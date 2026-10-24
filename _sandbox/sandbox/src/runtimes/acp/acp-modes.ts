@@ -1,4 +1,4 @@
-import type { SessionModeState } from "@agentclientprotocol/sdk";
+import type { SessionModeState } from "@agentclientprotocol/sdk/unstable";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 
 // An ACP session's modes (NewSessionResponse.modes, session/set_mode, current_mode_update), and which of them a turn's

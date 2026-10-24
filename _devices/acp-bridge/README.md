@@ -20,6 +20,8 @@ flowchart LR
 - Credentials come from `INTENTIC_SANDBOX_URL` and `INTENTIC_CONTROL_TOKEN`, or from `intentic-acp login`. The token
   is an editor-scoped control token minted in the sandbox app; a 401 reaches the editor as ACP `auth_required`.
 - [agent-registry/agent.json](agent-registry/agent.json) is the listing for ACP agent registries.
+- SDK 2 uses the `/unstable` entrypoint throughout the bridge and its in-process test peer, preserving the extended
+  authentication methods and usage updates the integration already sends. The wire protocol remains ACP v1.
 
 ## Key files
 

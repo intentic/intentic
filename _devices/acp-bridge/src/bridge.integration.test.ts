@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { client, methods, type RequestPermissionResponse, type SessionNotification } from "@agentclientprotocol/sdk";
+import { client, methods, type RequestPermissionResponse, type SessionNotification } from "@agentclientprotocol/sdk/unstable";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { fakeDaemon } from "./__fixtures__/fake-daemon.js";
 import { bridgeAgentApp } from "./bridge.js";

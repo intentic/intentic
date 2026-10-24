@@ -1,6 +1,6 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
-import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
+import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk/unstable";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";

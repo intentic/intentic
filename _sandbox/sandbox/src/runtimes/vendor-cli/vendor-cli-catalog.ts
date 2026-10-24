@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";

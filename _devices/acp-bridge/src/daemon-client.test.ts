@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
 import { createDaemonClient } from "./daemon-client.js";
 

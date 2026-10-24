@@ -1,4 +1,4 @@
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../../logger.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";

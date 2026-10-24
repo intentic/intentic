@@ -6,8 +6,8 @@ import type {
     RequestPermissionRequest,
     RequestPermissionResponse,
     SessionNotification,
-} from "@agentclientprotocol/sdk";
-import { methods } from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import { decidePermission } from "./acp-permissions.js";
 import { recordOptions, type SessionOptions } from "./acp-model.js";

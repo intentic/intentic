@@ -64,6 +64,10 @@ writes what was taken under the new key and drops or lowers the old (`lib/ratche
 excess were the other option (2026-10-16): simpler to key, but a function could then grow on what its neighbour gave
 up.
 
+Complexity plugin 4 changes nested-function cognitive scoring. Its baseline migration compares both
+plugin versions on the same source, carries recorded allowance deltas with each function, and records the reason
+on raised entries. The complexity caps and the cyclomatic and length entries are unchanged.
+
 ## Door checks
 
 Most tier checks answer one question: does this file reach past a concern's one door? `clipboard-tiers`,

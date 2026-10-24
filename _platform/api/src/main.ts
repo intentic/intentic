@@ -21,7 +21,7 @@ import { startWakeSignals } from "./sandbox/local-wake/wake-signals.js";
 import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";
 import { emailSignInEnabled } from "./sign-in.js";
-import { startTracing } from "./tracing.js";
+import { startTracing } from "./tracing/setup.js";
 import { startBrowsingCatalog } from "./models/model-catalog.js";
 
 // OTEL_* vars come from the environment; dev scripts pass --env-file so the root .env populates them under Bun.

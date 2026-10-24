@@ -29,7 +29,7 @@
         "@opentelemetry/core": "catalog:",
         "@opentelemetry/exporter-trace-otlp-proto": "catalog:",
         "@opentelemetry/resources": "catalog:",
-        "@opentelemetry/sdk-trace-node": "catalog:",
+        "@opentelemetry/sdk-node": "catalog:",
         "@opentelemetry/semantic-conventions": "catalog:",
         "@orpc/openapi": "catalog:",
         "@orpc/server": "catalog:",

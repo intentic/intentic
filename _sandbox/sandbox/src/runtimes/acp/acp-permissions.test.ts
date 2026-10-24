@@ -1,4 +1,4 @@
-import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import type { RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-policy";
 import { unstubbed } from "@intentic/testing";
 import { type CommandGuard, type CommandWhere, createCommandGuard } from "../../guard/command-guard.js";

@@ -1,4 +1,4 @@
-import type { CreateTerminalRequest, TerminalExitStatus, TerminalOutputResponse } from "@agentclientprotocol/sdk";
+import type { CreateTerminalRequest, TerminalExitStatus, TerminalOutputResponse } from "@agentclientprotocol/sdk/unstable";
 import { basename } from "node:path";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";

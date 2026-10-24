@@ -1,6 +1,6 @@
 import { Readable, Writable } from "node:stream";
 import { webStream } from "@intentic/base/web-stream";
-import { ndJsonStream } from "@agentclientprotocol/sdk";
+import { ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 import { fakeAcpAgentApp } from "./fake-acp-agent.js";
 
 // The same fake agent over stdio, for tests of the production connection's routing.

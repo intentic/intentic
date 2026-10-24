@@ -1,4 +1,4 @@
-import type { CreateElicitationRequest } from "@agentclientprotocol/sdk";
+import type { CreateElicitationRequest } from "@agentclientprotocol/sdk/unstable";
 import { elicitationForm } from "./acp-elicitation.js";
 
 const form = (properties: Record<string, unknown>, required: string[] = [], message = "Pick"): CreateElicitationRequest => ({

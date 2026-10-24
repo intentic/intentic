@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { FetchJsonError, type FetchJsonInit, fetchJsonResponse, type JsonValue } from "@intentic/base/fetch-json";
 import { agentContract } from "@intentic/sandbox-contract/contracts/agent.contract";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";

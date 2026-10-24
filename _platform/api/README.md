@@ -2,6 +2,10 @@
 
 The platform's HTTP server (`@intentic/api`): sign-in, the registry of sandboxes and their addresses, hosted Fly machines, the hosted plan and the agent wallet.
 
+[Tracing](src/tracing/setup.ts) starts only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. OpenTelemetry SDK 3 is configured through `NodeSDK`
+to retain standard `OTEL_*` sampler, span-limit and batch settings. Hono supplies the HTTP spans; automatic
+instrumentation, resource detection, log export and metric export are disabled. Shutdown flushes queued spans.
+
 Cloud entry (`/start/hosted` in the editor) is advertised by `hostedOffer.startJourney`. An optional create UUID reuses
 one owner-scoped sandbox identity across retries, including a lost response. Offer and provisioning accept a selected
 paid tier and check its own allocations, independently of the free machine. Checkout can return to this fixed cloud

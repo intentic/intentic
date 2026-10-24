@@ -5,7 +5,7 @@ import type {
     ToolCallLocation as AcpToolCallLocation,
     ToolKind as AcpToolKind,
     ToolCallUpdate,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract/events/requests";

@@ -1,4 +1,4 @@
-import type { CreateElicitationRequest, CreateElicitationResponse, ElicitationContentValue } from "@agentclientprotocol/sdk";
+import type { CreateElicitationRequest, CreateElicitationResponse, ElicitationContentValue } from "@agentclientprotocol/sdk/unstable";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";

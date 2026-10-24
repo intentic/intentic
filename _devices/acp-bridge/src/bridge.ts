@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { agent, type AgentApp, type AgentContext, methods, RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import { agent, type AgentApp, type AgentContext, methods, RequestError, type RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
 import type { TranscriptPlan, TranscriptQuestion } from "@intentic/sandbox-contract/events/transcript";
 import { type BridgeConfig, readSessions, resolveConfig, writeSessions } from "./config.js";
 import { createDaemonClient, type DaemonClient } from "./daemon-client.js";

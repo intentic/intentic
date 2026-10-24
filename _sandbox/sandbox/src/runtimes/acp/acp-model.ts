@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { EFFORT_TIERS } from "@intentic/sandbox-contract/models/agent-catalog";
 
 // An ACP session's model and reasoning-depth choices, read off the config options its agent answers session/new,

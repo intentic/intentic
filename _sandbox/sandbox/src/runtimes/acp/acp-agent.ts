@@ -7,7 +7,7 @@ import {
     RequestError,
     type RequestPermissionRequest,
     type SessionNotification,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";

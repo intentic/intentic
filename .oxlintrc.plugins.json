@@ -9,10 +9,7 @@
     // JS plugin ABI is not semver-stable.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.json"],
-    "jsPlugins": [
-        { "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" },
-        "oxlint-plugin-complexity"
-    ],
+    "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }, "oxlint-plugin-complexity"],
     "rules": {
         // COGNITIVE complexity, which is the metric that actually matches how hard a function is to read.
         // Cyclomatic counts every branch equally, so a flat 30-case dispatch scores the same as five levels of
@@ -29,12 +26,11 @@
         // Cyclomatic is 20, the plugin's and oxlint's own default, because THIS meter charges +1 per `??`, `||`
         // and `case`: at 10 it fired on 16-line flat switches and nullish-default mappers that cognitive scored
         // 5-9, the exact code the paragraph above says should cost nothing. It is a backstop for the flat but
-        // enormous dispatcher (the 16 it still catches run 21-44), not the gate. Cognitive is 20 rather than
-        // SonarSource's 15 because this plugin adds +1 per nested-function level and +1 for recursion, which
-        // Sonar does not: a loop over `.map(...)` callbacks runs 3-6 hotter here than under Sonar, and the 16-20
-        // band sampled as textbook algorithms (Kahn's sort, a fuzzy matcher, a streaming line reader) whose only
-        // "fix" is fragmenting them into helpers that exist for the number. 21 and up is where three-deep
-        // nesting starts, which is what the metric is for.
+        // enormous dispatcher (the 16 it still catches run 21-44), not the gate. Cognitive stays at 20 so
+        // ordinary algorithms do not need splitting just to satisfy the score. Plugin 4 removes parent-function
+        // penalties and makes callbacks inherit enclosing control-flow nesting + 1. Its migration recalibrates
+        // cognitive baseline entries by comparing both plugins on the same source and retaining allowance deltas;
+        // the caps, cyclomatic entries and length entries stay as they were.
         "complexity/complexity": ["error", { "cyclomatic": 20, "cognitive": 20 }],
         // Vendored from dmmulroy/anti-slop @ 6d53855. These are the only rules in this repo written for a
         // specific author rather than a specific bug: they reject code that TYPE-CHECKS AND RUNS but has

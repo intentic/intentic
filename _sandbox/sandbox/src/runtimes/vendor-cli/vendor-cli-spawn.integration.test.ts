@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { methods, RequestError } from "@agentclientprotocol/sdk";
+import { methods, RequestError } from "@agentclientprotocol/sdk/unstable";
 import { unstubbed } from "@intentic/testing";
 import { createLogger } from "../../logger.js";
 import { opt } from "../../opt.js";

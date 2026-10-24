@@ -4,7 +4,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/cli/src/apply/apply.command.ts#func#cognitive": {
-        "count": 83,
+        "count": 60,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/cli/src/apply/apply.command.ts#func#cyclomatic": {
@@ -23,17 +23,25 @@
         "count": 133,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_deploy/engine/src/reconcile/apply.ts#apply#cognitive": {
-        "count": 31,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_deploy/cli/src/plan/plan.command.ts#work#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_deploy/engine/src/reconcile/orphans.ts#collectOrphans#cognitive": {
-        "count": 21,
+    "_deploy/cli/src/secrets/secret-store.ts#get#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_deploy/engine/src/reconcile/apply.ts#apply#cognitive": {
+        "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/engine/src/reconcile/plan.ts#plan#cognitive": {
-        "count": 25,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_deploy/engine/src/resolve-inputs.ts#walk#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_deploy/providers/src/core/ssh.ts#connect.<anonymous>#lines": {
         "count": 162,
@@ -55,6 +63,10 @@
         "count": 127,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_deploy/providers/src/host/workspace.ts#apply#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_deploy/providers/src/host/workspace.ts#createWorkspaceProvider#lines": {
         "count": 138,
         "why": "standing when the check arrived (2026-10-16)"
@@ -64,7 +76,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/providers/src/integrations/discord.ts#read#cognitive": {
-        "count": 22,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/providers/src/observability/signoz.ts#otelCollectorConfig#lines": {
@@ -80,7 +92,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/state-resolver/src/emit/emit.ts#emit#cognitive": {
-        "count": 88,
+        "count": 78,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/state-resolver/src/emit/emit.ts#emit#cyclomatic": {
@@ -91,12 +103,8 @@
         "count": 315,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_deploy/state-resolver/src/intent/needs.ts#resolveNeeds#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_deploy/state-resolver/src/resolvers/app.ts#resolveApp#cognitive": {
-        "count": 38,
+        "count": 35,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/state-resolver/src/resolvers/app.ts#resolveApp#cyclomatic": {
@@ -108,7 +116,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/state-resolver/src/resolvers/identity.ts#resolveIdentities#cognitive": {
-        "count": 39,
+        "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_deploy/state-resolver/src/resolvers/identity.ts#resolveIdentities#cyclomatic": {
@@ -120,8 +128,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/acp-bridge/src/bridge.ts#bridgeAgentApp.<anonymous>#cognitive": {
-        "count": 37,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 54,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_devices/acp-bridge/src/bridge.ts#bridgeAgentApp.<anonymous>#cyclomatic": {
         "count": 26,
@@ -135,21 +143,25 @@
         "count": 118,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_devices/keyring/src/consent/consent-posix.ts#linuxPassphrasePrompt.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_devices/keyring/src/consent/consent.ts#ask#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_devices/keyring/src/core.ts": 1193,
     "_devices/local-agent/src/autostart.ts": {
         "count": 856,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/local-agent/src/layout.ts#stopLines#cognitive": {
-        "count": 22,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/local-agent/src/ui.ts": {
         "count": 676,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_devices/local-agent/src/ui.ts#createUi#cognitive": {
-        "count": 38,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/local-agent/src/ui.ts#createUi#lines": {
@@ -157,12 +169,28 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/local-agent/src/ui.ts#fail#cognitive": {
-        "count": 31,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 42,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_devices/local-agent/src/ui.ts#finished#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_devices/local-files/src/search-rg.ts#onEvent#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_devices/local-files/src/server.ts#createLocalFilesServer#lines": {
         "count": 103,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_devices/local-files/src/server.ts#fetch#cognitive": {
+        "count": 26,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_devices/local-files/src/watch.ts#watchDir#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_devices/machine/src/device/connection.ts#connect#lines": {
         "count": 130,
@@ -180,16 +208,16 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/device/tools/programs/programs.ts": 627,
-    "_devices/machine/src/device/tools/programs/programs.ts#appStatus#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_devices/machine/src/device/tools/sandboxes.ts": 816,
     "_devices/machine/src/environments/children.ts#superviseChildren#lines": {
         "count": 126,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/sync/commands.ts": 879,
+    "_devices/machine/src/sync/commands.ts#fileSyncSwitch.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_devices/machine/src/sync/git-bridge.ts": {
         "count": 617,
         "why": "standing when the check arrived (2026-10-16)"
@@ -207,9 +235,9 @@
         "count": 1189,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/machine/src/sync/retire.ts#retireSandbox#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_devices/machine/src/sync/tunnel.ts#reconcile#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_devices/machine/src/upkeep/reconcile.ts#reconcile#cognitive": {
         "count": 21,
@@ -223,17 +251,13 @@
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/webext/src/page/driver.ts#collectPage#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_devices/webext/src/page/driver.ts#collectPage#lines": {
         "count": 135,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/webext/src/page/driver.ts#roleOf#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 34,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_devices/webext/src/popup/popup.ts#ago#cognitive": {
         "count": 21,
@@ -258,20 +282,20 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/ui/src/components/sandbox/deviceDetail.ts": 706,
-    "_editor/ui/src/composables/useHighlighter.ts#highlightSliced#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_editor/ui/src/composables/useHoverMenu.ts#keydown#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/ui/src/composables/useHoverMenu.ts#useHoverMenu#lines": {
         "count": 163,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/ui/src/lib/anchorPlacement.ts#placeAnchored#cognitive": {
-        "count": 23,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/ui/src/markdown/figures.ts#splitFigureSegments#cognitive": {
-        "count": 27,
+        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/ui/src/markdown/figures.ts#splitFigureSegments#cyclomatic": {
@@ -294,6 +318,10 @@
         "count": 107,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/client/session/liveSocket.ts#dial#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/client/session/liveSocket.ts#liveSocket#lines": {
         "count": 165,
         "why": "standing when the check arrived (2026-10-16)"
@@ -303,7 +331,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/core-views/infrastructure/applyProgress.ts#reduceApplyLine#cognitive": {
-        "count": 38,
+        "count": 37,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/core-views/infrastructure/applyProgress.ts#reduceApplyLine#cyclomatic": {
@@ -319,10 +347,6 @@
         "count": 176,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/extension-host/apiImpl.ts#createExtensionApi#cognitive": {
-        "count": 75,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/extension-host/apiImpl.ts#createExtensionApi#lines": {
         "count": 446,
         "why": "standing when the check arrived (2026-10-16)"
@@ -332,12 +356,12 @@
         "count": 976,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/features/agents/board/useAgentFilter.ts#useAgentFilter.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/features/agents/board/useAgentFilter.ts#useAgentFilter#lines": {
         "count": 168,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/agents/board/view/boardLanes.ts#useBoardLanes#cognitive": {
-        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/board/view/boardLanes.ts#useBoardLanes#lines": {
@@ -357,12 +381,16 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/board/view/laneMotion.ts#useLaneMotion.<anonymous>#cognitive": {
-        "count": 34,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 43,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/agents/board/view/laneMotion.ts#useLaneMotion#lines": {
         "count": 116,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/agents/metrics/sandboxFigures.ts#figuresOf#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/agents/metrics/sandboxFigures.ts#useSandboxReadout#lines": {
         "count": 186,
@@ -370,12 +398,12 @@
     },
     "_editor/web/src/features/agents/review/AgentDetail.vue": 814,
     "_editor/web/src/features/agents/review/AgentReviewPanel.vue": 1064,
+    "_editor/web/src/features/agents/review/pager/swipePager.ts#release#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/features/agents/review/pager/swipePager.ts#useSwipePager#lines": {
         "count": 256,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/agents/review/useAgentChanges.ts#useAgentChanges#cognitive": {
-        "count": 49,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/review/useAgentChanges.ts#useAgentChanges#lines": {
@@ -390,19 +418,11 @@
         "count": 119,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/browsers/useBrowserView.ts#useBrowserView#cognitive": {
-        "count": 36,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/browsers/useBrowserView.ts#useBrowserView#lines": {
         "count": 258,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/capabilities/Capabilities.vue": 797,
-    "_editor/web/src/features/capabilities/capabilityForm.ts#useCapabilityForm#cognitive": {
-        "count": 39,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/capabilities/capabilityForm.ts#useCapabilityForm#lines": {
         "count": 250,
         "why": "standing when the check arrived (2026-10-16)"
@@ -410,6 +430,10 @@
     "_editor/web/src/features/capabilities/capabilityPairing.ts#useCapabilityPairing#lines": {
         "count": 135,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/capabilities/capabilitySubmit.ts#submit#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/chat/accounts/pickerAccounts.ts#usePickerAccounts#lines": {
         "count": 134,
@@ -427,19 +451,11 @@
         "count": 601,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/chat/models/run-settings/useRunThrough.ts#useRunThrough#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/chat/models/run-settings/useRunThrough.ts#useRunThrough#lines": {
         "count": 181,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/chat/panel/ChatPane.vue": 1110,
-    "_editor/web/src/features/chat/panel/pane/composerControls.ts#useComposerControls#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/chat/panel/pane/composerControls.ts#useComposerControls#lines": {
         "count": 140,
         "why": "standing when the check arrived (2026-10-16)"
@@ -451,6 +467,10 @@
     "_editor/web/src/features/chat/panel/pane/composerPopovers.ts#useComposerPopovers#lines": {
         "count": 134,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_editor/web/src/features/chat/panel/pane/composerSend.ts#submit#cognitive": {
+        "count": 31,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/chat/panel/pane/composerSend.ts#useComposerSend#cognitive": {
         "count": 21,
@@ -474,14 +494,6 @@
     },
     "_editor/web/src/features/chat/tabs/ChatTabs.vue#<anonymous>#lines": {
         "count": 149,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/chat/tabs/useChatRowActions.ts#createChatRowActions.<anonymous>#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/chat/tabs/useChatRowActions.ts#createChatRowActions#cognitive": {
-        "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/chat/tabs/useChatRowActions.ts#createChatRowActions#lines": {
@@ -509,16 +521,12 @@
         "count": 112,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/desktop/useDesktopView.ts#useDesktopView#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_editor/web/src/features/chat/wake/wakeDesktop.ts#asked#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/desktop/useDesktopView.ts#useDesktopView#lines": {
         "count": 164,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/extensions/extensionFacets.ts#facetsOf#cognitive": {
-        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/extensions/extensionFacets.ts#facetsOf#lines": {
@@ -533,16 +541,12 @@
         "count": 112,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/gettingStarted/useGettingStarted.ts#create#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/gettingStarted/useGettingStarted.ts#create#lines": {
         "count": 125,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/needs/NeedAutomationBody.vue#<anonymous>#cognitive": {
-        "count": 26,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/access/usePasskeys.ts#usePasskeys#lines": {
@@ -551,7 +555,7 @@
     },
     "_editor/web/src/features/sandbox/devices/DevicePage.vue": 772,
     "_editor/web/src/features/sandbox/devices/phones/phoneRows.ts#phoneRowOf#cognitive": {
-        "count": 24,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/sandbox/devices/runners/agentRun.ts#agentRunTitle#cognitive": {
@@ -562,9 +566,9 @@
         "count": 1063,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts#useDeviceOps#cognitive": {
-        "count": 59,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts#act#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/sandbox/devices/runners/deviceOps.ts#useDeviceOps#lines": {
         "count": 685,
@@ -596,9 +600,9 @@
         "count": 123,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/setup/flow/useHostedLane.ts#useHostedLane#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_editor/web/src/features/setup/flow/useHostedLane.ts#restartHosted#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/setup/flow/useHostedLane.ts#useHostedLane#lines": {
         "count": 415,
@@ -640,23 +644,11 @@
         "count": 671,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/terminal/useTerminal.ts#createTerminalTabs#cognitive": {
-        "count": 37,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/terminal/useTerminal.ts#createTerminalTabs#lines": {
         "count": 541,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/terminal/useTerminal.ts#relist#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/workspace/changes/changeOrigins.ts#stepRow#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/features/workspace/changes/changeOrigins.ts#summarizeOrigins#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
@@ -689,12 +681,16 @@
         "count": 111,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#enqueue#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#report#cognitive": {
-        "count": 33,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 42,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#uploadChunk#cognitive": {
-        "count": 29,
+        "count": 28,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/workspace/files/upload/useUploadQueue.ts#useUploadQueue#lines": {
@@ -716,16 +712,16 @@
         "count": 132,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/models/agent-status/landFailureTelemetry.ts#createLandFailureObserver.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/models/browsers/useScreencast.ts#useScreencast#lines": {
         "count": 159,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/browsers/videoSink.ts#videoSink#lines": {
         "count": 164,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/models/conversations/panel/useChat-view.ts#conversationView#cognitive": {
-        "count": 46,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/panel/useChat-view.ts#conversationView#lines": {
@@ -750,7 +746,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/fleet/board/childFold.ts#foldChildren#cognitive": {
-        "count": 34,
+        "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/providers/usageStatus.ts": 813,
@@ -770,6 +766,14 @@
         "count": 104,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/models/voice/browserSpeech.ts#browserSpeechFor.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_editor/web/src/models/voice/speechLink.ts#drain#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/models/voice/speechLink.ts#httpTransport#lines": {
         "count": 103,
         "why": "standing when the check arrived (2026-10-16)"
@@ -778,13 +782,21 @@
         "count": 142,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/models/voice/speechLink.ts#poll#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/models/voice/speechPlayer.ts#createSpeechPlayer#lines": {
         "count": 221,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_editor/web/src/models/voice/speechPlayer.ts#onMessage#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_editor/web/src/models/voice/useVoiceInput.ts#start.<anonymous>#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/models/voice/useVoiceInput.ts#start#lines": {
         "count": 229,
@@ -794,9 +806,9 @@
         "count": 340,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/models/workspace/tree/useWorkspaceTree.ts#useWorkspaceTree#cognitive": {
-        "count": 33,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_editor/web/src/models/workspace/search/useFuzzyFiles.ts#walk#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_editor/web/src/models/workspace/tree/useWorkspaceTree.ts#useWorkspaceTree#lines": {
         "count": 385,
@@ -824,7 +836,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/shell/prefetch/backgroundLoader.ts#runBackgroundLoader#cognitive": {
-        "count": 26,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/shell/ShellDesktop.vue": {
@@ -843,14 +855,6 @@
         "count": 106,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/vite.shared.ts#devStyleSource#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_extensions/activity/src/episodes.ts#turnEpisode#cognitive": {
-        "count": 29,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_extensions/approvals/src/ApprovalsView.vue": {
         "count": 838,
         "why": "standing when the check arrived (2026-10-16)"
@@ -858,7 +862,7 @@
     "_extensions/automations/src/AutomationFields.vue": 1401,
     "_extensions/automations/src/AutomationRow.vue": 607,
     "_extensions/automations/src/calendarModel.ts#calendarWeek#cognitive": {
-        "count": 42,
+        "count": 38,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/automations/src/cronSchedule.ts#parseCron#cognitive": {
@@ -873,29 +877,41 @@
         "count": 931,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_extensions/automations/src/useAutomationForm.ts#build#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_extensions/automations/src/useAutomationForm.ts#applyWatch#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_extensions/automations/src/useAutomationForm.ts#useAutomationForm#cognitive": {
-        "count": 58,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_extensions/automations/src/useAutomationForm.ts#build#cognitive": {
+        "count": 34,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_extensions/automations/src/useAutomationForm.ts#load#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_extensions/automations/src/useAutomationForm.ts#useAutomationForm.<anonymous>#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_extensions/automations/src/useAutomationForm.ts#useAutomationForm#lines": {
         "count": 830,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_extensions/automations/src/useAutomationForm.ts#webchatOf#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_extensions/discord/src/gateway.ts#routes#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_extensions/discord/src/voice.ts#joinVoice#lines": {
         "count": 113,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/git-history/src/GitHistoryTab.vue": 873,
-    "_extensions/git-history/src/useGitLog.ts#useGitLog#cognitive": {
-        "count": 27,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_extensions/google-workspace/src/google/csv.ts#parseCsv#cognitive": {
-        "count": 23,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/google-workspace/src/watch/poller.ts#startWatcher#lines": {
@@ -922,24 +938,24 @@
         "count": 167,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_extensions/onlyoffice/src/server/server.ts#activateServer.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_extensions/onlyoffice/src/server/server.ts#activateServer#lines": {
         "count": 246,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/pipelines/src/failureHistory.ts#recurringFailures#cognitive": {
-        "count": 39,
+        "count": 37,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/repo-apps/src/depModel.ts#flowOrder#cognitive": {
-        "count": 25,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/repo-apps/src/layerModel.ts#cyclesAmong#cognitive": {
-        "count": 30,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_extensions/repo-apps/src/layerModel.ts#stackOf#cognitive": {
-        "count": 31,
+        "count": 29,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/slack/src/listener.ts#createSlackListener#lines": {
@@ -951,8 +967,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/telegram/src/client.ts#loop#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 40,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_extensions/telegram/src/listener.ts#createTelegramListener#lines": {
         "count": 182,
@@ -978,16 +994,16 @@
         "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_extensions/whatsapp/src/pairing.ts#onFrame#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_extensions/whatsapp/src/store.ts#directory#cognitive": {
-        "count": 47,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 66,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_extensions/whatsapp/src/store.ts#directory#cyclomatic": {
         "count": 36,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_extensions/whatsapp/src/store.ts#openWaStore#cognitive": {
-        "count": 29,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/whatsapp/src/store.ts#openWaStore#lines": {
@@ -995,12 +1011,12 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/whatsapp/src/store.ts#upsertContacts.<anonymous>#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 41,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_extensions/whatsapp/src/sync.ts#toStored#cognitive": {
-        "count": 32,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 46,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_extensions/whatsapp/src/sync.ts#toStored#cyclomatic": {
         "count": 39,
@@ -1010,13 +1026,13 @@
         "count": 167,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_platform/api/src/admin/admin-costs.ts#adminCosts#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_platform/api/src/admin/admin-user.ts#adminUserDetail#lines": {
         "count": 138,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/app.ts#createApp.<anonymous>#cognitive": {
+        "count": 32,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_platform/api/src/app.ts#createApp#lines": {
         "count": 489,
@@ -1031,8 +1047,12 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/repair/repair-turn-schema.ts#asOpenAiMessages#cognitive": {
-        "count": 22,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/repair/repair.routes.ts#repairRoutes.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_platform/api/src/repair/repair.routes.ts#repairRoutes#lines": {
         "count": 106,
@@ -1043,11 +1063,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/hosted/build/hosted-build.ts#finishHostedBuild#cognitive": {
-        "count": 24,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/hosted/build/hosted-build.ts#reconcileHostedBuilds#cognitive": {
-        "count": 27,
+        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/hosted/gate/state-gate.ts": {
@@ -1055,12 +1075,16 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/hosted/hosted-pool.ts#reconcileHostedPool#cognitive": {
-        "count": 29,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/sandbox/hosted/hosted.ts": {
         "count": 1109,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_platform/api/src/sandbox/hosted/hosted.ts#adoptHostedApp.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_platform/api/src/sandbox/hosted/plan/hosted-plan.orpc.ts#hostedPlanRoutes#lines": {
         "count": 124,
@@ -1068,8 +1092,8 @@
     },
     "_platform/api/src/sandbox/sandbox.routes.ts": 656,
     "_platform/api/src/trial/trial-pool.ts#call#cognitive": {
-        "count": 54,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 70,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_platform/api/src/trial/trial-pool.ts#call#cyclomatic": {
         "count": 25,
@@ -1079,13 +1103,17 @@
         "count": 172,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_platform/api/src/trial/trial.routes.ts#trialRoutes.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_platform/api/src/trial/trial.routes.ts#trialRoutes#lines": {
         "count": 129,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_platform/api/src/wallet/wallet.routes.ts#walletHttpRoutes.<anonymous>#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 35,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_platform/api/src/wallet/wallet.routes.ts#walletHttpRoutes.<anonymous>#lines": {
         "count": 110,
@@ -1096,15 +1124,15 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/agent-context/src/workspace-map.ts#walk#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 30,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/claude-plugin/src/notes-evidence.ts#digestOf#cognitive": {
-        "count": 25,
+        "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/claude-plugin/src/session-start.ts#compose#cognitive": {
-        "count": 23,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/fileq/src/lib/check/check-pptx.ts": {
@@ -1120,11 +1148,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/ocr/src/geometry.ts#fillPolygon#cognitive": {
-        "count": 30,
+        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/ocr/src/geometry.ts#perspectiveTransform#cognitive": {
-        "count": 23,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/output-cleaners/bench/cleaner-bench.mjs#readCorpus#cognitive": {
@@ -1151,24 +1179,20 @@
         "count": 735,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/privacy-detect/src/contact.ts#isPhone#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/privacy-detect/src/contact.ts#isPhone#cyclomatic": {
         "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/agent-bench.ts#main#cognitive": {
-        "count": 36,
+        "count": 35,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/agent-bench.ts#report#cognitive": {
-        "count": 43,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/agent-bench.ts#runOnce#cognitive": {
-        "count": 24,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/agent-bench.ts#runOnce#cyclomatic": {
@@ -1180,7 +1204,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/guidance-corpus.ts#guidanceStats#cognitive": {
-        "count": 108,
+        "count": 104,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/guidance-corpus.ts#guidanceStats#cyclomatic": {
@@ -1208,7 +1232,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-arms.ts#stateNote#cognitive": {
-        "count": 48,
+        "count": 44,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-arms.ts#stateNote#cyclomatic": {
@@ -1216,11 +1240,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-arms.ts#transcriptRows#cognitive": {
-        "count": 24,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-arms.ts#trimSession#cognitive": {
-        "count": 25,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts": {
@@ -1228,7 +1252,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts#candidates#cognitive": {
-        "count": 31,
+        "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts#candidates#cyclomatic": {
@@ -1236,7 +1260,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts#report#cognitive": {
-        "count": 50,
+        "count": 47,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts#report#cyclomatic": {
@@ -1252,7 +1276,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts#tier0#cognitive": {
-        "count": 69,
+        "count": 59,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/bench/handoff-bench.ts#tier0#cyclomatic": {
@@ -1263,21 +1287,21 @@
         "count": 112,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/bench/map-corpus.ts#compactNoteOf#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/bench/map-corpus.ts#payloadOf#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/agent/models/role-model.ts#askRoleModel#lines": {
         "count": 169,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/models/role-model.ts#walk#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/agent/pages/page-assets.ts#carrierFor#lines": {
         "count": 156,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/pages/page-assets.ts#locate#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/pages/page-draft.ts#step#cognitive": {
         "count": 32,
@@ -1300,7 +1324,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/agent-installs.ts#classifyImageInstalls#cognitive": {
-        "count": 132,
+        "count": 125,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/agent-installs.ts#classifyImageInstalls#cyclomatic": {
@@ -1312,15 +1336,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/agent-installs.ts#installsIn#cognitive": {
-        "count": 33,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/agent/providers/agent-installs.ts#nodeInstallOf#cognitive": {
-        "count": 23,
+        "count": 32,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/agent-installs.ts#tokenize#cognitive": {
-        "count": 37,
+        "count": 35,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/agent-installs.ts#tokenize#cyclomatic": {
@@ -1340,7 +1360,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/harness-credentials.ts#resolveHarnessCredentials#cognitive": {
-        "count": 43,
+        "count": 41,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/providers/harness-credentials.ts#resolveHarnessCredentials#cyclomatic": {
@@ -1351,13 +1371,13 @@
         "count": 675,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/providers/translator.ts#createCliProxyClient#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/agent/providers/translator.ts#createCliProxyClient#lines": {
         "count": 417,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/routes/agent.routes.ts#createAgentRoutes.<anonymous>#cognitive": {
+        "count": 29,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/routes/agent.routes.ts#createAgentRoutes#lines": {
         "count": 291,
@@ -1365,10 +1385,6 @@
     },
     "_sandbox/sandbox/src/agent/run/agent.ts": {
         "count": 1069,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
-        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cyclomatic": {
@@ -1384,16 +1400,16 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#runAgent.<anonymous>#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 40,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#runAgent#lines": {
         "count": 188,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/harness/harness-servers.ts#release#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 35,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/run/placement/worktree-placement.ts#worktreePlacement#lines": {
         "count": 135,
@@ -1415,10 +1431,6 @@
         "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onSystem#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/agent/run/stream-agent.ts": 1025,
     "_sandbox/sandbox/src/agent/run/stream-agent.ts#preflight#cyclomatic": {
         "count": 22,
@@ -1428,17 +1440,29 @@
         "count": 312,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts#step#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
         "count": 1000,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#placeholder#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
         "count": 165,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#settlementOf#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cognitive": {
-        "count": 38,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 47,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cyclomatic": {
         "count": 30,
@@ -1476,6 +1500,10 @@
         "count": 40,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/tools/agent-terminals.ts#bashTmuxHooks.<anonymous>#cognitive": {
+        "count": 26,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/agent/tools/agent-terminals.ts#bashTmuxHooks#lines": {
         "count": 121,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1483,6 +1511,10 @@
     "_sandbox/sandbox/src/agent/tools/jobs/background-jobs.ts": {
         "count": 819,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/agent/tools/notices/agent-deps.ts#depsNoticeHooks.<anonymous>#cognitive": {
+        "count": 28,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/agent/tools/turn-mounts.ts#createTurnMounts#lines": {
         "count": 154,
@@ -1492,13 +1524,21 @@
         "count": 173,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/verification/agent-reach.ts#settle#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/agent/verification/agent-verification.ts#classifyCommand#cognitive": {
-        "count": 28,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/verification/watch-server.ts#watchServer#lines": {
         "count": 127,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/app.ts#createApp.<anonymous>#cognitive": {
+        "count": 34,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/app.ts#createApp#cognitive": {
         "count": 21,
@@ -1512,9 +1552,17 @@
         "count": 233,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
     },
+    "_sandbox/sandbox/src/approvals/approvals-executor.ts#runDue#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/audit/audit-forward.ts#createAuditForwarder#lines": {
         "count": 130,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/audit/audit-http.ts#auditRequests.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/auth/auth.ts": {
         "count": 650,
@@ -1545,7 +1593,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
-        "count": 82,
+        "count": 79,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cyclomatic": {
@@ -1557,7 +1605,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/watch/watch-condition.ts#checkCondition#cognitive": {
-        "count": 27,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/bootstrap/boot-schedulers.ts#startBootSchedulers#cognitive": {
@@ -1582,10 +1630,6 @@
     },
     "_sandbox/sandbox/src/browser/cast/live-view.ts#startFramesView#lines": {
         "count": 105,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/browser/cast/live-view.ts#startVideoView#cognitive": {
-        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/browser/cast/live-view.ts#startVideoView#lines": {
@@ -1613,8 +1657,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#open#cognitive": {
-        "count": 31,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 45,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/browser/sessions/browser-profile.routes.ts#open#cyclomatic": {
         "count": 23,
@@ -1628,6 +1672,10 @@
         "count": 649,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/browser/tools/accounts-tools.ts#accountsServer.<anonymous>#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/browser/tools/accounts-tools.ts#accountsServer.<anonymous>#lines": {
         "count": 240,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1637,8 +1685,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/browser/tools/browser-router.ts#call#cognitive": {
-        "count": 27,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 39,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/browser/tools/browser-router.ts#call#cyclomatic": {
         "count": 33,
@@ -1648,9 +1696,13 @@
         "count": 259,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/browser/tools/browser-router.ts#handle#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/capabilities/broker/broker-gateway.ts#createGateway.<anonymous>#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 61,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/capabilities/broker/broker-gateway.ts#createGateway.<anonymous>#cyclomatic": {
         "count": 34,
@@ -1669,15 +1721,19 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/capabilities/broker/ssh-agent.ts#sign#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 44,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/capabilities/capabilities.routes.ts#createCapabilitiesRoutes.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/capabilities/capabilities.routes.ts#createCapabilitiesRoutes#lines": {
         "count": 357,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/capabilities/offers/recommend.ts#capabilityRecommendations#cognitive": {
-        "count": 29,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/chores/chore-signals.ts#findFiles#cognitive": {
@@ -1688,6 +1744,10 @@
         "count": 121,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/ci/hooks.ts#reconcileOnce#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/ci/main-fixer.ts": {
         "count": 770,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1695,6 +1755,10 @@
     "_sandbox/sandbox/src/ci/poller.ts#createCiPoller#lines": {
         "count": 101,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/ci/poller.ts#pollOnce#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/ci/providers.ts": {
         "count": 814,
@@ -1708,10 +1772,15 @@
         "count": 185,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/ci/webhook.routes.ts#createCiWebhookRoute.<anonymous>#cognitive": {
-        "count": 43,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/ci/providers.ts#metaFromJobs#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
+    "_sandbox/sandbox/src/ci/providers.ts#workflowSource#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/ci/webhook.routes.ts#createCiWebhookRoute.<anonymous>#cognitive": 31,
     "_sandbox/sandbox/src/ci/webhook.routes.ts#createCiWebhookRoute.<anonymous>#cyclomatic": {
         "count": 41,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1741,10 +1810,6 @@
         "count": 273,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
     },
-    "_sandbox/sandbox/src/conversations/actor/conversation-actors.ts#createConversationActors#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/conversations/actor/conversation-actors.ts#createConversationActors#lines": {
         "count": 157,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1757,17 +1822,21 @@
         "count": 117,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/conversations/agents.routes.ts#createAgentsRoutes#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/conversations/actor/parked-cards.ts#settle#cognitive": {
+        "count": 37,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/conversations/agents.routes.ts#createAgentsRoutes#lines": {
         "count": 555,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/land/land.ts": 636,
+    "_sandbox/sandbox/src/conversations/land/land.ts#outstandingConflicts.<anonymous>#cognitive": {
+        "count": 32,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/conversations/land/landed-history.ts#commitsCarrying#cognitive": {
-        "count": 25,
+        "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/land/landed-presence.ts#createLandedPresences#lines": {
@@ -1790,16 +1859,12 @@
         "count": 216,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/conversations/land/review.ts#historyOf#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/conversations/recall/fleet.routes.ts#show#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/conversations/registry/agents-registry.ts": {
         "count": 1382,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/conversations/registry/agents-registry.ts#createFleet#cognitive": {
-        "count": 59,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/registry/agents-registry.ts#createFleet#lines": {
@@ -1810,16 +1875,8 @@
         "count": 682,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/conversations/registry/pre-1308-import.ts#plan#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts": {
         "count": 849,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts#createAgentWorktrees#cognitive": {
-        "count": 46,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/worktrees/worktrees.ts#createAgentWorktrees#lines": {
@@ -1827,32 +1884,32 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/definition/apply-definition.ts#applyDefinitionItems#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/definition/apply-definition.ts#definitionItems#cognitive": {
         "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/definition/apply-definition.ts#definitionItems#cognitive": {
+        "count": 24,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
     "_sandbox/sandbox/src/definition/definition.ts#definitionDiff#cognitive": {
-        "count": 47,
+        "count": 43,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/definition/definition.ts#definitionDiff#cyclomatic": {
         "count": 32,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/definition/definition.ts#deriveDefinition#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/definition/definition.ts#emitDefinitionToml#cognitive": {
-        "count": 28,
+        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/derived/shadow-keeper.ts#createShadowKeeper#lines": {
         "count": 273,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/derived/shadow-keeper.ts#walk#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/desktop/desktop-view.ts#createDesktopViewRoute.<anonymous>#lines": {
         "count": 267,
@@ -1862,36 +1919,48 @@
         "count": 268,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/environment/contents.ts#readEnvironmentContents#cognitive": {
-        "count": 42,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/desktop/desktop-view.ts#follow#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/environment/draft-offers.ts#reconcileOffers#cognitive": {
-        "count": 24,
+    "_sandbox/sandbox/src/desktop/desktop-view.ts#onOpen#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/environment/contents.ts#readEnvironmentContents#cognitive": {
+        "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/environment/environment.routes.ts#createEnvironmentRoutes#lines": {
         "count": 125,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/exit/exit-socks.ts#socksConnect.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/exit/exit-socks.ts#startSocks.<anonymous>#cognitive": {
+        "count": 31,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/extensions/backend/backend-host.ts#createBackendHostApp#lines": {
         "count": 182,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/extensions/backend/backend-host.ts#fetch#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts": {
         "count": 622,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#converge#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 32,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#converge#lines": {
         "count": 123,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#createExtensionBackend#cognitive": {
-        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/backend/backend-supervisor.ts#createExtensionBackend#lines": {
@@ -1907,7 +1976,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>#cognitive": {
-        "count": 44,
+        "count": 32,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>#cyclomatic": {
@@ -1919,31 +1988,27 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates.<anonymous>~2#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 74,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/extensions/extension-updates.ts#checkExtensionUpdates#lines": {
         "count": 116,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/extensions/extensions.routes.ts#createExtensionsRoutes#cognitive": {
+    "_sandbox/sandbox/src/extensions/extensions.routes.ts#backendStateOf#cognitive": {
         "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/extensions/extensions.routes.ts#createExtensionsRoutes#lines": {
         "count": 364,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/extensions/extensions.routes.ts#summaryOf#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/extensions/listener/listener.routes.ts#createListenerRoutes#lines": {
         "count": 118,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/git/changes/changes-commits.ts#commitLog#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/git/changes/changes-diff.ts#composeDiff#cognitive": {
-        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/git/changes/changes-porcelain.ts#parseStatusV2#cognitive": {
@@ -1962,13 +2027,13 @@
         "count": 611,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/git/git.routes.ts#createGitRoutes#cognitive": {
-        "count": 65,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/git/git.routes.ts#createGitRoutes#lines": {
         "count": 633,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/git/git.routes.ts#scanRepo.<anonymous>#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/git/ops/push-run.ts#createPushRuns#lines": {
         "count": 137,
@@ -1983,8 +2048,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/guard/command-guard.ts#safetyTiers#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 39,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/guard/command-guard.ts#safetyTiers#cyclomatic": {
         "count": 27,
@@ -1994,32 +2059,36 @@
         "count": 104,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/guard/settings-hooks.ts#settingsHookSet#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/history/history.ts": {
         "count": 618,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/history/history.ts#createWorkspaceHistory#cognitive": {
-        "count": 29,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/history/history.ts#createWorkspaceHistory#lines": {
         "count": 527,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/history/history.ts#fileDiff#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/history/history.ts#healGitPointers#cognitive": {
+        "count": 29,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/history/history.ts#snapshotAll#cognitive": {
         "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/hosts/desktop-sync.routes.ts#createSyncRoutes#lines": {
         "count": 136,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/hosts/device-artifacts.routes.ts#push#cognitive": {
+        "count": 26,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/hosts/device-reports.ts#mergeDevices#cognitive": {
-        "count": 32,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/hosts/device-reports.ts#mergeDevices#lines": {
@@ -2030,13 +2099,13 @@
         "count": 147,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/hosts/host-command-guard.ts#judgeHostCommand#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/hosts/host-command-guard.ts#judgeHostCommand#cyclomatic": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/inventory/enroll.routes.ts#createEnrollRoute.<anonymous>#cognitive": {
+        "count": 31,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/issues/issues-store.ts#fileIssuesStore#lines": {
         "count": 120,
@@ -2059,7 +2128,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/loops/loop-runner.ts#runLoop#cognitive": {
-        "count": 66,
+        "count": 63,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/loops/loop-runner.ts#runLoop#cyclomatic": {
@@ -2070,20 +2139,12 @@
         "count": 146,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/main.ts#bootToGate#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/main.ts#bootToGate#lines": {
         "count": 173,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/migrations/adapter-shared.ts#planSkillFiles#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/migrations/hermes.ts#planHermes#cognitive": {
-        "count": 89,
+        "count": 74,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/migrations/hermes.ts#planHermes#cyclomatic": {
@@ -2095,7 +2156,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/migrations/host-scan.ts#scanHost#cognitive": {
-        "count": 42,
+        "count": 38,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/migrations/json5ish.ts#dropTrailingCommas#cognitive": {
@@ -2111,7 +2172,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/migrations/openclaw.ts#planOpenclaw#cognitive": {
-        "count": 109,
+        "count": 89,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/migrations/openclaw.ts#planOpenclaw#cyclomatic": {
@@ -2122,13 +2183,25 @@
         "count": 276,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/needs/kinds/capability-need.ts#answer#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/needs/kinds/capability-need.ts#capabilityNeed#lines": {
         "count": 286,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/needs/kinds/capability-need.ts#check#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/needs/kinds/capability-need.ts#reachFor#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/needs/kinds/capability-need.ts#resolve#cognitive": {
-        "count": 37,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 48,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/needs/kinds/capability-need.ts#resolve#cyclomatic": {
         "count": 26,
@@ -2139,24 +2212,24 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onPersona#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/needs/kinds/grant-need.ts#onPersona#cyclomatic": {
         "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/needs/needs-slice.ts#createNeedsSlice#cognitive": {
-        "count": 35,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/needs/kinds/grant-need.ts#resolve#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/needs/needs-slice.ts#createNeedsSlice#lines": {
         "count": 112,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/needs/needs.ts#createNeeds#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/needs/needs.ts#ask#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/needs/needs.ts#createNeeds#lines": {
         "count": 363,
@@ -2166,9 +2239,17 @@
         "count": 107,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/offload/offload.routes.ts#createOffloadRoutes.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/org/org-policy.ts#createOrgPolicyHolder#lines": {
         "count": 159,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
+    },
+    "_sandbox/sandbox/src/panels/panels.routes.ts#createPanelsRoutes.<anonymous>#cognitive": {
+        "count": 36,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/panels/panels.routes.ts#createPanelsRoutes#lines": {
         "count": 106,
@@ -2182,10 +2263,6 @@
         "count": 114,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/peers/peer-hub.ts#createPeerHub#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/peers/peer-hub.ts#createPeerHub#lines": {
         "count": 262,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2193,6 +2270,10 @@
     "_sandbox/sandbox/src/peers/peer-routes.ts#createPeerRoutes#lines": {
         "count": 189,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/peers/peer-routes.ts#mcp#cognitive": {
+        "count": 29,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/personas/conversation-grants.ts#grantsOver#lines": {
         "count": 131,
@@ -2211,12 +2292,12 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/portability/bundle.ts#walk#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 37,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/privacy/gateway/gateway-route.ts#createGatewayRoute.<anonymous>#cognitive": {
-        "count": 63,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 87,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/privacy/gateway/gateway-route.ts#createGatewayRoute.<anonymous>#cyclomatic": {
         "count": 40,
@@ -2231,8 +2312,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#createMcpRoute.<anonymous>#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 58,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#createMcpRoute.<anonymous>#cyclomatic": {
         "count": 32,
@@ -2247,7 +2328,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#shieldValue#cognitive": {
-        "count": 31,
+        "count": 29,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/gateway/mcp-route.ts#shieldValue#cyclomatic": {
@@ -2262,6 +2343,10 @@
         "count": 125,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/privacy/gateway/request-shield.ts#maskImage#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/privacy/masker.ts#createMasker#lines": {
         "count": 123,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2273,6 +2358,10 @@
     "_sandbox/sandbox/src/privacy/privacy-shield.ts#createPrivacyShield#lines": {
         "count": 304,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/privacy/privacy-shield.ts#judge#cognitive": {
+        "count": 26,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/privacy/privacy-shield.ts#turnShield#lines": {
         "count": 106,
@@ -2286,17 +2375,25 @@
         "count": 195,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/processes/managed-processes.ts#sweep#cognitive": {
+        "count": 26,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/processes/service-processes.ts#createServiceProcesses#lines": {
         "count": 134,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/public/public-files.ts#listPublicFiles#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/public/public-serve.ts#createPublicHandler.<anonymous>#cognitive": {
+        "count": 28,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/runtimes/acp/acp-agent.ts#runAcpTurn#cognitive": {
+    "_sandbox/sandbox/src/runners/runner-command.ts#run.<anonymous>#cognitive": {
+        "count": 34,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runners/runner-credentials.ts#resolve#cognitive": {
         "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/acp/acp-connection.ts#connect#lines": {
         "count": 144,
@@ -2315,6 +2412,10 @@
         "count": 119,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts#runCodexAgent#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/codex/codex-agent.ts#runCodexAgent#lines": {
         "count": 116,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2325,12 +2426,16 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#runAppServerTurn#cognitive": {
-        "count": 34,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 40,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#runAppServerTurn#lines": {
         "count": 137,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#stdioConnector.<anonymous>#cognitive": {
+        "count": 37,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/codex/codex-app-server.ts#stdioConnector.<anonymous>#lines": {
         "count": 163,
@@ -2344,13 +2449,21 @@
         "count": 117,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/codex/codex-hooks.ts#settle#cognitive": {
+        "count": 31,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/codex/codex-hooks.ts#shellRewrite#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts": {
         "count": 778,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#attempt#cognitive": {
-        "count": 35,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 45,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#attempt#cyclomatic": {
         "count": 28,
@@ -2365,8 +2478,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#runPhase#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 30,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-agent.ts#runPhase#lines": {
         "count": 133,
@@ -2377,8 +2490,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-events.ts#map#cognitive": {
-        "count": 31,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 45,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-events.ts#map#cyclomatic": {
         "count": 27,
@@ -2392,13 +2505,25 @@
         "count": 765,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-hooks.ts#gateHandler.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-hooks.ts#toolHandler.<anonymous>#cognitive": {
+        "count": 29,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-host.ts#runtimeChannel#lines": {
         "count": 112,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/cursor/cursor-shield.ts#read#cognitive": {
-        "count": 31,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 48,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/cursor/cursor-shield.ts#toolCall#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/daemon-tools/policy-gate-server.ts#gateServer#lines": {
         "count": 102,
@@ -2408,6 +2533,22 @@
         "count": 110,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/devin/models/devin-catalog.ts#parseStored.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/minted/meta-login.ts#settle#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/minted/zai-login.ts#settle#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/muse/muse-agent.ts#runMuseAgent#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/opencode/opencode-agent.ts": {
         "count": 1136,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2416,6 +2557,10 @@
         "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode-agent.ts#openCodeTurnOf.<anonymous>#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/opencode/opencode-events.ts#openEventStream#lines": {
         "count": 135,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2423,6 +2568,10 @@
     "_sandbox/sandbox/src/runtimes/opencode/opencode.ts#createOpenCodeService#lines": {
         "count": 331,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/runtimes/opencode/opencode.ts#take#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/opencode/shell/opencode-shell-script.ts#shellScript#lines": {
         "count": 156,
@@ -2436,13 +2585,17 @@
         "count": 117,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/pi/pi-agent.ts#turn#cognitive": {
+        "count": 37,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#createPiEventMapper#lines": {
         "count": 145,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#map#cognitive": {
-        "count": 52,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 72,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/runtimes/pi/pi-events.ts#map#cyclomatic": {
         "count": 48,
@@ -2456,6 +2609,18 @@
         "count": 183,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/runtimes/pi/pi-hooks.ts#shellLine#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-hooks.ts#toolResult#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts#onLine#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts#piSpawner.<anonymous>#lines": {
         "count": 106,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2464,21 +2629,21 @@
         "count": 110,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/secrets/secrets.routes.ts#createSecretsRoutes#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/secrets/gates/credential-gate.ts#check#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/secrets/secrets.routes.ts#createSecretsRoutes#lines": {
         "count": 345,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
     },
-    "_sandbox/sandbox/src/sessions/record/record-blobs.ts#sweepBlobs#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/secrets/secrets.routes.ts#withUse#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/sessions/sessions-slice.ts#createSessionsSlice#cognitive": {
+    "_sandbox/sandbox/src/sessions/search-store.ts#search#cognitive": {
         "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/sessions/sessions-slice.ts#createSessionsSlice#lines": {
         "count": 174,
@@ -2496,9 +2661,9 @@
         "count": 185,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/sessions/transcript-record.ts#fileTranscriptRecord#cognitive": {
+    "_sandbox/sandbox/src/sessions/sessions.ts#said#cognitive": {
         "count": 27,
-        "why": "standing when the check arrived (2026-10-16)"
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/sessions/transcript-record.ts#fileTranscriptRecord#lines": {
         "count": 347,
@@ -2516,6 +2681,10 @@
         "count": 136,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/speech/speech.routes.ts#onMessage#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/speech/voice/voice.routes.ts#createVoiceStreamRoute.<anonymous>#lines": {
         "count": 110,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2524,9 +2693,17 @@
         "count": 111,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/speech/voice/voice.routes.ts#say.<anonymous>#cognitive": {
+        "count": 32,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/store/json-file.ts#openJsonFile#lines": {
         "count": 103,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/store/json-file.ts#readState#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/store/plain-files/json-dir.ts#jsonDir#lines": {
         "count": 102,
@@ -2545,8 +2722,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/system/boot/reaper.ts#sweepProcesses#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/system/listeners/reach-report.ts#createReachReporter#lines": {
         "count": 125,
@@ -2560,21 +2737,33 @@
         "count": 119,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/system/system.routes.ts#createSystemRoutes.<anonymous>#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/system/system.routes.ts#createSystemRoutes#lines": {
         "count": 310,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/system/system.routes.ts#systemEvents#cognitive": {
-        "count": 33,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/system/system.routes.ts#systemEvents#lines": {
         "count": 181,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/system/updates/auto-update.ts#configure.<anonymous>#cognitive": {
+        "count": 26,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/system/updates/auto-update.ts#createAutoUpdater#lines": {
         "count": 227,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/system/updates/auto-update.ts#look#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/terminal/pane-door.ts#handle#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/terminal/pane-door.ts#openPaneDoor#lines": {
         "count": 200,
@@ -2585,8 +2774,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/usage/serviceability/state-log.ts#note#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/usage/translator-usage.ts#appendCodexLimit#cognitive": {
         "count": 21,
@@ -2601,11 +2790,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/usage/usage-store.ts#rollup#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 29,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/wallet/payment-offer.ts#gatedPaidFetch#cognitive": {
-        "count": 53,
+        "count": 49,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/wallet/payment-offer.ts#gatedPaidFetch#cyclomatic": {
@@ -2616,13 +2805,17 @@
         "count": 262,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/wallet/wallet.routes.ts#fetch#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/webext/secret-tickets.ts#createSecretTickets#lines": {
         "count": 104,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
     },
-    "_sandbox/sandbox/src/workflows/workflow-runner.ts#runWorkflow#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_sandbox/sandbox/src/workflows/gate.routes.ts#createGateRoute.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workflows/workflow-runner.ts#runWorkflow#lines": {
         "count": 156,
@@ -2637,7 +2830,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#compileView#cognitive": {
-        "count": 114,
+        "count": 82,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#compileView#cyclomatic": {
@@ -2649,7 +2842,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#prepareAgentDomainView#cognitive": {
-        "count": 100,
+        "count": 79,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#prepareAgentDomainView#cyclomatic": {
@@ -2661,16 +2854,20 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#sameHostAliases#cognitive": {
-        "count": 38,
+        "count": 33,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#script#cognitive": {
-        "count": 52,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 64,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workload/domain/agent-domain-view.ts#script#cyclomatic": {
         "count": 27,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/sandbox/src/workload/resource-budget.ts#admit#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workload/resource-budget.ts#admit#cyclomatic": {
         "count": 23,
@@ -2680,56 +2877,68 @@
         "count": 214,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/workload/room-socket.ts#createRoomServer.<anonymous>#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/workspace/deps/package-graph.ts#readRepoMap#cognitive": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/workspace/deps/package-modules.ts#readPackageModules#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/workspace/deps/package-usage.ts#withUsage.<anonymous>#cognitive": {
-        "count": 31,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/workspace/deps/package-usage.ts#withUsage#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 41,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts#createDependencyCoordinator#lines": {
         "count": 294,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts#pass#cognitive": {
-        "count": 38,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 39,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/workspace/files/archive/workspace-archive.ts#handleEntry#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workspace/files/download/workspace-zip.ts#zipChunks#cognitive": {
-        "count": 31,
+        "count": 28,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/files/download/workspace-zip.ts#zipChunks#lines": {
         "count": 104,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/workspace/files/resident-tree.ts#apply#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/workspace/files/resident-tree.ts#createResidentTree#lines": {
         "count": 308,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/files/resident-tree.ts#relist#cognitive": {
-        "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 29,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workspace/files/resident-tree.ts#view#cognitive": {
-        "count": 47,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 61,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/sandbox/src/workspace/files/workspace-bytes.routes.ts#createWorkspaceBytesRoutes#lines": {
         "count": 250,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/workspace/files/workspace-bytes.routes.ts#media#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_sandbox/sandbox/src/workspace/files/workspace-bytes.routes.ts#upload#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#listWorkspaceChildren#cognitive": {
-        "count": 51,
+        "count": 49,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#listWorkspaceChildren#cyclomatic": {
@@ -2737,15 +2946,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#walkWorkspaceTree#cognitive": {
-        "count": 53,
+        "count": 52,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/files/workspace-tree.ts#walkWorkspaceTree#cyclomatic": {
         "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/workspace/workspace.routes.ts#createWorkspaceRoutes#cognitive": {
-        "count": 38,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/workspace/workspace.routes.ts#createWorkspaceRoutes#lines": {
@@ -2759,6 +2964,10 @@
     "_sandbox/speech/src/model-store.ts#createModelStore#lines": {
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_sandbox/speech/src/model-store.ts#fetchOne#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_sandbox/speech/src/speech-engine.ts#createSpeechProcess#lines": {
         "count": 111,
@@ -2784,28 +2993,28 @@
         "count": 122,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/webq/src/lib/crawl.ts#pump#cognitive": {
+        "count": 22,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_sandbox/webq/src/lib/markdown.ts#renderBlock#cyclomatic": {
         "count": 29,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/webq/src/lib/robots.ts#parseRobots#cognitive": {
-        "count": 26,
+        "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/webq/src/lib/sitemap.ts#fetchSitemapUrls#cognitive": {
-        "count": 26,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-bench/src/agents/analyze.ts#analyzeEvents#cognitive": {
         "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_search/iq-bench/src/agents/analyze.ts#renderAnalytics#cognitive": {
-        "count": 39,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_search/iq-bench/src/agents/analyze.ts#toolEvents#cognitive": {
-        "count": 29,
+        "count": 28,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-bench/src/agents/claude.ts#parseClaudeStream#cognitive": {
@@ -2821,19 +3030,15 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-bench/src/agents/run.ts#agents#cognitive": {
-        "count": 46,
+        "count": 41,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-bench/src/agents/run.ts#agents#cyclomatic": {
         "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_search/iq-bench/src/report.ts#configVsFull#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_search/iq-bench/src/report.ts#renderAgentsReport#cognitive": {
-        "count": 42,
+        "count": 32,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-bench/src/report.ts#renderAgentsReport#cyclomatic": {
@@ -2841,11 +3046,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-bench/src/retrieval.ts#runConfig#cognitive": {
-        "count": 28,
+        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/engines/catalog.ts#entryMatch#cognitive": {
-        "count": 26,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/engines/catalog.ts#parseCatalog#lines": {
@@ -2853,27 +3058,27 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/engines/catalog.ts#value#cognitive": {
-        "count": 32,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 46,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_search/iq-engine/src/engines/git.ts#churnOf#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
+    "_search/iq-engine/src/engines/lexical.ts#onLine#cognitive": {
+        "count": 23,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_search/iq-engine/src/engines/lexical.ts#rgSearch#lines": {
         "count": 129,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/engines/routes.ts#compileRoute#cognitive": {
-        "count": 27,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/engines/routes.ts#literal#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 52,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_search/iq-engine/src/engines/routes.ts#routeTable#cognitive": {
-        "count": 118,
+        "count": 107,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/engines/routes.ts#routeTable#cyclomatic": {
@@ -2882,14 +3087,6 @@
     },
     "_search/iq-engine/src/engines/routes.ts#routeTable#lines": {
         "count": 249,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/host/child.ts#<anonymous>#cognitive": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/host/client.ts#createEngineClient#cognitive": {
-        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/host/client.ts#createEngineClient#lines": {
@@ -2905,7 +3102,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/indexer/chunker.ts#chunkFile#cognitive": {
-        "count": 35,
+        "count": 32,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/indexer/chunker.ts#chunkFile#cyclomatic": {
@@ -2913,19 +3110,19 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/indexer/indexer.ts#revalidate#cognitive": {
-        "count": 25,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/indexer/symbols.ts#extractSymbols#cognitive": {
-        "count": 24,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/plan/fuse.ts#fuse#cognitive": {
-        "count": 28,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/render/text.ts#renderText#cognitive": {
-        "count": 71,
+        "count": 64,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/render/text.ts#renderText#cyclomatic": {
@@ -2941,7 +3138,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verbs/dispatch.ts#dispatch#cognitive": {
-        "count": 66,
+        "count": 61,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verbs/dispatch.ts#dispatch#cyclomatic": {
@@ -2953,15 +3150,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verbs/dispatch.ts#naturalPlan#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq-engine/src/verbs/dispatch.ts#rerankGroups#cognitive": {
-        "count": 24,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verbs/dispatch.ts#runVerb#cognitive": {
-        "count": 147,
+        "count": 134,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verbs/dispatch.ts#runVerb#cyclomatic": {
@@ -2972,12 +3165,8 @@
         "count": 343,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_search/iq-engine/src/verbs/literal.ts#literalAnswer#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_search/iq-engine/src/verbs/route.ts#routeAnswer#cognitive": {
-        "count": 70,
+        "count": 58,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verbs/route.ts#routeAnswer#cyclomatic": {
@@ -2989,7 +3178,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verify/check.ts#verifyReferences#cognitive": {
-        "count": 60,
+        "count": 48,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verify/check.ts#verifyReferences#cyclomatic": {
@@ -3001,8 +3190,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq-engine/src/verify/extract.ts#extractReferences.<anonymous>#cognitive": {
-        "count": 35,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 46,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_search/iq-engine/src/verify/extract.ts#extractReferences.<anonymous>#cyclomatic": {
         "count": 24,
@@ -3011,6 +3200,14 @@
     "_search/iq-engine/src/verify/lookup.ts#indexLookup#lines": {
         "count": 163,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_search/iq-engine/src/verify/lookup.ts#resolvePath#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_search/iq-engine/src/workspace/scan.ts#walk.<anonymous>#cognitive": {
+        "count": 25,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_search/iq/src/commands/sessions/sessions.routes.ts#func#cognitive": {
         "count": 21,
@@ -3025,7 +3222,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/lib/run.ts#parseMultiLine#cognitive": {
-        "count": 60,
+        "count": 58,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/lib/run.ts#parseMultiLine#cyclomatic": {
@@ -3033,7 +3230,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/lib/run.ts#runMulti#cognitive": {
-        "count": 31,
+        "count": 28,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/lib/run.ts#tokenize#cognitive": {
@@ -3041,7 +3238,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/fork/fork-point.ts#selectForkPoint#cognitive": {
-        "count": 30,
+        "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/fork/fork-point.ts#selectForkPoint#cyclomatic": {
@@ -3049,7 +3246,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/fork/fork.ts#materializeFork#cognitive": {
-        "count": 46,
+        "count": 43,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/fork/fork.ts#materializeFork#cyclomatic": {
@@ -3061,7 +3258,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/ingest/ingest.ts#ingest#cognitive": {
-        "count": 29,
+        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/ingest/ingest.ts#parseDelta#cognitive": {
@@ -3070,10 +3267,6 @@
     },
     "_search/iq/src/recall/ingest/ingest.ts#parseDelta#cyclomatic": {
         "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_search/iq/src/recall/rank/match.ts#matchSessions#cognitive": {
-        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_search/iq/src/recall/transcript/lines.ts#fileTouchesOf#cognitive": {
@@ -3092,6 +3285,10 @@
         "count": 1184,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_shared/connector-runtime/src/chat-reply.ts#apply#cognitive": {
+        "count": 36,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_shared/connector-runtime/src/chat-reply.ts#createChatReply#lines": {
         "count": 296,
         "why": "standing when the check arrived (2026-10-16)"
@@ -3100,9 +3297,13 @@
         "count": 161,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_shared/connector-runtime/src/gateway.ts#reconcile#cognitive": {
+    "_shared/connector-runtime/src/chat-reply.ts#settle#cognitive": {
         "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_shared/connector-runtime/src/gateway.ts#reconcile#cognitive": {
+        "count": 32,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_shared/connector-runtime/src/gateway.ts#runConnectorGateway#lines": {
         "count": 212,
@@ -3116,16 +3317,16 @@
         "count": 34,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_shared/registry/src/registry.ts#resolveRegistry.<anonymous>#cognitive": {
+        "count": 31,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_shared/registry/src/registry.ts#resolveRegistry.<anonymous>#cyclomatic": {
         "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/chores/chores.ts": {
         "count": 1105,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_shared/sandbox-contract/src/chores/chores.ts#assess#cognitive": {
-        "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/chores/probes.ts": {
@@ -3156,6 +3357,10 @@
         "count": 112,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_shared/sandbox-contract/src/protocol/peer-mcp-server.ts#createMcpServer.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_shared/sandbox-contract/src/schemas/agents.ts": 963,
     "_shared/sandbox-contract/src/schemas/automations.ts": {
         "count": 633,
@@ -3179,7 +3384,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cognitive": {
-        "count": 44,
+        "count": 35,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/text/transcript-fold.ts#apply#cyclomatic": {
@@ -3190,22 +3395,23 @@
         "count": 236,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_shared/workspace-ignore/src/index.ts#isIgnored#cognitive": {
+        "count": 27,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_site/astro-integrations/src/html-to-markdown.mjs#parseHtml#cognitive": {
         "count": 37,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_site/astro-integrations/src/html-to-markdown.mjs#renderNode#cognitive": {
-        "count": 30,
+        "count": 29,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_site/astro-integrations/src/html-to-markdown.mjs#renderNode#cyclomatic": {
         "count": 44,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_site/astro-integrations/src/llms-text.mjs#llmsText.<anonymous>#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_site/astro-integrations/src/llms-text.mjs#llmsText.<anonymous>#cognitive": 24,
     "_site/demo/scripts/smoke-daemon.ts#samplesOf#lines": {
         "count": 266,
         "why": "standing when the check arrived (2026-10-16)"
@@ -3223,7 +3429,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_site/site/src/lib/api-examples.ts#build#cognitive": {
-        "count": 65,
+        "count": 61,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_site/site/src/lib/api-examples.ts#build#cyclomatic": {
@@ -3238,16 +3444,12 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_site/site/src/lib/api-reference.ts#schemaRows#cognitive": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_site/site/src/lib/api-reference.ts#typeLabel#cognitive": {
-        "count": 28,
+        "count": 24,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/base/src/acme/acme.ts#obtainCertificate#cognitive": {
-        "count": 37,
+        "count": 28,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/base/src/acme/acme.ts#obtainCertificate#cyclomatic": {
@@ -3263,11 +3465,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/base/src/text/utf16-text.ts#decodeUtf16Window#cognitive": {
-        "count": 24,
+        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/base/src/when.ts#scan#cognitive": {
-        "count": 28,
+        "count": 27,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/checks/lib/visible-text.mjs#expressionLiterals#lines": {
@@ -3275,8 +3477,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/checks/lib/visible-text.mjs#visit#cognitive": {
-        "count": 68,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 91,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_tools/checks/lib/visible-text.mjs#visit#cyclomatic": {
         "count": 40,
@@ -3284,10 +3486,6 @@
     },
     "_tools/checks/lib/visible-text.mjs#visit#lines": {
         "count": 104,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/checks/lib/workflows.mjs#jobsOf#cognitive": {
-        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/code-read/src/stat.ts#codeLineStat#cyclomatic": {
@@ -3303,7 +3501,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/constants/src/contract-shrink.mjs#shrunkSurfaces#cognitive": {
-        "count": 28,
+        "count": 27,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/constants/src/contract-shrink.mjs#shrunkSurfaces#cyclomatic": {
@@ -3311,15 +3509,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/constants/src/mirror-roots.mjs#replacedMirrorRoots#cognitive": {
-        "count": 37,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/desktop-smoke-windows/src/tier-engine.ts#moveBothWays#cognitive": {
-        "count": 24,
+        "count": 34,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/desktop-smoke-windows/src/tier-engine.ts#runEngineTier#cognitive": {
-        "count": 29,
+        "count": 25,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/desktop-smoke-windows/src/tier-engine.ts#runEngineTier#lines": {
@@ -3327,7 +3521,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/desktop-smoke-windows/src/tier-install.ts#runInstallTier#cognitive": {
-        "count": 57,
+        "count": 45,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/desktop-smoke-windows/src/tier-install.ts#runInstallTier#cyclomatic": {
@@ -3351,8 +3545,8 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/fake-model/src/server.ts#startFakeModel.<anonymous>#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 48,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_tools/fake-model/src/server.ts#startFakeModel.<anonymous>#cyclomatic": {
         "count": 22,
@@ -3363,24 +3557,20 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/fake-upstream/src/server.ts#startFakeUpstream.<anonymous>#cognitive": {
-        "count": 30,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 54,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_tools/fake-upstream/src/server.ts#startFakeUpstream#lines": {
         "count": 108,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_tools/nav/bench.mjs#runBench#cognitive": {
-        "count": 25,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_tools/nav/gate.mjs#snapshotOf#cognitive": {
-        "count": 22,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/nav/lib/resolve.mjs#follow#cognitive": {
-        "count": 33,
-        "why": "standing when the check arrived (2026-10-16)"
+        "count": 47,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_tools/nav/lib/resolve.mjs#resolveSpecifier#cognitive": {
         "count": 23,
@@ -3392,14 +3582,6 @@
     },
     "_tools/nav/lib/tokens.mjs#estimateTokens#cyclomatic": {
         "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/nav/lookup.mjs#runLookupSim#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/nav/metrics.mjs#measureShape#cognitive": {
-        "count": 40,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/nav/metrics.mjs#measureShape#lines": {
@@ -3418,24 +3600,32 @@
         "count": 142,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_tools/perf/src/chat/stream.ts#streaming#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
     "_tools/perf/src/chat/stream.ts#streamTurn#lines": {
         "count": 125,
         "why": "standing when the check arrived (2026-10-16)"
+    },
+    "_tools/perf/src/mobile/page-scripts.ts#inflated#cognitive": {
+        "count": 24,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
+    },
+    "_tools/perf/src/mobile/serve.ts#serveBuild.<anonymous>#cognitive": {
+        "count": 21,
+        "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
     "_tools/registry-scan/src/audit.ts#admissionProblems#cyclomatic": {
         "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/registry-scan/src/audit.ts#securityAuditTargets#cognitive": {
-        "count": 28,
+        "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/registry-scan/src/audit.ts#securityAuditTargets#cyclomatic": {
         "count": 28,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/registry-scan/src/scan.ts#scanRegistry#cognitive": {
-        "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/scripts/desktop/try-onboarding.mjs": {
@@ -3443,15 +3633,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/scripts/verify/clock-suites.mjs#main#cognitive": {
-        "count": 26,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/testing/bin/suites.mjs#run#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/testing/src/fly-fake.ts#installFakeFly#cognitive": {
-        "count": 38,
+        "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/testing/src/fly-fake.ts#installFakeFly#lines": {
@@ -3460,10 +3642,6 @@
     },
     "_tools/testing/src/stripe-fake.ts": {
         "count": 646,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/testing/src/stripe-fake.ts#startFakeStripe#cognitive": {
-        "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_tools/testing/src/stripe-fake.ts#startFakeStripe#lines": {

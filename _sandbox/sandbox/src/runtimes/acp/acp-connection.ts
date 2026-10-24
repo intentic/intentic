@@ -1,4 +1,4 @@
-import { type AgentCapabilities, client, type ClientConnection, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { type AgentCapabilities, client, type ClientConnection, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { withTimeout } from "@intentic/base/async";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";

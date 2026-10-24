@@ -1,5 +1,5 @@
 import { basename, isAbsolute, join } from "node:path";
-import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLocation as AcpToolCallLocation } from "@agentclientprotocol/sdk";
+import type { SessionUpdate, ToolCallContent as AcpToolCallContent, ToolCallLocation as AcpToolCallLocation } from "@agentclientprotocol/sdk/unstable";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract/events/requests";

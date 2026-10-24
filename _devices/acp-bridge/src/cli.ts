@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Readable, Writable } from "node:stream";
-import { ndJsonStream } from "@agentclientprotocol/sdk";
+import { ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 import { bridgeAgentApp } from "./bridge.js";
 import { runLogin } from "./login.js";
 

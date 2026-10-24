@@ -1,4 +1,4 @@
-import type { PermissionOption, PermissionOptionKind, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import type { PermissionOption, PermissionOptionKind, RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk/unstable";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { answerVendorAsk, askCwdOf, askProgramOf, type VendorAnswer, VendorToolInputSchema } from "../decorators/vendor-ask.js";

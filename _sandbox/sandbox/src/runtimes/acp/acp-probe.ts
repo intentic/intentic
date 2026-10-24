@@ -1,4 +1,4 @@
-import { type AgentCapabilities, client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { type AgentCapabilities, client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { withTimeout } from "@intentic/base/async";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { acpLaunchOf, spawnAcpProcess } from "./acp-spawn.js";

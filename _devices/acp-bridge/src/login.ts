@@ -1,6 +1,6 @@
 import readline from "node:readline/promises";
 import { errorMessage } from "@intentic/base/errors";
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { createDaemonClient } from "./daemon-client.js";
 import { writeConfig } from "./config.js";
 

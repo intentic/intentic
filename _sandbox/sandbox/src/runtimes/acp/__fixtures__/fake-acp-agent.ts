@@ -12,7 +12,7 @@ import {
     type SessionConfigOption,
     type SessionModeState,
     type SessionUpdate,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
 import type { AcpConnection } from "../acp-connection.js";
 import type { AcpSessionMeta } from "../acp-spawn.js";

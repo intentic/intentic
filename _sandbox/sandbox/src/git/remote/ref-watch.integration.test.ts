@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -115,6 +115,28 @@ test("a ref several slashes deep is reported", async () => {
 
     batches.length = 0;
     await git(root, ["update-ref", "refs/remotes/origin/agent/deep/name", "HEAD"]);
+    await waitFor(() => batches.length > 0);
+    expect(batches[0]).toEqual(["root"]);
+});
+
+test("refs recreated after the watched directory was removed are reported", async () => {
+    const root = await workspace();
+    const batches = watchRoot(root);
+    await attached(batches, probeBranch(root));
+    await git(root, ["checkout", "--detach"]);
+    await settle();
+    batches.length = 0;
+
+    await rm(join(root, ".git", "refs"), { recursive: true });
+    await waitFor(() => batches.length > 0);
+    await settle();
+    batches.length = 0;
+
+    await mkdir(join(root, ".git", "refs"), { recursive: true });
+    await waitFor(() => batches.length > 0);
+    await settle();
+    batches.length = 0;
+    await git(root, ["update-ref", "refs/heads/recreated", "HEAD"]);
     await waitFor(() => batches.length > 0);
     expect(batches[0]).toEqual(["root"]);
 });

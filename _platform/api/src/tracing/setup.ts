@@ -3,7 +3,7 @@ import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-ho
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BatchSpanProcessor, NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { NodeSDK } from "@opentelemetry/sdk-node";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
 import type { MiddlewareHandler } from "hono";
 
@@ -26,19 +26,24 @@ export const startTracing = (): Tracing | undefined => {
         return undefined;
     }
 
-    const provider = new NodeTracerProvider({
+    // SDK 3's bare TracerProvider no longer reads OTEL_* sampler, span-limit or batch settings. NodeSDK keeps
+    // that environment contract; explicit empty signal/instrumentation lists keep this setup HTTP-traces only.
+    const sdk = new NodeSDK({
+        autoDetectResources: false,
+        instrumentations: [],
+        logRecordProcessors: [],
+        metricReaders: [],
+        contextManager: new AsyncLocalStorageContextManager(),
+        textMapPropagator: new W3CTraceContextPropagator(),
         resource: resourceFromAttributes({
             [ATTR_SERVICE_NAME]: SERVICE_NAME,
             [ATTR_SERVICE_VERSION]: SERVICE_VERSION,
         }),
-        spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter({ url: `${endpoint.replace(/\/$/, ``)}/v1/traces` }))],
+        traceExporter: new OTLPTraceExporter({ url: `${endpoint.replace(/\/$/, ``)}/v1/traces` }),
     });
+    sdk.start();
 
-    const contextManager = new AsyncLocalStorageContextManager();
-    contextManager.enable();
-    provider.register({ contextManager, propagator: new W3CTraceContextPropagator() });
-
-    return { shutdown: () => provider.shutdown() };
+    return { shutdown: () => sdk.shutdown() };
 };
 
 // Server span per request. @hono/otel extracts the incoming W3C traceparent (so a request stays in the same

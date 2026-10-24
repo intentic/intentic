@@ -1,7 +1,7 @@
 import { access, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { McpServer } from "@agentclientprotocol/sdk";
+import type { McpServer } from "@agentclientprotocol/sdk/unstable";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 
 // The daemon's stdio MCP proxy, for an ACP agent that does not advertise http MCP. Stdio is the one MCP transport every

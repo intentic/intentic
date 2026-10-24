@@ -1,5 +1,5 @@
 import { codedFailure } from "../../agent/run/frames/error-frames.js";
-import type { McpServer, NewSessionRequest } from "@agentclientprotocol/sdk";
+import type { McpServer, NewSessionRequest } from "@agentclientprotocol/sdk/unstable";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";

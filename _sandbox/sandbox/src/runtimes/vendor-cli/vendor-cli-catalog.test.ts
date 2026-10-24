@@ -1,4 +1,4 @@
-import { methods } from "@agentclientprotocol/sdk";
+import { methods } from "@agentclientprotocol/sdk/unstable";
 import { fakeAcpAgentApp, fakeAcpConnection } from "../acp/__fixtures__/fake-acp-agent.js";
 import { CLI_OWN_PICK, cliCatalogOf, offeredModels } from "./vendor-cli-catalog.js";
 
