@@ -1,9 +1,9 @@
 // Home spans sandboxes, so the per-sandbox screen memory must leave its navigation to the home surface.
 export const isHomePath = (path: string): boolean => /^\/home(?:[/?#]|$)/.test(path);
 
-// The person's own pages (settings), which belong to no one sandbox: opened from the master view they keep its rail, so
-// the account control's Settings is a visit, not a way back into whichever sandbox happened to be active.
-const PERSONAL = /^\/settings(?:[/?#]|$)/;
+// Settings and deleted sandboxes belong to the account. Opened from Home, they keep its rail instead of entering
+// whichever sandbox happened to be active.
+const PERSONAL = /^\/(?:settings(?:[/?#]|$)|deleted-sandboxes\/?(?:[?#]|$))/;
 
 /** Account pages stay available without a connected sandbox or a completed setup. */
 export const isAccountPath = (path: string): boolean => isHomePath(path) || PERSONAL.test(path);

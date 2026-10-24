@@ -255,6 +255,8 @@ flowchart LR
   rule. Binding also locks the sandbox row, shared with deletion and account erasure, so concurrent requests cannot
   delete a bound sandbox. An organisation admin must release it first. The personal owner remains; ownership transfer
   is still unfinished. [Organisation architecture](../../docs/architecture/organisations.md) describes enforcement and limits.
+  An admin may leave once another admin exists; their removal answers `null` so the editor closes that console,
+  rather than reading their removed membership and reporting a failure after the write succeeded.
 - Deleting an account runs one erase path whichever side asks (`src/account-erase.ts`): Better Auth's `beforeDelete`
   for the owner's own deletion, `deleteUserAccount` for an operator's. Before the cascade, in one transaction, it queues
   every Fly app the account owns (live machines, trashed sandboxes, a release's held volume, a provision in flight)

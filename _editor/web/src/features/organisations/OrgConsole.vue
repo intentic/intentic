@@ -61,9 +61,9 @@ const create = async (): Promise<void> => {
     }
 };
 
-// The panel answers every change with the organisation as it now stands; the list's counts follow.
-const changed = async (detail: OrgDetail): Promise<void> => {
-    picked.value = detail;
+// A departing admin's answer is null: close their console along with refreshing the list and its counts.
+const changed = async (detail: OrgDetail | null): Promise<void> => {
+    picked.value = detail ?? undefined;
     await load();
 };
 

@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import type { OrgDetail, OrgRole } from "@intentic/api-contract";
-import {
-    ORG_SECTIONS,
-    type OrgPolicyRules,
-    type OrgSectionMode,
-    orgPinnedGroups,
-    orgSectionMode,
-} from "@intentic/sandbox-contract/schemas/organisation";
-import { PRESET_GROUPS, type PresetGroup } from "@intentic/sandbox-contract/schemas/compliance";
+import type { OrgSectionMode } from "@intentic/sandbox-contract/schemas/organisation";
 import { Button, Notice, Row, RowGroup, RowNote, SegmentedControl, ui } from "@intentic/ui";
 import { formatDateTime } from "@intentic/ui/format";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -16,13 +9,14 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { apiClient } from "../../lib/useApi";
+import { useOrgPolicyDraft } from "./useOrgPolicyDraft";
 
 // One organisation as its console shows it: the policy, section by section; who is in it; which sandboxes it holds.
 // An admin edits all three; a member reads the policy their sandboxes are held to and nothing about anyone else, which
 // is also all the platform answers them (OrgDetailSchema).
 
 const { org } = defineProps<{ org: OrgDetail }>();
-const emit = defineEmits<{ changed: [detail: OrgDetail] }>();
+const emit = defineEmits<{ changed: [detail: OrgDetail | null] }>();
 
 const t = useT();
 const { sandboxes } = useSandbox();
@@ -31,7 +25,7 @@ const notice = shallowRef<NoticeModel>();
 const busy = ref(false);
 
 // Every change goes through here: one at a time, its answer handed up, its failure shown here.
-const act = async (change: () => Promise<OrgDetail>, failure: string): Promise<void> => {
+const act = async (change: () => Promise<OrgDetail | null>, failure: string): Promise<void> => {
     if (busy.value) {
         return;
     }
@@ -49,25 +43,15 @@ const act = async (change: () => Promise<OrgDetail>, failure: string): Promise<v
 // THE POLICY, edited as a draft and saved as one new edition: how each section is held, which groups of the
 // public-office preset every sandbox is pinned to (the daemon holds them on what it reads, whatever its files say), and
 // whether only the organisation's people may be given access (removing someone then removes them everywhere).
-const draft = ref(ORG_SECTIONS.map((section) => ({ section, mode: orgSectionMode(org.policy, section) })));
-const pins = ref(PRESET_GROUPS.map((group) => ({ group, pinned: orgPinnedGroups(org.policy).includes(group) })));
-const membersOnly = ref(org.policy.membersOnly === true);
+const { draft, pins, membersOnly, dirty, rules, expectedVersion, accept } = useOrgPolicyDraft(() => org);
 const MODES: readonly OrgSectionMode[] = [`open`, `locked`, `hidden`];
 const modeOptions = computed(() => MODES.map((mode) => ({ value: mode, label: t(`organisations.mode.${mode}`) })));
-const dirty = computed(
-    () =>
-        draft.value.some((row) => row.mode !== orgSectionMode(org.policy, row.section)) ||
-        pins.value.some((row) => row.pinned !== orgPinnedGroups(org.policy).includes(row.group)) ||
-        membersOnly.value !== (org.policy.membersOnly === true),
-);
-const savePolicy = (): Promise<void> => {
-    // Only what is not open is written: a section the policy leaves out is open, so the stored rules stay short. The same
-    // for pins and the member fence: absent is none.
-    const sections: OrgPolicyRules[`sections`] = Object.fromEntries(draft.value.filter((row) => row.mode !== `open`).map((row) => [row.section, row.mode]));
-    const preset: PresetGroup[] = pins.value.filter((row) => row.pinned).map((row) => row.group);
-    const rules = { sections, ...(preset.length > 0 && { preset }), ...(membersOnly.value && { membersOnly: true }) };
-    return act(() => apiClient.org.setPolicy({ orgId: org.id, rules, expectedVersion: org.policyVersion }), t(`organisations.detail.couldntSave`));
-};
+const savePolicy = (): Promise<void> =>
+    act(async () => {
+        const saved = await apiClient.org.setPolicy({ orgId: org.id, rules: rules.value, expectedVersion: expectedVersion.value });
+        accept(saved);
+        return saved;
+    }, t(`organisations.detail.couldntSave`));
 
 // THE PEOPLE.
 const email = ref(``);

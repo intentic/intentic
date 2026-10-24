@@ -14,16 +14,18 @@ test("settings opened from the master view keep its rail; a sandbox's page gives
     expect(masterRailAfter(true, `/settings/appearance`)).toBe(true);
     expect(masterRailAfter(true, `/settings`)).toBe(true);
     expect(masterRailAfter(false, `/settings`)).toBe(false);
+    expect(masterRailAfter(true, `/deleted-sandboxes`)).toBe(true);
+    expect(masterRailAfter(false, `/deleted-sandboxes`)).toBe(false);
     expect(masterRailAfter(true, `/workspace`)).toBe(false);
     expect(masterRailAfter(true, `/settingsx`)).toBe(false);
 });
 
-test.each([`/home`, `/home/box-1`, `/settings`, `/settings/appearance`, `/settings?plan=welcome`, `/settings/notifications#voice`])(
+test.each([`/home`, `/home/box-1`, `/settings`, `/settings/appearance`, `/settings?plan=welcome`, `/settings/notifications#voice`, `/deleted-sandboxes`, `/deleted-sandboxes/`, `/deleted-sandboxes#deleted`])(
     `%s belongs to the account without needing a sandbox`,
     (path) => expect(isAccountPath(path)).toBe(true),
 );
 
-test.each([`/homework`, `/settingsx`, `/workspace`, `/agents`, `/sandbox`, `/sandbox/agent`])(
+test.each([`/homework`, `/settingsx`, `/deleted-sandboxesx`, `/deleted-sandboxes/other`, `/workspace`, `/agents`, `/sandbox`, `/sandbox/agent`])(
     `%s is not an account page`,
     (path) => expect(isAccountPath(path)).toBe(false),
 );

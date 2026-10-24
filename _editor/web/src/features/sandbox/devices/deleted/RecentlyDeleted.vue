@@ -20,7 +20,7 @@ const route = useRoute();
 const sandbox = useSandbox();
 const trash = useSandboxTrash();
 
-const asked = computed(() => route.hash === `#${DELETED_ANCHOR}`);
+const asked = computed(() => route.name === `deleted-sandboxes` || route.hash === `#${DELETED_ANCHOR}`);
 const shows = computed(() =>
     trashSection({
         rows: trash.recoverable.value.length,

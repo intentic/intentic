@@ -91,7 +91,7 @@ it(`opens settings from Home with unfinished setup, and still gates sandbox page
     expect(shown(el)).toBe(`connecting`);
 });
 
-it.each([`/settings`, `/settings/appearance`, `/settings/billing`, `/settings/tokens`])(
+it.each([`/settings`, `/settings/appearance`, `/settings/billing`, `/settings/tokens`, `/deleted-sandboxes`])(
     `opens a direct visit to %s even when the sandbox is unavailable, too old or refuses access`,
     async (path) => {
         reachable.value = false;

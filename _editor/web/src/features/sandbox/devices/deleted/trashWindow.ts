@@ -9,7 +9,7 @@ export type TrashSection = `hidden` | `reading` | `error` | `empty` | `rows`;
 
 /**
  * The section is the board's footnote, not one of its machines: it appears when there is something to have back, and
- * otherwise only for a reader who came for it (`/devices#deleted`, the delete dialog's link). An empty or unreadable
+ * otherwise only for a reader who came for it (the account's recovery page or `/devices#deleted`). An empty or unreadable
  * trash on every visit would be noise, and on a box that cannot reach the platform a red notice that never goes away.
  */
 export const trashSection = (state: {

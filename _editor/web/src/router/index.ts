@@ -42,7 +42,7 @@ import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
-import { DELETED_PATH } from "../models/sandbox/devices/deviceLinks";
+import { DELETED_ANCHOR, DELETED_PATH, DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { useNotifications } from "../workbench/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
@@ -234,7 +234,7 @@ const routes: RouteRecordRaw[] = [
     // asks for it here.
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
-        // Persistent workspace shell (rail + shared chat + area outlet). Home and personal settings need only an account; other pages need a sandbox;
+        // Persistent workspace shell (rail + shared chat + area outlet). Home, recovery and settings need only an account; other pages need a sandbox;
         // otherwise requireSetup redirects to /setup (in the desktop app, to This computer: thisComputerFirst.ts).
         path: `/`,
         beforeEnter: [requireAuth, async (to) => workspaceAside.settle(await requireSetup(to)), openNamedSandbox],
@@ -245,6 +245,12 @@ const routes: RouteRecordRaw[] = [
                 name: `home`,
                 meta: { title: () => t(`home.title`) },
                 component: asyncView(() => import(`../features/home/MasterHomeView.vue`)),
+            },
+            {
+                path: `deleted-sandboxes`,
+                name: `deleted-sandboxes`,
+                meta: { title: () => t(`sandbox.words.recentlyDeleted`) },
+                component: asyncView(() => import(`../features/sandbox/devices/deleted/SandboxTrashPage.vue`)),
             },
             // The shell's own landing is the agent fleet on both desktop and mobile.
             // A new sandbox opens on the full-screen chat instead (landingAfterSetup, AddSandboxDialog), since the chat
@@ -340,7 +346,7 @@ const routes: RouteRecordRaw[] = [
                 component: asyncView(() => import(`../features/sandbox/devices/DevicesView.vue`)),
             },
             { path: `sandbox/devices`, redirect: (to) => ({ name: `devices`, query: to.query, hash: to.hash }) },
-            // Recently deleted was a hub section until 2026-10-07; it is the Devices board's foot now, by its anchor.
+            // Recently deleted used to be a hub section; recovery now also has its own account-level page.
             { path: `sandbox/deleted`, redirect: () => DELETED_PATH },
             // The audit log was a hub section until 2026-10-17; its records are a part of Activity now, and how they are
             // kept (its old second part, `?section=keeping`) is Retention's.
@@ -531,6 +537,8 @@ router.beforeEach((_to, from) => {
 // The installed app's cold start at "/" goes back to the page it was on, if that was recent (recentRoute.ts). Only the
 // first navigation: "/" chosen inside a running app means home.
 router.beforeEach((to, from) => (coldStartAtRoot(to, from === START_LOCATION) && installedApp() ? (lastRoute(Date.now()) ?? true) : true));
+// Older removal receipts must reach recovery even from an account page with no active sandbox.
+router.beforeEach((to) => (to.path === DEVICES_PATH && to.hash === `#${DELETED_ANCHOR}` ? DELETED_PATH : true));
 router.afterEach((to, _from, failure) => {
     if (failure === undefined && to.path !== `/` && to.matched.some((match) => match.path === `/`) && installedApp()) {
         rememberRoute(to.fullPath, Date.now());

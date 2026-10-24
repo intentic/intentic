@@ -90,7 +90,8 @@ export const orgContract = {
     removeMember: oc
         .route({ method: "POST", path: "/org/member/remove" })
         .input(orgIdInput.extend({ email: z.string().min(3) }))
-        .output(OrgDetailSchema),
+        // A departing admin no longer has an organisation to display; their successful removal answers null.
+        .output(OrgDetailSchema.nullable()),
     // Puts a sandbox under the organisation's policy. Its owner must be an admin of the organisation and the one
     // asking: binding constrains the owner, so it is never done to a sandbox by somebody else.
     bindSandbox: oc

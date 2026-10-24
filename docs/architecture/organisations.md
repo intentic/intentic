@@ -35,7 +35,7 @@ The routes are `org.*` in [`api-contract/organisations.ts`](../../_shared/api-co
 | Start an organisation | The deployment's operators (`ADMIN_EMAILS`, proven the way `ADMIN_SIGN_IN` requires), or anyone signed in when `ORGS_CREATION=anyone`. The creator becomes its first admin. |
 | Read the policy | Any member. Only admins also see the member list and the sandboxes. |
 | Save a new policy version | Admins. Each save names the version it was edited from. If someone saved in between, the save is refused with `CONFLICT`, so one admin cannot silently undo another's change. |
-| Add or remove people | Admins. The last admin can be neither removed nor demoted by adding them again as a member. Removing a person also deletes their platform grants (`SandboxMember`) to every sandbox the organisation holds. |
+| Add or remove people | Admins. The last admin can be neither removed nor demoted by adding them again as a member. Removing a person also deletes their platform grants (`SandboxMember`) to every sandbox the organisation holds. An admin who removes themselves receives `null` and their console closes. |
 | Add a sandbox (bind) | An admin who owns that sandbox. Binding constrains the owner, so it is never done to a sandbox by someone else. |
 | Release a sandbox (unbind) | Admins. If the owner could unbind alone, every lock would be optional. |
 | Delete a bound sandbox | Nobody until an admin releases it. `sandbox.delete` answers `CONFLICT`, because a deleted sandbox restored from the trash comes back personal, which would be a way out of every lock. |

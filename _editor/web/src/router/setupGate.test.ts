@@ -1,4 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { DELETED_PATH } from "../models/sandbox/devices/deviceLinks";
 import { readSetupRedirect, setupRedirect } from "./setupGate";
 
 const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">): SandboxSummary => ({
@@ -21,7 +22,7 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
 });
 
 describe(`checking setup before opening the workspace`, () => {
-    it.each([`/home`, `/home/missing`, `/settings`, `/settings/appearance`, `/settings/billing`])(`opens %s without a sandbox and leaves creation to a press`, async (path) => {
+    it.each([`/home`, `/home/missing`, `/settings`, `/settings/appearance`, `/settings/billing`, `/deleted-sandboxes`, DELETED_PATH])(`opens %s without a sandbox and leaves creation to a press`, async (path) => {
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [] }, path)).toBeUndefined();
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }, path)).toBeUndefined();
     });

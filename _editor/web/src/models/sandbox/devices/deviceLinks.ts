@@ -33,6 +33,7 @@ export const capabilityRoute = (entry: string, query?: LocationQueryRaw): RouteL
 export const cardRoute = (fix: DeviceCardFix): RouteLocationRaw =>
     capabilityRoute(fix.card, fix.connection === undefined ? undefined : { edit: fix.connection });
 
-/** The board's Recently deleted section, by its anchor: the hash is what marks a reader who came for it. */
+/** The account's Recently deleted section, also embedded in the Devices board. */
 export const DELETED_ANCHOR = `deleted`;
-export const DELETED_PATH = `${DEVICES_PATH}#${DELETED_ANCHOR}`;
+// Recovery must remain reachable after the account's last sandbox is gone: Devices itself needs a working sandbox.
+export const DELETED_PATH = `/deleted-sandboxes#${DELETED_ANCHOR}`;

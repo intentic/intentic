@@ -213,6 +213,16 @@ describe(`organisations`, () => {
         await expect(call(orgRoutes.removeMember, { orgId: org.id, email: `it@gmina.test` }, { context: admin })).rejects.toMatchObject({ code: `CONFLICT` });
     });
 
+    it(`acknowledges an admin leaving once another admin exists, without reading the membership it removed`, async () => {
+        const { prisma, admin, org, members } = await started();
+        await call(orgRoutes.addMember, { orgId: org.id, email: `deputy@gmina.test`, role: `admin` }, { context: admin });
+        expect(await call(orgRoutes.removeMember, { orgId: org.id, email: `IT@Gmina.test` }, { context: admin })).toBeNull();
+        expect(members.map((member) => ({ email: member.email, role: member.role }))).toEqual([{ email: `deputy@gmina.test`, role: `admin` }]);
+        expect((await call(orgRoutes.list, undefined, { context: admin })).orgs).toEqual([]);
+        await expect(call(orgRoutes.get, { orgId: org.id }, { context: admin })).rejects.toMatchObject({ code: `NOT_FOUND` });
+        expect((await call(orgRoutes.get, { orgId: org.id }, { context: as(prisma, `deputy@gmina.test`, `user-4`) })).role).toBe(`admin`);
+    });
+
     it(`never demotes the last admin by adding them again as a member, and lets one go once another admin exists`, async () => {
         const { admin, org, members } = await started();
         await expect(call(orgRoutes.addMember, { orgId: org.id, email: `IT@gmina.test`, role: `member` }, { context: admin })).rejects.toMatchObject({
@@ -231,7 +241,7 @@ describe(`organisations`, () => {
         grants.push({ sandboxId: `sbx-1`, email: `leaver@gmina.test` }, { sandboxId: `sbx-2`, email: `leaver@gmina.test` });
         expect(boxes[1]?.orgId).toBeNull();
         const after = await call(orgRoutes.removeMember, { orgId: org.id, email: `Leaver@gmina.test` }, { context: admin });
-        expect(after.members?.map((member) => member.email)).toEqual([`it@gmina.test`]);
+        expect(after?.members?.map((member) => member.email)).toEqual([`it@gmina.test`]);
         expect(grants).toEqual([{ sandboxId: `sbx-2`, email: `leaver@gmina.test` }]);
     });
 
@@ -244,7 +254,7 @@ describe(`organisations`, () => {
         expect((await call(orgRoutes.addMember, { orgId: org.id, email: `new@gmina.test`, role: `member` }, { context: admin })).policyVersion).toBe(3);
         // A role change is not a new person: what a daemon is sent does not move.
         expect((await call(orgRoutes.addMember, { orgId: org.id, email: `new@gmina.test`, role: `admin` }, { context: admin })).policyVersion).toBe(3);
-        expect((await call(orgRoutes.removeMember, { orgId: org.id, email: `clerk@gmina.test` }, { context: admin })).policyVersion).toBe(4);
+        expect((await call(orgRoutes.removeMember, { orgId: org.id, email: `clerk@gmina.test` }, { context: admin }))?.policyVersion).toBe(4);
     });
 
     it(`saves pinned preset groups this build knows and refuses a name it does not`, async () => {

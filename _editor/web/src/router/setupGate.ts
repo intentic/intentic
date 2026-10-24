@@ -28,6 +28,6 @@ export const readSetupRedirect = async (sandbox: SetupGateHost, path = ``, authe
         return undefined;
     }
     const redirect = setupRedirect(await sandbox.list()) === undefined ? undefined : setupRedirect(await sandbox.refresh());
-    // Home and personal settings belong to the account, including before its first sandbox.
+    // Home, personal settings and deleted sandboxes belong to the account, including before its first sandbox.
     return isAccountPath(path) ? undefined : redirect;
 };

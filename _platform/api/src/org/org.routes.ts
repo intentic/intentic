@@ -215,7 +215,9 @@ export const orgRoutes = {
         if (removed) {
             context.logger.info({ orgId: input.orgId }, `org: a member was removed, with their grants to the organisation's sandboxes`);
         }
-        return freshDetail(context, input.orgId);
+        // The write already committed. Requiring the caller's membership again after they removed themselves would
+        // turn that success into NOT_FOUND and leave their console showing administration controls they no longer hold.
+        return email === requireUser(context).email.toLowerCase() ? null : freshDetail(context, input.orgId);
     }),
     // Under the sandbox's row lock too, re-read there: a delete or an account erasure that committed first has taken the
     // row (answered as not found), and one waiting behind this bind finds the sandbox bound and refuses.
