@@ -12,6 +12,7 @@ import { providerCommands } from "../../providers/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
 import { type ContinueOptions, withCardBooking } from "../endings/pickUp";
 import type { ForkLink } from "../run/turnRequest";
+import { reopensAtOf } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerReadyOn } from "../../providers/access";
 import { type ChatAttachment, type ChatMessage, continuationFor, newestPermission } from "../transcript/transcript";
 import { newestOf } from "../transcript/transcriptScan";
@@ -164,7 +165,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     servingAccount: computed(() => conversation.value.selection.servingAccount.value?.id),
     spentReopensAt: computed(() => {
         const state = conversation.value.selection.servingState.value;
-        return state?.kind === `spent` ? state.reopensAt : undefined;
+        return state !== undefined ? reopensAtOf(state) : undefined;
     }),
     // The persona this chat acts as; undefined means anyone, keeping every connected account reachable. Resolved per
     // turn by the daemon, so a switch lands on the next message without a fresh chat.
