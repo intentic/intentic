@@ -44,7 +44,7 @@ const CHANNEL = "antigravity";
 
 // Served only when discovery and the persisted catalog are empty; strongest first, also the picker's display.
 export const SEED_GEMINI_MODELS: readonly GeminiModel[] = [
-    { id: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)", inputModalities: ["text", "image"] },
+    { id: "claude-opus-5-5-high", label: "Claude Opus 5.5 (High)", inputModalities: ["text", "image"] },
     { id: "gemini-pro-agent", label: "Gemini 3.1 Pro (High)", inputModalities: ["text", "image", "audio", "video"] },
     { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Thinking)", inputModalities: ["text", "image"] },
     { id: "gemini-3-flash-agent", label: "Gemini 3.5 Flash (High)", inputModalities: ["text", "image", "audio", "video"] },

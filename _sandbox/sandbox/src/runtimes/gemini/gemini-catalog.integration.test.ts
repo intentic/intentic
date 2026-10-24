@@ -28,7 +28,7 @@ const translatorListing = (ids: readonly string[]): typeof fetch =>
     );
 
 test("every Google model the translator lists is offered, -high ids included", async () => {
-    const listed = ["gemini-3.8-flash-high", "gemini-3.7-flash-high", "claude-opus-4-6-thinking"];
+    const listed = ["gemini-3.8-flash-high", "gemini-3.7-flash-high", "claude-opus-5-5-high"];
     const catalog = createGeminiCatalog(
         { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         join(root, "models.json"),

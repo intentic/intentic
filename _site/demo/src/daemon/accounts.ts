@@ -98,7 +98,7 @@ const CODEX_MODELS: Model[] = [
 
 // Google's routed lane serves other makers' models, so its catalog is mixed rather than Gemini-only.
 const GEMINI_MODELS: Model[] = [
-    { id: `claude-opus-4-6`, label: `Claude Opus 4.6 (Thinking)`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
+    { id: `claude-opus-5-5-high`, label: `Claude Opus 5.5 (High)`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
     { id: `gemini-3-1-pro`, label: `Gemini 3.1 Pro`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
     { id: `gemini-3-5-flash`, label: `Gemini 3.5 Flash`, efforts: [`low`, `medium`, `high`], badges: [`fast`] },
     { id: `gpt-oss-120b`, label: `GPT-OSS 120B`, efforts: [`low`, `medium`, `high`] },
