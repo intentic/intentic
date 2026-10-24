@@ -26,7 +26,7 @@ import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { switchableSandboxes } from "../../../models/sandbox/live/roster";
-import { addsInDialog, askAddSandbox } from "../../../models/sandbox/addSandbox";
+import { useRequestAddSandbox } from "../../../models/sandbox/addSandbox";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
@@ -195,11 +195,11 @@ const placementTip = (option: SandboxSummary): Tip => {
         : tip;
 };
 
-// "Add sandbox" opens its dialog over the workspace while there is a sandbox to stay in (models/sandbox/addSandbox.ts).
-const addsHere = computed(() => addsInDialog(sandbox.sandboxes.value));
+// Every add opens over the current place; a signed-out home asks for sign-in first and returns to the same dialog.
+const requestAddSandbox = useRequestAddSandbox();
 const addHere = (): void => {
     open.value = false;
-    askAddSandbox();
+    requestAddSandbox();
 };
 
 const pick = (option: SandboxSummary): void => {
@@ -527,19 +527,18 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
                     </div>
                 </template>
 
-                <!-- A dialog over the workspace once the account works in a sandbox; /setup's first run before that. -->
-                <component
-                    :is="local || addsHere ? `button` : RouterLink"
-                    v-bind="local || addsHere ? { type: `button` } : { to: `/setup` }"
+                <!-- The first and every later sandbox use the same dialog over this place. -->
+                <button
+                    type="button"
                     data-menu-row
                     class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
-                    @click="(event: MouseEvent) => (local ? addFromFolder(event) : addsHere ? addHere() : dismiss(event))"
+                    @click="(event: MouseEvent) => (local ? addFromFolder(event) : addHere())"
                 >
                     <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-line text-muted">
                         <Icon name="plus" class="text-sm" />
                     </span>
                     <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
-                </component>
+                </button>
 
             </template>
 

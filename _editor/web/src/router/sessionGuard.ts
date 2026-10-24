@@ -4,10 +4,11 @@ import { useAuth } from "../client/auth/useAuth";
 import { restorePersistedQueries } from "../lib/queryPersistence";
 import { signInAt } from "../lib/routes/signIn";
 import { restoreImprints } from "../lib/skeletonPersistence";
+import { isHomePath } from "../lib/routes/home";
 
 // Resolves the session once (Better Auth cookie); redirects to /login only when the platform authoritatively says none.
 // An unavailable platform gets its own retry screen, not treated as a sign-out.
-type Resolved = { readonly user: User } | { readonly redirect: RouteLocationRaw };
+type Resolved = { readonly user: User } | { readonly redirect: RouteLocationRaw; readonly signedOut: boolean };
 
 // A platform that hangs rather than refuses must not hold the first paint on a blank screen: past this the reader gets
 // the outage screen, and with it the sandboxes this device can open without the platform (recovery/README.md). The
@@ -26,11 +27,11 @@ export const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved
         try {
             current = await withinBudget(refresh(), SESSION_BUDGET_MS);
         } catch {
-            return { redirect: unavailable(to) };
+            return { redirect: unavailable(to), signedOut: false };
         }
     }
     // Signed out: the login screen carries the page that asked for it.
-    return current ? { user: current } : { redirect: signInAt(to.fullPath) };
+    return current ? { user: current } : { redirect: signInAt(to.fullPath), signedOut: true };
 };
 
 // Signed in, with a user in hand: hydrate the query cache from IndexedDB (per-user buster) before any route mounts, so
@@ -39,7 +40,8 @@ export const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved
 export const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     const resolved = await resolveUser(to);
     if (!(`user` in resolved)) {
-        return resolved.redirect;
+        // Home's empty state is useful before an account exists. Every other workspace route still asks for sign-in.
+        return isHomePath(to.path) && resolved.signedOut ? true : resolved.redirect;
     }
     await Promise.all([restorePersistedQueries(resolved.user.id), restoreImprints()]);
     return true;

@@ -26,6 +26,15 @@ describe(`checking setup before opening the workspace`, () => {
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }, path)).toBeUndefined();
     });
 
+    it(`opens anonymous home without reading the account's sandbox registry`, async () => {
+        const list = jest.fn(async () => []);
+        const refresh = jest.fn(async () => []);
+
+        expect(await readSetupRedirect({ list, refresh }, `/home`, false)).toBeUndefined();
+        expect(list).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+    });
+
     it.each([`/settingsx`, `/agents`, `/sandbox/agent`])(`still requires setup for %s`, async (path) => {
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [] }, path)).toBe(`/setup`);
     });

@@ -39,6 +39,8 @@ const adoptIdToken = jest.fn<(credential: string) => boolean>();
 jest.mock(`../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ adoptIdToken }) }));
 const redeem = jest.fn<(input: { handoff: string; verifier: string }) => Promise<{ ott: string; idToken?: string }>>();
 jest.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { redeem: (input: { handoff: string; verifier: string }) => redeem(input) } } }));
+let handoffDestination = `/`;
+jest.mock(`./browserHandoff`, () => ({ takeBrowserHandoffDestination: () => handoffDestination }));
 
 const { default: DesktopAuthComplete } = await import("./DesktopAuthComplete.vue");
 
@@ -69,6 +71,7 @@ beforeEach(() => {
     verify.mockClear();
     delete query.back;
     heard.length = 0;
+    handoffDestination = `/`;
     stubGlobal(`fetch`, verify);
     Object.defineProperty(document, `readyState`, { configurable: true, get: () => `complete` });
     stubGlobal(`location`, {
@@ -133,6 +136,16 @@ it(`stays in the workspace for a sign-in that began there`, async () => {
     await mount();
 
     expect(replace).toHaveBeenCalledWith(`/`);
+    expect(heard).toEqual([]);
+});
+
+it(`returns to the Add sandbox dialog requested before browser sign-in`, async () => {
+    redeem.mockResolvedValue({ ott: `ott-1` });
+    handoffDestination = `/home?add=sandbox`;
+
+    await mount();
+
+    expect(replace).toHaveBeenCalledWith(`/home?add=sandbox`);
     expect(heard).toEqual([]);
 });
 

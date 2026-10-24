@@ -55,8 +55,9 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   `progress/`, and draws the run with `<StagedProgress>`, the card every long run on a machine uses: the steps, a bar
   sized by them, the time left, and the raw output behind "Show log", which opens by itself when the run fails.
 
-- **Adding a sandbox when the account already has one** is not this page. "Add sandbox" (the switcher, the home rail,
-  the phone's Menu) opens a dialog over the workspace instead (`add/AddSandboxDialog.vue`, `add/useAddSandbox.ts`): a
+- **Adding a sandbox** is not this page. "Add sandbox" (the switcher, the home rail, the phone's Menu and the command
+  palette) opens a dialog over the current place instead (`add/AddSandboxDialog.vue`, `add/useAddSandbox.ts`), for the
+  first and every later sandbox. Signed-out home first asks for sign-in, then returns with this dialog open: a
   name and where it runs (this computer in the app, a connected machine, a machine of ours with room), then one press.
   It runs this page's own flows on the row (`useSetupRow`, `useHostedLane`, `useSetupOnMachine`, `useRegistryWatch`),
   so `/setup?sandbox=<id>` resumes the same run, and the getting-started ring's "Finish setting up" reaches it once the
@@ -65,8 +66,8 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   connecting and starting gates are never shown. The workspace opens on the full-screen chat (`/chat`), where the first
   session starts, as a finished setup here does (`landingAfterSetup`). The dialog draws the run itself and links to no
   `/setup`: that page cannot pick up a press on a machine mid-stream, so it showed only the install picker. Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`,
-  which skips the "You already have a sandbox" question and opens the picker. Which press gets which is
-  `models/sandbox/addSandbox.ts`; an account with no working sandbox still comes here.
+  which skips the "You already have a sandbox" question and opens the picker. The shared add action and its return
+  address live in `models/sandbox/addSandbox.ts`.
 
 ## Key files
 

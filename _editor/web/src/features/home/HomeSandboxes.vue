@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useTemplateRef, watch } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { Beacon, CoachMark, SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
@@ -8,7 +8,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
-import { addsInDialog, askAddSandbox } from "../../models/sandbox/addSandbox";
+import { useRequestAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
@@ -48,14 +48,8 @@ const badgeOf = (id: string): ViewBadge | undefined => {
 const route = useRoute();
 const selected = (id: string): boolean => route.name === `home` && sandbox.activeSandboxId.value === id;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
-// "Add sandbox" opens its dialog while there is a sandbox to stay in, else /setup's first run (models/sandbox/addSandbox.ts).
-const addsHere = computed(() => addsInDialog(sandbox.sandboxes.value));
-const addTarget = computed(() => (addsHere.value ? { type: `button` } : { to: `/setup` }));
-const add = (): void => {
-    if (addsHere.value) {
-        askAddSandbox();
-    }
-};
+// The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
+const add = useRequestAddSandbox();
 let last: { id: string; at: number } | undefined;
 const choose = (id: string, input: `click` | `enter`): void => {
     const now = Date.now();
@@ -93,15 +87,14 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
         </button>
         <span ref="addAnchor" class="relative flex shrink-0">
-            <component
-                :is="addsHere ? `button` : RouterLink"
-                v-bind="addTarget"
+            <button
+                type="button"
                 class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-3 text-muted hover:bg-content/5"
                 :aria-label="t(`sandbox.words.addSandbox`)"
                 @click="add"
             >
                 <Icon name="plus" aria-hidden="true" />
-            </component>
+            </button>
             <span v-if="!boxes.length" class="pointer-events-none absolute right-2 top-1 flex">
                 <Beacon size="sm" />
             </span>
@@ -138,16 +131,15 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
         </button>
         <span ref="addAnchor" class="relative flex shrink-0">
-            <component
-                :is="addsHere ? `button` : RouterLink"
-                v-bind="addTarget"
+            <button
+                type="button"
                 :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
                 :aria-label="t(`sandbox.words.addSandbox`)"
                 v-tooltip.right="hintOpen ? undefined : t(`sandbox.words.addSandbox`)"
                 @click="add"
             >
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
-            </component>
+            </button>
             <span v-if="!boxes.length" class="pointer-events-none absolute right-1 top-1 flex">
                 <Beacon size="sm" />
             </span>

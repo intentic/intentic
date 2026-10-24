@@ -307,7 +307,9 @@ flowchart LR
   setup page. Before the shell sends an account to setup, it confirms a cached list with no working sandbox against
   a fresh platform list; a sandbox connected while the page was hidden opens through the workspace's connection flow.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
-  `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
+  `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`; `/home` alone also opens signed out, with its
+  empty state and no account registry or plan reads. Its Add sandbox action asks for sign-in and returns to
+  `/home?add=sandbox`, whose query opens the usual dialog. The shell renders `ShellDesktop.vue` (rail, side
   panel, terminal and status bar) or `ShellMobile.vue` (the board with a rail beside it, full-screen views). In the
   desktop app, an account with nothing to open is not sent to setup (arriving there makes a sandbox): the reader is
   put on This computer, and the workspace waits behind it on `/no-sandbox`, which offers This computer or setup

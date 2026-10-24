@@ -87,7 +87,7 @@ const handoffWaiting = handoff.waiting;
 
 const redirectSignIn = async (): Promise<void> => {
     if (desktop.value) {
-        handoff.start();
+        handoff.start(destination.value);
         return;
     }
     await signInWithGoogle(destination.value);
@@ -206,7 +206,7 @@ watch(
                     <div v-if="desktop && handoffWaiting" class="handoff" role="status">
                         <p class="handoff-title">{{ t(`auth.words.finishInBrowser`) }}</p>
                         <p class="handoff-detail">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
-                        <Button :label="t(`auth.words.openBrowserAgain`)" tier="boring" class="w-full justify-center" @click="handoff.start">
+                        <Button :label="t(`auth.words.openBrowserAgain`)" tier="boring" class="w-full justify-center" @click="handoff.start(destination)">
                             <template #icon><Icon name="google" /></template>
                         </Button>
                         <button type="button" class="escape" @click="handoff.cancel">{{ t(`ui.action.cancel`) }}</button>
@@ -287,8 +287,8 @@ watch(
    height, level with the window's own buttons in the opposite corner. */
 .back-band {
     position: absolute;
-    top: 0;
-    left: 0.5rem;
+    top: 0.25rem;
+    left: 1rem;
     display: flex;
     align-items: center;
     height: var(--bar-height);

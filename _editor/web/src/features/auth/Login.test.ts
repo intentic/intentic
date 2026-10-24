@@ -65,6 +65,7 @@ jest.mock(`../../app/environments/desktop`, () => ({
 }));
 jest.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
 
+const { takeBrowserHandoffDestination, useBrowserHandoff } = await import("./browserHandoff");
 const { default: Login } = await import("./Login.vue");
 
 let app: App | undefined;
@@ -119,6 +120,8 @@ beforeEach(() => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    useBrowserHandoff().cancel();
+    takeBrowserHandoffDestination();
     document.body.innerHTML = ``;
     Reflect.deleteProperty(window, `IdentityCredential`);
 });
@@ -365,6 +368,7 @@ describe(`in the installed app`, () => {
 
     // For the two minutes Google took in the browser the window did not change, and its reader came back to it five times.
     it(`says the sign-in is waiting in the browser once pressed, and can open it again`, async () => {
+        query.value = { returnTo: `/home?add=sandbox` };
         const el = await mount();
         await pressing(`Continue with Google in your browser`);
 
@@ -374,6 +378,7 @@ describe(`in the installed app`, () => {
 
         await pressing(`Open it again`);
         expect(signInThroughBrowser).toHaveBeenCalledTimes(2);
+        expect(takeBrowserHandoffDestination()).toBe(`/home?add=sandbox`);
     });
 
     it(`goes back to the button on Cancel`, async () => {

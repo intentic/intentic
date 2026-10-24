@@ -16,7 +16,9 @@ import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
 import { markBoot } from "../app/perf/boot";
-import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE, addSandboxAsked, askAddSandbox, closeAddSandbox } from "../models/sandbox/addSandbox";
+import { ADD_SANDBOX_HOME_PATH, ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE, addSandboxAsked, askAddSandbox, closeAddSandbox } from "../models/sandbox/addSandbox";
+import { useAuth } from "../client/auth/useAuth";
+import { signInAt } from "../lib/routes/signIn";
 import { loadShellDesktop, loadShellMobile } from "./shellChunks";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
@@ -42,6 +44,7 @@ onMounted(prefetchViewsAtIdle);
 onMounted(() => markBoot(`shell`));
 const router = useRouter();
 const route = useRoute();
+const { user } = useAuth();
 
 // Runs an errand a popped-out panel can't: opening a file, showing something beside, or taking a route. Announced only
 // from here, since only a mounted shell can promise there's somewhere to put it (mainWindow.ts).
@@ -75,6 +78,10 @@ watch(
     () => route.query[ADD_SANDBOX_QUERY],
     (value) => {
         if (value !== ADD_SANDBOX_VALUE) {
+            return;
+        }
+        if (user.value === null) {
+            void router.replace(signInAt(ADD_SANDBOX_HOME_PATH));
             return;
         }
         askAddSandbox();

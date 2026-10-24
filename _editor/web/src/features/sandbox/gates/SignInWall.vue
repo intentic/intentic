@@ -333,7 +333,7 @@ const backToSetup = async (): Promise<void> => {
                 <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to, and only the
                      owner's: /setup on a sandbox a member doesn't own starts a new one on their account instead. -->
                 <div class="mt-2 flex w-full items-center justify-center gap-6">
-                    <button v-if="waitingInBrowser && !stepUp" type="button" :class="ui.textButton()" @click="handoff.start">
+                    <button v-if="waitingInBrowser && !stepUp" type="button" :class="ui.textButton()" @click="signInOutside">
                         {{ t(`sandbox.signInWall.openBrowser`) }}
                         <Icon name="external-link" class="text-2xs" />
                     </button>

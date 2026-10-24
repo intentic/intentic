@@ -66,6 +66,7 @@ import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import HomeSandboxes from "../features/home/HomeSandboxes.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
+import { useAuth } from "../client/auth/useAuth";
 
 // The tiles themselves, and every badge on them, are rail/sectionTiles.ts's, shared with the phone's rail.
 const t = useT();
@@ -97,6 +98,8 @@ const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
 const onHome = computed(() => route.name === `home`);
+const { user } = useAuth();
+const anonymousHome = computed(() => onHome.value && user.value === null);
 followMasterRail();
 // The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
@@ -393,7 +396,7 @@ useGettingStarted();
         <!-- The master view keeps the rail itself (its look, its account control) and swaps only its tiles for the sandboxes. -->
         <nav v-if="masterRail" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <HomeSandboxes />
-            <AccountPanel />
+            <AccountPanel v-if="!anonymousHome" />
         </nav>
         <nav v-else ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <!-- Top of the rail: switch between sandboxes, add one, or manage access. -->
@@ -585,7 +588,7 @@ useGettingStarted();
             </RouterLink>
 
             <!-- The account control: avatar opening a popover with account identity and actions. -->
-            <AccountPanel />
+            <AccountPanel v-if="!anonymousHome" />
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->

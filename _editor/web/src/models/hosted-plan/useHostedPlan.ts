@@ -8,15 +8,18 @@ import { computed } from "vue";
 import { HOSTED_PLAN } from "../../lib/queryKeys";
 import { apiClient } from "../../lib/useApi";
 import { planBadge } from "./hostedHours";
+import { useAccount } from "../../client/auth/useAccount";
 
 // The hosted plan's state, read once for the whole app: Billing, the account badge, a hosted sandbox's hours on its own
 // pages and in the chat strip, and whether the platform sells a plan at all. Account-scoped, not sandbox-scoped: a
 // sandbox's hours are found in it by id (hostedHours.ts). A planless platform answers `enabled: false` rather than
 // erroring.
 export function useHostedPlan() {
+    const { user } = useAccount();
     const query = useQuery({
         queryKey: HOSTED_PLAN.every,
         queryFn: (): Promise<HostedPlanState> => apiClient.hostedPlan.state(),
+        enabled: computed(() => user.value !== null),
         staleTime: 60_000,
         refetchOnWindowFocus: true,
         retry: 1,

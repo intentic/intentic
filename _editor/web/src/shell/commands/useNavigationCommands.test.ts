@@ -30,6 +30,8 @@ jest.mock(`../../client/sandbox/useRole`, () => {
 jest.mock(`../../models/hosted-plan/useHostedPlan`, () => {
     return { useHostedPlan: () => ({ offered: ref(state.planOffered) }) };
 });
+const requestAddSandbox = jest.fn();
+jest.mock(`../../models/sandbox/addSandbox`, () => ({ useRequestAddSandbox: () => requestAddSandbox }));
 
 const mountShell = (): { unmount: () => void } => {
     const app = createApp({
@@ -49,6 +51,7 @@ const ids = (): readonly string[] => commands.value.map((entry) => entry.command
 afterEach(() => {
     state.canShip = true;
     state.planOffered = true;
+    requestAddSandbox.mockClear();
 });
 
 it(`registers one destination per sandbox section and per settings section`, () => {
@@ -151,6 +154,17 @@ it(`names every page a tabbed row stands for, and the audit trail inside Activit
     }
     expect(ids()).not.toContain(`view.sandbox.privacy`);
     app.unmount();
+});
+
+it(`uses the shared Add sandbox action instead of sending the palette to a separate setup page`, () => {
+    const app = mountShell();
+    const add = commands.value.find((entry) => entry.command === `sandbox.add`);
+
+    add?.handler();
+    app.unmount();
+
+    expect(add).toMatchObject({ category: `Sandbox`, title: `Add…` });
+    expect(requestAddSandbox).toHaveBeenCalledTimes(1);
 });
 
 it(`releases every command when the shell goes away`, () => {

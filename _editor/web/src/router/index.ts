@@ -77,7 +77,7 @@ const startGoogleMint = (to: RouteLocationNormalized): true => {
 const requireSetup = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked; the outage
     // screen says so and retries.
-    const result = await readSetupRedirect(useSandbox(), to.path).then(
+    const result = await readSetupRedirect(useSandbox(), to.path, useAuth().user.value !== null).then(
         (redirect) => ({ redirect }),
         () => undefined,
     );

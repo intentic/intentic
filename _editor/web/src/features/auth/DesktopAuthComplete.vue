@@ -10,6 +10,7 @@ import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import { environment } from "../../app/environments/environment";
 import { openAgentOnThisComputer } from "../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
+import { takeBrowserHandoffDestination } from "./browserHandoff";
 
 // This page runs inside the desktop app's webview, which starts with no session.
 // 1. Redeem the row the browser parked (single use).
@@ -63,10 +64,11 @@ const complete = async (): Promise<void> => {
             return;
         }
         await refresh();
+        const destination = takeBrowserHandoffDestination();
         if (backToFolder) {
             openAgentOnThisComputer();
         }
-        await router.replace(`/`);
+        await router.replace(backToFolder ? `/` : destination);
     } catch (err) {
         error.value = noticeFrom(err, t(`auth.desktopAuthComplete.couldntFinish`));
     }

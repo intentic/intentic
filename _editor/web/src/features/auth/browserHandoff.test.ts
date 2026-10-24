@@ -1,5 +1,6 @@
+import "@intentic/testing/dom";
 import { effectScope } from "vue";
-import { useBrowserHandoff } from "./browserHandoff";
+import { takeBrowserHandoffDestination, useBrowserHandoff } from "./browserHandoff";
 
 // The desktop window's wait for a sign-in in the browser belongs to the window: a sign-in page drawn again while the
 // browser has it still says so, rather than offering the button a second time.
@@ -15,6 +16,7 @@ const mounted = () => {
 
 afterEach(() => {
     useBrowserHandoff().cancel();
+    takeBrowserHandoffDestination();
     signInThroughBrowser.mockClear();
 });
 
@@ -27,6 +29,23 @@ test(`a sign-in page drawn again while the browser has the sign-in still waits f
     const again = mounted();
     expect(again.handoff.waiting.value).toBe(true);
     again.unmount();
+});
+
+test(`returns to the requested dialog after the browser handoff, only once`, () => {
+    const login = mounted();
+
+    login.handoff.start(`/home?add=sandbox`);
+
+    expect(takeBrowserHandoffDestination()).toBe(`/home?add=sandbox`);
+    expect(takeBrowserHandoffDestination()).toBe(`/`);
+});
+
+test(`does not carry an off-origin destination through the handoff`, () => {
+    const login = mounted();
+
+    login.handoff.start(`//evil.example`);
+
+    expect(takeBrowserHandoffDestination()).toBe(`/`);
 });
 
 test(`going back to the button ends the wait everywhere`, () => {

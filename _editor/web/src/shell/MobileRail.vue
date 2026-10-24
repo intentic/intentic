@@ -24,6 +24,7 @@ import { railBands } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import AccountPanel from "./AccountPanel.vue";
+import { useAuth } from "../client/auth/useAuth";
 import RailIcon from "./rail/RailIcon.vue";
 import { phoneRailFrame } from "./rail/railFrame";
 import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTiles";
@@ -39,6 +40,7 @@ import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTile
 // a finger raises none, so each tile's accessible name carries what its corner marks say (tileLabel).
 
 const t = useT();
+const { user } = useAuth();
 const route = useRoute();
 const { canShip, isGuest } = useRole();
 const { maker } = useAudience();
@@ -180,6 +182,6 @@ const frame = phoneRailFrame();
             <RailIcon section="capabilities" class="icon-rail-glyph" />
         </RouterLink>
         <!-- The account, at the foot as on the desktop (its own `mt-auto`): who is signed in, Settings, sign out. -->
-        <AccountPanel />
+        <AccountPanel v-if="user !== null" />
     </nav>
 </template>

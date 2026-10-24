@@ -16,6 +16,7 @@ import { settingsDestinations } from "../../features/settings/settingsNav";
 import { GO_TO, SANDBOX, SETTINGS } from "../../workbench/commands/categories";
 import { registerCommand } from "../../workbench/commands/useCommands";
 import { t } from "@intentic/ui/i18n";
+import { useRequestAddSandbox } from "../../models/sandbox/addSandbox";
 
 // Every place the shell can take you, as a command. Derived from the same tables the rail and the two hubs draw
 // themselves from, never a second list, so a section or an extension area is reachable by name the moment it is
@@ -42,10 +43,10 @@ export function useNavigationCommands(): void {
     const { canShip, isGuest, homeOnly } = useRole();
     const { offered: planOffered } = useHostedPlan();
     const { hidden: orgHidden } = useOrgPolicy();
+    const requestAddSandbox = useRequestAddSandbox();
     const words = useVocabulary();
 
-    // The rail's own tiles, which are shell routes rather than registered views, so no detect() reports them. Named as
-    // the rail names them, including the two the maker's vocabulary renames.
+    // Shell routes named as the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
         { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
         { command: `view.agents`, title: useVocabulary().value.agents, category: GO_TO, icon: `robot`, to: `/agents` },
@@ -111,8 +112,8 @@ export function useNavigationCommands(): void {
                 icon: activation.icon,
                 to: sandboxSectionPath(activation.key),
             })),
-        // The one sandbox errand that is a place rather than a section: where the switcher's "Add sandbox" goes.
-        { command: `sandbox.add`, title: t(`shell.useNavigationCommands.add`), category: SANDBOX, icon: `plus`, to: `/setup` },
+        // The same add action as the switcher: a dialog here, with sign-in first only when needed.
+        { command: `sandbox.add`, title: t(`shell.useNavigationCommands.add`), category: SANDBOX, icon: `plus`, to: `/home`, run: requestAddSandbox },
     ]);
 
     const settingsPlaces = computed<readonly NavCommand[]>(() =>
