@@ -309,7 +309,7 @@ catalog:
   "@ast-grep/lang-go": 0.0.6
   "@ast-grep/lang-rust": 0.0.7
   "@ast-grep/lang-java": 0.0.7
-  asn1js: 3.0.10
+  asn1js: 4.0.0
   astro: 7.3.5
   astro-opengraph-images: 1.20.3
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
@@ -381,7 +381,7 @@ catalog:
   pg: 8.23.1
   pino: 10.3.1
   pino-pretty: 13.2.0
-  pkijs: 3.4.1
+  pkijs: 4.0.0
   playwright: 1.64.1
   posthog-js: 1.436.1
   prettier: 3.9.9
@@ -398,6 +398,8 @@ catalog:
   # The daemon's local speech-to-text (_sandbox/speech): k2-fsa's prebuilt N-API addon over its own ONNX Runtime,
   # loaded only in the speech worker process. The per-platform binaries (linux-x64, linux-arm64) arrive as its
   # optionalDependencies, so each natively built image half installs its own; no install script runs.
+  # v2 ignores espeak-ng dataDir; Piper now needs an external phonemizer or lexicon. Keep v1 until the adapter supplies
+  # phonemeCodepoints: the pinned Polish Piper model produces no audio with v2, while v1 passes the real voice suite.
   sherpa-onnx-node: 1.13.8
   shiki: 4.5.0
   # TOML for the sandbox-definition surface (sandbox.toml): a strict 1.0 parser with no coercion surprises.
@@ -416,6 +418,8 @@ catalog:
   tslib: 2.8.1
   tsx: 4.23.15
   turbo: 2.11.7
+  # v7's root exports only version metadata; nav/contract scripts still use the compiler API, and vue-tsc patches
+  # the legacy tsc shim. Keep this paired with the native-preview compiler until those consumers can migrate together.
   typescript: 6.0.3
   # fileq's pdf deriver: a serverless pdf.js build that extracts text layers in plain Node — no worker, no
   # canvas, no DOM shims — at a fraction of pdfjs-dist's install.
