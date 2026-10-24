@@ -17,6 +17,7 @@ flowchart LR
   globally registered `Icon` under the kit's glyph names. `installUi` must run before any PrimeVue control renders.
 - **mermaid.** The patch swaps its `@iconify/utils` icon code for a local `rendering-util/svgIcons.mjs` registry.
   `mermaidRender.ts` registers the kit's glyphs as a pack, and icon markup still passes Mermaid's sanitizer.
+  The 12.2.0 patch preserves the local registry; its bundled icon chunk imports were regenerated for that release.
 - **monaco-editor-core.** The codicon font is dropped. Each codicon draws a CSS mask named by an
   `--intentic-icon-*` variable, which the editor fills from the kit's glyphs in
   `_editor/web/src/features/workspace/files/monacoIcons.ts`.

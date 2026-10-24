@@ -256,7 +256,7 @@ catalog:
   # The plugin API the vendored anti-slop rules compile against, pinned to `oxlint` — see the override above.
   "@oxlint/plugins": 1.89.0
   "@playwright/mcp": 0.0.83
-  "@playwright/test": 1.63.0
+  "@playwright/test": 1.64.1
   # Held on the PrimeVue 4 line on purpose: PrimeVue 5 (and @primeuix/themes 3, which it pairs with) left MIT for
   # the commercial "PrimeUI License": a licence key checked by @primeui/license-manager, a revenue/headcount cap on
   # the free tier, and no redistribution "as a component library or development tool", which is what
@@ -281,8 +281,8 @@ catalog:
   # dependency rather than `pnpm dlx`: under dlx Stryker resolves its plugins from the working directory and finds none.
   "@stryker-mutator/core": 10.0.0
   "@tailwindcss/vite": 4.3.3
-  "@tanstack/query-persist-client-core": 5.104.1
-  "@tanstack/vue-query": 5.104.1
+  "@tanstack/query-persist-client-core": 5.104.5
+  "@tanstack/vue-query": 5.104.5
   "@tauri-apps/api": 2.12.4
   "@tauri-apps/cli": 2.12.3
   "@tauri-apps/plugin-dialog": 2.8.3
@@ -305,7 +305,7 @@ catalog:
   "@xterm/addon-webgl": 0.19.0
   "@xterm/headless": 6.0.0
   "@xterm/xterm": 6.0.0
-  "@ast-grep/napi": 0.45.3
+  "@ast-grep/napi": 0.51.0
   "@ast-grep/lang-python": 0.0.6
   "@ast-grep/lang-go": 0.0.6
   "@ast-grep/lang-rust": 0.0.7
@@ -317,7 +317,7 @@ catalog:
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
   bcryptjs: 3.0.3
-  better-auth: 1.7.7
+  better-auth: 1.7.12
   bun: 1.4.4
   chokidar: 6.0.0
   croner: 10.0.1
@@ -340,7 +340,7 @@ catalog:
   image-size: 2.0.4
   ignore: 7.0.12
   imapflow: 2.2.5
-  jose: 6.2.12
+  jose: 6.2.13
   # Held on 29: jsdom 30's window fails its own EventTarget brand check under bun's `vm` ("'addEventListener' called
   # on an object that is not a valid instance of EventTarget" from _tools/testing/src/dom.ts), while the same code
   # passes under Node. Every DOM suite here runs on bun, so 30 waits for either side to fix that.
@@ -364,7 +364,7 @@ catalog:
   # here rather than @discordjs/opus, whose node-pre-gyp installer fetched a tarball over the network at install
   # time and dragged in a `tar` override to stay clear of a live path-traversal advisory.
   mediaplex: 1.0.0
-  mermaid: 12.0.0
+  mermaid: 12.2.0
   monaco-editor-core: 0.57.0
   # The privacy shield's text reader (_sandbox/ocr) runs PP-OCRv6 with it directly. The same pin as
   # @huggingface/transformers' own, so the daemon carries one runtime, not two.
@@ -383,7 +383,7 @@ catalog:
   pino: 10.3.1
   pino-pretty: 13.2.0
   pkijs: 3.4.1
-  playwright: 1.63.0
+  playwright: 1.64.1
   posthog-js: 1.436.1
   prettier: 3.9.9
   primevue: 4.5.5
@@ -427,8 +427,8 @@ catalog:
   vite: 8.3.5
   vitest: 5.0.5
   vue: 3.5.44
-  vue-i18n: 11.4.13
-  vue-router: 5.3.1
+  vue-i18n: 11.4.16
+  vue-router: 5.4.0
   vue-tsc: 3.3.12
   web-push: 3.6.7
   wrangler: 4.147.0
@@ -440,9 +440,9 @@ catalog:
   yaml: 2.9.1
   zod: 4.6.7
   '@axe-core/playwright': 4.13.0
-  playwright-core: 1.63.0
+  playwright-core: 1.64.1
 
 patchedDependencies:
   primevue@4.5.5: _editor/ui/patches/primevue@4.5.5.patch
-  mermaid@12.0.0: _editor/ui/patches/mermaid@12.0.0.patch
+  mermaid@12.2.0: _editor/ui/patches/mermaid@12.2.0.patch
   monaco-editor-core@0.57.0: _editor/ui/patches/monaco-editor-core@0.57.0.patch

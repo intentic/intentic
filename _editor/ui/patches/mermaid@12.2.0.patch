@@ -1,18 +1,19 @@
-diff --git a/dist/chunks/mermaid.core/chunk-742MDFTN.mjs b/dist/chunks/mermaid.core/chunk-742MDFTN.mjs
---- a/dist/chunks/mermaid.core/chunk-742MDFTN.mjs
-+++ b/dist/chunks/mermaid.core/chunk-742MDFTN.mjs
+diff --git a/dist/chunks/mermaid.core/chunk-YZO67HFG.mjs b/dist/chunks/mermaid.core/chunk-YZO67HFG.mjs
+index 9a319f2b6cf95e28396cb9e6886e67679c582f27..dfe855386e4b8f2d977ee694079f964d31cc517a 100644
+--- a/dist/chunks/mermaid.core/chunk-YZO67HFG.mjs
++++ b/dist/chunks/mermaid.core/chunk-YZO67HFG.mjs
 @@ -1,98 +1,5 @@
 -import {
 -  getConfig,
 -  sanitizeText
--} from "./chunk-O7XYJQB3.mjs";
+-} from "./chunk-DSNLSHJZ.mjs";
 -import {
 -  log
 -} from "./chunk-X3CZISLH.mjs";
 -import {
 -  __name
 -} from "./chunk-Y2CYZVJY.mjs";
-+import { getConfig, sanitizeText } from './chunk-O7XYJQB3.mjs';
++import { getConfig, sanitizeText } from './chunk-DSNLSHJZ.mjs';
 +import { createIconRegistry } from '../../rendering-util/svgIcons.mjs';
  
 -// src/rendering-util/icons.ts
@@ -104,21 +105,22 @@ diff --git a/dist/chunks/mermaid.core/chunk-742MDFTN.mjs b/dist/chunks/mermaid.c
 -};
 +const { unknownIcon, registerIconPacks, isIconAvailable, getIconSVG } = createIconRegistry(svg => sanitizeText(svg, getConfig()));
 +export { unknownIcon, registerIconPacks, isIconAvailable, getIconSVG };
-diff --git a/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs b/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs
---- a/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs
-+++ b/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs
+diff --git a/dist/chunks/mermaid.esm/chunk-5QBFSAUC.mjs b/dist/chunks/mermaid.esm/chunk-5QBFSAUC.mjs
+index eae9d483850d33c7f3248aa370d8836523782b22..47fbffcd2fa2e45006d6df95d9bf74d5981639f6 100644
+--- a/dist/chunks/mermaid.esm/chunk-5QBFSAUC.mjs
++++ b/dist/chunks/mermaid.esm/chunk-5QBFSAUC.mjs
 @@ -1,417 +1,5 @@
 -import {
 -  getConfig,
 -  sanitizeText
--} from "./chunk-KMA2NSDO.mjs";
+-} from "./chunk-DLUCIBNR.mjs";
 -import {
 -  log
 -} from "./chunk-OHNBJXQ2.mjs";
 -import {
 -  __name
 -} from "./chunk-35ZOQMXA.mjs";
-+import { getConfig, sanitizeText } from './chunk-KMA2NSDO.mjs';
++import { getConfig, sanitizeText } from './chunk-DLUCIBNR.mjs';
 +import { createIconRegistry } from '../../rendering-util/svgIcons.mjs';
  
 -// ../../node_modules/.pnpm/@iconify+utils@3.0.2/node_modules/@iconify/utils/lib/icon/defaults.js
@@ -530,6 +532,7 @@ diff --git a/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs b/dist/chunks/mermaid.es
 +const { unknownIcon, registerIconPacks, isIconAvailable, getIconSVG } = createIconRegistry(svg => sanitizeText(svg, getConfig()));
 +export { unknownIcon, registerIconPacks, isIconAvailable, getIconSVG };
 diff --git a/dist/diagrams/architecture/architectureIcons.d.ts b/dist/diagrams/architecture/architectureIcons.d.ts
+index 677f0397ff0e05785c01b7c16cdbdf7c1de5a617..1e3a34449265244eb6a1d06f13e3168d73f2fb93 100644
 --- a/dist/diagrams/architecture/architectureIcons.d.ts
 +++ b/dist/diagrams/architecture/architectureIcons.d.ts
 @@ -1,2 +1,2 @@
@@ -538,6 +541,7 @@ diff --git a/dist/diagrams/architecture/architectureIcons.d.ts b/dist/diagrams/a
 +import type { SvgIconPack } from '../../rendering-util/svgIcons.mjs';
 +export declare const architectureIcons: SvgIconPack;
 diff --git a/dist/diagrams/treeView/icons.d.ts b/dist/diagrams/treeView/icons.d.ts
+index 72fa6576cae77d4867340cd1ba603f04ab200697..246f75a012bd8afe2f8204a78282505d39187578 100644
 --- a/dist/diagrams/treeView/icons.d.ts
 +++ b/dist/diagrams/treeView/icons.d.ts
 @@ -1,4 +1,4 @@
@@ -556,6 +560,7 @@ diff --git a/dist/diagrams/treeView/icons.d.ts b/dist/diagrams/treeView/icons.d.
      /** Exact-filename → icon map used to pick file icons when `showIcons` is enabled */
      filenameIcons?: Record<string, string>;
 diff --git a/dist/rendering-util/icons.d.ts b/dist/rendering-util/icons.d.ts
+index 9345adfefe70fe0a83de3e237a3d31ad8f8ba2d8..dc04ea7bb91ba709840968d9e9fcecab6f64446a 100644
 --- a/dist/rendering-util/icons.d.ts
 +++ b/dist/rendering-util/icons.d.ts
 @@ -1,17 +1,16 @@
@@ -583,6 +588,7 @@ diff --git a/dist/rendering-util/icons.d.ts b/dist/rendering-util/icons.d.ts
  }, extraAttributes?: Record<string, string>) => Promise<string>;
 diff --git a/dist/rendering-util/svgIcons.d.mts b/dist/rendering-util/svgIcons.d.mts
 new file mode 100644
+index 0000000000000000000000000000000000000000..f1a3ab9377a04b4d44e54b2932d0857b3526908c
 --- /dev/null
 +++ b/dist/rendering-util/svgIcons.d.mts
 @@ -0,0 +1,29 @@
@@ -617,6 +623,7 @@ new file mode 100644
 +export declare function createIconRegistry(sanitize: (svg: string) => string): SvgRegistry;
 diff --git a/dist/rendering-util/svgIcons.mjs b/dist/rendering-util/svgIcons.mjs
 new file mode 100644
+index 0000000000000000000000000000000000000000..1b54b068df259655d3843338458a7f1fed99bc59
 --- /dev/null
 +++ b/dist/rendering-util/svgIcons.mjs
 @@ -0,0 +1,121 @@
