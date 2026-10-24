@@ -8,7 +8,7 @@ import { resolveFile } from "../tree/fileType";
 // plays silently, a document is drawn as its own first page, a folder lists what it holds; anything else (a PDF, an
 // archive, a font) has no cheap look and gets its name and size only. Pure, no framework code.
 
-export type QuickLookKind = "folder" | "text" | "picture" | "video" | "document" | "none";
+export type QuickLookKind = "folder" | "markdown" | "text" | "picture" | "video" | "document" | "none";
 
 export interface QuickLookPlan {
     readonly kind: QuickLookKind;
@@ -41,6 +41,9 @@ export const quickLookPlan = (entry: WorkspaceTreeEntry): QuickLookPlan => {
     const resolved = resolveFile(entry.path, entry.size);
     if (resolved.mode === `binary` || resolved.mode === `empty`) {
         return { kind: `none` };
+    }
+    if (resolved.mode === `markdown`) {
+        return { kind: `markdown` };
     }
     return resolved.lang === undefined ? { kind: `text` } : { kind: `text`, lang: resolved.lang };
 };

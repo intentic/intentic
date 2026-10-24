@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { useLoaded } from "@intentic/extension-api";
-import { Await, Code, explorerColorClass, formatBytes, formatCount, iconForEntry } from "@intentic/ui";
+import { Await, Code, explorerColorClass, formatBytes, formatCount, iconForEntry, Markdown } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
 import { useLatest } from "@intentic/ui/async";
 import { useLayout } from "../../../../workbench/window/useLayout";
@@ -11,8 +11,10 @@ import { sandboxBlob } from "../../../../client/sandbox/sandboxClient";
 import { explorerShows } from "../../explorer/explorerFilter";
 import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { readFileWindow } from "../../../../models/workspace/files/fileWindow";
-import { scopeQuery } from "../../../../app/workspaceScope";
+import { scopeQuery, workspaceAgent } from "../../../../app/workspaceScope";
 import { extensionOf } from "@intentic/ui/file-format";
+import { parentDir } from "@intentic/ui/path";
+import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
 import { homeGroups, homeOrder } from "../homeOrder";
 import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "../../../../models/workspace/home/quickLookContent";
 import { edgeFor, screenScale } from "../../../../models/workspace/home/thumbnails";
@@ -44,6 +46,14 @@ const kind = computed<QuickLookKind>(() => {
 });
 const icon = computed(() => (entry === undefined ? `file` : iconForEntry(entry.name, entry.type)));
 const color = computed(() => (entry === undefined ? `` : explorerColorClass(`colorful`, entry.name, entry.type, entry.ignored)));
+// Markdown prose in the quick look: file links resolve against the file's own folder, scoped to the viewed conversation.
+const decorate = computed(() => {
+    if (entry === undefined || kind.value !== `markdown`) {
+        return undefined;
+    }
+    const dir = parentDir(entry.path);
+    return fileLinkDecorator({ dir: dir === `` ? `` : `${dir}/`, agent: workspaceAgent.value });
+});
 
 // --- Folder: what the home would show on entering it, so its count agrees with the tiles. ------------------------
 const folder = (): string | undefined => (entry?.type === `dir` ? entry.path : undefined);
@@ -137,7 +147,7 @@ const load = (target: WorkspaceTreeEntry | undefined): void => {
     if (target === undefined) {
         return;
     }
-    if (planned === `text`) {
+    if (planned === `text` || planned === `markdown`) {
         controller = new AbortController();
         void readText(target, isLatest, controller.signal);
     } else if (planned === `picture` || planned === `video`) {
@@ -334,7 +344,7 @@ onBeforeUnmount(() => {
                     v-if="kind !== 'none' && !unreadable"
                     ref="contentBox"
                     class="relative shrink-0 overflow-hidden border-t border-line bg-canvas"
-                    :class="kind === 'text' ? 'h-64' : kind === 'document' ? 'h-72' : ''"
+                    :class="kind === 'text' || kind === 'markdown' ? 'h-64' : kind === 'document' ? 'h-72' : ''"
                     :style="mediaStyle"
                 >
                     <template v-if="kind === 'folder'">
@@ -378,10 +388,15 @@ onBeforeUnmount(() => {
                     </template>
                     <!-- Reading (a document too): the last file looked at, its lines as bars, or until there is one a few
                          line-shaped placeholders, still (no animation), in the file's own measure. -->
-                    <Await v-else-if="kind === 'text' || kind === 'document'" :of="body" :imprint="bodyImprint">
+                    <Await v-else-if="kind === 'markdown' || kind === 'text' || kind === 'document'" :of="body" :imprint="bodyImprint">
                         <template #default="{ data }">
                             <template v-if="typeof data === 'string'">
                                 <p v-if="data === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.homeQuickLook.nothingInYet`) }}</p>
+                                <!-- Markdown rendered as prose, the way its tab reads it; a glance at the file's heading and its
+                                     first paragraph, not its source fences. -->
+                                <div v-else-if="kind === 'markdown'" class="px-3 py-3 text-xs">
+                                    <Markdown :source="data" :decorate="decorate" />
+                                </div>
                                 <!-- The block's own frame and scrollbar are dropped: the body is already the window into the file,
                                      and a card that takes no pointer can't be scrolled. -->
                                 <div

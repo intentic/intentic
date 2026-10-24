@@ -15,8 +15,11 @@ describe(`what a hover can show`, () => {
 
     it(`reads text with its grammar, or plain where none is known`, () => {
         expect(quickLookPlan(file(`index.ts`))).toEqual({ kind: `text`, lang: `typescript` });
-        expect(quickLookPlan(file(`README.md`))).toEqual({ kind: `text`, lang: `markdown` });
         expect(quickLookPlan(file(`NOTES`))).toEqual({ kind: `text` });
+    });
+
+    it(`renders markdown as prose`, () => {
+        expect(quickLookPlan(file(`README.md`))).toEqual({ kind: `markdown` });
     });
 
     it(`paints a picture the browser can draw`, () => {
