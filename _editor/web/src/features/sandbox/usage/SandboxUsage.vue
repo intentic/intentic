@@ -42,6 +42,7 @@ import {
     rankByCost,
     providerColor,
     rankedBars,
+    sessionCostsOf,
     sparkPoints,
     todayUtc,
     totalsOf,
@@ -112,6 +113,7 @@ const providerOptions = computed(() => [
 // the figures
 
 const totals = computed(() => totalsOf(current.value));
+const sessionCosts = computed(() => sessionCostsOf(current.value));
 const cacheRate = computed(() => cacheHitRate(totals.value));
 const previousTotals = computed(() => (previous.value === undefined ? undefined : totalsOf(previous.value)));
 
@@ -338,6 +340,39 @@ const hasSpend = computed(() => current.value.length > 0);
                             </p>
                         </Card>
                     </div>
+
+                    <Section :label="t(`sandbox.sandboxUsage.costPerSession`)">
+                        <template #info>{{ t(`sandbox.sandboxUsage.sessionCount`, { count: sessionCosts.count }) }}</template>
+                        <Card>
+                            <dl class="grid grid-cols-2 gap-3">
+                                <div class="min-w-0">
+                                    <dt class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.averageCost`) }}</dt>
+                                    <dd class="mt-1 break-words text-2xl font-semibold tabular-nums text-content">
+                                        <template v-if="sessionCosts.averageCostUsd !== undefined">
+                                            {{ sessionCosts.costKnown ? `` : `≥ ` }}{{ formatMoney(sessionCosts.averageCostUsd) }}
+                                        </template>
+                                        <template v-else>—</template>
+                                    </dd>
+                                </div>
+                                <div class="min-w-0">
+                                    <dt class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.medianCost`) }}</dt>
+                                    <dd class="mt-1 break-words text-2xl font-semibold tabular-nums text-content">
+                                        <template v-if="sessionCosts.medianCostUsd !== undefined">
+                                            {{ sessionCosts.costKnown ? `` : `≥ ` }}{{ formatMoney(sessionCosts.medianCostUsd) }}
+                                        </template>
+                                        <template v-else>—</template>
+                                    </dd>
+                                </div>
+                            </dl>
+                            <p class="mt-3 text-2xs text-subtle">{{ t(`sandbox.sandboxUsage.sessionCostBasis`) }}</p>
+                            <p v-if="sessionCosts.count === 0" class="mt-1 text-2xs text-muted">
+                                {{ t(`sandbox.sandboxUsage.noSessionsInRange`) }}
+                            </p>
+                            <p v-else-if="!sessionCosts.costKnown" class="mt-1 text-2xs text-muted">
+                                {{ t(`sandbox.sandboxUsage.sessionCostIncomplete`) }}
+                            </p>
+                        </Card>
+                    </Section>
 
                     <!-- Its own section, not phrased like the tiles above: spend and plan-week-remaining are different questions. -->
                     <PlanLimitsPanel />

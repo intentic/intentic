@@ -17,6 +17,7 @@ import {
     rankedAccent,
     rankedKey,
     providerColor,
+    sessionCostsOf,
     shiftDay,
     sparkPoints,
     totalsOf,
@@ -121,6 +122,81 @@ describe(`totals`, () => {
         expect(deltaPercent(10, 0)).toBeUndefined();
         expect(deltaPercent(12, 10)).toBeCloseTo(20);
         expect(deltaPercent(8, 10)).toBeCloseTo(-20);
+    });
+});
+
+describe(`session costs`, () => {
+    it(`combines a conversation's rows before taking the mean and the odd median`, () => {
+        const rows = [
+            row({ conversationId: `a`, costUsd: 1, turns: 10 }),
+            row({ conversationId: `a`, costUsd: 2, day: `2026-07-21`, provider: `codex`, model: `gpt`, account: `other`, harness: `codex` }),
+            row({ conversationId: `b`, costUsd: 100 }),
+            row({ conversationId: `c`, costUsd: 20 }),
+        ];
+        expect(sessionCostsOf(rows)).toEqual({ count: 3, averageCostUsd: 41, medianCostUsd: 20, costKnown: true });
+    });
+
+    it(`averages the two central session totals for an even median, sorted numerically`, () => {
+        const rows = [10, 2, 100, 4].map((costUsd, index) => row({ conversationId: String(index), costUsd }));
+        expect(sessionCostsOf(rows)).toEqual({ count: 4, averageCostUsd: 29, medianCostUsd: 7, costKnown: true });
+    });
+
+    it(`counts a known zero-cost session and gives a lone session its own cost for both figures`, () => {
+        expect(sessionCostsOf([row({ conversationId: `free`, costUsd: 0 })])).toEqual({
+            count: 1,
+            averageCostUsd: 0,
+            medianCostUsd: 0,
+            costKnown: true,
+        });
+        expect(sessionCostsOf([row({ conversationId: `only`, costUsd: 5 })])).toEqual({
+            count: 1,
+            averageCostUsd: 5,
+            medianCostUsd: 5,
+            costKnown: true,
+        });
+    });
+
+    it(`excludes main-tree spend and its missing-cost marker from session figures`, () => {
+        expect(sessionCostsOf([row({ costUsd: 100, costKnown: false }), row({ conversationId: `a`, costUsd: 2 })])).toEqual({
+            count: 1,
+            averageCostUsd: 2,
+            medianCostUsd: 2,
+            costKnown: true,
+        });
+    });
+
+    it(`has no average or median when there are no identified sessions`, () => {
+        const empty = { count: 0, averageCostUsd: undefined, medianCostUsd: undefined, costKnown: true };
+        expect(sessionCostsOf([])).toEqual(empty);
+        expect(sessionCostsOf([row()])).toEqual(empty);
+    });
+
+    it(`keeps sessions with unpriced turns in the distribution and marks the figures as floors`, () => {
+        expect(
+            sessionCostsOf([
+                row({ conversationId: `a`, costUsd: 3 }),
+                row({ conversationId: `a`, costUsd: 0, costKnown: false }),
+                row({ conversationId: `b`, costUsd: 0, costKnown: false }),
+                row({ conversationId: `c`, costUsd: 6 }),
+            ]),
+        ).toEqual({ count: 3, averageCostUsd: 3, medianCostUsd: 3, costKnown: false });
+    });
+
+    it(`uses only the supplied date, provider and conversation scope`, () => {
+        const rows = [
+            row({ conversationId: `a`, costUsd: 100, day: `2026-07-19` }),
+            row({ conversationId: `a`, costUsd: 3 }),
+            row({ conversationId: `a`, costUsd: 50, provider: `codex` }),
+            row({ conversationId: `b`, costUsd: 9 }),
+        ];
+        const selected = inWindow(rows, windowFor(`7d`, `2026-07-26`)).filter((entry) => entry.provider === `claude`);
+        expect(sessionCostsOf(selected)).toEqual({ count: 2, averageCostUsd: 6, medianCostUsd: 6, costKnown: true });
+        expect(sessionCostsOf(selected.filter((entry) => entry.conversationId === `a`))).toEqual({
+            count: 1,
+            averageCostUsd: 3,
+            medianCostUsd: 3,
+            costKnown: true,
+        });
     });
 });
 

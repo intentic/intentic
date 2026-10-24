@@ -98,6 +98,37 @@ export const totalsOf = (rows: readonly UsageRollupRow[]): UsageTotals =>
         EMPTY_TOTALS,
     );
 
+export interface SessionCosts {
+    readonly count: number;
+    readonly averageCostUsd: number | undefined;
+    readonly medianCostUsd: number | undefined;
+    readonly costKnown: boolean;
+}
+
+// One session is one conversation, even across days, models, accounts and runtimes. Call with the filtered rows:
+// these are costs within the selected window, not lifetime totals. Main-tree rows cannot identify a session.
+export const sessionCostsOf = (rows: readonly UsageRollupRow[]): SessionCosts => {
+    const costs = new Map<string, number>();
+    let costKnown = true;
+    for (const row of rows) {
+        if (row.conversationId === undefined) {
+            continue;
+        }
+        costs.set(row.conversationId, (costs.get(row.conversationId) ?? 0) + row.costUsd);
+        costKnown = costKnown && row.costKnown !== false;
+    }
+    const sorted = [...costs.values()].toSorted((left, right) => left - right);
+    const count = sorted.length;
+    const middle = Math.floor(count / 2);
+    return {
+        count,
+        averageCostUsd: count === 0 ? undefined : sorted.reduce((sum, cost) => sum + cost, 0) / count,
+        medianCostUsd: count === 0 ? undefined : count % 2 === 0 ? (sorted[middle - 1]! + sorted[middle]!) / 2 : sorted[middle]!,
+        // Replacing an unpriced cost with its eventual price can only raise either statistic, so both are floors.
+        costKnown,
+    };
+};
+
 // Every token the request carried, cached or not, the "18.4M tokens" headline.
 export const totalTokens = (totals: UsageTotals): number =>
     totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheCreationTokens;

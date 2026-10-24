@@ -517,6 +517,13 @@ browser (`models/providers/browsingCatalog.ts`). Only successful upstream discov
 after a week without verification, the provider offers connection without model versions. Connected providers use
 the sandbox's account catalogs. Browsing refreshes never rewrite a conversation's model or its saved preferences.
 
+## Usage
+
+`/sandbox/usage` shows average and median API-equivalent cost per session under the current date, provider and agent
+filters. A session is one agent conversation; its rows are summed before calculating either statistic, and main-tree
+usage without a conversation ID is excluded. Sessions with unpriced turns remain included, with both figures marked
+as lower bounds. An empty selection shows no average or median.
+
 ## Key files
 
 - [src/main.ts](src/main.ts) — boot order: self-heal, appearance, i18n, then mount with router, vue-query and `@intentic/ui`.
