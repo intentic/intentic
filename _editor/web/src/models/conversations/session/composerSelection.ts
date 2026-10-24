@@ -120,6 +120,9 @@ type SelectionHost = Pick<
 export class ComposerSelection {
     // The selection, whole; `apply` is the one thing that replaces it.
     readonly state = shallowRef<Selection>(UNPICKED);
+    // A deliberate routing pick in this chat also answers where a kept request should run. A freshly opened chat's
+    // seeded defaults do not: a kept request may have been started by an automation on its own model.
+    readonly routingPicked = shallowRef(false);
 
     // One read per pick, so a surface drawing one of them redraws only when that one moves.
     readonly provider = computed(() => this.state.value.provider);
@@ -228,6 +231,10 @@ export class ComposerSelection {
     apply(action: PickAction): void {
         const { selection, effects } = reduceSelection(this.state.value, action, this.world());
         this.state.value = selection;
+        // Restored per-chat picks still answer a re-run after a reload; constructor defaults alone do not.
+        if (action.kind === `set` && (`provider` in action.picks || `model` in action.picks || `harness` in action.picks)) {
+            this.routingPicked.value = true;
+        }
         this.remember(effects);
         if (effects.kept === true) {
             this.host.peek.value = false;
@@ -247,6 +254,7 @@ export class ComposerSelection {
         }
         // The words already waiting go where the next message goes, rather than by themselves on the pick they were sent under.
         if (effects.follow === true) {
+            this.routingPicked.value = true;
             void followPick(this.host, this.followRouting.value);
         }
         this.divide(effects.divider);

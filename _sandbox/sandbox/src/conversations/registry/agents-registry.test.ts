@@ -557,6 +557,28 @@ describe("agents registry", () => {
         expect(moved?.account).toBeUndefined();
     });
 
+    it("drops the previous provider's model and tier from the board and saved profile", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ profile: { agent: "kimi", harness: "native", model: "kimi-k3.1-pro", effort: "high", thinking: true, fast: true } }), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "kimi-session" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+
+        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native" } }), 3_000);
+        expect(registry.get("c1")).toMatchObject({ provider: "claude", status: "running" });
+        expect(conversations.sessionIdOf("c1")).toBeUndefined();
+        expect([registry.get("c1")?.model, registry.get("c1")?.effort, registry.get("c1")?.thinking, registry.get("c1")?.fast]).toEqual([
+            undefined, undefined, undefined, undefined,
+        ]);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+        expect(store.saved().find((entry) => entry.id === "c1")?.profile).toEqual({ provider: "claude", harness: "native" });
+        const reloaded = createFleet(store, standings(), presences()).agents;
+        await reloaded.init();
+        expect(reloaded.entry("c1")?.profile).toEqual({ provider: "claude", harness: "native" });
+        expect(reloaded.entry("c1")?.sessionId).toBeUndefined();
+    });
+
     it("clearSession drops the pointer so the next turn opens a fresh provider thread", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

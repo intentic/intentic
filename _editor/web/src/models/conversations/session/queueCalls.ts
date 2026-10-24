@@ -109,7 +109,7 @@ export const repeatsNudge = (message: { readonly text: string; readonly attachme
 // another account is switchAccount's (continueOn). `handoff` is how a spent allowance's held turn continues (the card's
 // pick, handoffChoice.ts).
 export const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: ContinueOptions): ResumeRouting => {
-    const routing: ResumeRouting = { agent: settings.agent, harness: settings.harness, model: settings.model || undefined };
+    const routing: ResumeRouting = { agent: settings.agent, harness: settings.harness, model: settings.model || undefined, effort: settings.effort };
     const account = accountIntent(settings, { registered: true, session });
     if (account !== undefined) {
         routing.account = account;

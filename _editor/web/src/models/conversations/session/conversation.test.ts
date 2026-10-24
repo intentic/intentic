@@ -2109,6 +2109,62 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
+    it(`continues a Kimi usage-limit hold on the Claude model picked in the composer`, async () => {
+        const conversation = new Conversation(`c1`);
+        conversation.selection.apply({ kind: `set`, picks: { provider: `kimi`, model: `kimi-k3.1-pro` } });
+        daemon.mockImplementation(turnDaemon([
+            { kind: `session`, sessionId: `kimi-session` },
+            { kind: `error`, code: `rate_limit`, message: `Kimi usage limit reached.`, held: { ran: true } },
+            { kind: `done` },
+        ]));
+        await conversation.turn.send(`ship the parser`, { ...settings, agent: `kimi`, model: `kimi-k3.1-pro` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5-5` } });
+        conversation.selection.apply({ kind: `setEffort`, effort: `high` });
+        daemon.mockImplementation(turnDaemon([
+            { kind: `session`, sessionId: `claude-session` },
+            { kind: `init`, model: `claude-opus-5-5` },
+            { kind: `done` },
+        ]));
+
+        await conversation.turn.continueTurn();
+
+        const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
+        expect(wire(press[1])).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, model: `claude-opus-5-5`, effort: `high` },
+        });
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.session.value).toEqual({ id: `claude-session`, provider: `claude`, harness: `native`, account: undefined });
+        expect(conversation.activeModel.value).toBe(`claude-opus-5-5`);
+    });
+
+    for (const restored of [false, true]) {
+        it(`sends a kept turn again on the provider and model picked after the refusal (restored=${restored})`, async () => {
+            turnDefaults.provider.value = `kimi`;
+            turnDefaults.models.value = { ...turnDefaults.models.value, kimi: `kimi-k3.1-pro` };
+            const conversation = new Conversation(`c1`);
+            conversation.session.value = { id: `kimi-session`, provider: `kimi`, harness: `native`, account: undefined };
+            conversation.registered.value = true;
+            conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5-5` } });
+            conversation.selection.apply({ kind: `setEffort`, effort: `high` });
+            const chat = restored ? new Conversation(`c1`) : conversation;
+            if (restored) {
+                chat.selection.apply({ kind: `set`, picks: { ...conversation.selection.state.value } });
+                chat.session.value = conversation.session.value;
+            }
+            daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
+
+            await chat.turn.resendKept({ text: `ship the parser`, attachments: [] });
+
+            const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
+            expect(wire(press[1])).toEqual({
+                conversationId: `c1`,
+                routing: { agent: `claude`, harness: `native`, model: `claude-opus-5-5`, effort: `high` },
+            });
+            expect(turnBodies()).toHaveLength(0);
+        });
+    }
+
     // A restart since the refusal drops the sandbox's copy; the words are still on screen, so the press sends those.
     it(`sends the kept message's own words when the sandbox no longer keeps the turn`, async () => {
         const conversation = new Conversation(`c1`);
@@ -2147,7 +2203,7 @@ describe(`Conversation`, () => {
         const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
         expect(wire(press[1])).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
+            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus`, effort: `high` },
         });
         // The daemon seeds a fresh session on the new credential and says so; this window takes its word, not a guess.
         expect(conversation.session.value).toEqual({ id: `s-2`, provider: `claude`, account: `with-room`, harness: `native` });
@@ -2251,7 +2307,7 @@ describe(`Conversation`, () => {
         const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
         expect(wire(press[1])).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
+            routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus`, effort: `high` },
         });
         // Run there, the pick is spent: the next turn follows the daemon's record, which now says the same.
         expect(conversation.selection.state.value.accountPicked).toBe(false);

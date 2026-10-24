@@ -51,8 +51,6 @@ import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
 // reader answers for — a spent allowance, a provider outage, a turn that stopped short — each of which fires only on
 // that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
 // What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
-
-
 // Where a press sends the held turn, by the one routing rule (conversations/registry/routing.ts), with the held turn's own
 // routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
 // (switchAccount, or an older editor's `account`) moves a conversation to another account.
@@ -76,10 +74,11 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
     if (routing === undefined) {
         return input;
     }
-    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, ...rest } = input;
-    // No model in the press keeps the refused turn's; an unloaded catalog has no pick to send. The same for its tier.
-    const model = routing.model ?? input.model;
-    const effort = routing.effort ?? input.effort;
+    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking, fast, ...rest } = input;
+    const sameProvider = withRuntimeDefaults(input).agent === routing.agent;
+    const model = routing.model ?? (sameProvider ? input.model : undefined);
+    const sameModel = sameProvider && model === input.model;
+    const effort = routing.effort ?? (sameModel ? input.effort : undefined);
     const { account } = pressed(input, routing);
     return {
         ...rest,
@@ -88,6 +87,8 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
         ...(account !== undefined ? { account } : {}),
         ...(model !== undefined ? { model } : {}),
         ...opt("effort", effort),
+        ...opt("thinking", sameModel ? thinking : undefined),
+        ...opt("fast", sameModel ? fast : undefined),
     };
 };
 
@@ -238,8 +239,7 @@ const resumedTurn = (
     failure: { readonly input: TurnInput & { conversationId: string }; readonly sessionId?: string | undefined },
     { reason, fresh, restate, tail }: RerunNote,
 ): TurnInput & { conversationId: string } => {
-    // Destructured out first so `fresh` can unset it, rather than leaving the carried session in place via a spread. The
-    // failed turn's own cut goes too: it named a point in the session as it stood then, and the work since is kept.
+    // Drop the carried session for `fresh`, and the old cut, which named the session before the work since.
     const { sessionId: carried, resumeAt: _cut, ...rest } = failure.input;
     const sessionId = fresh === true ? undefined : (failure.sessionId ?? carried);
     const resume = restate === true ? reason : (failure.input.resume ?? reason);

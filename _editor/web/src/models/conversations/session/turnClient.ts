@@ -962,8 +962,8 @@ export class TurnClient {
 
     // Send a turn the sandbox kept after the door turned it away (a fix press, a peer's message): the press runs it as
     // it was started, routing and all, unless the composer holds an account the daemon has not taken (a pick made since,
-    // or one it refused to move to): the kept turn names its own account, which would win over the move, so the press
-    // names the pick, as Continue does for a held turn. A sandbox that no longer keeps it (a restart since) gets its words
+    // or one it refused to move to), or the person picked another runtime or model: the press names the pick, as Continue
+    // does for a held turn. A sandbox that no longer keeps it (a restart since) gets its words
     // as a send.
     async resendKept(kept: { readonly text: string; readonly attachments: readonly ChatAttachment[] }): Promise<void> {
         if (this.streaming.value) {
@@ -972,7 +972,7 @@ export class TurnClient {
         const { host } = this;
         host.error.value = null;
         const settings = host.selection.turnSettings();
-        const named = accountIntent(settings, { registered: true, session: host.session.value }) !== undefined;
+        const named = host.selection.routingPicked.value || accountIntent(settings, { registered: true, session: host.session.value }) !== undefined;
         const resumed = await this.askResume(named ? heldRouting(settings, host.session.value, {}) : undefined);
         if (resumed === undefined) {
             await this.say(kept.text, kept.attachments);

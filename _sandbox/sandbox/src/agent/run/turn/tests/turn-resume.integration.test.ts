@@ -2168,6 +2168,48 @@ test("a press onto another runtime naming no account carries none of the old run
     clearPendingResume(services, "lim-runtime");
 });
 
+for (const ran of [false, true]) {
+    test(`a Kimi limit resume runs on the selected Claude model (ran=${ran})`, async () => {
+        const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+        const input = { prompt: "ship the parser", conversationId: "lim-opus", agent: "kimi", harness: "native", model: "kimi-k3.1-pro", effort: "high", thinking: true, fast: true, account: "spent-kimi" } as const;
+        recordHeldTurn(services, { reason: "limit", input, sessionId: "kimi-session", ran });
+        const turns: TurnInput[] = [];
+
+        await fireHeldResume(drivenBy(services, cutWake(turns)), input.conversationId, { agent: "claude", harness: "native", model: "claude-opus-5-5", effort: "max" });
+        await settle(services, input.conversationId);
+
+        expect(turns).toHaveLength(1);
+        expect([turns[0]!.agent, turns[0]!.model, turns[0]!.effort, turns[0]!.thinking, turns[0]!.fast, turns[0]!.account, turns[0]!.sessionId]).toEqual([
+            "claude", "claude-opus-5-5", "max", undefined, undefined, undefined, undefined,
+        ]);
+        expect(turns[0]!.resume).toBe(ran ? "switched" : "refused");
+        expect(withoutResumeNote(turns[0]!.prompt)).toBe(input.prompt);
+        clearPendingResume(services, input.conversationId);
+    });
+}
+
+test("a cross-provider resume without a model drops the refused model and its tier settings", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: TurnInput[] = [];
+    recordHeldTurn(services, {
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "lim-kimi", agent: "kimi", harness: "native", model: "kimi-k3.1-pro", effort: "high", thinking: true, fast: true, account: "spent-kimi" },
+        sessionId: "kimi-session",
+        ran: true,
+    });
+
+    await fireHeldResume(drivenBy(services, cutWake(turns)), "lim-kimi", { agent: "claude", harness: "native" });
+    await settle(services, "lim-kimi");
+
+    expect(turns).toHaveLength(1);
+    expect([turns[0]!.agent, turns[0]!.model, turns[0]!.effort, turns[0]!.thinking, turns[0]!.fast, turns[0]!.account, turns[0]!.sessionId]).toEqual([
+        "claude", undefined, undefined, undefined, undefined, undefined, undefined,
+    ]);
+    expect(turns[0]!.resume).toBe("switched");
+    expect(withoutResumeNote(turns[0]!.prompt)).toBe("ship the parser");
+    clearPendingResume(services, "lim-kimi");
+});
+
 test("a press that names no routing runs the turn exactly as it was", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];

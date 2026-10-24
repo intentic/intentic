@@ -265,17 +265,22 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
     updatedAt: now,
 });
 
-// Each setting falls back to the last turn's, so a turn naming none keeps describing the agent by what it actually ran;
-// provider, harness and account are the one routing rule's (conversations/registry/routing.ts), which never carries an account
-// onto a provider that did not mint it.
+// Unnamed settings stay only on the same provider and model; another provider cannot inherit the last one's model.
+// Provider, harness and account follow the one routing rule (conversations/registry/routing.ts).
 const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => {
     const { provider, harness, account } = routingFor(existing, profile);
     // The persona is the turn's own, never the last turn's: a turn naming none is an ordinary chat.
-    const { account: _held, actsAs: _lastPersona, ...kept } = existing;
+    const { account: _held, actsAs: _lastPersona, model, effort, thinking, fast, ...kept } = existing;
+    const sameProvider = existing.provider === provider;
+    const sameModel = sameProvider && (profile.model === undefined || profile.model === model);
     return {
         ...kept,
         provider,
         harness,
+        ...opt("model", sameProvider ? model : undefined),
+        ...opt("effort", sameModel ? effort : undefined),
+        ...opt("thinking", sameModel ? thinking : undefined),
+        ...opt("fast", sameModel ? fast : undefined),
         ...opt("model", profile.model),
         ...opt("effort", profile.effort),
         ...opt("thinking", profile.thinking),
@@ -300,6 +305,8 @@ const openedEntry = (
         ...held,
         identity: { ...identityOf(held.identity, turn, entryOf), ...peopleOfConversation(held, turn, entryOf) },
         profile: settingsOf(held.profile, turn.profile),
+        // Retire the old binding before a new runtime can fail without minting a session of its own.
+        sessionId: routingFor(held.profile, turn.profile).continues ? held.sessionId : undefined,
         ending: { kind: "interrupted" },
         social: socialOf(held, turn, entryOf, now),
         updatedAt: now,
