@@ -178,7 +178,8 @@ const pageList = (numbers: readonly number[]): string => (numbers.length > 6 ? `
 const openPdf = async (bytes: Uint8Array): Promise<PdfDocument | CheckReport> => {
     try {
         // Errors only: pdf.js otherwise narrates its recovery of a damaged file on the console, into the report.
-        return await getDocumentProxy(bytes, { verbosity: 0 });
+        // pdf.js 6 exposes the original font name only with extra font properties enabled.
+        return await getDocumentProxy(bytes, { verbosity: 0, fontExtraProperties: true });
     } catch (cause) {
         const reason =
             cause instanceof Error && cause.name === "PasswordException"

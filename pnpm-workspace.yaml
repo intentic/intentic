@@ -73,10 +73,11 @@ overrides:
   # leaks plaintext credentials on an auth-plugin downgrade to mysql_clear_password (GHSA-3f6p-5ww8-9rcr,
   # fixed in 3.22.0). Nothing here connects to MySQL — the datasource in _platform/prisma/schema.prisma is
   # postgresql — so this is a tree hygiene bump, not a live exposure; same major, no code of ours touches it.
-  mysql2: 3.24.4
-  # react-dom@19.3.0 peers react@^19.3.0; better-auth pulls react-dom into @intentic/web, and react@19.2.8 is one
-  # patch behind — peer-deps flags it for @intentic/share-view.
-  react: 19.3.0
+  mysql2: 3.24.6
+  # Better Auth's React bindings bring react-dom into the frontend dependency graph. Pin the pair together:
+  # react-dom's peer range requires the corresponding React patch, including in share-view's resolved tree.
+  react: 19.3.1
+  react-dom: 19.3.1
   # onnxruntime-node's `adm-zip: ^0.5.16` is used only by its postinstall unpacker, which `allowBuilds` disables
   # here — so the extraction advisories are unreachable in this workspace. Pinned past them anyway so the tree
   # does not carry a known-bad copy for whoever enables that build later. 0.6.0 no longer clears that bar: the
@@ -87,14 +88,13 @@ overrides:
   # reachable: it is the sanitiser the editor runs over rendered markdown. An exact pin never follows a sanitiser
   # fix, so this holds it on the catalog's copy; same major, so the tree dedupes onto one copy rather than two.
   "monaco-editor-core>dompurify": 3.4.17
-  # @connectrpc/connect-node (reached through @cursor/sdk) asks for undici ^5.28.4, and the 5.x line is EOL:
+  # @connectrpc/connect-node asks for undici ^5.28.4, and the 5.x line is EOL:
   # all twelve of its open advisories — three of them high — are fixed only in 6.x, so no in-range bump exists.
   # What connect-node imports is one thing, `Headers`, and it installs it as a global only when the Node major
   # is below 18 (node-headers-polyfill.js); on this workspace's Node 24 that branch is dead and none of the
-  # vulnerable fetch, WebSocket or Set-Cookie code is ever entered. Bumped anyway so the tree does not carry a
-  # known-bad copy: 6.29.0 is the newest 6.x and the line discord.js already resolves, so this drops the 5.x
-  # copy rather than adding a second one.
-  "@connectrpc/connect-node>undici": 6.29.0
+  # vulnerable fetch, WebSocket or Set-Cookie code is ever entered. connect-node is absent from the current
+  # lockfile; retain the scoped 6.x override in case an SDK brings it back.
+  "@connectrpc/connect-node>undici": 6.29.1
   # Two packages pin deepmerge-ts to the 7.x line — @prisma/config to an exact 7.1.5 and html-to-text (via
   # mailparser) to ^7.1.5 — and every 7.x release blows the stack on a recursive object graph
   # (GHSA-ggr8-5vv4-36mx, fixed only in 8.0.0; the 7.1.6 that landed just before it is still vulnerable).
@@ -146,7 +146,6 @@ minimumReleaseAgeExclude:
   - monaco-editor-core@0.57.0
   - "@posthog/core@1.56.0"
   - "@muse-code/sdk@1.4.11"
-  - mailparser@3.9.36
   - marked@18.1.0
   - posthog-js@1.436.1
   - "@oven/bun-darwin-aarch64@1.4.4"
@@ -212,7 +211,7 @@ catalogPrune: true
 # Version conflicts are resolved to the newest compatible release. Held to a single copy per package, which is
 # what lets the overrides above dedupe rather than add.
 catalog:
-  "@agentclientprotocol/sdk": 2.0.1
+  "@agentclientprotocol/sdk": 2.0.2
   "@anthropic-ai/claude-agent-sdk": 0.3.308
   "@astrojs/check": 0.9.10
   "@astrojs/sitemap": 3.7.4
@@ -286,16 +285,16 @@ catalog:
   "@tauri-apps/api": 2.12.4
   "@tauri-apps/cli": 2.12.3
   "@tauri-apps/plugin-dialog": 2.8.3
-  "@types/bun": 1.4.2
+  "@types/bun": 1.4.4
   "@types/mailparser": 3.9.0
-  "@types/node": 24.19.1
+  "@types/node": 24.19.2
   "@types/pg": 8.23.1
   "@types/semver": 7.8.0
   "@types/ssh2": 1.15.6
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.2
   "@typescript/native-preview": 7.0.0-dev.20260707.2
-  "@vitejs/plugin-vue": 6.0.9
+  "@vitejs/plugin-vue": 6.0.10
   "@vue-flow/core": 1.48.2
   # The e-urzad extension's signature verifier (XAdES, PAdES, CAdES): CMS, timestamps and certificate chains through
   # PKI.js (with asn1js) over WebCrypto, XML signatures through xadesjs on xmldom + xpath. Nothing hand-rolled.
@@ -333,13 +332,13 @@ catalog:
   fast-check: 4.10.2
   # fileq's zip surgeon: pptx slide parts out, binary test fixtures built in code.
   fflate: 0.8.3
-  file-type: 22.1.1
+  file-type: 22.2.0
   hono: 4.13.13
   idb-keyval: 6.3.0
   # fileq's image dimensions, header-only (no pixel decode, no native code).
   image-size: 2.0.4
   ignore: 7.0.12
-  imapflow: 2.2.5
+  imapflow: 2.9.1
   jose: 6.2.13
   # Held on 29: jsdom 30's window fails its own EventTarget brand check under bun's `vm` ("'addEventListener' called
   # on an object that is not a valid instance of EventTarget" from _tools/testing/src/dom.ts), while the same code
@@ -351,7 +350,7 @@ catalog:
   knip: 6.39.0
   # GitHub Actions secrets are sealed boxes (_deploy/providers/src/github/github-api.ts).
   libsodium-wrappers: 0.8.4
-  mailparser: 3.9.36
+  mailparser: 3.12.4
   # fileq's docx deriver: docx → semantic HTML, which webq's markdown writer then renders.
   mammoth: 1.13.0
   marked: 18.1.0
@@ -389,7 +388,7 @@ catalog:
   primevue: 4.5.5
   prisma: 7.10.1
   quickjs-emscripten-core: 0.32.0
-  read-excel-file: 9.3.10
+  read-excel-file: 9.3.12
   semantic-release: 25.0.9
   semver: 7.8.5
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
@@ -420,7 +419,7 @@ catalog:
   typescript: 6.0.3
   # fileq's pdf deriver: a serverless pdf.js build that extracts text layers in plain Node — no worker, no
   # canvas, no DOM shims — at a fraction of pdfjs-dist's install.
-  unpdf: 1.8.1
+  unpdf: 1.9.1
   # QR codes drawn in the browser (the phone pairing dialog): the code carries a live pairing token, so it is never
   # rendered by a third-party service. Zero dependencies.
   uqr: 0.1.3
@@ -429,7 +428,7 @@ catalog:
   vue: 3.5.44
   vue-i18n: 11.4.16
   vue-router: 5.4.0
-  vue-tsc: 3.3.12
+  vue-tsc: 3.3.13
   web-push: 3.6.7
   wrangler: 4.147.0
   ws: 8.22.0
