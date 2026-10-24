@@ -341,6 +341,9 @@ const hasSpend = computed(() => current.value.length > 0);
                         </Card>
                     </div>
 
+                    <!-- Its own section, not phrased like the tiles above: spend and plan-week-remaining are different questions. -->
+                    <PlanLimitsPanel />
+
                     <Section :label="t(`sandbox.sandboxUsage.costPerSession`)">
                         <template #info>{{ t(`sandbox.sandboxUsage.sessionCount`, { count: sessionCosts.count }) }}</template>
                         <Card>
@@ -373,9 +376,6 @@ const hasSpend = computed(() => current.value.length > 0);
                             </p>
                         </Card>
                     </Section>
-
-                    <!-- Its own section, not phrased like the tiles above: spend and plan-week-remaining are different questions. -->
-                    <PlanLimitsPanel />
 
                     <Card>
                         <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
