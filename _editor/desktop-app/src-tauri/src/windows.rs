@@ -203,6 +203,13 @@ pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f
     if window.label() != CONFIRM_CLOSE || !content_height.is_finite() {
         return;
     }
+    // The dialog may have been opened always-on-top to survive the face's restore animation (ask_before_closing,
+    // 2026-10-24). By the time the page has rendered its content and called this, the restore is over and the
+    // ownership alone keeps the dialog above the face, so the flag comes off. Leaving it on would keep the dialog
+    // above every other application on the desktop.
+    if window.is_always_on_top().unwrap_or(false) {
+        let _ = window.set_always_on_top(false);
+    }
     let work = window_work_area(window).or_else(|| work_area(app));
     let size = LogicalSize::new(
         CONFIRM_WIDTH,
@@ -2162,7 +2169,10 @@ fn hide_faces(app: &AppHandle) {
 /// Every failure here falls through to the tray rather than leaving the × doing nothing: a close that seems to
 /// be ignored is the worst outcome available, and the app staying up is the recoverable one.
 fn ask_before_closing(app: &AppHandle) {
-    let face = face_to_ask_over(app);
+    let (face, was_minimized) = match face_to_ask_over(app) {
+        Some(pair) => (Some(pair.0), pair.1),
+        None => (None, false),
+    };
     if let Some(window) = app.get_webview_window(CONFIRM_CLOSE) {
         // Asked again while the question is up: put it back over the face, on screen, rather than only focusing it
         // wherever it is. A question nobody can see that every × only focuses is a × that does nothing.
@@ -2178,7 +2188,15 @@ fn ask_before_closing(app: &AppHandle) {
         return;
     }
     // Owned by the frame only while it is on screen: a dialog owned by a minimised window is hidden with it.
-    let parent = face.filter(window_on_screen);
+    // When the face was just unminimized, `is_minimized()` can still read true because Windows restores
+    // asynchronously — but the face WILL be on screen, so the dialog must be owned by it: ownership is what
+    // keeps the dialog above the face. Without it, the face's restore animation and the dialog fight for the
+    // foreground, and the dialog flickers behind the face (2026-10-24).
+    let parent = if was_minimized {
+        face
+    } else {
+        face.filter(window_on_screen)
+    };
     let mode = app.state::<crate::state::AppState>().ui_mode();
     let mut builder =
         WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
@@ -2203,7 +2221,12 @@ fn ask_before_closing(app: &AppHandle) {
             // Nothing here reaches loopback. It carries the arguments so every window in this process agrees
             // on them, because the first one built is the one that configures the environment (BROWSER_ARGS).
             .additional_browser_args(BROWSER_ARGS)
-            .visible(false);
+            .visible(false)
+            // When the face was just unminimized from the taskbar, Windows restores it with a foreground
+            // activation that races the dialog's own `set_focus`. Always-on-top keeps the dialog above the
+            // face throughout the restore animation; `fit_to_content` clears it once the dialog's content has
+            // rendered and the restore is over (2026-10-24).
+            .always_on_top(was_minimized);
     if let Some(parent) = &parent {
         builder = match owned_by(builder, parent) {
             Ok(owned) => owned,
@@ -2235,12 +2258,19 @@ fn ask_before_closing(app: &AppHandle) {
 /// taskbar button ("Close window"), and the question used to be centred on where Windows parks a minimised window,
 /// (-32000, -32000): off every screen, and every × after it only focused that question again, so the × did nothing for
 /// the rest of the run (2026-10-12). The reader asked about this window, so it comes back to be asked about.
-fn face_to_ask_over(app: &AppHandle) -> Option<Window> {
+///
+/// Returns `(face, was_minimized)`: the caller needs to know whether the face was just unminimized, because
+/// `is_minimized()` answers from the OS and can still read `true` for a window whose restore animation has not
+/// finished yet — on Windows `unminimize()` is asynchronous. When it was, the dialog must still be owned by the
+/// face (ownership is what keeps it on top), and it must not test `window_on_screen` against a state the OS has
+/// not committed to yet (2026-10-24).
+fn face_to_ask_over(app: &AppHandle) -> Option<(Window, bool)> {
     let face = shown_face(app)?;
-    if !matches!(face.is_minimized(), Ok(false)) {
+    let was_minimized = !matches!(face.is_minimized(), Ok(false));
+    if was_minimized {
         let _ = face.unminimize();
     }
-    Some(face)
+    Some((face, was_minimized))
 }
 
 /// The dialog `builder` makes, owned by `parent` as Tauri's own `parent` would own it by a window of a page: on
