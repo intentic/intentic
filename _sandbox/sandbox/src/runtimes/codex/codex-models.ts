@@ -40,15 +40,18 @@ export const discoverTranslatorCodexModels = async (
     fetchImpl: typeof fetch = fetch,
 ): Promise<string[]> => codexModelIds(`${translatorUrl.replace(/\/$/, "")}/v1/models`, translatorToken, fetchImpl);
 
-// The Codex CLI's own words for the notices this runtime reads, as against an upstream API's text it relays: each must
+// The current Codex CLI's own words for the notices this runtime reads, as against an upstream API's text it relays: each must
 // stay in the installed binary (agent/providers/tests/vendor-phrases.integration.test.ts), so a release that rewords
 // one fails a suite instead of reaching the chat as the notice it came as.
 const FALLBACK_METADATA = "Defaulting to fallback metadata";
 const RESUMING_WITH = "but is resuming with";
-// The in-turn retry notice ("Reconnecting... 2/5 (...)") and the heads-up after an auto-compaction (codex-agent.ts).
+// The in-turn retry notice ("Reconnecting... 2/5 (...)").
 export const CODEX_RECONNECTING = "Reconnecting...";
+export const CODEX_CLI_PHRASES: readonly string[] = [CODEX_RECONNECTING, FALLBACK_METADATA, RESUMING_WITH];
+
+// Codex 0.164 removed this warning (openai/codex#55355). Keep filtering it from older installed engines, but do not
+// require current binaries to contain a sentence upstream intentionally retired.
 export const CODEX_COMPACTION_NOTICE = "Long threads and multiple compactions";
-export const CODEX_CLI_PHRASES: readonly string[] = [CODEX_RECONNECTING, CODEX_COMPACTION_NOTICE, FALLBACK_METADATA, RESUMING_WITH];
 
 // Non-fatal advisory on the error channel (fallback metadata used); a muted notice, not an error.
 export const CODEX_ADVISORY = new RegExp(escapeRegExp(FALLBACK_METADATA), "i");

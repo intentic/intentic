@@ -679,8 +679,8 @@ test("a context-compaction item is the compact lifecycle frame, and the turn's a
     ]);
 });
 
-// Codex's post-compaction heads-up, worded as codex-rs/core/src/compact.rs emits it; it follows every auto-compaction,
-// on top of the context_compaction item.
+// Codex's post-compaction heads-up through 0.163, worded as codex-rs/core/src/compact.rs emitted it. Older installed
+// engines still send it on top of the context_compaction item; 0.164 removed it (openai/codex#55355).
 const COMPACTED_HEADS_UP =
     "Heads up: Long threads and multiple compactions can cause the model to be less accurate. " +
     "Start a new thread when possible to keep threads small and targeted.";

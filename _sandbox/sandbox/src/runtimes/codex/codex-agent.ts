@@ -206,7 +206,7 @@ const mcpResultContent = (item: Extract<CodexItem, { type: "mcp_tool_call" }>, n
 // sentence decides nothing.
 const CODEX_RETRY_COUNTERS = new RegExp(String.raw`^${escapeRegExp(CODEX_RECONNECTING)}\s*(\d+)\s*\/\s*(\d+)`);
 
-// Codex's heads-up after every auto-compaction. The context_compaction item already carries the lifecycle frame, so
+// Codex's heads-up after every auto-compaction through 0.163. The context_compaction item already carries the lifecycle frame, so
 // repeating it here would show the reader two compaction notices for one compaction.
 const CODEX_COMPACTED = new RegExp(escapeRegExp(CODEX_COMPACTION_NOTICE), "i");
 

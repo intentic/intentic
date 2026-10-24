@@ -9,10 +9,10 @@ import { HOOK_TRUST_FLAG } from "../../../runtimes/codex/codex-hooks.js";
 import { UNKNOWN_COMMAND_PREFIX } from "../agent-commands.js";
 import { CLAUDE_CLI_PHRASES, CODEX_CLI_PHRASES } from "../../../engines/failure-sentences.js";
 
-// Every phrase a classifier here matches that a CLI prints in its own words is still in the CLI this tree installs. A
+// Every current phrase a classifier here matches that a CLI prints in its own words is still in the CLI this tree installs. A
 // release that rewords one fails this suite, where a fixture-built test would keep passing and production would read the
 // new sentence as nothing. Server-side API text is not here: no binary holds it. Matched case-insensitively, as the
-// classifiers match.
+// classifiers match. Retired notices kept for older installed engines are covered by their adapter's unit tests.
 
 // The Claude CLI the Agent SDK ships beside itself, resolved the way the daemon resolves the image's copy (claude-sdk.ts).
 const claudeBinary = (): string | undefined => {
@@ -102,7 +102,7 @@ test.skipIf(!claudeCli.runs)(
 );
 
 test.skipIf(!codexCli.runs)(
-    codexCli.title("every Codex CLI sentence a classifier reads is still in the installed CLI"),
+    codexCli.title("every current Codex CLI sentence a classifier reads is still in the installed CLI"),
     async () => {
         expect(await missingFrom(codex ?? "", [...CODEX_CLI_PHRASES, ...CODEX_NOTICES, HOOK_TRUST_FLAG])).toEqual([]);
     },
