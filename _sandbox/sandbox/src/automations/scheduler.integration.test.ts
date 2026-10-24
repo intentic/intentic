@@ -8,7 +8,7 @@ import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settin
 import { UTC } from "@intentic/sandbox-contract/time/zone";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
-import { SETTLES, waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
 import { type JournalEntry, sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
@@ -184,19 +184,27 @@ const inMinutes = (minutes: number): number => Date.now() + minutes * 60_000;
 
 test("a started scheduler fires a moment due within a poll on the moment, not at the next poll", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    // Real filesystem work may take arbitrarily long on a busy runner; only the scheduler's clock is advanced.
+    jest.useFakeTimers();
     // Polls two seconds apart: the first, at 2s, sets the timer for 2.9s; the poll alone would fire it at 4s.
     const at = Date.now() + 2_900;
-    await services.automations.upsert(automationConfig("standup", { trigger: { kind: "once", at } }));
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)), 2_000);
-    scheduler.start();
     try {
-        await waitFor(() => expect(prompts).toEqual(["wake:standup"]), { timeout: 8_000, interval: 20 });
-        expect(Date.now() - at).toBeGreaterThanOrEqual(0);
-        expect(Date.now() - at).toBeLessThan(600);
+        await services.automations.upsert(automationConfig("standup", { trigger: { kind: "once", at } }));
+        scheduler.start();
+        await advanceTimersByTimeAsync(2_000);
+        // Wait for the poll's file reads and writes to finish arming the due timer beside the backstop interval.
+        await waitFor(() => expect(jest.getTimerCount()).toBe(2), SETTLES);
+        await advanceTimersByTimeAsync(899);
+        expect(prompts).toEqual([]);
+        await advanceTimersByTimeAsync(1);
+        await waitFor(() => expect(prompts).toEqual(["wake:standup"]), SETTLES);
+        expect(Date.now()).toBe(at);
         await automationIdle("standup");
     } finally {
         scheduler.stop();
+        jest.useRealTimers();
     }
 });
 
@@ -204,6 +212,7 @@ test("a started scheduler fires a moment due within a poll on the moment, not at
 // seen at all. The poll here is a minute, so only the save could have armed it in time (2026-10-20).
 test("a wake saved due within the current poll fires on its moment, not a poll later", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    jest.useFakeTimers();
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)), 60_000);
     scheduler.start();
@@ -211,13 +220,18 @@ test("a wake saved due within the current poll fires on its moment, not a poll l
     try {
         const at = Date.now() + 1_500;
         await services.automations.upsert(automationConfig("soon", { trigger: { kind: "once", at } }));
-        await waitFor(() => expect(prompts).toEqual(["wake:soon"]), { timeout: 5_000, interval: 20 });
-        expect(Date.now() - at).toBeGreaterThanOrEqual(0);
-        expect(Date.now() - at).toBeLessThan(600);
+        await advanceTimersByTimeAsync(100);
+        await waitFor(() => expect(jest.getTimerCount()).toBe(2), SETTLES);
+        await advanceTimersByTimeAsync(1_399);
+        expect(prompts).toEqual([]);
+        await advanceTimersByTimeAsync(1);
+        await waitFor(() => expect(prompts).toEqual(["wake:soon"]), SETTLES);
+        expect(Date.now()).toBe(at);
         await automationIdle("soon");
     } finally {
         unhear();
         scheduler.stop();
+        jest.useRealTimers();
     }
 });
 
