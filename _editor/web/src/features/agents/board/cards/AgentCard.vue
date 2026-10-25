@@ -403,7 +403,7 @@ const account = computed(() => (maker.value ? undefined : accountBadge(providerA
 // A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
 // leaves Vue comparing one string, so only the card being typed into redraws.
 const unsentWords = computed(() => previewOf(props.agent.id));
-// A never-sent draft says so in the corner; words left in a conversation with a standing ride its tile (UnsentMark).
+// A never-sent draft says so in the corner; words left in a conversation with a standing ride the corner's stamps (UnsentMark).
 const draftCorner = computed(() => props.agent.unsent && props.agent.status === `draft` && chip.value === undefined);
 const displayTitle = computed(() => agentDisplayTitle(props.agent, unsentWords.value));
 // Marks the filter term in the title; the matched line (via MatchLine, which also names the speaker) is never shown
@@ -608,7 +608,6 @@ const grab = (event: PointerEvent): void => {
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
                 <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
                 <IdentityTile :session="agent" class="h-4 w-4 text-2xs" />
-                <UnsentMark v-if="agent.unsent && !draftCorner" badge :preview="unsentWords" :at="agent.draftAt" />
             </span>
             <input
                 v-if="edit.editing"
@@ -666,6 +665,8 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <!-- What vouches for its work, one badge per check that ran (CardStamps), left of the standing so the standing keeps
                      the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
+                <!-- Words left in a conversation with a standing of its own: a pencil in the stamp list, the standing keeps its seat. -->
+                <UnsentMark v-if="agent.unsent && !draftCorner" stamp :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
                 <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-base" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span

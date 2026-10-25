@@ -9,7 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 let app: App | undefined;
 
-const render = (props: { preview?: string; at?: number; badge?: boolean }): HTMLElement => {
+const render = (props: { preview?: string; at?: number; badge?: boolean; stamp?: boolean }): HTMLElement => {
     app?.unmount();
     const host = document.createElement(`div`);
     document.body.append(host);
@@ -36,6 +36,14 @@ describe(`<UnsentMark>`, () => {
         const mark = host.querySelector(`[data-unsent-mark="badge"]`)!;
         expect(mark.textContent?.trim()).toBe(``);
         expect(mark.getAttribute(`role`)).toBe(`img`);
+        expect(mark.getAttribute(`aria-label`)).toBe(`Draft, fix the login redirect`);
+    });
+
+    // In a card's stamp list it is the same named glyph, unpinned.
+    it(`as a stamp, is a named pencil with no word`, () => {
+        const host = render({ preview: `fix the login redirect`, stamp: true });
+        const mark = host.querySelector(`[data-unsent-mark="stamp"]`)!;
+        expect(mark.textContent?.trim()).toBe(``);
         expect(mark.getAttribute(`aria-label`)).toBe(`Draft, fix the login redirect`);
     });
 

@@ -9,7 +9,10 @@ import { timeAgo } from "@intentic/ui";
 // Two shapes, by whether the draft is the card's whole standing:
 // - the pill, for a card that has never sent anything: it takes the corner where every standing is said, in a word;
 // - the badge, for a conversation with a standing of its own (running, asking, done): a pencil pinned to the identity
-//   tile, so the corner keeps what the conversation is doing and the tile keeps saying which conversation it is.
+//   tile, so the corner keeps what the conversation is doing and the tile keeps saying which conversation it is (the
+//   chat rail's row);
+// - the stamp, the same case on a fleet board card: a bare pencil in the corner's stamp list (CardStamps), beside the
+//   standing, so a draft reads in the corner whether or not the conversation has a standing of its own.
 // Age and opening words live in the accessible name, and in the badge's hover, since a lone glyph states no fact.
 
 const t = useT();
@@ -23,6 +26,8 @@ const props = defineProps<{
     at?: number;
     // Pinned to the identity tile (its host is the tile's `relative` disc) rather than standing as a pill.
     badge?: boolean;
+    // A bare glyph in the corner's stamp list, at the stamps' own size, rather than a pill or a pinned badge.
+    stamp?: boolean;
 }>();
 
 // The mark reads the shared clock itself, armed only while it has a stamp to age, and quantized to the 15s that
@@ -48,6 +53,16 @@ const spoken = computed(() => [t(`common.unsentMark.draft`), age.value, words.va
         class="pointer-events-auto absolute -bottom-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-canvas text-link ring-1 ring-primary-600/50"
     >
         <Icon name="pencil" class="text-3xs" />
+    </span>
+    <span
+        v-else-if="stamp"
+        v-tooltip.top="spoken"
+        role="img"
+        :aria-label="spoken"
+        data-unsent-mark="stamp"
+        class="inline-flex shrink-0 items-center text-link"
+    >
+        <Icon name="pencil" />
     </span>
     <!-- `w-fit` keeps it a chip in both frames: a column would stretch a flex child into a banner, a row would not. -->
     <span v-else :aria-label="spoken" data-unsent-mark="pill" class="ui-status-pill flex w-fit shrink-0 items-center bg-primary-600/15 font-semibold text-link">
