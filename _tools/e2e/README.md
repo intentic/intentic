@@ -21,7 +21,8 @@ flowchart LR
   (`google.ts`): a fake Identity Services script whose button returns an RS256 ID token, and the matching JWKS
   answered inside the api's process, so Better Auth's real one-tap verification accepts it. The desktop app's half
   (`desktop.ts`) is `auth.rs` in TypeScript: the state and verifier, the `intentic://` links read off Chrome
-  DevTools, and the landing the app points its window at. `SIGNIN_E2E_REUSE_BUILD=1` serves the `dist` already there;
+  DevTools, and the landing the app points its window at. The app opens Home before sign-in; the specs press its
+  Sign in link before continuing in the browser. `SIGNIN_E2E_REUSE_BUILD=1` serves the `dist` already there;
   `SIGNIN_E2E_DATABASE_URL` skips the container.
   Testcontainers must keep cleanup helpers owned by other runtimes separate: the CI fleet shares its Docker
   daemon with other jobs. Version 12.2.1 fixes reuse of a foreign Ryuk helper, whose owner could remove it during setup.
