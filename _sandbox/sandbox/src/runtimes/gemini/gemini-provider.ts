@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { withOpenCodeToolNames } from "../opencode/opencode-mcp.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -119,7 +120,7 @@ export const planGeminiTurn = async (
                 ...context.base,
                 // The turn's steering queue, which the OpenCode loop sends on as steers (capabilities.steering).
                 spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
-                tools,
+                tools: withOpenCodeToolNames(tools, input.conversationId),
                 hooks,
                 credential: { kind: "container" },
             },

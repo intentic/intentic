@@ -16,7 +16,7 @@ import {
 import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
 import { outOfReachNote, reachCliEnv, withinReach } from "../../../secrets/credential-reach.js";
 import { gatewayHeld, shellEnvOf } from "../../../capabilities/cli-env.js";
-import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
+import { SKILL_CATALOG_NOTE_TITLE, skillCatalogNoteOf } from "../../../store/loaded-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
 import type { SearchTool } from "../../prompt/guidance.js";
@@ -87,6 +87,11 @@ export interface PlannedNotes {
 const installReachOf = (isolated: boolean, capabilities: AgentCapabilities, canInstall: boolean): InstallReach =>
     !canInstall ? "ask-owner" : !isolated ? "main-tree" : capabilities.isolation === "namespace" ? "own-copy" : "ask-owner";
 
+// The skills a denied list names (`Skill(<id>)`, written by the persona, the gates and the reach filter alike), so the
+// catalogue leaves out what the turn may not use instead of advertising it.
+const deniedSkillNames = (denied: readonly string[]): ReadonlySet<string> =>
+    new Set(denied.flatMap((rule) => /^Skill\((.+)\)$/.exec(rule)?.slice(1, 2) ?? []));
+
 // What the turn is told about its tree and what the workspace holds, in the order it reads them.
 const workspaceNotes = (
     facts: AdmittedTurnFacts,
@@ -95,8 +100,10 @@ const workspaceNotes = (
     send: TurnPremise["send"],
     isolated: boolean,
     canInstall: boolean,
+    denied: readonly string[],
 ): TurnNote[] => {
     const setupNotice = setupNoticeFor(facts.setup, installReachOf(isolated, capabilities, canInstall));
+    const skillCatalogNote = facts.skillCatalog === undefined ? undefined : skillCatalogNoteOf(facts.skillCatalog, deniedSkillNames(denied));
     return [
         ...(isolated && capabilities.isolation === "cwd"
             ? [context.base.spec.sessionId === undefined ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)]
@@ -110,7 +117,7 @@ const workspaceNotes = (
         // Beside it: for a fresh session, the work it started from, which is the rest of what its tree holds; for a home
         // conversation, the policy it orchestrates by.
         ...[facts.fresh?.note, facts.homeNote].filter((note) => note !== undefined),
-        ...(facts.skillCatalogNote === undefined ? [] : [{ title: SKILL_CATALOG_NOTE_TITLE, text: facts.skillCatalogNote }]),
+        ...(skillCatalogNote === undefined ? [] : [{ title: SKILL_CATALOG_NOTE_TITLE, text: skillCatalogNote }]),
         // Only where the runtime has no readiness tools and hooks, which would otherwise repeat these facts every turn.
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
     ];
@@ -200,7 +207,7 @@ export const honoured = (
             notes: premise.briefing.keep([
                 // First, when there is one: who the turn acts as belongs ahead of anything about files or tools.
                 ...(placement.userNotes ?? []),
-                ...workspaceNotes(facts, context, capabilities, send, isolated, persona.powers.files === "write" && persona.powers.shell),
+                ...workspaceNotes(facts, context, capabilities, send, isolated, persona.powers.files === "write" && persona.powers.shell, access.denied),
                 ...turnNotes(facts, premise, planned.spawn, access.withheld),
             ]),
             systemPromptMode: prompt.mode,

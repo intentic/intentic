@@ -107,6 +107,14 @@ export const accountLine = (root: string, capability: Capability): string => {
     return `  ${capability.id} · ${siteLabel(config)} · ${notes.join(" · ")}`;
 };
 
+// What the roster ends on: which browser these ids open, said with one of them, since a weak model that read
+// `x · signed in` went to the owner's own browser next (2026-10-25).
+const rosterHowTo = (example: string): string =>
+    `Each id above is the \`account\` value of the \`browser\` server's tools: \`browser_navigate\` with ` +
+    `\`account: "${example}"\` (\`mcp__browser__browser_navigate\` in most tool lists), then the same \`account\` on ` +
+    `every \`browser_snapshot\`, \`browser_click\` and \`browser_type\` after it. A "signed in" id opens signed in there. ` +
+    `Not the \`web\` browser, which is signed into nothing, and not the owner's own browser.`;
+
 // Identity an entry answers mail through: itself, or the one it was born from; undefined for a standalone account.
 const identityBehind = async (deps: AccountsDeps, capability: Capability): Promise<Capability | undefined> => {
     if (capability.kind === "identity") {
@@ -480,7 +488,12 @@ export const accountsServer =
                                 ? []
                                 : [["standalone accounts (no identity)", ...standalone.map((account) => accountLine(deps.root, account))].join("\n")];
                         const all = [...sections, ...tail];
-                        return ok(all.length === 0 ? "this turn speaks for no identities or accounts" : all.join("\n\n"));
+                        const first = entries[0]?.id;
+                        return ok(
+                            all.length === 0 || first === undefined
+                                ? "this turn speaks for no identities or accounts"
+                                : [...all, rosterHowTo(first)].join("\n\n"),
+                        );
                     },
                     { annotations: toolAnnotations("read") },
                 ),

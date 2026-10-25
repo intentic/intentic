@@ -24,12 +24,14 @@ export function useBrowserAccounts() {
     const { capabilities } = useCapabilities();
     const { contributionOf } = useExtensions();
 
+    // The owner's own browser (a `webext` card) is listed beside the site accounts: a persona reaches it only by naming
+    // it, the way it names an account (policy/persona-capability.ts), so the picker has to offer it.
     const accounts = computed<BrowserAccount[]>(() =>
         capabilities.value
-            .filter((capability) => capability.kind === `browser`)
+            .filter((capability) => capability.kind === `browser` || capability.kind === `webext`)
             .map((capability) => {
                 const platform = typeof capability.config[`platform`] === `string` ? (capability.config[`platform`] as string) : capability.id;
-                const card = contributionOf(`browser`, platform)?.catalog;
+                const card = contributionOf(capability.kind === `webext` ? `webext` : `browser`, platform)?.catalog;
                 return {
                     id: capability.id,
                     platform,

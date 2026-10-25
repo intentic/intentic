@@ -8,6 +8,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import { freePort as bindEphemeral } from "@intentic/base/fs";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { opt } from "../../opt.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
@@ -18,16 +19,14 @@ import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
 import { isProfileOpen, launchSessionDir, passkeyPath, profileOwner } from "../sessions/session-store.js";
 import { ensureStealthScript } from "../sessions/stealth.js";
+import { ANONYMOUS_BROWSER_SERVER, ROUTED_BROWSER_SERVER } from "./browser-servers.js";
 
 // Pure wiring over Microsoft's @playwright/mcp; no browser tools of our own.
 // `web` is always available, credential-free, in-memory profile (--isolated), for ordinary page reads.
 // `browser` fronts every signed-in account/identity via one router, one backend per owner, spawned only when named.
 // Both mounts are routers: neither spawns anything until a call names it.
 
-// Router's mount point; the observer keys on this to read a call's `account` arg, not the prefix.
-export const ROUTED_BROWSER_SERVER = "browser";
-// The credential-free browser's mount, and the owner name its single backend and its X display are keyed under.
-export const ANONYMOUS_BROWSER_SERVER = "web";
+export { ANONYMOUS_BROWSER_SERVER, ROUTED_BROWSER_SERVER } from "./browser-servers.js";
 
 const nodeRequire = createRequire(import.meta.url);
 let mcpCli: string | undefined;
@@ -370,6 +369,9 @@ export const browserServersOf = async (
     anonymous = true,
     // Stamped onto the backends a router spawns, so the process scan attributes a browser to its conversation.
     conversationId?: string,
+    // Host to the signed-in account this turn holds for it (account-hosts.ts): the credential-free browser names that
+    // account's own browser when it is pointed at one of them.
+    coveredHosts?: Readonly<Record<string, string>>,
 ): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
     if (runtime === undefined) {
@@ -392,6 +394,7 @@ export const browserServersOf = async (
             soleOwner: ANONYMOUS_BROWSER_SERVER,
             accounts: {},
             owners: { [ANONYMOUS_BROWSER_SERVER]: { port: ports[ANONYMOUS_BROWSER_SERVER] } },
+            ...opt("coveredHosts", coveredHosts !== undefined && Object.keys(coveredHosts).length > 0 ? coveredHosts : undefined),
         });
     }
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");

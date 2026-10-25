@@ -11,6 +11,12 @@ That is the point of this connection. Use it for the things the sandbox's own br
 a hardware key, a corporate login, anything that blocks a datacentre IP. For public pages, fetching the URL is
 cheaper and does not borrow somebody's session.
 
+**Not for a site the sandbox has an account on.** \`mcp__accounts__roster\` lists the sandbox's own signed-in
+accounts (X, Reddit and the like). A site on that list is driven through the \`browser\` server with its
+\`account\`, never through this browser, even when the person is signed in here too: their skill says how. Asking
+this browser for such a site puts a card in front of the person for nothing, and the call is refused with the
+account to use instead.
+
 ## Tools
 
 | Tool | What it does |

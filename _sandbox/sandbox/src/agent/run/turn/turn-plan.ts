@@ -16,6 +16,7 @@ import { withTurnSafety } from "./turn-safety.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { heldAtTheDoor, spentDoor } from "./holds/spent-door.js";
+import { withComposedGuidance } from "../../prompt/guidance/runtime-guidance.js";
 
 // Plans a turn: gatherTurnFacts reads what it stands on, decideTurn decides it without I/O (both in ../decide), and the
 // adapter its (provider, harness) row names preflights it. A refusal is a value (`ok: false` + code) the route turns
@@ -139,6 +140,15 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
     if (!plan.ok) {
         return plan;
     }
+    // This product's guidance, from what the arm just mounted, for every runtime but the Claude Code loop, which composes
+    // its own from the same request (runtime-guidance.ts).
+    const guided = await withComposedGuidance(services, plan, {
+        capabilities: capabilitiesOf(decision.provider, decision.harness),
+        granted: decision.granted,
+        chatPages: (decision.context.settings ?? (await services.sandboxSettings.get())).chatPages,
+        compacted: decision.context.compacted === true,
+        conversationId: decision.input.conversationId,
+    });
     // Carried past the arm, so the two notes the route adds after planning face the same card and the same window.
-    return { ...plan, briefing: decision.briefing, ...opt("contextTrim", decision.contextTrim), experiments: decision.experiments };
+    return { ...guided, briefing: decision.briefing, ...opt("contextTrim", decision.contextTrim), experiments: decision.experiments };
 };

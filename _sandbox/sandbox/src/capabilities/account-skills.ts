@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
-import { accountSkillLine, browserToolsNote, identitiesSkill, rosterSummary } from "./browser-skill.js";
+import { accountSkillLine, browserToolsNote, identitiesSkill, rosterSummary, whichBrowserBox } from "./browser-skill.js";
 import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, skillWriterOf, stampSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { CapabilityCtx } from "./capability.js";
 import { contributionKey, contributionRegistry, hostOf } from "./contributions.js";
@@ -86,6 +86,8 @@ const renderGroupSkill = async (
         return undefined;
     }
     const roster = [
+        whichBrowserBox(accounts[0]?.id ?? group.name),
+        "",
         "Accounts on this skill: each backticked id is the `account` value every browser and accounts tool takes:",
         ...accounts.map((account) => accountSkillLine(account.id, account.config, identities.get(account.config.identity ?? "")?.email)),
     ].join("\n");

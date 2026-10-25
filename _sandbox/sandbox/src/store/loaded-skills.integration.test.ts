@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import {
+    loadedSkillCatalog,
     loadedSkillCatalogNote,
+    skillCatalogNoteOf,
     loadedSkillDir,
     loadedSkillFile,
     removeLoadedSkill,
@@ -69,12 +71,26 @@ test("the prompt catalogue lists every skill name-ordered and reflects rewrites"
             "",
             "One folder per connected tool, account, or workflow is available below. When a task matches a",
             "description, read that skill's SKILL.md before improvising: it carries the exact commands, endpoints,",
-            "and rules.",
+            "and rules. Read it at the path shown, with your file tool: a skill tool of your runtime's own may not",
+            "list these, and that does not mean the skill is missing.",
             "",
             "- **apple**, A2. → `/visible/worktree/.agents/skills/apple/SKILL.md`",
             "- **zebra**, Z. → `/visible/worktree/.agents/skills/zebra/SKILL.md`",
         ].join("\n"),
     );
+});
+
+// A withheld account's skill stays on disk; offered in the catalogue, it reads as an invitation (2026-10-25: an X-only
+// persona was offered `chrome` and asked the owner's own browser for x.com).
+test("the prompt catalogue leaves out the skills the turn may not use, and says nothing when none is left", async () => {
+    const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
+    await writeLoadedSkill(FILES, root, "x", "---\nname: x\ndescription: X.\n---\n\nX.\n", "owner");
+    await writeLoadedSkill(FILES, root, "chrome", "---\nname: chrome\ndescription: Own browser.\n---\n\nC.\n", "owner");
+    const skills = await loadedSkillCatalog(root, "/w");
+    const note = skillCatalogNoteOf(skills, new Set(["chrome"]));
+    expect(note).toContain("- **x**, X.");
+    expect(note).not.toContain("chrome");
+    expect(skillCatalogNoteOf(skills, new Set(["chrome", "x"]))).toBeUndefined();
 });
 
 test("a real directory in .claude/skills is never replaced by the projection", async () => {

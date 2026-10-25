@@ -1,6 +1,6 @@
 ---
 name: chrome
-description: Use "${id}", the user's OWN signed-in browser, via its extension: open, read, click and type on the sites they allow. For anything needing THEIR session (work SSO, a passkey, a bank, a datacentre-blocked site), or when they say "my browser", "the tab I have open", or name a site they are signed into.
+description: Use "${id}", the user's OWN signed-in browser, via its extension, on the sites they allow: for what needs THEIR session and no sandbox account covers (work SSO, a passkey, a bank, a datacentre-blocked site), or when they say "my browser". Not for a site with its own skill (X, Reddit…), not unattended.
 ---
 
 ${tools}

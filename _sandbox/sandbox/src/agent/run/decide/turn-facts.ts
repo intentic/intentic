@@ -15,7 +15,7 @@ import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceab
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import type { ConversationReach } from "../../../secrets/credential-reach.js";
-import { loadedSkillCatalogNote } from "../../../store/loaded-skills.js";
+import { type CatalogSkill, loadedSkillCatalog } from "../../../store/loaded-skills.js";
 import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
@@ -72,7 +72,9 @@ export interface AdmittedTurnFacts {
     readonly areas: readonly Area[];
     // What a person allowed this conversation beyond its persona, if anything.
     readonly grant: ConversationGrant | undefined;
-    readonly skillCatalogNote: string | undefined;
+    // The loaded skills, for a runtime with no skill loader on its opening turn; rendered once the persona is known, so a
+    // skill this turn may not use is never offered (honoured.ts).
+    readonly skillCatalog: readonly CatalogSkill[] | undefined;
     readonly contextNote: TurnNote | undefined;
     // A fresh session's account of the work it started from (context/fresh-session.ts); absent for any other conversation.
     readonly fresh?: FreshFacts;
@@ -127,7 +129,7 @@ const manifests = (
         services.perf.track("turn.plan.areas", {}, () => services.areas.list()),
         // For a runtime with no skill loader, on the opening turn, with paths as the agent sees them.
         capabilities.skillDiscovery === "prompt" && conversationTurns === 0
-            ? services.perf.track("turn.plan.skills", {}, () => loadedSkillCatalogNote(context.localCwd, context.effectiveCwd))
+            ? services.perf.track("turn.plan.skills", {}, () => loadedSkillCatalog(context.localCwd, context.effectiveCwd))
             : Promise.resolve(undefined),
         services.perf.track("turn.plan.context", {}, () => contextNoteIfDue(services, input, entry, conversationTurns)),
         // Every turn, never cached: a check the owner switched off this morning must not keep running.
@@ -302,7 +304,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     ]);
     const declared = windowOf(served);
     const helperOnly = served?.row.helperOnly;
-    const [installed, setup, personas, areas, skillCatalogNote, contextNote, repoChecks, turnContext, fresh, homeNote] = await manifests(
+    const [installed, setup, personas, areas, skillCatalog, contextNote, repoChecks, turnContext, fresh, homeNote] = await manifests(
         services,
         input,
         context,
@@ -345,7 +347,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         personas,
         areas,
         grant,
-        skillCatalogNote,
+        skillCatalog,
         contextNote,
         ...opt("fresh", fresh),
         ...opt("homeNote", homeNote),

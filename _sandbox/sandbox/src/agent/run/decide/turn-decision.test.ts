@@ -40,7 +40,7 @@ const FACTS: AdmittedTurnFacts = {
     personas: [],
     areas: [],
     grant: undefined,
-    skillCatalogNote: undefined,
+    skillCatalog: undefined,
     contextNote: undefined,
     turnContext: undefined,
     gates: [],

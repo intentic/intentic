@@ -26,6 +26,7 @@ import {
 import type { Services } from "../../composition.js";
 import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
 import { OPENCODE_XAI_PROVIDER } from "../opencode/xai-models.js";
+import { withOpenCodeToolNames } from "../opencode/opencode-mcp.js";
 import { type OpenCodeHostedDeps, openCodeRouteHealth, planOpenCodeRouteTurn } from "../opencode/hosted/opencode-hosted.js";
 import { doorToolsOf, type DoorToolsDeps } from "../daemon-tools/door-tools.js";
 import { sharedServerRefusal } from "../../privacy/harness-route.js";
@@ -88,7 +89,7 @@ export const planGrokTurn = async (
                 ...context.base,
                 // The turn's steering queue, which the OpenCode loop sends on as steers (capabilities.steering).
                 spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
-                tools,
+                tools: withOpenCodeToolNames(tools, input.conversationId),
                 hooks,
                 credential: { kind: "container" },
             },

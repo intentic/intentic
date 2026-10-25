@@ -15,6 +15,7 @@ import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
+import { accountCovering, accountHostsOf, signedInDoor } from "../browser/tools/account-hosts.js";
 
 // The user's own browser as a peer door, through the extension that dials this sandbox and serves `webextContract`.
 // Heartbeat stays under an MV3 service worker's 30s idle kill, and facts are re-asked per read since allowed sites and
@@ -188,6 +189,37 @@ export const withoutDaemonTools =
             : answer;
     };
 
+// A site ask for a page a signed-in sandbox account of this turn already covers, answered with that account instead of
+// a card the owner would have to click: 2026-10-25, two X automations raised "Allow x.com in your browser" while the
+// `x` account sat signed in. Read off what the conversation's last turn was granted (turn-standing.ts), since this door
+// sees only the call; a conversation with no standing on record asks as it always did.
+export interface SignedInInsteadDeps {
+    // What the conversation's last turn was granted (composition.ts, from its turn standing); undefined when none is on record.
+    readonly turnGranted: (conversationId: string) => readonly string[] | undefined;
+    readonly capabilities: { readonly get: (id: string) => Promise<Capability | undefined> };
+    readonly accountSignInUrls: (capability: Capability) => Promise<readonly string[]>;
+}
+
+export const signedInInstead = async (
+    services: SignedInInsteadDeps,
+    asked: { readonly origin: string } | undefined,
+    conversationId: string | undefined,
+): Promise<string | undefined> => {
+    if (asked === undefined || conversationId === undefined) {
+        return undefined;
+    }
+    const granted = services.turnGranted(conversationId);
+    if (granted === undefined || granted.length === 0) {
+        return undefined;
+    }
+    const held = (await Promise.all(granted.map((id) => services.capabilities.get(id)))).filter((capability): capability is Capability => capability !== undefined);
+    const covered = accountCovering(await accountHostsOf(held, services.accountSignInUrls), asked.origin);
+    return covered === undefined
+        ? undefined
+        : `Not asked: nothing was put in front of the owner. ${signedInDoor(covered.account, covered.host)} If the person ` +
+              `explicitly asked for their own browser on this site, tell them so: they can allow it from the extension themselves.`;
+};
+
 export const webextPeerRoutes = (services: Services) => {
     const routes = createPeerRoutes(services, WEBEXT_PEER, {
         store: services.webexts,
@@ -198,6 +230,10 @@ export const webextPeerRoutes = (services: Services) => {
         // (docs/architecture/needs.md), met when that browser reports the site allowed, which continues the conversation.
         beforeCall: async (payload, call) => {
             const asked = accessAsked(payload);
+            const instead = await signedInInstead(services, asked, call.conversationId);
+            if (instead !== undefined) {
+                return { refusal: instead };
+            }
             if (asked !== undefined && call.conversationId !== undefined) {
                 const site = grantSite(asked.origin);
                 await services.needs

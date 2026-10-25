@@ -1,4 +1,5 @@
 import type { AgentProvider, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { withOpenCodeToolNames } from "../opencode-mcp.js";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
     type AdapterHealth,
@@ -58,7 +59,7 @@ export const planOpenCodeRouteTurn = async (
         ...context.base,
         // The turn's steering queue, which the OpenCode loop sends on as steers (capabilities.steering).
         spec: { ...spec, ...opt("steering", context.steering) },
-        tools,
+        tools: withOpenCodeToolNames(tools, input.conversationId),
         hooks,
         credential,
     };

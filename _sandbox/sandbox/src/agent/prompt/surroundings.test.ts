@@ -1,5 +1,5 @@
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
-import { SURROUNDINGS_CLEARED, SURROUNDINGS_TITLE, guidanceBlock, type LoopFacts } from "./guidance.js";
+import { CLAUDE_CODE_RUNTIME, SURROUNDINGS_CLEARED, SURROUNDINGS_TITLE, guidanceBlock, type GuidanceFacts } from "./guidance.js";
 import { recordSurroundingsSaid, surroundingsNote } from "./surroundings.js";
 
 // The note under a stable prompt: what moves between turns, said when it moved and only then.
@@ -7,7 +7,7 @@ import { recordSurroundingsSaid, surroundingsNote } from "./surroundings.js";
 // The holdings a daemon's conversations keep in memory, fresh per call: a new one is a daemon that just restarted.
 const fleet = () => memoryFleet().conversations;
 
-const QUIET = { unattended: false, hostDevices: undefined, ownBrowsers: undefined, ownPhones: undefined } as const;
+const QUIET = { runtime: CLAUDE_CODE_RUNTIME, unattended: false, hostDevices: undefined, ownBrowsers: undefined, ownPhones: undefined } as const;
 const UNWATCHED = { ...QUIET, unattended: true } as const;
 const DEVICES = { ...QUIET, hostDevices: { ids: ["laptop"] } } as const;
 const RESUMED = { fresh: false } as const;
@@ -62,7 +62,7 @@ test("one conversation's note is not another's", () => {
     expect(surroundingsNote(actors, "c2", RESUMED, DEVICES)?.title).toBe(SURROUNDINGS_TITLE);
 });
 
-const LOOP: LoopFacts = {
+const LOOP: GuidanceFacts = {
     ...UNWATCHED,
     hostDevices: { ids: ["laptop"] },
     browserOutputDir: undefined,

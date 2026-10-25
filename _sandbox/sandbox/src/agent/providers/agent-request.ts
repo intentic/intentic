@@ -177,6 +177,10 @@ export interface TurnTools {
     readonly offloadCommands?: () => Promise<Readonly<Record<string, string>>>;
     // Whether the diagnostics server is mounted; withheld from a persona whose `files` power is `none`.
     readonly diagnostics?: boolean;
+    // What this runtime's tool list puts ahead of `<server>_<tool>` for the turn's MCP tools, where it is not
+    // `mcp__<server>__<tool>`: OpenCode's per-conversation prefix (runtimes/opencode/opencode-mcp.ts). Set by the arm that
+    // knows it, read by the guidance that names those tools (agent/prompt/guidance/runtime-guidance.ts).
+    readonly mcpToolPrefix?: string;
     // Whether the iq plugin is actually loaded, so the empty-search notice can name it only where it's real.
     readonly iqAvailable?: boolean;
     // The connected devices this turn carries servers for, and which of them runs this sandbox: what the prompt needs

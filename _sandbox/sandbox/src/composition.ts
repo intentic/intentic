@@ -84,6 +84,7 @@ import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js"
 import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { cardDeps } from "./conversations/actor/card-deps.js";
+import { turnStandingOf } from "./conversations/actor/turn-standing.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
@@ -190,6 +191,9 @@ export interface Services
     readonly reach: ReachReporter;
     // Makes a turn's browser router, which the turn then mounts.
     readonly browserRouters: BrowserRouterFactory;
+    // What a conversation's last turn was granted (its turn standing), for a lower layer that sees only a call's
+    // conversation: the owner's-browser door answers a site ask with the sandbox account that covers it (webext-peer.ts).
+    readonly turnGranted: (conversationId: string) => readonly string[] | undefined;
     // The sandbox's own desktop as a turn mounts it, beside its browsers; a seam here rather than an import in
     // agent/tools/turn-tools.ts, since the desktop builds on the browser stack's display and the browser reaches the agent.
     readonly desktopServers: typeof desktopServersOf;
@@ -506,6 +510,7 @@ const createDaemonMembers = (
         orgPolicy: deps.orgPolicy,
         reach: createReachReporter(config, logger, () => boot),
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
+        turnGranted: (conversationId: string) => turnStandingOf(conversations, conversationId)?.granted,
         desktopServers: desktopServersOf,
         probeAcpAgent,
         probePiAgent,

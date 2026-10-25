@@ -54,9 +54,12 @@ export const createPersonasRoutes = (services: Services) => {
             ]);
             const fenced = context.identity?.areas !== undefined;
             const reachable = fenced ? new Set(personas.flatMap((persona) => persona.capabilities)) : undefined;
-            // `hasSession`, not manifest presence: exists before login finishes, a cloned workspace's usual state.
+            // `hasSession`, not manifest presence: exists before login finishes, a cloned workspace's usual state. The
+            // owner's own browser is a persona's account too (policy/persona-capability.ts), connected while its
+            // extension publishes tools here.
+            const ownBrowsers = new Set(((await services.webextReach(capabilities))?.browsers ?? []).map((browser) => browser.id));
             const connected = capabilities
-                .filter((capability) => capability.kind === "browser" && hasSession(services.workspace.root, capability.id))
+                .filter((capability) => (capability.kind === "browser" && hasSession(services.workspace.root, capability.id)) || ownBrowsers.has(capability.id))
                 .filter((capability) => reachable === undefined || reachable.has(capability.id))
                 .map((capability) => capability.id);
             return { personas, connected };

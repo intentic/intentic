@@ -25,7 +25,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "describe",
         description:
-            "Which browser this is, how many tabs are open, and — the part you need before anything else — exactly which sites you are allowed to work on and whether each is read-only. Call this first.",
+            "Which browser this is, how many tabs are open, and exactly which sites you are allowed to work on and whether each is read-only. This is the person's own browser: call it before your first action here, and only once you know the task needs their session. A site the sandbox holds its own signed-in account for goes through that account's browser instead.",
         effect: "read",
         input: NO_ARGS,
         run: async () => textResult(await describeAccess()),

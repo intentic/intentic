@@ -9,6 +9,7 @@ import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 import { SCREENSHOT_VERB } from "../cast/browser-artifacts.js";
 import { describeBoundedWait, sendBoundingWait } from "./bounded-wait.js";
+import { accountCovering, signedInDoor } from "./account-hosts.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -47,6 +48,10 @@ export interface RouterManifest {
     readonly backendEnv: Readonly<Record<string, string>>;
     // The conversation whose turn holds this router, written beside every screenshot it takes (screenshot-provenance.ts).
     readonly conversationId?: string | undefined;
+    // The credential-free browser's alone: host to the signed-in account this turn holds for it (account-hosts.ts). A
+    // navigation there still runs, and its answer opens by naming the account's own browser, since this one shows that
+    // site's login wall and a turn reading the wall concludes the account is signed out.
+    readonly coveredHosts?: Readonly<Record<string, string>>;
 }
 
 // One screenshot a backend answered for, handed to RouterDeps.screenshotTaken.
@@ -181,6 +186,27 @@ const toolRefusal = (id: RpcMessage["id"], text: string): RpcMessage => ({
     id: id ?? null,
     result: { content: [{ type: "text", text }], isError: true },
 });
+
+const NAVIGATE_VERB = "browser_navigate";
+// The two fields of a navigation this reads: where it went, and the answer's content to put a paragraph ahead of.
+const NavigationSchema = z.looseObject({ name: z.literal(NAVIGATE_VERB), arguments: z.looseObject({ url: z.string() }) });
+const ContentAnswerSchema = z.looseObject({ content: z.array(z.unknown()) });
+
+// A navigation's answer with a first paragraph naming the signed-in door, when it went to a site an account covers;
+// anything else as it came.
+export const withSignedInDoor = (hosts: Readonly<Record<string, string>> | undefined, params: RpcMessage["params"], answer: RpcMessage): RpcMessage => {
+    const navigation = hosts === undefined ? undefined : NavigationSchema.safeParse(params);
+    const result = ContentAnswerSchema.safeParse(answer.result);
+    if (hosts === undefined || navigation?.success !== true || !result.success) {
+        return answer;
+    }
+    const covered = accountCovering(hosts, navigation.data.arguments.url);
+    if (covered === undefined) {
+        return answer;
+    }
+    const note = `WRONG BROWSER: this is the \`web\` browser. ${signedInDoor(covered.account, covered.host)}`;
+    return { ...answer, result: { ...result.data, content: [{ type: "text", text: note }, ...result.data.content] } };
+};
 
 const ACCOUNT_PROPERTY = {
     type: "string",
@@ -459,7 +485,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         if (webmcp === undefined && message.params?.["name"] === SCREENSHOT_VERB && answer.error === undefined) {
             deps.screenshotTaken?.({ owner, conversationId: manifest.conversationId, params: message.params, answer });
         }
-        return { ...(network === undefined ? answer : redactNetworkAnswer(network, answer)), id: message.id ?? null };
+        const steered = withSignedInDoor(manifest.coveredHosts, message.params, answer);
+        return { ...(network === undefined ? steered : redactNetworkAnswer(network, steered)), id: message.id ?? null };
     };
 
     const handle = async (message: RpcMessage, signal?: AbortSignal): Promise<RpcMessage | undefined> => {

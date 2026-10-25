@@ -58,11 +58,30 @@ const ensureClaudeLink = async (root: string, name: string): Promise<void> => {
 // renamed link still sweeps.
 const isManagedLink = (target: string | undefined): boolean => target !== undefined && target.split(/[\\/]/).includes(".agents");
 
+// One entry of the catalogue: what a runtime without a skill loader is told a skill is, and where its file is, as the
+// agent sees the path.
+export interface CatalogSkill {
+    readonly name: string;
+    readonly description: string;
+    readonly path: string;
+}
+
+// The workspace's loaded skills, name-ordered. Paths use the root the agent sees, so an isolated turn never gets a
+// daemon-only worktree path.
+export const loadedSkillCatalog = async (localRoot: string, agentRoot: string): Promise<CatalogSkill[]> =>
+    (await scanSkillFolders(loadedSkillsRoot(localRoot), (path) => readFile(path, "utf8").catch(() => undefined), "throw")).map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        path: join(agentRoot, ".agents", "skills", skill.name, SKILL_FILE),
+    }));
+
 // Catalogue for a runtime without a skill loader: names and descriptions now, full SKILL.md only when a task matches.
-// Paths use the root the agent sees, so an isolated turn never gets a daemon-only worktree path; empty means no note.
-export const loadedSkillCatalogNote = async (localRoot: string, agentRoot: string): Promise<string | undefined> => {
-    const skills = await scanSkillFolders(loadedSkillsRoot(localRoot), (path) => readFile(path, "utf8").catch(() => undefined), "throw");
-    if (skills.length === 0) {
+// `omit` is the skills this turn may not use (its persona's withheld accounts, a gate, what its people were not given):
+// listed, a withheld skill reads as an invitation. 2026-10-25: an X-only persona's runs were offered `chrome` ("when
+// they name a site they are signed into") and two of them asked the owner's Brave for x.com. Empty means no note.
+export const skillCatalogNoteOf = (skills: readonly CatalogSkill[], omit: ReadonlySet<string> = new Set()): string | undefined => {
+    const listed = skills.filter((skill) => !omit.has(skill.name));
+    if (listed.length === 0) {
         return undefined;
     }
     return [
@@ -70,14 +89,15 @@ export const loadedSkillCatalogNote = async (localRoot: string, agentRoot: strin
         "",
         "One folder per connected tool, account, or workflow is available below. When a task matches a",
         "description, read that skill's SKILL.md before improvising: it carries the exact commands, endpoints,",
-        "and rules.",
+        "and rules. Read it at the path shown, with your file tool: a skill tool of your runtime's own may not",
+        "list these, and that does not mean the skill is missing.",
         "",
-        ...skills.map(
-            (skill) =>
-                `- **${skill.name}**${skill.description === "" ? "" : `, ${skill.description}`} → \`${join(agentRoot, ".agents", "skills", skill.name, SKILL_FILE)}\``,
-        ),
+        ...listed.map((skill) => `- **${skill.name}**${skill.description === "" ? "" : `, ${skill.description}`} → \`${skill.path}\``),
     ].join("\n");
 };
+
+export const loadedSkillCatalogNote = async (localRoot: string, agentRoot: string): Promise<string | undefined> =>
+    skillCatalogNoteOf(await loadedSkillCatalog(localRoot, agentRoot));
 
 // One pass: a Claude link per canonical skill, and no Claude link without one. Only sweeps symlinks that point at the
 // canonical folder; a real directory or a link to somewhere else is untouched.

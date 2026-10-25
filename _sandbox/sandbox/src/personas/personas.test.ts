@@ -74,6 +74,26 @@ test("a named persona is narrowed to exactly its own accounts, attended or not",
     }
 });
 
+// The owner's own browser holds every session they have, so it is an account, not a service that passes untouched.
+// 2026-10-25: an X-only persona's automation reached for the owner's Brave and raised "Allow x.com" at 22:10.
+test("the owner's own browser reaches a turn only as an account does", () => {
+    const chrome: Capability = {
+        id: "chrome",
+        kind: "webext",
+        config: { platform: "chrome", read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" },
+    };
+    const cast = [personaOf("marketing", ["x"]), personaOf("browsing", ["chrome"])];
+    expect(turnPersona({ personas: cast, actsAs: undefined, unattended: false }).allows(chrome)).toBe(true);
+    expect(turnPersona({ personas: cast, actsAs: undefined, unattended: true }).allows(chrome)).toBe(false);
+    expect(turnPersona({ personas: cast, actsAs: "marketing", unattended: true }).allows(chrome)).toBe(false);
+    expect(turnPersona({ personas: cast, actsAs: "browsing", unattended: true }).allows(chrome)).toBe(true);
+    // Withheld like an account, so the unpinned wake is told it was this rule and not a broken extension.
+    const unpinned = turnPersona({ personas: cast, actsAs: undefined, unattended: true });
+    expect(personaWithheldAccounts([chrome, connector("github")], unpinned).map((capability) => capability.id)).toEqual(["chrome"]);
+    // Its skill is denied by name, the same way an account's is.
+    expect(personaDisallowedTools(turnPersona({ personas: cast, actsAs: "marketing", unattended: true }), [chrome])).toContain("Skill(chrome)");
+});
+
 test("a persona with an empty persona allows nothing, which is not the same as naming none", () => {
     const persona = turnPersona({ personas: [personaOf("mute", [])], actsAs: "mute", unattended: false });
     expect(persona.reason).toBe("persona");

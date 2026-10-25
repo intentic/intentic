@@ -7,10 +7,12 @@ import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
-import { guidanceBlock, type SearchTool } from "./guidance.js";
+import { CLAUDE_CODE_RUNTIME, GUIDANCE_TITLE, guidanceBlock, type SearchTool } from "./guidance.js";
+import { ANONYMOUS_BROWSER_SERVER } from "../../browser/tools/browser-servers.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import type { TurnPolicy, TurnSpec, TurnTools } from "../providers/agent-request.js";
 import { MEMORY_NOTE_TITLE } from "../../sessions/vocabulary/prompt-envelope.js";
+import { opt } from "../../opt.js";
 
 // Three modes: `intentic` and `claude` share the same appends over a different base; `custom` replaces the prompt
 // outright, nothing added. AgentCapabilities.instructions ("replace"/"append"/"none") decides how each of the six
@@ -117,7 +119,7 @@ const replacing = (own: string, instructions: AgentCapabilities["instructions"])
 // message must not also ride the append, and a custom prompt removes both choices at once.
 export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement => {
     const { capabilities, mode, personaNote, memoryNote, fieldNotesNote } = input;
-    const { instructions, runtime } = capabilities;
+    const { instructions } = capabilities;
     const trim = input.trim ?? TAKES_NOTHING;
 
     if (instructions === "none") {
@@ -131,8 +133,9 @@ export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement
     }
 
     const append = joined([
-        // The Claude Code loop composes its guidance itself (sdkSystemPrompt); every other runtime carries it here.
-        runtime === "claude-code" || trim.guidance ? undefined : guidanceBlock(undefined, input.search ?? "rg"),
+        // This product's guidance is not placed here for any runtime: it is composed from what the turn mounted, which
+        // only exists once an arm has mounted it (sdkSystemPrompt for the Claude Code loop, withRuntimeGuidance below for
+        // every other, called from planTurn).
         personaNote,
         // Before the owner's rules and after this product's: what the sandbox learned about itself is context for the
         // rules, not a rule, and anything claiming to outrank the owner's own words would be reading its own promotion.
@@ -159,6 +162,9 @@ export interface SdkSystemPromptInput {
     // Whether an account stands behind the routed browser, so the browser sentence can name it. The `mcp__browser__`
     // schemas are deferred now, so this sentence is what tells a turn they exist.
     readonly browserAccounts?: boolean;
+    // Whether the credential-free `web` browser is mounted beside it (a persona without the browser shelf has only the
+    // accounts' `browser` server); absent reads as mounted.
+    readonly anonymousBrowser?: boolean;
     // Whether turn-plan mounted the diagnostics server (withheld from a persona whose files power is `none`); the
     // sentence rides only where it's loadable.
     readonly diagnostics?: boolean;
@@ -189,7 +195,7 @@ export interface SdkSystemPromptInput {
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search" | "stablePrompt">;
     readonly policy: Pick<TurnPolicy, "unattended">;
-    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "pages">;
+    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "browserPorts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "pages">;
 }
 
 // Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
@@ -209,6 +215,8 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     unattended: policy.unattended === true,
     browserOutputDir: tools.browserOutputDir,
     browserAccounts: holdsBrowserAccounts(tools.browserAccounts),
+    // Read off the ports the browser stack reserved: no port map at all says nothing either way, and reads as mounted.
+    ...opt("anonymousBrowser", tools.browserPorts === undefined ? undefined : tools.browserPorts[ANONYMOUS_BROWSER_SERVER] !== undefined),
     desktop: tools.desktop === true,
     diagnostics: tools.diagnostics === true,
     pages: tools.pages !== undefined,
@@ -230,6 +238,7 @@ export const harnessGuidance = ({
     unattended,
     browserOutputDir,
     browserAccounts,
+    anonymousBrowser,
     desktop,
     diagnostics,
     pages,
@@ -244,9 +253,11 @@ export const harnessGuidance = ({
         : [
               guidanceBlock(
                   {
+                      runtime: CLAUDE_CODE_RUNTIME,
                       unattended,
                       browserOutputDir,
                       browserAccounts: browserAccounts === true,
+                      ...opt("anonymousBrowser", anonymousBrowser),
                       desktop: desktop === true,
                       diagnostics: diagnostics === true,
                       pages: pages === true,
@@ -281,3 +292,30 @@ export const sdkSystemPrompt = async (
     }
     return { type: "preset", preset: "claude_code", append: harnessGuidance(extras).join("\n\n") };
 };
+
+// This product's guidance for a runtime other than the Claude Code loop, placed once its arm has mounted what the
+// guidance describes (guidance/runtime-guidance.ts composes it from those mounts). The same seams the persona note
+// takes: ahead of everything on the system append where the runtime has one, and on the opening message of a session
+// where it has none (ACP), since such a session keeps its history and would otherwise carry a copy per turn. The
+// volatile half (who is watching, what of the owner's is online) rides the message under a stable prompt, as the
+// Claude Code loop's does. A custom prompt and a window too small for the guidance take none of it.
+export const withRuntimeGuidance = (
+    spec: TurnSpec,
+    capabilities: AgentCapabilities,
+    guidance: string,
+    surroundings: TurnNote | undefined,
+): TurnSpec => {
+    if (capabilities.runtime === "claude-code" || spec.systemPromptMode === "custom" || spec.contextTrim?.guidance === true || spec.contextTrim?.base === true) {
+        return spec;
+    }
+    const tail = surroundings === undefined ? [] : [surroundings];
+    if (capabilities.instructions === "none") {
+        const notes = spec.notes ?? [];
+        // After the persona note when there is one: who the turn acts as decides what the rest is for.
+        const at = notes[0]?.title === PERSONA_NOTE_TITLE ? 1 : 0;
+        const opening = spec.sessionId === undefined ? [{ title: GUIDANCE_TITLE, text: guidance }] : [];
+        return { ...spec, notes: [...notes.slice(0, at), ...opening, ...notes.slice(at), ...tail] };
+    }
+    return { ...spec, systemAppend: joined([guidance, spec.systemAppend]), ...opt("notes", tail.length === 0 ? undefined : [...(spec.notes ?? []), ...tail]) };
+};
+

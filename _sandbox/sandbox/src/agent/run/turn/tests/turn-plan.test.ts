@@ -1,3 +1,4 @@
+import { openCodeMounts } from "../../../../runtimes/opencode/opencode-mcp.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
@@ -392,6 +393,8 @@ test("Codex receives the connected browser granted to its persona, and no other 
         expect.objectContaining({ routers: services.browserRouters }),
         true,
         "reddit-conversation",
+        // No site the turn's accounts cover could be read (this suite stubs no card), so the web browser steers nowhere.
+        undefined,
     );
     expect(request.tools.remote?.[0]).toEqual(routed);
     expect(request.tools.remote?.map((tool) => tool.name)).toContain("gate");
@@ -399,6 +402,12 @@ test("Codex receives the connected browser granted to its persona, and no other 
     expect(request.tools.sdkServers).toBeUndefined();
     expect(request.tools.browserPorts).toEqual({ identity: 41_111 });
     expect(request.tools.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
+    // And it is told what it mounted, from the registry the Claude Code loop reads (runtime-guidance.ts): the accounts'
+    // browser by the name Codex lists it under, and none of the Claude Code loop's own tools.
+    expect(request.spec.systemAppend).toContain("`mcp__browser__browser_navigate`");
+    expect(request.spec.systemAppend).toContain("ALWAYS driven there");
+    expect(request.spec.systemAppend).toContain("`mcp__ui__ask`");
+    expect(request.spec.systemAppend).not.toContain("AskUserQuestion");
 });
 
 // OpenCode takes the same remote list now: the connected browser granted to the persona reaches a Grok turn as it
@@ -434,11 +443,16 @@ test("Grok receives the connected browser granted to its persona, and no other a
         expect.objectContaining({ routers: services.browserRouters }),
         true,
         "reddit-conversation",
+        // No site the turn's accounts cover could be read (this suite stubs no card), so the web browser steers nowhere.
+        undefined,
     );
     // The daemon's own servers ride the same lease after it (daemon-tools/door-tools.ts); no other browser does.
     const daemonOwn = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code"]);
     expect(request.tools.remote?.filter((tool) => !daemonOwn.has(tool.name))).toEqual([routed]);
     expect(request.tools.sdkServers).toBeUndefined();
+    // 2026-10-25: OpenCode turns held the accounts' browser and were told nothing of it. Now they are, by the name
+    // OpenCode's own tool list gives it.
+    expect(request.spec.systemAppend).toContain(`\`${openCodeMounts("reddit-conversation", []).prefix}browser_browser_navigate\``);
 });
 
 test("Grok replaces a model its live catalog no longer offers, and keeps one it does", async () => {

@@ -11,18 +11,34 @@ export const rosterSummary = (ids: readonly string[]): string =>
         ? ids.join(", ")
         : `${ids.slice(0, ROSTER_IDS_IN_DESCRIPTION).join(", ")} and ${ids.length - ROSTER_IDS_IN_DESCRIPTION} more`;
 
-// Shared driving guidance for identities and platform skills alike; same mechanics regardless of whose cookies.
+// Shared driving guidance for identities and platform skills alike; same mechanics regardless of whose cookies. Written
+// for every runtime: the tools by server and name, the spelling most tool lists show, and the deferral only where a
+// runtime defers (2026-10-25: an OpenCode run read "load them with ToolSearch", had none, and went another way).
 const DRIVING = `
-You drive REAL browsers through the \`browser\` server's Playwright tools (\`mcp__browser__browser_navigate\`,
-\`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_press_key\`, \`browser_take_screenshot\`,
-\`browser_wait_for\`, …). BOTH TOOL FAMILIES ARE DEFERRED: before the first call, load them with ToolSearch,
-\`+mcp__browser__\` for these and \`+accounts\` for the \`mcp__accounts__*\` tools named below. EVERY CALL NAMES
-WHOSE BROWSER with its \`account\` argument: an account's id, or an
-identity's id for the identity's own browser. Once a profile is signed in, you act as its owner. Prefer
+You drive REAL browsers through the \`browser\` server's Playwright tools: \`browser_navigate\`, \`browser_snapshot\`,
+\`browser_click\`, \`browser_type\`, \`browser_press_key\`, \`browser_take_screenshot\`, \`browser_wait_for\`, … Most
+tool lists spell them \`mcp__browser__browser_navigate\`; OpenCode's puts its own prefix first
+(\`intentic_<key>_browser_browser_navigate\`). The same goes for the \`accounts\` server's tools named below
+(\`mcp__accounts__*\`). Where your runtime defers tool schemas (Claude Code's ToolSearch), load them before the first
+call: \`+mcp__browser__\` and \`+accounts\`. EVERY CALL NAMES WHOSE BROWSER with its \`account\` argument: an account's
+id, or an identity's id for the identity's own browser. Once a profile is signed in, you act as its owner. Prefer
 \`browser_snapshot\` (the accessibility tree) to find elements by role + visible text over guessing selectors;
 screenshot when a page is visual or a snapshot is ambiguous. Work in small steps: navigate → snapshot → act →
 re-snapshot to confirm. Posts, replies, votes, follows and joins are REAL and public: confirm the exact
 target AND the exact account before you submit, and never carry a task from one account into another's calls.`;
+
+// The first thing a site's roster block says: which of the turn's browsers this site is driven through, with one of its
+// own ids, since a turn holding the account has two wrong doors beside the right one and a weak model picks by name.
+// 2026-10-25: one X run used the `web` browser, met the login wall and asked the owner's Brave for x.com; another went
+// to the owner's browser straight from a roster reading `x · signed in`.
+export const whichBrowserBox = (example: string): string =>
+    [
+        "WHICH BROWSER: this site is driven ONLY through the `browser` server, with `account` set to an id below.",
+        `- RIGHT: \`browser_navigate\` on the \`browser\` server (\`mcp__browser__browser_navigate\` in most tool lists) with \`account: "${example}"\`, the same \`account\` on every call after it.`,
+        "- WRONG: the `web` browser (`mcp__web__browser_navigate`). It is signed into nothing, so it shows this site's login wall, and that wall says nothing about the account.",
+        "- WRONG: the owner's own browser (named `chrome` or after it, with tools like `describe`, `open` and `ask_access`). It is theirs, and asking it for this site puts a card in front of them for nothing.",
+        "A login page in the `browser` server itself means the session expired: call `request_help` on the `accounts` server and wait. Never switch browsers.",
+    ].join("\n");
 
 // Shared tail of every playbook: how a stuck sign-in escalates and how it's declared done, regardless of origin.
 const STUCK_AND_DONE = `

@@ -18,8 +18,13 @@ export interface PersonaShelves {
     readonly mcp?: readonly string[] | undefined;
 }
 
-/** The kinds that are someone signed in: a site account, and the identity whose browser holds every account born of it. */
-export const isSignedInAccount = (kind: string): boolean => kind === "browser" || kind === "identity";
+/**
+ * The kinds that are someone signed in: a site account, the identity whose browser holds every account born of it, and
+ * the owner's own browser (its extension), which holds every session they have. The last one was missing until
+ * 2026-10-25, and it fell through to "passes untouched": an X-only persona's unattended run reached the owner's Brave,
+ * and an unpinned wake that lost every sandbox account kept it.
+ */
+export const isSignedInAccount = (kind: string): boolean => kind === "browser" || kind === "identity" || kind === "webext";
 
 const listed = (list: readonly string[] | undefined, id: string): boolean => list === undefined || list.includes(id);
 
@@ -31,9 +36,11 @@ const listed = (list: readonly string[] | undefined, id: string): boolean => lis
 export const personaAllowsCapability = (capability: CapabilityRef, accounts: readonly string[], shelves: PersonaShelves): boolean => {
     switch (capability.kind) {
         // The signed-in browsers: the persona's own `capabilities` list, and the field that predates the shelves. Granting
-        // an account (`reddit-work`) grants its hands; granting the identity itself grants the someone.
+        // an account (`reddit-work`) grants its hands; granting the identity itself grants the someone. The owner's own
+        // browser is named the same way: a persona reaches it only when its list says so.
         case "browser":
         case "identity":
+        case "webext":
             return accounts.includes(capability.id);
         // Connector credentials reach the shell; an ungranted id keeps its env vars out of the turn entirely.
         case "cli":

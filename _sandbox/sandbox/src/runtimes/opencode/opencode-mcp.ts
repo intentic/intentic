@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { McpAddInput, PermissionRule } from "@opencode/client";
+import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import type { AgentTool } from "../../agent/tools/agent-tools.js";
 import { opt } from "../../opt.js";
 
@@ -39,6 +40,11 @@ export const openCodeMounts = (conversationId: string | undefined, tools: readon
     const key = conversationId === undefined ? randomBytes(4).toString("hex") : createHash("sha256").update(conversationId).digest("hex").slice(0, 8);
     return { prefix: `${PREFIX}${key}_`, tools };
 };
+
+// A turn's tools with the prefix its servers will be mounted under named on them, so the guidance can spell their
+// tools as OpenCode's tool list does. Only for a conversation: a turn with none gets a key of its own at mount time.
+export const withOpenCodeToolNames = <T extends AgentRequest["tools"]>(tools: T, conversationId: string | undefined): T =>
+    conversationId === undefined ? tools : { ...tools, mcpToolPrefix: openCodeMounts(conversationId, []).prefix };
 
 // Each server remote (Streamable HTTP, SSE its fallback), the bearer as a header, and OAuth off: a bearer the door
 // refuses is an error to read, never a sign-in flow started from a headless server (OpenCode 2 tries OAuth on a remote

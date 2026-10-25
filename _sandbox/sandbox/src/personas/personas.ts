@@ -146,8 +146,9 @@ export const personaCapabilities = (capabilities: readonly Capability[], persona
 // The signed-in accounts this turn lost, read from the other side of the same predicate — what the note below has to
 // name. Accounts only: a filtered connector or device teaches by the absence of a tool it never had, while an account's
 // skill file stays on disk naming it (deniedSkills says why), which is what makes THIS absence read as a broken login.
+// The owner's own browser counts: its skill stays on disk too.
 export const personaWithheldAccounts = (capabilities: readonly Capability[], persona: TurnPersona): Capability[] =>
-    capabilities.filter((capability) => (capability.kind === "browser" || capability.kind === "identity") && !persona.allows(capability));
+    capabilities.filter((capability) => isSignedInAccount(capability.kind) && !persona.allows(capability));
 
 export const UNATTENDED_ACCOUNTS_TITLE = "This turn reaches no signed-in account";
 

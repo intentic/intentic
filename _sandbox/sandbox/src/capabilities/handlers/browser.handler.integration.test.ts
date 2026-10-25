@@ -168,6 +168,12 @@ test("apply substitutes the core tools note and the roster into the contributed 
     expect(skill).toContain("browser_snapshot");
     expect(skill).toContain("REAL and public");
     expect(skill).toContain("Accounts on this skill");
+    // The right browser, by one of the roster's own ids, ahead of the roster: a turn holding the account has two wrong
+    // doors beside it (2026-10-25: X runs reached for the `web` browser and the owner's own).
+    expect(skill).toContain("WHICH BROWSER");
+    expect(skill?.indexOf("WHICH BROWSER")).toBeLessThan(skill?.indexOf("Accounts on this skill") ?? -1);
+    expect(skill).toContain("`web` browser");
+    expect(skill).toContain("owner's own browser");
 });
 
 // npmjs is declared by `connectors`, not `social`: the one browser entry outside the social pack.

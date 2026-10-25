@@ -1,8 +1,9 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { GUIDANCE_HEADER, guidanceBlock } from "./guidance.js";
+import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
+import { CLAUDE_CODE_RUNTIME, GUIDANCE_HEADER, GUIDANCE_TITLE, guidanceBlock, otherRuntime } from "./guidance.js";
 import { intenticPromptOf } from "./intentic-prompt.js";
-import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
+import { sdkSystemPrompt, turnPromptPlacement, withRuntimeGuidance } from "./system-prompt.js";
 
 // Stands in for the installed CLI's preset, so no suite here spawns one: a line and a section the intentic base cuts,
 // around what it keeps.
@@ -44,6 +45,16 @@ const CURSOR = capabilitiesOf("cursor", "native");
 const APPENDING = { ...CURSOR, instructions: "append" as const };
 const ACP = capabilitiesOf("some-installed-agent", "native");
 
+// What planTurn hands a runtime other than the Claude Code loop: the placement, then the guidance composed from what its
+// arm mounted (here nothing in particular, unless `facts` says otherwise).
+const otherAppend = (capabilities: typeof CODEX, facts: Partial<Parameters<typeof guidanceBlock>[0]> = {}): string =>
+    withRuntimeGuidance(
+        { prompt: "", cwd: "/w", ...turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "" }) },
+        capabilities,
+        guidanceBlock({ ...OTHER_FACTS, runtime: otherRuntime(capabilities.secrets), ...facts }, "rg"),
+        undefined,
+    ).systemAppend ?? "";
+
 test("nothing to append is undefined, not an empty string", () => {
     // The runner spreads this into the request; an empty string would leave a trailing separator on the base prompt.
     expect(turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "" }).systemAppend).toBeUndefined();
@@ -66,13 +77,13 @@ test("custom replaces everything: nothing is appended to it", () => {
 // Claude Code composes these conventions itself (sdkSystemPrompt), so repeating them in the append would say it twice
 // on the one runtime that already has it.
 test("a runtime outside the Claude Code loop is told the workspace conventions; that loop is not told twice", () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(codex.systemAppend).toContain("`refs/`");
-    expect(codex.systemAppend).toContain("`public/`");
-    expect(codex.systemAppend).toMatch(/commit only when asked/i);
-    // Nothing here names a mechanism only the Claude Code loop wires (no question card, ToolSearch, or browser server).
-    expect(codex.systemAppend).not.toContain("AskUserQuestion");
-    expect(codex.systemAppend).not.toContain("mcp__web__browser");
+    const codex = otherAppend(CODEX);
+    expect(codex).toContain("`refs/`");
+    expect(codex).toContain("`public/`");
+    expect(codex).toMatch(/commit only when asked/i);
+    // Nothing here names a tool this turn lacks: the Claude Code loop's own card, or a browser it did not mount.
+    expect(codex).not.toContain("AskUserQuestion");
+    expect(codex).not.toContain("mcp__web__browser");
 
     const claude = turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "" });
     expect(claude.systemAppend).toBeUndefined();
@@ -82,14 +93,45 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
 // an envelope means has to arrive wherever an envelope can.
 test("a runtime outside the Claude Code loop is told what outside content is", () => {
     for (const capabilities of [CODEX, CURSOR]) {
-        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "" });
-        expect(placement.systemAppend).toContain("<untrusted-content");
+        expect(otherAppend(capabilities)).toContain("<untrusted-content");
     }
 });
 
-test("a runtime outside the loop carries the guidance block as its append", () => {
-    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(placement.systemAppend).toBe(guidanceBlock(undefined, "rg"));
+// Composed from the mounts once the arm has mounted them (withRuntimeGuidance), never from a turn that mounted nothing.
+test("no runtime's guidance is placed before its arm has mounted anything", () => {
+    const placement = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", personaNote: "## Who" });
+    expect(placement.systemAppend).toBe("## Who");
+});
+
+const OTHER_FACTS = {
+    runtime: otherRuntime("shell"),
+    unattended: false,
+    browserOutputDir: undefined,
+    browserAccounts: false,
+    desktop: false,
+    diagnostics: false,
+    terminal: false,
+    hostDevices: undefined,
+    ownBrowsers: undefined,
+};
+
+test("a runtime with a system seam carries the guidance ahead of its append, and one without carries it on the opening message", () => {
+    const guidance = guidanceBlock(OTHER_FACTS, "rg");
+    const appended = withRuntimeGuidance({ prompt: "go", cwd: "/w", systemAppend: "## Who" }, CODEX, guidance, undefined);
+    expect(appended.systemAppend).toBe(`${guidance}\n\n## Who`);
+    const persona = { title: PERSONA_NOTE_TITLE, text: "## Who" };
+    const opening = withRuntimeGuidance({ prompt: "go", cwd: "/w", notes: [persona] }, ACP, guidance, undefined);
+    expect(opening.notes?.map((note) => note.title)).toEqual([PERSONA_NOTE_TITLE, GUIDANCE_TITLE]);
+    // A resumed session already holds it.
+    expect(withRuntimeGuidance({ prompt: "go", cwd: "/w", sessionId: "s1", notes: [persona] }, ACP, guidance, undefined).notes).toEqual([persona]);
+});
+
+test("the Claude Code loop, a custom prompt and a window too small for it take no placed guidance", () => {
+    const guidance = guidanceBlock(OTHER_FACTS, "rg");
+    const spec = { prompt: "go", cwd: "/w", systemAppend: "x" };
+    expect(withRuntimeGuidance(spec, CLAUDE, guidance, undefined)).toBe(spec);
+    expect(withRuntimeGuidance({ ...spec, systemPromptMode: "custom" }, CODEX, guidance, undefined).systemAppend).toBe("x");
+    expect(withRuntimeGuidance({ ...spec, contextTrim: { guidance: true, base: false } }, CODEX, guidance, undefined).systemAppend).toBe("x");
 });
 
 test("a custom prompt is added where it cannot replace", () => {
@@ -250,6 +292,7 @@ test("both built-in bases carry the guidance under its heading, after the base",
 test("the loop's own composition is the base, the guidance block, then the append", async () => {
     const composed = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: "extra" })) as string;
     const mounted = {
+        runtime: CLAUDE_CODE_RUNTIME,
         unattended: false,
         browserOutputDir: undefined,
         browserAccounts: false,
@@ -300,16 +343,16 @@ test("an unattended turn keeps them: a wake nobody watches is where polling cost
     expect(text).toMatch(/already read/i);
 });
 
-test("a runtime outside the Claude Code loop is not told to use seams it has not got", () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(codex.systemAppend).not.toContain("run_in_background");
-    expect(codex.systemAppend).not.toContain("mcp__watch__start");
+test("a runtime outside the Claude Code loop is not told to use seams it has not got, and is told of the ones it has", () => {
+    expect(otherAppend(CODEX)).not.toContain("run_in_background");
+    expect(otherAppend(CODEX, { watch: false })).not.toContain("mcp__watch__start");
+    // The daemon's own watch server rides every runtime that reaches MCP, so where it is mounted it is named.
+    expect(otherAppend(CODEX, { watch: true })).toContain("`mcp__watch__start`");
 });
 
 // Which binary is installed is not a loop-specific mechanism, so unlike the seams above it travels to every runtime.
 test("the search-binary steer travels to every runtime, like the other image facts", async () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(codex.systemAppend).toContain("`rg` (ripgrep)");
+    expect(otherAppend(CODEX)).toContain("`rg` (ripgrep)");
     const claude = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;
     expect(claude).toContain("`rg` (ripgrep)");
 });
@@ -345,10 +388,9 @@ test("both built-in bases say what the agent runs inside and where the product's
     }
 });
 
-// The skill lives under /root/.claude/skills, loaded only via the Claude Code loop's settingSources.
-test("a runtime outside the Claude Code loop is not pointed at a skill it cannot load", () => {
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(codex.systemAppend).not.toContain("`intentic` skill");
+// The skill lives under /root/.claude/skills: the Claude Code loop loads it by name, every other loop reads the file.
+test("every runtime is pointed at the product guide by its file", () => {
+    expect(otherAppend(CODEX)).toContain("`/root/.claude/skills/intentic/SKILL.md`");
 });
 
 // Diagnostics tools are named only on the turns that mounted them; turn-plan withholds the server from a persona with
@@ -366,8 +408,8 @@ test("the diagnostics tools are named on the turns that mounted them, and nowher
     // An unattended wake keeps diagnostics: an automation's own failure is exactly what those records answer.
     const unattended = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, unattended: true, diagnostics: true })) as string;
     expect(unattended).toContain("mcp__diagnostics__errors");
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(codex.systemAppend).not.toContain("mcp__diagnostics__");
+    expect(otherAppend(CODEX)).not.toContain("mcp__diagnostics__");
+    expect(otherAppend(CODEX, { diagnostics: true })).toContain("`mcp__diagnostics__errors`");
 });
 
 // The terminal hand-off is deferred, and named only on turns agent.ts mounted it for: attended, with the tmux wrapper.
@@ -382,8 +424,7 @@ test("the terminal hand-off is named on the turns that mounted it, and nowhere e
     expect(withheld).not.toContain("mcp__terminal__");
     const preset = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined, terminal: true })) as { append: string };
     expect(preset.append).toContain("mcp__terminal__request_help");
-    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" });
-    expect(codex.systemAppend ?? "").not.toContain("mcp__terminal__");
+    expect(otherAppend(CODEX)).not.toContain("mcp__terminal__");
 });
 
 // The device sentence exists because a turn with a connected machine still wrote commands out for the owner to paste

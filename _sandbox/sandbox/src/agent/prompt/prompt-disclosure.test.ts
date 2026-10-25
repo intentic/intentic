@@ -1,7 +1,7 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { guidanceBlock } from "./guidance.js";
+import { CLAUDE_CODE_RUNTIME, type GuidanceFacts, guidanceBlock, otherRuntime } from "./guidance.js";
 import { promptDisclosure, withBaseText } from "./prompt-disclosure.js";
-import { turnPromptPlacement } from "./system-prompt.js";
+import { turnPromptPlacement, withRuntimeGuidance } from "./system-prompt.js";
 import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 
 // What the chat shows must be what the turn was sent. Everything here composes a placement the ordinary way and then
@@ -14,6 +14,24 @@ const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
 const FIELD_NOTES = "## Field notes for this sandbox\n\npnpm's exit code lies here.";
 const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\nNo legacy support.";
 const AT = 1_700_000_000_000;
+
+// What a runtime other than the Claude Code loop is told once its arm has mounted nothing in particular.
+const OTHER: GuidanceFacts = {
+    runtime: otherRuntime("shell"),
+    unattended: true,
+    browserOutputDir: undefined,
+    browserAccounts: false,
+    desktop: false,
+    diagnostics: false,
+    terminal: false,
+    hostDevices: undefined,
+    ownBrowsers: undefined,
+};
+
+// The spec as planTurn hands it to the loop: the placement, then (for every loop but Claude Code's, which composes its
+// own) the guidance composed from what the arm mounted.
+const sentSpec = (capabilities: typeof CLAUDE, spec: { readonly systemPromptMode: "intentic" | "claude" | "custom"; readonly systemAppend?: string; readonly systemPrompt?: string }) =>
+    withRuntimeGuidance({ prompt: "", cwd: "/w", ...spec }, capabilities, guidanceBlock(OTHER, "rg"), undefined);
 
 // Stands in for the installed CLI, answering with a preset that names the model it was rendered for.
 jest.mock("./preset-prompt.js", () => ({
@@ -34,7 +52,7 @@ const disclosureOf = (capabilities: typeof CLAUDE, mode: "intentic" | "claude" |
     });
     return promptDisclosure({
         capabilities,
-        request: { spec: { systemPromptMode: mode, ...placement }, policy: { unattended: true }, tools: {} },
+        request: { spec: sentSpec(capabilities, { systemPromptMode: mode, ...placement }), policy: { unattended: true }, tools: {} },
         at: AT,
     });
 };
@@ -87,6 +105,7 @@ test("the guidance shown is the block the turn was sent", () => {
     });
     expect(textOf(claude, "guidance")).toBe(
         guidanceBlock({
+            runtime: CLAUDE_CODE_RUNTIME,
             unattended: true,
             browserOutputDir: undefined,
             browserAccounts: false,
@@ -101,25 +120,23 @@ test("the guidance shown is the block the turn was sent", () => {
     const codex = promptDisclosure({
         capabilities: CODEX,
         request: {
-            spec: {
-                systemPromptMode: "intentic",
-                ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" }),
-            },
+            spec: sentSpec(CODEX, { systemPromptMode: "intentic", ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "" }) }),
             policy: {},
             tools: {},
         },
         at: AT,
     });
-    expect(textOf(codex, "guidance")).toBe(guidanceBlock(undefined, "rg"));
+    expect(textOf(codex, "guidance")).toBe(guidanceBlock(OTHER, "rg"));
 });
 
 test("a runtime that keeps its own prompt says so, and its guidance is the append's own head", () => {
     const codex = disclosureOf(CODEX, "intentic");
     expect(codex.base).toEqual({ kind: "runtime" });
     expect(codex.runtime).toBe("codex");
-    // What that runtime actually got: the workspace conventions, not the Claude loop's mechanisms.
+    // What that runtime actually got: the same registry, without the Claude Code loop's own tools.
     expect(textOf(codex, "guidance")).toContain("`refs/`");
-    expect(textOf(codex, "guidance")).not.toContain("You run inside Intentic");
+    expect(textOf(codex, "guidance")).toContain("You run inside Intentic");
+    expect(textOf(codex, "guidance")).not.toContain("AskUserQuestion");
 });
 
 // A custom prompt drops this product's guidance outright; showing a "guidance" row for it would be showing words

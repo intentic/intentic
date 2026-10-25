@@ -1,5 +1,6 @@
 import { opt } from "../../opt.js";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { accountHostsOf } from "../../browser/tools/account-hosts.js";
 import { browserServersOf, type BrowserTurnTools } from "../../browser/tools/browser-tools.js";
 import { mcpToolsOf } from "../../capabilities/mcp-tools.js";
 import type { Services } from "../../composition.js";
@@ -25,7 +26,8 @@ export interface TurnRemoteTools {
 // is typed by it: a mount a turn starts reading is a compile error there, not a throw in every suite that plans a turn.
 export type TurnMountDeps = Pick<Services, "turnMounts" | "browserRouters" | "desktopServers" | "linkMounts">;
 
-export type TurnToolsDeps = TurnMountDeps & Pick<Services, "tools"> & ExtensionHost;
+// `accountSignInUrls` optional, so a suite's stand-in that predates it composes the same mounts minus the steer.
+export type TurnToolsDeps = TurnMountDeps & Pick<Services, "tools"> & Partial<Pick<Services, "accountSignInUrls">> & ExtensionHost;
 
 // Every MCP server a turn may reach, as one list every runtime projects the same way: the daemon's own internal tools,
 // the workspace's mcp-kind capabilities, and, through the daemon's one MCP door on a lease of this turn's own, the
@@ -56,6 +58,11 @@ export const turnToolsOf = async (
         ...opt("cleanOutput", turn.cleanOutput),
     });
     try {
+        // The sites the turn's signed-in accounts are on, so the credential-free browser can name the right door when
+        // it is pointed at one (browser/tools/account-hosts.ts).
+        const signInUrls = services.accountSignInUrls;
+        const hosts = turn.anonymousBrowser && signInUrls !== undefined ? await accountHostsOf(granted, signInUrls) : {};
+        const coveredHosts = Object.keys(hosts).length === 0 ? undefined : hosts;
         const [extension, browser] = await Promise.all([
             extensionMcpToolsOf(services, granted, lease, turn.extensions),
             browserServersOf(
@@ -64,6 +71,7 @@ export const turnToolsOf = async (
                 { routers: services.browserRouters, lease },
                 turn.anonymousBrowser,
                 turn.conversationId,
+                coveredHosts,
             ),
         ]);
         // Mounted beside the browsers rather than by browser-tools.ts, since the desktop builds on the browser stack's
