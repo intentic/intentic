@@ -705,11 +705,11 @@ it(`names an untitled draft by the words waiting in its composer, and marks them
     });
 
     expect(el.textContent ?? ``).toContain(UNSENT_WORDS);
-    // A never-sent draft has no other standing, so its corner says "Draft" in a word, and the tile carries no badge.
-    const pill = el.querySelector(`[data-unsent-mark="pill"]`);
-    expect(pill?.textContent?.trim()).toBe(`Draft`);
-    expect(pill?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
-    expect(el.querySelector(`[data-unsent-mark="stamp"]`)).toBeNull();
+    // A never-sent draft wears the same pencil among its stamps as any other card with words waiting, not a word-pill.
+    const mark = el.querySelector(`[data-unsent-mark="stamp"]`);
+    expect(mark?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
+    expect(el.querySelector(`[data-unsent-mark="pill"]`)).toBeNull();
+    expect(el.querySelector(`[data-unsent-mark="badge"]`)).toBeNull();
 });
 
 // Words left in a conversation that has a standing of its own ride the corner's stamp list as a pencil, so the standing

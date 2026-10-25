@@ -11,8 +11,8 @@ import { timeAgo } from "@intentic/ui";
 // - the badge, for a conversation with a standing of its own (running, asking, done): a pencil pinned to the identity
 //   tile, so the corner keeps what the conversation is doing and the tile keeps saying which conversation it is (the
 //   chat rail's row);
-// - the stamp, the same case on a fleet board card: a bare pencil in the corner's stamp list (CardStamps), beside the
-//   standing, so a draft reads in the corner whether or not the conversation has a standing of its own.
+// - the stamp, on a fleet board card whatever its standing: a bare pencil in the corner's stamp list (CardStamps),
+//   beside the standing, so every draft on the board reads the same way.
 // Age and opening words live in the accessible name, and in the badge's hover, since a lone glyph states no fact.
 
 const t = useT();

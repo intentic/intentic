@@ -403,8 +403,6 @@ const account = computed(() => (maker.value ? undefined : accountBadge(providerA
 // A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
 // leaves Vue comparing one string, so only the card being typed into redraws.
 const unsentWords = computed(() => previewOf(props.agent.id));
-// A never-sent draft says so in the corner; words left in a conversation with a standing ride the corner's stamps (UnsentMark).
-const draftCorner = computed(() => props.agent.unsent && props.agent.status === `draft` && chip.value === undefined);
 const displayTitle = computed(() => agentDisplayTitle(props.agent, unsentWords.value));
 // Marks the filter term in the title; the matched line (via MatchLine, which also names the speaker) is never shown
 // apart from it.
@@ -665,8 +663,9 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <!-- What vouches for its work, one badge per check that ran (CardStamps), left of the standing so the standing keeps
                      the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
-                <!-- Words left in a conversation with a standing of its own: a pencil in the stamp list, the standing keeps its seat. -->
-                <UnsentMark v-if="agent.unsent && !draftCorner" stamp :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
+                <!-- Words waiting in the composer: a pencil in the stamp list, whether or not anything was ever sent, so the standing
+                     (a never-sent draft's own quiet circle included) keeps its seat. -->
+                <UnsentMark v-if="agent.unsent" stamp :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
                 <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-base" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span
@@ -676,7 +675,6 @@ const grab = (event: PointerEvent): void => {
                     :class="chip.tone"
                     ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
                 >
-                <UnsentMark v-else-if="draftCorner" :preview="unsentWords" :at="agent.draftAt" />
                 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
                 <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
                 <Icon
