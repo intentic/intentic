@@ -161,7 +161,7 @@ export const CODEX: AgentCapabilities = {
     // connect the gate, so there the rules reach only the commands and patches Codex asks about.
     rulebook: "hooks",
     // Shell commands resolve `{{secret:…}}` in the gate's rewrite and run under a wrapper that masks stored values in
-    // their output (codex-mask-script.ts); apply_patch, view_image and hosted tools pass no wrapper.
+    // their output (mask-script.ts); apply_patch, view_image and hosted tools pass no wrapper.
     secrets: "shell",
     // Its model provider's base_url is the daemon's, written into the per-thread config.
     privacy: "gateway",

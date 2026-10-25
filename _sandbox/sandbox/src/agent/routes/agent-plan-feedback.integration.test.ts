@@ -89,10 +89,13 @@ test.each([false, true])("keeps plan feedback through auth recovery and a usage 
     expect(rows.map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "user", text: "plan the fix" },
         { role: "assistant", text: "Here is the plan." },
+        { role: "assistant", text: "" },
         { role: "notice", text: "Kept planning." },
         { role: "user", text: feedback },
         { role: "notice", text: "OAuth token revoked. The credential is being renewed and this turn continues automatically." },
     ]);
+    // The plan is its own card row; rejecting it keeps the card as well as the feedback that followed.
+    expect(rows[2]?.plan).toEqual({ requestId, text: "1. Ship the fix", status: "rejected" });
     await waitFor(() => expect(saved).toEqual(rows), SETTLES);
     expect(await errorCode(client.agent.reply({ kind: "plan", requestId, approve: false, feedback }))).toBe("NOT_FOUND");
 
@@ -106,6 +109,6 @@ test.each([false, true])("keeps plan feedback through auth recovery and a usage 
         { role: "notice", text: "Claude usage limit reached." },
     ]);
     await waitFor(() => expect(saved.at(-1)?.text).toBe("Claude usage limit reached."), SETTLES);
-    expect(saved.filter((row) => row.text === feedback)).toEqual(rows.slice(3, 4));
+    expect(saved.filter((row) => row.text === feedback)).toEqual(rows.slice(4, 5));
     expect(saved.filter((row) => row.role === "user").map((row) => row.text)).toEqual(["plan the fix", feedback]);
 });

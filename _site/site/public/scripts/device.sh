@@ -351,6 +351,7 @@ KIT_ANSWER
 # <<< end of generated redeem.sh
 
 # >>> generated from _site/site/scripts-kit/agent-fetch.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
+# ---- bootstrap the agent binary (identical in device.sh and sync.sh) ----
 # Bootstrap only if the installed agent cannot run the handover's help; version alone does not prove route/flag compatibility.
 # Pin downloads to the tag resolved by releases/latest so interrupted transfers cannot splice releases.
 # Run version before installing the binary to reject broken downloads. Inputs: ROUTE, SPEAKS, os, arch; output: BIN.

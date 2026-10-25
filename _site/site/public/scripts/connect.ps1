@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Fetch ic before Docker checks: ic docker prepare owns Windows prerequisites, then ic sandbox connect handles setup/tunnels/launch/sync.
-  The sandbox dials outbound with its grant; CF_TOKEN serves only SELF_HOST SSH. Under irm | iex return LASTEXITCODE, never exit the session.
+  The sandbox dials outbound with its grant; CF_TOKEN serves only SELF_HOST SSH. Under irm | iex return LASTEXITCODE, keep the session open.
 .EXAMPLE
   irm https://intentic.dev/setup/<code> | iex
 #>

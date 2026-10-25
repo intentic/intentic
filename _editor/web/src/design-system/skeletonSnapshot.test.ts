@@ -12,6 +12,7 @@ import { type App, createApp, h, nextTick, ref, type VNode, withDirectives } fro
 
 // jsdom lays nothing out, so each element says where it sits (`data-box="top,left,width,height"`) and a text node's
 // lines come from its parent's `data-lines="width,width"`, each line 16px tall from the parent's top.
+// The default 16px font yields a 13px bar (80%, rounded); the explicit 20px name below yields 16px.
 const LINE = 16;
 const numbers = (raw: string | null): number[] => (raw ?? ``).split(`,`).filter(Boolean).map(Number);
 const rect = (top: number, left: number, width: number, height: number): DOMRect =>
@@ -153,7 +154,7 @@ describe(`takeImprint`, () => {
                     c: `absolute`,
                     s: `transform: translate(30px, 20px)`,
                     v: undefined,
-                    k: [{ e: `span`, c: undefined, s: undefined, v: undefined, k: [{ h: 11, w: [90] }] }],
+                    k: [{ e: `span`, c: undefined, s: undefined, v: undefined, k: [{ h: 13, w: [90] }] }],
                 },
             ],
         });
@@ -169,8 +170,8 @@ describe(`takeImprint`, () => {
             ),
         );
         expect(imprint?.root.k?.map((tile) => readable(tile, imprint.t))).toEqual([
-            { e: `div`, c: `rounded-xl bg-card`, s: undefined, v: undefined, k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 11, w: [120] }] }] },
-            { e: `div`, c: `rounded-xl bg-card`, s: undefined, v: undefined, k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 11, w: [90] }] }] },
+            { e: `div`, c: `rounded-xl bg-card`, s: undefined, v: undefined, k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 13, w: [120] }] }] },
+            { e: `div`, c: `rounded-xl bg-card`, s: undefined, v: undefined, k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 13, w: [90] }] }] },
         ]);
     });
 
@@ -195,7 +196,7 @@ describe(`takeImprint`, () => {
                         c: `flex flex-col gap-2`,
                         s: undefined,
                         v: undefined,
-                        k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 11, w: [200] }] }],
+                        k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 13, w: [200] }] }],
                     },
                 ],
             },
@@ -327,7 +328,7 @@ describe(`v-skeleton-source`, () => {
         expect(imprintOf(`row`)).toBeUndefined();
 
         jest.advanceTimersByTime(500);
-        expect(imprintOf(`row`)?.root.k).toEqual([{ e: `span`, k: [{ h: 11, w: [90] }] }]);
+        expect(imprintOf(`row`)?.root.k).toEqual([{ e: `span`, k: [{ h: 13, w: [90] }] }]);
 
         // Content arriving inside a box that keeps its size (an editor filling its pane) is taken again once quiet.
         const late = document.createElement(`span`);
@@ -338,8 +339,8 @@ describe(`v-skeleton-source`, () => {
         await Promise.resolve();
         jest.advanceTimersByTime(500);
         expect(imprintOf(`row`)?.root.k).toEqual([
-            { e: `span`, k: [{ h: 11, w: [90] }] },
-            { e: `span`, k: [{ h: 11, w: [40] }] },
+            { e: `span`, k: [{ h: 13, w: [90] }] },
+            { e: `span`, k: [{ h: 13, w: [40] }] },
         ]);
     });
 
