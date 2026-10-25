@@ -123,8 +123,8 @@ watch(
 );
 onBeforeUnmount(stopMeasuring);
 
-// `tabs: false` means no rail is taking width off the panes, so nothing is reserved. Only reserved with something
-// in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
+// Without tabs, reserve matching space on the left so the right rail cannot shift the chat off the panel's centre.
+// Only reserved with something in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
 // non-empty only where the rail last had figures (capacityMemory.ts), so the transcript doesn't reflow when they land
 // and a sandbox with nothing connected never draws skeletons for figures that aren't coming. Keyed on capacity alone, never on the chat's checklist,
 // so picking up a first task can't reflow the panel mid-turn. Shown when floating in its own window or when docked
@@ -137,7 +137,7 @@ const showsRail = computed(
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         shownSideTabs.value.length === 0 &&
         capacityRail.value &&
-        railFitsBeside(panelWidth.value, tabs ? railWidth.value : 0, shown.value.length),
+        railFitsBeside(panelWidth.value, tabs ? railWidth.value : CAPACITY_RAIL_PX, shown.value.length),
 );
 
 // Past the floor the row scrolls, so the focused pane scrolls back into view (a no-op if already visible).
@@ -260,7 +260,7 @@ watch(
         ref="root"
         class="chat-panel relative flex min-h-0"
         :class="[chatWide && !bar ? 'chat-panel-wide flex-row' : 'flex-col', ground]"
-        :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
+        :style="{ '--capacity-rail': showsRail ? uiLength(CAPACITY_RAIL_PX) : `0px`, '--capacity-balance': tabs ? `0px` : `var(--capacity-rail)` }"
         data-window-band
     >
         <template v-if="tabs && !bar">

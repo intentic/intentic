@@ -463,7 +463,7 @@
     flex-basis: var(--capacity-rail, 0px);
 }
 .chat-panel .chat-panes > .chat-pane:last-child .chat-scroller {
-    padding-right: var(--capacity-rail, 0px);
+    padding-inline: var(--capacity-balance, 0px) var(--capacity-rail, 0px);
 }
 /* THE LANE PAST THE READING COLUMN, and every mark that stands in it (ChatAsideLane): the notes the sandbox prepended to
    a message, an errand's own words — what went out on the reader's side. What the agent thought and ran stands on the
