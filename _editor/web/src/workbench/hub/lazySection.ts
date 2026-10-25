@@ -1,7 +1,8 @@
 import { Await } from "@intentic/ui";
-import { type Component, defineComponent, h, onBeforeUnmount, onMounted } from "vue";
+import { type Component, computed, defineComponent, h, onBeforeUnmount, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useChunkLoaded, type ViewChunk, viewChunk } from "../../components/viewChunk";
+import { pageImprint } from "../../lib/routes/pageImprint";
 import { whenIdle } from "../../lib/whenIdle";
 import HubSectionOutline from "./HubSectionOutline.vue";
 
@@ -24,7 +25,7 @@ const arriving = new Set<Promise<void>>();
 /**
  * A section of a hub whose code is fetched the first time it is drawn: a stand-in for the component `load` resolves to,
  * taking the same props, attributes and slots. `name` tells it apart from the other sections a page can draw together
- * (a settings page and its parts), since what it last looked like is remembered per path and per section.
+ * (a settings page and its parts), since what it last looked like is remembered per path, per open part and per section.
  */
 export const lazySection = <T extends Component>(name: string, load: Loader<T>): T => {
     const chunk = viewChunk<Component>(async () => (await load()).default);
@@ -35,9 +36,11 @@ export const lazySection = <T extends Component>(name: string, load: Loader<T>):
         inheritAttrs: false,
         setup(_props, { attrs, slots }) {
             const router = useRouter();
-            // Per path, as a route's view is imprinted (asyncView.ts), under a name of the hub's own: the route's imprint
-            // is the whole hub, rail and all. Read once, since a stand-in is only ever drawn for one section.
-            const imprint = `hub:${router.currentRoute.value.path}#${name}`;
+            // Per path and open part, as a route's view is imprinted (asyncView.ts), under a name of the hub's own: the
+            // route's imprint is the whole hub, rail and all. Followed, not read once: a section with parts (Agent's
+            // `?section=`) stays mounted while they change, and each part is remembered as itself. A new name alone
+            // never takes a drawn region back (Await), it only moves where its look is kept.
+            const imprint = computed(() => `hub:${pageImprint(router.currentRoute.value)}#${name}`);
             const section = useChunkLoaded(() => chunk);
             if (chunk.landed() === undefined) {
                 // The same fetch the wait above made; settled either way, the warm-up may go on.
@@ -48,7 +51,7 @@ export const lazySection = <T extends Component>(name: string, load: Loader<T>):
             return () =>
                 h(
                     Await,
-                    { of: section.value, imprint },
+                    { of: section.value, imprint: imprint.value },
                     {
                         default: ({ data }: { readonly data: Component }) => h(data, { ...attrs }, slots),
                         fallback: () => h(HubSectionOutline),

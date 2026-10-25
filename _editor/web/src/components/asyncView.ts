@@ -3,13 +3,14 @@ import { type Component, computed, defineComponent, h, nextTick, onMounted, watc
 import { useRouter } from "vue-router";
 import { t } from "@intentic/ui/i18n";
 import { finishBoot } from "../app/perf/boot";
+import { pageImprint } from "../lib/routes/pageImprint";
 import { useChunkLoaded, viewChunk } from "./viewChunk";
 
 // Wraps a route's `() => import(...)` so navigation completes immediately, and waits for the chunk as every view waits
 // (<Await>, over viewChunk.ts): a dead chunk gets loadChunk's one reload onto the page just landed on, anything else a
-// notice with retry. A view with an outline is remembered per path (`route:<path>`): the next wait for it draws the
-// page as it last looked, the outline only until it has been seen once, and its first reads are waited for under that
-// look too. A view without one draws nothing until its code is here, then waits for itself.
+// notice with retry. A view with an outline is remembered per path and open part (`route:<path>[?section=<part>]`):
+// the next wait for it draws the page as it last looked, the outline only until it has been seen once, and its first
+// reads are waited for under that look too. A view without one draws nothing until its code is here, then waits for itself.
 
 type Loader = () => Promise<{ readonly default: Component }>;
 
@@ -62,8 +63,8 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
                     }
                 },
             );
-            // Per path, not per route: one hub's sections are different pages.
-            const imprint = computed(() => (outline === undefined ? undefined : `route:${router.currentRoute.value.path}`));
+            // Per path, not per route: one hub's sections are different pages, and so are one page's parts (pageImprint).
+            const imprint = computed(() => (outline === undefined ? undefined : `route:${pageImprint(router.currentRoute.value)}`));
 
             return () =>
                 h(

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
+import { Await, Icon, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
@@ -93,20 +93,16 @@ watch(
 const RETENTION = { name: `sandbox`, params: { tab: `retention` } } as const;
 
 const sandbox = useSandbox();
-const { settings, error: settingsError, dropped: settingsDropped } = useSandboxSettings();
+const { settings, loaded: settingsRead, dropped: settingsDropped } = useSandboxSettings();
 
-// Only surfaces a failed read or an unreachable sandbox; the first-load moment is silent so a notice doesn't flash
-// in and shift the layout.
-const settingsBlocked = computed<NoticeModel | undefined>(() => {
-    if (settings.value !== undefined) {
-        return undefined;
-    }
-    // A failed read is an error; an offline sandbox is a fact about the world, so it's a warning, not a danger tone.
-    if (settingsError.value !== undefined) {
-        return { tone: `danger`, title: t(`sandbox.sandboxAgent.couldntReadSandboxsSettings`), detail: settingsError.value };
-    }
-    return sandbox.reachable.value ? undefined : { tone: `warning`, title: t(`sandbox.sandboxAgent.sandboxOfflineSettingsCant`) };
-});
+// An offline sandbox is a fact about the world, so it's a warning, not a danger tone, said above the category's
+// placeholder. A failed read is the category's own to say (the <Await> below), with a way to ask again; the first-load
+// moment says nothing, so a notice doesn't flash in and shift the layout.
+const settingsOffline = computed<NoticeModel | undefined>(() =>
+    settings.value === undefined && settingsRead.value.state !== `failed` && !sandbox.reachable.value
+        ? { tone: `warning`, title: t(`sandbox.sandboxAgent.sandboxOfflineSettingsCant`) }
+        : undefined,
+);
 </script>
 
 <template>
@@ -115,59 +111,76 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- Tabs, as every page's parts are (Privacy & safety's, Activity's): as pills they read as one more setting beside the settings they open. -->
         <SegmentedControl v-model="section" :options="SECTIONS" variant="underline" :aria-label="t(`sandbox.sandboxAgent.agentSettingsCategory`)" />
 
-        <!-- Page-level so it sits above whichever category is showing; every control below is inert while the read is pending or failed. -->
-        <Notice v-if="settingsBlocked" :of="settingsBlocked" />
+        <!-- Page-level so it sits above whichever category is showing. -->
+        <Notice v-if="settingsOffline" :of="settingsOffline" />
 
         <!-- Daemon accepted the save but dropped a field; the control already reverted, so without this it looks like a rejected input. -->
         <Notice v-if="settingsDropped" tone="warning">{{ settingsDropped }}</Notice>
 
-        <!-- Every pick below chooses among what Models holds; said once, where the pick is made, with the way there. -->
-        <template v-if="section === `jobs`">
-            <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-                {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
-                <RouterLink :to="MODELS_PATH" :class="ui.textButton()">
-                    {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
-                </RouterLink>
-            </p>
-            <AgentModels />
-        </template>
+        <!-- Every category draws the sandbox's settings, never their defaults standing in for a read that has not
+             answered (as Guardrails and Retention wait). Each category is remembered as itself, and keyed so opening one
+             waits again: under its own last look while the reads only it makes (instructions, memory, skills, repo
+             checks) answer, rather than drawing an empty document and a "Reading…" line where they will be. -->
+        <Await :key="section" :of="settingsRead" :imprint="`sandbox.agent.${section}`">
+            <template #failed="{ error, retry }">
+                <Notice
+                    :of="{
+                        tone: `danger`,
+                        title: t(`sandbox.sandboxAgent.couldntReadSandboxsSettings`),
+                        detail: error,
+                        action: retry === undefined ? undefined : { label: t(`ui.action.tryAgain`), run: retry },
+                    }"
+                />
+            </template>
 
-        <!-- Ordered by widening scope: told every turn, told per job match, memory, then import from elsewhere. -->
-        <template v-else-if="section === `instructions`">
-            <AgentInstructions />
-            <AgentSkills />
-            <AgentMemory />
-            <AgentMemoryImport />
-        </template>
+            <!-- Every pick below chooses among what Models holds; said once, where the pick is made, with the way there. -->
+            <template v-if="section === `jobs`">
+                <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                    {{ t(`sandbox.sandboxAgent.jobsFromModels`) }}
+                    <RouterLink :to="MODELS_PATH" :class="ui.textButton()">
+                        {{ t(`sandbox.sandboxAgent.manageModels`) }}<Icon name="arrow-right" class="text-2xs" />
+                    </RouterLink>
+                </p>
+                <AgentModels />
+            </template>
 
-        <!-- Simplest and most-met first, deepest last: how it answers you (pages, voice), what it can find (documents, then
+            <!-- Ordered by widening scope: told every turn, told per job match, memory, then import from elsewhere. -->
+            <template v-else-if="section === `instructions`">
+                <AgentInstructions />
+                <AgentSkills />
+                <AgentMemory />
+                <AgentMemoryImport />
+            </template>
+
+            <!-- Simplest and most-met first, deepest last: how it answers you (pages, voice), what it can find (documents, then
              code), what a turn costs (command output, then what every request carries), how its edits are checked, how
              far it may delegate, and last where the heaviest of it runs, which only matters once a machine has a runner.
              Each section with tuning behind its switches has a Simple | Advanced pair of its own (detailLevel.ts), and
              each that takes explaining has an (i) that draws how it works. -->
-        <template v-else-if="section === `tools`">
-            <AgentChatPages />
-            <AgentVoice />
-            <AgentDocumentSearch />
-            <AgentCodeSearch />
-            <AgentCommandOutput />
-            <AgentToolLoading />
-            <AgentRepoChecks />
-            <AgentSubagents />
-            <AgentOffload />
-        </template>
+            <template v-else-if="section === `tools`">
+                <AgentChatPages />
+                <AgentVoice />
+                <AgentDocumentSearch />
+                <AgentCodeSearch />
+                <AgentCommandOutput />
+                <AgentToolLoading />
+                <AgentRepoChecks />
+                <AgentSubagents />
+                <AgentOffload />
+            </template>
 
-        <!-- Whether main's failing CI gets a fix agent, then delivery, and last the recovery path for a turn that broke instead. -->
-        <template v-else>
-            <AgentChecks />
-            <AgentFinishedWork />
-            <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
-            <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
-            <AgentChangelog />
-            <AgentRecovery />
-            <!-- Beside the automation failure limit above, which is the other setting that only matters once
+            <!-- Whether main's failing CI gets a fix agent, then delivery, and last the recovery path for a turn that broke instead. -->
+            <template v-else>
+                <AgentChecks />
+                <AgentFinishedWork />
+                <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
+                <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
+                <AgentChangelog />
+                <AgentRecovery />
+                <!-- Beside the automation failure limit above, which is the other setting that only matters once
                  something runs on a clock rather than because somebody pressed send. -->
-            <AgentClock />
-        </template>
+                <AgentClock />
+            </template>
+        </Await>
     </div>
 </template>
