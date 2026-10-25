@@ -1,7 +1,8 @@
 <!-- THE NEW SANDBOX'S FIRST START, SEEN FROM THE DIALOG. Once it reports in, the setup row selects it and the workspace
      behind the dialog connects to it, then waits out its boot chain (SandboxGate's "Connecting" and "Starting" pages).
      Nobody needs to watch those: this keeps the dialog up, says how far the boot has got from the daemon's own declared
-     steps (useDaemonBoot.ts, the ones SandboxWarming lists), and says `shown` once the workspace is on screen ready to use.
+     steps (useDaemonBoot.ts, the ones SandboxWarming lists), and says `shown` once the workspace is on screen ready to use,
+     or, opened from Home, the new sandbox's home conversation (models/home/homeChat.ts `homeShownFor`).
      A start that outlasts OPEN_ANYWAY_MS is handed over as it is, so the gate behind can say why. -->
 <script setup lang="ts">
 import { Meter } from "@intentic/ui";
@@ -9,6 +10,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onUnmounted, watch } from "vue";
 import { bootSteps } from "../../../client/sandbox/useDaemonBoot";
 import { useSandboxGateState } from "../../sandbox/gates/workspaceShown";
+import { homeShownFor } from "../../../models/home/homeChat";
 
 const { sandboxId, name } = defineProps<{ sandboxId: string; name: string }>();
 const emit = defineEmits<{ shown: [] }>();
@@ -20,10 +22,11 @@ const { shown } = useSandboxGateState();
 const done = computed(() => bootSteps.value.filter((step) => step.state === `done` || step.state === `failed`).length);
 const running = computed(() => bootSteps.value.find((step) => step.state === `running`));
 
+// The workspace, or on Home the new sandbox's home conversation: whichever the reader will be looking at once it closes.
 watch(
-    shown,
-    (sandbox) => {
-        if (sandbox === sandboxId) {
+    () => [shown.value, homeShownFor.value] as const,
+    (ready) => {
+        if (ready.includes(sandboxId)) {
             emit(`shown`);
         }
     },

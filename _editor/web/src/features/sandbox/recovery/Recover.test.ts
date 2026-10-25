@@ -106,10 +106,11 @@ it(`says the records were reset when the platform answered from another database
     await waitFor(() => expect(el.textContent).toContain(`intentic's records were reset`));
 });
 
-it(`sends the reader to setup when there is nothing to bring back and no workspace`, async () => {
+// Home's first run, where a browser makes its first sandbox on a press (app/environments/standAside.ts).
+it(`sends the reader to Home's first run when there is nothing to bring back and no workspace`, async () => {
     candidates.value = [];
     await mount();
-    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/setup`));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(`/home`));
 });
 
 it(`sends the reader to the workspace when there is nothing to bring back but one to open`, async () => {

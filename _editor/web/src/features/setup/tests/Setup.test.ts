@@ -449,8 +449,9 @@ it(`offers the sandbox an account already works in, and makes nothing until anot
     expect(create).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
 
+    // Home, the first screen, on that sandbox's home conversation (lib/foundOnComputer.ts `landingAfterSetup`).
     buttonLabelled(`Open chat`)!.click();
-    await waitFor(() => expect(push).toHaveBeenCalledWith(`/chat`));
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/home`));
     expect(create).not.toHaveBeenCalled();
 });
 
@@ -1288,7 +1289,7 @@ it(`opens the sandbox the account already lists at a live address of ours, and d
     stubGlobal(`fetch`, () => Promise.resolve(new Response(`{}`, { status: 200 })));
     try {
         buttonLabelled(`Connect`)!.click();
-        await waitFor(() => expect(push).toHaveBeenCalledWith(`/chat`));
+        await waitFor(() => expect(push).toHaveBeenCalledWith(`/home`));
     } finally {
         unstubAllGlobals();
     }

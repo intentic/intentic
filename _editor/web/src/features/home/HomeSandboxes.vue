@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { Beacon, CoachMark, SandboxLogo, ui } from "@intentic/ui";
+import { computed } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import { Beacon, SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -10,6 +10,10 @@ import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useRequestAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
+import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
+import { useAuth } from "../../client/auth/useAuth";
+import { HOME_PATH } from "../../lib/routes/firstScreens";
+import { signInAt } from "../../lib/routes/signIn";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
 import { desktopApp, openThisComputer } from "../../app/environments/desktop";
@@ -21,24 +25,14 @@ const t = useT();
 const router = useRouter();
 const sandbox = useSandbox();
 const { homeOnly } = useRole();
+const { user } = useAuth();
 // The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
 // daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
 const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)));
 const inDesktopApp = desktopApp() !== undefined;
-const addAnchor = useTemplateRef<HTMLElement>(`addAnchor`);
-const hintOpen = ref(false);
-// The same beacon and anchored hint as getting started, on the actual press that creates the first sandbox.
-watch(
-    () => boxes.value.length === 0,
-    (empty, _old, cleanup) => {
-        hintOpen.value = false;
-        if (empty) {
-            const timer = setTimeout(() => (hintOpen.value = true), 700);
-            cleanup(() => clearTimeout(timer));
-        }
-    },
-    { immediate: true },
-);
+// Before the first sandbox the + wears getting started's beacon, a quiet second way to the press the page itself leads
+// with (HomeNoSandbox.vue). No coach mark beside it any more: the page says what it would have said, and a popover over
+// a page that already asks for the same press is two voices for one thing.
 const readings = useHomeAttention();
 const badgeOf = (id: string): ViewBadge | undefined => {
     const count = readings.value.get(id)?.needsYou ?? 0;
@@ -58,7 +52,8 @@ const choose = (id: string, input: `click` | `enter`): void => {
     last = { id, at: now };
     sandbox.select(id);
     if (action === `enter`) {
-        void router.push(`/`);
+        // Into the sandbox, where it was last left: `/` alone is Home itself (lib/routes/firstScreens.ts).
+        void router.push(sandboxEntryPath(id));
     } else if (phone) {
         void router.push(`/home/${encodeURIComponent(id)}`);
     } else {
@@ -70,7 +65,21 @@ const choose = (id: string, input: `click` | `enter`): void => {
 <template>
     <!-- On a phone, the master view IS this list: a page of its own. -->
     <nav v-if="phone" v-bind="$attrs" :aria-label="t(`home.sandboxes`)" class="flex h-full flex-col gap-3 overflow-y-auto bg-card p-3">
-        <h1 class="px-2 py-3 text-lg font-semibold">{{ t(`home.title`) }}</h1>
+        <div class="flex items-center justify-between gap-2 px-2 py-1">
+            <h1 class="py-2 text-lg font-semibold">{{ t(`home.title`) }}</h1>
+            <!-- The phone's first screen has no rail, so the account's settings (sign-out included) are reached from here. -->
+            <RouterLink
+                v-if="user !== null"
+                to="/settings"
+                class="flex size-11 items-center justify-center rounded-xl text-muted hover:bg-content/5 hover:text-content"
+                :aria-label="t(`shared.settings`)"
+            >
+                <Icon name="cog" aria-hidden="true" />
+            </RouterLink>
+            <RouterLink v-else :to="signInAt(HOME_PATH)" class="rounded-lg px-3 py-2 text-sm text-link hover:bg-content/5">{{
+                t(`home.firstRun.signIn`)
+            }}</RouterLink>
+        </div>
         <button
             v-for="box in boxes"
             :key="box.id"
@@ -86,20 +95,22 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <span class="min-w-0 flex-1 truncate">{{ box.name }}</span>
             <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
         </button>
-        <span ref="addAnchor" class="relative flex shrink-0">
+        <span class="relative flex shrink-0">
             <button
                 type="button"
-                class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-3 text-muted hover:bg-content/5"
-                :aria-label="t(`sandbox.words.addSandbox`)"
+                class="flex min-h-11 flex-1 items-center gap-3 rounded-xl p-2 text-left text-muted hover:bg-content/5 hover:text-content"
                 @click="add"
             >
-                <Icon name="plus" aria-hidden="true" />
+                <span class="flex size-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-line-strong">
+                    <Icon name="plus" aria-hidden="true" />
+                </span>
+                <span>{{ t(`sandbox.words.addSandbox`) }}</span>
             </button>
-            <span v-if="!boxes.length" class="pointer-events-none absolute right-2 top-1 flex">
+            <span v-if="!boxes.length" class="pointer-events-none absolute left-9 top-1 flex">
                 <Beacon size="sm" />
             </span>
         </span>
-        <HomeNoSandbox v-if="!boxes.length" />
+        <HomeNoSandbox v-if="!boxes.length" nested />
     </nav>
     <!-- On a desktop, the tiles of the shell's own rail (ShellDesktop.vue draws the rail around them, account included),
          worn like every other tile: the same size, selection and corner chip. Only what needs you is counted; a quiet box
@@ -130,12 +141,12 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
         </button>
-        <span ref="addAnchor" class="relative flex shrink-0">
+        <span class="relative flex shrink-0">
             <button
                 type="button"
                 :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
                 :aria-label="t(`sandbox.words.addSandbox`)"
-                v-tooltip.right="hintOpen ? undefined : t(`sandbox.words.addSandbox`)"
+                v-tooltip.right="t(`sandbox.words.addSandbox`)"
                 @click="add"
             >
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
@@ -145,7 +156,4 @@ const choose = (id: string, input: `click` | `enter`): void => {
             </span>
         </span>
     </div>
-    <CoachMark v-if="!boxes.length" v-model="hintOpen" :anchor="addAnchor ?? undefined" :side="phone ? `bottom` : `right`" :title="t(`home.addSandboxHint`)">
-        {{ t(`home.noSandboxLine`) }}
-    </CoachMark>
 </template>

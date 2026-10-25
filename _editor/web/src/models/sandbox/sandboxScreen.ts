@@ -4,6 +4,8 @@ import type { RouteRecordNormalized } from "vue-router";
 import { onNavigation } from "../../workbench/navigation/navigation";
 import { readWindowState, writeWindowState } from "../../workbench/window/windowStore";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useRole } from "../../client/sandbox/useRole";
+import { type LandingRole, sandboxEntry, sandboxLanding } from "../../lib/routes/firstScreens";
 
 // Remembers which screen each sandbox was last on and lands there on a switch, since a route naming something
 // in the outgoing sandbox means nothing in the incoming one. Kept per window. Registered at module scope, like
@@ -20,6 +22,21 @@ const inShell = (matched: readonly RouteRecordNormalized[]): boolean => matched[
 const parseScreen = (raw: string): string | undefined => (raw.startsWith(`/`) ? raw : undefined);
 
 const { activeSandboxId } = useSandbox();
+// Read on first use rather than on import: the router imports this module, and the role reads a sandbox query.
+let role: ReturnType<typeof useRole> | undefined;
+const roleNow = (): LandingRole => {
+    role ??= useRole();
+    return { isGuest: role.isGuest.value, homeOnly: role.homeOnly.value };
+};
+
+/** The active sandbox's own first screen (lib/routes/firstScreens.ts), by the person's standing in it now. */
+export const sandboxLandingNow = (): string => sandboxLanding(roleNow());
+
+/**
+ * Where opening a sandbox goes, from Home or a link naming it: the screen it was last left on in this window, else its
+ * first screen. Read after the sandbox is selected, since the landing depends on the person's standing in it.
+ */
+export const sandboxEntryPath = (sandboxId: string): string => sandboxEntry(readWindowState(screenKey(sandboxId), parseScreen), roleNow());
 
 // Overrides "land on the last screen" for a switch with a known destination (opening an agent from another
 // sandbox's card). Recorded rather than pushed after the switch: the landing watch replaces at flush:post and
@@ -41,7 +58,7 @@ onNavigation((router) => {
     });
 
     // `replace`, not `push`, so switching sandboxes repeatedly doesn't bury Back under a stack of visits. A sandbox
-    // never shown lands on the shell's home. `flush: post` so useWorkspaceRoute's own pre-flush navigation wins the
+    // never shown lands on its own first screen. `flush: post` so useWorkspaceRoute's own pre-flush navigation wins the
     // tie instead.
     watch(
         activeSandboxId,
@@ -49,7 +66,8 @@ onNavigation((router) => {
             if (sandboxId === undefined || !inShell(router.currentRoute.value.matched) || isHomePath(router.currentRoute.value.fullPath)) {
                 return;
             }
-            void router.replace(readWindowState(screenKey(sandboxId), parseScreen) ?? `/`);
+            // Its own first screen, not `/`, which is Home since 2026-10-25: a switch made inside a sandbox stays inside one.
+            void router.replace(sandboxEntryPath(sandboxId));
         },
         { flush: `post` },
     );

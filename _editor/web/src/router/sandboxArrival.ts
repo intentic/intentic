@@ -28,6 +28,11 @@ export interface SandboxArrivalHost {
     readonly missing?: () => void;
     /** Opens the named sandbox on one of its project folders (`&project=`), the folder's window having asked for it. */
     readonly scope?: (id: string, project: string) => void;
+    /**
+     * Where a link naming a sandbox and nothing more (`/?sandbox=<id>`) lands once that sandbox is selected: inside it,
+     * since the bare address alone opens Home (lib/routes/firstScreens.ts). Absent, the bare address is replayed as it is.
+     */
+    readonly landing?: (id: string) => string;
 }
 
 /** What the rule reads of a route: a guard's route and one the router resolved for the desktop app alike (index.ts). */
@@ -35,7 +40,8 @@ export type SandboxArrivalRoute = Pick<RouteLocationNormalized, `path` | `query`
 
 // Selects the named sandbox before the shell mounts, so nothing connects to the one active before, then replays the
 // link without the id. The replay passes the home redirect again, which already chose a landing by the old sandbox's
-// role (a guest's home is its chat), and every other query key rides along.
+// role (a guest's home is its chat), and every other query key rides along. A link to the bare address with a sandbox
+// named asks for that sandbox, so it lands inside it (`landing`) rather than on Home, which the bare address opens.
 export const arriveOnSandbox = async (to: SandboxArrivalRoute, sandbox: SandboxArrivalHost): Promise<true | RouteLocationRaw> => {
     const named = to.query[`sandbox`];
     if (named === undefined) {
@@ -55,5 +61,6 @@ export const arriveOnSandbox = async (to: SandboxArrivalRoute, sandbox: SandboxA
     }
     const asked = to.redirectedFrom ?? to;
     const { sandbox: _dropped, project: _scoped, ...query } = asked.query;
-    return { path: asked.path, query, hash: asked.hash };
+    const path = asked.path === `/` && found !== undefined && sandbox.landing !== undefined ? sandbox.landing(found.id) : asked.path;
+    return { path, query, hash: asked.hash };
 };

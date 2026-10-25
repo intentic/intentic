@@ -25,6 +25,7 @@ import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import AccountPanel from "./AccountPanel.vue";
 import { useAuth } from "../client/auth/useAuth";
+import { HOME_PATH } from "../lib/routes/firstScreens";
 import RailIcon from "./rail/RailIcon.vue";
 import { phoneRailFrame } from "./rail/railFrame";
 import { type SectionTile, tileLabel, useSectionTiles } from "./rail/sectionTiles";
@@ -96,6 +97,16 @@ const frame = phoneRailFrame();
         :style="[frame, { width: `var(--icon-rail-width)` }]"
         :aria-label="t(`shared.menu`)"
     >
+        <!-- Home, the master view, heads the rail as on the desktop (HomeRailTile.vue): the way out to every sandbox. -->
+        <RouterLink
+            v-if="!isGuest"
+            :to="HOME_PATH"
+            class="icon-rail-tile flex shrink-0 items-center justify-center rounded-xl text-muted"
+            :aria-label="`${t(`home.title`)} · ${t(`home.tileNote`)}`"
+            data-rail-home
+        >
+            <Icon name="th-large" class="icon-rail-glyph" aria-hidden="true" />
+        </RouterLink>
         <!-- The sandbox: its logo, the way to every sandbox and to what this one needs. -->
         <RouterLink
             to="/menu"

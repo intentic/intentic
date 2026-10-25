@@ -3,6 +3,8 @@ import { type NativeProvider, nativeProvidersIn } from "@intentic/sandbox-contra
 import type { LocationQuery, LocationQueryValue, RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 import { modelsPath } from "./routes/modelsPath";
+import { HOME_PATH } from "./routes/firstScreens";
+import { PHONE_HOME } from "./routes/phoneScreens";
 
 // THE AI TOOLS ALREADY SIGNED IN ON THIS COMPUTER, as the desktop app found them. The app opens setup as
 // `/setup?found=claude,codex` (provider ids, comma-separated); a finished setup lands on Sandbox ▸ Models (`?found=…`), where each
@@ -130,10 +132,18 @@ export const foundAfterSetup = (value: QueryValue, now: number = Date.now()): Na
 };
 
 /**
- * Where a finished setup opens the workspace: Sandbox ▸ Models with what was found, else the chat, where a first session
- * starts: full-screen on its rail tile rather than docked beside the file tree. A phone keeps `/`, which already opens
- * straight into a conversation.
+ * Where a finished setup opens the workspace: Sandbox ▸ Models with what was found, else Home, the first screen, with the
+ * new sandbox selected and its home conversation ready for a first message (lib/routes/firstScreens.ts). A folder's project
+ * was opened from the folder's own window, which asked for that sandbox: it opens inside it, on the full-screen chat (a
+ * phone on its board).
  */
-export const landingAfterSetup = (found: readonly NativeProvider[], mobile = false): RouteLocationRaw =>
-    found.length > 0 ? modelsPath({ [FOUND_QUERY]: found.join(`,`) }) : mobile ? `/` : `/chat`;
+export const landingAfterSetup = (found: readonly NativeProvider[], mobile = false, project = false): RouteLocationRaw => {
+    if (found.length > 0) {
+        return modelsPath({ [FOUND_QUERY]: found.join(`,`) });
+    }
+    if (project) {
+        return mobile ? PHONE_HOME : `/chat`;
+    }
+    return HOME_PATH;
+};
 

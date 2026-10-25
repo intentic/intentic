@@ -22,12 +22,16 @@ export interface SetupGateHost {
 // The desktop app may have made or connected a sandbox while this page was hidden. A cached list that has nothing
 // to open must be confirmed before sending the reader to setup; otherwise the next fresh list leaves them on setup
 // offering a sandbox that already works. A failed refresh remains a platform outage, never an empty account.
-export const readSetupRedirect = async (sandbox: SetupGateHost, path = ``, authenticated = true): Promise<RouteLocationRaw | undefined> => {
+//
+// `path` is where the navigation lands, `asked` the address that asked for it, which differ when the shell's own redirect
+// chose the landing: the bare address lands on Home (lib/routes/firstScreens.ts), and is still the arrival that resumes an
+// unfinished setup, and in the desktop app the one put on This computer when there is nothing to open (standAside.ts).
+export const readSetupRedirect = async (sandbox: SetupGateHost, path = ``, authenticated = true, asked = path): Promise<RouteLocationRaw | undefined> => {
     // Anonymous home has no account registry to read; its add action is where sign-in begins.
     if (!authenticated && isHomePath(path)) {
         return undefined;
     }
     const redirect = setupRedirect(await sandbox.list()) === undefined ? undefined : setupRedirect(await sandbox.refresh());
     // Home, personal settings and deleted sandboxes belong to the account, including before its first sandbox.
-    return isAccountPath(path) ? undefined : redirect;
+    return isAccountPath(asked) ? undefined : redirect;
 };

@@ -13022,17 +13022,41 @@
         "offline": "Ten sandboks nie jest połączony.",
         "retry": "Spróbuj ponownie",
         "open": "Wszystkie sandboksy",
-        "noSandboxTitle": "Utwórz sandboks, aby rozmawiać",
-        "noSandboxLine": "Agenci pracują w sandboksach. Użyj +, aby dodać pierwszy.",
-        "noSandboxComposer": "Dodaj sandboks, aby rozpocząć rozmowę.",
-        "addSandboxHint": "Zacznij tutaj",
-        "doubleClickToEnter": "Kliknij dwukrotnie, aby wejść",
+        "noSandboxTitle": "Zacznij od sandboksa",
+        "noSandboxLine": "Sandboks to prywatny komputer, na naszych maszynach albo na twoich, na którym agenci pracują nad twoim projektem. Rozmawiasz z nim stąd.",
+        "doubleClickToEnter": "Kliknij dwukrotnie, aby otworzyć",
         "land": "Scal",
         "landConflict": "Wystąpił konflikt z obszarem roboczym i nic nie zostało scalone: poproś swoją rozmowę domową, by go rozwiązała.",
         "landFailed": "Nie udało się scalić. Spróbuj ponownie.",
         "heldConflict": "Jej praca koliduje z obszarem roboczym: poproś ją o rozwiązanie konfliktu, a potem zostanie scalona.",
         "heldForYou": "Jej praca czeka, aż ją scalisz.",
-        "heldForMaintainer": "Jej praca czeka, aż scali ją opiekun."
+        "heldForMaintainer": "Jej praca czeka, aż scali ją opiekun.",
+        "openSandbox": "Otwórz sandboks",
+        "openSandboxShort": "Otwórz",
+        "openSandboxNamed": "Otwórz {name}",
+        "starting": "Uruchamianie {name}…",
+        "offlineHint": "Otwórz go, aby zobaczyć, co jest nie tak, albo wybierz inny sandboks.",
+        "tileNote": "Wszystkie twoje sandboksy",
+        "firstRun": {
+            "create": "Utwórz sandboks",
+            "finish": "Dokończ konfigurację {name}",
+            "signIn": "Zaloguj się",
+            "signedOut": "Masz już sandboksy? Zaloguj się, aby je zobaczyć.",
+            "steps": {
+                "create": {
+                    "title": "Utwórz sandboks",
+                    "line": "Nadaj mu nazwę i wybierz, gdzie działa."
+                },
+                "ask": {
+                    "title": "Powiedz, czego chcesz",
+                    "line": "Jego rozmowa domowa planuje pracę i przekazuje ją agentom."
+                },
+                "open": {
+                    "title": "Zajrzyj do środka, kiedy chcesz",
+                    "line": "Każdy agent, plik i zmiana są o jedno kliknięcie."
+                }
+            }
+        }
     },
     "hostedStart": {
         "title": "Uruchom sandboks w chmurze",

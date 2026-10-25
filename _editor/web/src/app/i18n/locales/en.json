@@ -13022,17 +13022,41 @@
         "offline": "This sandbox is not connected.",
         "retry": "Try again",
         "open": "All sandboxes",
-        "noSandboxTitle": "Create a sandbox to chat",
-        "noSandboxLine": "Agents work in sandboxes. Use + to add your first one.",
-        "noSandboxComposer": "Add a sandbox to start a conversation.",
-        "addSandboxHint": "Start here",
-        "doubleClickToEnter": "Double-click to enter",
+        "noSandboxTitle": "Start with a sandbox",
+        "noSandboxLine": "A sandbox is a private computer, on our machines or on your own, where agents work on your project. You talk to it from here.",
+        "doubleClickToEnter": "Double-click to open",
         "land": "Land",
         "landConflict": "It clashed with the workspace and nothing landed: ask your home conversation to resolve it.",
         "landFailed": "Could not land it. Try again.",
         "heldConflict": "Its work clashes with the workspace: ask it to resolve that, then it lands.",
         "heldForYou": "Its work is held, waiting for you to land it.",
-        "heldForMaintainer": "Its work is held until a maintainer lands it."
+        "heldForMaintainer": "Its work is held until a maintainer lands it.",
+        "openSandbox": "Open sandbox",
+        "openSandboxShort": "Open",
+        "openSandboxNamed": "Open {name}",
+        "starting": "Starting {name}…",
+        "offlineHint": "Open it to see what is wrong, or pick another sandbox.",
+        "tileNote": "All your sandboxes",
+        "firstRun": {
+            "create": "Create a sandbox",
+            "finish": "Finish setting up {name}",
+            "signIn": "Sign in",
+            "signedOut": "Already have sandboxes? Sign in to see them.",
+            "steps": {
+                "create": {
+                    "title": "Create a sandbox",
+                    "line": "Name it and pick where it runs."
+                },
+                "ask": {
+                    "title": "Say what you want",
+                    "line": "Its home conversation plans the work and hands it to agents."
+                },
+                "open": {
+                    "title": "Look inside whenever you like",
+                    "line": "Every agent, file and change is one press away."
+                }
+            }
+        }
     },
     "hostedStart": {
         "title": "Start a cloud sandbox",

@@ -310,23 +310,27 @@ flowchart LR
   setup page. Before the shell sends an account to setup, it confirms a cached list with no working sandbox against
   a fresh platform list; a sandbox connected while the page was hidden opens through the workspace's connection flow.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
-  `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`; `/home` alone also opens signed out, with its
-  empty state and no account registry or plan reads. Its Add sandbox action asks for sign-in and returns to
-  `/home?add=sandbox`, whose query opens the usual dialog. The shell renders `ShellDesktop.vue` (rail, side
-  panel, terminal and status bar) or `ShellMobile.vue` (the board with a rail beside it, full-screen views). In the
-  desktop app, an account with nothing to open is not sent to setup (arriving there makes a sandbox): the reader is
-  put on This computer, and the workspace waits behind it on `/no-sandbox`, which offers This computer or setup
+  `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup` (`router/shellGates.ts`). The bare address opens
+  **Home** (`/home`, the master view below) for everyone but a guest of a box, whose way in is its chat, and the
+  Android app's WebView, which keeps the board it draws itself (`lib/routes/firstScreens.ts` `rootLanding`). `/home` alone
+  also opens signed out, with its first run and no account registry or plan reads. Its Add sandbox action asks for
+  sign-in and returns to `/home?add=sandbox`, whose query opens the usual dialog. The shell renders `ShellDesktop.vue`
+  (rail, side panel, terminal and status bar) or `ShellMobile.vue` (one screen at a time). In a browser an account
+  with nothing to open lands on Home's first run rather than on setup (which used to start a machine the moment it
+  arrived), and an unfinished setup of the reader's own is resumed on `/setup`. In the desktop app it is put on This
+  computer, and the workspace waits behind it on `/no-sandbox`, which offers This computer or setup
   (`router/thisComputerFirst.ts`). A link naming a sandbox (`/?sandbox=<id>`, the
-  desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell on it if the
-  account lists it, and otherwise says that sandbox is not on the account any more; the id leaves the address either
-  way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
+  desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell inside it, on
+  the screen it was last left on or its board (`sandboxEntry`), if the account lists it, and otherwise says that
+  sandbox is not on the account any more; the id leaves the address either way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
   `local/LocalShell.vue`, with `workspace/:path*` (the folder), one route per view the app adds (`device`) and
   `settings/:tab?`, the same Settings hub, open while there is an account. There it leaves out Notifications (a
   sandbox's), and Data hands deleting the account to the workspace, which knows every sandbox it must leave first. The
   routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
-- **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. Home is the agents board, with
-  the desktop's rail down its left (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`):
-  the sandbox's logo on top opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
+- **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. The first screen is Home's list of
+  sandboxes; a sandbox's own first screen is its agents board, with the desktop's rail down its left
+  (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`): Home on top, then the sandbox's
+  logo, which opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
   section, the terminal, the Sandbox hub and the + that adds a capability, at a finger's size (`phoneRailFrame` in
   `shell/rail/railFrame.ts`), and at the foot the desktop's own avatar control (`shell/AccountPanel.vue`: Settings,
   Discord, sign out). The board there draws only the lanes with something in them
@@ -548,18 +552,27 @@ pnpm --filter @intentic/web typecheck
 
 ## Master view
 
-`/home` keeps the shared shell and shows one home conversation for the selected sandbox. The desktop rail lists
+`/home` is the first screen (since 2026-10-25): every sandbox at once, where sandboxes are made and from which each is
+entered. It keeps the shared shell and shows one home conversation for the selected sandbox. The desktop rail lists
 connected sandboxes with personal attention counts; on phones the list opens each sandbox’s chat at `/home/:sandbox`.
-Single clicks switch sandboxes; double clicks and Enter enter the full sandbox on `/agents`, the default landing
-view on both desktop and mobile. `features/home/` draws the surface;
-`models/home/` holds attention polling and the pure work ledger projection.
+A bar over the chat names the selected sandbox, whether it answers and where it runs, and its **Open sandbox** press
+goes inside, to the screen that sandbox was last left on or its agents board (`HomeSandboxBar.vue`,
+`models/sandbox/sandboxScreen.ts` `sandboxEntryPath`); on a phone the bar also leads back to the list. Single clicks
+on a tile switch sandboxes; double clicks and Enter open the sandbox as the bar does. Inside a sandbox, Home heads the
+rail on both desktop and phone (`shell/rail/HomeRailTile.vue`, `Mod+Alt+H`), so going in and coming back out are one
+press each; the master view's own rail is `shell/rail/MasterRail.vue`. Going in is never `/`: that is Home itself
+(`lib/routes/firstScreens.ts`). `features/home/` draws the surface; `models/home/` holds attention polling, the pure work
+ledger projection and which sandbox's home is on screen (`homeShownFor`, which the Add sandbox dialog waits on when
+it was opened here).
 The shared composer offers model selection to non-guest members in either audience mode. Effort appears when the
 selected model and runtime support it, and stays hidden under Auto or on the free trial.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. Its rail offers a way back to This
-computer in the desktop app; without a sandbox, the composer is disabled and a beacon and hint point to the + tile.
+computer in the desktop app. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
+is, three steps, and Create, which opens the Add sandbox dialog over the page; a setup of the reader's own that never
+finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.
 
 A **home-only** member (Access ▸ People, Agents: Home only) reaches nothing else: the shell fence
 (`lib/routes/guestPaths.ts` `homeOnlyAllowedPath`) keeps them on `/home`, the sessions their home started, their own

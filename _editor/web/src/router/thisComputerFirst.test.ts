@@ -27,10 +27,16 @@ describe(`the desktop app's workspace with nothing to open`, () => {
         expect(app.shownThisComputer).toBe(1);
     });
 
-    it(`keeps setup in a browser, which has no This computer`, () => {
+    // A browser has no This computer: Home's first run is where it makes a sandbox, on a press rather than by arriving.
+    it(`puts a browser on Home's first run, never on setup`, () => {
         const browser = host(false);
-        expect(createStandAside(browser).settle(`/setup`)).toBe(`/setup`);
+        expect(createStandAside(browser).settle(`/setup`)).toBe(`/home`);
         expect(browser.shownThisComputer).toBe(0);
+    });
+
+    it(`still resumes an unfinished setup of the reader's own in a browser`, () => {
+        const resume = { path: `/setup`, query: { sandbox: `pending` } };
+        expect(createStandAside(host(false)).settle(resume)).toBe(resume);
     });
 
     it(`leaves every other answer of the gate alone: the shell, recovery, an unfinished setup of the reader's own`, () => {

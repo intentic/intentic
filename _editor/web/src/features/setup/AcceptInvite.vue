@@ -7,6 +7,7 @@ import { useRoute, useRouter } from "vue-router";
 import { apiClient } from "../../lib/useApi";
 import { useAuth } from "../../client/auth/useAuth";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
 import { desktopVersion } from "../../app/environments/desktop";
 import { inNativeShell } from "../../workbench/window/capacitor";
 import EmailCodeSignIn from "../auth/EmailCodeSignIn.vue";
@@ -112,7 +113,8 @@ const accept = async (): Promise<void> => {
         const { sandboxId } = await apiClient.invite.accept({ token });
         await sandbox.refresh();
         sandbox.select(sandboxId);
-        await router.push(`/`);
+        // Into the sandbox the invite names, on its own first screen: the bare address is Home since 2026-10-25.
+        await router.push(sandboxEntryPath(sandboxId));
     } catch (err) {
         error.value = noticeFrom(err, t(`setup.acceptInvite.couldntAccept`));
         busy.value = false;

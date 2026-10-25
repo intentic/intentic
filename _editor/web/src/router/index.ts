@@ -26,13 +26,10 @@ import { useSandbox } from "../client/sandbox/useSandbox";
 import { useRole } from "../client/sandbox/useRole";
 import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
-import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
-import { openOnProject } from "../app/projectScope";
-import { readSetupRedirect } from "./setupGate";
-import { noSandboxRoute, workspaceAside } from "./thisComputerFirst";
+import { noSandboxRoute } from "./thisComputerFirst";
+import { openNamedSandbox, requireSetup, settleGate } from "./shellGates";
 import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/settings/settingsNav";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
-import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../workbench/views/vocabulary";
 import { localFace, sandboxFace } from "../app/environments/local";
@@ -44,11 +41,12 @@ import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
 import { DELETED_ANCHOR, DELETED_PATH, DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
-import { useNotifications } from "../workbench/notifications/notifications";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 import { afterPaint } from "../lib/afterPaint";
 import { browsersPath, previewRedirect } from "../workbench/browsers/browsersPaths";
 import { installNavigation } from "../workbench/navigation/navigation";
+import { rootLanding } from "../lib/routes/firstScreens";
+import { embedded } from "../app/environments/nativeApp";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -68,28 +66,6 @@ const startGoogleMint = (to: RouteLocationNormalized): true => {
         void useGoogleIdentity().getIdToken({ gate: false });
     }
     return true;
-};
-
-// Gates the workspace shell on having a workspace to open; setupGate.ts owns the predicate. A list the platform could
-// not give is not an empty one, so it never reads as "nothing to open" (it used to leave the page blank). And a list
-// that offers nothing to open while this device remembers sandboxes of the account's own goes to recovery rather than
-// onboarding (2026-10-02): a platform answering from a database that forgot them looks exactly like a new account.
-const requireSetup = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
-    // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked; the outage
-    // screen says so and retries.
-    const result = await readSetupRedirect(useSandbox(), to.path, useAuth().user.value !== null).then(
-        (redirect) => ({ redirect }),
-        () => undefined,
-    );
-    if (result === undefined) {
-        return unavailable(to);
-    }
-    const setup = result.redirect;
-    if (setup === undefined) {
-        return true;
-    }
-    const account = useAuth().user.value;
-    return account !== null && ownsMissingSandboxes(account.email) ? `/recover` : setup;
 };
 
 // A sandbox's own address, handed over by the sandbox itself when someone opened it in a browser (the daemon's GET /):
@@ -118,15 +94,6 @@ const openAddressed = async (to: RouteLocationNormalized): Promise<RouteLocation
     }
     select(listed.id);
     return `/`;
-};
-
-// A link naming a sandbox (`/?sandbox=<id>`) opens the shell on it; sandboxArrival.ts owns the rule. After the gate, so
-// the list it reads is the one the gate just fetched.
-const openNamedSandbox = (to: SandboxArrivalRoute): Promise<true | RouteLocationRaw> => {
-    const { list, refresh, select } = useSandbox();
-    const missing = (): void =>
-        useNotifications().report({ tone: `info`, title: t(`sandbox.sandboxSwitcher.notOnAccount`), detail: t(`sandbox.sandboxSwitcher.notOnAccountDetail`) });
-    return arriveOnSandbox(to, { list, refresh, select, missing, scope: openOnProject });
 };
 
 // THE DESKTOP APP TAKING THIS PAGE TO A PATH WITHOUT A RELOAD (app/environments/desktop.ts `installDesktopOpener`): a
@@ -235,9 +202,10 @@ const routes: RouteRecordRaw[] = [
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Home, recovery and settings need only an account; other pages need a sandbox;
-        // otherwise requireSetup redirects to /setup (in the desktop app, to This computer: thisComputerFirst.ts).
+        // otherwise requireSetup sends the reader to Home's first run (in the desktop app, to This computer: thisComputerFirst.ts),
+        // or to /setup to resume an unfinished one of their own.
         path: `/`,
-        beforeEnter: [requireAuth, async (to) => workspaceAside.settle(await requireSetup(to)), openNamedSandbox],
+        beforeEnter: [requireAuth, settleGate, openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
             {
@@ -252,18 +220,15 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`sandbox.words.recentlyDeleted`) },
                 component: asyncView(() => import(`../features/sandbox/devices/deleted/SandboxTrashPage.vue`)),
             },
-            // The shell's own landing is the agent fleet on both desktop and mobile.
-            // A new sandbox opens on the full-screen chat instead (landingAfterSetup, AddSandboxDialog), since the chat
-            // is where a first session starts. A guest has no home tile but the chat: the tree is a read the daemon
-            // refuses it. A home-only guest has only the master view.
+            // THE FIRST SCREEN IS HOME (2026-10-25): the master view, every sandbox at once, before and after the first
+            // one (lib/routes/firstScreens.ts). Going into a sandbox is a press there, and lands on that sandbox's own first
+            // screen, its agent board; so does a link naming one (openNamedSandbox). A guest of a box has no Home but
+            // its chat: the tree is a read the daemon refuses it. The Android app draws the board itself and keeps it.
             {
                 path: ``,
                 redirect: () => {
                     const { isGuest, homeOnly } = useRole();
-                    if (isGuest.value) {
-                        return homeOnly.value ? `/home` : `/chat`;
-                    }
-                    return `/agents`;
+                    return rootLanding({ isGuest: isGuest.value, homeOnly: homeOnly.value }, embedded());
                 },
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so

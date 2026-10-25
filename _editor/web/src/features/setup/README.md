@@ -1,6 +1,9 @@
 # setup
 
 The `/setup` page: it makes the sandbox row a visit sets up, decides by itself where that sandbox runs, and opens its workspace once the sandbox answers.
+Since Home became the first screen (2026-10-25) a browser account with nothing to open is not sent here: it lands on
+Home's first run, which makes its first sandbox with the Add sandbox dialog below. This page is where an unfinished
+setup of the reader's own is resumed, where "More ways" and cloud pricing lead, and what the desktop app opens.
 
 - **Starting from cloud pricing** opens `/start/hosted` (`hosted/HostedStart.vue`), outside the workspace gate. It reads
   the account's cloud machines and the chosen tier's offer without minting a draft. Sign-in returns here with the
@@ -63,8 +66,11 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   so `/setup?sandbox=<id>` resumes the same run, and the getting-started ring's "Finish setting up" reaches it once the
   dialog is closed. Once the sandbox reports in it is selected behind the dialog, which stays up through its first start
   (`add/AddSandboxOpening.vue`, the daemon's boot steps) and closes only once the workspace is on screen, so the
-  connecting and starting gates are never shown. The workspace opens on the full-screen chat (`/chat`), where the first
-  session starts, as a finished setup here does (`landingAfterSetup`). The dialog draws the run itself and links to no
+  connecting and starting gates are never shown. Opened from Home (the first sandbox always is), the
+  dialog closes onto Home with the new sandbox selected, once its home conversation is on screen
+  (`models/home/homeChat.ts` `homeShownFor`), and that conversation is where the first session starts; a finished
+  setup here lands there too (`landingAfterSetup`), a folder's project inside its sandbox. Opened from inside a
+  sandbox, the workspace opens on the new one's full-screen chat (`/chat`). The dialog draws the run itself and links to no
   `/setup`: that page cannot pick up a press on a machine mid-stream, so it showed only the install picker. Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`,
   which skips the "You already have a sandbox" question and opens the picker. The shared add action and its return
   address live in `models/sandbox/addSandbox.ts`.

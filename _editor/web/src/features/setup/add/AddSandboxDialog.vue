@@ -16,6 +16,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { apiClient } from "../../../lib/useApi";
 import { markJustSetUp } from "../../../models/sandbox/live/justSetUp";
 import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
+import { masterRail } from "../../../models/home/masterRail";
 import DesktopSetupProgress from "../DesktopSetupProgress.vue";
 import { useDesktopSetup } from "../desktopSetup";
 import { platformUrlOf } from "../flow/installCommand";
@@ -61,13 +62,14 @@ const add = useAddSandbox({
 });
 const { name, problem, pick, options, loaded, creating, error, started, created, hostedWait, hostedRow, onMachine } = add;
 onMounted(() => void add.read());
-// The new sandbox opens on the full-screen chat, where its first session starts, rather than on the shell's default (the
-// file tree with the chat docked). Recorded the moment the row exists: the switch lands on it once the row is selected.
-// A phone keeps its own landing, a conversation already.
+// Added from inside a sandbox, the new one opens on the full-screen chat, where its first session starts, rather than on
+// the shell's default (the file tree with the chat docked). Recorded the moment the row exists: the switch lands on it
+// once the row is selected. Added from Home (the first sandbox always is), it stays on Home, the new sandbox selected and
+// its home conversation the chat on screen. A phone keeps its own landing, a conversation already.
 watch(
     () => created.value?.id,
     (id) => {
-        if (id !== undefined && !mobile.value) {
+        if (id !== undefined && !mobile.value && !masterRail.value) {
             landOnAfterSwitch(id, `/chat`);
         }
     },

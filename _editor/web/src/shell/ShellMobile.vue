@@ -8,14 +8,17 @@ import { RouterView, useRoute, useRouter } from "vue-router";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import MobileRail from "./MobileRail.vue";
 import { ownsWayBack, PHONE_HOME } from "../lib/routes/phoneScreens";
+import { isHomePath } from "../lib/routes/home";
+import { HOME_PATH } from "../lib/routes/firstScreens";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import { useEdgeBack } from "./edgeBack";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { embedded } from "../app/environments/nativeApp";
 
-// Mobile chrome: two screens and the places between them. The board (/agents) is home, with the rail down its left
-// (MobileRail.vue) holding every other place; a conversation (/agents/:id) is the board's drill-down, back by its own
-// arrow. Everything else is a full-screen page the rail opened, with the way back drawn at its top. h-dvh tracks the
+// Mobile chrome: one screen at a time. Home (/home) is the first, the list of sandboxes, each opening its home
+// conversation (/home/:sandbox, back to the list by its bar's arrow). A sandbox's own first screen is its board
+// (/agents), with the rail down its left (MobileRail.vue) holding every other place and Home on top; a conversation
+// (/agents/:id) is the board's drill-down, back by its own arrow. Everything else is a full-screen page the rail opened, with the way back drawn at its top. h-dvh tracks the
 // browser's UI chrome. No tab bar, chat column, or docked terminal: chat and terminal are full-screen routes.
 // Inside the Android app's WebView (app/environments/nativeApp.ts) the board, a conversation and the menu are the app's
 // own screens, and its toolbar and system back are the way between them: this shell draws no rail, no back arrow and no
@@ -35,8 +38,13 @@ const onBoard = computed(() => route.path === PHONE_HOME);
 // Undefined on the board and a conversation under it: the board is home, and a conversation's screen carries its own
 // arrow. Otherwise steps back when history.state.back shows one exists, else falls back to the board.
 const back = computed<PageBack | undefined>(() => {
-    if (inApp || ownsWayBack(route.path)) {
+    if (inApp || ownsWayBack(route.path) || route.path === HOME_PATH) {
         return undefined;
+    }
+    // One sandbox's home conversation is the list's drill-down: its bar draws the arrow (HomeSandboxBar.vue), and an
+    // edge swipe goes where that arrow does.
+    if (isHomePath(route.path)) {
+        return { label: t(`home.open`), go: () => void router.push(HOME_PATH) };
     }
     const stepped = typeof router.options.history.state[`back`] === `string`;
     return {

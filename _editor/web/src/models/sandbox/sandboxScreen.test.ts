@@ -33,6 +33,9 @@ const replace = jest.fn();
 const hooks: AfterEach[] = [];
 
 jest.mock("../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
+// The person's standing in the sandbox switched to: a guest's first screen is its chat, everyone else's the board.
+const guest = ref(false);
+jest.mock("../../client/sandbox/useRole", () => ({ useRole: () => ({ isGuest: guest, homeOnly: ref(false) }) }));
 const router = { afterEach: (hook: AfterEach) => void hooks.push(hook), currentRoute, replace };
 jest.mock("../../workbench/navigation/navigation", () => ({ onNavigation: (run: (installed: typeof router) => void) => run(router) }));
 
@@ -60,6 +63,7 @@ beforeEach(() => {
     session.clear();
     replace.mockClear();
     activeSandboxId.value = `sb1`;
+    guest.value = false;
     currentRoute.value = shellRoute(`/workspace`);
 });
 
@@ -86,12 +90,29 @@ describe(`landing on a switched-to sandbox`, () => {
         expect(replace).toHaveBeenLastCalledWith(`/workspace/src/foo.ts`);
     });
 
-    it(`sends a sandbox this window has never shown to the shell's home, not to the current screen`, async () => {
+    it(`sends a sandbox this window has never shown to its own first screen, not to the current screen`, async () => {
         navigate(shellRoute(`/agents/agent-of-sb1`));
 
         await switchTo(`sb-fresh`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/`);
+        expect(replace).toHaveBeenLastCalledWith(`/agents`);
+    });
+
+    // `/` is Home since Home became the first screen: a switch made inside a sandbox must not bounce out to it.
+    it(`never sends a switch to the bare address, which opens Home`, async () => {
+        session.set(`intentic.sandboxScreen.sb2`, `/`);
+
+        await switchTo(`sb2`);
+
+        expect(replace).toHaveBeenLastCalledWith(`/agents`);
+    });
+
+    it(`lands a guest on its chat, the one screen it has in a box it was let into`, async () => {
+        guest.value = true;
+
+        await switchTo(`sb-fresh`);
+
+        expect(replace).toHaveBeenLastCalledWith(`/chat`);
     });
 
     it(`ignores a stored value that is not a path`, async () => {
@@ -99,7 +120,7 @@ describe(`landing on a switched-to sandbox`, () => {
 
         await switchTo(`sb2`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/`);
+        expect(replace).toHaveBeenLastCalledWith(`/agents`);
     });
 
     it(`seeds a window that has never held the screen from the last window's`, async () => {
@@ -119,7 +140,7 @@ describe(`what counts as a sandbox's screen`, () => {
 
         await switchTo(`sb1`);
 
-        expect(replace).toHaveBeenLastCalledWith(`/`);
+        expect(replace).toHaveBeenLastCalledWith(`/agents`);
     });
 
     it(`does not land while the user is outside the shell: the setup flow makes its new sandbox active`, async () => {

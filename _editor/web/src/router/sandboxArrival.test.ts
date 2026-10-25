@@ -157,3 +157,66 @@ describe(`a sandbox made since the page last listed the account's`, () => {
         expect({ refreshed: refresh.mock.calls.length, selected: select.mock.calls }).toEqual({ refreshed: 0, selected: [[`project`]] });
     });
 });
+
+// Since Home became the first screen the bare address opens it, so a link naming a sandbox (the desktop app opening the
+// one it syncs a folder with, a sandbox picked in a local window's switcher) lands inside that sandbox instead.
+describe(`a link naming a sandbox, in a shell whose bare address is Home`, () => {
+    const homeFirst = (rows: readonly SandboxSummary[]) => {
+        const active = ref(`mine`);
+        const select = jest.fn((id: string) => {
+            active.value = id;
+        });
+        const landing = jest.fn((id: string) => (rows.find((row) => row.id === id)?.role === `guest` ? `/chat` : `/agents`));
+        const sandbox: SandboxArrivalHost = { list: async () => rows, select, landing };
+        const router = createRouter({
+            history: createMemoryHistory(),
+            routes: [
+                {
+                    path: `/`,
+                    component: nothing,
+                    beforeEnter: [(to: RouteLocationNormalized) => arriveOnSandbox(to, sandbox)],
+                    children: [
+                        { path: ``, redirect: `/home` },
+                        { path: `home`, component: nothing },
+                        { path: `agents`, component: nothing },
+                        { path: `chat`, component: nothing },
+                        { path: `workspace`, component: nothing },
+                    ],
+                },
+            ],
+        });
+        return { active, landing, router };
+    };
+
+    it(`opens the named sandbox's own first screen, not Home`, async () => {
+        const { active, router } = homeFirst([MINE, PROJECT]);
+
+        await router.push(`/?sandbox=project&focus=a1`);
+
+        expect({ active: active.value, at: router.currentRoute.value.fullPath }).toEqual({ active: `project`, at: `/agents?focus=a1` });
+    });
+
+    it(`asks for the landing of the sandbox it selected, so a guest's is its chat`, async () => {
+        const { landing, router } = homeFirst([MINE, SHARED]);
+
+        await router.push(`/?sandbox=shared`);
+
+        expect({ asked: landing.mock.calls, at: router.currentRoute.value.fullPath }).toEqual({ asked: [[`shared`]], at: `/chat` });
+    });
+
+    it(`keeps any other page the link names`, async () => {
+        const { router } = homeFirst([MINE, PROJECT]);
+
+        await router.push(`/workspace?sandbox=project`);
+
+        expect(router.currentRoute.value.fullPath).toBe(`/workspace`);
+    });
+
+    it(`opens Home when the named sandbox is not the account's, since nothing was asked for but the bare address`, async () => {
+        const { landing, router } = homeFirst([MINE]);
+
+        await router.push(`/?sandbox=someone-elses`);
+
+        expect({ asked: landing.mock.calls.length, at: router.currentRoute.value.fullPath }).toEqual({ asked: 0, at: `/home` });
+    });
+});

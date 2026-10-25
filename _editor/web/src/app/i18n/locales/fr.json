@@ -13022,17 +13022,41 @@
         "offline": "Ce sandbox n’est pas connecté.",
         "retry": "Réessayer",
         "open": "Tous les sandboxes",
-        "noSandboxTitle": "Créez un sandbox pour discuter",
-        "noSandboxLine": "Les agents travaillent dans des sandboxes. Utilisez + pour ajouter le premier.",
-        "noSandboxComposer": "Ajoutez un sandbox pour démarrer une conversation.",
-        "addSandboxHint": "Commencez ici",
-        "doubleClickToEnter": "Double-cliquez pour entrer",
+        "noSandboxTitle": "Commencez par un sandbox",
+        "noSandboxLine": "Un sandbox est un ordinateur privé, sur nos machines ou sur les vôtres, où des agents travaillent sur votre projet. Vous lui parlez d'ici.",
+        "doubleClickToEnter": "Double-cliquez pour ouvrir",
         "land": "Intégrer",
         "landConflict": "Il est entré en conflit avec l’espace de travail et rien n’a été intégré : demandez à votre conversation d’accueil de le résoudre.",
         "landFailed": "Impossible de l’intégrer. Réessayez.",
         "heldConflict": "Son travail entre en conflit avec l’espace de travail : demandez-lui de le résoudre, puis il sera intégré.",
         "heldForYou": "Son travail est en attente que vous l’intégriez.",
-        "heldForMaintainer": "Son travail est en attente qu’un mainteneur l’intègre."
+        "heldForMaintainer": "Son travail est en attente qu’un mainteneur l’intègre.",
+        "openSandbox": "Ouvrir le sandbox",
+        "openSandboxShort": "Ouvrir",
+        "openSandboxNamed": "Ouvrir {name}",
+        "starting": "Démarrage de {name}…",
+        "offlineHint": "Ouvrez-le pour voir ce qui ne va pas, ou choisissez un autre sandbox.",
+        "tileNote": "Tous vos sandboxes",
+        "firstRun": {
+            "create": "Créer un sandbox",
+            "finish": "Terminer la configuration de {name}",
+            "signIn": "Se connecter",
+            "signedOut": "Vous avez déjà des sandboxes ? Connectez-vous pour les voir.",
+            "steps": {
+                "create": {
+                    "title": "Créez un sandbox",
+                    "line": "Nommez-le et choisissez où il tourne."
+                },
+                "ask": {
+                    "title": "Dites ce que vous voulez",
+                    "line": "Sa conversation d'accueil planifie le travail et le confie à des agents."
+                },
+                "open": {
+                    "title": "Regardez à l'intérieur quand vous voulez",
+                    "line": "Chaque agent, fichier et modification est à un clic."
+                }
+            }
+        }
     },
     "hostedStart": {
         "title": "Démarrer un sandbox cloud",

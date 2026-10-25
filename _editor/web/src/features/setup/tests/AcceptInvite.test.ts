@@ -32,6 +32,7 @@ jest.mock(`../../../client/auth/useAuth`, () => ({
     }),
 }));
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ refresh: jest.fn(), select: jest.fn() }) }));
+jest.mock(`../../../models/sandbox/sandboxScreen`, () => ({ sandboxEntryPath: () => `/agents` }));
 // An ordinary browser. Partial, over the real module, for Login.test.ts's reason.
 jest.mock(`../../../app/environments/desktop`, () => ({ ...actualDesktop, desktopVersion: () => undefined }));
 const GOOGLE_ONLY = { google: true, email: false };

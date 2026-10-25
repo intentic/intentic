@@ -1,6 +1,7 @@
 // The phone's screen geometry as pure rules, importable by the router and the shell without the composables' graph.
 
-/** Home on a phone: the board, with the rail down its left (shell/MobileRail.vue). */
+/** A sandbox's home on a phone: its board, with the rail down its left (shell/MobileRail.vue). The app's own first
+ *  screen is Home's list of sandboxes (lib/routes/firstScreens.ts), except in the Android app, which draws this board. */
 export const PHONE_HOME = `/agents`;
 
 /** The phone's chat surface for a conversation: the agent route, since a conversation is its own screen there. */

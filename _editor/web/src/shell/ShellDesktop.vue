@@ -45,6 +45,8 @@ import { usePanels } from "../models/extensions/usePanels";
 import { appTargetId } from "../models/preview/previewModel";
 import { openPreviewOnFirstVisit } from "../workbench/browsers/browsersSurface";
 import AccountPanel from "./AccountPanel.vue";
+import MasterRail from "./rail/MasterRail.vue";
+import HomeRailTile from "./rail/HomeRailTile.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { terminalSlot } from "../workbench/window/panelSlots";
@@ -63,10 +65,8 @@ import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
-import HomeSandboxes from "../features/home/HomeSandboxes.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
-import { useAuth } from "../client/auth/useAuth";
 
 // The tiles themselves, and every badge on them, are rail/sectionTiles.ts's, shared with the phone's rail.
 const t = useT();
@@ -98,8 +98,6 @@ const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
 const onHome = computed(() => route.name === `home`);
-const { user } = useAuth();
-const anonymousHome = computed(() => onHome.value && user.value === null);
 followMasterRail();
 // The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
@@ -394,11 +392,9 @@ useGettingStarted();
 <template>
     <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
         <!-- The master view keeps the rail itself (its look, its account control) and swaps only its tiles for the sandboxes. -->
-        <nav v-if="masterRail" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
-            <HomeSandboxes />
-            <AccountPanel v-if="!anonymousHome" />
-        </nav>
+        <MasterRail v-if="masterRail" />
         <nav v-else ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
+            <HomeRailTile />
             <!-- Top of the rail: switch between sandboxes, add one, or manage access. -->
             <SandboxSwitcher />
             <!-- Other members connected right now, live from the daemon's /events roster. -->
@@ -588,7 +584,7 @@ useGettingStarted();
             </RouterLink>
 
             <!-- The account control: avatar opening a popover with account identity and actions. -->
-            <AccountPanel v-if="!anonymousHome" />
+            <AccountPanel />
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->

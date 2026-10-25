@@ -13022,17 +13022,41 @@
         "offline": "Este sandbox no está conectado.",
         "retry": "Reintentar",
         "open": "Todos los sandboxes",
-        "noSandboxTitle": "Crea un sandbox para chatear",
-        "noSandboxLine": "Los agentes trabajan en sandboxes. Usa + para añadir el primero.",
-        "noSandboxComposer": "Añade un sandbox para iniciar una conversación.",
-        "addSandboxHint": "Empieza aquí",
-        "doubleClickToEnter": "Doble clic para entrar",
+        "noSandboxTitle": "Empieza con un sandbox",
+        "noSandboxLine": "Un sandbox es un ordenador privado, en nuestras máquinas o en las tuyas, donde los agentes trabajan en tu proyecto. Hablas con él desde aquí.",
+        "doubleClickToEnter": "Doble clic para abrir",
         "land": "Integrar",
         "landConflict": "Chocó con el espacio de trabajo y no se integró nada: pide a tu conversación de inicio que lo resuelva.",
         "landFailed": "No se pudo integrar. Inténtalo de nuevo.",
         "heldConflict": "Su trabajo choca con el espacio de trabajo: pídele que lo resuelva y luego se integrará.",
         "heldForYou": "Su trabajo está retenido, esperando a que lo integres.",
-        "heldForMaintainer": "Su trabajo está retenido hasta que un mantenedor lo integre."
+        "heldForMaintainer": "Su trabajo está retenido hasta que un mantenedor lo integre.",
+        "openSandbox": "Abrir sandbox",
+        "openSandboxShort": "Abrir",
+        "openSandboxNamed": "Abrir {name}",
+        "starting": "Iniciando {name}…",
+        "offlineHint": "Ábrelo para ver qué falla, o elige otro sandbox.",
+        "tileNote": "Todos tus sandboxes",
+        "firstRun": {
+            "create": "Crear un sandbox",
+            "finish": "Terminar de configurar {name}",
+            "signIn": "Iniciar sesión",
+            "signedOut": "¿Ya tienes sandboxes? Inicia sesión para verlos.",
+            "steps": {
+                "create": {
+                    "title": "Crea un sandbox",
+                    "line": "Ponle nombre y elige dónde se ejecuta."
+                },
+                "ask": {
+                    "title": "Di lo que quieres",
+                    "line": "Su conversación de inicio planifica el trabajo y se lo pasa a los agentes."
+                },
+                "open": {
+                    "title": "Mira dentro cuando quieras",
+                    "line": "Cada agente, archivo y cambio está a un clic."
+                }
+            }
+        }
     },
     "hostedStart": {
         "title": "Iniciar un sandbox en la nube",

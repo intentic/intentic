@@ -126,7 +126,7 @@ const enterWorkspace = async (): Promise<void> => {
     if (project !== undefined && entered !== undefined) {
         openOnProject(entered, project.dirName);
     }
-    await router.push(landingAfterSetup(foundAfterSetup(route.query[FOUND_QUERY]), mobile.value));
+    await router.push(landingAfterSetup(foundAfterSetup(route.query[FOUND_QUERY]), mobile.value, project !== undefined));
     revealConversation(composingConversation());
 };
 

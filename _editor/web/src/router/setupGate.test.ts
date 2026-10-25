@@ -36,6 +36,22 @@ describe(`checking setup before opening the workspace`, () => {
         expect(refresh).not.toHaveBeenCalled();
     });
 
+    // The bare address lands on Home, and is still the arrival the gate answers: in the desktop app it is put on This
+    // computer, and an unfinished setup of the reader's own is resumed (index.ts asks with the address that asked).
+    it(`answers the bare address that landed on Home as the arrival it is`, async () => {
+        const empty = { list: async () => [], refresh: async () => [] };
+        expect(await readSetupRedirect(empty, `/home`, true, `/`)).toBe(`/setup`);
+        expect(await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }, `/home`, true, `/`)).toEqual({
+            path: `/setup`,
+            query: { sandbox: `pending` },
+        });
+        expect(await readSetupRedirect({ list: async () => [sandbox({ id: `local`, ...CONNECTED })], refresh: async () => [] }, `/home`, true, `/`)).toBeUndefined();
+    });
+
+    it(`opens Home asked for by its own address without a sandbox, whatever the list says`, async () => {
+        expect(await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }, `/home`, true, `/home`)).toBeUndefined();
+    });
+
     it.each([`/settingsx`, `/agents`, `/sandbox/agent`])(`still requires setup for %s`, async (path) => {
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [] }, path)).toBe(`/setup`);
     });

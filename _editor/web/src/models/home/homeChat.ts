@@ -15,6 +15,11 @@ import { useChat } from "../conversations/run/useChat";
 // allow(module-state): the conversation the master view's panel draws, one per window
 export const homeConversation = shallowRef<Conversation | undefined>();
 
+// The sandbox whose home conversation the master view has on screen, ready for a message: what the Add sandbox dialog
+// waits on when it was opened from Home, where no workspace is drawn for its gate to pass (AddSandboxOpening.vue).
+// allow(module-state): one master view per window
+export const homeShownFor = shallowRef<string | undefined>();
+
 // Each sandbox's home kept for this page load, so coming back to a sandbox finds its home as it was left.
 const held = new Map<string, Conversation>();
 

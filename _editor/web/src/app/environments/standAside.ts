@@ -9,9 +9,19 @@ place that needs no sandbox, This computer, and a reader who signed in may want 
 app the reader is put on This computer, and the workspace's page waits behind it on a screen that says there is nothing
 to open yet and offers both ways on (NoSandbox.vue): what the reader sees if they bring the workspace up from the tray.
 Setup is still one press away there, and by its own address ("Add a sandbox", "Put agents to work"), which never passes
-through here. A browser has no This computer, and keeps the setup it always had. */
+through here.
+
+A browser has no This computer. Since Home became the first screen (2026-10-25) it has Home instead: its first run says
+what a sandbox is and makes one on a press (features/home/HomeNoSandbox.vue, the Add sandbox dialog), where setup used to
+start a machine the moment the page arrived. An unfinished setup of the reader's own is still resumed, on either. */
 
 export const NO_SANDBOX_PATH = `/no-sandbox`;
+
+/**
+ * A browser's place for an account with nothing to open: Home's first run. The same address as lib/routes/firstScreens.ts
+ * `HOME_PATH`, written out since `app` sits below `lib` and may not import it back.
+ */
+export const NOTHING_TO_OPEN_PATH = `/home`;
 
 export interface StandAsideHost {
     /** Whether this page is the desktop app's workspace, the one window with a This computer to step aside for. */
@@ -23,15 +33,21 @@ export interface StandAsideHost {
 }
 
 export interface StandAside {
-    /** The shell gate's answer as it stands in the app: a blank setup is This computer, and the page waits behind it. */
-    readonly settle: <Gate extends boolean | RouteLocationRaw>(gate: Gate) => Gate | typeof NO_SANDBOX_PATH;
+    /**
+     * The shell gate's answer as it stands here: a blank setup is This computer in the app, with the page waiting behind
+     * it, and Home's first run in a browser.
+     */
+    readonly settle: <Gate extends boolean | RouteLocationRaw>(gate: Gate) => Gate | typeof NO_SANDBOX_PATH | typeof NOTHING_TO_OPEN_PATH;
 }
 
 export const createStandAside = (host: StandAsideHost): StandAside => ({
     settle: (gate) => {
         const alreadyThere = host.takeHandedBack();
-        if (gate !== `/setup` || !host.inApp()) {
+        if (gate !== `/setup`) {
             return gate;
+        }
+        if (!host.inApp()) {
+            return NOTHING_TO_OPEN_PATH;
         }
         if (!alreadyThere) {
             host.showThisComputer();
@@ -47,5 +63,5 @@ export const workspaceAside: StandAside = createStandAside({
     takeHandedBack: takeHandedToFolder,
 });
 
-/** Where a page that has just found nothing to open sends its reader: setup, or This computer in the app (above). */
+/** Where a page that has just found nothing to open sends its reader: Home's first run, or This computer in the app (above). */
 export const setupOrThisComputer = (): RouteLocationRaw => workspaceAside.settle(`/setup`);
