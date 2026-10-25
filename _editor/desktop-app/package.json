@@ -33,7 +33,6 @@
         "@tauri-apps/api": "catalog:",
         "@tauri-apps/plugin-dialog": "catalog:",
         "primevue": "catalog:",
-        "tslib": "catalog:",
         "vue": "catalog:",
         "vue-router": "catalog:"
     },

@@ -1,40 +1,24 @@
 import { oneLine } from "@intentic/base/one-line";
 import { markdownTable } from "@intentic/webq/markdown";
-import type ExcelJS from "exceljs";
+import type { CellValue } from "read-excel-file/node";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
 /* Spreadsheets: one markdown table per sheet, capped, with the cap announced. */
 
-// exceljs is 0.8s to load, and it is loaded inside derive() rather than here because every fileq run — every agent
+// read-excel-file is loaded inside derive() rather than here because every fileq run — every agent
 // read of a png, every `fileq derive`, `fileq --version` — pays for a module this file imports at its top. The type import
 // above is erased at compile time and costs nothing.
 
 const MAX_ROWS_PER_SHEET = 200;
 const MAX_COLUMNS = 30;
 
-// A cell's value as text. exceljs surfaces formulas, rich text and hyperlinks as objects; each collapses to
-// what a person looking at the rendered sheet would read.
-const cellText = (value: ExcelJS.CellValue): string => {
+// A cell's value as text.
+const cellText = (value: CellValue): string => {
     if (value === null || value === undefined) {
         return "";
     }
     if (value instanceof Date) {
         return value.toISOString();
-    }
-    if (typeof value === "object") {
-        if ("richText" in value) {
-            return value.richText.map((run) => run.text).join("");
-        }
-        if ("text" in value) {
-            return String(value.text);
-        }
-        if ("result" in value && value.result !== undefined) {
-            return cellText(value.result as ExcelJS.CellValue);
-        }
-        if ("error" in value) {
-            return String(value.error);
-        }
-        return "";
     }
     return String(value);
 };
@@ -43,36 +27,34 @@ export const xlsxDeriver: Deriver = {
     name: "xlsx",
     version: 1,
     derive: async (absPath): Promise<DerivedDoc> => {
-        const { default: excel } = await import("exceljs");
-        const workbook = new excel.Workbook();
-        await workbook.xlsx.readFile(absPath);
+        const { default: readXlsxFile } = await import("read-excel-file/node");
+        const sheets = await readXlsxFile(absPath);
         const notes: string[] = [];
         const sections: string[] = [];
-        for (const sheet of workbook.worksheets) {
-            const rows: string[][] = [];
+        for (const { sheet: sheetName, data } of sheets) {
             let columnCap = 0;
-            sheet.eachRow({ includeEmpty: false }, (row) => {
+            const rows: string[][] = [];
+            for (const row of data) {
                 if (rows.length > MAX_ROWS_PER_SHEET) {
-                    return; // counted past the cap so the note can say how many were left behind
+                    break;
                 }
-                // `row.values` is 1-based (index 0 is always empty); keep blanks so columns stay aligned.
-                const values = (row.values as ExcelJS.CellValue[]).slice(1, MAX_COLUMNS + 1).map(cellText);
-                columnCap = Math.max(columnCap, row.cellCount);
+                columnCap = Math.max(columnCap, row.length);
+                const values = row.slice(0, MAX_COLUMNS).map((cell) => cellText(cell as CellValue));
                 rows.push(values);
-            });
+            }
             const kept = rows.slice(0, MAX_ROWS_PER_SHEET);
-            if (sheet.rowCount > MAX_ROWS_PER_SHEET) {
-                notes.push(`sheet "${sheet.name}": showing ${MAX_ROWS_PER_SHEET} of ${sheet.rowCount} rows`);
+            if (data.length > MAX_ROWS_PER_SHEET) {
+                notes.push(`sheet "${sheetName}": showing ${MAX_ROWS_PER_SHEET} of ${data.length} rows`);
             }
             if (columnCap > MAX_COLUMNS) {
-                notes.push(`sheet "${sheet.name}": showing ${MAX_COLUMNS} of ${columnCap} columns`);
+                notes.push(`sheet "${sheetName}": showing ${MAX_COLUMNS} of ${columnCap} columns`);
             }
             if (kept.length === 0) {
-                sections.push(`## ${sheet.name}\n\n(empty sheet)`);
+                sections.push(`## ${sheetName}\n\n(empty sheet)`);
                 continue;
             }
             // Each cell as one line: a sheet's cell can hold line breaks and runs of spaces nobody reads as meaningful.
-            sections.push(`## ${sheet.name}\n\n${markdownTable(kept.map((row) => row.map((cell) => oneLine(cell))))}`);
+            sections.push(`## ${sheetName}\n\n${markdownTable(kept.map((row) => row.map((cell) => oneLine(cell))))}`);
         }
         return { markdown: sections.join("\n\n"), notes };
     },

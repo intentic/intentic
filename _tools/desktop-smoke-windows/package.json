@@ -19,8 +19,7 @@
         "@intentic/constants": "workspace:*",
         "@intentic/desktop-automation": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
-        "@intentic/sandbox-run": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/sandbox-run": "workspace:*"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

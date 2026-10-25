@@ -56,8 +56,7 @@
         "@intentic/base": "workspace:*",
         "@stricli/core": "catalog:",
         "parse5": "catalog:",
-        "playwright": "catalog:",
-        "tslib": "catalog:"
+        "playwright": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

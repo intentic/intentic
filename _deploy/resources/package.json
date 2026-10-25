@@ -34,8 +34,7 @@
         "watch": "tsgo --build --watch"
     },
     "dependencies": {
-        "@intentic/graph": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/graph": "workspace:*"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",

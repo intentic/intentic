@@ -94,8 +94,7 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
-        "@stricli/core": "catalog:",
-        "tslib": "catalog:"
+        "@stricli/core": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

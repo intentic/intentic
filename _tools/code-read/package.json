@@ -72,8 +72,7 @@
     },
     "dependencies": {
         "@shikijs/langs": "catalog:",
-        "shiki": "catalog:",
-        "tslib": "catalog:"
+        "shiki": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

@@ -55,13 +55,6 @@ const REVIEWED = new Map([
         },
     ],
     [
-        "buffers",
-        {
-            licence: undefined,
-            why: "Needs an owner decision: substack's package declares no licence and carries no licence file; fileq reaches it through exceljs > unzipper > binary, and the sandbox image ships it.",
-        },
-    ],
-    [
         "khroma",
         {
             licence: undefined,

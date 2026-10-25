@@ -21,7 +21,6 @@
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
-        "@types/mailparser": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:"
     }

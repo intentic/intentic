@@ -59,7 +59,6 @@
         "@intentic/iq-engine": "workspace:*",
         "@puristic/env": "catalog:",
         "@stricli/core": "catalog:",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

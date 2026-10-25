@@ -35,6 +35,7 @@ import {
     rtfBytes,
     tarBytes,
     wavBytes,
+    xlsxBytes,
     zipBytes,
 } from "./testing.js";
 
@@ -81,14 +82,14 @@ describe("pptx", () => {
 
 describe("xlsx", () => {
     test("sheets become capped markdown tables", async () => {
-        const ExcelJS = (await import("exceljs")).default;
-        const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet("Costs");
-        sheet.addRow(["item", "price"]);
-        sheet.addRow(["widget", 4]);
-        sheet.addRow(["gadget", 7]);
-        const path = join(root, "costs.xlsx");
-        await workbook.xlsx.writeFile(path);
+        const path = fixture(
+            "costs.xlsx",
+            xlsxBytes("Costs", [
+                ["item", "price"],
+                ["widget", 4],
+                ["gadget", 7],
+            ]),
+        );
         const doc = await xlsxDeriver.derive(path);
         expect(doc.markdown).toContain("## Costs");
         expect(doc.markdown).toContain("| widget | 4 |");

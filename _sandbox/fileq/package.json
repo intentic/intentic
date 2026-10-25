@@ -86,14 +86,13 @@
         "@intentic/webq": "workspace:*",
         "@intentic/workspace-ignore": "workspace:*",
         "@stricli/core": "catalog:",
-        "exceljs": "catalog:",
         "exifr": "catalog:",
         "fflate": "catalog:",
         "file-type": "catalog:",
         "image-size": "catalog:",
         "mammoth": "catalog:",
         "music-metadata": "catalog:",
-        "tslib": "catalog:",
+        "read-excel-file": "catalog:",
         "unpdf": "catalog:"
     },
     "devDependencies": {

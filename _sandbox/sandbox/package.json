@@ -90,7 +90,6 @@
         "smol-toml": "catalog:",
         "ssh2": "catalog:",
         "tar-stream": "catalog:",
-        "tslib": "catalog:",
         "web-push": "catalog:",
         "ws": "catalog:",
         "yaml": "catalog:",

@@ -76,8 +76,7 @@
         "@intentic/sandbox-contract": "workspace:*",
         "@orpc/client": "catalog:",
         "@orpc/contract": "catalog:",
-        "@orpc/openapi-client": "catalog:",
-        "tslib": "catalog:"
+        "@orpc/openapi-client": "catalog:"
     },
     "peerDependencies": {
         "vue": "3"

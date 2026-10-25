@@ -375,7 +375,6 @@
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@orpc/contract": "catalog:",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

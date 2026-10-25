@@ -37,8 +37,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/extension-api": "workspace:*",
-        "@intentic/sandbox-contract": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/sandbox-contract": "workspace:*"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

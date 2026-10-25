@@ -120,20 +120,13 @@ export const githubApi: GitHubApi = {
         const keyData = await json(`${BASE}/repos/${owner}/${repo}/actions/secrets/public-key`, { headers: headers(token) });
         const parsed = parseResponse(publicKeySchema, keyData, "GitHub /actions/secrets/public-key");
 
-        // Loaded on first use: only this call needs the wasm build, and the package ships no type declarations.
-        // oxlint-disable-next-line typescript/no-explicit-any -- The dependency has no usable type declaration.
-        const sodium: any = await import(/* webpackIgnore: true */ "libsodium-wrappers").then(
-            // oxlint-disable-next-line typescript/no-explicit-any -- same untyped module as the line above.
-            (m: any) => m.default ?? m,
-            () => {
-                throw new Error("libsodium-wrappers is required for GitHub Actions secrets; install it: pnpm add libsodium-wrappers");
-            },
-        );
+        // Loaded on first use: only this call needs the wasm build.
+        const { default: sodium } = await import("libsodium-wrappers");
         await sodium.ready;
 
-        const keyBytes = sodium.from_base64(parsed.key, sodium.base64_variants.ORIGINAL) as Uint8Array;
-        const encrypted = sodium.crypto_box_seal(Buffer.from(value), keyBytes) as Uint8Array;
-        const encryptedBase64 = sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL) as string;
+        const keyBytes = sodium.from_base64(parsed.key, sodium.base64_variants.ORIGINAL);
+        const encrypted = sodium.crypto_box_seal(Buffer.from(value), keyBytes);
+        const encryptedBase64 = sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL);
 
         await json(`${BASE}/repos/${owner}/${repo}/actions/secrets/${secretName}`, {
             method: "PUT",

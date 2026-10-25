@@ -70,7 +70,6 @@
         "@intentic/base": "workspace:*",
         "onnxruntime-node": "catalog:",
         "sharp": "catalog:",
-        "tslib": "catalog:",
         "yaml": "catalog:"
     },
     "devDependencies": {

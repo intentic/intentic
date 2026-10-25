@@ -37,8 +37,7 @@
         "test:watch": "suites --watch"
     },
     "dependencies": {
-        "@intentic/base": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/base": "workspace:*"
     },
     "devDependencies": {
         "@intentic/sandbox-contract": "workspace:*",

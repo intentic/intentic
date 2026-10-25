@@ -32,7 +32,6 @@
         "@intentic/constants": "workspace:*",
         "@intentic/local-agent": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

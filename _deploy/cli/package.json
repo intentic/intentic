@@ -55,7 +55,6 @@
         "@puristic/env": "catalog:",
         "@stricli/core": "catalog:",
         "eta": "catalog:",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

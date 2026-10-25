@@ -19,8 +19,7 @@
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
-        "@intentic/gate": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/gate": "workspace:*"
     },
     "devDependencies": {
         "@intentic/sandbox-contract": "workspace:*",

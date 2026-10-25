@@ -45,7 +45,6 @@
         "@intentic/local-agent": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@stricli/core": "catalog:",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

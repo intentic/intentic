@@ -62,7 +62,6 @@
         "monaco-editor-core": "catalog:",
         "posthog-js": "catalog:",
         "primevue": "catalog:",
-        "tslib": "catalog:",
         "uqr": "catalog:",
         "vue": "catalog:",
         "vue-i18n": "catalog:",

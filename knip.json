@@ -12,7 +12,7 @@
     // core itself is run by the test-strength chore (sandbox-contract/src/chores/probes.ts) through `pnpm exec`, which no script names.
     // `@commitlint/cli` is run by path from .githooks/commit-msg (node_modules/.bin/commitlint). `gpt-tokenizer` is
     // optional: _tools/nav/lib/tokens.mjs loads it only under NAV_TOKENIZER=real and falls back to its estimator.
-    "ignoreDependencies": ["gpt-tokenizer", "tslib", "@intentic/entry-css", "@stryker-mutator/command-runner", "@stryker-mutator/core", "@commitlint/cli"],
+    "ignoreDependencies": ["gpt-tokenizer", "@intentic/entry-css", "@stryker-mutator/command-runner", "@stryker-mutator/core", "@commitlint/cli"],
     // `check` is `bun check`'s subcommand, which knip reads as a binary of its own; the rest are system tools.
     "ignoreBinaries": [
         "docker",

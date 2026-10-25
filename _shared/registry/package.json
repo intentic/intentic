@@ -39,7 +39,6 @@
     },
     "dependencies": {
         "@intentic/extension-manifest": "workspace:*",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

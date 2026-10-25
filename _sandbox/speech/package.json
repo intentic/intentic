@@ -89,8 +89,7 @@
         "@intentic/base": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "mediaplex": "catalog:",
-        "sherpa-onnx-node": "catalog:",
-        "tslib": "catalog:"
+        "sherpa-onnx-node": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

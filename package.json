@@ -82,7 +82,6 @@
         "oxlint-plugin-complexity": "catalog:",
         "prettier": "catalog:",
         "semantic-release": "catalog:",
-        "tslib": "catalog:",
         "turbo": "catalog:",
         "typescript": "catalog:"
     },

@@ -50,8 +50,7 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/constants": "workspace:*",
-        "ignore": "catalog:",
-        "tslib": "catalog:"
+        "ignore": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

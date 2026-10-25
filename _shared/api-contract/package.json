@@ -42,7 +42,6 @@
         "@intentic/resources": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@orpc/contract": "catalog:",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

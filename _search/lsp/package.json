@@ -27,7 +27,6 @@
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
-        "tslib": "catalog:",
         "@typescript/native-preview": "catalog:"
     },
     "devDependencies": {

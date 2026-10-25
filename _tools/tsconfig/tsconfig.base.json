@@ -6,7 +6,7 @@
         "declarationMap": true,
         "exactOptionalPropertyTypes": true,
         "forceConsistentCasingInFileNames": true,
-        "importHelpers": true,
+        "importHelpers": false,
         "incremental": true,
         "isolatedModules": true,
         "module": "NodeNext",

@@ -219,7 +219,6 @@
         "shiki": "catalog:",
         "tailwind-merge": "catalog:",
         "tailwind-variants": "catalog:",
-        "tslib": "catalog:",
         "vue": "catalog:",
         "vue-i18n": "catalog:"
     },

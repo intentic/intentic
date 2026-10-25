@@ -38,8 +38,7 @@
     },
     "dependencies": {
         "@intentic/graph": "workspace:*",
-        "@intentic/state-resolver": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/state-resolver": "workspace:*"
     },
     "devDependencies": {
         "@intentic/resources": "workspace:*",

@@ -42,7 +42,6 @@
         "pino": "catalog:",
         "pino-pretty": "catalog:",
         "prisma": "catalog:",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

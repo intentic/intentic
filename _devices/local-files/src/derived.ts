@@ -45,7 +45,7 @@ type Cached = z.infer<typeof CachedSchema>;
 
 type Outcome = { readonly kind: `derived`; readonly cached: Cached } | { readonly kind: `failed`; readonly reason: string };
 
-// fileq's readers (pdf.js, mammoth, exceljs and the rest), loaded the first time a document is asked about: a cost the
+// fileq's readers (pdf.js, mammoth, read-excel-file and the rest), loaded the first time a document is asked about: a cost the
 // rest of this process never needs to pay.
 const loadFileq = async () => {
     const [derive, formats] = await Promise.all([import("@intentic/fileq/derive"), import("@intentic/fileq/formats")]);

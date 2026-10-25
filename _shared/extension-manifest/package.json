@@ -52,7 +52,6 @@
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
-        "tslib": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

@@ -39,7 +39,7 @@ await build({
     target: "node20",
     // Workspace packages resolve to their TypeScript sources, as everywhere else in this repository.
     conditions: ["@intentic/src"],
-    // Bundled CommonJS (exceljs, mammoth) still calls `require` for node builtins.
+    // Bundled CommonJS (mammoth) still calls `require` for node builtins.
     banner: { js: "import { createRequire as __intenticRequire } from 'node:module'; const require = __intenticRequire(import.meta.url);" },
     legalComments: "none",
     logLevel: "warning",

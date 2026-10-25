@@ -39,8 +39,7 @@
     "dependencies": {
         "@intentic/constants": "workspace:*",
         "@intentic/graph": "workspace:*",
-        "@intentic/resources": "workspace:*",
-        "tslib": "catalog:"
+        "@intentic/resources": "workspace:*"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",
