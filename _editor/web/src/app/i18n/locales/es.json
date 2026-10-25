@@ -8405,7 +8405,21 @@
             "deleteArea": "Eliminar área",
             "deleteHeader": "¿Eliminar {label}?",
             "deleteBody": "Solo desaparece el nombre con el que se concede el acceso; las carpetas se quedan. El sandbox se niega mientras alguien todavía lo tenga.",
-            "onlyOwnerEdits": "Solo el propietario de la sandbox decide quién ve qué carpetas."
+            "onlyOwnerEdits": "Solo el propietario de la sandbox decide quién ve qué carpetas.",
+            "explainer": {
+                "label": "Qué es un área",
+                "title": "Un área es un conjunto de carpetas con nombre",
+                "workspace": "Espacio de trabajo",
+                "frontend": "Frontend",
+                "docs": "Docs",
+                "assistant": "Asistente de UI",
+                "grant": "conceder",
+                "personSees": "Ada ve",
+                "example": "Un ejemplo, no las áreas de este espacio de trabajo.",
+                "sees": "Ve solo sus carpetas: en el árbol, la búsqueda y las conversaciones",
+                "talks": "Habla solo con personas y asistentes de ella",
+                "agents": "Los agentes que inicia también se quedan dentro"
+            }
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Ahora mismo no se puede leer el registro; la compilación en sí no se ve afectada. {hiccup}",

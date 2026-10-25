@@ -8405,7 +8405,21 @@
             "deleteArea": "Supprimer la zone",
             "deleteHeader": "Supprimer {label} ?",
             "deleteBody": "Seul le nom sous lequel l'accès est accordé disparaît ; les dossiers restent. Le sandbox refuse tant que quelqu'un le détient encore.",
-            "onlyOwnerEdits": "Seul le propriétaire de la sandbox décide qui voit quels dossiers."
+            "onlyOwnerEdits": "Seul le propriétaire de la sandbox décide qui voit quels dossiers.",
+            "explainer": {
+                "label": "Ce qu’est une zone",
+                "title": "Une zone est un ensemble nommé de dossiers",
+                "workspace": "Espace de travail",
+                "frontend": "Frontend",
+                "docs": "Docs",
+                "assistant": "Assistant UI",
+                "grant": "attribuer",
+                "personSees": "Ada voit",
+                "example": "Un exemple, pas les zones de cet espace de travail.",
+                "sees": "Ne voit que ses dossiers : dans l’arborescence, la recherche et les conversations",
+                "talks": "Ne parle qu’aux personnes et assistants qui s’y trouvent",
+                "agents": "Les agents qu’elle lance y restent aussi"
+            }
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Impossible de lire le journal pour le moment — la construction elle-même n'est pas affectée. {hiccup}",

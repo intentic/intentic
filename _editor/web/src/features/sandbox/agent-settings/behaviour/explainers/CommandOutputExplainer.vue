@@ -2,7 +2,7 @@
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Explainer from "./Explainer.vue";
-import { AREA_GOOD, ARROW, BOX, LANE } from "./atoms";
+import { AREA_GOOD, ARROW, BOX, LANE } from "../../../../../components/explainerAtoms";
 
 // Command output, drawn: a command's output as lines, most of them progress and noise, through a cleaner that keeps the
 // summary and the failure, so the agent reads two lines where the terminal printed eight.

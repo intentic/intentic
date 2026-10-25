@@ -21,6 +21,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import FolderPicker from "../devices/FolderPicker.vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { usePersonaReach } from "../access/usePersonaReach";
+import AreasExplainer from "./AreasExplainer.vue";
 import { useAreas } from "./useAreas";
 
 // The named parts of the workspace, and the folders behind each. This is where "who sees what" is decided: the
@@ -255,6 +256,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
         <Await :of="loaded" imprint="sandbox.areas" :label="t(`sandbox.sandboxAreas.readingAreas`)">
             <template #fallback>
                 <RowGroup :label="t(`sandbox.sandboxAreas.areas`)">
+                    <template #info><AreasExplainer /></template>
                     <div role="status" aria-busy="true">
                         <span class="sr-only">{{ t(`sandbox.sandboxAreas.readingAreas`) }}</span>
                         <SkeletonRows :rows="2" description control />
@@ -277,6 +279,8 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
             </div>
 
             <RowGroup v-else :label="t(`sandbox.sandboxAreas.areas`)">
+                <!-- What the name on this page means, drawn: the empty state says it in words, this list's header shows it. -->
+                <template #info><AreasExplainer /></template>
                 <template #actions>
                     <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" tier="boring" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>

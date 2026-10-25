@@ -2,7 +2,7 @@
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Explainer from "./Explainer.vue";
-import { ARROW, BOX, LANE } from "./atoms";
+import { ARROW, BOX, LANE } from "../../../../../components/explainerAtoms";
 
 // Where heavy work runs, drawn: a heavy command leaving this sandbox for a runner on one of your machines and its
 // results coming back, and the fallback when that machine is offline or busy.

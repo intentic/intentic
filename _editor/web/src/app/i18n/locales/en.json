@@ -8405,7 +8405,21 @@
             "deleteArea": "Delete area",
             "deleteHeader": "Delete {label}?",
             "deleteBody": "Only the name people are granted in goes; the folders stay. The sandbox refuses while somebody still holds it.",
-            "onlyOwnerEdits": "Only the sandbox owner decides who sees which folders."
+            "onlyOwnerEdits": "Only the sandbox owner decides who sees which folders.",
+            "explainer": {
+                "label": "What an area is",
+                "title": "An area is a named set of folders",
+                "workspace": "Workspace",
+                "frontend": "Frontend",
+                "docs": "Docs",
+                "assistant": "UI assistant",
+                "grant": "grant",
+                "personSees": "Ada sees",
+                "example": "An example, not this workspace’s areas.",
+                "sees": "Sees only its folders: in the tree, search and chats",
+                "talks": "Talks only to people and assistants in it",
+                "agents": "Agents they start stay inside it too"
+            }
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Can't read the log at the moment — the build itself is unaffected. {hiccup}",

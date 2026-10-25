@@ -2,7 +2,7 @@
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import Explainer from "./Explainer.vue";
-import { AREA_GOOD, LANE, SEGMENT } from "./atoms";
+import { AREA_GOOD, LANE, SEGMENT } from "../../../../../components/explainerAtoms";
 
 // Token savings, drawn: one request as a stacked bar of what it carries, then the same bar under each switch. On
 // demand shrinks the tool descriptions; stable instructions turn the instructions into a cache read; trimming after a

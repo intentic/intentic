@@ -8405,7 +8405,21 @@
             "deleteArea": "Bereich löschen",
             "deleteHeader": "{label} löschen?",
             "deleteBody": "Nur der Name, unter dem Zugang gewährt wird, verschwindet; die Ordner bleiben. Die Sandbox verweigert es, solange ihn noch jemand hält.",
-            "onlyOwnerEdits": "Nur der Sandbox-Eigentümer entscheidet, wer welche Ordner sieht."
+            "onlyOwnerEdits": "Nur der Sandbox-Eigentümer entscheidet, wer welche Ordner sieht.",
+            "explainer": {
+                "label": "Was ein Bereich ist",
+                "title": "Ein Bereich ist eine benannte Gruppe von Ordnern",
+                "workspace": "Arbeitsbereich",
+                "frontend": "Frontend",
+                "docs": "Doku",
+                "assistant": "UI-Assistent",
+                "grant": "zuweisen",
+                "personSees": "Ada sieht",
+                "example": "Ein Beispiel, nicht die Bereiche dieses Arbeitsbereichs.",
+                "sees": "Sieht nur seine Ordner: im Baum, in der Suche und in Unterhaltungen",
+                "talks": "Spricht nur mit Personen und Assistenten darin",
+                "agents": "Agenten, die sie startet, bleiben ebenfalls darin"
+            }
         },
         "devRebuildProgress": {
             "cantReadLogAt": "Das Protokoll kann gerade nicht gelesen werden — der Build selbst ist davon nicht betroffen. {hiccup}",

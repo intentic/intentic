@@ -1,7 +1,8 @@
 import { toneTint } from "@intentic/ui";
 
-// The pieces every Tools explainer draws with, so six diagrams read as one visual language: a box is a thing (a
-// command, a file, the agent), a bar is an amount, an arrow is what happens next.
+// The pieces every explainer diagram draws with (the (i) cards on the Tools settings, on Areas, on Personas), so they
+// read as one visual language: a box is a thing (a command, a file, the agent), a bar is an amount, an arrow is what
+// happens next. Here rather than beside one feature's explainers, since several features draw with them.
 
 /** A thing in a diagram: a step, a file, a machine. */
 export const BOX = `inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-line bg-card px-1.5 py-0.5 text-2xs text-content`;

@@ -2,7 +2,7 @@
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Explainer from "./Explainer.vue";
-import { ARROW, BOX, BOX_GOOD, LANE } from "./atoms";
+import { ARROW, BOX, BOX_GOOD, LANE } from "../../../../../components/explainerAtoms";
 
 // Checks after edits, drawn: the loop inside a turn (edit, the repository's own check, what it found, the fix), then
 // the one run as the turn ends, and the line that none of it ever holds a land, a commit or a push.

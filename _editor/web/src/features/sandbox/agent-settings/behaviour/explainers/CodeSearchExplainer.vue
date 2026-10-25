@@ -2,7 +2,7 @@
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Explainer from "./Explainer.vue";
-import { ARROW, BOX, BOX_FADED, BOX_GOOD, LANE } from "./atoms";
+import { ARROW, BOX, BOX_FADED, BOX_GOOD, LANE } from "../../../../../components/explainerAtoms";
 
 // Code search, drawn: the hunt without iq against the one ranked search with it, then what each turn actually sends.
 // A request is the whole conversation so far, so the stack grows turn by turn: the field notes sit in the instructions

@@ -2,7 +2,7 @@
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import Explainer from "./Explainer.vue";
-import { AREA_GOOD, BOX, LANE } from "./atoms";
+import { AREA_GOOD, BOX, LANE } from "../../../../../components/explainerAtoms";
 
 // Subagents, drawn: one chat fanning out (how many at once is the width), one of them delegating again (how deep it
 // nests), and an allowance window split between what subagents may spend and the room kept for your own chats.
