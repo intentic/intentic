@@ -14,6 +14,8 @@ flowchart LR
 - The index has no Node imports, so the web app and the public site bundle the same values the daemon reads.
   It also carries the provider logos, the arrival profiles (`profile.ts`) and the hosted machine ladder
   (`hosted-tiers.ts`), whose prices the site, the Billing page and the platform config all state.
+- The package includes the TypeScript sources selected by `@intentic/src`, so pnpm's injected workspace copies
+  can load the index and its modules as well as the compiled exports.
 - `turn-preamble.ts` is how a reader outside the sandbox takes the daemon's turn notes off a stored prompt: the
   separator, the two dependency-notice openings, and `stripInjectedPreamble`. Session recall uses it. The daemon
   builds its own notes with the same separator and openings, and its tests check every header it parses against it.
