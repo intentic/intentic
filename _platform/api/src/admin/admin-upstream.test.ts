@@ -145,6 +145,25 @@ describe(`the admin upstream read lane`, () => {
         expect((await response.json()).message).toContain(`did not answer`);
     });
 
+    it(`answers 502 when the upstream fails while its body is being read`, async () => {
+        const app = serve({
+            upstream: () => new Response(new ReadableStream({
+                start(controller) {
+                    controller.error(new Error(`connection reset after headers`));
+                },
+            })),
+        });
+        const response = await app.request(`https://localhost:6480/upstream/admin/overview`);
+        expect(response.status).toBe(502);
+        expect(await response.json()).toEqual({ message: `the upstream platform did not answer` });
+    });
+
+    it.each([204, 304])(`preserves a bodyless upstream %s`, async (status) => {
+        const response = await serve({ upstream: () => new Response(null, { status }) }).request(`https://localhost:6480/upstream/admin/overview`);
+        expect(response.status).toBe(status);
+        expect(response.body).toBeNull();
+    });
+
     it(`mirrors /me and /admin only`, async () => {
         const calls: Call[] = [];
         const response = await serve({ calls }).request(`https://localhost:6480/upstream/sandbox/list`);

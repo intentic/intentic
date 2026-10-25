@@ -61,24 +61,24 @@ export const adminUpstreamRoutes = ({ config, prisma, auth, fetchUpstream = fetc
     const forward = async (c: Context<{ Variables: UpstreamVariables }>, route: string) => {
         const target = `${config.admin.upstreamUrl.replace(/\/+$/, ``)}${API_BASE_PATH}${route}${new URL(c.req.url).search}`;
         c.get(`logger`).info({ admin: c.get(`admin`), route, upstream: config.admin.upstreamUrl }, `admin upstream read`);
-        let response: Response;
         try {
-            response = await fetchUpstream(target, {
+            const response = await fetchUpstream(target, {
                 // The stored cookie and nothing of the caller's own, so the upstream can only ever be reached as the
                 // one account that cookie belongs to.
                 headers: { accept: `application/json`, cookie: config.admin.upstreamCookie },
                 signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
             });
+            // A fresh response carrying only the body: the upstream's own Set-Cookie must never reach this browser.
+            // Read under the same error boundary as the fetch: a reset or deadline after headers is still an upstream
+            // failure. Keep a bodyless status bodyless when constructing the answer.
+            return new Response(response.body === null ? null : await response.text(), {
+                status: response.status,
+                headers: { "content-type": response.headers.get(`content-type`) ?? `application/json` },
+            });
         } catch (error) {
             c.get(`logger`).warn({ err: error, upstream: config.admin.upstreamUrl }, `admin upstream unreachable`);
             return c.json({ message: `the upstream platform did not answer` }, 502);
         }
-        // A fresh response carrying only the body: the upstream's own Set-Cookie must never reach this browser, or the
-        // dev tab silently becomes a session on the other deployment.
-        return new Response(await response.text(), {
-            status: response.status,
-            headers: { "content-type": response.headers.get(`content-type`) ?? `application/json` },
-        });
     };
 
     // Who the stored cookie belongs to, so the panel can name the upstream account it is reading as.

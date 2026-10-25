@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { readCappedText } from "@intentic/base/capped-read";
+import { bodyExcerpt } from "@intentic/base/fetch-json";
 
 // Thin typed client for the Stripe operations the hosted plan needs, hand-rolled over fetch rather than the SDK
 // (fewer dependencies). The host is config (hostedPlan.stripeApiUrl), never set in production, so tests point this same
@@ -25,7 +27,8 @@ export class StripeError extends Error {
 const RefusalSchema = z.object({ error: z.object({ message: z.string() }) });
 
 const refusal = async (call: string, response: Response): Promise<StripeError> => {
-    const body = await response.text();
+    // Enough for Stripe's structured error envelope, with a ceiling even when a proxy returns a chunked error page.
+    const { text: body } = await readCappedText(response, 16_384);
     let said: string | undefined;
     try {
         said = RefusalSchema.parse(JSON.parse(body)).error.message;
@@ -33,7 +36,7 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
         // Not Stripe's envelope (a proxy's HTML page, a truncated body); keep the raw evidence instead.
         said = undefined;
     }
-    return new StripeError(said !== undefined ? `Stripe refused: ${said}` : `Stripe ${call} failed (HTTP ${response.status}): ${body}`, response.status);
+    return new StripeError(said !== undefined ? `Stripe refused: ${bodyExcerpt(said)}` : `Stripe ${call} failed (HTTP ${response.status}): ${bodyExcerpt(body)}`, response.status);
 };
 
 // Stripe encodes requests as x-www-form-urlencoded with bracketed nesting; the plan needs only one level, spelled
@@ -41,16 +44,21 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
 const send = async (
     fetchFn: typeof fetch,
     client: StripeClientConfig,
-    method: `POST` | `DELETE`,
+    method: `GET` | `POST` | `DELETE`,
     path: string,
-    params: Record<string, string>,
+    params?: Record<string, string>,
 ): Promise<unknown> => {
-    const response = await fetchFn(`${client.stripeApiUrl}${path}`, {
+    const headers = new Headers({ authorization: `Bearer ${client.stripeSecretKey}` });
+    const init: RequestInit = {
         method,
-        headers: { authorization: `Bearer ${client.stripeSecretKey}`, "content-type": `application/x-www-form-urlencoded` },
-        body: new URLSearchParams(params).toString(),
+        headers,
         signal: AbortSignal.timeout(30_000),
-    });
+    };
+    if (params !== undefined) {
+        headers.set(`content-type`, `application/x-www-form-urlencoded`);
+        init.body = new URLSearchParams(params).toString();
+    }
+    const response = await fetchFn(`${client.stripeApiUrl}${path}`, init);
     if (!response.ok) {
         throw await refusal(`${method} ${path}`, response);
     }
@@ -59,17 +67,6 @@ const send = async (
 
 const post = (fetchFn: typeof fetch, client: StripeClientConfig, path: string, params: Record<string, string>): Promise<unknown> =>
     send(fetchFn, client, `POST`, path, params);
-
-const get = async (fetchFn: typeof fetch, client: StripeClientConfig, path: string): Promise<unknown> => {
-    const response = await fetchFn(`${client.stripeApiUrl}${path}`, {
-        headers: { authorization: `Bearer ${client.stripeSecretKey}` },
-        signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-        throw await refusal(`GET ${path}`, response);
-    }
-    return response.json();
-};
 
 const SessionSchema = z.object({ url: z.url() });
 
@@ -222,7 +219,7 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
         ),
     portalSession: async (customerId, returnUrl) =>
         SessionSchema.parse(await post(fetchFn, client, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
-    subscription: async (id) => toSubscription(await get(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`), now),
+    subscription: async (id) => toSubscription(await send(fetchFn, client, `GET`, `/subscriptions/${encodeURIComponent(id)}`), now),
     cancelSubscription: async (id) => toSubscription(await send(fetchFn, client, `DELETE`, `/subscriptions/${encodeURIComponent(id)}`, {}), now),
     deleteCustomer: async (id) => {
         await send(fetchFn, client, `DELETE`, `/customers/${encodeURIComponent(id)}`, {});
@@ -255,7 +252,7 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
             }),
             now,
         ),
-    price: async (id) => toPrice(await get(fetchFn, client, `/prices/${encodeURIComponent(id)}`)),
+    price: async (id) => toPrice(await send(fetchFn, client, `GET`, `/prices/${encodeURIComponent(id)}`)),
 });
 
 // How far a webhook's timestamp may drift from now; Stripe's own recommended replay window.

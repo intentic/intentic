@@ -77,8 +77,9 @@ flowchart LR
   reaches it. `untranslatedEnv` is the environment for a program whose output is parsed: messages in gettext's C
   locale, every other category as the caller had it.
 - `fetch-json.ts` (`./fetch-json`) is one JSON call over HTTP: a deadline of its own combined with the caller's signal,
-  a refusal's body quoted in the error and cut at 300 characters, and a `kind` that tells a timeout from a server that
-  could not be reached. No schema library, like `cloudflare.ts`: each caller validates the body with its own.
+  a refusal's body read up to 1,200 bytes (then cancelled) and quoted in the error at 300 characters, and a `kind` that
+  tells a timeout from a server that could not be reached. Explicitly accepted statuses keep their complete bodies.
+  No schema library, like `cloudflare.ts`: each caller validates the body with its own.
 - `escape.ts` (`./escape`) holds `escapeHtml` (all five HTML-active characters, the apostrophe included),
   `escapeRegExp` and `isRecord`, which a dozen packages each kept a copy of.
 - `errors.ts` lets a catch name the failure it expects: `isMissing` is ENOENT or ENOTDIR only, and

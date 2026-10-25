@@ -1,5 +1,7 @@
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
+import { readCappedText } from "@intentic/base/capped-read";
+import { bodyExcerpt } from "@intentic/base/fetch-json";
 
 // Three outcomes, not two: sent, unconfigured (no Resend key, link logged instead), or local-link (would only resolve
 // here). Talks to Resend's HTTP API directly; the caller decides what a decline means for its mutation.
@@ -84,9 +86,15 @@ export const sendMail = async (config: Config, logger: Logger, mail: Mail): Prom
         method: `POST`,
         headers: { authorization: `Bearer ${config.email.apiKey}`, "content-type": `application/json` },
         body: JSON.stringify({ from: config.email.from, to: mail.to, subject: mail.subject, html: mail.html }),
+        signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-        throw new Error(`Resend rejected the email (${response.status}): ${await response.text()}`);
+        const { text } = await readCappedText(response, 1200);
+        throw new Error(`Resend rejected the email (${response.status}): ${bodyExcerpt(text)}`);
     }
+    // The status decides delivery. Discard the acknowledgement so a slow or malformed body cannot turn a sent mail
+    // into a failure that a caller retries.
+    // allow(silent-catch): cancellation cannot change the successful delivery status
+    await response.body?.cancel().catch(() => undefined);
     return `sent`;
 };

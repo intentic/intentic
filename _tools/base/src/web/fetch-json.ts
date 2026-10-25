@@ -1,4 +1,5 @@
 import { errorMessage } from "../errors.js";
+import { readCappedText } from "./capped-read.js";
 
 // ONE JSON CALL OVER HTTP, AS EVERY TIER MAKES IT: a deadline of its own combined with the caller's signal, the body
 // parsed, a refusal's body quoted in the error (bounded, so an HTML error page cannot fill a log), and a timeout told
@@ -108,7 +109,11 @@ export const fetchJsonResponse = async (url: string | URL, init: FetchJsonInit =
     try {
         response = await call(href, sentInit(init, signal));
         // Read under the same deadline: a server that sends headers and then stalls is as stuck as one that never answers.
-        text = await response.text();
+        // Only accepted answers need their whole body. A refusal needs evidence, not an unbounded download; allow
+        // four UTF-8 bytes per diagnostic character and cancel the remaining stream at that ceiling.
+        text = response.ok || (init.accept ?? []).includes(response.status)
+            ? await response.text()
+            : (await readCappedText(response, ERROR_BODY_CHARS * 4)).text;
     } catch (error) {
         throw failureOf(error instanceof Error ? error : new Error(String(error)), label, href, timeout, init.signal, timeoutMs);
     }
