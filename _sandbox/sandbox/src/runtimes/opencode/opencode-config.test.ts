@@ -1,8 +1,8 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import type { PermissionEffect } from "@opencode/client";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
+import { BUILTIN_SKILLS_ROOT } from "../../store/loaded-skills.js";
 import {
     AGENT_CONFIG,
-    BUILTIN_SKILLS_ROOT,
     GEMINI_CHUNK_TIMEOUT_MS,
     GEMINI_HEADER_TIMEOUT_MS,
     geminiProviderConfig,
@@ -241,8 +241,7 @@ test("the spawn's lockdown switches off project config and self-update", () => {
     expect(OPENCODE_LOCKDOWN_ENV).toStrictEqual({ OPENCODE_DISABLE_PROJECT_CONFIG: "1", OPENCODE_DISABLE_AUTOUPDATE: "1" });
 });
 
-test("the inline config accepts skills directories and exports the built-in skills root", () => {
-    expect(BUILTIN_SKILLS_ROOT).toBe("/root/.claude/skills");
+test("the inline config carries the skill directories it is given", () => {
     const providers = xaiProviderConfig(["grok-4"], undefined);
     const config = serverConfig(providers, undefined, ["/workspace/.agents/skills", BUILTIN_SKILLS_ROOT]);
     expect(config.skills).toEqual(["/workspace/.agents/skills", "/root/.claude/skills"]);

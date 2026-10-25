@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { basename } from "node:path";
 import type { OpenCodeClient, OpenCodeEvent, PermissionRule } from "@opencode/client";
 import type { AgentCommand } from "@intentic/sandbox-contract/events/requests";
@@ -21,7 +22,6 @@ import { planPhaseOf, type TurnCapture, type TurnTokens, usageTotals } from "../
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { opt } from "../../opt.js";
 import { isChatModel, OPENCODE_XAI_PROVIDER, parseModelSuggestions } from "./xai-models.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { openCodeBackendLabel, type OpenCodeLease, type OpenCodeService } from "./opencode.js";
 import { OPENCODE_AGENTS, SERVER_PERMISSIONS } from "./opencode-config.js";
 import { allowlistRules } from "./allowlist/opencode-allowlist.js";

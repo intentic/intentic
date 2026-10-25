@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { type ChildProcess, spawn as spawnChild } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -5,7 +6,6 @@ import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
 import { unstubbed } from "@intentic/testing";
 import { requires } from "@intentic/testing/requires";
 import { SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { createOpenCodeService, type OpenCodeGeminiConfig, type OpenCodeService } from "./opencode.js";
 import type { OpenCodeConfig } from "./opencode-config.js";
 import { processAlive, type ServedServer, type ServeRequest } from "./opencode-serve.js";

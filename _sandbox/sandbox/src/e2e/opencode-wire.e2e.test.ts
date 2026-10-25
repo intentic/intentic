@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { mkdtemp } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -14,7 +15,6 @@ import { onPath } from "../image/on-path.js";
 import { createOpenCodeAgent, createOpenCodeRunner } from "../runtimes/opencode/opencode-agent.js";
 import { mcpServersOf, openCodeMounts } from "../runtimes/opencode/opencode-mcp.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../runtimes/decorators/turn-watchdog.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../runtimes/gemini/gemini-models.js";
 import { createOpenCodeService, type OpenCodeService } from "../runtimes/opencode/opencode.js";
 import { parkedCards } from "../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";

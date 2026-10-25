@@ -1,5 +1,5 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { opt } from "../../opt.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { executionErrorFrame, OUTAGE_ATTEMPTS, RATE_LIMIT_PATIENCE_MS, retryFrame, retryHandover, type StructuredError } from "./opencode-failures.js";
 import { OPENCODE_XAI_PROVIDER } from "./xai-models.js";
 

@@ -106,9 +106,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 </span>
                 <span>{{ t(`sandbox.words.addSandbox`) }}</span>
             </button>
-            <span v-if="!boxes.length" class="pointer-events-none absolute left-9 top-1 flex">
-                <Beacon size="sm" />
-            </span>
+            <Beacon v-if="!boxes.length" size="sm" class="absolute left-9 top-1" />
         </span>
         <HomeNoSandbox v-if="!boxes.length" nested />
     </nav>
@@ -151,9 +149,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             >
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
             </button>
-            <span v-if="!boxes.length" class="pointer-events-none absolute right-1 top-1 flex">
-                <Beacon size="sm" />
-            </span>
+            <Beacon v-if="!boxes.length" size="sm" class="absolute right-1 top-1" />
         </span>
     </div>
 </template>

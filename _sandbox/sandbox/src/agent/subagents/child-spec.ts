@@ -1,3 +1,4 @@
+import { canonicalProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentHarness, AgentProvider, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { ChildRun } from "@intentic/sandbox-contract/events/requests";
@@ -6,9 +7,6 @@ import { canonicalHarness, loopLabel, loopOf } from "@intentic/sandbox-contract/
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
 import type { ChildParent, ChildRecord, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
-
-// OpenCode's runtime alias for Gemini in its server config.
-const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
 
 /** Another provider and model for a child's next turn, in the same worktree (sendToChild, a spawn's fallbacks). */
 export interface ChildRehome {
@@ -77,18 +75,21 @@ export interface ChildRoute {
     readonly model: string;
 }
 
-// Maps runtime aliases (e.g. OpenCode's internal provider id for Gemini) to the canonical provider id.
-export const canonicalProvider = (provider: AgentProvider): AgentProvider =>
-    provider === OPENCODE_GEMINI_PROVIDER ? "gemini" : provider;
+export const childRouting = (spec: ChildSpawnSpec): ChildRoute => ({
+    provider: spec.provider,
+    harness: canonicalHarness(spec.provider, spec.harness),
+    model: spec.model,
+});
 
-export const childRouting = (spec: ChildSpawnSpec): ChildRoute => {
-    const provider = canonicalProvider(spec.provider);
-    return {
-        provider,
-        harness: canonicalHarness(provider, spec.harness),
-        model: spec.model,
-    };
-};
+// A spawn or a move as the supervisor takes it in (childSupervisor), with every provider it names read as the provider
+// it is: an agent repeats a runtime's own alias for its provider (canonicalProvider), and whichever door it came through
+// (the subagent tools, Cursor's, the HTTP routes), nothing past the supervisor sees anything but canonical ids.
+export const canonicalRehome = <T extends ChildRehome>(to: T): T => ({ ...to, provider: canonicalProvider(to.provider) });
+export const canonicalSpawn = (spec: ChildSpawnSpec): ChildSpawnSpec => ({
+    ...spec,
+    provider: canonicalProvider(spec.provider),
+    ...opt("fallbacks", spec.fallbacks?.map(canonicalRehome)),
+});
 
 // Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, and
 // nobody at a composer, which also floors the persona so it speaks for no outside account. No `runRole`: the parent's
@@ -119,8 +120,7 @@ type SpecDraft = { -readonly [K in keyof ChildSpawnSpec]: ChildSpawnSpec[K] };
 // effort or an account the agent named for its own model never rides along onto another.
 export const withRun = (spec: ChildSpawnSpec, run: ChildRun): ChildSpawnSpec => {
     const { harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, ...task } = spec;
-    const provider = canonicalProvider(run.provider);
-    const next: SpecDraft = { ...task, provider, model: run.model };
+    const next: SpecDraft = { ...task, provider: run.provider, model: run.model };
     if (run.harness !== undefined) {
         next.harness = run.harness;
     }
@@ -141,21 +141,19 @@ export const withRun = (spec: ChildSpawnSpec, run: ChildRun): ChildSpawnSpec => 
 
 // A run in words for the parent's tool result: provider and model as the ids the agent spawns with, since that is its
 // vocabulary, and each knob only when one was named.
-const runWords = (run: ChildRun): string => {
-    const provider = canonicalProvider(run.provider);
-    return [
-        `${provider}/${run.model}`,
+const runWords = (run: ChildRun): string =>
+    [
+        `${run.provider}/${run.model}`,
         run.effort !== undefined ? `${run.effort} effort` : undefined,
         run.thinking === false ? "no extended thinking" : undefined,
         run.fast === true ? "fast speed" : undefined,
-        run.harness !== undefined && canonicalHarness(provider, run.harness) !== "native"
-            ? `the ${loopLabel(provider, loopOf(provider, run.harness))} loop`
+        run.harness !== undefined && canonicalHarness(run.provider, run.harness) !== "native"
+            ? `the ${loopLabel(run.provider, loopOf(run.provider, run.harness))} loop`
             : undefined,
         run.account !== undefined ? `account ${run.account}` : undefined,
     ]
         .filter((part) => part !== undefined)
         .join(", ");
-};
 
 /** What the parent is told when the owner started its child on something else, so its own report names the right model. */
 export const repointedNote = (asked: ChildRun, run: ChildRun): string =>
@@ -187,8 +185,7 @@ export const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): P
 // dropped, since an effort or an account named for one model means nothing on another.
 export const rehomedSpec = (spec: ChildSpawnSpec, to: ChildRehome, fallbacks?: readonly ChildRehome[]): ChildSpawnSpec => {
     const { harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, fallbacks: _fallbacks, ...task } = spec;
-    const provider = canonicalProvider(to.provider);
-    const next: SpecDraft = { ...task, provider, model: to.model };
+    const next: SpecDraft = { ...task, provider: to.provider, model: to.model };
     if (to.harness !== undefined) {
         next.harness = to.harness;
     }
@@ -196,7 +193,7 @@ export const rehomedSpec = (spec: ChildSpawnSpec, to: ChildRehome, fallbacks?: r
         next.effort = to.effort;
     }
     if (fallbacks !== undefined && fallbacks.length > 0) {
-        next.fallbacks = fallbacks.map((f) => ({ ...f, provider: canonicalProvider(f.provider) }));
+        next.fallbacks = fallbacks;
     }
     return next;
 };

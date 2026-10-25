@@ -24,8 +24,6 @@ export interface GeminiModel {
     readonly efforts?: string[];
 }
 
-// OpenCode's id for Gemini through the translator; not "google", OpenCode's own API-key provider, which bypasses the fleet.
-export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
 
 // Vocabulary OpenCode's model config understands; an unlisted modality is dropped rather than passed through, since an
 // unknown name there is a boot-time schema failure for the whole runtime (Grok's server included, one `opencode serve`

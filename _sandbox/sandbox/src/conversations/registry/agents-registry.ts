@@ -15,9 +15,9 @@ import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
+import { routingFor } from "./routing.js";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../engines/failure-sentences.js";
 import { isBareConversationTitle } from "../../seams/conversation-title.js";
-import { routingFor } from "./routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
@@ -88,24 +88,26 @@ const withHomeTitle = (entry: PersistedAgent): PersistedAgent => {
     return { ...entry, social: { ...entry.social, title: { text, source: "derived" } } };
 };
 
-// Broken replies and bare labels cannot name the work. Stored automatic ones forfeit their rank so a useful title
-// can replace them; a person's explicit rename is always kept.
-const cannotBeAName = (title: string): boolean => isBareConversationTitle(title) || isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
+// What cannot name a conversation's work: a provider's failure sentence, a tool-call stand-in, a model's answer about
+// itself, or a bare label (a project or file name with nothing done to it). Never written by an automatic source, and a
+// stored one forfeits its rank (automaticMayWrite); the naming pass reads a stored one as no name at all
+// (agent/models/title-namer.ts). A person's own rename is the exception both ways.
+export const cannotBeAName = (title: string): boolean =>
+    isBareConversationTitle(title) || isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
 
-// Whether an automatic source may overwrite what is stored: it must be a name at all, and must strictly outrank the
-// stored one, whose rank is forfeit when it cannot be a name. A rename ("user") never asks; it always lands.
-const outranksTitle = (title: Social["title"], clean: string, source: AgentTitleSource): boolean => {
-    if (cannotBeAName(clean)) {
+// Whether an automatic source may write `clean` over what is stored. A person's rename stands whatever it says, and what
+// cannot be a name is never written. Otherwise the new title must strictly outrank the stored one, whose
+// rank is forfeit when it cannot be a name, or be the one automatic write that is not a rename: the same words from the
+// same source, adding the work word they lacked (a parent's description of its child opens as a `model` name, and the
+// naming pass gives it only the board's category).
+const automaticMayWrite = (title: Social["title"], clean: string, source: AgentTitleSource, action: string | undefined): boolean => {
+    if (title?.source === "user" || cannotBeAName(clean)) {
         return false;
     }
     const currentRank = title === undefined ? TITLE_RANK.derived : cannotBeAName(title.text) ? -1 : TITLE_RANK[title.source];
-    return TITLE_RANK[source] > currentRank;
+    const addsAction = title !== undefined && title.text === clean && title.source === source && title.action === undefined && action !== undefined;
+    return TITLE_RANK[source] > currentRank || addsAction;
 };
-
-// The one automatic write that is not a rename: the same words from the same source, adding the work word they lacked.
-// A parent's description of its child opens as a `model` name, and the naming pass gives it only the board's category.
-const addsAction = (title: Social["title"], clean: string, source: AgentTitleSource, action: string | undefined): boolean =>
-    title !== undefined && title.text === clean && title.source === source && title.action === undefined && action !== undefined;
 
 // One-line scrub on its own limit (MAX_NOTE_LENGTH), never the title's 80-character card width: sharing that ceiling
 // once truncated changelog entries mid-word. A backstop; the drafter clips on a word boundary before this is reached.
@@ -742,7 +744,7 @@ export const createFleet = (
             return false;
         }
         const held = entry.social.title;
-        if (source !== "user" && (held?.source === "user" || cannotBeAName(clean) || (!outranksTitle(held, clean, source) && !addsAction(held, clean, source, action)))) {
+        if (source !== "user" && !automaticMayWrite(held, clean, source, action)) {
             return false;
         }
         if (held?.text === clean && held.source === source && held.action === action) {

@@ -2,7 +2,6 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import { unstubbed } from "@intentic/testing";
 import type { ConversationActors } from "../../../../conversations/actor/conversation-actors.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../../../../runtimes/gemini/gemini-models.js";
 import type { ChildSupervisor } from "../../children.js";
 import { subagentWaitServer } from "../subagent-wait.js";
 
@@ -190,50 +189,4 @@ test("spawn passes a result schema on, and refuses one that is no JSON object be
         { ok: false, message: "The result schema must be a JSON object: a JSON Schema describing the value you want back." },
     ]);
     expect(spawned).toHaveLength(1);
-});
-
-test("spawn maps intentic-gemini to canonical gemini for provider and fallbacks", async () => {
-    let captured: unknown;
-    const children = unstubbed<ChildSupervisor>("children", {
-        spawn: async (spec) => {
-            captured = spec;
-            return { ok: true, id: "sub-1" };
-        },
-    });
-    const call = await connect(serverWith(children));
-    await call("tools/call", {
-        name: "spawn",
-        arguments: {
-            prompt: "Test gemini",
-            provider: OPENCODE_GEMINI_PROVIDER,
-            model: "gemini-3.8-flash-high",
-            fallbacks: [{ provider: OPENCODE_GEMINI_PROVIDER, model: "gemini-2.5-flash" }],
-        },
-    });
-    expect(captured).toMatchObject({
-        provider: "gemini",
-        model: "gemini-3.8-flash-high",
-        fallbacks: [{ provider: "gemini", model: "gemini-2.5-flash" }],
-    });
-});
-
-test("send with rehome maps intentic-gemini to canonical gemini", async () => {
-    const sent: { childId: string; rehome: unknown }[] = [];
-    const children = unstubbed<ChildSupervisor>("children", {
-        send: async (childId, _message, rehome) => {
-            sent.push({ childId, rehome });
-            return { ok: true, note: "Sent." };
-        },
-    });
-    const call = await connect(serverWith(children));
-    await call("tools/call", {
-        name: "send",
-        arguments: {
-            child: "kid-1",
-            message: "Switch to Gemini",
-            provider: OPENCODE_GEMINI_PROVIDER,
-            model: "gemini-3.8-flash-high",
-        },
-    });
-    expect(sent).toEqual([{ childId: "kid-1", rehome: { provider: "gemini", model: "gemini-3.8-flash-high" } }]);
 });

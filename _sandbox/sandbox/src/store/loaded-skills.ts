@@ -14,6 +14,9 @@ import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js
 export type SkillFiles = Pick<Services["files"], "write" | "remove">;
 
 export const loadedSkillsRoot = (root: string): string => join(root, ".agents", "skills");
+// Where the image bakes the product's own skills (Dockerfile: seed-skills), beside each workspace's own: a runtime that
+// does not look in the daemon's HOME by itself is pointed at both (OpenCode, whose project config is switched off).
+export const BUILTIN_SKILLS_ROOT = "/root/.claude/skills";
 export const loadedSkillDir = (root: string, name: string): string => join(loadedSkillsRoot(root), name);
 export const loadedSkillFile = (root: string, name: string): string => join(loadedSkillDir(root, name), SKILL_FILE);
 

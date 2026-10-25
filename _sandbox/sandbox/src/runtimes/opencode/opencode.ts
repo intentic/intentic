@@ -1,11 +1,11 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { dirname, join } from "node:path";
 import { within } from "@intentic/base/async";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
-import { BUILTIN_SKILLS_ROOT, geminiProviderConfig, OPENCODE_LOCKDOWN_ENV, type OpenCodeConfig, type OpenCodeGeminiConfig, serverConfig, variantOf, xaiProviderConfig } from "./opencode-config.js";
-import { loadedSkillsRoot } from "../../store/loaded-skills.js";
+import { geminiProviderConfig, OPENCODE_LOCKDOWN_ENV, type OpenCodeConfig, type OpenCodeGeminiConfig, serverConfig, variantOf, xaiProviderConfig } from "./opencode-config.js";
+import { BUILTIN_SKILLS_ROOT, loadedSkillsRoot } from "../../store/loaded-skills.js";
 import { createXaiCatalog, openCodeCredentials } from "./opencode-credentials.js";
 import { type OpenCodeEvents, type OpenCodeListener, openEventStream } from "./opencode-events.js";
 import type { OpenCodeMcpServer } from "./opencode-mcp.js";

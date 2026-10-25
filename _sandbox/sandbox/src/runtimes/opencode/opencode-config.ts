@@ -1,5 +1,6 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import type { ConfigEntry, PermissionRule } from "@opencode/client";
-import { type InputModality, OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
+import type { InputModality } from "../gemini/gemini-models.js";
 import { opt } from "../../opt.js";
 import { xaiEffortsOf } from "./xai-models.js";
 
@@ -157,9 +158,6 @@ export const xaiProviderConfig = (models: readonly string[], gateway: string | u
 // declares it, else none, since OpenCode refuses a variant a model lacks as an unroutable model.
 export const variantOf = (providers: ProviderConfigs, providerID: string, modelID: string, effort: string | undefined): string | undefined =>
     effort === undefined ? undefined : providers[providerID]?.models?.[modelID]?.variants?.find((variant) => variant.id === effort)?.id;
-
-// Where the sandbox bakes its built-in skills (capabilities, environment, fleet, intentic, links, panels, wallet).
-export const BUILTIN_SKILLS_ROOT = "/root/.claude/skills";
 
 // The whole inline config: no self-update, no sharing (OpenCode 2 has none yet, and this keeps it off when it does),
 // every permission answered by a rule, the daemon's two agents, both providers, skill discovery roots (since project config

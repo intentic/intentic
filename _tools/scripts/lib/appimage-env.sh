@@ -77,3 +77,26 @@ appimage_fetch_tools() {
     appimage_fetch_tool "AppRun-$arch" "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-$arch" "$apprun_sha"
     appimage_fetch_tool "linuxdeploy-07333c6-$linuxdeploy_arch.AppImage" "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-07333c6/linuxdeploy-$linuxdeploy_arch.AppImage" "$linuxdeploy_sha"
 }
+
+# Runs a command that bundles an AppImage ("$@", a `tauri build`) up to three times, five then ten seconds apart:
+# linuxdeploy, the AppImage bundler, fails now and then for reasons a second run does not repeat. A retry keeps the
+# compiled binary, so it re-bundles only, but cannot reuse linuxdeploy's partial AppDir, which goes from under
+# `$bundles` (the bundle directory, `<target>/release/bundle`) first. `$what` names the step in the log. Returns 1 after
+# the third failure, so a persistent failure still fails the build.
+appimage_build_retrying() {
+    local bundles="$1" what="$2" attempt delay
+    shift 2
+    for attempt in 1 2 3; do
+        if "$@"; then
+            return 0
+        fi
+        if [ "$attempt" -eq 3 ]; then
+            echo "error: $what failed after 3 attempts" >&2
+            return 1
+        fi
+        rm -rf "$bundles/appimage"
+        delay=$((attempt * 5))
+        echo "==> $what failed (attempt $attempt/3) — retrying in ${delay}s" >&2
+        sleep "$delay"
+    done
+}

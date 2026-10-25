@@ -159,7 +159,6 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                         ...spokenBy(speakerOf(context.identity, context.principal)),
                         ...opt("areas", areasOf(context.identity)),
                     },
-                    picked: input.pick !== undefined,
                     ...opt("fallback", input.fallback),
                     pressed: true,
                     resume: input.mode,

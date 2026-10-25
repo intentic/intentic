@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { queueWhole } from "./agent/tools/agent-terminals.js";
 import { join } from "node:path";
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
@@ -52,7 +53,6 @@ import { type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-pr
 import { type CodexSlice, createCodexSlice } from "./runtimes/codex/codex-provider.js";
 import { createCursorSlice, type CursorSlice } from "./runtimes/cursor/cursor-provider.js";
 import { createDevinSlice, type DevinSlice } from "./runtimes/devin/devin-provider.js";
-import { OPENCODE_GEMINI_PROVIDER } from "./runtimes/gemini/gemini-models.js";
 import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-provider.js";
 import type { GrokSlice } from "./runtimes/grok/grok-provider.js";
 import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-provider.js";

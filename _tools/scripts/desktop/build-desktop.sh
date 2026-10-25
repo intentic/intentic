@@ -279,23 +279,11 @@ fi
 # ONE `tauri build` FOR ALL THREE LINUX BUNDLES. It used to be two, deb+rpm and then the AppImage, and the second
 # recompiled the app crate from scratch with LTO (2m11s after the first's 2m47s on desktop-verify, run 39487890026)
 # for a binary identical to the one already built. One invocation compiles once and bundles each kind from that binary.
-# The retry is for linuxdeploy, the AppImage bundler's flaky step; a retry finds the binary fresh and re-bundles only.
+# The retry is for linuxdeploy, the AppImage bundler's flaky step (appimage-env.sh, appimage_build_retrying).
 if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
     echo "==> building Linux packages (deb, rpm, AppImage)"
-    for attempt in 1 2 3; do
-        if pnpm exec tauri build --verbose --config "$CONFIG" --bundles deb,rpm,appimage; then
-            break
-        fi
-        if [ "$attempt" -eq 3 ]; then
-            echo "error: Linux bundling failed after 3 attempts" >&2
-            exit 1
-        fi
-        # A retry cannot reuse linuxdeploy's partial AppDir.
-        rm -rf "$LINUX_BUNDLES/appimage"
-        delay=$((attempt * 5))
-        echo "==> Linux bundling failed (attempt $attempt/3) — retrying in ${delay}s" >&2
-        sleep "$delay"
-    done
+    appimage_build_retrying "$LINUX_BUNDLES" "Linux bundling" \
+        pnpm exec tauri build --verbose --config "$CONFIG" --bundles deb,rpm,appimage || exit 1
 fi
 
 if [ "$LINUX_ONLY" -eq 0 ] && [ -z "$WINDOWS_PREBUILT" ]; then

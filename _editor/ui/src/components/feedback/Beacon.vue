@@ -12,8 +12,13 @@ const { size = `md` } = defineProps<{
 </script>
 
 <template>
-    <span class="pointer-events-none relative inline-flex shrink-0" :class="size === 'sm' ? 'size-2' : 'size-2.5'" aria-hidden="true">
-        <span class="absolute inset-0 rounded-full bg-primary-500 opacity-60 ui-beacon-ripple" />
-        <span class="relative inline-flex size-full rounded-full bg-primary-500 ring-2 ring-canvas ui-beacon-dot" />
+    <!-- The root takes no position of its own, so a caller's placement (`absolute right-1 top-1` on a tile's corner) is
+         the one that holds: a `relative` here beats a caller's `absolute`, since Tailwind emits `.relative` later, and
+         drops the dot into the row's flow beside the control it marks. The ripple is placed against the inner box. -->
+    <span class="pointer-events-none inline-flex shrink-0" :class="size === 'sm' ? 'size-2' : 'size-2.5'" aria-hidden="true">
+        <span class="relative inline-flex size-full">
+            <span class="absolute inset-0 rounded-full bg-primary-500 opacity-60 ui-beacon-ripple" />
+            <span class="relative inline-flex size-full rounded-full bg-primary-500 ring-2 ring-canvas ui-beacon-dot" />
+        </span>
     </span>
 </template>

@@ -1,9 +1,9 @@
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
-import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../engines/failure-sentences.js";
 import { type RoleAnswer, sentenceReason } from "../../engines/role-answer.js";
 import { isBareConversationTitle, TITLE_MAX } from "../../seams/conversation-title.js";
+import { cannotBeAName } from "../../conversations/registry/agents-registry.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
 import { BULLET, FENCE } from "@intentic/sandbox-contract/text/model-answer";
 
@@ -137,7 +137,7 @@ export const nameAgentTitle = async (services: Services, execution: AgentExecuti
     }
     // Broken replies and bare labels count as no automatic name, regardless of their old source rank.
     const held = entry.social.title;
-    const poisoned = held !== undefined && (isBareConversationTitle(held.text) || isFailureSentence(held.text) || isToolCallStandIn(held.text) || isSelfIdentityAnswer(held.text));
+    const poisoned = held !== undefined && cannotBeAName(held.text);
     const chosen = poisoned ? undefined : chosenName(entry);
     if (held !== undefined && held.source !== "derived" && !poisoned && chosen === undefined) {
         return;

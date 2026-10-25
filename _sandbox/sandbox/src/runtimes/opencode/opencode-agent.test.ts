@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { ClientError, type OpenCodeClient, type OpenCodeEvent } from "@opencode/client";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -19,7 +20,6 @@ import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from
 import { opt } from "../../opt.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import type { OpenCodeListener, OpenCodeService, SessionJudge } from "./opencode.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { mcpServersOf, type OpenCodeMcpServer, openCodeMounts } from "./opencode-mcp.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../decorators/turn-watchdog.js";

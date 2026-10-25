@@ -67,51 +67,6 @@ export const pptxBytes = (slides: readonly (readonly string[])[]): Uint8Array =>
     return zipSync(files);
 };
 
-/** A spreadsheet with one sheet named `sheetName` containing `rows`. */
-export const xlsxBytes = (sheetName: string, rows: readonly (readonly (string | number)[])[]): Uint8Array => {
-    const sheetData = rows
-        .map((row, rIdx) => {
-            const rowNum = rIdx + 1;
-            const cells = row
-                .map((val, cIdx) => {
-                    const colLetter = String.fromCharCode(65 + cIdx);
-                    const ref = `${colLetter}${rowNum}`;
-                    if (typeof val === "number") {
-                        return `<c r="${ref}" t="n"><v>${val}</v></c>`;
-                    }
-                    return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(String(val))}</t></is></c>`;
-                })
-                .join("");
-            return `<row r="${rowNum}">${cells}</row>`;
-        })
-        .join("");
-
-    return zipSync({
-        "[Content_Types].xml": strToU8(
-            CONTENT_TYPES(
-                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>',
-            ),
-        ),
-        "_rels/.rels": strToU8(RELS("xl/workbook.xml")),
-        "xl/_rels/workbook.xml.rels": strToU8(
-            `<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-</Relationships>`,
-        ),
-        "xl/workbook.xml": strToU8(
-            `<?xml version="1.0" encoding="UTF-8"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="${xmlEscape(sheetName)}" sheetId="1" r:id="rId1"/></sheets>
-</workbook>`,
-        ),
-        "xl/worksheets/sheet1.xml": strToU8(
-            `<?xml version="1.0" encoding="UTF-8"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetData}</sheetData></worksheet>`,
-        ),
-    });
-};
-
 /**
  * Smallest well-formed one-page PDF with a text layer saying `text`; honest xref offsets keep it out of pdf.js's
  * damaged-file recovery path.

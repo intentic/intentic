@@ -51,7 +51,7 @@ import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
-import { type ChildRehome, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
+import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { elsewhereFor, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
@@ -1706,11 +1706,11 @@ export const childSupervisor = (services: Services, parent: ChildParent): ChildS
     const linked = services.linkedChildren;
     const ownChild = (childId: string): boolean => services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId;
     return {
-        spawn: (spec) => spawnChild(services, parent, spec),
+        spawn: (spec) => spawnChild(services, parent, canonicalSpawn(spec)),
         providers: () => spawnableProviders(services),
         send: (childId, message, rehome) => {
             if (!linked.owns(childId)) {
-                return sendToChild(services, parent, childId, message, rehome);
+                return sendToChild(services, parent, childId, message, rehome === undefined ? undefined : canonicalRehome(rehome));
             }
             return rehome === undefined ? linked.send(parent, childId, message) : Promise.resolve(LINKED_REHOME);
         },

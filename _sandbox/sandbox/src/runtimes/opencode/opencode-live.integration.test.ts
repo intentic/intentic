@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -12,7 +13,6 @@ import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { opt } from "../../opt.js";
 import { createOpenCodeAgent, createOpenCodeRunner } from "./opencode-agent.js";
 import { createOpenCodeService, type OpenCodeService } from "./opencode.js";

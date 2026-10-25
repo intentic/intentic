@@ -421,6 +421,13 @@ export const MINTED_PROVIDERS: readonly MintedProvider[] = PROVIDER_SPECS.filter
     (spec): spec is Extract<Spec, { auth: { kind: "minted" } }> => spec.auth.kind === "minted",
 ).map((spec) => spec.id);
 
+// OpenCode's id for Gemini through the translator; not "google", OpenCode's own API-key provider, which bypasses the fleet.
+export const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
+
+// The provider an id names everywhere outside OpenCode's own config. A model running there sees the alias above as its
+// provider and repeats it when it names one (a subagent's spawn or move), so the doors that take such a name read it here.
+export const canonicalProvider = (provider: string): string => (provider === OPENCODE_GEMINI_PROVIDER ? "gemini" : provider);
+
 // This provider's CLIProxyAPI id, where it has one; not always ours (grok/xai, gemini/antigravity).
 export const cliProxyIdOf = (provider: string): string | undefined => {
     const auth = providerSpec(provider)?.auth;

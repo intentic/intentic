@@ -35,7 +35,7 @@ import {
     rtfBytes,
     tarBytes,
     wavBytes,
-    xlsxBytes,
+    workbookBytes,
     zipBytes,
 } from "./testing.js";
 
@@ -81,19 +81,39 @@ describe("pptx", () => {
 });
 
 describe("xlsx", () => {
+    // A cell as the sheet XML saves it: an inline string, or a value of the given type (n: number, e: an error).
+    const text = (ref: string, value: string): string => `<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`;
+    const saved = (ref: string, value: string, type: "n" | "e"): string => `<c r="${ref}" t="${type}"><v>${value}</v></c>`;
+    const row = (index: number, cells: string): string => `<row r="${index}">${cells}</row>`;
+
     test("sheets become capped markdown tables", async () => {
-        const path = fixture(
-            "costs.xlsx",
-            xlsxBytes("Costs", [
-                ["item", "price"],
-                ["widget", 4],
-                ["gadget", 7],
-            ]),
-        );
-        const doc = await xlsxDeriver.derive(path);
+        const rows = [row(1, text("A1", "item") + text("B1", "price")), row(2, text("A2", "widget") + saved("B2", "4", "n")), row(3, text("A3", "gadget") + saved("B3", "7", "n"))];
+        const doc = await xlsxDeriver.derive(fixture("costs.xlsx", workbookBytes([{ name: "Costs", rows: rows.join("") }])));
         expect(doc.markdown).toContain("## Costs");
         expect(doc.markdown).toContain("| widget | 4 |");
         expect(doc.notes).toEqual([]); // nothing was cut, so nothing claims to be
+    });
+
+    // The reader pads the gap between two filled rows into rows of empty cells; they are not rows of the sheet.
+    test("the empty rows between filled ones are neither shown nor counted against the cap", async () => {
+        const filled = Array.from({ length: 205 }, (_, index) => row(index * 3 + 1, text(`A${index * 3 + 1}`, `line ${index}`)));
+        const doc = await xlsxDeriver.derive(fixture("gaps.xlsx", workbookBytes([{ name: "Gaps", rows: filled.join("") }])));
+        const tableRows = doc.markdown.split("\n").filter((line) => line.startsWith("|"));
+        expect(tableRows).toHaveLength(201); // the header row, its rule, and 199 rows more of the 200 shown
+        expect(tableRows.some((line) => /^\|[\s|]*$/.test(line))).toBe(false);
+        expect(doc.notes).toEqual(['sheet "Gaps": showing 200 of 205 rows']);
+    });
+
+    // An error's saved value is dropped by the reader (lib/derivers/xlsx.ts); `fileq check` is what reports it.
+    test("every sheet is its own section, an empty one says so, and a saved error reads as an empty cell", async () => {
+        const bytes = workbookBytes([
+            { name: "Totals", rows: row(1, text("A1", "ratio") + saved("B1", "#DIV/0!", "e") + text("C1", "end")) },
+            { name: "Spare", rows: "" },
+        ]);
+        const doc = await xlsxDeriver.derive(fixture("totals.xlsx", bytes));
+        expect(doc.markdown).toContain("## Totals");
+        expect(doc.markdown).not.toContain("#DIV/0!");
+        expect(doc.markdown).toContain("## Spare\n\n(empty sheet)");
     });
 });
 

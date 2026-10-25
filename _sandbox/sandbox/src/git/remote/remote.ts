@@ -29,6 +29,11 @@ const configuredRemote = async (dir: string, git: GitRunner): Promise<string | u
     return names.includes("origin") ? "origin" : names[0];
 };
 
+// The checked-out branch, or undefined when detached or unborn.
+// allow(silent-catch): a repo git cannot read has no branch to name either, and every caller answers that case already.
+const currentBranch = async (dir: string, git: GitRunner): Promise<string | undefined> =>
+    (await git(dir, ["branch", "--show-current"]).catch(() => undefined))?.stdout.trim() || undefined;
+
 // Every field is optional-or-zero and never thrown; no remote, no upstream, and detached HEAD are normal. `remote`
 // falls back to `origin` only when the branch has no upstream of its own, and only then does this spawn `git remote`.
 export const remoteState = async (
@@ -36,7 +41,7 @@ export const remoteState = async (
     known: { readonly branch?: string | undefined } = {},
     git: GitRunner = defaultGit,
 ): Promise<GitRemoteState> => {
-    const branch = known.branch ?? (await git(dir, ["branch", "--show-current"]).catch(() => undefined))?.stdout.trim();
+    const branch = known.branch ?? (await currentBranch(dir, git));
     // No branch (detached HEAD, unborn repo): report the configured remote so a sync bar still shows.
     if (branch === undefined || branch === "") {
         const configured = await configuredRemote(dir, git);
@@ -104,17 +109,31 @@ const replayOnto = async (dir: string, branch: string, upstream: string, ahead: 
     }
 };
 
-// A first publish can be rejected because the remote already has this branch. Pull from the same destination push
-// would use, without assigning an upstream until the eventual publish succeeds.
-const pullTarget = async (dir: string, git: GitRunner): Promise<{ branch: string; upstream: string; remote: string } | undefined> => {
+// Where a branch publishes, said once for push and pull: its upstream's own remote and ref, or, for a branch never
+// pushed, the repo's configured remote under the branch's own name. So a pull before a first publish (one rejected
+// because the remote already has the branch) levels with the very ref that publish will write, without assigning an
+// upstream until it succeeds. Throws when the upstream cannot be read: a failed read must never send a tracked branch
+// to another remote. Undefined when the repo has no remote at all.
+interface Destination {
+    readonly remote: string;
+    readonly upstream: string;
+    // Whether the branch already tracks it; a push that publishes it sets the upstream (`-u`).
+    readonly tracked: boolean;
+}
+
+const destinationOf = async (dir: string, branch: string, git: GitRunner): Promise<Destination | undefined> => {
+    const tracking = await upstreamOf(dir, branch, git);
+    const remote = tracking.remote ?? (await configuredRemote(dir, git));
+    return remote === undefined ? undefined : { remote, upstream: tracking.upstream ?? `${remote}/${branch}`, tracked: tracking.upstream !== undefined };
+};
+
+const pullTarget = async (dir: string, git: GitRunner): Promise<(Destination & { readonly branch: string }) | undefined> => {
     const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
     if (branch === "") {
         return undefined;
     }
-    // A failed upstream read must not silently redirect a tracked branch to origin.
-    const tracking = await upstreamOf(dir, branch, git);
-    const remote = tracking.remote ?? await configuredRemote(dir, git);
-    return remote === undefined ? undefined : { branch, remote, upstream: tracking.upstream ?? `${remote}/${branch}` };
+    const destination = await destinationOf(dir, branch, git);
+    return destination === undefined ? undefined : { branch, ...destination };
 };
 
 // Levels a branch with its upstream, never with a merge commit: behind-only fast-forwards, diverged replays the
@@ -158,8 +177,8 @@ export const pullRemote = async (dir: string, author: Author, git: GitRunner = d
 
 // The checked-out branch and what it tracks; undefined when detached, unborn or tracking nothing.
 export const trackedBranch = async (dir: string, git: GitRunner = defaultGit): Promise<{ branch: string; upstream: string; remote: string } | undefined> => {
-    const branch = (await git(dir, ["branch", "--show-current"]).catch(() => undefined))?.stdout.trim();
-    if (branch === undefined || branch === "") {
+    const branch = await currentBranch(dir, git);
+    if (branch === undefined) {
         return undefined;
     }
     const { upstream, remote } = await upstreamOf(dir, branch, git).catch(() => ({ upstream: undefined, remote: undefined }));
@@ -171,26 +190,22 @@ export const trackedBranch = async (dir: string, git: GitRunner = defaultGit): P
 export type PushPlan = { readonly ok: true; readonly args: readonly string[] } | { readonly ok: false; readonly reason: string };
 
 export const pushPlan = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<PushPlan> => {
-    const state = await remoteState(dir, {}, git);
-    const branch = options.branch ?? state.branch;
+    const branch = options.branch ?? (await currentBranch(dir, git));
     if (branch === undefined || branch === "") {
         return { ok: false, reason: "no branch checked out" };
     }
-    // Read here, not taken from remoteState (which reads a failure as "no upstream"): a failed read planned as a first
-    // push would send the branch with `-u` to another remote and repoint its upstream there.
-    let tracking: Awaited<ReturnType<typeof upstreamOf>>;
+    // A failed upstream read is refused, never planned as a first push: that would send the branch with `-u` to another
+    // remote and repoint its upstream there.
+    let destination: Destination | undefined;
     try {
-        tracking = await upstreamOf(dir, branch, git);
+        destination = await destinationOf(dir, branch, git);
     } catch (error) {
         return { ok: false, reason: gitFailureReason(error, "could not read the branch's upstream") };
     }
-    // A never-pushed branch has no remote of its own; it publishes to the repo's configured one.
-    const remote = tracking.remote ?? state.remote;
-    if (remote === undefined) {
+    if (destination === undefined) {
         return { ok: false, reason: "no remote configured" };
     }
-    const publish = tracking.upstream === undefined;
-    return { ok: true, args: ["push", ...(publish ? ["-u"] : []), remote, branch] };
+    return { ok: true, args: ["push", ...(destination.tracked ? [] : ["-u"]), destination.remote, branch] };
 };
 
 export const pushBranch = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<ActionResult> => {

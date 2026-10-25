@@ -107,10 +107,8 @@ export interface CiFixRequest {
     // Somebody pressed Fix, rather than main's fix agent starting by itself: the door a person's words come through, so an
     // archived attempt it continues reopens.
     readonly pressed?: boolean;
-    // Whether a model was picked for this press, which outranks re-running a turn the door kept.
-    readonly picked?: boolean;
     // The model a new chat opens on in the browser that pressed: what the run opens on when nobody picked one and no
-    // model pinned for the job can run, while this sandbox can serve its provider. Never counts as `picked`.
+    // model pinned for the job can run, while this sandbox can serve its provider.
     readonly fallback?: AgentRunPick;
     readonly resume?: Parameters<typeof startFixAttempt>[1]["resume"];
     // Said first in the opening prompt, when whoever started it knows something the logs do not.
@@ -172,11 +170,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
         ...(request.evidence.logs !== "" ? [`--- what failed ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");
     return startFixAttempt(
-        {
-            ...daemonFixAttemptDeps(services, { pressed: request.pressed === true, picked: request.picked === true }),
-            // A kept turn predates this evidence snapshot. Resend the prepared prompt so every acknowledged job reaches it.
-            rerun: async () => undefined,
-        },
+        daemonFixAttemptDeps(services, { pressed: request.pressed === true }),
         {
             base: request.base ?? ciFixConversationId(project.repo, runId),
             prompt: promptOf(request, where),

@@ -20,8 +20,6 @@ export interface FixAttemptDeps {
     readonly archive: (conversationId: string) => Promise<void>;
     // Starts the turn; undefined means a live turn already owns the conversation.
     readonly start: (turn: TurnInput & { conversationId: string }) => Promise<unknown>;
-    // Runs again the turn the sandbox kept after turning it away at the door; undefined when it keeps none there.
-    readonly rerun: (conversationId: string) => Promise<unknown>;
 }
 
 export interface FixAttemptAsk {
@@ -75,20 +73,14 @@ export const startFixAttempt = async (deps: FixAttemptDeps, ask: FixAttemptAsk):
         await deps.archive(plan.retire);
     }
     const continued = plan.kind === "continue" || plan.kind === "resend";
-    // The kept turn is the task exactly as first sent, routing and all; the prompt goes again only where none is kept.
-    const started =
-        (plan.kind === "resend" ? await deps.rerun(plan.conversationId) : undefined) ??
-        (await deps.start({ ...ask.turn, ...openingOf(plan, ask), conversationId: plan.conversationId }));
+    // An attempt turned away at the door gets the whole prompt again, never a replay of the turn the sandbox kept: the ask
+    // carries the failure as it stands now, which may have grown since that turn was first sent. The new turn supersedes
+    // the kept one (stream-agent.ts, supersedeHeld).
+    const started = await deps.start({ ...ask.turn, ...openingOf(plan, ask), conversationId: plan.conversationId });
     if (started === undefined) {
         return { kind: "busy", conversationId: plan.conversationId, reason: "An agent is already working on this run's failure." };
     }
     return { kind: "started", conversationId: plan.conversationId, attempt: plan.attempt, continued };
-};
-
-const reopened = async (services: Services, pressed: boolean, conversationId: string): Promise<void> => {
-    if (pressed) {
-        await services.agents.clearArchived([conversationId]);
-    }
 };
 
 // The earlier attempt would not be filed away, so no new one was started; carries the registry's reason.
@@ -97,7 +89,7 @@ export class AttemptRefused extends Error {}
 // How the daemon's own fix attempts reach the fleet, for every failure it starts one on: a failed CI run.
 // `pressed`: somebody pressed for this attempt, the door a person's words come through, so an archived conversation it
 // continues reopens first (clearArchived) exactly as a person's message would reopen it.
-export const daemonFixAttemptDeps = (services: Services, request: { readonly pressed: boolean; readonly picked: boolean }): FixAttemptDeps => ({
+export const daemonFixAttemptDeps = (services: Services, request: { readonly pressed: boolean }): FixAttemptDeps => ({
     roster: () => services.agents.list(),
     archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
     // Whatever runs on the earlier attempt goes: it is being set aside, whichever turn it is on.
@@ -121,9 +113,4 @@ export const daemonFixAttemptDeps = (services: Services, request: { readonly pre
         const started = await services.turns.start(request.pressed || turn.speaker !== undefined ? turn : { ...turn, speaker: { kind: "sandbox" } });
         return typeof started === "string" ? undefined : started;
     },
-    // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
-    rerun: async (conversationId) =>
-        !request.picked && services.conversations.state(conversationId)?.resume.held?.reason === "door"
-            ? reopened(services, request.pressed, conversationId).then(() => services.turns.resume(conversationId))
-            : undefined,
 });

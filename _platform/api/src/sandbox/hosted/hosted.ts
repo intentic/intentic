@@ -885,13 +885,13 @@ const appOwner = (machines: { metadata: Record<string, string> }[], instance: st
 };
 
 // What the sweep reads of an unknown app on Fly, or undefined if Fly won't answer (read as "not now", not a verdict).
-// Age is the oldest resource in the app, not the newest machine. `stock` says every machine in it is warm stock this
-// platform built (hosted-pool.ts) and nobody claimed: a claim re-stamps its machine `sandbox` before anyone works on it.
+// Age is the oldest resource in the app, not the newest machine. `stock`: every machine in it is warm stock this platform
+// built (hosted-pool.ts) and nobody claimed, as a claim re-stamps its machine `sandbox`. `hollow`: no machine, no volume.
 interface AppEvidence {
     readonly owner: AppOwner;
     readonly oldestAt: Date | undefined;
     readonly machines: number;
-    readonly volumes: number;
+    readonly hollow: boolean;
     readonly stock: boolean;
 }
 
@@ -907,13 +907,13 @@ const appEvidence = async (config: Config, app: string): Promise<AppEvidence | u
             owner: appOwner(machines, instance),
             oldestAt: stamps.length === 0 ? undefined : new Date(Math.min(...stamps.map((at) => at.getTime()))),
             machines: machines.length,
-            volumes: volumes.length,
+            hollow: machines.length === 0 && volumes.length === 0,
             stock:
                 machines.length > 0 &&
                 machines.every((machine) => machine.metadata[FLY_META_ROLE] === `warm` && machine.metadata[FLY_META_PLATFORM] === instance),
         };
     } catch (error) {
-        return isFlyGone(error) ? { owner: `mine`, oldestAt: undefined, machines: 0, volumes: 0, stock: false } : undefined;
+        return isFlyGone(error) ? { owner: `mine`, oldestAt: undefined, machines: 0, hollow: true, stock: false } : undefined;
     }
 };
 
@@ -953,13 +953,10 @@ export const appRecordsOf = async (prisma: PrismaClient, config: Config, apps: r
 // 5. unknown: has machines, none carrying a stamp; ownership cannot be proven, so never destroyed
 // 6. forgotten: this platform's as far as Fly can say, but this database holds no deletion record for its sandbox.
 //    Absence is not deletion: a platform restored from an older backup has no row and no record for every sandbox made
-//    since, and their apps are those sandboxes' disks. Reported (hosted health, the admin digest) for an operator to
-//    decide, never destroyed
-// An app is collected only on positive evidence: the deletion record of its sandbox, or every machine in it being
-// unclaimed warm stock. (2026-10-05) An app with no machine used to be collected for its emptiness alone, which is
-// exactly what Fly losing a machine leaves of a sandbox nobody deleted. An app a HostedCleanup row names never gets
-// here: that row is a teardown somebody asked for, and the cleanup sweep runs it. (2026-10-24) A completely hollow
-// app (no machines and no volumes) holds neither compute nor disk and is safe to collect.
+//    since, and their apps are those sandboxes' disks. Reported (hosted health, the admin digest), never destroyed
+// So an app is collected only on evidence: its sandbox's deletion record, every machine in it unclaimed warm stock, or
+// nothing in it to lose (`hollow`, 2026-10-24); one holding a volume and no machine is what Fly losing a machine leaves
+// (2026-10-05). An app a HostedCleanup row names never gets here: the cleanup sweep runs that requested teardown.
 export type OrphanSkip = "live" | "theirs" | "unknown" | "young" | "unreadable" | "forgotten";
 
 const orphanVerdict = (evidence: AppEvidence | undefined, tombstoned: boolean, now: number): OrphanSkip | undefined => {
@@ -975,10 +972,7 @@ const orphanVerdict = (evidence: AppEvidence | undefined, tombstoned: boolean, n
     if (evidence.machines > 0 && evidence.owner !== `mine`) {
         return `unknown`;
     }
-    if (evidence.machines === 0 && evidence.volumes === 0) {
-        return undefined;
-    }
-    return tombstoned || evidence.stock ? undefined : `forgotten`;
+    return tombstoned || evidence.stock || evidence.hollow ? undefined : `forgotten`;
 };
 
 // Sorts our-prefix apps the database can't explain into collectable (oldest first, so a pass stopped by its cap has

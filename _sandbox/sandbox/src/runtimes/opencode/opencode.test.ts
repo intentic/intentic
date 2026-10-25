@@ -1,3 +1,4 @@
+import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { dirname } from "node:path";
 import type {
     CredentialEntry,
@@ -14,7 +15,6 @@ import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
-import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import {
     createOpenCodeService,
     OPENCODE_IDLE_STOP_MS,
@@ -23,7 +23,8 @@ import {
     type OpenCodeService,
     type SessionJudge,
 } from "./opencode.js";
-import { AGENT_CONFIG, BUILTIN_SKILLS_ROOT, type OpenCodeConfig, SERVER_PERMISSIONS } from "./opencode-config.js";
+import { AGENT_CONFIG, type OpenCodeConfig, SERVER_PERMISSIONS } from "./opencode-config.js";
+import { BUILTIN_SKILLS_ROOT } from "../../store/loaded-skills.js";
 import type { McpRemoteConfig, OpenCodeMcpServer } from "./opencode-mcp.js";
 import type { ServeRequest, SpawnServer } from "./opencode-serve.js";
 import type { OpenCodeRouteEntry } from "./hosted/opencode-routes.js";
