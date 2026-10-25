@@ -305,7 +305,7 @@ describe(`when Google's button goes nowhere`, () => {
         const el = await mount();
         jest.useFakeTimers();
         let focused = true;
-        jest.spyOn(document, `hasFocus`).mockImplementation(() => focused);
+        jest.spyOn(Document.prototype, `hasFocus`).mockImplementation(() => focused);
 
         el.querySelector(`.entry-socket-slot [role="button"]`)!.dispatchEvent(new Event(`pointerdown`, { bubbles: true }));
         // Google's pop-up comes up in front of the page, and is closed with nothing in it.

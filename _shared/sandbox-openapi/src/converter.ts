@@ -29,7 +29,7 @@ export const zodConverter: ConditionalSchemaConverter = {
         });
         // Every schema's own $schema banner duplicates the document's top-level one: dead weight, repeated.
         delete json.$schema;
-        // Zod and json-schema-typed disagree on $vocabulary's type and $defs's genericity; cast via unknown.
+        // Zod's output type includes older-draft keywords; this converter uses its default 2020-12 dialect.
         return [!isOptionalIn(schema), json as unknown as JSONSchema];
     },
 };

@@ -127,7 +127,7 @@ it(`tells the reader a press came back with nothing, and offers Google's own pag
     const el = await mount();
     jest.useFakeTimers();
     let focused = true;
-    jest.spyOn(document, `hasFocus`).mockImplementation(() => focused);
+    jest.spyOn(Document.prototype, `hasFocus`).mockImplementation(() => focused);
 
     el.querySelector(`.entry-socket-slot [role="button"]`)!.dispatchEvent(new Event(`pointerdown`, { bubbles: true }));
     focused = false;

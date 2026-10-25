@@ -201,7 +201,7 @@ test("ordinary text, controls, empty anchors and non-element targets keep their 
 
 test("in a browser nothing is installed at all: `_blank` needs no help there", () => {
     asApp(undefined);
-    const watching = jest.spyOn(document, `addEventListener`);
+    const watching = jest.spyOn(Document.prototype, `addEventListener`);
     try {
         installDesktopLinks();
         expect(watching).not.toHaveBeenCalled();

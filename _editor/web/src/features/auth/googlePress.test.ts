@@ -32,7 +32,7 @@ beforeEach(() => {
     jest.useFakeTimers();
     track.mockReset();
     focused = true;
-    jest.spyOn(document, `hasFocus`).mockImplementation(() => focused);
+    jest.spyOn(Document.prototype, `hasFocus`).mockImplementation(() => focused);
     slot = document.createElement(`div`);
     drawn = document.createElement(`div`);
     drawn.setAttribute(`role`, `button`);
