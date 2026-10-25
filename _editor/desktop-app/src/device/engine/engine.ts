@@ -1,8 +1,8 @@
 import { t } from "@intentic/ui/i18n";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { computed, ref } from "vue";
-import { setEngine, track } from "../analytics";
-import { revealLog } from "../desktop";
+import { setEngine, track } from "../../analytics";
+import { revealLog } from "../../desktop";
 import {
     engineCleanup,
     engineMove,
@@ -12,9 +12,9 @@ import {
     type EngineMoveEvent,
     type EngineStatus,
     type MoveTarget,
-} from "../desktopEngine";
+} from "../../desktopEngine";
 import { endOf, engineOf, foldMove, keptCopiesOf, offerOf, pcEngineOf, startMove, type MoveProgress } from "./engineMove";
-import { running, start } from "./runs";
+import { running, start } from "../runs";
 
 // WHICH ENGINE THIS PC'S SANDBOXES RUN ON, AND THE MOVE TO THE OTHER (src-tauri/src/engine.rs): Docker Desktop or
 // Intentic's engine, as `ic engine status` says when a window starts, when This device opens and after anything here

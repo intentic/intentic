@@ -74,7 +74,7 @@ export interface EngineMoveEnd {
 }
 
 /** One step of a move, as every window hears it: an `intentic-move:` line's JSON with the engine it goes `to`, and at the
- *  end `step: "exit"` with the move's EngineMoveEnd. Read field by field (device/engineMove.ts): ic says more than this
+ *  end `step: "exit"` with the move's EngineMoveEnd. Read field by field (device/engine/engineMove.ts): ic says more than this
  *  names. */
 export type EngineMoveEvent = { readonly step: string; readonly slug?: string; readonly to?: EngineId } & Readonly<Record<string, unknown>>;
 

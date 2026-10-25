@@ -22,6 +22,7 @@ import {
     cardSubline,
     filesLine,
     folderConflicts,
+    isUntitled,
     type DeviceFolderRow,
     type DevicePortRow,
     type DeviceSandboxGroup,
@@ -105,7 +106,8 @@ const FACT_LABEL = `w-10 shrink-0 text-2xs text-subtle`;
 const indent = (): string => (slots.select === undefined ? `pl-10.5` : `pl-17.5`);
 
 const TONE = { content: `text-content`, muted: `text-muted`, subtle: `text-subtle`, warning: `text-warning` } as const satisfies Record<CardTone, string>;
-const partClass = (part: CardPart): string[] => [TONE[part.tone], part.mono === true ? `font-mono` : ``];
+// The code face runs a size larger than the sans beside it, so a path or an address is set a step down to sit level.
+const partClass = (part: CardPart): string[] => [TONE[part.tone], part.mono === true ? `font-mono text-2xs` : ``];
 
 // Where the sandbox stands, as a dot and a word in the line's own ink rather than a chip: a list of cards each wearing
 // two or three pills read as a wall of tags. Only a state worth acting on takes its colour into the word.
@@ -162,7 +164,15 @@ const portsShown = (group: DeviceSandboxGroup): boolean => reachedParts(group).l
 const conflicts = computed(() => new Map(groups.value.map((group) => [group.sandboxId, folderConflicts(group.folder)])));
 
 // Read at render: a machine's report is re-read on the page's own poll, and a probation that ended drops off its next one.
-const sublineOf = (group: DeviceSandboxGroup): string[] => cardSubline(group, Date.now());
+// A sandbox whose files this computer does not keep, and cannot start keeping from here, says so last on this line.
+const sublineOf = (group: DeviceSandboxGroup): string[] => [
+    ...cardSubline(group, Date.now()),
+    ...(group.folder === undefined && !offersSync(group) ? [t(`ui.deviceDetail.filesNotSynced`)] : []),
+];
+
+// A sandbox nothing named prints its raw id as the id it is, under a title that says it has none (`isUntitled`).
+const untitled = isUntitled;
+const exactId = (group: DeviceSandboxGroup): string | undefined => group.subtitle ?? (untitled(group) ? group.title : undefined);
 
 // The list as it is read (see `cardOrder`): every sandbox that is doing something here, then, apart, the idle ones.
 const bands = computed(() => cardOrder(groups.value, leading));
@@ -244,16 +254,17 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 <div class="flex min-w-0 items-center gap-x-2.5">
                     <span v-if="$slots[`select`]" class="flex w-5 shrink-0 items-center justify-center"><slot name="select" :group="item.group" /></span>
                     <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-content/5">
-                        <slot name="lead" :group="item.group"><SandboxLogo :name="item.group.title" :size="18" /></slot>
+                        <slot name="lead" :group="item.group"><SandboxLogo :name="untitled(item.group) ? undefined : item.group.title" :size="18" /></slot>
                     </span>
                     <div class="flex min-w-0 flex-1 flex-col">
                         <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                            <!-- A sandbox nothing named says so, and keeps its id on the line below like any other card. -->
                             <h3
                                 class="min-w-0 truncate text-sm font-medium"
-                                :class="item.group.sandbox === undefined ? `text-muted` : `text-content`"
+                                :class="item.group.sandbox === undefined || untitled(item.group) ? `text-muted` : `text-content`"
                                 v-tooltip.top="idTip(item.group)"
                             >
-                                {{ item.group.title }}
+                                {{ untitled(item.group) ? t(`ui.deviceDetail.unnamed`) : item.group.title }}
                             </h3>
                             <span
                                 class="inline-flex shrink-0 items-center gap-1.5 text-2xs"
@@ -275,15 +286,15 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         <!-- Who it is to a terminal, what version runs, and its share of the machine: one quiet line. The
                              name's hover holds the rest (the image, which side keeps it). -->
                         <p
-                            v-if="item.group.subtitle || sublineOf(item.group).length > 0"
+                            v-if="exactId(item.group) || sublineOf(item.group).length > 0"
                             class="flex min-w-0 flex-wrap items-center gap-x-1.5 text-2xs text-subtle"
                         >
-                            <span v-if="item.group.subtitle" class="inline-flex min-w-0 items-center gap-1">
-                                <span class="truncate font-mono">{{ item.group.subtitle }}</span>
-                                <CopyButton :text="item.group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
+                            <span v-if="exactId(item.group)" class="inline-flex min-w-0 items-center gap-1">
+                                <span class="truncate font-mono">{{ exactId(item.group) }}</span>
+                                <CopyButton :text="exactId(item.group) ?? ``" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
                             </span>
                             <template v-for="(part, index) in sublineOf(item.group)" :key="part">
-                                <span v-if="index > 0 || item.group.subtitle" aria-hidden="true">·</span>
+                                <span v-if="index > 0 || exactId(item.group)" aria-hidden="true">·</span>
                                 <span>{{ part }}</span>
                             </template>
                         </p>
@@ -291,11 +302,14 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5 self-start"><slot name="actions" :group="item.group" /></span>
                 </div>
 
-                <div class="flex min-w-0 flex-col gap-1.5" :class="indent()">
+                <!-- Gone when every line in it is (a card with no files, ports or run to show), so the card's gap does not
+                     hang an empty band under its name. -->
+                <div class="flex min-w-0 flex-col gap-1.5 [&:not(:has(>:not(:empty)))]:hidden" :class="indent()">
                     <p v-if="item.group.sandbox?.parked" class="text-xs text-warning">{{ t(`ui.deviceDetail.interruptedUpdateHint`) }}</p>
 
-                    <!-- FILES: where this computer keeps them, and only what is news about them beside the path. -->
-                    <div v-if="item.group.folder || !offersSync(item.group)" :class="FACT">
+                    <!-- FILES: where this computer keeps them, and only what is news about them beside the path. None kept
+                         here is said on the line under the name, not given a line of its own to say it. -->
+                    <div v-if="item.group.folder" :class="FACT">
                         <span :class="FACT_LABEL">{{ t(`ui.deviceDetail.files`) }}</span>
                         <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                             <!-- Which side of a many-sided machine holds the folder, as its mark ahead of the path. -->
@@ -312,7 +326,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         </span>
                     </div>
                     <!-- Nothing synced yet, and this sandbox can start it here: the offer stands where the folder would. -->
-                    <div v-else :class="FACT">
+                    <div v-else-if="offersSync(item.group)" :class="FACT">
                         <span :class="FACT_LABEL">{{ t(`ui.deviceDetail.files`) }}</span>
                         <div class="min-w-0 flex-1"><slot name="sync" :group="item.group" /></div>
                     </div>

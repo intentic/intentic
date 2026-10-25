@@ -123,12 +123,12 @@ export interface DeviceSandboxRow {
 
 /**
  * The open row's version line: what runs, and while the version before the last swap is still parked, until when.
- * Undefined when the machine said neither.
+ * Undefined when the machine said neither; a dev image's `0.0.0` names nothing to compare, so it counts as unsaid.
  */
 export const versionLine = (sandbox: DeviceSandboxRow, now: number): string | undefined => {
     const until = sandbox.probationUntil;
     const ready = until !== undefined && until > now ? t(`ui.deviceDetail.previousReadyUntil`, { when: formatUntil(until, now) }) : undefined;
-    if (sandbox.version === undefined) {
+    if (sandbox.version === undefined || sandbox.version === `0.0.0`) {
         return ready;
     }
     return ready === undefined ? sandbox.version : `${sandbox.version} · ${ready}`;
@@ -176,19 +176,16 @@ export interface DeviceSandboxGroup {
 const OUTCOME_RANK: Readonly<Record<DevicePortRow[`state`], number>> = { mirrored: 0, "held-by-sandbox": 1, busy: 2, ignored: 3 };
 const byOutcomeThenNumber = (a: DevicePortRow, b: DevicePortRow): number => OUTCOME_RANK[a.state] - OUTCOME_RANK[b.state] || a.port - b.port;
 
-// IPv4 and IPv6 binds of the same server are one port to the reader; folded here since the outcome
-// (which both rows agree on) is what survives.
+// IPv4 and IPv6 binds of the same server are one port to the reader; folded, since the outcome both agree on survives.
 const twinKey = (port: DevicePortRow): string => `${port.port}:${port.state}:${port.heldBy ?? ``}:${port.command ?? ``}`;
 
-// The sync agent keys a sandbox by its flattened host (`sandbox-<id>-<name>`); docker knows it by the
-// leading label alone (`sandbox-<id>`). Matched conservatively: equal, or continuing past the slug at a separator.
-// Exported because the same two spellings meet anywhere a screen asks "is that pairing this sandbox", not only
-// where a container and a folder are being joined into one row.
+// The sync agent keys a sandbox by its flattened host (`sandbox-<id>-<name>`); docker knows it by the leading label alone
+// (`sandbox-<id>`). Matched conservatively: equal, or continuing past the slug at a separator. Exported because the two
+// spellings meet anywhere a screen asks "is that pairing this sandbox", not only where a container meets a folder.
 export const isSameSandbox = (sandboxId: string, slug: string): boolean => sandboxId === slug || sandboxId.startsWith(`${slug}-`);
 
-// Most-human-first: a recorded display name (the container's, else the pairing's), then the synced folder's own leaf,
-// then the raw id. The
-// exact id survives as `subtitle` rather than being replaced, since it's the string somebody actually types.
+// Most-human-first: a recorded display name (the container's, else the pairing's), then the synced folder's own leaf, then
+// the raw id. The exact id survives as `subtitle` rather than being replaced, since it's the string somebody actually types.
 const leafOf = (dir: string | undefined): string | undefined => {
     const trimmed = (dir ?? ``).replace(/[/\\]+$/, ``);
     const leaf = trimmed.slice(Math.max(trimmed.lastIndexOf(`/`), trimmed.lastIndexOf(`\\`)) + 1);
@@ -204,6 +201,9 @@ const titled = (
     const title = sandbox?.name ?? folder?.name ?? leafOf(folder?.localDir) ?? exact;
     return { title, ...(title === exact ? {} : { subtitle: exact }) };
 };
+
+/** Nothing named it (no recorded name, no folder to take one from): its title is the raw id, and a card says it has none. */
+export const isUntitled = (group: DeviceSandboxGroup): boolean => group.subtitle === undefined && group.sandbox?.name === undefined && group.folder === undefined;
 
 // Driven by the pairings, in their own order, since that's what the user set up and it survives a
 // restart with nothing re-mirrored yet. Containers with no pairing come last.
@@ -543,7 +543,7 @@ export const filesLine = (group: DeviceSandboxGroup): CardPart[] => {
     const parts: CardPart[] = [
         folder.localDir === undefined || folder.localDir === ``
             ? { key: `path`, text: t(`ui.deviceDetail.noFolderSynced`), tone: `muted` }
-            : { key: `path`, text: folder.localDir, tone: `content`, mono: true, hint: folder.localDir },
+            : { key: `path`, text: folder.localDir, tone: `muted`, mono: true, hint: folder.localDir },
     ];
     const hold = folderHold(folder);
     if (hold !== undefined) {
@@ -568,8 +568,8 @@ export const filesLine = (group: DeviceSandboxGroup): CardPart[] => {
 // How many reached addresses the closed line names before it counts the rest.
 const PORTS_SHOWN = 3;
 
-// The Ports line, or undefined where this computer holds no pairing and no port for the sandbox: nothing reaches
-// localhost then, and the Files line already says it isn't connected here.
+// The Ports line, or undefined where it has nothing to say: no pairing and no port here, or nothing served yet, which is
+// a quiet sandbox's resting state rather than news.
 export const portsLine = (group: DeviceSandboxGroup): CardPart[] | undefined => {
     if (group.folder === undefined && group.ports.length === 0) {
         return undefined;
@@ -602,7 +602,7 @@ export const portsLine = (group: DeviceSandboxGroup): CardPart[] | undefined => 
     if (alone > 0) {
         parts.push({ key: `alone`, text: t(`ui.deviceDetail.portsAlone`, { count: alone }, alone), tone: `subtle`, hint: portsTip(group, `ignored`, t(`ui.deviceDetail.leftAlone`)) });
     }
-    return parts.length > 0 ? parts : [{ key: `none`, text: t(`ui.deviceDetail.noPorts`), tone: `subtle` }];
+    return parts.length > 0 ? parts : undefined;
 };
 
 // The line under a card's name: what version runs, the container's share of the machine, and an adoption (which side

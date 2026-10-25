@@ -118,7 +118,7 @@ const change = async (verb: OsVerb, apply: boolean, ask: () => Promise<OsRunEnd>
     const mine = startRun(verb, apply, channel);
     osRun.value = mine;
     const startedAt = Date.now();
-    // Asked here and awaited through `start`, which owns the run's bookkeeping, as a move's is (../engine.ts).
+    // Asked here and awaited through `start`, which owns the run's bookkeeping, as a move's is (../engine/engine.ts).
     const asked = ask();
     const failure = await start(RUN_OF[verb], () => asked.then(() => undefined));
     const end = failure === undefined ? await asked : undefined;

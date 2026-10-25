@@ -178,6 +178,8 @@ export {
     resourcesSummary,
     // The view's own grouping, for a caller that needs to count sandboxes and attention flags before drawing.
     sandboxGroups,
+    // Whether nothing named a sandbox, so a caller's own lead mark draws no initial of its raw id.
+    isUntitled,
 } from "./components/sandbox/deviceDetail.js";
 // Sandbox Resources… dialog: memory/CPU caps, privileged mode, GPU, applied as a recreate onto the same image.
 // Its arithmetic also ships DOM-free as `@intentic/ui/sandbox-resources`.

@@ -507,8 +507,10 @@ it(`titles a sandbox by the name this account gave it, over its folder and its s
         },
     ]);
     const names = [...el.querySelectorAll(`section[aria-label] h3`)].map((name) => (name.textContent ?? ``).trim());
-    // Not the folder's leaf, which kept the name the sandbox had at setup; a container this account cannot see keeps its slug.
-    expect(names).toEqual([`intentic`, `sandbox-7f00`]);
+    // Not the folder's leaf, which kept the name the sandbox had at setup; a container nothing named says it has no name,
+    // and keeps its slug on the line under it.
+    expect(names).toEqual([`intentic`, `Unnamed sandbox`]);
+    expect(el.querySelector(`section[aria-label="sandbox-7f00"]`)?.textContent ?? ``).toContain(`sandbox-7f00`);
     // The slug somebody types into a terminal is still on the card, under the name.
     expect(el.textContent ?? ``).toContain(`sandbox-1ea6`);
 });
@@ -870,7 +872,7 @@ const cardOf = (el: HTMLElement, name: string): string => el.querySelector(`sect
 it(`states each sandbox's standing in a word on its card`, () => {
     const el = mount([busyMachine()]);
     expect(cardOf(el, `radarsu-web-platform-bce57bb9fe3b`)).toContain(`radarsu-web-platform-bce57bb9fe3b running`);
-    expect(cardOf(el, `sandbox-4c64429cade7`)).toContain(`sandbox-4c64429cade7 stopped`);
+    expect(cardOf(el, `sandbox-4c64429cade7`)).toContain(`Unnamed sandbox stopped`);
 });
 
 // A folded card still answers the two questions it is read for, in words: where its files are, and what reached
@@ -882,7 +884,9 @@ it(`folds a sandbox to a card that still says where its files and ports are`, ()
     expect(card).toContain(`Files/home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
     expect(card).toContain(`Portslocalhost:8788localhost:33177`);
     expect(card).not.toContain(`img:a`);
-    expect(cardOf(el, `sandbox-4c64429cade7`)).toContain(`Filesnot synced to this computer`);
+    // Files this computer does not keep are said on the line under the name, not given a Files line to say it.
+    expect(cardOf(el, `sandbox-4c64429cade7`)).toContain(`sandbox-4c64429cade7·files not synced here`);
+    expect(cardOf(el, `sandbox-4c64429cade7`)).not.toContain(`Files`);
 });
 
 // THE CASE THIS RULE EXISTS FOR. A port the machine itself already uses for something else — a database on 5440 —

@@ -3,7 +3,7 @@ import { track } from "../analytics";
 import { dockerListening, dockerOpen, dockerStart, folderSetupCheck, hostsSandboxes, takePendingDocker, workspaceOpen, type DockerStart } from "../desktop";
 import { dockerEndingLine } from "../components/dockerWords";
 import { dockerReasonOf } from "./dockerReason";
-import { onOurEngine } from "./engine";
+import { onOurEngine } from "./engine/engine";
 import { dockerReady, dockerStarting, engineListening, info, refresh } from "./machine";
 
 // STARTING THE ENGINE: the whole of what this app can do about a Docker that is not running, and it is a lot. Docker

@@ -37,8 +37,8 @@ import PasswordsOffer from "../passwords/PasswordsOffer.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { followRoster, signedIn as rosterSignedIn } from "./roster";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
-import { engineBackShown, engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine";
-import { moveTargetOf } from "./engineMove";
+import { engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine/engine";
+import { agentSettled, openable, openSandbox, useMastheadMenu } from "./face";
 
 // DEVICES, IN A LOCAL WINDOW: the page the app adds to a local window's rail (host.ts), where the launcher window's card
 // used to be. It is the workspace's Devices view opened on one machine, the one this window runs on: the same masthead
@@ -204,6 +204,8 @@ const mastheadErrands = computed(
         agentsElsewhere.value.length > 0,
 );
 
+const mastheadMenu = useMastheadMenu(restartAgent);
+
 // The row a verb is working on, by the id the list knows it by: its status glyph spins, as on the workspace's page.
 const busyIds = computed(() => {
     const slug = busy.value?.slug;
@@ -254,9 +256,9 @@ onMounted(() => {
                     <Icon name="arrow-up-right" class="text-2xs" aria-hidden="true" />
                 </button>
 
-                <!-- THIS COMPUTER'S MASTHEAD, the workspace's own for a machine of one environment: its name, its OS, its
-                     engine's size, its agent's build and state, and the agent's one verb. This window runs ON the device,
-                     so the verb never needs a command to go and type. -->
+                <!-- THIS COMPUTER'S MASTHEAD, the workspace's own for a machine of one environment (face.ts says what it keeps
+                     behind its ⋯). On a card like the sandboxes under it: only the way to the board sits on the window's picture. -->
+                <section class="rounded-xl bg-card px-4 py-3.5 shadow-sm">
                 <DeviceEnvironmentRow
                     :masthead="true"
                     :name="machineName"
@@ -265,7 +267,9 @@ onMounted(() => {
                     :hardware="hardware"
                     :version="agentPanel?.version"
                     :state="agentPanel?.state"
-                    :actions="agentPanel?.actions"
+                    :actions="agentSettled ? [] : agentPanel?.actions"
+                    :quiet="agentSettled"
+                    :menu="mastheadMenu"
                     :running="agentRestarting ? `restart` : undefined"
                     :busy="running || busy !== undefined"
                     @run="void restartAgent()"
@@ -277,13 +281,21 @@ onMounted(() => {
                         <p v-else-if="agentRestartOutcome" class="text-xs text-muted">{{ agentRestartOutcome }}</p>
                         <!-- The agent didn't answer, which is a different absence from having none. -->
                         <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                        <!-- This computer's other environments with an agent of their own (a WSL distro's), which keep the sandboxes set up there. -->
-                        <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-1.5 text-xs text-subtle">
-                            <Icon name="server" class="shrink-0" />
-                            <span>{{ t(`desktop.device.agentsElsewhere`, { places: agentsElsewhere.join(`, `) }) }}</span>
+                        <!-- This computer's other environments with an agent of their own (a WSL distro's): a tag each. -->
+                        <p v-if="agentsElsewhere.length > 0" class="flex flex-wrap items-center gap-1.5 text-2xs text-subtle">
+                            <span>{{ t(`desktop.device.alsoOnThisComputer`) }}</span>
+                            <span
+                                v-for="place in agentsElsewhere"
+                                :key="place"
+                                class="inline-flex items-center gap-1 rounded-md bg-content/5 px-1.5 py-0.5 text-muted"
+                                v-tooltip.top="{ title: t(`desktop.device.agentElsewhere`), note: t(`desktop.device.keepsSandboxesThere`) }"
+                            >
+                                <Icon name="server" class="shrink-0" aria-hidden="true" />{{ place }}
+                            </span>
                         </p>
                     </template>
                 </DeviceEnvironmentRow>
+                </section>
             </div>
 
             <!-- The app's own update: what is true now, never a promise about later. -->
@@ -587,9 +599,10 @@ onMounted(() => {
                 <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :busy="busyIds">
                     <!-- No `busy`: the row's status glyph already spins (DeviceDetail `busy`). -->
                     <template #actions="{ group }">
+                        <Button v-if="openable(group)" size="small" tier="boring" :label="t(`desktop.device.open`)" @click="void openSandbox(group)" />
                         <SandboxVerbs
                             v-if="group.sandbox"
-                            :compact="true"
+                            :compact="group.sandbox.running"
                             :running="group.sandbox.running"
                             :disabled="running || busy !== undefined"
                             :logs-open="logOpen(group)"
@@ -640,20 +653,6 @@ onMounted(() => {
                 </Button>
             </section>
 
-            <!-- The way back to Docker Desktop, last and in the quietest ink: Intentic's engine is where sandboxes belong on a
-                 PC, so the move away is there for whoever looks for it and never put in front of anyone. The move asks first. -->
-            <p v-if="engineBackShown && engineState" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle">
-                <span>{{ t(`desktop.engine.runsOn.intentic`) }}</span>
-                <span aria-hidden="true">·</span>
-                <button
-                    type="button"
-                    :class="ui.textButton({ tone: `quiet` })"
-                    :disabled="running || busy !== undefined"
-                    @click="void moveEngine(moveTargetOf(engineState) ?? `docker-desktop`, false)"
-                >
-                    {{ t(`desktop.engine.moveBack`) }}
-                </button>
-            </p>
             <!-- PASSWORDS, offered while this computer has not set it up: it has no rail tile until then. -->
             <PasswordsOffer />
         </div>

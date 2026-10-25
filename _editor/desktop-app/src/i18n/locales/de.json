@@ -196,7 +196,10 @@
         "startingDockerBadge": "Docker wird gestartet",
         "updateReadyBadge": "ein Update ist bereit",
         "folderSetupBadge": "Sandbox eines Ordners wird erstellt",
-        "agentsElsewhere": "Der Maschinen-Agent von Intentic läuft auf diesem Computer auch in {places} und kümmert sich um die dort eingerichteten Sandboxes.",
+        "alsoOnThisComputer": "Auch auf diesem Computer",
+        "agentElsewhere": "Eigener Maschinen-Agent",
+        "keepsSandboxesThere": "Betreut seine Sandboxes.",
+        "open": "Öffnen",
         "pcSettingUpBadge": "dieser PC wird eingerichtet",
         "pcSetupBadge": "dieser PC kann für Agenten eingerichtet werden"
     },

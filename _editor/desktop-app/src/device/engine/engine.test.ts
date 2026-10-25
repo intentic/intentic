@@ -1,13 +1,13 @@
 import "@intentic/testing/dom";
 import { freshImport, waitFor } from "@intentic/testing/bun";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import type { EngineMoveEnd, EngineMoveEvent, EngineStatus } from "../desktopEngine";
+import type { EngineMoveEnd, EngineMoveEvent, EngineStatus } from "../../desktopEngine";
 
 // The engine as a window holds it: ic's status read and re-read, a move run at the reader's yes with every step any
 // window hears folded in, its end said once whichever of its answer and its last step reaches the window first, the
 // reader's "Not now", and the copies a move left removed. The app is Tauri's own IPC mock.
 
-// The kit's device readout (reached through ./runs and ./machine) asks media queries at import; nothing here is about the screen.
+// The kit's device readout (reached through ../runs and ../machine) asks media queries at import; nothing here is about the screen.
 Object.defineProperty(window, `matchMedia`, {
     value: (query: string) => ({ matches: false, media: query, addEventListener: () => undefined, removeEventListener: () => undefined }),
     configurable: true,

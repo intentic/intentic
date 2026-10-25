@@ -196,7 +196,10 @@
         "startingDockerBadge": "uruchamianie Dockera",
         "updateReadyBadge": "aktualizacja jest gotowa",
         "folderSetupBadge": "tworzenie piaskownicy folderu",
-        "agentsElsewhere": "Agent maszyny Intentic działa na tym komputerze także w {places} i dba o skonfigurowane tam sandboxy.",
+        "alsoOnThisComputer": "Także na tym komputerze",
+        "agentElsewhere": "Własny agent maszyny",
+        "keepsSandboxesThere": "Dba o swoje sandboxy.",
+        "open": "Otwórz",
         "pcSettingUpBadge": "konfiguracja tego komputera",
         "pcSetupBadge": "ten komputer można przygotować dla agentów"
     },

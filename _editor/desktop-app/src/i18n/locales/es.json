@@ -196,7 +196,10 @@
         "startingDockerBadge": "iniciando Docker",
         "updateReadyBadge": "hay una actualización lista",
         "folderSetupBadge": "creando el sandbox de una carpeta",
-        "agentsElsewhere": "El agente de máquina de Intentic también se ejecuta en {places} en este ordenador, y se ocupa de los sandboxes configurados allí.",
+        "alsoOnThisComputer": "También en este ordenador",
+        "agentElsewhere": "Agente propio",
+        "keepsSandboxesThere": "Cuida sus sandboxes.",
+        "open": "Abrir",
         "pcSettingUpBadge": "preparando este PC",
         "pcSetupBadge": "este PC se puede preparar para agentes"
     },

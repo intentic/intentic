@@ -1,16 +1,20 @@
 <!-- One environment of a machine, as both Devices pages draw it: the masthead of a one-environment machine's page, and a
      row of a many-sided machine's Environments list. -->
 <script setup lang="ts" generic="Op extends string">
-import type { VNode } from "vue";
+import type { MenuItem } from "primevue/menuitem";
+import { computed, ref, type VNode } from "vue";
 import BrandMark from "../brand/BrandMark.vue";
 import StatusBadge from "../feedback/StatusBadge.vue";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 import Button from "../primitives/Button.vue";
 import Icon from "../primitives/Icon.vue";
+import ContextMenu from "../overlays/ContextMenu.vue";
 import Row from "../rows/Row.vue";
+import { useT } from "../../i18n/index.js";
 import type { TooltipValue } from "../../lib/tooltip.js";
 import type { AgentAction } from "./deviceAgent.js";
 import type { OsMark } from "./deviceMachine.js";
+import type { SandboxMenuVerb } from "./sandboxVerbs.js";
 
 // ONE ENVIRONMENT, ONE SHAPE, ONE COMPONENT. A PC reached through one door and a PC reached through three are the same
 // kind of thing, so they are the same row; and the computer the desktop app runs on is the same kind of thing as any
@@ -40,6 +44,8 @@ const {
     running,
     busy = false,
     working,
+    quiet = false,
+    menu = [],
 } = defineProps<{
     /** The machine's name: the masthead's title. */
     name: string;
@@ -75,6 +81,11 @@ const {
     // stands in for the state badge, the last-seen and the verbs: a machine mid-update drops its socket by design, so
     // "reconnecting", "last seen now" and a dead Restart button beside a spinner were three tellings of one wait.
     working?: string | undefined;
+    // A settled machine's masthead, said in fewer words: the agent's build goes to its badge's hover, since a version
+    // beside a healthy state is a number nobody reads. The caller decides when the machine is settled.
+    quiet?: boolean | undefined;
+    /** The verbs a reader seldom needs (the agent's restart on a healthy machine, a move of its engine), behind one ⋯. */
+    menu?: readonly SandboxMenuVerb[] | undefined;
 }>();
 
 const slots = defineSlots<{
@@ -85,6 +96,22 @@ const slots = defineSlots<{
 }>();
 
 const emit = defineEmits<{ run: [op: Op] }>();
+
+const t = useT();
+const badgeTip = computed(() => (quiet && version !== undefined ? t(`ui.deviceAgent.agentBuild`, { version }) : undefined));
+const menuRef = ref<{ show: (event: Event) => void } | undefined>();
+// The menu's rows as SandboxVerbs builds a card's: a hint and the danger ink only where the verb has them.
+const menuRow = (verb: SandboxMenuVerb): MenuItem => {
+    const row: MenuItem = { label: verb.label, icon: verb.icon, command: verb.run };
+    if (verb.danger === true) {
+        row[`danger`] = true;
+    }
+    if (verb.hint !== undefined) {
+        row[`hint`] = verb.hint;
+    }
+    return row;
+};
+const menuItems = computed(() => menu.map(menuRow));
 </script>
 
 <template>
@@ -120,16 +147,16 @@ const emit = defineEmits<{ run: [op: Op] }>();
 
         <template #meta>
             <span v-if="seen && !working" class="shrink-0">{{ seen }}</span>
-            <span v-if="version" class="shrink-0 font-mono">{{ version }}</span>
+            <span v-if="version && !quiet" class="shrink-0 font-mono">{{ version }}</span>
             <span v-if="working" class="inline-flex shrink-0 items-center gap-1.5 text-content tabular-nums" role="status">
                 <Icon name="spinner" spin class="text-2xs text-info" aria-hidden="true" />{{ working }}
             </span>
-            <StatusBadge v-else-if="state" :variant="state.variant" size="xs" :dot="true" :label="state.word" class="shrink-0" />
+            <StatusBadge v-else-if="state" v-tooltip.top="badgeTip" :variant="state.variant" size="xs" :dot="true" :label="state.word" class="shrink-0" />
         </template>
 
         <!-- The agent's verbs through this environment's door. Each runs on that machine, so each spins the whole
              page's lock rather than its own. -->
-        <template v-if="(actions.length > 0 && !working) || slots.aside" #control>
+        <template v-if="((actions.length > 0 || menu.length > 0) && !working) || slots.aside" #control>
             <slot name="aside" />
             <template v-if="!working">
                 <Button
@@ -143,6 +170,21 @@ const emit = defineEmits<{ run: [op: Op] }>();
                     v-tooltip.top="action.hint"
                     @click="emit(`run`, action.op)"
                 />
+                <template v-if="menu.length > 0">
+                    <Button
+                        size="small"
+                        tier="quiet"
+                        :loading="running !== undefined"
+                        :disabled="busy || running !== undefined"
+                        aria-haspopup="menu"
+                        :aria-label="t(`ui.action.moreActions`)"
+                        v-tooltip.top="t(`ui.action.moreActions`)"
+                        @click="menuRef?.show($event)"
+                    >
+                        <template #icon><Icon name="ellipsis" /></template>
+                    </Button>
+                    <ContextMenu ref="menuRef" :model="menuItems" :min-width="11" />
+                </template>
             </template>
         </template>
 

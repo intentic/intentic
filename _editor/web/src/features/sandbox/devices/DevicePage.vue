@@ -11,6 +11,7 @@ import {
     distroMark,
     folderHold,
     Icon,
+    isUntitled,
     mirroringOff,
     type ResourcesForm,
     Row,
@@ -421,7 +422,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     :selected="selection.chosenIds.value"
                 >
                     <template #lead="{ group }">
-                        <SandboxLogo :image="logoOf(group)" :name="group.title" :size="logoOf(group) ? 32 : 18" />
+                        <SandboxLogo :image="logoOf(group)" :name="isUntitled(group) ? undefined : group.title" :size="logoOf(group) ? 32 : 18" />
                     </template>
                     <!-- Dead rather than absent on a row that can't go in a batch: a gap in the column says nothing, and
                          the reason is the one thing somebody who ticked it wants. -->

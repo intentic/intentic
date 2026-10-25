@@ -14,7 +14,7 @@ let consent = false;
 let listening = false;
 let context: { installId: string; shared: Record<string, unknown> } | undefined;
 
-// Which engine this PC's sandboxes run on (`ic engine status`, device/engine.ts), sent with every event as
+// Which engine this PC's sandboxes run on (`ic engine status`, device/engine/engine.ts), sent with every event as
 // `desktop_engine` once it is known: the one fact that splits every funnel here in two. Kept apart from `context`, since
 // the status can arrive before or after `initAnalytics`.
 let engine: string | undefined;

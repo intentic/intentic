@@ -1,6 +1,6 @@
 //! WHICH ENGINE THIS PC'S SANDBOXES RUN ON, AND THE MOVE TO THE OTHER (2026-10-10): Docker Desktop or Intentic's engine
 //! (a dockerd in a WSL distro of ours), every sandbox moved from one to the other at the reader's word, the reader's
-//! preference, and the copies a move leaves behind. This device's engine card draws it (src/device/engine.ts). Every
+//! preference, and the copies a move leaves behind. This device's engine card draws it (src/device/engine/engine.ts). Every
 //! answer is `ic engine`'s own: this app runs it and reads what it prints.
 
 use std::path::PathBuf;

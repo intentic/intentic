@@ -10,8 +10,10 @@ const NOW = new Date(2026, 8, 28, 16, 30).getTime();
 it(`says what runs and, while the version before stays parked, until when`, () => {
     const box = { slug: `work`, running: true, image: `intentic/sandbox:stable`, version: `1.316.0` };
     expect(versionLine({ ...box, probationUntil: new Date(2026, 8, 29, 14, 5).getTime() }, NOW)).toBe(
-        `1.316.0 · previous version ready until 14:05 tomorrow`,
+        `1.316.0 · can roll back until 14:05 tomorrow`,
     );
+    // A dev image's 0.0.0 names nothing to compare against: said as no version at all.
+    expect(versionLine({ ...box, version: `0.0.0` }, NOW)).toBeUndefined();
     expect(versionLine({ ...box, probationUntil: NOW - 1 }, NOW)).toBe(`1.316.0`);
     expect(versionLine({ slug: `work`, running: true, image: `intentic/sandbox:stable` }, NOW)).toBeUndefined();
 });

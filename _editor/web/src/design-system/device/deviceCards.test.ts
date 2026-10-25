@@ -34,7 +34,7 @@ it(`puts the folder on the Files line with only the news beside it`, () => {
     expect(filesLine(running(`a`, { folder })).map((part) => part.text)).toEqual([`/home/ada/a`]);
     expect(filesLine(running(`a`, { folder: { ...folder, paused: true } })).map((part) => part.text)).toEqual([`/home/ada/a`, `paused`]);
     expect(filesLine(running(`a`, { folder: { ...folder, conflicts: 3 } })).map((part) => [part.text, part.tone])).toEqual([
-        [`/home/ada/a`, `content`],
+        [`/home/ada/a`, `muted`],
         [`3 conflicts`, `warning`],
     ]);
     expect(filesLine(running(`a`)).map((part) => part.text)).toEqual([`not synced to this computer`]);
@@ -69,13 +69,13 @@ it(`says a folder is paused for a full drive, and that some git history lags, as
     const lowDisk = { freeBytes: 3 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 };
     const parts = filesLine(running(`a`, { folder: { ...folder, lowDisk } }));
     expect(parts.map((part) => [part.text, part.tone])).toEqual([
-        [`/home/ada/a`, `content`],
+        [`/home/ada/a`, `muted`],
         [`paused: drive nearly full`, `warning`],
     ]);
     expect(parts[1]?.hint).toContain(`3.0 GiB free of 953 GiB`);
     const held = filesLine(running(`a`, { folder: { ...folder, paused: false, bridgeHolds: [{ repo: `firma-backup`, reason: `stalled`, retryAt: Date.now() + 60_000 }] } }));
     expect(held.map((part) => [part.text, part.tone])).toEqual([
-        [`/home/ada/a`, `content`],
+        [`/home/ada/a`, `muted`],
         [`git history behind in 1 repo`, `warning`],
     ]);
 });
@@ -105,8 +105,9 @@ it(`names the addresses that reached localhost and counts the rest by outcome`, 
         [`1 busy here`, `muted`],
     ]);
     expect(portsLine(running(`a`, { folder: { ...folder, mirroring: `off` }, ports }))?.map((part) => part.text)).toEqual([`mirroring off`]);
-    expect(portsLine(running(`a`, { folder }))?.map((part) => part.text)).toEqual([`nothing served yet`]);
-    // Nothing paired and nothing held: no Ports line at all, since nothing here could reach localhost.
+    // Nothing served yet is a quiet sandbox's resting state, and nothing paired or held means nothing here could reach
+    // localhost: neither gets a Ports line.
+    expect(portsLine(running(`a`, { folder }))).toBeUndefined();
     expect(portsLine(running(`a`))).toBeUndefined();
 });
 

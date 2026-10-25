@@ -4,9 +4,9 @@ import { formatDateLong, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import type { EngineMoveEnd, EngineStatus, MoveTarget } from "../desktopEngine";
-import { barOf, gigabytes, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type MoveProgress } from "../device/engineMove";
+import { barOf, gigabytes, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type MoveProgress } from "../device/engine/engineMove";
 
-// WHICH ENGINE THIS PC'S SANDBOXES RUN ON, beside Docker's own card on This device (device/engine.ts holds it, the app's
+// WHICH ENGINE THIS PC'S SANDBOXES RUN ON, beside Docker's own card on This device (device/engine/engine.ts holds it, the app's
 // engine.rs runs `ic engine`): Docker Desktop or Intentic's engine, and the move to the other one. On Docker Desktop the
 // move is in reach with a line of why and of what happens, and in front of the reader with a "Not now" once ic says it
 // is worth making. On Intentic's engine the card offers no way back: that is a footnote at the foot of This device

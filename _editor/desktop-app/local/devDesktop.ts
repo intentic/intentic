@@ -35,7 +35,8 @@ import { CHECK_CANT_RUN, CHECK_NEEDS_SETUP, CHECK_READY, CHECK_UNKNOWN } from ".
 //
 // Which machine is chosen by `?machine=` on the dev address, kept for the tab's reloads:
 // - `fresh` (the default): a first launch. No account, no sandbox, no agent, no Docker.
-// - `host`: signed in, two sandboxes here (one running, with a folder synced) of the account's three, the machine agent up.
+// - `host`: signed in, sandboxes here (one running with a folder synced, one stopped, one a WSL distro keeps, one nobody
+//   named), the machine agent up.
 // - `setup`: signed in, a setup handed over from the workspace, running its steps.
 //
 // A folder's own sandbox (src-tauri/src/folder_setup.rs), made on the press of "Work on this with an agent", goes as
@@ -165,20 +166,19 @@ const RESOURCES: NonNullable<SandboxStatus[`resources`]> = {
     overlayRuntime: [],
 };
 
+// A sandbox here, running the stable image with the share above, and what sets each case apart.
+const box = (slug: string, more: Partial<SandboxStatus>): SandboxStatus =>
+    Object.assign({ slug, container: `intentic-${slug}`, running: true, image: `ghcr.io/intentic/sandbox:stable`, resources: RESOURCES }, more);
+
 const sandboxesOf = (machine: Machine): SandboxStatus[] =>
     machine === `host`
         ? [
-              { slug: `574ea8038415`, container: `intentic-574ea8038415`, name: `shop`, running: true, image: `ghcr.io/intentic/sandbox:stable`, tunnelRunning: true, resources: RESOURCES },
-              { slug: `8a8171848c91`, container: `intentic-8a8171848c91`, name: `research`, running: false, image: `ghcr.io/intentic/sandbox:stable`, resources: RESOURCES },
-              {
-                  slug: `b1e2c3d4e5f6`,
-                  container: `intentic-b1e2c3d4e5f6`,
-                  name: `wsl-work`,
-                  running: true,
-                  image: `ghcr.io/intentic/sandbox:stable`,
-                  resources: RESOURCES,
-                  keptElsewhere: `linux`,
-              },
+              // Just updated, the version before still parked, and known to the platform: its card offers Open.
+              box(`574ea8038415`, { name: `shop`, tunnelRunning: true, version: `1.318.0`, probationUntil: Date.now() + 3 * 3_600_000, platformId: `cm1shop` }),
+              box(`8a8171848c91`, { name: `research`, running: false }),
+              box(`b1e2c3d4e5f6`, { name: `wsl-work`, keptElsewhere: `linux` }),
+              // Nothing named it, its image says no version, and it runs privileged.
+              box(`sandbox-82789f4106b4`, { image: `ghcr.io/intentic/sandbox:dev`, resources: { ...RESOURCES, privileged: true }, version: `0.0.0` }),
           ]
         : [];
 
