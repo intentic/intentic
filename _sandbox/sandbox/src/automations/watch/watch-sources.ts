@@ -2,6 +2,7 @@ import { Script, createContext } from "node:vm";
 import type { WatchSource } from "@intentic/sandbox-contract/schemas/automations";
 import { maxSatisfying, validRange } from "semver";
 import { errorMessage } from "@intentic/base/errors";
+import { readCappedText } from "@intentic/base/capped-read";
 
 // The ready-made checks a watch can name instead of a guard command (WatchSourceSchema): the daemon asks the registry,
 // GitHub or the page itself, with no shell, no extension and no model. Each answers whether its condition holds and what
@@ -35,8 +36,8 @@ const githubApi = (env: SourceContext["env"]): { readonly base: string; readonly
 
 // One request may take this long before the check reads as not passing; a 60-second guard has the same bound.
 const FETCH_TIMEOUT_MS = 20_000;
-// What a page may weigh before the rest is ignored: a watch reads a release page, not a download.
-const PAGE_MAX_CHARS = 2_000_000;
+// Count bytes as they arrive and cancel the rest: slicing a fully downloaded page never bounded the download.
+const PAGE_MAX_BYTES = 2_000_000;
 const USER_AGENT = "intentic-sandbox-watch";
 
 // The source in a few words, for a run's detail, a notification and the wake's "Check command" line.
@@ -75,7 +76,16 @@ export const sourceProblem = (source: WatchSource): string | undefined => {
 
 const timed = async (context: SourceContext, url: string, headers: Record<string, string>): Promise<Response | string> => {
     try {
-        return await context.fetch(url, { headers: { "user-agent": USER_AGENT, ...headers }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        const response = await context.fetch(url, {
+            headers: { "user-agent": USER_AGENT, ...headers },
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!response.ok) {
+            // These checks report refusals by status alone. Release the unread body rather than holding its connection.
+            // allow(silent-catch): cancellation cannot change the HTTP refusal the check already received.
+            await response.body?.cancel().catch(() => undefined);
+        }
+        return response;
     } catch (error) {
         return `could not reach ${new URL(url).host}: ${errorMessage(error)}`;
     }
@@ -201,7 +211,7 @@ const checkUrl = async (source: Extract<WatchSource, { kind: "url" }>, context: 
     if (!response.ok) {
         return { pass: false, detail: `the page answered ${response.status}` };
     }
-    const body = (await response.text()).slice(0, PAGE_MAX_CHARS);
+    const { text: body } = await readCappedText(response, PAGE_MAX_BYTES);
     if (source.select === undefined) {
         const html = (response.headers.get("content-type") ?? "").includes("html");
         return { pass: true, output: html ? pageText(body) : body.trim() };

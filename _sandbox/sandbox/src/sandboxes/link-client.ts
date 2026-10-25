@@ -59,7 +59,13 @@ const call = async <T>(
 ): Promise<LinkAnswerOf<T>> => {
     const deadline = AbortSignal.timeout(CALL_MS + (request.holdS ?? 0) * 1_000);
     const headers = new Headers({ [LINK_HEADER]: target.config.token });
-    const init: RequestInit = { method: request.method, headers, signal: signal === undefined ? deadline : AbortSignal.any([deadline, signal]) };
+    // A redirect is a refusal from the configured sandbox; its private link header must never travel to another target.
+    const init: RequestInit = {
+        method: request.method,
+        headers,
+        redirect: "manual",
+        signal: signal === undefined ? deadline : AbortSignal.any([deadline, signal]),
+    };
     if (request.body !== undefined) {
         headers.set("content-type", "application/json");
         init.body = JSON.stringify(request.body);
@@ -102,7 +108,9 @@ export const linkStatus = (
     signal?: AbortSignal,
 ): Promise<LinkAnswerOf<LinkTaskStatus>> => {
     const query =
-        hold.after === undefined ? "" : `?${new URLSearchParams({ after: String(hold.after), wait: String(hold.waitS ?? LINK_POLL_WAIT_S) }).toString()}`;
+        hold.after === undefined
+            ? ""
+            : `?${new URLSearchParams({ after: String(hold.after), wait: String(hold.waitS ?? LINK_POLL_WAIT_S) }).toString()}`;
     return call(
         target,
         {

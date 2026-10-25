@@ -1,4 +1,5 @@
 import { checkSource, pageText, sourceLabel, sourceProblem, type SourceFetch } from "./watch-sources.js";
+import { streamedResponse } from "../../http/fetch.testing.js";
 
 // The ready-made checks against canned answers: what each asks for, what it saw, and what it says while waiting.
 
@@ -94,6 +95,29 @@ test("a network failure is a check that did not pass, said as such", async () =>
         pass: false,
         detail: "could not reach registry.npmjs.org: connect ECONNREFUSED",
     });
+});
+
+test("a watched page stops downloading at its cap, including a chunked answer with no length", async () => {
+    const { response, pulled } = streamedResponse(32, 1_000_000);
+    const checked = await checkSource({ kind: "url", url: "https://example.com/large" }, { fetch: async () => response, env: {} });
+    expect(checked).toEqual({ pass: true, output: "a".repeat(2_000_000) });
+    expect(pulled.cancelled).toBe(true);
+    expect(pulled.count).toBeLessThanOrEqual(4);
+});
+
+test.each([
+    { source: { kind: "npm" as const, package: "missing" }, status: 404, detail: "npm has no package named missing" },
+    {
+        source: { kind: "github-release" as const, repo: "a/b" },
+        status: 403,
+        detail: "GitHub answered 403 (likely its hourly limit for requests without a token)",
+    },
+    { source: { kind: "url" as const, url: "https://example.com/" }, status: 503, detail: "the page answered 503" },
+])("an unread HTTP $status watch refusal releases its response body", async ({ source, status, detail }) => {
+    const { response, pulled } = streamedResponse(32, 100_000, 0x61, { status });
+    expect(await checkSource(source, { fetch: async () => response, env: {} })).toEqual({ pass: false, detail });
+    expect(pulled.cancelled).toBe(true);
+    expect(pulled.count).toBeLessThanOrEqual(1);
 });
 
 test("labels and the problems upsert refuses", () => {

@@ -37,7 +37,14 @@ export const forwardToBackend = async (
     const stalled = new AbortController();
     const deadline = setTimeout(() => stalled.abort(), headersDeadlineMs);
     // Node's fetch streams a request body only with `duplex: "half"`, which the DOM's RequestInit does not declare.
-    const init: RequestInit & { duplex?: "half" } = { method: c.req.method, headers, signal: stalled.signal };
+    // Redirects belong to the caller: following one here would send the host token and resolved card secrets to its
+    // destination. The caller's abort stays attached after headers too, so leaving a stream closes the backend call.
+    const init: RequestInit & { duplex?: "half" } = {
+        method: c.req.method,
+        headers,
+        redirect: "manual",
+        signal: AbortSignal.any([c.req.raw.signal, stalled.signal]),
+    };
     if (body !== undefined && body !== null) {
         init.body = body;
         init.duplex = "half";
@@ -46,7 +53,7 @@ export const forwardToBackend = async (
         const upstream = await fetch(`http://127.0.0.1:${target.port}${url.pathname}${url.search}`, init);
         return new Response(upstream.body, { status: upstream.status, headers: forwardHeaders(upstream.headers, RESPONSE_REFRAMED) });
     } catch (error) {
-        if (!stalled.signal.aborted) {
+        if (c.req.raw.signal.aborted || !stalled.signal.aborted) {
             throw error;
         }
         return c.json(stall(extension, url.pathname, `${extension} did not answer ${url.pathname} within ${headersDeadlineMs / 1000}s`), 504);
