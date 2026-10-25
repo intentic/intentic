@@ -16,15 +16,19 @@ test.skipIf(process.platform !== "linux")("a process stamped with a conversation
     });
     try {
         await once(child, "spawn");
-        const live = createLiveMetrics({ workspaceRoot: tmpdir(), budget: createResourceBudget({ sampleMs: 0 }) });
+        // Only the measurement clock is controlled: the process, procfs, memory and CPU counters stay real. A wall-clock
+        // step during the sleep can otherwise leave the first snapshot cached instead of taking the second reading.
+        let at = 1_000_000;
+        const live = createLiveMetrics({ workspaceRoot: tmpdir(), budget: createResourceBudget({ sampleMs: 0 }), source: { now: () => at } });
         const first = await live.read();
         expect(first.sessions[owner]?.processes).toBe(1);
         expect(first.sessions[owner]?.cpuPercent).toBeUndefined();
 
         await sleep(1_500);
+        at += 1_500;
         const second = await live.read();
-        // Measured against the first reading, on the clock that stamps both: a runner whose wall clock stepped back while
-        // the timer above slept read a 1,356ms window for a 1,500ms sleep, so the sleep is no bound on it.
+        expect(second.at).toBe(at);
+        expect(second.windowMs).toBe(1_500);
         expect(second.windowMs).toBe(second.at - first.at);
         expect(second.windowMs).toBeGreaterThan(0);
         expect(second.sessions[owner]?.cpuPercent).toBeGreaterThan(0);

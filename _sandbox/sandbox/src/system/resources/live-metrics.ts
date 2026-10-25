@@ -251,11 +251,11 @@ export const createLiveMetrics = ({
 }: {
     readonly workspaceRoot: string;
     readonly budget: Pick<ResourceBudget, "snapshot">;
-    // A fake procfs for a test; production shares the daemon's one scanner (process-scan.ts).
-    readonly source?: LiveMetricsSource;
+    // Tests can replace the clock alone or the whole host; production shares the daemon's one scanner (process-scan.ts).
+    readonly source?: Partial<LiveMetricsSource>;
 }): LiveMetrics => {
-    const scan = source === undefined ? scanProcesses : createProcessScanner(source);
-    const sourceOf = source ?? procSource();
+    const sourceOf = { ...procSource(), ...source };
+    const scan = source === undefined ? scanProcesses : createProcessScanner(sourceOf);
     let baseline: Baseline | undefined;
     const readings = cachedAsync<undefined, SandboxMetrics>({ ttlMs: REUSE_MS, now: () => sourceOf.now() });
 

@@ -15,6 +15,7 @@ import { ENV_GOOGLE_KEY, REPO, stackUrls } from "./tier.js";
 
 // The labels the specs find controls by, read from the editor's English catalogue so a reworded label moves with the page.
 interface Labels {
+    readonly home: { readonly firstRun: { readonly signIn: string } };
     readonly auth: {
         readonly words: { readonly continueGoogleInBrowser: string };
         readonly desktopAuth: { readonly closeTab: string };
@@ -25,8 +26,10 @@ interface Labels {
 }
 // SAFETY: the editor's own catalogue, nested objects of strings; a key gone from it reads as undefined, which the
 // assertion below names before any spec runs.
-const EN = (JSON.parse(readFileSync(join(REPO, `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as Labels).auth;
+const CATALOG = JSON.parse(readFileSync(join(REPO, `_editor/web/src/app/i18n/locales/en.json`), `utf8`)) as Labels;
+const EN = CATALOG.auth;
 const LABELS = {
+    signIn: CATALOG.home.firstRun.signIn,
     continueInBrowser: EN.words.continueGoogleInBrowser,
     closeTab: EN.desktopAuth.closeTab,
     backToSignIn: EN.desktopAuthComplete.backToSignIn,
@@ -130,8 +133,11 @@ const signInThroughTheApp = async (
     const appHears = await listenForDeepLinks(window);
 
     await options.before?.(window);
-    // Signed out, the window's every screen leads to /login, whose one action in the app is the browser hand-off.
+    // Home opens before sign-in; its account link opens /login, whose action in the app is the browser hand-off.
     await window.goto(`${web}/`);
+    await expect(window).toHaveURL(/\/home$/u);
+    expect(await signedInAs(webview)).toBeUndefined();
+    await window.getByRole(`link`, { name: LABELS.signIn, exact: true }).click();
     await expect(window).toHaveURL(/\/login/u);
     await window.getByRole(`button`, { name: LABELS.continueInBrowser }).click();
     await appHears.next(`intentic://signin`);
