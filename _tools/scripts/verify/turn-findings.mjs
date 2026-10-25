@@ -1,10 +1,6 @@
-// HOW AN ACTOR IS HELD TO ITS OWN FINDINGS AND TO NO OTHERS. The caller asks each failing check the same question twice,
-// once in the working tree and once in a snapshot of the commit the work is built on (check-snapshot.mjs), and this
-// reads the second answer against the first. Nothing here depends on which base it is: verify-push asks about the
-// commit the push is built on, so a push answers for its own range. Separate from it because it is the only part with
-// no side effects, and so the only part a test can pin (turn-findings.test.mjs). Getting it wrong is expensive in both
-// directions, since a false accusation charges a push with code it never touched and a missed one leaves a new problem
-// to nobody.
+// Compares failing checks in the working tree with a base snapshot (check-snapshot.mjs) to report only added findings.
+// The caller chooses the base, so this works for both a conversation's change and a pushed commit range.
+// Kept side-effect-free so turn-findings.test.mjs can pin attribution without running checks or creating snapshots.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CHECKS } from "../../checks/manifest.mjs";

@@ -1,16 +1,7 @@
 #!/usr/bin/env node
-// A .gz COPY BESIDE EVERY BINARY A DEVICE DOWNLOADS. release-prepare.sh runs this once the binaries are staged and before
-// release-checksums.mjs, so SHA256SUMS lists the copies with the rest:
-//
-//   node _tools/scripts/release/release-compress.mjs
-//
-// GitHub serves a release asset as the bytes it holds, with no content coding, so every install and every upgrade moved
-// the whole binary: 92 MB for the Linux agent. Measured on v1.340.0's intentic-machine-linux-amd64, gzip -9 leaves 45%
-// of it (xz 34%, zstd 37%), and gzip is the one coding every downloader already reads without a new dependency: the
-// agent (Bun's zlib), ic and the desktop app (flate2), the shell one-liners (gzip is on every Linux and macOS) and the
-// PowerShell ones (.NET's GZipStream, in Windows PowerShell 5.1 too). Each of them asks for `<asset>.gz` first and falls
-// back to `<asset>` on a 404, which is what every release from before this answers, and checks the unpacked binary
-// against SHA256SUMS' line for `<asset>`, so the copy adds bytes to download and nothing to trust.
+// Run `node _tools/scripts/release/release-compress.mjs` after staging binaries and before release-checksums.mjs.
+// Adds .gz copies to reduce downloads; gzip is supported by every existing downloader without new dependencies.
+// Clients try <asset>.gz, fall back to <asset> on 404, and verify the unpacked binary against <asset>'s SHA256SUMS entry.
 import { createReadStream, createWriteStream, readdirSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";

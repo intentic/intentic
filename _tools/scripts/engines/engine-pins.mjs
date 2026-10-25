@@ -1,13 +1,6 @@
-// WHERE EACH ENGINE'S VERSION IS WRITTEN IN THIS REPOSITORY, once. The CI check reads this to hold engines.json to the
-// pins; the bumper writes through it. A pin site listed in one of those and not the other is exactly the drift this
-// module exists to make impossible, which is why neither keeps a table of its own.
-//
-// Two versions per engine, because for two of them they differ:
-//   tracked — what this repo asks upstream for and what the catalog carries (@openai/codex-sdk, @anthropic-ai/…).
-//   blessed — the version of the program a sandbox actually runs, which is what engines.json names. Codex's is the CLI
-//             its SDK depends on, a different number from the SDK's own.
-// Everything here is plain file reading: no install, no YAML parser, no network, since the check runs on a bare
-// checkout before anything is installed.
+// Shared engine pin table: CI checks engines.json against it and the bumper writes through it to prevent drift.
+// `tracked` is the upstream/catalog package version; `blessed` is the running program version in engines.json.
+// Codex's CLI and SDK versions differ. Reads local files without installs, YAML parsing or network for bare-checkout checks.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

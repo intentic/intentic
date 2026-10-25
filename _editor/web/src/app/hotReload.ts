@@ -1,17 +1,6 @@
-// Several composables here are per-window singletons (channel listeners in chat/chatChannel.ts, floating.ts,
-// mainWindow.ts; the tab store in chat/useChat.ts; per-kind note readers in chat/summon.ts). Vite's hot update
-// re-executes a changed module and everything up to the accepting boundary as new instances, while modules outside
-// that chain keep the old ones — for a singleton that means a second channel or store in the same window, silently
-// ignoring the first's messages.
-//
-// `hot.accept` only fires when this module is itself the boundary the update was routed to (the file was edited
-// directly); it does not fire when the module is merely re-evaluated on the way to a boundary further up, which is
-// the common case here since these singletons sit under most of the chat's components. So the invariant is checked
-// rather than delegated: the window remembers (on `globalThis`, not module scope, since this module is itself
-// re-evaluated by the updates it catches) which modules it has already run, and a second evaluation reloads the
-// page immediately, whichever route the update took.
-//
-// Dev only: `import.meta.hot` is undefined in production and in tests, where a module runs once by construction.
+// Vite can re-evaluate a singleton below an HMR boundary while other modules retain the old instance, splitting state.
+// hot.accept misses that path, so track evaluated modules on globalThis (which survives this module's re-evaluation)
+// and reload on a second evaluation. Dev only: import.meta.hot is absent in production and tests.
 
 declare global {
     // Lives on the window, not this module, since this module is itself re-evaluated by the updates it exists to

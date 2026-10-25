@@ -1,14 +1,6 @@
-// THE INSTALL SCRIPTS' SHARED CODE, written once and pasted in. Every script under _site/site/public/scripts is one
-// self-contained file (piped into `sh` or `iex`, run by path from a checkout, bundled into the desktop app), so nothing
-// can be imported at run time. What used to be copied by hand (the output kit, the ic download, the PATH edit, the
-// intentic-machine download, the code redemption) lives once under _site/site/scripts-kit/ and is materialised into
-// each script between two marker lines:
-//
-//   # >>> generated from _site/site/scripts-kit/<name>: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-//   # <<< end of generated <name>
-//
-// A script names the regions it wants by carrying their markers; this fills them. The `scripts-kit` check fails when a
-// region is stale, and `--fix` rewrites it. Plain file reading, no network.
+// Install scripts under _site/site/public/scripts must be self-contained, so shared code is inlined at build time.
+// Fills their generated marker regions from _site/site/scripts-kit/ using local files only.
+// The scripts-kit check reports stale regions; --fix rewrites them. Edit the kit sources rather than generated copies.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

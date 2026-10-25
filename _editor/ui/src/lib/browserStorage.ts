@@ -1,15 +1,6 @@
-// The one door to the browser's key-value storage, for the kit and the editor alike. Storage is optional
-// infrastructure: naming `localStorage` throws where site data is off, a write throws over quota, and a value read back
-// was written by any earlier build. So nothing here throws: an unreadable value reads as absent, and a write that did
-// not stick is dropped, the caller's in-memory state staying authoritative for the window.
-//
-// Every key is declared in the scope it belongs to:
-// - `deviceKey`: a fact about this browser (theme, language, layout, a rail's last pick), kept across sign-out.
-// - `accountKey` / `accountKeys`: what the signed-in account left (drafts, prompts, open chats), cleared on sign-out.
-// - `sandboxKeys`: one sandbox's, `<prefix><sandboxId>`; a sandbox is reached through an account, so it is the
-//   account's too and is cleared with it.
-// What is not a storage key (an IndexedDB mirror, a module's in-memory copy) registers its own clearer with
-// `onAccountCleared`; `clearAccountStorage` runs all of it.
+// Storage is optional and never throws: unreadable values are absent, failed writes are dropped, and in-memory state wins.
+// deviceKey survives sign-out; accountKey/accountKeys and sandboxKeys (<prefix><sandboxId>) are cleared on sign-out.
+// Non-storage state (IndexedDB mirrors, module caches) registers with onAccountCleared; clearAccountStorage clears it too.
 
 /** Whatever JSON.parse can hand back: what a stored value is before its schema has read it. */
 export type StoredJsonValue = string | number | boolean | null | readonly StoredJsonValue[] | { readonly [key: string]: StoredJsonValue };

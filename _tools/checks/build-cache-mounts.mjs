@@ -1,15 +1,8 @@
 #!/usr/bin/env node
-// Checks that every sandbox image fragment (the core Dockerfile, its packs, any extension's *.Dockerfile) uses BuildKit
-// cache mounts, since every overlay layer above the sandbox image rebuilds whenever it is published. Usage: node
-// _tools/checks/build-cache-mounts.mjs.
-// 1. A RUN that installs with apt must mount /var/cache/apt and /var/lib/apt/lists.
-// 2. Nothing may delete /var/lib/apt/lists; a cache mount is never committed to the image anyway.
-// 3. A RUN that compiles with cmake must mount ccache and route compilers through it via COMPILER_LAUNCHER.
-// 4. A RUN that fetches from npm must mount ~/.npm, and nothing may clear it.
-// 5. A cmake build must not use bare -j or --parallel: unbounded concurrency can exhaust the host.
-// Covered too: the fragments the capability handlers carry as template literals (_sandbox/sandbox/src/capabilities/
-// handlers/*.ts), which compose into an overlay exactly as a *.Dockerfile does and once shipped every rule broken.
-// Not checked: the platform's own service Dockerfiles (api, web, ci-base), separate images with no overlay above them.
+// Checks sandbox Dockerfiles, packs, extension fragments and capability-handler templates; excludes platform service images.
+// apt must mount /var/cache/apt and /var/lib/apt/lists; npm must mount ~/.npm. Neither cache may be cleared.
+// cmake must mount ccache, use COMPILER_LAUNCHER and bound -j/--parallel to avoid exhausting the host.
+// BuildKit caches preserve downloads and compilation across overlay rebuilds after sandbox image publishes.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";

@@ -1,15 +1,8 @@
 import type { Readable } from "node:stream";
 
-// The one reader of a newline-delimited JSON stream (a child's stdio protocol, a bridge's answers), hardened where the
-// copies it replaces each broke:
-// - Decoded across chunk boundaries: a character split between two chunks, decoded one chunk at a time, is two
-//   replacement characters in the record.
-// - Split at LF only. Node's readline also breaks lines at U+2028 and U+2029, which JSON allows raw inside a string and
-//   which Codex and Pi do not escape, so a record holding one reached JSON.parse as two halves.
-// - A trailing \r is dropped (a Windows peer's CRLF), blank lines are skipped, and a last record the stream ended
-//   without its LF is still a record.
-// It yields the lines, not parsed values: a bad line is the caller's to skip or report, and one JSON.parse that throws
-// must never end the stream for every line after it.
+// Reads JSON lines with decoding across chunk boundaries and splits only at LF: U+2028/U+2029 are valid inside JSON strings.
+// Drops trailing CR and blank lines, and yields a final record even without LF.
+// Yields unparsed lines so callers can handle a malformed record without losing the rest of the stream.
 
 const record = (line: string): string | undefined => {
     const text = line.endsWith("\r") ? line.slice(0, -1) : line;

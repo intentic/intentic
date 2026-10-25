@@ -1,14 +1,7 @@
 #!/usr/bin/env node
-// Downloads every webfont this repo serves, and writes the @font-face rules that declare them.
-//
-//   node _tools/scripts/fonts.mjs
-//
-// Both the app and the marketing site used to pull their faces from Google's CDN at runtime. For the site that was
-// merely a third-party request; for the APP it was a defect, because intentic runs agents in sandboxes and a
-// workspace that is offline, air-gapped or behind a content blocker fell back to system fonts with nothing to say
-// so. Everything is self-hosted now, and this is what regenerates it.
-//
-// Output is committed. Re-run it when a family, a weight range or a subset changes here.
+// Run `node _tools/scripts/fonts.mjs` to download webfonts and generate their @font-face rules for the app and site.
+// Self-hosting keeps fonts available offline and behind content blockers. Output is committed.
+// Re-run when a family, weight range or subset changes here.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";

@@ -7,19 +7,9 @@ import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
 import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
 import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMaxHeight } from "./statusBarState";
 
-// THE STATUS BAR: one line at the foot of the window saying what the sandbox is running and how full it is. Its start is
-// the host's: the desktop shell puts its runtime chips there (shell/status-bar/), the terminal first. Its end is the
-// geek metrics, opt-in (Settings ▸ Appearance), whose segment opens their panel above the bar.
-//
-// The panel opens in the layout rather than over it, so the page moves up instead of being covered, and nothing but the
-// reader closes it again (its segment, its ×, or Escape inside it). It stays: its figures are few and live, watched
-// while the agents work. The reader sets its height on the seam above it, and both are remembered (statusBarState.ts).
-// Opaque, so a skin's backdrop does not show through.
-//
-// `persistent` is the desktop shell's, set while it has a runtime chip to put at the start: the bar is drawn then even
-// with the metrics off. A developer's terminal chip never leaves, so for them the bar stays at one height and no page
-// jumps when a chip arrives; a maker with no chip and no metrics gets no bar rather than an empty strip. Without it
-// (the phone's Agents board, which has no shell bar) the bar is the metrics alone and is absent while they are off.
+// Bottom bar: host runtime chips at the start, opt-in metrics at the end. persistent keeps it visible with metrics off.
+// Without persistent it disappears when metrics are off. The opaque metrics panel takes layout space above the bar.
+// Only the reader closes it (segment, × or Escape); its open state and resized height persist in statusBarState.ts.
 
 const t = useT();
 

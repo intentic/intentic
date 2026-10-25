@@ -3,24 +3,10 @@ import { type InjectionKey, nextTick, onScopeDispose, type Ref, ref, watch } fro
 import { whenIdle } from "../../../../lib/whenIdle";
 import type { ChatMessage, ChatTurn } from "../../../../models/conversations/transcript/transcript";
 
-// HOW MANY ROWS OF A CHAT ARE DRAWN, newest first. Opening a chat mounted every row it held in one task: each row's
-// component, its markdown parsed and sanitised, its box laid out, before the chat could answer a tap. Profiled at 4× CPU
-// throttle (a Galaxy S10's class), 140 rows held the main thread 2.5s and 420 rows froze a single frame for 3.3s. Here a
-// chat opens on its newest rows, drawn in the same frame, and the rows above are mounted a slice at a time while the page
-// is idle, so no single task draws more than a slice.
-//
-// AND NO MORE THAN A WINDOW OF THEM STAYS DRAWN. Every row in the column is paid for on every frame, whether or not it is
-// on screen: each layout walks every row's box, and the browser checks every `content-visibility: auto` row against the
-// viewport per frame. Measured on a desktop with 4,000 real rows drawn, one layout cost 20ms (0.6ms with the last 40
-// turns), a streamed turn kept the main thread 94% busy with a 283ms 99th-percentile frame, and a keystroke took 56ms;
-// with 300 rows drawn the same transcript streamed at 25% busy, 17ms, and 24ms a key. So the idle growth stops at a
-// ceiling, the rows above it are drawn only as a reader climbs toward them (a mark above the oldest drawn row, within a
-// screen of the top), and once the reader is back at the newest they are taken down again.
-//
-// Within a conversation, rows arriving never take down what the reader may be looking at: rows appended below widen the
-// window, unless the reader is at the newest with the window full, when the oldest drawn rows give way instead; a page
-// put above ("Load earlier") draws its nearest slice, and the rest as the reader climbs into it. A new conversation, or
-// rows arriving into an empty one (the open itself), starts over at the first paint.
+// Mount newest rows first, then grow in idle slices to a ceiling: even offscreen mounted rows cost layout work.
+// Reveal older slices near the top and trim on returning to newest. Appends widen the window unless it is full at newest,
+// when oldest rows give way; prepends reveal the nearest slice. Preserve rows the reader may be viewing.
+// Reset to the first-paint size on a conversation change or when rows arrive into an empty conversation.
 
 export interface RowSizes {
     // Drawn in the frame a chat opens on.

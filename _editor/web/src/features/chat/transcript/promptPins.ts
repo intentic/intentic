@@ -1,14 +1,6 @@
-// WHICH PROMPTS ARE STUCK, answered once per scroller rather than once per prompt. A prompt pins to the top of the
-// transcript while its turn scrolls beneath it (`.chat-prompt` in chat.css), and whether it actually is stuck is
-// something CSS cannot ask, so it is measured: the row's top against the scroller's edge, on scroll and whenever a box
-// that decides it resizes. That measurement used to be each prompt's own — two ResizeObservers, an IntersectionObserver
-// and a scroll listener per prompt, one of them on the shared scroller and content, so every frame a streamed answer grew
-// ran every prompt's callback, and each prompt's mount wrote `--chat-pin` and then read layout back: N forced layouts on
-// open. Profiled opening a 420-row chat at 4× CPU throttle: 1.0s in getBoundingClientRect, 0.5s in that write.
-//
-// Here one IntersectionObserver says which prompts are on screen, one ResizeObserver watches the scroller, its content
-// and the prompts themselves, and one scroll listener runs a pass over the prompts on screen. A pass reads every box it
-// needs first and writes afterwards, so it costs one layout however many prompts it measures.
+// Measures which .chat-prompt rows are stuck against the scroller's top, sharing observers and a scroll listener per scroller.
+// One IntersectionObserver tracks visible prompts; one ResizeObserver watches prompts, content and the scroller.
+// Each pass measures visible prompts with all reads before writes, avoiding per-prompt forced layouts during streaming.
 
 export interface PinnedPrompt {
     // The prompt row, which is `position: sticky` (chat.css).

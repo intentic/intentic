@@ -1,20 +1,7 @@
 #!/usr/bin/env node
-// Does npm know every name in the publish set? Asked while a release is still a PLAN, and again by publish-npm.sh
-// before it packs anything.
-//
-// Trusted publishing is registered per package, on that package's own settings page — a name nobody has ever
-// published has no such page, so no trusted publisher can be registered against it, so the release lane's OIDC
-// exchange has nothing to exchange for (npm-publish.yml's header says the rest). The release lane therefore cannot
-// publish a NEW name at all, and renaming a package is how a new name arrives without anyone deciding to add one:
-// v1.249.0 renamed `@intentic/desktop` (53 versions, trusted publisher, provenance) to `@intentic/desktop-automation`
-// as collateral of a directory reorganization, and the refusal landed after semantic-release had already tagged and
-// released — a passing release, a GitHub Release, and nothing on npm for any of the 28 packages.
-//
-// Which is why this is read at PLAN time: the release that cannot publish is the one that must not be cut.
-//
-// ONLY A DEFINITIVE 404 BLOCKS. A timeout, a socket error or a 5xx means the registry did not answer the question,
-// and a registry having a bad minute is not a rename; the publish would fail loudly later anyway. Blocking a release
-// on the registry's availability would trade one rare failure for a common one.
+// Checks npm names during release planning and again before publish-npm.sh packs: a new or renamed package needs an
+// initial publish before its trusted publisher can be registered, so discovering it after tagging is too late.
+// Only a definitive 404 blocks; timeouts, socket errors and 5xx leave availability failures to the publish step.
 import { publishSet, manifestOf } from "../lib/packages.mjs";
 
 const dirs = publishSet();

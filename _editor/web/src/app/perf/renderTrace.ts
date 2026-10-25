@@ -1,18 +1,7 @@
-// Dev-only: names the reactive write behind every component update. `__intenticPerf` says what was slow and the
-// browser's own profiler says what ran; neither says WHY a component nothing on screen changed redrew — and an excess
-// redraw is a wrong dependency, not a slow one. Off until `__intenticRender.on()`, since the hook runs inside the
-// render effect and capturing a stack per trigger is only worth it while someone is reading the answer.
-//
-//   __intenticRender.on()      start recording
-//   __intenticRender.table()   redraws that LANDED, per component, worst first, with the write that caused most of them
-//   __intenticRender.why('X')  every write that woke component X, most-frequent first, each with its writer and stack
-//   __intenticRender.off()     stop and clear
-//
-// Both halves are needed and they count different things. A trigger is not a redraw: Vue marks the effect dirty, then
-// skips the render if every computed in the way settled on the value it already had — so `triggers` is the ceiling and
-// `redraws` is what the screen paid, and a component with many of the first and none of the second is subscribed to
-// something noisier than it needs. Redraws are read off Vue's own `app.config.performance` measures, which this turns
-// on with recording and off again after, since they are not free.
+// Dev-only tracing of reactive writes: __intenticRender.on() records stacks; .off() stops and clears them.
+// .table() ranks landed redraws and their main cause; .why('X') ranks component X's triggers with writers and stacks.
+// Triggers can exceed redraws because unchanged computed values suppress rendering. Redraws use Vue performance measures.
+// Stack capture and Vue measures are enabled only while recording to avoid overhead during normal use.
 
 import { getCurrentInstance, type App, type DebuggerEvent } from "vue";
 

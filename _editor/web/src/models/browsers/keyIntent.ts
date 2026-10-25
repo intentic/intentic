@@ -1,13 +1,6 @@
-// Assigns every keystroke over a live browser picture (useBrowserView, BrowserProfileDialog) to the host, the remote
-// page, or the chrome the client draws itself.
-// - Command: what a browser's own shortcuts do (new tab, close tab, reload, back, the address bar, find); the
-//   chrome is the client's, so these never travel as keystrokes, which is also what keeps Ctrl+L from focusing an
-//   omnibox the picture does not show.
-// - Host: window-level shortcuts a remote Chromium ignores anyway (devtools, a new window); paste, since the remote
-//   clipboard is the sandbox's own, not the user's.
-// - Page: typing, control keys, and editing chords (select-all, undo, redo).
-// - clipboard: copy/cut, which round-trip the selection to the user's own clipboard instead of just reaching the
-//   sandbox's.
+// Routes live-browser keystrokes: Command handles tabs, reload, back, address bar and find in the client's own chrome.
+// Host keeps window shortcuts and paste, whose clipboard belongs to the user; Page gets typing, control keys and editing chords.
+// clipboard round-trips copy/cut selections to the user's clipboard. Command shortcuts never reach the remote omnibox.
 
 // Sent as key events; everything else printable is an insert (see the daemon's SPECIAL_KEYS). Space is the one
 // printable sent as a key, so a focused button or checkbox answers it.

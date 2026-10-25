@@ -1,20 +1,10 @@
 import { tv } from "tailwind-variants";
 import { toneHover } from "./tone.js";
 
-// THE KIT'S CLASS RECIPES. Each is a `tv()` recipe: a base, named variants (size, tone, state) and the caller's own
-// classes last, merged by twMerge so the caller's LAYOUT always wins. What a recipe varies is chosen by name, never
-// by overriding its classes: `ui.textButton({ size: "xs", tone: "quiet" })`, not `ui.linkButton("text-2xs
-// text-muted hover:text-content")`. `_tools/checks/recipe-tiers.mjs` refuses a size, an ink or a radius passed as a
-// class to a recipe that has a variant for it.
-//
-// Two ways to call each one, and the second is not legacy to be removed: installed extensions call `ui.*` through
-// the host at runtime, built against whatever kit was published when they were, so `ui.iconButton("h-8 w-8")` keeps
-// working for them. In this repository the first argument is the variants object.
-//   ui.iconButton({ size: "lg", tone: "danger" }, "shrink-0")
-//   ui.iconButton("shrink-0")
-//
-// The public variant types below are written out rather than inferred from `tv()`, because the extension kit's
-// published declarations carry them and must not depend on tailwind-variants' own types.
+// tv() recipes merge caller classes last with twMerge so layout overrides win; choose size, tone and state by variant.
+// recipe-tiers.mjs enforces that choice. Repository calls use ui.iconButton({ size: "lg", tone: "danger" }, "shrink-0").
+// Keep ui.iconButton("shrink-0") support: installed extensions call the host's recipes against older kit declarations.
+// Public variant types stay explicit so published declarations do not depend on tailwind-variants' types.
 
 // The action button is <Button>, in four tiers and two sizes (Button.vue, primeng.css); no other `button*` recipe
 // exists. Not <Button> at all: `ui.iconButton()` (bare glyph), `ui.textButton()` (a line of text that acts: a link

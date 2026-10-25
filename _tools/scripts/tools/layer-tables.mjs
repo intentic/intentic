@@ -1,13 +1,6 @@
-// A PACKAGE'S LAYOUT TABLE, drawn from its layers.json. A package whose imports are layered (the daemon, the web editor)
-// declares its layers once in layers.json, which its boundary check enforces; its README shows them as a table between
-// two marker lines:
-//
-//   <!-- >>> generated from layers.json: edit it there, then run node _tools/checks/layer-tables.mjs --fix -->
-//   <!-- <<< end of generated layers.json -->
-//
-// This fills that region: one row per layer, lowest first (its name, its `about`, its units), and a last row for the
-// directories under the layers' root that no unit claims. The `layer-tables` check fails when a region is stale, and
-// `--fix` rewrites it. Plain file reading, no network.
+// Fills each README's generated layers.json region with layers lowest first (name, about, units), then unclaimed directories.
+// layers.json also drives the boundary check, keeping the documented layout aligned with enforced imports.
+// The layer-tables check reports stale regions; --fix rewrites them using local files only.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";

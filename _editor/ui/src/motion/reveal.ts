@@ -2,19 +2,10 @@ import { onBeforeUnmount, onMounted, type Ref, ref, watch } from "vue";
 import { canAnimate } from "./fold.js";
 import { lessMotion } from "./choice.js";
 
-// ROWS ARRIVING IN READING ORDER. When a list of sessions shows (the agents board, the chat's lanes, the rail's
-// checklist and usage), its rows play into place top to bottom: each rises a few pixels as it comes in, and row `i`
-// starts `i` steps after the first. On a board of lanes the step is shared across lanes, so row one of every lane
-// lands together, then row two: the board fills side by side, the way it is read, and the whole opening takes the
-// rows of the longest lane rather than every card in turn. Lane headings and empty-lane notes do not move: the frame
-// is there at once, and only what is in it arrives.
-//
-// It is quick on purpose, and capped: past the eighth row every row starts with the eighth, so a long lane costs no
-// more time than a short one, and the last row is still in place under half a second after the first.
-//
-// Played as Web Animations on `translate` and `opacity` (compositor-only, and `translate` rather than `transform`, so a
-// card's own flight or fold keeps running beside it), held at their first frame through their delay (`backwards`),
-// and gone once finished, so a row at rest carries nothing. Skipped outright when motion is off (choice.ts).
+// Reveals rows top-to-bottom, sharing the stagger across lanes; headings and empty-lane notes stay still.
+// Delays cap at the eighth row so even long lists finish in under half a second. Skipped when motion is off.
+// Compositor-only translate/opacity animations preserve a card's own transform, hold the first frame during delay
+// (backwards fill), and leave no animation on a row at rest.
 
 /** How long one row takes to arrive. */
 export const REVEAL_MS = 240;

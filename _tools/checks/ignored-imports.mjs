@@ -1,17 +1,7 @@
 #!/usr/bin/env node
-// A TRACKED FILE IMPORTS A PATH GIT IGNORES: the import lands and the file it names does not. Its author's tree has the
-// file, so their tests pass; every clean checkout lacks it, so CI's fail with ERR_MODULE_NOT_FOUND and nothing in the
-// failure says why. That is a shipped break, not a guess: `_tools/testing/bin/suites.mjs` imported
-// `../../scripts/build/dist-staleness.mjs`, `**/dist-*` swallowed the new file, and every test job on main failed.
-//
-// Each relative import (`./`, `../`; a package name resolves through a manifest the lockfile already holds to account)
-// is resolved as the repo resolves it (lib/ignored-imports.mjs). One that a tracked file answers is fine. One that only
-// an ignored path answers is a finding, named with the rule that ignores it. One nothing answers is not this check's:
-// the type checker and the suites say so, and say it in the author's own tree.
-//
-// Tracked means the index git is pointed at. The turn check hands its checks a copy that lists every untracked file
-// not ignored as intent-to-add (GIT_INDEX_FILE, inherited by every git this runs), so a new file that is not ignored
-// counts as landing and one that is ignored does not, which is the very difference this check is for.
+// Reports relative imports from tracked files that resolve only to ignored paths, naming the ignore rule.
+// Such imports work locally but fail in clean checkouts; unresolved paths are left to typechecks and tests.
+// Uses the active git index: the turn check's GIT_INDEX_FILE includes unignored new files as intent-to-add.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { GitRefused, ignoredImports, SOURCE, trackedIn } from "./lib/ignored-imports.mjs";

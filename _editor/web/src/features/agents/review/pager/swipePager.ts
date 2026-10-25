@@ -3,18 +3,10 @@ import { commits, lockAxis, rubberBand, SETTLE, springTiming, velocityTracker } 
 import { EDGE_PX } from "../../../../lib/edgeZone";
 import { swipeBelongsElsewhere } from "./swipeYields";
 
-// PAGES SIDE BY SIDE, UNDER A THUMB. A phone's agent screen is two pages, the chat and its changes, and the switch
-// between them used to be a row of tabs that cost the transcript a line of its height. Now the pages lie side by side
-// and a finger drawn across either one takes both with it, the neighbour sliding in as the first leaves; a release past
-// COMMIT_SHARE of the width, or a flick, lands on the neighbour, and short of that springs back. A press elsewhere (the
-// header's switch) moves them the same way, so the reader learns where the other page lives from the motion itself.
-//
-// Touch events, for the reason shell/edgeBack.ts gives: the gesture shares the page with every scroller on it, and the
-// axis has to be decided before the browser's own scroll takes the finger. The left edge stays the way back.
-//
-// Each page is moved on its own (absolutely placed, translated by its distance from the one in view), never a strip
-// holding both: at rest the page in view carries no transform at all, so nothing fixed-position inside it is pinned to
-// a moving box, and a page off to the side is hidden rather than painted.
+// Slides phone Chat/Changes pages together; a flick or release past COMMIT_SHARE commits, otherwise it springs back.
+// The header switch uses the same motion. Touch events lock the axis before native scrolling; the left edge stays back.
+// Pages translate independently so the active page has no resting transform that would trap fixed-position children.
+// Inactive pages are hidden at rest to avoid painting them.
 
 // Past this share of the width a release turns the page, before its speed is counted.
 const COMMIT_SHARE = 0.4;

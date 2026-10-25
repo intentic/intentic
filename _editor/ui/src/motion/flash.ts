@@ -1,19 +1,10 @@
 import { lessMotion } from "./choice.js";
 import { canAnimate } from "./fold.js";
 
-// THE "HERE IT IS" GLOW: what a press answers with when it lands on something already on screen, and what a search
-// answer lands on. A press that changes nothing reads as a dead control and is pressed again (replays counted twenty
-// presses on one board card, twelve on one link), so the thing it points at answers instead.
-//
-// It lights the thing, it does not box it. Two layers, both fading together over a breath:
-//   · a WASH of the accent over the element's own ground: an inset box-shadow wide enough to fill it, so it sits under
-//     the words and over the background, follows the element's own corners, and can never be clipped by an ancestor.
-//     It is ADDED to the element's own shadows (`composite: add`), so a card's lift or a selection edge stays put.
-//   · an EDGE of one pixel, drawn as an outline on the element's own border line (offset -1px): above whatever the
-//     element holds, so a panel whose rows are opaque still shows it, and on the border, so it never crowds the words.
-// A ring drawn two pixels inside the edge, which this replaced, read as a thick box pressed against the text and as a
-// square cut into a rounded card. Asked for less motion, the glow holds still for the same time and then goes: a
-// state shown, never a move.
+// Highlights an already-visible target so a press or search result gives feedback even when nothing moves.
+// An inset accent wash follows its corners without clipping; composite:add preserves existing shadows and selection edges.
+// A 1px outline at offset -1px stays visible over opaque children without crowding text. Both layers fade together.
+// Under reduced motion the glow holds still for the same duration, then disappears.
 
 export const FLASH_MS = 1_600;
 // Tags this module's layers among an element's animations, so a second press restarts them rather than stacking more.

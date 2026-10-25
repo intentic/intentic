@@ -1,13 +1,6 @@
-// The byte pump between one WebSocket and one TCP socket, both ends of desktop sync's SSH transport: the machine agent
-// fronts the sandbox's sshd on a loopback port (ssh → TCP → wss), the daemon carries the socket on to sshd (wss → TCP).
-// One protocol, so one set of rules: frames are binary only on both ends (a text frame is dropped, never re-encoded
-// into the byte stream), every chunk is copied out of Node's buffer pool before an async send, and each direction
-// applies backpressure:
-// - TCP → WebSocket: a send never blocks, it buffers. Past BUFFER_HIGH the TCP read pauses (so the writer blocks on its
-//   own write) until the WebSocket drains under BUFFER_LOW.
-// - WebSocket → TCP: a write that the socket cannot take at once pauses the WebSocket until the socket drains. A
-//   WebSocket that cannot pause (the WHATWG one has no such call) is instead dropped once more than UNPAUSABLE_CEILING
-//   waits for TCP: a stalled reader costs that stream, which ssh redials, never the process's memory.
+// Pumps desktop sync's SSH bytes between TCP and WebSocket, dropping text frames and copying pooled buffers before send.
+// TCP reads pause above BUFFER_HIGH until the WebSocket drains below BUFFER_LOW; blocked TCP writes pause the WebSocket.
+// A WebSocket without pause support (WHATWG) is dropped above UNPAUSABLE_CEILING, bounding memory until SSH redials.
 
 export const BUFFER_HIGH = 1_048_576;
 export const BUFFER_LOW = 262_144;

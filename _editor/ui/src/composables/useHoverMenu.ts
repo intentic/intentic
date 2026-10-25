@@ -2,16 +2,10 @@ import { computed, getCurrentScope, nextTick, onScopeDispose, readonly, ref, typ
 import { inCorridor, type Point } from "../lib/pointerCorridor.js";
 import { type HoverIntentOptions, useHoverIntent } from "./useHoverIntent.js";
 
-// A MENU THE POINTER CAN OPEN AND A PRESS CAN KEEP. Resting on the trigger raises it after the hover clock's dwell, and
-// leaving lets it go after its grace. On the way to the panel the pointer crosses whatever lies between, so leaving
-// toward it keeps it up for as long as the pointer stays in the corridor (lib/pointerCorridor.ts). A press raises it
-// at once and pins it: it stays up until something dismisses it, as a menu that was asked for does. A press on a menu
-// the pointer already raised pins it rather than closing it, because that press was meant to open it, and so does a
-// press inside the panel, whose answer (a failure said under its row) must not leave with the pointer. A second press
-// on the trigger closes it.
-//
-// The keyboard opens it with Enter, Space or ArrowDown and lands on the current row. Arrows, Home and End move between
-// rows. The rows are what the panel marks `data-menu-row`, and the current one is marked `data-current`.
+// Hover opens after a dwell and closes after a grace; the pointer corridor keeps it open while crossing to the panel.
+// A trigger or panel press pins it, including an already-hovered menu; a second trigger press closes it.
+// Enter, Space or ArrowDown opens on the current row; arrows, Home and End navigate.
+// The panel marks rows with data-menu-row and the current row with data-current.
 
 const ROW = `[data-menu-row]`;
 

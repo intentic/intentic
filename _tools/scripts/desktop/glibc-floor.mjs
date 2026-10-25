@@ -1,20 +1,8 @@
 #!/usr/bin/env node
-// THE GLIBC FLOOR, held to what the Linux bundle actually links against.
-//
-//   glibc-floor.mjs [--config <tauri.conf.json>] <label> <payload dir> [<package .deb|.rpm>]
-//
-// A glibc symbol is versioned, so a binary linked on a newer glibc asks for GLIBC_x.y and dies in the loader on
-// an older one ("version `GLIBC_2.39' not found") after the package has installed cleanly. The floor is declared
-// ONCE, as the deb's `libc6 (>= x.y)` in _editor/desktop-app/src-tauri/tauri.conf.json. The rpm's
-// `libc.so.6(GLIBC_x.y)(64bit)` must name the same version, and the download page and the desktop-app README
-// repeat it for people. This fails when:
-//
-//   - any ELF in the payload (the app, its sidecars, every library an AppImage vendors) imports a GLIBC_ symbol
-//     version newer than the floor, which is what happens silently when the build base moves to a newer Debian;
-//   - the rpm's declared floor is not the deb's;
-//   - the built package does not carry the floor in its metadata, which only the bundler can get wrong.
-//
-// Runs from verify-desktop-bundle.sh over each extracted payload, and by hand over any directory of ELFs.
+// Usage: glibc-floor.mjs [--config <tauri.conf.json>] <label> <payload dir> [<package .deb|.rpm>].
+// Enforces the deb's libc6 floor in _editor/desktop-app/src-tauri/tauri.conf.json across every payload ELF and the rpm.
+// Also checks built package metadata, preventing a successful install followed by a missing GLIBC_x.y loader error.
+// verify-desktop-bundle.sh runs it on extracted payloads; it also accepts any directory of ELFs.
 import { execFileSync } from "node:child_process";
 import { closeSync, lstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { join, relative } from "node:path";

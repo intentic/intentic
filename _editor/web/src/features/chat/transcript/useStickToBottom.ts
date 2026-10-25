@@ -1,15 +1,8 @@
 import { type InjectionKey, nextTick, onMounted, onUnmounted, type Ref, ref } from "vue";
 
-// Stays pinned to the bottom unless the user scrolls up away from it; follow() re-pins on any change, keyed on scroll
-// state rather than a panel-owned flag. Any upward scroll by the reader counts as leaving, however small: a soft wheel
-// notch that stayed near the bottom and still counted as parked was dragged back down by the next layout change (a row
-// realizing as it scrolls into view, a streamed token), which reads as the view flickering back. An upward move the
-// layout caused (content shrinking under the reader clamps scrollTop) is not the reader leaving.
-//
-// Nothing on screen moves except by the reader's own hand. Two kinds of growth look the same to an observer: a message
-// arriving, which a parked reader follows, and the reader opening a fold, which they are about to read. So the fold's
-// press says which it was (hold, below) instead of the observer guessing; and a finger on the screen is the reader
-// scrolling, which no growth may pull back down.
+// Follow the bottom until any reader-driven upward scroll; layout clamping from shrinking content does not unpin.
+// follow() re-pins using scroll state. Even a small upward move must unpin or the next streamed token pulls the reader back.
+// Folds call hold() to distinguish intentional expansion from incoming content; growth must also respect an active touch.
 
 // How close to the bottom counts as parked again when the reader scrolls back down; absorbs sub-pixel rounding and
 // saves them landing on the exact last pixel.

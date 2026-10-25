@@ -1,17 +1,7 @@
-// THE MOTION MODULE: everything about whether and how the interface moves, in one place.
-//
-// - choice.ts — the Appearance setting (System, On, Off), the `data-motion="reduced"` switch it writes on <html>,
-//   and `lessMotion()`, which every move played from script asks before it starts.
-// - loops.ts — the pace of a glyph that loops to say work is happening (a spinner, the thinking rosette): slowed rather
-//   than stopped when motion is off, and where it may run on the compositor.
-// - fold.ts — a tray folding out from under its card, and a column sliding its units to make room (FLIP).
-// - reveal.ts — rows arriving in reading order when a list of sessions shows, and leaving in it when a press clears them.
-// - flash.ts — the ring a press draws round what it points at, when it lands on something already on screen.
-// - swipe.ts — what a finger meant: axis lock, release speed, the stretch past an end, commit or spring back.
-// - spring.ts — a release's speed carried into a spring the compositor plays (`linear()` easing), so nothing steps per frame.
-//
-// Its stylesheet is ../styles/motion.css: the duration and curve tokens, the switch that stills every transition, and
-// the few CSS recipes the views use (a chart growing from its baseline, the workspace arriving).
+// Shared motion: choice.ts owns System/On/Off and lessMotion(), which script animations check before starting.
+// loops.ts slows activity glyphs under reduced motion; fold/reveal/flash handle layout, row arrival and target feedback.
+// swipe.ts resolves gestures; spring.ts carries release velocity into compositor easing without per-frame script.
+// ../styles/motion.css owns duration/curve tokens, CSS recipes and the data-motion="reduced" transition switch.
 
 export {
     isMotionChoice,

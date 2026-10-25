@@ -1,16 +1,7 @@
 #!/usr/bin/env node
-// THE THING THAT KEEPS `blessed` FROM GOING STALE. Asks upstream what each agent engine has published, takes the newest
-// stable version that has aged past its soak window, rewrites every pin this repository carries for it, and moves
-// engines.json to match. It does not verify anything and it does not decide anything is safe — CI does that, on the
-// pull request .github/workflows/engines.yml opens from what this wrote. Blessed still means "this repo's suite ran
-// against it"; it just stops meaning "someone remembered".
-//
-//   node _tools/scripts/engines/bump-engines.mjs                     what would move, and why the rest would not
-//   node _tools/scripts/engines/bump-engines.mjs --json              the same, for a machine
-//   node _tools/scripts/engines/bump-engines.mjs --apply             write the pins and engines.json
-//   node _tools/scripts/engines/bump-engines.mjs --apply --engine=claude --to=0.3.270
-//
-// An engine upstream could not be reached for is reported and left alone, never guessed at.
+// Updates engine pins and engines.json to the newest stable releases past their soak windows; unreachable engines stay put.
+// Run `node _tools/scripts/engines/bump-engines.mjs` to preview; --json formats output, --apply writes, --engine/--to select a pin.
+// CI on engines.yml's PR validates the result: blessed means this repository's suite ran against that version.
 
 import { appendFileSync } from "node:fs";
 import { ENGINE_PINS, blessedFor, enginePin, listKeyOf, readBlessedList, readPin, writeBlessed, writePin } from "./engine-pins.mjs";

@@ -4,17 +4,9 @@ import { messageOr } from "@intentic/ui/async";
 import { computed, type ComputedRef, ref } from "vue";
 import { importOrReload } from "../../../lib/staleChunk";
 
-// Watches a command the daemon runs on click (a push, usePushRun.ts): start it, follow it to a verdict, stop it.
-//
-// - the output isn't here: the daemon runs it in a tmux window, so this opens the terminal panel on it instead
-//   of re-printing a captured tail.
-// - the reveal happens once per run, at the first state carrying a terminal session; after that the panel is
-//   the user's to close or leave.
-// - a dropped poll isn't a failed run: the error is reported and polling continues, since killing it would
-//   strand the surface on "running".
-// - only the verdict is polled, and only while a run is going; the poll starts with the run and stops the
-//   moment it settles.
-// - a plain interval, not a vue-query observer: state is per watcher, so a re-render never restarts a run.
+// Starts, watches and stops a daemon command, revealing its tmux terminal once when the session first appears.
+// Polls only its verdict while running; poll errors are reported and retried so the surface can still settle.
+// A per-watcher interval keeps re-renders from restarting the run and leaves the terminal's visibility to the user.
 
 // The wait between polls, short enough that the answer follows the terminal's last line, and cheap: memory-only.
 const POLL_MS = 700;

@@ -1,16 +1,7 @@
-// Where words said to the agent by name go: on into a conversation already under way, or into a new session. Pure, so
-// the rule can be read and pinned in one place; the listener gathers the situation and does what this answers.
-//
-// The rule leans to a new session. Every conversation is its own worktree and its own context: a request carried into
-// the wrong one mixes two pieces of work into one change and muddles what the agent knows, and neither is easy to take
-// back, while a session nobody needed is one more card on the board. So words go on into a conversation only on a clear
-// sign of an exchange under way:
-// 1. "Leon, new session …" asks for a new one outright.
-// 2. A question card waiting in a conversation the person is talking to (the one the last wake went to, or the one on
-//    screen) takes the words as its answer, as hands-free voice does.
-// 3. The conversation the last wake went to, while that exchange is recent: "Leon, and add tests too".
-// 4. The conversation on screen, while something was said in it recently or a turn runs in it.
-// 5. Anything else is a new session: calling a name after a long while is almost always a new topic.
+// Routes wake-word requests, preferring a new session to mixing unrelated worktrees and contexts. Priority:
+// explicit "new session"; a recent waiting question in the last-wake or visible conversation; a recent last-wake exchange;
+// the visible conversation if recently active or running; otherwise a new session.
+// Pure decision only: the listener gathers context and carries out the result.
 
 /** How long after the last thing said in a conversation it still counts as the exchange under way. */
 export const FOLLOW_UP_MS = 10 * 60_000;

@@ -1,14 +1,7 @@
 #!/usr/bin/env node
-// How many workers each `bun test` may fork, and how many typecheck and test tasks may run at once, sized to the memory
-// FREE when the run starts rather than to the machine's size: a sandbox runs several conversations, a local model and a
-// browser side by side, and a run that sized itself to the whole box while half of it was taken
-// is how one check swapped a 32 GB laptop to a standstill. A bun worker on the web package (jsdom + Vue) climbs to
-// about 3 GiB, one on the daemon stays near 1.4 GiB, the other packages far below, and a run may take half of what is
-// free. Prints the worker count when run; a `TEST_WORKERS` already set wins, so a caller's own value is never
-// second-guessed.
-//
-// THE BOX IS NOT ALWAYS THIS JOB'S ALONE, and at the moment six jobs start nothing any of them reads says so: each sees
-// the same free memory. `CI_HOST_JOBS` is how the caller supplies the part that cannot be measured.
+// Sizes Bun workers and test/typecheck concurrency from currently free memory; test fan-out uses at most half.
+// Web workers need about 3 GiB and daemon workers 1.4 GiB; sizing against total RAM can exhaust a busy sandbox.
+// Prints the worker count, respecting TEST_WORKERS. CI_HOST_JOBS accounts for jobs that all see the same free memory.
 import { availableParallelism, freemem } from "node:os";
 import { askFreeSync, TEST_PROCESS_BYTES } from "../../constants/src/memory-room.mjs";
 import { pathToFileURL } from "node:url";

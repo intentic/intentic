@@ -1,17 +1,7 @@
 #!/usr/bin/env node
-// THE THING THAT KEEPS THE SANDBOX IMAGE'S TOOL PINS FROM GOING STALE. Asks upstream what each pinned tool has published
-// (tool-pins.mjs lists them and every place each is written), takes the newest stable release that has aged past its
-// soak window, fetches what the pin derives from it (checksums, an image digest), and rewrites every site. It verifies
-// nothing and decides nothing is safe: CI does that, on the pull request .github/workflows/tools.yml opens from what
-// this wrote, and the image build is what proves a checksum. The engines bumper (_tools/scripts/engines) is the same
-// loop for the agent engines; this is its sibling for everything else the image downloads at a fixed version.
-//
-//   node _tools/scripts/tools/bump-tools.mjs                   what would move, and why the rest would not
-//   node _tools/scripts/tools/bump-tools.mjs --json            the same, for a machine
-//   node _tools/scripts/tools/bump-tools.mjs --apply           write the pins
-//   node _tools/scripts/tools/bump-tools.mjs --apply --tool=gh --to=2.103.0
-//
-// A tool upstream could not be reached for, or whose derived values could not be fetched, is reported and left alone.
+// Updates tool-pins.mjs sites to stable releases past their soak window, fetching derived checksums and image digests.
+// Run `node _tools/scripts/tools/bump-tools.mjs` to preview; --json formats output, --apply writes, --tool/--to select a pin.
+// Unreachable tools or derived values are reported and left alone. CI on tools.yml's PR validates changes and image checksums.
 
 import { appendFileSync } from "node:fs";
 import { compareVersions, isNewer, publishedVersions } from "../engines/upstream.mjs";
