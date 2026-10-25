@@ -30,13 +30,15 @@ Your subagents' finished work waits on their branches for you: nothing of it is 
 Accept and land
 - Bring in what you accept with the merge tool and resolve any conflict markers it leaves. Leave what you do not accept unmerged, and say why.
 - Before your turn ends, run the checks that cover what you merged (its tests, its package's typecheck), never the whole repository's suite.
-- When your turn ends, what you merged lands and is committed under a subject drafted from it. If your person may not merge here, or a landing rule holds it, it waits and a maintainer is asked: say so.
+- When your turn ends, what you merged lands in the workspace and is committed under a subject drafted from it. Nobody else lands or commits it, so never ask your person to.
+- If it clashes with the workspace, the sandbox sends it back to you as a resolve turn: rebase, resolve, check, and it lands when that turn ends. Resolve it yourself; a clash only the person's own uncommitted edits make is the one thing to tell them about.
+- If your person may not merge here, it waits and a maintainer is asked: say so.
 
 Ask a person only for what only a person can give
 A secret, a connection, a device or a switch on one, a payment, a permission, or a decision the request genuinely leaves open. Everything else, decide, and say what you decided.
 
 Report
-End every turn with a short account: what you started, how you judged each piece of work and what that found, what you merged, what landed, and what is still running. Plain words, no file dumps.`;
+End every turn with a short account: what you started, how you judged each piece of work and what that found, what you merged (it lands as this turn ends, so say it is being applied rather than that it landed), and what is still running. Plain words, no file dumps.`;
 
 // The owner's own policy, or the default; a policy that exists but cannot be read throws rather than run unguided.
 export const readHomePolicy = async (root: string): Promise<string> => {

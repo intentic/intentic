@@ -35,13 +35,14 @@ const landedMessage = (subject: string, landed: { testNote?: string; breaking?: 
 const servicesWith = (
     rules: readonly Rule[],
     landedSubject?: string,
-    landed: { testNote?: string; breaking?: string; said?: string; title?: string; origins?: Record<string, string[]> } = {},
+    landed: { testNote?: string; breaking?: string; said?: string; title?: string; origins?: Record<string, string[]>; home?: boolean } = {},
 ): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () =>
                 isolatedAgent([{ repo: "root", base: "a".repeat(40) }], {
+                    identity: landed.home === true ? { home: true } : {},
                     social: { title: { text: landed.title ?? "Recent commits", source: "derived" }, reactions: [] },
                     landing: landedSubject === undefined ? {} : { message: landedMessage(landedSubject, landed) },
                 }),
@@ -104,6 +105,14 @@ describe(`settling a landing`, () => {
         };
         await settleLanding(fleet, `c1`);
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`, `state-shapes.json`], `fix: cascading markers\n\nConversation-Id: c1`);
+    });
+
+    // A home's person only chats with it: nobody is there to commit what it lands, so it commits without the rule.
+    test(`a home's land is committed without the rule; anyone else's waits for the owner`, async () => {
+        await settleLanding(servicesWith([], `fix: keep the return path`), `c1`);
+        expect(commitOnly).not.toHaveBeenCalled();
+        await settleLanding(servicesWith([], `fix: keep the return path`, { home: true }), `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: keep the return path\n\nConversation-Id: c1`);
     });
 
     // The report already tells the owner the draft failed; the landing must still reach history.

@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { effectiveAutoLand, turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { landsByDefault } from "../../../models/sandbox/environment/rules";
@@ -27,10 +28,12 @@ export const useComposerLanding = (conversation: () => Conversation) => {
     const card = computed(() => (registered.value ? agentById(conversation().conversationId) : undefined));
     // Whether it works on a branch of its own is the card's to say once the daemon holds it (this tab's latch can be an
     // older reading), and the tab's before. A draft's answer rides its opening message, which only a sandbox that reads
-    // `conversationAutoLand` takes.
+    // `conversationAutoLand` takes. Never a home conversation's: it lands and commits whatever it merged by itself, and
+    // its person only chats with it (the daemon's turn-landing.ts homeOverride takes no hold for one).
     const offered = computed(
         () =>
             canShip.value &&
+            !isHomeConversationId(conversation().conversationId) &&
             conversation().box.value === undefined &&
             (registered.value ? card.value?.branch !== undefined : conversation().isolated.value && supportsRoute(`agent.queueSchedule`)),
     );

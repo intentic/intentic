@@ -209,7 +209,8 @@ describe("a home's family", () => {
     });
 
     // Whether a home lands by itself is its owner's authority at the land (home-conversation.ts homeOwnerLands), never the
-    // answer its opening latched: a member granted `lands` later lands, and one whose grant was taken back is held.
+    // answer its opening latched nor a hold set on it: a member granted `lands` later lands, and one whose grant was taken
+    // back is held.
     test("a home's own land follows its owner's grant as it stands at the land", async () => {
         const owner = { email: "ada@example.com", name: "Ada", since: 1 };
         const atRest = (autoLand: boolean | undefined) =>
@@ -232,7 +233,8 @@ describe("a home's family", () => {
         const main = { kind: "main", ruled: true } as const;
         expect(await decideLanding(withGrant(true), main, atRest(undefined), undefined, [])).toEqual({ mode: "check", writes: [] });
         expect(await decideLanding(withGrant(false), main, atRest(true), undefined, [])).toEqual({ mode: "measure", writes: [] });
-        expect(await decideLanding(withGrant(true), main, atRest(false), undefined, [])).toEqual({ mode: "measure", writes: [] });
+        expect(await decideLanding(withGrant(true), main, atRest(false), undefined, [])).toEqual({ mode: "check", writes: [] });
+        expect(await decideLanding(withGrant(true), main, atRest(undefined), false, [])).toEqual({ mode: "check", writes: [] });
     });
 
     test("a home whose work was held asks a maintainer in its owner's name; nothing else does", async () => {

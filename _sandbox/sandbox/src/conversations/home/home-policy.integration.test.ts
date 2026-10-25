@@ -34,7 +34,8 @@ test("the owner's own policy wins; an empty or missing one is the default", asyn
 test("the default delegates, judges before it merges, and asks a person only for what only a person can give", () => {
     expect(DEFAULT_HOME_POLICY).toContain('freshOf: { conversationId: <the subagent>, kind: "test" }');
     expect(DEFAULT_HOME_POLICY).toContain("Never merge work a review or a test found broken.");
-    expect(DEFAULT_HOME_POLICY).toContain("what you merged lands and is committed");
+    expect(DEFAULT_HOME_POLICY).toContain("what you merged lands in the workspace and is committed");
+    expect(DEFAULT_HOME_POLICY).toContain("never ask your person to");
 });
 
 test("rides a home's opening turn and the one after a compaction, as its own note; nothing else carries it", async () => {

@@ -9,7 +9,7 @@ import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js
 import { isProjectFolderRepo } from "../../git/remote/project-repo.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
-import { reposOf } from "../registry/agents-store.js";
+import { reposOf, type PersistedAgent } from "../registry/agents-store.js";
 import { landMarksOf } from "../registry/land-marks.js";
 import { conversationTrailers, describeLanding } from "./landed-subject.js";
 import { rederiveSettled, withRederivedRepo } from "./rederive.js";
@@ -26,6 +26,13 @@ const VERSION_BUILTIN = "version-landed";
 // The standing rule, if the owner has one; a disabled or absent rule leaves every commit to the owner.
 export const versionRuleOf = (rules: readonly Rule[]): Rule | undefined =>
     standing(rules, "agent.landed").find((rule) => rule.action.kind === "builtin" && rule.action.name === VERSION_BUILTIN);
+
+// A home conversation's land is committed whatever the rules say. Its person only chats with it and never commits, so
+// left uncommitted the work would sit in the main tree, unseen by every later agent cut from HEAD, until someone who
+// never asked for it committed it by hand. The rule's reason to leave lands uncommitted, the developer's review boundary,
+// is not a home's: the home judged the work itself before it merged it. Only the land's own claim; the owner's own edits
+// still wait for the rule (versionMainTree).
+const commitsItsOwnLands = (entry: Pick<PersistedAgent, "identity"> | undefined): boolean => entry?.identity.home === true;
 
 // The subject an owner would read in `git log` when the drafting model wrote nothing (disabled, refused, or the land
 // left nothing to describe): the conversation's own title, which at least names the ask.
@@ -144,9 +151,9 @@ const draftUnlessHurried = async (services: Services, id: string, hurried: Promi
     return Promise.race([draft, hurried.then(() => false)]);
 };
 
-// What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing, the
-// claim is committed under it. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
-// otherwise once the claim is committed (or failed to be). The land's version-pending mark is cleared as it ends, so only
+// What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing or the
+// land a home conversation's, the claim is committed under it. `unhold` is called the moment no commit is coming: at once
+// when neither holds, otherwise once the claim is committed (or failed to be). The land's version-pending mark is cleared as it ends, so only
 // a daemon that died meanwhile leaves it for the boot (settlePendingVersions).
 //
 // (2026-10-20) `hurried` settles when a land or a turn opening comes to wait on this commit (versionCommitsSettled). The
@@ -164,11 +171,12 @@ export const settleLanding = async (
     try {
         const { rules } = await services.sandboxSettings.get();
         const rule = versionRuleOf(rules);
-        if (rule === undefined) {
+        const commits = rule !== undefined || commitsItsOwnLands(services.agents.entry(id));
+        if (!commits) {
             unhold();
         }
-        const drafted = await draftUnlessHurried(services, id, rule === undefined ? undefined : hurried);
-        if (rule === undefined) {
+        const drafted = await draftUnlessHurried(services, id, commits ? hurried : undefined);
+        if (!commits) {
             return;
         }
         // The derived files are written after the land, in the background (rederive.ts): the commit waits for them, so
@@ -181,7 +189,9 @@ export const settleLanding = async (
         }
         // The commit itself moves HEAD, which the daemon's ref watcher already announces to every panel; only the firing
         // needs recording here.
-        services.ruleFirings.stamp(rule.id, Date.now()).catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
+        if (rule !== undefined) {
+            services.ruleFirings.stamp(rule.id, Date.now()).catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
+        }
         services.logger.info({ agent: id, repos: committed }, "landed: versioned");
     } finally {
         await answerVersionMark(services, id, since);

@@ -24,6 +24,7 @@ import { type PersistedAgent, worktreeOf } from "../../conversations/registry/ag
 import { holdAccount } from "../providers/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
+import { resolveHomeConflict } from "../../conversations/home/home-conflict.js";
 import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import { childRerunHorizonMs } from "../subagents/child-records.js";
@@ -213,6 +214,7 @@ const placementOf = (
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
+            resolveConflict: (conversationId, conflicts) => void resolveHomeConflict(services, conversationId, conflicts),
         },
     );
 };

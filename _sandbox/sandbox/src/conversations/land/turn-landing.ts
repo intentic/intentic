@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
+import { isLandConflict } from "@intentic/sandbox-contract/events/land-conflict";
 import { landAgent, type LandOutcome } from "./land.js";
 import { afterLand } from "./rederive.js";
 import { landFailureOf } from "./land-failure.js";
@@ -98,6 +99,8 @@ export type LandingDeps = Pick<
 export interface LandingHooks {
     // Drafts what a land did and commits it where the version rule stands, off the turn's clock.
     readonly settleLanding: (conversationId: string) => void;
+    // Hands a home conversation's clash with the main tree back to it to resolve (home/home-conflict.ts), off the turn's clock.
+    readonly resolveConflict: (conversationId: string, conflicts: LandOutcome["conflicts"]) => void;
 }
 
 export interface LandingTurn {
@@ -210,6 +213,10 @@ async function* recordLand(
     const reconciled = landed.landed ? await deps.dependencies.reconcileLand(origin) : undefined;
     yield landedFrame(landed, reconciled);
     if (!landed.landed) {
+        // A resolve turn's own clash is not sent back: recognised by its prompt, whoever sent it.
+        if (books.outcome === "conflict" && finished.identity.home === true && !isLandConflict(turn.prompt)) {
+            hooks.resolveConflict(id, landed.conflicts);
+        }
         return;
     }
     // The main tree just changed, announced before the land itself: history files its turn checkpoint first.
@@ -278,13 +285,15 @@ export const decideLanding = async (
 };
 
 // A home's own answer to landing is its owner's authority now (auth/operator.ts homeOwnerLands), whatever its opening
-// latched: lands when they may land, else the rules decide as for anyone's work. A "hold" somebody set on it still holds.
+// latched or anyone set on it since: lands when they may land, else the rules decide as for anyone's work.
+// (2026-10-25) A "hold" set on a home used to hold, and every later turn of it with it: the person only chats with their
+// home, nothing on the home view lands held work or lifts the hold, so its work stayed on its branch for good.
 const homeOverride = async (
     deps: Pick<Services, "auth" | "members" | "ownerEmail">,
     finished: IsolatedAgent,
     asked: boolean | undefined,
 ): Promise<boolean | undefined> => {
-    if (finished.identity.home !== true || asked === false) {
+    if (finished.identity.home !== true) {
         return asked;
     }
     return (await homeOwnerLands(deps, finished.social.owner?.email)) ? true : undefined;

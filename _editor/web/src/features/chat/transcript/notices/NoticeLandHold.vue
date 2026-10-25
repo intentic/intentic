@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { effectiveAutoLand } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { landsByDefault } from "../../../../models/sandbox/environment/rules";
@@ -8,7 +9,8 @@ import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSetting
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
-/* A landed turn's one-press opt-out from future auto-land, offered while this agent still lands by itself. */
+/* A landed turn's one-press opt-out from future auto-land, offered while this agent still lands by itself. Never on a
+   home conversation, which lands whatever it merged whatever is set on it (composerLanding.ts). */
 
 defineProps<{ message: ChatMessage }>();
 
@@ -16,7 +18,11 @@ const t = useT();
 const { conversation } = usePaneView();
 const { agentById, setAutoLand } = useAgents();
 const { settings } = useSandboxSettings();
-const offered = computed(() => effectiveAutoLand(agentById(conversation.value.conversationId), landsByDefault(settings.value?.rules ?? [])));
+const offered = computed(
+    () =>
+        !isHomeConversationId(conversation.value.conversationId) &&
+        effectiveAutoLand(agentById(conversation.value.conversationId), landsByDefault(settings.value?.rules ?? [])),
+);
 
 // Best-effort like markSeen: a failed write leaves the offer standing to press again.
 const hold = async (): Promise<void> => {
