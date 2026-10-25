@@ -156,6 +156,15 @@ const required = <T>(value: T | undefined, what: string): T => {
     return value;
 };
 
+// A skill of the owner's written, switched off and deleted again, so the list reads as it started.
+const SKILL_SAMPLES: Samples[`skills`] = {
+    list: undefined,
+    read: { id: `release-notes` },
+    save: { name: `smoke-skill`, description: `smoke`, body: `smoke` },
+    switch: { name: `smoke-skill`, on: false },
+    remove: { name: `smoke-skill` },
+};
+
 // The git area's inputs: stage and take back the same file, commit it, stage it as a run, throw away another.
 const GIT_SAMPLES: Samples[`git`] = {
     repos: undefined,
@@ -386,10 +395,8 @@ const samplesOf = (
             list: undefined,
             marketplace: { url: `https://github.com/acme/registry` },
         },
-        personas: {
-            list: undefined,
-            save: { id: `smoke-persona`, capabilities: [] },
-        },
+        skills: SKILL_SAMPLES,
+        personas: { list: undefined, save: { id: `smoke-persona`, capabilities: [] } },
         audit: {
             list: { limit: 100 },
             verify: undefined,

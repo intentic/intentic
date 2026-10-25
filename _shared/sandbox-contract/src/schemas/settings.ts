@@ -197,11 +197,17 @@ export const SkillIdSchema = z.object({
             "Which skill. It travels in the query rather than the address, because an id can name the owner it came from and that will not fit in a path.",
         ),
 });
+// The trigger line rides every turn's skill list, so it is capped; the form counts against the same number.
+export const SKILL_DESCRIPTION_MAX = 1024;
 // Three fields because a skill is three things: name, when to reach for it, what to do. The daemon assembles
 // frontmatter from the first two, so a saved skill can never be one the loader skips.
 export const SkillDraftSchema = z.object({
     name: SkillNameSchema.describe("What to call it. Saving over an existing name rewrites it, which is also how one is renamed."),
-    description: z.string().min(1).max(1024).describe("What it is for, which is what the agent reads to decide whether to reach for it."),
+    description: z
+        .string()
+        .min(1)
+        .max(SKILL_DESCRIPTION_MAX)
+        .describe("What it is for, which is what the agent reads to decide whether to reach for it."),
     body: z.string().min(1).describe("The skill itself."),
 });
 export type SkillDraft = z.infer<typeof SkillDraftSchema>;

@@ -18,13 +18,14 @@ const skills = ref<SkillSummary[]>([]);
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const setEnabled = jest.fn();
 const removeMutate = jest.fn();
+const saveMutate = jest.fn();
 
 jest.mock(`../../environment/useSkills`, () => ({
     useSkills: () => ({
         skills,
         settings,
         loaded: computed(() => ({ state: `ready`, data: [skills.value, settings.value], refreshing: false, refreshError: undefined })),
-        save: { mutate: jest.fn() },
+        save: { mutate: saveMutate },
         remove: { mutate: removeMutate },
         setEnabled,
         readBody: async () => ({ id: `x`, name: `x`, body: `## Body.` }),
@@ -76,6 +77,7 @@ afterEach(() => {
     settings.value = SandboxSettingsSchema.parse({});
     setEnabled.mockClear();
     removeMutate.mockClear();
+    saveMutate.mockClear();
 });
 
 // A sandbox with many connections; each account ships its own cheatsheet skill.
@@ -270,4 +272,57 @@ test(`a skill the reader owns offers delete under its editor`, async () => {
     button(host, `Delete`)?.click();
     await nextTick();
     expect(removeMutate).toHaveBeenCalledWith(`notes`);
+});
+
+// The new skill's form: one press on an incomplete form says what is missing under each box and puts the caret in the
+// first, rather than a dimmed button that can't be asked why.
+const nameField = (host: HTMLElement): HTMLInputElement | null => host.querySelector<HTMLInputElement>(`input[placeholder="e.g. release-notes"]`);
+
+test(`pressing Add skill on an empty form names each missing field and saves nothing`, async () => {
+    const host = mount();
+    button(host, `Write a skill`)?.click();
+    await nextTick();
+
+    // Every example reads as one, so an empty box never passes for a filled one.
+    expect(nameField(host)).not.toBeNull();
+    expect(host.textContent).not.toContain(`Give it a name.`);
+
+    button(host, `Add skill`)?.click();
+    await nextTick();
+    expect(saveMutate).not.toHaveBeenCalled();
+    expect(host.textContent).toContain(`Give it a name.`);
+    expect(host.textContent).toContain(`Say when the agent should reach for it.`);
+    expect(host.textContent).toContain(`Write what it should do.`);
+    expect(document.activeElement).toBe(nameField(host));
+    expect(nameField(host)?.getAttribute(`aria-invalid`)).toBe(`true`);
+
+    // A message leaves as soon as its field is filled.
+    await type(nameField(host)!, `changelog`);
+    expect(host.textContent).not.toContain(`Give it a name.`);
+});
+
+// Saving is an upsert by name, so a new skill named like an existing one would silently replace it.
+test(`a new skill can't take a name already in the list`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    const host = mount();
+    button(host, `Write a skill`)?.click();
+    await nextTick();
+
+    await type(nameField(host)!, `notes`);
+    expect(host.textContent).toContain(`There's already a skill called notes.`);
+
+    await type(nameField(host)!, `notes-2`);
+    expect(host.textContent).not.toContain(`There's already a skill called`);
+});
+
+// The row being edited already says its name, and a name can't change once saved.
+test(`editing a skill asks only for what can change`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    const host = mount();
+
+    rows(host)[0]?.click();
+    await settle();
+    expect(button(host, `Save changes`)).toEqual(expect.any(Object));
+    expect(host.querySelector(`input.font-mono`)).toBeNull();
+    expect(host.textContent).toContain(`When to use it`);
 });

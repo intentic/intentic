@@ -388,11 +388,6 @@ export const UNSERVED = {
     "share.list": UNFILLED_VIEW,
     "share.remove": UNSIMULATED_WRITE,
     "share.update": UNSIMULATED_WRITE,
-    "skills.list": UNFILLED_VIEW,
-    "skills.read": UNFILLED_VIEW,
-    "skills.remove": UNSIMULATED_WRITE,
-    "skills.save": UNSIMULATED_WRITE,
-    "skills.switch": UNSIMULATED_WRITE,
     // The switch for updates that take themselves, drawn only where /info carries `autoUpdate`, which the demo's never does.
     "system.autoUpdate": REAL_MACHINE,
     "system.killTerminal": UNSIMULATED_WRITE,

@@ -50,6 +50,9 @@ const rememberFold = (event: Event): void => {
 // Enabled, not installed: a disabled extension doesn't claim the card its connection came from.
 const sources = computed<SkillSources>(() => ({ capabilities: capabilities.value, extensions: enabledExtensions.value }));
 
+// Every name in the list, filtered or not: a new skill saved under one of them would replace it.
+const takenNames = computed(() => skills.value.map((skill) => skill.name));
+
 // Which row is open; `adding` is its own flag since a new skill has no id yet.
 const openId = ref<string | undefined>();
 const adding = ref(false);
@@ -157,7 +160,7 @@ const removeSkill = (skill: SkillSummary): void => {
                 <!-- Padding and tint values mirror <DisclosureRow>'s own; keep them in sync if that component's spacing changes. -->
                 <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
                     <template #below>
-                        <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
+                        <SkillForm :taken="takenNames" :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
                     </template>
                 </DisclosureRow>
 

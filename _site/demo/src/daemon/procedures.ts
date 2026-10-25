@@ -42,6 +42,7 @@ import {
     demoUsageRollup,
     setExtensionEnabled,
 } from "../fixture/sandbox";
+import { skillDoors } from "./skills";
 import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../fixture/storage";
 import { subagentTranscriptFor } from "../fixture/subagentTranscripts";
 import { documentsFor, transcriptFor } from "../fixture/transcripts";
@@ -347,10 +348,7 @@ export const procedures = {
     },
     settings: {
         get: () => settingsNow,
-        set: (settings) => {
-            settingsNow = settings;
-            return { ok: true };
-        },
+        set: (settings) => okAfter(() => (settingsNow = settings)),
         gettingStarted: () => gettingStarted,
         setGettingStarted: (choices) => {
             gettingStarted = choices;
@@ -507,6 +505,7 @@ export const procedures = {
         // files from it.
         marketplace: () => demoRegistry(),
     },
+    skills: skillDoors,
     // The persona picker's data; three personas make the point without turning the column into a directory. A save
     // is real (the fixture is the store), so the project persona New agent makes under a scope shows in the picker.
     personas: {

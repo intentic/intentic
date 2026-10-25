@@ -205,7 +205,7 @@ watch(
                 <!-- New skills use the same disclosure row as existing skills. -->
                 <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
                     <template #below>
-                        <SkillForm :disabled="busy" @save="save" @cancel="close" />
+                        <SkillForm :taken="kit.skills.map((skill) => skill.name)" :disabled="busy" @save="save" @cancel="close" />
                     </template>
                 </DisclosureRow>
 
