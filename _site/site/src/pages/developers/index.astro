@@ -39,20 +39,24 @@ const lcChips = extensionLifecycle.map((stage, i) => {
 // The flow line through every chip centre: straight along a lane, an S-curve where the lane changes.
 const lcFlow = lcChips
     .map((chip, i) => {
-        if (i === 0) {return `M ${chip.cx} ${chip.cy}`;}
         const prev = lcChips[i - 1];
+        if (prev === undefined) {return `M ${chip.cx} ${chip.cy}`;}
         if (prev.cy === chip.cy) {return `L ${chip.cx} ${chip.cy}`;}
         return `C ${prev.cx + 40} ${prev.cy} ${chip.cx - 40} ${chip.cy} ${chip.cx} ${chip.cy}`;
     })
     .join(" ");
 // A chevron in each same-lane gap, so the wave reads left-to-right without labelling the curves.
-const lcArrows = lcChips
-    .slice(1)
-    .map((chip, i) => ({ prev: lcChips[i], chip }))
-    .filter(({ prev, chip }) => prev.cy === chip.cy)
-    .map(({ prev, chip }) => `M ${(prev.left + LC.chipW + chip.left) / 2 - 4} ${chip.cy} L ${(prev.left + LC.chipW + chip.left) / 2 + 4} ${chip.cy}`);
+const lcArrows = lcChips.flatMap((chip, i) => {
+    const prev = lcChips[i - 1];
+    if (prev === undefined || prev.cy !== chip.cy) {return [];}
+    const x = (prev.left + LC.chipW + chip.left) / 2;
+    return [`M ${x - 4} ${chip.cy} L ${x + 4} ${chip.cy}`];
+});
 const lcFirst = lcChips[1];
 const lcLast = lcChips.at(-1);
+if (lcFirst === undefined || lcLast === undefined) {
+    throw new Error("The extension lifecycle diagram needs at least two stages.");
+}
 // The return arc: Maintain's new sha re-entering review at Publish.
 const lcReturn = `M ${lcLast.cx} ${lcLaneY.author - 15} L ${lcLast.cx} 26 Q ${lcLast.cx} 18 ${lcLast.cx - 8} 18 L ${lcFirst.cx + 8} 18 Q ${lcFirst.cx} 18 ${lcFirst.cx} 26 L ${lcFirst.cx} ${lcLaneY.author - 19}`;
 

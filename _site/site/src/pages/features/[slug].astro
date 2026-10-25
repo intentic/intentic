@@ -21,7 +21,7 @@ interface Props {
 
 const { page } = Astro.props;
 const index = productPages.indexOf(page);
-const next = productPages[(index + 1) % productPages.length];
+const next = productPages[(index + 1) % productPages.length] ?? page;
 
 /* A portrait hero (the docked chat, a phone) is a panel, not a page: stretched to the 6xl column it would be three screens tall. */
 const heroShot = page.hero;

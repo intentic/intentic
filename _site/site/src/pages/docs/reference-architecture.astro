@@ -8,7 +8,7 @@ const icon = (paths: string) =>
 const cubeGlyph = icon('<path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="m3.5 7 8.5 4.5L20.5 7M12 11.5v10"/>');
 
 // Cards render through set:html, so escape the trusted-but-ampersand-bearing data (e.g. "Payroll & approvals").
-const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const esc = (t: string) => t.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const chip = (t: string) => `<span class="border border-line bg-overlay/50 px-2 py-0.5 text-2xs text-muted">${esc(t)}</span>`;
 const sandboxCard = (c: { title: string; fns: string[] }) => `
     <div class="border border-line bg-card p-4">

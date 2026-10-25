@@ -53,6 +53,7 @@ The flat paths (`/connect`, `/fix.ps1`, …) keep answering as before.
 pnpm -C _site/site dev          # astro dev; /demo proxies to the demo's dev server
 pnpm -C _site/demo dev          # start it alongside to see /demo in dev
 pnpm -C _site/site build
+pnpm -C _site/site typecheck    # Astro pages and scripts, then the worker tests
 pnpm -C _site/site test         # desk palette and mark alignment checks, then the Worker's verb-route tests
 pnpm -C _site/site test:compare --content-only  # copy and research-map invariants
 pnpm -C _site/site test:compare  # after build: generated comparison HTML and FAQ parity

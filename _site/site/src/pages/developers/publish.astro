@@ -72,7 +72,7 @@ const routeCol = { x: 180, w: 300, cx: 330 };
 const routeStages = [
     { y: 12, h: 48, label: `YOUR REPO`, sub: `+ the intentic-extension topic` },
     { y: 84, h: 48, label: `A PULL REQUEST`, sub: `opened for you, at your latest sha` },
-];
+] as const;
 // The hand-written entrance, on the same row as the topic so the two read as alternatives rather than steps.
 const routeManual = { x: 8, y: 12, w: 144, h: 48 };
 const routeBand = { x: 90, y: 156, w: 480, h: 92 };

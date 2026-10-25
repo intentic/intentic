@@ -1,5 +1,5 @@
 ---
-import { creatorLinks } from "@intentic/site-content/about";
+import { creatorLinks, type AboutLink } from "@intentic/site-content/about";
 
 /* The three profiles a reader can go and check, as chips. */
 
@@ -9,7 +9,7 @@ interface Props {
 
 const { class: className } = Astro.props;
 
-const brand: Record<string, { viewBox: string; body: string; stroke?: boolean }> = {
+const brand: Record<AboutLink["logo"], { viewBox: string; body: string; stroke?: boolean }> = {
     // simple-icons (CC0), verbatim. Monochrome on this palette: these are identity marks, not a logo wall.
     github: {
         viewBox: "0 0 24 24",

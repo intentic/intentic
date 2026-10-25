@@ -17,7 +17,7 @@ interface Props {
 
 const { page } = Astro.props;
 const index = guidePages.indexOf(page);
-const next = guidePages[(index + 1) % guidePages.length];
+const next = guidePages[(index + 1) % guidePages.length] ?? page;
 
 // FAQ body and structured data share one list.
 const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: entry.answer }));
