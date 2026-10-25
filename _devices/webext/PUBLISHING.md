@@ -17,7 +17,7 @@ Every release tag builds the extension and submits it to the Chrome Web Store fr
 
 Before releasing a version that adds a manifest permission, update the item's **Privacy practices** tab in the
 Developer Dashboard with the matching justification from [STORE-LISTING.md](STORE-LISTING.md). Passwords adds
-**optional** `nativeMessaging` and uses the existing optional host permission for `<all_urls>` when the person
+**optional** `nativeMessaging` and uses the existing optional host permission for `*://*/*` when the person
 turns remembering on; justify them as:
 
 - **nativeMessaging:** Talks only to the Intentic desktop app's local native host so passwords the person saves in

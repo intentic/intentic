@@ -6,6 +6,11 @@ import type { ActivityEntry, PairedSandbox, PendingAccess, Settings } from "./st
 // an `any` pipe that silently drops a renamed button's message. Anything needing a user gesture
 // (`chrome.permissions.request`) happens in the popup; everything with state happens in the worker.
 
+// Passwords' all-sites host pattern: exactly the one static/manifest.json lists under optional_host_permissions.
+// Chrome refuses to request (and never reports holding) any pattern the manifest does not declare, and `<all_urls>`
+// is wider than `*://*/*` (it adds file:// and more), so asking for it rejected and the Turn on button did nothing.
+export const ALL_SITES = "*://*/*";
+
 export type PopupCommand =
     // Everything the popup renders, in one round trip: a popup that made six calls would paint in six stages.
     | { readonly type: "state" }

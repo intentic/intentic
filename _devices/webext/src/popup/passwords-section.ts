@@ -1,4 +1,5 @@
-import type { PopupState } from "../background/messages.js";
+import { errorMessage } from "@intentic/base/errors";
+import { ALL_SITES, type PopupState } from "../background/messages.js";
 import { button, byId, say, send, show } from "./dom.js";
 
 // The popup's Passwords section: remembering and filling sign-ins in this browser, turned on with one click that asks
@@ -21,7 +22,7 @@ export const renderPasswords = (state: PopupState, refresh: () => Promise<void>)
             actions.append(
                 button("Turn on", "primary", () => {
                     void (async () => {
-                        const granted = await chrome.permissions.request({ permissions: ["nativeMessaging"], origins: ["<all_urls>"] });
+                        const granted = await chrome.permissions.request({ permissions: ["nativeMessaging"], origins: [ALL_SITES] });
                         if (!granted) {
                             say(error, "The browser did not allow access, so nothing changed.");
                             return;
@@ -31,7 +32,10 @@ export const renderPasswords = (state: PopupState, refresh: () => Promise<void>)
                             say(error, result.message ?? "Could not connect to Passwords on this computer.");
                         }
                         await refresh();
-                    })();
+                    })().catch((cause: unknown) => {
+                        // A rejected request (Chrome refusing what it was asked for) has to show, not vanish into `void`.
+                        say(error, errorMessage(cause));
+                    });
                 }),
             );
             break;

@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { ALL_SITES } from "./messages.js";
 import { sandboxOwnOrigin } from "./policy.js";
 import { store } from "./store.js";
 
@@ -71,7 +72,7 @@ export const syncPasswordContentScript = async (): Promise<void> => {
         await unregisterPasswordScript();
         return;
     }
-    const hasAll = await chrome.permissions.contains({ origins: ["<all_urls>"] });
+    const hasAll = await chrome.permissions.contains({ origins: [ALL_SITES] });
     if (!hasAll) {
         await unregisterPasswordScript();
         return;
@@ -90,7 +91,7 @@ export const syncPasswordContentScript = async (): Promise<void> => {
         await chrome.scripting.updateContentScripts([
             {
                 id: SCRIPT_ID,
-                matches: ["<all_urls>"],
+                matches: [ALL_SITES],
                 excludeMatches,
                 js: ["passwords.js"],
                 runAt: "document_idle",
@@ -101,7 +102,7 @@ export const syncPasswordContentScript = async (): Promise<void> => {
         await chrome.scripting.registerContentScripts([
             {
                 id: SCRIPT_ID,
-                matches: ["<all_urls>"],
+                matches: [ALL_SITES],
                 excludeMatches,
                 js: ["passwords.js"],
                 runAt: "document_idle",
