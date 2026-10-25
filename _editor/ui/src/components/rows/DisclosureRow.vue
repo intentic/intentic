@@ -5,7 +5,7 @@ import { FACE_SIZES } from "../brand/personaFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../../icons/iconSets.js";
-import { ROW_DRAWER_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
+import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
 
 const {
     open = false,
@@ -107,11 +107,8 @@ const tint = computed(() => {
     return ``;
 });
 
-// Hover wash lives on the wrapper, not <Row>, so it still covers the row once a drawer removes <Row>'s
-// own bottom padding.
+// Hover wash lives on the wrapper, not <Row>, so it covers the drawer under an open row as well as the row.
 const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
-
-// Drawer padding: less top air than ROW_BLOCK_PAD, since the header row's own padding already separates them.
 </script>
 
 <template>
@@ -123,8 +120,9 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
     >
         <!-- The selection column, outside the toggle: a checkbox can't nest in the button that opens the row. -->
         <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
+        <!-- The header keeps its full padding when a drawer opens: the drawer's rule sits between the two, and taking the
+             row's bottom padding away put that rule against the title's descenders. -->
         <Row
-            :class="open && body === `drawer` ? `!pb-0` : ``"
             :density="tier"
             :lead="lead"
             :tone="tone"
@@ -192,12 +190,13 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
             </template>
         </Row>
 
-        <!-- The drawer: a sibling of <Row>, not its `#below`, since it's full-bleed and pulling it out of <Row>'s padding would need tier-matched negative margins. -->
+        <!-- The drawer: a sibling of <Row>, not its `#below`, since it's full-bleed and pulling it out of <Row>'s padding would need tier-matched negative margins.
+             Past its rule it is a block of its own, so it takes a block's padding, the same air above as below. -->
         <div
             v-if="open && body === `drawer`"
             :id="bodyId"
             class="cursor-auto border-t border-line-subtle"
-            :class="[ROW_DRAWER_PAD[tier], flushInline ? `!px-0` : ``, $slots[`before`] ? `col-span-full` : ``]"
+            :class="[ROW_BLOCK_PAD[tier], flushInline ? `!px-0` : ``, $slots[`before`] ? `col-span-full` : ``]"
         >
             <slot name="below" />
         </div>

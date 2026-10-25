@@ -110,14 +110,6 @@ export const ROW_BLOCK_PAD = {
     dense: `px-2.5 py-3`,
 } as const satisfies Record<RowDensity, string>;
 
-// Padding for a drawer under an open row; asymmetric, since the row's own bottom padding already
-// separates header from body.
-export const ROW_DRAWER_PAD = {
-    comfortable: `px-4.5 pt-2 pb-4`,
-    compact: `px-4 pt-1.5 pb-3.5`,
-    dense: `px-2.5 pt-1 pb-3`,
-} as const satisfies Record<RowDensity, string>;
-
 // The tier is declared once, on <RowGroup>, and everything inside reads its answer, rather than each of
 // <Row>, <DisclosureRow> and <SkeletonRows> defaulting to `comfortable` independently and drifting apart.
 // An explicit prop still wins, for a row that legitimately disagrees. Outside a group the fallback is

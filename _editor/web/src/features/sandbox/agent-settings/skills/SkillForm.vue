@@ -116,7 +116,7 @@ const example = (text: string): string => t(`sandbox.skillForm.forExample`, { ex
 <template>
     <!-- Ctrl/Cmd+Enter or +S saves from any box, the same chords the app's other documents answer to. -->
     <div
-        class="flex flex-col gap-5 pt-2"
+        class="flex flex-col gap-5"
         @keydown.ctrl.enter.prevent="save"
         @keydown.meta.enter.prevent="save"
         @keydown.ctrl.s.prevent="save"
