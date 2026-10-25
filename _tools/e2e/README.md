@@ -36,7 +36,8 @@ flowchart LR
   call the daemon refused, a read that failed, an uncaught error, any gate left standing, or the "too old" page. The
   daemon runs with its auth off, so its session is seeded in the browser rather than exchanged, which the sign-in tier
   and the daemon's own suites cover. CI runs it as `e2e-compat` before the platform deploys and nightly as
-  `compat-stable`.
+  `compat-stable`. The daemon's template source is a local git fixture copied into its container, so opening the
+  starter site's apps uses the released daemon's own manifest parser without fetching the moving canonical repository.
   - 2026-10-15: written after the editor on main called `org.policy` on every released daemon, none of which had it.
     Pointed at 1.248.0 it stops on the too-old page; with the `org.policy` gate taken out it fails on twelve 404s.
 - The browser tier (`playwright.config.ts`, `specs/`) tests the browser-daemon contract. Its stack lives on

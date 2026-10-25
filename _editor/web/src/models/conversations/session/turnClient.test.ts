@@ -117,6 +117,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
             provider: computed(() => `claude` as const),
             account: computed(() => undefined),
             harness: computed(() => `native` as const),
+            routingPicked: shallowRef(false),
             ...selection,
         }),
         failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn(), settled: jest.fn(), failedTurn: false }),
@@ -517,7 +518,7 @@ describe(`a run's lifecycle`, () => {
         expect(await bound.client.resumeHeldTurn()).toBe(true);
         expect(resume.mock.calls.at(-1)?.[0]).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, model: `opus` },
+            routing: { agent: `claude`, harness: `native`, model: `opus`, effort: `high` },
         });
         expect(bound.host.session.value).toEqual(session);
 
@@ -527,7 +528,7 @@ describe(`a run's lifecycle`, () => {
         expect(await picked.client.resumeHeldTurn({ carry: true })).toBe(true);
         expect(resume.mock.calls.at(-1)?.[0]).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `acct-other`, model: `opus`, carry: true },
+            routing: { agent: `claude`, harness: `native`, account: `acct-other`, model: `opus`, effort: `high`, carry: true },
         });
     });
 
@@ -821,7 +822,7 @@ describe(`saying something`, () => {
 
         expect(queueResume.mock.calls).toEqual([
             [
-                { conversationId: `c1`, routing: { agent: `claude`, harness: `native`, account: undefined, model: `opus` } },
+                { conversationId: `c1`, routing: { agent: `claude`, harness: `native`, model: `opus`, effort: `high` } },
                 { context: { at: undefined } },
             ],
         ]);
@@ -920,7 +921,7 @@ describe(`an account picked by hand`, () => {
         await picked.client.resendKept({ text: `fix the pipeline`, attachments: [] });
         expect(resume.mock.calls.at(-1)?.[0]).toEqual({
             conversationId: `c1`,
-            routing: { agent: `claude`, harness: `native`, account: `acct-b`, model: `opus` },
+            routing: { agent: `claude`, harness: `native`, account: `acct-b`, model: `opus`, effort: `high` },
         });
         expect(picked.taken()).toEqual([{ kind: `accountTaken`, account: `acct-b` }]);
 
@@ -928,6 +929,21 @@ describe(`an account picked by hand`, () => {
         unpicked.host.session.value = ON_A;
         await unpicked.client.resendKept({ text: `fix the pipeline`, attachments: [] });
         expect(resume.mock.calls.at(-1)?.[0]).toEqual({ conversationId: `c1` });
+        expect(run).not.toHaveBeenCalled();
+    });
+
+    it(`sends a kept turn again on a model and effort picked by hand on the same account`, async () => {
+        resume.mockImplementation(async () => ({ run: `r-picked` }));
+        attach.mockImplementation(async () => attached(`r-picked`, 4_000, `fix the pipeline`));
+        const { client, host } = clientOf({ ...SETTINGS, account: `acct-a`, model: `sonnet`, effort: `low` }, { routingPicked: shallowRef(true) });
+        host.session.value = ON_A;
+
+        await client.resendKept({ text: `fix the pipeline`, attachments: [] });
+
+        expect(resume.mock.calls.at(-1)?.[0]).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, model: `sonnet`, effort: `low` },
+        });
         expect(run).not.toHaveBeenCalled();
     });
 

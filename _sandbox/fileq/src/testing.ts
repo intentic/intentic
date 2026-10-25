@@ -126,6 +126,42 @@ export const wavBytes = (): Uint8Array => {
     return bytes;
 };
 
+// Real encoded media, kept as bytes so the parser regressions run without an encoder on the host (CI has no ffmpeg).
+// Generated once with ffmpeg, -threads 1 -fflags +bitexact, and these inputs/options:
+// FLAC: wavBytes() as silence.wav; -i silence.wav -metadata_header_padding 0
+//       -metadata title="Fixture audio" -metadata artist="Fixture artist" tagged.flac
+// MP4:  -f lavfi -i color=c=black:s=16x16:r=1 -t 1 -c:v mpeg4 -flags:v +bitexact
+//       -metadata title="Fixture video" tagged.mp4
+export const flacBytes = (): Uint8Array =>
+    Uint8Array.from(
+        Buffer.from(
+            "ZkxhQwAAACICQAJAAAALAAALAfQA8AAAH0Ae4Bk2cWCcfWPP6JuSCtMThAAAPgYAAABmZm1wZWcCAAAAEwAAAHRpdGxlPUZpeHR1" +
+                "cmUgYXVkaW8VAAAAYXJ0aXN0PUZpeHR1cmUgYXJ0aXN0//gkCADKAAAAznb/+CQIAc0AAACiDv/4JAgCxAAAABaG//gkCAPDAAAA" +
+                "ev7/+CQIBNYAAAD/k//4JAgF0QAAAJPr//gkCAbYAAAAJ2P/+CQIB98AAABLG//4JAgI8gAAAK28//gkCAn1AAAAwcT/+CQICvwA" +
+                "AAB1TP/4JAgL+wAAABk0//gkCAzuAAAAnFn/+JQIDQMAAADDDA==",
+            "base64",
+        ),
+    );
+
+export const mp4Bytes = (): Uint8Array =>
+    Uint8Array.from(
+        Buffer.from(
+            "AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAAGW1kYXQAAAGzABAHAAABthYFGCPbfgAAAzBtb292AAAAbG12" +
+                "aGQAAAAAAAAAAAAAAAAAAAPoAAAD6AABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAA" +
+                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACWnRyYWsAAABcdGtoZAAAAAMAAAAAAAAAAAAAAAEAAAAAAAAD6AAAAAAAAAAA" +
+                "AAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAEAAAABAAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAA" +
+                "AQAAA+gAAAAAAAEAAAAAAdJtZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAAEAAAABAAFXEAAAAAAAtaGRscgAAAAAAAAAAdmlkZQAA" +
+                "AAAAAAAAAAAAAFZpZGVvSGFuZGxlcgAAAAF9bWluZgAAABR2bWhkAAAAAQAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAAB" +
+                "AAAADHVybCAAAAABAAABPXN0YmwAAADZc3RzZAAAAAAAAAABAAAAyW1wNHYAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAEAAQAEgA" +
+                "AABIAAAAAAAAAAEKTGF2YyBtcGVnNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY//8AAABPZXNkcwAAAAADgICAPgABAASAgIAwIBEA" +
+                "AAAAAw1AAAAAiAWAgIAeAAABsAEAAAG1iRMAAAEAAAABIADEjYgADQCEAhRjBoCAgAECAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0" +
+                "AAAAAAADDUAAAACIAAAAGHN0dHMAAAAAAAAAAQAAAAEAAEAAAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAABAAAAAQAAABRzdHN6AAAA" +
+                "AAAAABEAAAABAAAAFHN0Y28AAAAAAAAAAQAAACwAAABidWR0YQAAAFptZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAA" +
+                "AAAAAAAAAAAAAC1pbHN0AAAAJaluYW0AAAAdZGF0YQAAAAEAAAAARml4dHVyZSB2aWRlbw==",
+            "base64",
+        ),
+    );
+
 // OpenDocument/EPUB need `mimetype` first in the archive and stored (level 0), per spec.
 const storedMimetype = (mimetype: string): [Uint8Array, { level: 0 }] => [strToU8(mimetype), { level: 0 }];
 

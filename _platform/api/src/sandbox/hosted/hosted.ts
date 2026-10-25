@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
 import { projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
@@ -39,6 +38,7 @@ import {
     LIVE_STATES,
 } from "./fly/fly.js";
 import { withHostedAppLock } from "./hosted-app-lock.js";
+import { hostedInstanceId } from "./fly/hosted-identity.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { digestIn, resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotUse } from "./plan/hosted-plan.js";
@@ -62,6 +62,7 @@ import {
 
 // Where every caller has always found it; it lives beside the gate that starts machines too.
 export { startAfterUpdate } from "./gate/start-after-update.js";
+export { hostedInstanceId } from "./fly/hosted-identity.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
 // tunnel id>` always. The machine dials the edge's tunnel like every sandbox and is reached only down it; until it has,
@@ -71,26 +72,6 @@ export { startAfterUpdate } from "./gate/start-after-update.js";
 // Both the Fly credential and the edge are required: hosted machines are reached only through the edge, down the tunnel
 // they dial under its wildcard.
 export const hostedEnabled = (config: Config): boolean => config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && ingressEnabled(config);
-
-// Deployment identity: API URL plus the database's host and path, never the credential (plaintext at the provider) — a
-// copied env file pointed at a different database is a different deployment. `HOSTED_INSTANCE_ID` overrides this
-// derivation.
-const instanceFingerprint = (config: Config): string => {
-    const raw = config.database?.url ?? ``;
-    try {
-        const dsn = new URL(raw);
-        return `${config.api.url}|${dsn.host}${dsn.pathname}`;
-    } catch {
-        // Unparsable DSN (empty config in tests): fall back so a bad URL doesn't take the whole lane down.
-        return `${config.api.url}|`;
-    }
-};
-
-export const hostedInstanceId = (config: Config): string => {
-    // `?? ''` guards against undefined comparing unequal to every stored stamp (reads as "none of these are mine").
-    const override = config.hosted.instanceId ?? ``;
-    return override === `` ? createHash(`sha256`).update(instanceFingerprint(config)).digest(`hex`).slice(0, 12) : override;
-};
 
 const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;

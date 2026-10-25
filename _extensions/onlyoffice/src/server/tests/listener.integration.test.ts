@@ -17,6 +17,7 @@ const logged: string[] = [];
 // What the fake write leaves on disk, and a gate a test can hold a write at.
 const written: FileStat = { size: 9, mtimeMs: 9000 };
 let holdWrite: Promise<void> | undefined;
+let endServerSession: () => void;
 
 const listen = (server: http.Server): Promise<number> =>
     new Promise((resolve) => {
@@ -47,9 +48,9 @@ beforeAll(async () => {
         socket.on(`error`, () => socket.destroy());
         // A client that lets go is let go of, as socket.io does: an upgraded socket keeps its half open otherwise.
         socket.once(`end`, () => socket.end());
-        // The server's own end of a session (its idle timeout, a drop): it closes, the browser never says a word.
+        // Let the test end the server's session after it has observed the connection open.
         if (req.url?.startsWith(`/server-ends`) === true) {
-            setTimeout(() => socket.end(), 20);
+            endServerSession = () => socket.end();
         }
     });
     documentServerPort = await listen(fakeServer);
@@ -277,12 +278,17 @@ describe(`the editors' sockets`, () => {
             request.end();
         });
         socket.on(`error`, () => socket.destroy());
-        expect(listener.editorsConnected()).toBe(1);
-        for (let attempt = 0; attempt < 50 && listener.editorsConnected() > 0; attempt++) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
+        try {
+            expect(listener.editorsConnected()).toBe(1);
+            // The document server closes first; the browser has not ended its half of the socket.
+            endServerSession();
+            for (let attempt = 0; attempt < 50 && listener.editorsConnected() > 0; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            expect(listener.editorsConnected()).toBe(0);
+        } finally {
+            socket.destroy();
         }
-        expect(listener.editorsConnected()).toBe(0);
-        socket.destroy();
     });
 });
 

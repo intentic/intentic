@@ -4,6 +4,7 @@ import type { Config } from "../../config.js";
 import { forgetHostedHealthAlert, sweepHostedHealth } from "./hosted-health.js";
 import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 import { fakeHostedAppLock } from "../../testing.js";
+import { hostedInstanceId } from "./hosted.js";
 
 jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
@@ -185,7 +186,9 @@ describe(`hosted health`, () => {
     // Neither a row nor a deletion record: the reaper never destroys it, so the watch names it for an operator. Not
     // litter (it is not the reaper's work) and not a fault (a restore from an older backup leaves exactly these).
     it(`names an app no record explains as forgotten, apart from litter, and stays healthy`, async () => {
-        stubFly([`intentic-sbx-pool-1`, `intentic-sbx-unexplained`]);
+        stubFly([`intentic-sbx-pool-1`, `intentic-sbx-unexplained`], {
+            "intentic-sbx-unexplained": [flyMachine(hostedInstanceId(config()))],
+        });
         const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
         expect(health?.forgotten).toEqual([`intentic-sbx-unexplained`]);
