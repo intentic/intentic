@@ -199,7 +199,14 @@
         "historyShallow": "the sandbox's copy is a shallow clone",
         "historyFailed": "git refused the last fetch",
         "historyRetry": "next try {when}",
-        "held": "held",
+        "heldWord": {
+            "gone": "sync held: sandbox gone",
+            "containerMissing": "sync held: container not here",
+            "containerTrashed": "sync held: in the trash",
+            "swap": "sync held while it updates",
+            "unreachable": "sync held: not answering",
+            "other": "sync held"
+        },
         "fileSyncingHeld": "file syncing held",
         "heldBy": {
             "gone": "Held while this sandbox is said to no longer exist. Its sync carries on by itself if it answers again.",

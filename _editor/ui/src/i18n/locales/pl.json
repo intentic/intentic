@@ -199,7 +199,14 @@
         "historyShallow": "kopia w sandboksie to płytki klon",
         "historyFailed": "git odrzucił ostatnie pobieranie",
         "historyRetry": "kolejna próba {when}",
-        "held": "wstrzymane",
+        "heldWord": {
+            "gone": "synchronizacja wstrzymana: sandboksa nie ma",
+            "containerMissing": "synchronizacja wstrzymana: brak kontenera",
+            "containerTrashed": "synchronizacja wstrzymana: w koszu",
+            "swap": "synchronizacja wstrzymana na czas aktualizacji",
+            "unreachable": "synchronizacja wstrzymana: brak odpowiedzi",
+            "other": "synchronizacja wstrzymana"
+        },
         "fileSyncingHeld": "synchronizacja plików wstrzymana",
         "heldBy": {
             "gone": "Wstrzymane, bo ten sandbox podobno już nie istnieje. Synchronizacja wznowi się sama, jeśli znów odpowie.",

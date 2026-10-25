@@ -529,6 +529,22 @@ describe("the summary's link count", () => {
     it("keeps the old wording when nothing knows", () => {
         expect(statusSummary(4242, 2, quiet, NOW)).toContain("2 sandboxes connected");
     });
+
+    // A folder held still by a swap or paused by its owner moves nothing, so it is not counted as syncing: the tray
+    // said "syncing 1 sandbox" for the quarter hour a swap held the only pairing (2026-10-25).
+    it("counts only the folders whose files move as syncing", () => {
+        const pairing = { sandboxId: "a", mode: "sync", localDir: "/w/a" } as const;
+        const withPairings = (pairings: DeviceReport["pairings"]): DeviceReport => ({ ...quiet, pairings });
+        expect(statusSummary(4242, 1, withPairings([{ ...pairing, heldBy: [] }]), NOW, 1)).toBe("1 sandbox connected · syncing 1 sandbox");
+        const held = statusSummary(4242, 1, withPairings([{ ...pairing, paused: true, heldBy: ["swap"] }]), NOW, 1);
+        expect(held).toBe("1 sandbox connected · file sync held for 1 sandbox");
+        const mixed = withPairings([
+            { ...pairing, sandboxId: "a", paused: true, heldBy: ["owner", "swap"] },
+            { ...pairing, sandboxId: "b", heldBy: [] },
+            { ...pairing, sandboxId: "c", paused: true },
+        ]);
+        expect(statusSummary(4242, 3, mixed, NOW, 3)).toBe("3 sandboxes connected · syncing 1 sandbox · file sync paused for 2 sandboxes");
+    });
 });
 
 // The paths under the count, on the one output that has ever printed the word "conflict": the count was the

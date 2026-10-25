@@ -199,7 +199,14 @@
         "historyShallow": "la copia del sandbox es un clon superficial",
         "historyFailed": "git rechazó la última descarga",
         "historyRetry": "próximo intento {when}",
-        "held": "retenida",
+        "heldWord": {
+            "gone": "sincronización retenida: el sandbox ya no está",
+            "containerMissing": "sincronización retenida: contenedor ausente",
+            "containerTrashed": "sincronización retenida: en la papelera",
+            "swap": "sincronización retenida mientras se actualiza",
+            "unreachable": "sincronización retenida: no responde",
+            "other": "sincronización retenida"
+        },
         "fileSyncingHeld": "sincronización de archivos retenida",
         "heldBy": {
             "gone": "Retenida porque este sandbox ya no existiría. La sincronización sigue sola si vuelve a responder.",

@@ -199,7 +199,14 @@
         "historyShallow": "la copie du sandbox est un clone superficiel",
         "historyFailed": "git a refusé la dernière récupération",
         "historyRetry": "prochain essai {when}",
-        "held": "retenue",
+        "heldWord": {
+            "gone": "synchro retenue : sandbox disparu",
+            "containerMissing": "synchro retenue : conteneur absent",
+            "containerTrashed": "synchro retenue : dans la corbeille",
+            "swap": "synchro retenue pendant la mise à jour",
+            "unreachable": "synchro retenue : ne répond pas",
+            "other": "synchro retenue"
+        },
         "fileSyncingHeld": "synchro des fichiers retenue",
         "heldBy": {
             "gone": "Retenue parce que ce sandbox n'existerait plus. La synchro reprend d'elle-même s'il répond de nouveau.",

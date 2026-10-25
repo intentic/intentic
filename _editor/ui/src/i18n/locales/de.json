@@ -199,7 +199,14 @@
         "historyShallow": "die Kopie in der Sandbox ist ein flacher Klon",
         "historyFailed": "Git hat den letzten Abruf abgelehnt",
         "historyRetry": "nächster Versuch {when}",
-        "held": "angehalten",
+        "heldWord": {
+            "gone": "Sync angehalten: Sandbox weg",
+            "containerMissing": "Sync angehalten: Container nicht hier",
+            "containerTrashed": "Sync angehalten: im Papierkorb",
+            "swap": "Sync angehalten während des Updates",
+            "unreachable": "Sync angehalten: keine Antwort",
+            "other": "Sync angehalten"
+        },
         "fileSyncingHeld": "Dateisync angehalten",
         "heldBy": {
             "gone": "Angehalten, weil diese Sandbox angeblich nicht mehr existiert. Der Sync läuft von selbst weiter, wenn sie wieder antwortet.",

@@ -52,10 +52,11 @@ it(`puts the folder on the Files line with only the news beside it`, () => {
 it(`offers Resume only for the owner's own pause, and says why the machine holds the rest`, () => {
     const folder = { sandboxId: `a`, mode: `sync` as const, localDir: `/home/ada/a`, mutagenStatus: `watching`, paused: true };
     expect(folderHold({ ...folder, heldBy: [`owner`, `swap`] })).toMatchObject({ word: `paused`, resumable: true });
-    expect(folderHold({ ...folder, heldBy: [`swap`] })).toMatchObject({ word: `held`, resumable: false, hint: expect.stringContaining(`updated or rebuilt`) });
+    // (2026-10-25) The word names the hold: a bare quiet "held" beside the path was read as sync running through a swap.
+    expect(folderHold({ ...folder, heldBy: [`swap`] })).toMatchObject({ word: `sync held while it updates`, resumable: false, hint: expect.stringContaining(`updated or rebuilt`) });
     expect(folderHold({ ...folder, heldBy: [`unreachable`] })?.hint).toContain(`has not answered for an hour`);
-    expect(folderHold({ ...folder, heldBy: [`a-reason-from-a-newer-agent`] })).toMatchObject({ word: `held`, resumable: false });
-    expect(filesLine(running(`a`, { folder: { ...folder, heldBy: [`gone`] } })).map((part) => part.text)).toEqual([`/home/ada/a`, `held`]);
+    expect(folderHold({ ...folder, heldBy: [`a-reason-from-a-newer-agent`] })).toMatchObject({ word: `sync held`, resumable: false });
+    expect(filesLine(running(`a`, { folder: { ...folder, heldBy: [`gone`] } })).map((part) => part.text)).toEqual([`/home/ada/a`, `sync held: sandbox gone`]);
     // An agent older than `heldBy` only says Mutagen has it paused: a pause a person may lift, as before.
     expect(folderHold(folder)).toMatchObject({ word: `paused`, resumable: true });
     expect(folderHold({ ...folder, paused: false })).toBeUndefined();

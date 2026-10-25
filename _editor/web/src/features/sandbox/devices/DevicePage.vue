@@ -224,17 +224,31 @@ const fileVerbs = (group: DeviceSandboxGroup): SandboxMenuVerb[] => {
     }
     const sync = (command: SyncCommand): void => void ops.runSync(owner, ops.rowKey(group), group.sandboxId, command);
     const off = mirroringOff(group.folder);
+    // While anything holds the folder's sync (deviceHolds.ts `folderHold`) the menu must not talk as if files moved:
+    // "Pause syncing" over a sync this computer held for a swap, beside "Files keep syncing", read as sync running
+    // (2026-10-25). Pause stays offered, since it adds the owner's own pause that outlives the hold, and says so.
+    const held = folderHold(group.folder) !== undefined;
     return [
         ...(pausable(owner.device, group)
             ? [
                   resumes(group)
                       ? { label: t(`sandbox.devicePage.resumeSyncing`), icon: `play` as const, run: () => sync(`sync-resume`) }
-                      : { label: t(`sandbox.devicePage.pauseSyncing`), icon: `pause` as const, hint: t(`sandbox.words.portsStayMirrored`), run: () => sync(`sync-pause`) },
+                      : {
+                            label: t(`sandbox.devicePage.pauseSyncing`),
+                            icon: `pause` as const,
+                            hint: held ? t(`sandbox.devicePage.pauseWhileHeld`) : t(`sandbox.words.portsStayMirrored`),
+                            run: () => sync(`sync-pause`),
+                        },
               ]
             : []),
         off
             ? { label: t(`sandbox.devicePage.startMirroring`), icon: `eye` as const, hint: t(`sandbox.words.ontoLocalhost`), run: () => sync(`mirror-on`) }
-            : { label: t(`sandbox.devicePage.stopMirroring`), icon: `eye-slash` as const, hint: t(`sandbox.words.filesKeepSyncing`), run: () => sync(`mirror-off`) },
+            : {
+                  label: t(`sandbox.devicePage.stopMirroring`),
+                  icon: `eye-slash` as const,
+                  hint: held ? t(`sandbox.words.fileSyncUnchanged`) : t(`sandbox.words.filesKeepSyncing`),
+                  run: () => sync(`mirror-off`),
+              },
         // Not where the menu's Remove already is the unpairing: a row with no container here has nothing else to remove.
         ...(rowRemoval(machine, group).container || !removableHere(machine, group)
             ? [

@@ -76,6 +76,21 @@ const heldHint = (hold: string | undefined): string =>
                 ? t(`ui.deviceDetail.heldBy.unreachable`)
                 : t(`ui.deviceDetail.heldBy.other`);
 
+// The word beside the folder names the hold, not just that there is one (2026-10-25): a bare quiet "held" beside a
+// path in step was read as sync running while a swap held it for a quarter hour, and the reason sat only in a hover.
+const heldWord = (hold: string | undefined): string =>
+    hold === `gone`
+        ? t(`ui.deviceDetail.heldWord.gone`)
+        : hold === `container-missing`
+          ? t(`ui.deviceDetail.heldWord.containerMissing`)
+          : hold === `container-trashed`
+            ? t(`ui.deviceDetail.heldWord.containerTrashed`)
+            : hold === `swap`
+              ? t(`ui.deviceDetail.heldWord.swap`)
+              : hold === `unreachable`
+                ? t(`ui.deviceDetail.heldWord.unreachable`)
+                : t(`ui.deviceDetail.heldWord.other`);
+
 export const folderHold = (folder: HeldFolder | undefined): FolderHold | undefined => {
     const held = folder?.heldBy ?? [];
     const lowDisk = folder?.lowDisk;
@@ -87,7 +102,7 @@ export const folderHold = (folder: HeldFolder | undefined): FolderHold | undefin
     }
     return held.length === 0
         ? undefined
-        : { word: t(`ui.deviceDetail.held`), label: t(`ui.deviceDetail.fileSyncingHeld`), hint: heldHint(held[0]), tone: `quiet`, resumable: false };
+        : { word: heldWord(held[0]), label: t(`ui.deviceDetail.fileSyncingHeld`), hint: heldHint(held[0]), tone: `quiet`, resumable: false };
 };
 
 // The closed line's words for both, when they hold.

@@ -70,6 +70,28 @@ const linksHalf = (links: number, connected: number | undefined): string | undef
     return connected === undefined || connected === links ? `${links} ${sandboxes} connected` : `${connected} of ${links} ${sandboxes} connected`;
 };
 
+// The sync half, counted by what each folder is doing (2026-10-25): a pairing whose file sync is held still (a swap's
+// quarter hour, an unreachable sandbox) or paused by its owner moves no files, and counting it under "syncing" put
+// "syncing 1 sandbox" on the tray of a machine that had moved nothing for as long as the hold lasted.
+const sandboxCount = (pairings: readonly DevicePairing[]): string => {
+    const count = new Set(pairings.map((pairing) => pairing.sandboxId)).size;
+    return `${count} sandbox${count === 1 ? "" : "es"}`;
+};
+
+const syncHalves = (pairings: readonly DevicePairing[]): string[] => {
+    const still = (pairing: DevicePairing): boolean => pairing.mode === "sync" && (pairing.paused === true || (pairing.heldBy?.length ?? 0) > 0);
+    // The owner's own pause first, as holds.ts orders it; an agent older than `heldBy` only knew Mutagen's pause.
+    const ownerPaused = (pairing: DevicePairing): boolean => pairing.heldBy?.[0] === "owner" || (pairing.heldBy === undefined && pairing.paused === true);
+    const moving = pairings.filter((pairing) => !still(pairing));
+    const paused = pairings.filter((pairing) => still(pairing) && ownerPaused(pairing));
+    const held = pairings.filter((pairing) => still(pairing) && !ownerPaused(pairing));
+    return [
+        ...(moving.length > 0 ? [`syncing ${sandboxCount(moving)}`] : []),
+        ...(held.length > 0 ? [`file sync held for ${sandboxCount(held)}`] : []),
+        ...(paused.length > 0 ? [`file sync paused for ${sandboxCount(paused)}`] : []),
+    ];
+};
+
 // The one-line summary. Health first, since a stopped or stalled agent outranks any count, then the counts in
 // the cards' vocabulary, only for the halves in use.
 export const statusSummary = (running: number | undefined, links: number, sync: DeviceReport, now: number, connected?: number): string => {
@@ -77,10 +99,7 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
     if (!working) {
         return "nothing connected";
     }
-    const sandboxes = new Set(sync.pairings.map((pairing) => pairing.sandboxId)).size;
-    const halves = [linksHalf(links, connected), sync.pairings.length === 0 ? undefined : `syncing ${sandboxes} sandbox${sandboxes === 1 ? "" : "es"}`].filter(
-        (part) => part !== undefined,
-    );
+    const halves = [linksHalf(links, connected), ...syncHalves(sync.pairings)].filter((part) => part !== undefined);
     if (running === undefined) {
         return `NOT RUNNING · ${halves.join(" · ")}`;
     }
