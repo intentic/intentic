@@ -1,5 +1,6 @@
+import { automationOf, movedAt, stackHeads } from "@intentic/sandbox-contract/models/agent-stack";
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
-import { callsOwner, type FleetLane, laneOf } from "../../agent-status/agentStatus-lanes";
+import { callsOwner, type FleetLane, laneOf, runCallsOwner } from "../../agent-status/agentStatus-lanes";
 import { heardByParent, limited, onlyOwnerCanAnswer, unregistered } from "../../agent-status/agentStatus-standing";
 import { subagentLive } from "../subagentRoster";
 import { activeLaneOrder, attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../useAgents-fleet";
@@ -13,6 +14,12 @@ import { parentOf } from "../../agent-status/ownership";
 // is theirs to answer (callsOwner), and then the parent's card carries it: the card moves to the lane that asks, as a
 // workflow run's card does for its steps (useWorkflowRuns.laneOfRun). Pure over the lanes, as withoutSteps is, so every
 // count, window and range the board reads is taken from the cards it actually draws.
+//
+// AN AUTOMATION'S RUNS RIDE ITS LATEST RUN (sandbox-contract models/agent-stack.ts). Every fire of an automation that
+// starts an agent opens a conversation of its own, so one on a ten-minute clock would fill the board with a card per run.
+// Its earlier runs ride the card of its latest instead, as rows in its tray, by the same rules as a spawned child, save
+// whom a stop is news to: nothing supervises a run, so it calls the reader until a later run has moved past it
+// (runCallsOwner). A run with work to land keeps its card (standsAlone), and archiving the card files the whole stack.
 //
 // A CARD'S TRAY HOLDS EVERY AGENT IT STARTED, whichever mechanism started it. A conversation it spawned rides here from
 // the fold; a subagent its own runtime ran in-process (the roster's `subagent` kind: the runtime's Agent/Task tool) has no
@@ -41,13 +48,15 @@ export const standsAlone = (agent: FleetAgent): boolean =>
 export interface FoldRules {
     readonly alone: (agent: FleetAgent) => boolean;
     readonly calls: (child: FleetAgent, family: { readonly child: FleetLane; readonly parent: FleetLane; readonly parentAt: number }) => boolean;
+    // The same question of an automation's earlier run, riding the card of its latest.
+    readonly runCalls: (run: FleetAgent, stack: { readonly run: FleetLane; readonly headAt: number }) => boolean;
 }
 
-export const BOARD_RULES: FoldRules = { alone: standsAlone, calls: callsOwner };
+export const BOARD_RULES: FoldRules = { alone: standsAlone, calls: callsOwner, runCalls: runCallsOwner };
 
 // The archive's: every filed child rides under its filed parent, and none calls, since every press there is withheld
 // until a card is restored and so nothing is asking.
-export const ARCHIVE_RULES: FoldRules = { alone: () => false, calls: () => false };
+export const ARCHIVE_RULES: FoldRules = { alone: () => false, calls: () => false, runCalls: () => false };
 
 // A card's key across boxes: an id is one daemon's, and the all-sandboxes board holds several daemons' cards. A parent
 // always lives in its child's own box, so the child's box is the one its parent's id is read in.
@@ -115,6 +124,44 @@ const liftWith = (lift: Lift, child: FleetAgent, read: { readonly lane: FleetLan
     };
 };
 
+// The key of the card a conversation's parent wears, given every conversation on the board: a child's parent, or for an
+// automation's earlier run the latest run of it, whose card it rides. Undefined for a conversation that rides nothing. A
+// stack is keyed by the automation within its own box, since two sandboxes may name an automation alike, and a
+// conversation another one started rides its parent, never a stack.
+const parentKeys = (agents: readonly FleetAgent[]): ((agent: FleetAgent) => string | undefined) => {
+    const runOf = (agent: FleetAgent): string | undefined => {
+        const automation = parentOf(agent.startedBy) === undefined ? automationOf(agent) : undefined;
+        return automation === undefined ? undefined : keyOf(automation, agent.sandboxId);
+    };
+    const heads = stackHeads(agents, runOf);
+    return (agent) => {
+        const parentId = parentOf(agent.startedBy);
+        if (parentId !== undefined) {
+            return keyOf(parentId, agent.sandboxId);
+        }
+        const stack = runOf(agent);
+        const head = stack === undefined ? undefined : heads.get(stack);
+        return head === undefined || head === agent ? undefined : cardKey(head);
+    };
+};
+
+// Whether a riding conversation calls the reader through its card, and the moment its card last moved, past which its
+// stop is heard. A child answers to its parent first (callsOwner); an automation's earlier run to nobody but the
+// reader, until a later run moved past it (runCallsOwner), measured from the later run's movedAt.
+const riderCall = (
+    rules: FoldRules,
+    agent: FleetAgent,
+    lane: FleetLane,
+    parent: { readonly agent: FleetAgent; readonly lane: FleetLane },
+) => {
+    if (parentOf(agent.startedBy) === undefined) {
+        const headAt = movedAt(parent.agent);
+        return { calling: rules.runCalls(agent, { run: lane, headAt }), parentAt: headAt };
+    }
+    const parentAt = parent.agent.updatedAt;
+    return { calling: rules.calls(agent, { child: lane, parent: parent.lane, parentAt }), parentAt };
+};
+
 export const foldChildren = (lanes: Lanes, rules: FoldRules = BOARD_RULES): ChildFold => {
     const where = new Map<string, { readonly agent: FleetAgent; readonly lane: FleetLane }>();
     for (const lane of LANES) {
@@ -122,10 +169,7 @@ export const foldChildren = (lanes: Lanes, rules: FoldRules = BOARD_RULES): Chil
             where.set(cardKey(agent), { agent, lane });
         }
     }
-    const parentKeyOf = (agent: FleetAgent): string | undefined => {
-        const parentId = parentOf(agent.startedBy);
-        return parentId === undefined ? undefined : keyOf(parentId, agent.sandboxId);
-    };
+    const parentKeyOf = parentKeys([...where.values()].map((entry) => entry.agent));
     // The card a conversation rides under, `undefined` for one that is a card itself. Memoised, and walked with the
     // path it came by, so a record naming its own descendant as its parent ends the walk instead of looping.
     const hostKeys = new Map<string, string | undefined>();
@@ -158,12 +202,12 @@ export const foldChildren = (lanes: Lanes, rules: FoldRules = BOARD_RULES): Chil
             }
             push(children, host, agent);
             hosts.set(key, hostEntry.agent);
-            const calling = rules.calls(agent, { child: lane, parent: parent.lane, parentAt: parent.agent.updatedAt });
+            const { calling, parentAt } = riderCall(rules, agent, lane, parent);
             if (calling) {
                 push(calls, host, agent);
             }
             const lift = lifts.get(host) ?? { lane: hostEntry.lane, calledAt: 0, workingSince: Number.POSITIVE_INFINITY };
-            lifts.set(host, liftWith(lift, agent, { lane, calling, heard: heardByParent(agent, parent.agent.updatedAt) }));
+            lifts.set(host, liftWith(lift, agent, { lane, calling, heard: heardByParent(agent, parentAt) }));
         }
     }
     // Nothing rode anywhere, which is most boards: the lanes go on as they came, so nothing downstream recomputes.
@@ -393,6 +437,10 @@ export const trayOf = (
     const tail = open ? dealt.settled : dealt.settled.filter((child) => child.id === state.selected);
     return { asks, lead: dealt.lead, groups, folded: dealt.settled.length, open, tail };
 };
+
+// The riders under a card that are its automation's earlier runs rather than agents it started: whatever rides with no
+// parent of its own rides as a run of the card's stack (parentKeys).
+export const stackedRuns = (children: readonly FleetAgent[]): readonly FleetAgent[] => children.filter((child) => parentOf(child.startedBy) === undefined);
 
 // How many agents a card started, and how many of them are still at work: what the card itself wears (ChildCount), so
 // a shut tray still says there is a family under it and whether it is busy. Counted over the same two lists the tray

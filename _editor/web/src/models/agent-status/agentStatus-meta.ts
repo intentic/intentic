@@ -124,18 +124,24 @@ const originSources = (): Record<string, { icon: IconName; label: string }> => (
     imap: { icon: `envelope`, label: t(`agents.agentStatus.email`) },
     webchat: { icon: `globe`, label: t(`agents.agentStatus.visitorChat`) },
     webhook: { icon: `bolt`, label: t(`agents.agentStatus.webhook`) },
+    // An automation's own clock or check, which names no sender: the daemon's fire-sessions.ts ownOrigin.
+    schedule: { icon: `clock`, label: t(`agents.agentStatus.schedule`) },
+    once: { icon: `clock`, label: t(`agents.agentStatus.oneTime`) },
+    watch: { icon: `eye`, label: t(`agents.agentStatus.watch`) },
+    workspace: { icon: `folder-open`, label: t(`agents.agentStatus.workspaceEvent`) },
 });
 
 // The card's "came in from outside" line: what opened it, who sent it, and which automation was configured to
 // answer. The hint carries only what OriginMark doesn't already print (source and sender), so nothing is said
-// twice.
+// twice. A fire nobody sent (a schedule, a webhook, a watch) names the automation where a sender would stand, since that
+// is the one name the card of an automation's runs is known by.
 export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
     const source = originSources()[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
     const where = origin.channelId !== undefined ? t(`agents.agentStatus.inChannel`, { channel: origin.channelId }) : ``;
     return {
         icon: source.icon,
         label: source.label,
-        detail: origin.author,
+        detail: origin.author ?? (origin.channelId === undefined ? origin.automationId : undefined),
         hint: t(`agents.agentStatus.openedByAutomationFirst`, { automationId: origin.automationId, where }),
     };
 };

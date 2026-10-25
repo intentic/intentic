@@ -68,3 +68,17 @@ the parent has moved past it. A parent that carried on and landed sits in **Fini
 tray. What only you can answer (a permission, a plan, a setup, a credential) and a question nobody answered still
 reach **Attention**. When a parent is archived, by hand, by **Clear** or by age, the subagents that stopped before
 it last moved go with it.
+
+## Automations that start an agent on every run
+
+Each run of an automation that starts a new agent is a conversation of its own, so an automation on a short clock
+(every 10 minutes) would otherwise fill the board with a card per run. Instead, its runs share one card: the card of
+its latest run, with a provenance line naming the automation (**Schedule · x-follow**, **Watch · …**, **Webhook ·
+…**) and a count with a history glyph (**Earlier runs: N**). The earlier runs are rows in that card's tray, behind
+**N finished**, and each still opens its own chat.
+
+The card stands where its latest run stands. An earlier run that failed is history once a later run has run after it,
+so it stays in the tray rather than pulling the card into **Attention**; a run that needs something only you can give
+(a permission, a credential, a setup) still does. A run that left work to land keeps a card of its own until it lands.
+Archiving the card archives every run in it, after a dialog naming the automation and the count (**Archive all 7 runs
+of x-follow?**). Runs recorded before this change are recognised by their `a-<automation>-…` id.

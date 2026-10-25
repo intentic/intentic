@@ -262,6 +262,76 @@ describe(`which children ride under their parent`, () => {
     });
 });
 
+// An automation on a ten-minute clock opens a conversation per fire; its runs ride the card of its latest one.
+describe(`an automation's runs`, () => {
+    const scheduled = { automationId: `x-follow`, provider: `schedule` };
+    const run = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => card(id, { origin: scheduled, ...over });
+
+    it(`hang under the card of its latest run, newest first, and leave a person's work alone`, () => {
+        const fold = folded(run(`r1`, { updatedAt: 1_000 }), run(`r3`, { updatedAt: 3_000 }), run(`r2`, { updatedAt: 2_000 }), card(`mine`));
+        expect(ids(fold.lanes.finished)).toEqual([`r3`, `mine`]);
+        expect(ids(fold.children.get(`r3`))).toEqual([`r2`, `r1`]);
+    });
+
+    it(`stack the runs a schedule fired before origins were recorded, by the id the daemon minted them under`, () => {
+        const fold = folded(card(`a-x-follow-mvn5x1jtu`, { updatedAt: 1_000 }), card(`a-x-follow-mvn5zi8gw`, { updatedAt: 2_000 }), run(`now`, { updatedAt: 3_000 }));
+        expect(ids(fold.lanes.finished)).toEqual([`now`]);
+        expect(ids(fold.children.get(`now`))).toEqual([`a-x-follow-mvn5zi8gw`, `a-x-follow-mvn5x1jtu`]);
+    });
+
+    it(`keep two automations, and two sandboxes' automations of one name, apart`, () => {
+        const other = { automationId: `nightly`, provider: `schedule` };
+        const fold = folded(run(`x1`), run(`x2`, { updatedAt: 2_000 }), card(`n1`, { origin: other }), run(`far`, { sandboxId: `b` }));
+        expect(fold.lanes.finished).toHaveLength(3);
+        expect(ids(fold.children.get(`x2`))).toEqual([`x1`]);
+    });
+
+    it(`lift the card to Active while its latest run works, without trading places with an earlier run still at it`, () => {
+        const fold = folded(
+            run(`slow`, { status: `running`, startedAt: 1_000, updatedAt: 9_000 }),
+            run(`fresh`, { status: `running`, startedAt: 5_000, updatedAt: 5_100 }),
+        );
+        expect(ids(fold.lanes.active)).toEqual([`fresh`]);
+        expect(ids(fold.children.get(`fresh`))).toEqual([`slow`]);
+    });
+
+    it(`file a failure a later run moved past as history in the tray, and keep one the latest run repeats in Attention`, () => {
+        const past = folded(run(`failed`, { status: `error`, updatedAt: 1_000 }), run(`fine`, { updatedAt: 2_000 }));
+        expect(ids(past.lanes.finished)).toEqual([`fine`]);
+        expect(past.calls.size).toBe(0);
+        const still = folded(run(`failed`, { status: `error`, updatedAt: 1_000 }), run(`again`, { status: `error`, updatedAt: 2_000 }));
+        expect(ids(still.lanes.attention)).toEqual([`again`]);
+        expect(ids(still.children.get(`again`))).toEqual([`failed`]);
+    });
+
+    it(`call the reader through the card for an earlier run asking what only the reader can give`, () => {
+        const fold = folded(run(`asks`, { status: `awaiting`, attention: permission, updatedAt: 1_000 }), run(`latest`, { updatedAt: 2_000 }));
+        expect(ids(fold.lanes.attention)).toEqual([`latest`]);
+        expect(ids(fold.calls.get(`latest`))).toEqual([`asks`]);
+    });
+
+    it(`give a run with work to land its own card`, () => {
+        const fold = folded(run(`ready`, { status: `ready`, updatedAt: 1_000 }), run(`latest`, { updatedAt: 2_000 }));
+        expect(ids(fold.lanes.finished)).toEqual([`latest`, `ready`]);
+        expect(fold.hosts.size).toBe(0);
+    });
+
+    it(`carry a run's own child along to the stack's card`, () => {
+        const fold = folded(run(`r1`, { updatedAt: 1_000 }), run(`r2`, { updatedAt: 2_000 }), child(`helper`, `r1`));
+        expect(ids(fold.lanes.finished)).toEqual([`r2`]);
+        expect(fold.hosts.get(`helper`)?.id).toBe(`r2`);
+    });
+
+    it(`stack in the archive too, where nothing calls`, () => {
+        const fold = foldChildren(
+            { attention: [], active: [], finished: [run(`old`, { status: `error`, updatedAt: 1_000 }), run(`new`, { updatedAt: 2_000 })] },
+            ARCHIVE_RULES,
+        );
+        expect(ids(fold.lanes.finished)).toEqual([`new`]);
+        expect(fold.calls.size).toBe(0);
+    });
+});
+
 describe(`a steady fold`, () => {
     it(`keeps the last answer's lists wherever the same cards stand in the same order`, () => {
         const parent = working(`p`);

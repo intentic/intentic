@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { automationOf } from "@intentic/sandbox-contract/models/agent-stack";
 import { useT } from "@intentic/ui/i18n";
 import { type ComponentPublicInstance, computed, inject } from "vue";
 import { agentDisplayTitle } from "../../models/agent-status/agentStatus-meta";
 import type { FleetAgent } from "../../models/fleet/useAgents-fleet";
-import { FINISHED_FOLD, inProcess, type TrayChild, trayOf } from "../../models/fleet/board/childFold";
+import { FINISHED_FOLD, inProcess, stackedRuns, type TrayChild, trayOf } from "../../models/fleet/board/childFold";
 import { trayFold } from "@intentic/ui/motion";
 import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
@@ -45,7 +46,11 @@ const children = computed(() => board?.childrenOf(props.agent) ?? []);
 const subagents = computed(() => board?.subagentsOf(props.agent) ?? []);
 const tray = computed(() => (board === undefined ? undefined : trayOf(children.value, board.stateOf(props.agent), subagents.value)));
 const title = computed(() => agentDisplayTitle(props.agent));
-const label = computed(() => t(`agents.childRows.startedBy`, { title: title.value }));
+// An automation's earlier runs are named for the automation, not as agents its latest run started.
+const automation = computed(() => (children.value.length > 0 && stackedRuns(children.value).length === children.value.length ? automationOf(props.agent) : undefined));
+const label = computed(() =>
+    automation.value === undefined ? t(`agents.childRows.startedBy`, { title: title.value }) : t(`agents.childRows.runsOf`, { automation: automation.value }),
+);
 // Whether one of the rows is on screen: its chat in a pane, or its transcript in this card's column.
 const childOnScreen = computed(
     () =>

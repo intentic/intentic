@@ -1,5 +1,8 @@
+import { automationOf } from "@intentic/sandbox-contract/models/agent-stack";
+import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, ref } from "vue";
 import { agentDisplayTitle } from "../../../../models/agent-status/agentStatus-meta";
+import { stackedRuns } from "../../../../models/fleet/board/childFold";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // What archiving one card from the board does when children ride under it (childFold): it asks first, naming how many
@@ -23,7 +26,16 @@ export interface PendingFamilyArchive {
     readonly ids: readonly string[];
     readonly title: string;
     readonly children: number;
+    // The automation whose runs these all are, when the card is its latest run's and nothing else rides it (childFold):
+    // what the dialog names instead of the latest run's own title.
+    readonly automation?: string | undefined;
 }
+
+// The automation a card's riders are all earlier runs of, or undefined for a card with any other agent under it.
+const stackOf = (card: FleetAgent, ids: readonly string[], byId: (id: string) => FleetAgent | undefined): string | undefined => {
+    const riders = ids.slice(1).flatMap((id) => byId(id) ?? []);
+    return riders.length === ids.length - 1 && stackedRuns(riders).length === riders.length ? automationOf(card) : undefined;
+};
 
 export const useFamilyArchive = (host: FamilyArchiveHost) => {
     const pending = ref<PendingFamilyArchive | undefined>(undefined);
@@ -32,7 +44,7 @@ export const useFamilyArchive = (host: FamilyArchiveHost) => {
     const request = (card: FleetAgent): Promise<void> => {
         const ids = host.familyIds(card);
         if (ids.length > 1) {
-            pending.value = { ids, title: agentDisplayTitle(card), children: ids.length - 1 };
+            pending.value = { ids, title: agentDisplayTitle(card), children: ids.length - 1, automation: stackOf(card, ids, host.agentById) };
             return Promise.resolve();
         }
         return run(ids);
@@ -61,5 +73,15 @@ export const useFamilyArchive = (host: FamilyArchiveHost) => {
         pending.value = undefined;
     };
     const asking = computed(() => pending.value !== undefined);
-    return { pending, asking, request, requestIds, confirm, cancel };
+    // What the dialog asks: a family by its card's title and its subagents, an automation's runs by the automation.
+    const heading = computed(() => {
+        const held = pending.value;
+        if (held === undefined) {
+            return ``;
+        }
+        return held.automation === undefined
+            ? t(`agents.agentsView.archiveFamily`, { title: held.title, count: held.children }, held.children)
+            : t(`agents.agentsView.archiveStack`, { automation: held.automation, count: held.children + 1 }, held.children + 1);
+    });
+    return { pending, asking, heading, request, requestIds, confirm, cancel };
 };

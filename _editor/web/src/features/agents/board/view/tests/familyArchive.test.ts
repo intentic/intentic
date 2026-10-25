@@ -43,6 +43,17 @@ describe("useFamilyArchive", () => {
         expect(family.pending.value).toBeUndefined();
     });
 
+    it("names an automation's runs by the automation, counting the card's own run with them", async () => {
+        const origin = { automationId: `x-follow`, provider: `schedule` };
+        const runs = [`r3`, `r2`, `r1`].map((id) => ({ ...card(id, `Follow back new connections`), origin }));
+        const byId = new Map(runs.map((run) => [run.id, run]));
+        const archive = jest.fn(async (_ids?: readonly string[], _options?: { readonly receipt?: boolean }) => undefined);
+        const family = useFamilyArchive({ archive, familyIds: () => runs.map((run) => run.id), agentById: (id) => byId.get(id), coarse: ref(false) });
+        await family.request(runs[0]!);
+        expect(family.pending.value?.automation).toBe(`x-follow`);
+        expect(family.heading.value).toBe(`Archive all 3 runs of x-follow?`);
+    });
+
     it("archives nothing when the reader cancels", async () => {
         const { family, archive } = setup();
         await family.requestIds([`lead`]);

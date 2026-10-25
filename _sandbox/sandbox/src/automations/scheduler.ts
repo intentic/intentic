@@ -34,7 +34,7 @@ import { type TurnProgressReader, turnProgressReader } from "../extensions/liste
 import { conversationLink } from "../system/boot/open-in-app.js";
 import type { TurnInput } from "../seams/turn-starter.js";
 import { refusalOf, type WakeRefusal, wakeEnding, wakePostures } from "./wake/wake-fallback.js";
-import { mintConversationId, sessionsGate } from "./fire/fire-sessions.js";
+import { mintConversationId, ownOrigin, sessionsGate } from "./fire/fire-sessions.js";
 
 // How much of an event's webhook body reaches the guard's env and the wake prompt.
 export const PAYLOAD_MAX = 64_000;
@@ -693,7 +693,7 @@ const runFire = async (
                       origin,
                       title: (title ?? `${origin.provider}: ${automation.id}`).slice(0, TITLE_MAX),
                   }
-                : {}),
+                : { origin: ownOrigin(automation) }),
             // Resolved rung spread verbatim, not through turn-resume's fill step, since this turn walked its ladder.
             ...pinFields(pin),
             ...opt("account", account),

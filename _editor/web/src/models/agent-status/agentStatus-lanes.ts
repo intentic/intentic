@@ -7,6 +7,7 @@ import type { AgentStanding } from "@intentic/sandbox-contract/models/agent-stan
 // them (`agents.attention`). Re-exported here, where the editor has always imported them; the tile's rim stays.
 export {
     callsOwner,
+    runCallsOwner,
     NO_ATTENTION,
     laneOf,
     attentionCards,

@@ -1,3 +1,4 @@
+import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import type { AutomationRecord } from "../automations-store.js";
@@ -12,6 +13,15 @@ const AUTOMATION_CONVERSATION_PREFIX = "a-";
 let fireSeq = 0;
 export const mintConversationId = (automationId: string, now: number): string =>
     `${AUTOMATION_CONVERSATION_PREFIX}${automationId.slice(0, AUTOMATION_ID_IN_CONVERSATION)}-${now.toString(36)}${(fireSeq++).toString(36)}`;
+
+// Where a minted conversation came from when no outside message opened it: the automation, and the clock or check that
+// woke it. Recorded so every surface can tell an automation's runs from a person's work: the board stacks one
+// automation's runs on one card (sandbox-contract models/agent-stack.ts), the card's provenance line names it, and the
+// browser tab does not wait on it. Nothing outward reads it: answering back needs a channel, which this never names.
+export const ownOrigin = (automation: AutomationRecord): AgentOrigin => ({
+    automationId: automation.id,
+    provider: automation.guard !== undefined || automation.source !== undefined ? "watch" : automation.trigger.kind,
+});
 
 // Whether this automation minted that conversation id; a leftover "-" after the base36 suffix means only a prefix
 // match. Used to exclude a job's own wakes from its sessions gate and its own `turn.settled`.

@@ -334,6 +334,34 @@ const auditFamily = (now: number): AgentSummary[] => {
 const ADA = { email: `ada@acme.dev`, name: `Ada Lovelace` };
 const GRACE = { email: `grace@acme.dev`, name: `Grace Hopper` };
 
+// An automation on a ten-minute clock, each fire a conversation of its own: its runs ride the card of its latest one
+// (sandbox-contract models/agent-stack.ts) rather than filling Finished with a card per run. One failed half an hour ago
+// and the runs since went through, so the failure is the stack's history, not news.
+export const TRIAGE_AUTOMATION_ID = `inbox-triage`;
+const triageRun = (now: number, ago: number): AgentSummary => ({
+    id: `a-${TRIAGE_AUTOMATION_ID}-${(now - minutes(ago)).toString(36)}`,
+    origin: { automationId: TRIAGE_AUTOMATION_ID, provider: `schedule` },
+    sessionId: `ses_triage_${ago}`,
+    title: [`Triage new support emails`, `Label and route new support emails`, `Sort the support inbox`][ago % 3] ?? ``,
+    status: `landed`,
+    provider: `claude`,
+    harness: `claude-code`,
+    model: `claude-haiku-4-5`,
+    account: `ops@acme.dev`,
+    branch: `agent/a-${TRIAGE_AUTOMATION_ID}-${ago}`,
+    base: `9b2d10e`,
+    costUsd: 0.02,
+    updatedAt: now - minutes(ago) + 40_000,
+    seenAt: now - minutes(ago) + 40_000,
+    attention: NO_ATTENTION,
+    turns: 1,
+    toolUses: 6,
+});
+const automationRuns = (now: number): AgentSummary[] => [
+    ...[3, 13, 23, 43, 53, 63].map((ago) => triageRun(now, ago)),
+    { ...triageRun(now, 33), status: `error`, failure: `The mail server refused the connection.` },
+];
+
 export const fleetRoster = (now: number): AgentSummary[] => [
     {
         id: FEATURED_AGENT_ID,
@@ -738,6 +766,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     ...spawnedChildren(now),
     ...freshSessions(now),
     ...auditFamily(now),
+    ...automationRuns(now),
 ];
 
 // What a quiet recording (mode.ts `demoQuiet`) takes off a card: the marks of a busy moment rather than of the work.

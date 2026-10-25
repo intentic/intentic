@@ -651,7 +651,7 @@ test("outside and scheduled fires both open isolated conversations, and only pro
     const record = (await services.automations.get("support")) as AutomationRecord;
     const origin = { automationId: "support", provider: "discord", channelId: "c1", author: "ada" };
     await fireAutomation(drivenBy(services, capture), record, { payload: "hi", origin, title: "ada: hi" });
-    // A schedule fire of the same automation carries no origin, but still runs in its own worktree.
+    // A schedule fire of the same automation names only the automation as its origin, and still runs in its own worktree.
     await fireAutomation(drivenBy(services, capture), record);
 
     const surfaced = inputs[0] as AgentTurn;
@@ -663,7 +663,8 @@ test("outside and scheduled fires both open isolated conversations, and only pro
     expect(surfaced.conversationId).toContain("support");
     const scheduled = inputs[1] as AgentTurn;
     expect(scheduled).toMatchObject({ prompt: "wake:support", conversationId: expect.any(String), isolated: true });
-    expect(scheduled.origin).toBeUndefined();
+    // Named so the board can stack the automation's runs, with no channel, so nothing is ever said back anywhere.
+    expect(scheduled.origin).toEqual({ automationId: "support", provider: "schedule" });
     expect(scheduled.title).toBeUndefined();
 
     // One conversation per fire: a repeated message opens a new agent, never a resumed one.

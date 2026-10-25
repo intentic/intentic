@@ -1,6 +1,7 @@
 import type { AgentAttention } from "../schemas/agents.js";
 import type { AutomationApproval } from "../schemas/automations.js";
 import { goesBySelf } from "../schemas/agent-next.js";
+import { automationOf, movedAt, type StackMember, stackHeads } from "./agent-stack.js";
 import { parentOf } from "./agent-starter.js";
 import { type AgentStanding, blocked, heardByParent, onlyOwnerCanAnswer, turnInFlight, turnWorking, watching } from "./agent-standing.js";
 
@@ -23,6 +24,15 @@ export const callsOwner = (
 ): boolean =>
     onlyOwnerCanAnswer(child) ||
     (family.child === "attention" && (family.parent !== "active" || child.fresh !== undefined) && !heardByParent(child, family.parentAt));
+
+// Whether an automation's earlier run, riding the card of its latest (agent-stack.ts), calls the reader through that card.
+// Nothing supervises a run, so unlike a child's stop (callsOwner) its stop is nobody else's news: what only the reader can
+// give always calls, and any other stop calls until a later run of the same automation has moved since (`headAt`, its
+// movedAt), which is the automation's own account of whether the trouble still stands: a run that failed at 02:30 behind
+// one that went through at 02:40 is history in the tray, and one that failed behind a run failing the same way is news on
+// the card already.
+export const runCallsOwner = (run: AgentStanding & { readonly updatedAt: number }, stack: { readonly run: FleetLane; readonly headAt: number }): boolean =>
+    onlyOwnerCanAnswer(run) || (stack.run === "attention" && !heardByParent(run, stack.headAt));
 
 export type FleetLane = "attention" | "active" | "finished";
 
@@ -80,18 +90,18 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
 // How many cards the board's Attention lane draws for one fleet, as the board folds child agents under their parents
 // (models/fleet/board/childFold.ts): an agent in Attention is a card of its own, except a child agent whose parent is in the
 // fleet, which rides under its family's one card and lifts that card to Attention only when it calls the reader
-// (callsOwner). A family counts once however many of its children call, and not again when its own card is in
-// Attention already; a child with words left in its composer keeps a card of its own, as on the board. The rail
-// badge's count, for this sandbox's fleet and another's alike, so the badge cannot disagree with the lane it names.
+// (callsOwner). An automation's earlier runs ride the card of its latest the same way (agent-stack.ts, runCallsOwner). A
+// family counts once however many of its children call, and not again when its own card is in Attention already; a
+// child with words left in its composer keeps a card of its own, as on the board. The rail badge's count, for this
+// sandbox's fleet and another's alike, so the badge cannot disagree with the lane it names.
 export const attentionCards = (agents: readonly CallerStanding[]): number => new Set(attentionCalls(agents).map((call) => call.card)).size;
 
 // Enough of a fleet's agent to say whether it calls the reader, and through which card.
-export type CallerStanding = AgentStanding & {
-    readonly id: string;
-    readonly updatedAt: number;
-    readonly startedBy?: string | undefined;
-    readonly unsent?: boolean | undefined;
-};
+export type CallerStanding = AgentStanding &
+    StackMember & {
+        readonly startedBy?: string | undefined;
+        readonly unsent?: boolean | undefined;
+    };
 
 // Every agent calling the reader, each with the card it is drawn on: its own, or its family's where it rides one. The
 // count above is the cards; the browser tab's chime wants the callers, so a second child calling under a family already
@@ -103,12 +113,22 @@ export const attentionCalls = (agents: readonly CallerStanding[]): readonly { re
         const id = parentOf(agent.startedBy);
         return id === undefined ? undefined : byId.get(id);
     };
+    // A conversation another one started rides its parent, never a stack, whether or not that parent is in this fleet.
+    const runOf = (agent: Standing): string | undefined => (parentOf(agent.startedBy) === undefined ? automationOf(agent) : undefined);
+    const heads = stackHeads(agents, runOf);
+    // The latest run of this one's automation, whose card it rides; undefined for that latest run itself.
+    const headIn = (agent: Standing): Standing | undefined => {
+        const automation = runOf(agent);
+        const head = automation === undefined ? undefined : heads.get(automation);
+        return head === agent ? undefined : head;
+    };
+    const aboveIn = (agent: Standing): Standing | undefined => parentIn(agent) ?? headIn(agent);
     // The card a child rides under: its eldest ancestor in this fleet, walked with a guard against a record naming its
     // own descendant as its parent.
     const familyOf = (agent: Standing): string => {
         const seen = new Set([agent.id]);
         let top = agent;
-        for (let above = parentIn(top); above !== undefined && !seen.has(above.id); above = parentIn(top)) {
+        for (let above = aboveIn(top); above !== undefined && !seen.has(above.id); above = aboveIn(top)) {
             seen.add(above.id);
             top = above;
         }
@@ -117,13 +137,18 @@ export const attentionCalls = (agents: readonly CallerStanding[]): readonly { re
     const calls: { readonly id: string; readonly card: string }[] = [];
     for (const agent of agents) {
         const parent = parentIn(agent);
+        const above = parent ?? headIn(agent);
         // Words left in a child's composer give it a card of its own (childFold.standsAlone), except a fresh session's:
         // its composer is the person's anyway, and it rides its origin's card whatever it holds.
-        if (parent === undefined || (agent.unsent === true && agent.fresh === undefined)) {
+        if (above === undefined || (agent.unsent === true && agent.fresh === undefined)) {
             if (laneOf(agent) === "attention") {
                 calls.push({ id: agent.id, card: agent.id });
             }
-        } else if (callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent), parentAt: parent.updatedAt })) {
+        } else if (
+            parent === undefined
+                ? runCallsOwner(agent, { run: laneOf(agent), headAt: movedAt(above) })
+                : callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent), parentAt: parent.updatedAt })
+        ) {
             calls.push({ id: agent.id, card: familyOf(agent) });
         }
     }

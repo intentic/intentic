@@ -162,7 +162,7 @@ const foundAnnouncement = computed(() =>
 // an archive that takes any asks first, with the count (familyArchive.ts).
 const withFamilies = (ids: readonly string[]): string[] => lanes.withFamilies(ids, agents.agentById);
 const familyArchive = useFamilyArchive({ archive, familyIds, agentById: agents.agentById, coarse });
-const { pending: pendingFamilyArchive } = familyArchive;
+const { pending: pendingFamilyArchive, heading: familyArchiveHeading } = familyArchive;
 // A card a thumb swipes aside on a touch screen runs its own filing press (cardSwipe.ts): an archive asks first when it
 // takes children along, and leaves the same receipt with Undo a touch screen gets for one card.
 const swipeOf = (agent: FleetAgent) => {
@@ -722,13 +722,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <!-- Archiving loses nothing, but one tap taking a whole family off the board is not something to do unasked. -->
         <ConfirmDialog
             :open="pendingFamilyArchive !== undefined"
-            :header="
-                t(
-                    `agents.agentsView.archiveFamily`,
-                    { title: pendingFamilyArchive?.title ?? ``, count: pendingFamilyArchive?.children ?? 0 },
-                    pendingFamilyArchive?.children ?? 0,
-                )
-            "
+            :header="familyArchiveHeading"
             :description="t(`agents.agentsView.archiveFamilyKept`)"
             :confirm-label="
                 t(
