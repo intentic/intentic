@@ -187,7 +187,6 @@
         "noSandboxLead": "Agents work in a sandbox: a computer of their own, with your repositories, tools and accounts. It can run here in Docker, or on a machine we host. Your files on this computer don't need one.",
         "setOneUp": "Set one up",
         "signInToSetUp": "Sign in to set one up",
-        "signInForAllDevices": "Sign in to see all devices",
         "folderHolds": "It already holds {count} item, and the sandbox's own files land in it too. | It already holds {count} items, and the sandbox's own files land in it too.",
         "folderUnread": "What it already holds couldn't be read ({error}); anything in it syncs too.",
         "syncsBothWays": "Everything in this folder syncs both ways with {what}: changes agents make in the sandbox appear here, with no undo.",

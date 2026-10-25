@@ -188,9 +188,8 @@ const engineDownWithSandboxes = computed(() => engineListening.value === false &
 // A sandbox by the name this app knows it by, else its slug: what a move says it is moving.
 const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => sandbox.slug === slug)?.name ?? slug;
 
-// Signed in now, as the roster says (roster.ts), else whether this install ever was: that alone is never unwritten.
-const accountSeen = computed(() => facts.value?.accountSeen === true);
-const signedIn = computed(() => rosterSignedIn.value ?? accountSeen.value);
+// Someone signed in now, as the roster says (roster.ts). Not `accountSeen`: the workspace merely shown sets that.
+const signedIn = computed(() => rosterSignedIn.value === true);
 const toSetup = (): Promise<void> => intoWorkspace(`/setup`);
 
 // The masthead's errands, on its own spine as the workspace's page hangs them: what the agent wants, the answer to the
@@ -242,16 +241,17 @@ onMounted(() => {
     <Page>
         <div class="flex flex-col gap-6">
             <div class="flex flex-col gap-3">
-                <!-- The way to the board, one window away (the arrow says it leaves this one); signed out, it says it signs in. -->
+                <!-- The account's board, one window away (the arrow says it leaves this one). Only for an account: with
+                     none, this computer is every device there is, and the board would be a sign-in wall. -->
                 <button
-                    v-if="accountSeen"
+                    v-if="signedIn"
                     type="button"
                     :class="ui.textButton({ size: `xs` }, `inline-flex w-fit items-center`)"
-                    v-tooltip.right="signedIn ? t(`desktop.app.openWorkspace`) : undefined"
+                    v-tooltip.right="t(`desktop.app.openWorkspace`)"
                     @click="intoWorkspace(DEVICES_PATH)"
                 >
-                    {{ signedIn ? t(`ui.devicePage.allDevices`) : t(`desktop.device.signInForAllDevices`) }}
-                    <Icon :name="signedIn ? `arrow-up-right` : `sign-in`" class="text-2xs" aria-hidden="true" />
+                    {{ t(`ui.devicePage.allDevices`) }}
+                    <Icon name="arrow-up-right" class="text-2xs" aria-hidden="true" />
                 </button>
 
                 <!-- THIS COMPUTER'S MASTHEAD, the workspace's own for a machine of one environment: its name, its OS, its
