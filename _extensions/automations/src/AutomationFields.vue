@@ -26,6 +26,7 @@ import { useCiDelivery } from "./useCiDelivery";
 import { useConversations, useSenders, useWatchCheck } from "./useAutomations";
 import { type AutomationFormState, type ConditionKind, type SenderRuleDraft, splitIds, type TargetKind, type TriggerKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
+import { usePersonaReach } from "./usePersonaReach";
 
 // Shared create/edit fields use useAutomationForm, with content-sized When, Then and Runs as steps in a label rail.
 
@@ -74,12 +75,9 @@ const {
     conversationError,
 } = props.state;
 
-// Personas this sandbox can wear, for the picker below; read here since the list is the same for every automation.
-// Names only: a card's connection status belongs on the Personas page, not here.
-const { query: personaList } = host().sandbox.query({
-    queryKey: host().sandbox.readKey(`personas.list`),
-    queryFn: () => host().sandbox.rpc.personas.list(),
-});
+// Personas this sandbox can wear, for the picker below (names only; a card's connection status is the Personas page's),
+// and the one sentence under it when the choice costs something: no signed-in accounts, or a card that is gone.
+const { personaList, hint: personaHint } = usePersonaReach(computed(() => (form.actsAs === `` ? {} : { actsAs: form.actsAs })));
 const personas = computed<readonly PickerOption[]>(() =>
     (personaList.data.value?.personas ?? [])
         // `face` draws the same derived character used on the Personas page and in chat, so picking who an automation
@@ -1253,6 +1251,7 @@ const setProvider = (provider: string): void => {
                 <p v-if="isVisitorChat && form.actsAs === ``" class="-mt-1 text-2xs text-subtle">
                     {{ t(`automationFields.strangersWritePromptsSaving`) }}
                 </p>
+                <p v-else-if="personaShown && personaHint" class="-mt-1 text-2xs" :class="personaHint.tone">{{ personaHint.text }}</p>
 
                 <!-- WHO IT ANSWERS: drawn only where the source vouches for who is writing; the Visitor chat keeps its own access above. -->
                 <div v-if="sendersOffered" class="flex flex-col gap-3 border-t border-line-subtle pt-3">

@@ -232,7 +232,9 @@
         "tagPlaceholder": "latest",
         "aiDisclosure": "Informuj odwiedzających, że odpowiada AI",
         "aiDisclosureText": "Własna informacja (opcjonalnie)",
-        "aiDisclosureDefault": "Odpowiedzi pisze asystent AI. Mogą zawierać błędy."
+        "aiDisclosureDefault": "Odpowiedzi pisze asystent AI. Mogą zawierać błędy.",
+        "noPersonaHint": "Bez persony ma wszystkie narzędzia, ale żadnego z Twoich zalogowanych kont. Wybierz ją, jeśli ma publikować lub przeglądać jako Ty.",
+        "personaGoneHint": "Ta persona już nie istnieje, więc uruchomienia nie miałyby narzędzi ani kont. Wybierz inną."
     },
     "automationRow": {
         "alreadyFired": "Już uruchomiona",
@@ -322,7 +324,13 @@
         "check": "Sprawdzenie",
         "lastSaw": "Co ostatnio zobaczyła",
         "lastSawSince": "Co ostatnio zobaczyła, bez zmian od {when}",
-        "checkedAt": "Sprawdzono {at}"
+        "checkedAt": "Sprawdzono {at}",
+        "personaMissing": "Persona usunięta",
+        "personaMissingNote": "{ids} już nie istnieje, więc jej uruchomienia nie mają żadnych narzędzi ani kont. Wybierz inną personę.",
+        "noAccounts": "Bez persony",
+        "noAccountsNote": "Jej uruchomienia mają wszystkie narzędzia, ale żadnego z Twoich zalogowanych kont. Nadaj jej personę, jeśli ma publikować lub przeglądać jako Ty.",
+        "runsAsMissing": "{id} (już nie istnieje)",
+        "runsAsNobody": "Nikt: bez zalogowanych kont"
     },
     "automationsView": {
         "addAutomation": "Dodaj automatyzację",

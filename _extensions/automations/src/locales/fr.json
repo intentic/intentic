@@ -232,7 +232,9 @@
         "tagPlaceholder": "latest",
         "aiDisclosure": "Informer les visiteurs que l’IA répond",
         "aiDisclosureText": "Mention personnalisée (facultative)",
-        "aiDisclosureDefault": "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs."
+        "aiDisclosureDefault": "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs.",
+        "noPersonaHint": "Sans persona, il a tous les outils mais aucun de vos comptes connectés. Choisissez-en un s'il doit publier ou naviguer en votre nom.",
+        "personaGoneHint": "Ce persona n'existe plus, donc ses réveils tourneraient sans outils ni comptes. Choisissez-en un autre."
     },
     "automationRow": {
         "alreadyFired": "Déjà déclenchée",
@@ -322,7 +324,13 @@
         "check": "Vérification",
         "lastSaw": "Dernière valeur vue",
         "lastSawSince": "Dernière valeur vue, inchangée depuis {when}",
-        "checkedAt": "Vérifiée {at}"
+        "checkedAt": "Vérifiée {at}",
+        "personaMissing": "Persona disparu",
+        "personaMissingNote": "{ids} n'existe plus, donc ses réveils tournent sans outils ni comptes. Choisissez un autre persona.",
+        "noAccounts": "Aucun persona",
+        "noAccountsNote": "Ses réveils ont tous les outils, mais aucun de vos comptes connectés. Donnez-lui un persona s'il doit publier ou naviguer en votre nom.",
+        "runsAsMissing": "{id} (n'existe plus)",
+        "runsAsNobody": "Personne : aucun compte connecté"
     },
     "automationsView": {
         "addAutomation": "Ajouter une automatisation",

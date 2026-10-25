@@ -232,7 +232,9 @@
         "tagPlaceholder": "latest",
         "aiDisclosure": "Besucher über KI-Antworten informieren",
         "aiDisclosureText": "Eigener Hinweis (optional)",
-        "aiDisclosureDefault": "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten."
+        "aiDisclosureDefault": "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten.",
+        "noPersonaHint": "Ohne Persona hat sie jedes Werkzeug, aber keines deiner angemeldeten Konten. Wähle eine, wenn sie als du posten oder surfen soll.",
+        "personaGoneHint": "Diese Persona existiert nicht mehr, daher liefen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere."
     },
     "automationRow": {
         "alreadyFired": "Bereits ausgelöst",
@@ -322,7 +324,13 @@
         "check": "Prüfung",
         "lastSaw": "Was sie zuletzt gesehen hat",
         "lastSawSince": "Was sie zuletzt gesehen hat, unverändert seit {when}",
-        "checkedAt": "Geprüft {at}"
+        "checkedAt": "Geprüft {at}",
+        "personaMissing": "Persona fehlt",
+        "personaMissingNote": "{ids} existiert nicht mehr, daher laufen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere Persona.",
+        "noAccounts": "Keine Persona",
+        "noAccountsNote": "Die Weckrufe haben jedes Werkzeug, aber keines deiner angemeldeten Konten. Gib ihr eine Persona, wenn sie als du posten oder surfen soll.",
+        "runsAsMissing": "{id} (existiert nicht mehr)",
+        "runsAsNobody": "Niemand: keine angemeldeten Konten"
     },
     "automationsView": {
         "addAutomation": "Eine Automation hinzufügen",

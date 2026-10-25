@@ -25,6 +25,8 @@ import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
 import { embedSnippet, useAutomations, useConversations, useSandboxZone, webhookUrl } from "./useAutomations";
 import { isWatch, sourceLabel, watchLine } from "./watch";
+import { usePersonaReach } from "./usePersonaReach";
+import { answersCard, answersPhrase } from "./senderSummary";
 import { t } from "./i18n.js";
 
 // Two lines only: what it's called, and what it does when; everything else (prompt, URL, wake settings, run ledger,
@@ -204,6 +206,12 @@ const visitorChat = computed(() => {
     };
 });
 
+// Whether its wakes get less than the owner likely expects: one quiet mark on the row, the reason in the drawer.
+const { reach, reachTip, runsAs } = usePersonaReach(
+    computed(() => props.automation),
+    computed(() => targetPhrase.value === undefined),
+);
+
 // Labelled facts, not one run-on sentence: four settings read at a glance instead of parsed out of prose.
 // The model wanted, then a count of fallbacks, not a full list: scanning asks "which model", not "what are all four";
 // the full ladder is one click away in the editor.
@@ -215,57 +223,16 @@ const runsOn = computed<string>(() => {
     const named = `${head.provider} · ${head.model}`;
     return rest.length === 0 ? named : `${named} +${rest.length}`;
 });
-// Who it answers, in one phrase: how many people and groups the rules name, then what everyone else gets.
-const othersPhrase = (others: NonNullable<AutomationSummary[`senders`]>[`others`]): string =>
-    ({
-        ignore: t(`automationRow.othersPhrase.ignore`),
-        hold: t(`automationRow.othersPhrase.hold`),
-        allow: t(`automationRow.othersPhrase.allow`),
-    })[others];
-const namedIn = (senders: NonNullable<AutomationSummary[`senders`]>) => ({
-    people: senders.rules.reduce((sum, rule) => sum + (rule.ids?.length ?? 0), 0),
-    groups: senders.rules.reduce((sum, rule) => sum + (rule.groups?.length ?? 0), 0),
-});
-const answers = computed<string | undefined>(() => {
-    const senders = props.automation.senders;
-    if (senders === undefined) {
-        return undefined;
-    }
-    const { people, groups } = namedIn(senders);
-    const named = [
-        ...(people > 0 ? [t(`automationRow.peopleCount`, { count: people }, people)] : []),
-        ...(groups > 0 ? [t(`automationRow.groupsCount`, { count: groups }, groups)] : []),
-    ];
-    return [
-        named.length > 0 ? t(`automationRow.named`, { who: named.join(t(`automationRow.and`)) }) : t(`automationRow.nobodyNamed`),
-        othersPhrase(senders.others),
-    ].join(` · `);
-});
-// The same rules as a hover card on the row's glyph: the counts, then what everyone else gets.
-const othersWord = (others: NonNullable<AutomationSummary[`senders`]>[`others`]): string =>
-    others === `ignore` ? t(`automationRow.othersIgnore`) : others === `hold` ? t(`automationRow.othersHold`) : t(`automationRow.othersAllow`);
-const answersTip = computed<{ title: string; rows: { label: string; value: number | string }[] } | undefined>(() => {
-    const senders = props.automation.senders;
-    if (senders === undefined) {
-        return undefined;
-    }
-    const { people, groups } = namedIn(senders);
-    return {
-        title: t(`automationRow.answers`),
-        rows: [
-            { label: t(`automationRow.people`), value: people },
-            { label: t(`automationRow.groups`), value: groups > 0 ? groups : `` },
-            { label: t(`automationRow.others`), value: othersWord(senders.others) },
-        ],
-    };
-});
+// Who it answers (senderSummary.ts): a phrase for the drawer, and the same counts as a hover card on the row's glyph.
+const answers = computed(() => answersPhrase(props.automation.senders));
+const answersTip = computed(() => answersCard(props.automation.senders));
 const settings = computed<readonly { label: string; value: string }[]>(() => [
     // A conversation runs on its own model and a notification on none, so only a new agent names one.
     ...(targetPhrase.value === undefined
         ? [{ label: t(`automationRow.runsOn`), value: runsOn.value }]
         : [{ label: t(`automationRow.then`), value: targetPhrase.value }]),
     ...(props.automation.fireOn === `change` ? [{ label: t(`automationRow.fires`), value: t(`automationRow.onlyOnChange`) }] : []),
-    ...(props.automation.actsAs !== undefined ? [{ label: t(`automationRow.runs2`), value: props.automation.actsAs }] : []),
+    ...(runsAs.value !== undefined ? [{ label: t(`automationRow.runs2`), value: runsAs.value }] : []),
     ...(answers.value !== undefined ? [{ label: t(`automationRow.answers`), value: answers.value }] : []),
     ...(props.automation.requireApproval === true ? [{ label: t(`automationRow.approval`), value: t(`automationRow.heldForYou`) }] : []),
     ...(props.automation.holdForSeconds !== undefined && props.automation.holdForSeconds > 0
@@ -336,6 +303,15 @@ const verbs = computed((): ActionItem[] => [
                     name="lock"
                     v-tooltip.top="t(`automationRow.needsApproval`)"
                     class="shrink-0 text-2xs text-subtle"
+                />
+                <!-- Its wakes reach less than expected: a persona that is gone (nothing at all), or none (no signed-in account). -->
+                <Icon
+                    v-if="reachTip"
+                    :name="reach?.kind === `missing` ? `exclamation-triangle` : `user`"
+                    v-tooltip.top="reachTip"
+                    :aria-label="reachTip.title"
+                    class="shrink-0 text-2xs"
+                    :class="reach?.kind === `missing` ? `text-danger` : `text-subtle`"
                 />
                 <!-- Answers only the people its rules name. -->
                 <Icon v-if="answersTip" name="users" v-tooltip.top="answersTip" class="shrink-0 text-2xs text-subtle" />

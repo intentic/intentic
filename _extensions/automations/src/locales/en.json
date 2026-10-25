@@ -232,7 +232,9 @@
         "tagPlaceholder": "latest",
         "aiDisclosure": "Tell visitors replies come from AI",
         "aiDisclosureText": "Custom disclosure (optional)",
-        "aiDisclosureDefault": "Replies are written by an AI assistant and may contain mistakes."
+        "aiDisclosureDefault": "Replies are written by an AI assistant and may contain mistakes.",
+        "noPersonaHint": "Without a persona it has every tool but none of your signed-in accounts. Pick one if it has to post or browse as you.",
+        "personaGoneHint": "That persona no longer exists, so its wakes would run with no tools and no accounts. Pick another."
     },
     "automationRow": {
         "alreadyFired": "Already fired",
@@ -322,7 +324,13 @@
         "check": "Check",
         "lastSaw": "What it saw last",
         "lastSawSince": "What it saw last, unchanged since {when}",
-        "checkedAt": "Checked {at}"
+        "checkedAt": "Checked {at}",
+        "personaMissing": "Persona gone",
+        "personaMissingNote": "{ids} no longer exists, so its wakes run with no tools and no accounts. Pick another persona.",
+        "noAccounts": "No persona",
+        "noAccountsNote": "Its wakes have every tool but none of your signed-in accounts. Give it a persona if it has to post or browse as you.",
+        "runsAsMissing": "{id} (no longer exists)",
+        "runsAsNobody": "Nobody: no signed-in accounts"
     },
     "automationsView": {
         "addAutomation": "Add an automation",

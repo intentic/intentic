@@ -232,7 +232,9 @@
         "tagPlaceholder": "latest",
         "aiDisclosure": "Informar a los visitantes de que responde una IA",
         "aiDisclosureText": "Aviso personalizado (opcional)",
-        "aiDisclosureDefault": "Las respuestas las escribe un asistente de IA y pueden contener errores."
+        "aiDisclosureDefault": "Las respuestas las escribe un asistente de IA y pueden contener errores.",
+        "noPersonaHint": "Sin persona tiene todas las herramientas, pero ninguna de tus cuentas con sesión iniciada. Elige una si tiene que publicar o navegar como tú.",
+        "personaGoneHint": "Esa persona ya no existe, así que sus ejecuciones no tendrían herramientas ni cuentas. Elige otra."
     },
     "automationRow": {
         "alreadyFired": "Ya se disparó",
@@ -322,7 +324,13 @@
         "check": "Comprobación",
         "lastSaw": "Último resultado",
         "lastSawSince": "Último resultado, sin cambios desde {when}",
-        "checkedAt": "Comprobado {at}"
+        "checkedAt": "Comprobado {at}",
+        "personaMissing": "Persona eliminada",
+        "personaMissingNote": "{ids} ya no existe, así que sus ejecuciones no tienen herramientas ni cuentas. Elige otra persona.",
+        "noAccounts": "Sin persona",
+        "noAccountsNote": "Sus ejecuciones tienen todas las herramientas, pero ninguna de tus cuentas con sesión iniciada. Dale una persona si tiene que publicar o navegar como tú.",
+        "runsAsMissing": "{id} (ya no existe)",
+        "runsAsNobody": "Nadie: sin cuentas con sesión iniciada"
     },
     "automationsView": {
         "addAutomation": "Añadir una automatización",
