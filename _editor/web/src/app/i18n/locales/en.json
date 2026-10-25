@@ -4602,8 +4602,7 @@
             "loading": "Loading"
         },
         "unsentMark": {
-            "notSent": "Not sent",
-            "unsent": "Unsent"
+            "draft": "Draft"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ means at most: other devices on this account spend the same pools.",

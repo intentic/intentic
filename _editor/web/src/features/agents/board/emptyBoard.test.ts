@@ -145,10 +145,10 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().active.value.draft.value).toContain(`Explain this codebase`);
     expect(useChat().active.value.transcript.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
-    // Still a first run: filling the composer is not starting anything. The filled draft is an unsent card standing in
-    // the first agent's slot, which is where the slot said its card would appear.
+    // Still a first run: filling the composer is not starting anything. The filled draft is a never-sent card standing in
+    // the first agent's slot, which is where the slot said its card would appear, its corner saying "Draft".
     expect(board.textContent).toContain(`Nothing needs you right now.`);
-    expect(board.textContent).toContain(`Unsent`);
+    expect(board.querySelector(`[data-unsent-mark="pill"]`)?.textContent?.trim()).toBe(`Draft`);
 });
 
 // The hosted product can answer a question before anything is connected: the chat lands on the free trial so there's

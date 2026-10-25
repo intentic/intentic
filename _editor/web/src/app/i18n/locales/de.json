@@ -4602,8 +4602,7 @@
             "loading": "Wird geladen"
         },
         "unsentMark": {
-            "notSent": "Nicht gesendet",
-            "unsent": "Nicht gesendet"
+            "draft": "Entwurf"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ heißt höchstens: andere Geräte in diesem Konto zahlen aus denselben Töpfen.",

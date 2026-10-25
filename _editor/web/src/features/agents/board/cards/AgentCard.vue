@@ -409,6 +409,8 @@ const account = computed(() => (maker.value ? undefined : accountBadge(providerA
 // A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
 // leaves Vue comparing one string, so only the card being typed into redraws.
 const unsentWords = computed(() => previewOf(props.agent.id));
+// A never-sent draft says so in the corner; words left in a conversation with a standing ride its tile (UnsentMark).
+const draftCorner = computed(() => props.agent.unsent && props.agent.status === `draft` && chip.value === undefined);
 const displayTitle = computed(() => agentDisplayTitle(props.agent, unsentWords.value));
 // Marks the filter term in the title; the matched line (via MatchLine, which also names the speaker) is never shown
 // apart from it.
@@ -611,6 +613,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
                 <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="28" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
                 <IdentityTile :title="agent.title" :action="agent.titleAction" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
+                <UnsentMark v-if="agent.unsent && !draftCorner" badge :preview="unsentWords" :at="agent.draftAt" />
             </span>
             <input
                 v-if="edit.editing"
@@ -677,6 +680,7 @@ const grab = (event: PointerEvent): void => {
                     :class="chip.tone"
                     ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
                 >
+                <UnsentMark v-else-if="draftCorner" :preview="unsentWords" :at="agent.draftAt" />
                 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
                 <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
                 <Icon
@@ -755,10 +759,8 @@ const grab = (event: PointerEvent): void => {
             <WorkflowMark :workflow="agent.workflow" />
             <ParentMark v-if="parent !== undefined" :parent="parent" :sandbox-id="agent.sandboxId" />
 
-            <!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
             <div
                 v-if="
-                    agent.unsent ||
                     box !== undefined ||
                     provenance !== undefined ||
                     model !== undefined ||
@@ -771,8 +773,6 @@ const grab = (event: PointerEvent): void => {
                      account's person): the glyph already parts it from the one before, and a dot written ahead of it was
                      left at the start of the next line whenever the line wrapped there ("· 👤 someone"). The dot stays only
                      between the two facts that are bare words, whose it is and the model. -->
-                <!-- Shape and wording live in UnsentMark, shared with the rail row. -->
-                <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" />
                 <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
                 <span
                     v-if="box !== undefined"

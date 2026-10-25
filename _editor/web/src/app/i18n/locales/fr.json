@@ -4602,8 +4602,7 @@
             "loading": "Chargement"
         },
         "unsentMark": {
-            "notSent": "Non envoyé",
-            "unsent": "Non envoyé"
+            "draft": "Brouillon"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ signifie au plus : les autres appareils de ce compte puisent dans les mêmes réserves.",

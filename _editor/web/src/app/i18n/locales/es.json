@@ -4602,8 +4602,7 @@
             "loading": "Cargando"
         },
         "unsentMark": {
-            "notSent": "Sin enviar",
-            "unsent": "Sin enviar"
+            "draft": "Borrador"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ significa como máximo: otros dispositivos de esta cuenta gastan de las mismas bolsas.",

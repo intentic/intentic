@@ -117,6 +117,8 @@ const chipHint = computed((): Tip | undefined =>
                     <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
                     </span>
+                    <!-- A mark pinned to the disc (UnsentMark's badge). -->
+                    <slot name="tile" />
                 </span>
                 <!-- Clamped to two lines; most titles fit whole at this width. -->
                 <span

@@ -180,6 +180,6 @@ it(`redraws the unsent mark on a keystroke, and not the rail card or row that ca
     expect(updates.get(`RailCard`) ?? 0).toBe(0);
     expect(updates.get(`ChatTabRow`) ?? 0).toBe(0);
     // The words still follow the draft, to the last key: the mark reads them itself.
-    const mark = el.querySelector(`[data-chat-tab="${typed.conversationId}"] [aria-label^="${t(`common.unsentMark.notSent`)}"]`);
+    const mark = el.querySelector(`[data-chat-tab="${typed.conversationId}"] [aria-label^="${t(`common.unsentMark.draft`)}"]`);
     expect(mark?.getAttribute(`aria-label`)).toContain(`the plan looks right`);
 });

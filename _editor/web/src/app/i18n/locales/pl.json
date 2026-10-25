@@ -4602,8 +4602,7 @@
             "loading": "Wczytywanie"
         },
         "unsentMark": {
-            "notSent": "Niewysłane",
-            "unsent": "Niewysłane"
+            "draft": "Szkic"
         },
         "usageRing": {
             "atMostOtherDevices": "≤ oznacza co najwyżej: inne urządzenia na tym koncie czerpią z tych samych pul.",

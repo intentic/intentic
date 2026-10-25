@@ -104,11 +104,11 @@ export const liveOf = (entry: OpenChat): CardView[`live`] => {
 };
 
 // Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per card
-// rather than assumed. The standing is not counted here: it wears the card's corner, not this line.
+// rather than assumed. The standing is not counted here: it wears the card's corner, not this line, and nor is a draft,
+// which wears the corner or the identity tile (UnsentMark).
 const hasMeta = (entry: OpenChat, reach: ReachLine | undefined): boolean =>
     reach !== undefined ||
     (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
-    entry.conversation.unsent.value ||
     originOf(entry.conversation) !== undefined ||
     isArchived(entry.conversation) ||
     modelOf(entry) !== undefined;
