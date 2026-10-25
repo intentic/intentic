@@ -1,11 +1,8 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { requires } from "@intentic/testing/requires";
 import { mediaDeriver } from "./lib/derivers/media.js";
-import { onPath } from "./lib/tools.js";
-import { wavBytes } from "./testing.js";
+import { flacBytes, mp4Bytes, wavBytes } from "./testing.js";
 
 let root: string;
 beforeEach(() => {
@@ -23,23 +20,8 @@ test("PCM format details survive the metadata parser upgrade", async () => {
 });
 
 test("compressed audio retains its duration and descriptive tags", async () => {
-    requires(onPath("ffmpeg"), "ffmpeg encodes the real FLAC fixture");
-    const source = join(root, "silence.wav");
     const path = join(root, "tagged.flac");
-    writeFileSync(source, wavBytes());
-    execFileSync("ffmpeg", [
-        "-v",
-        "error",
-        "-i",
-        source,
-        "-threads",
-        "1",
-        "-metadata",
-        "title=Fixture audio",
-        "-metadata",
-        "artist=Fixture artist",
-        path,
-    ]);
+    writeFileSync(path, flacBytes());
     const doc = await mediaDeriver.derive(path);
     expect(doc.title).toBe("Fixture audio");
     expect(doc.markdown).toContain("Duration: 1s");
@@ -47,25 +29,8 @@ test("compressed audio retains its duration and descriptive tags", async () => {
 });
 
 test("a video container retains its duration and title", async () => {
-    requires(onPath("ffmpeg"), "ffmpeg encodes the real MP4 fixture");
     const path = join(root, "tagged.mp4");
-    execFileSync("ffmpeg", [
-        "-v",
-        "error",
-        "-f",
-        "lavfi",
-        "-i",
-        "color=c=black:s=16x16:r=1",
-        "-t",
-        "1",
-        "-c:v",
-        "mpeg4",
-        "-threads",
-        "1",
-        "-metadata",
-        "title=Fixture video",
-        path,
-    ]);
+    writeFileSync(path, mp4Bytes());
     const doc = await mediaDeriver.derive(path);
     expect(doc.title).toBe("Fixture video");
     expect(doc.markdown).toContain("Duration: 1s");
