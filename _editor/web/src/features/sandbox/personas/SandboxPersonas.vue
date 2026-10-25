@@ -22,6 +22,7 @@ import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import PersonaSelector from "./PersonaSelector.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
+import PersonasExplainer from "./PersonasExplainer.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
@@ -378,6 +379,8 @@ const confirmRemove = async (): Promise<void> => {
             </div>
 
             <Section v-else :label="t(`sandbox.sandboxPersonas.personas`)">
+                <!-- What a persona is, drawn: the empty state above says it in words, but once the list exists nothing does. -->
+                <template #info><PersonasExplainer /></template>
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"
