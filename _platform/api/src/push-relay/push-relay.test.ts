@@ -125,16 +125,64 @@ describe(`send`, () => {
 
     it(`deletes the row and answers 410 when Apple says the device is gone: both halves of the channel die together`, async () => {
         const { secret, hash } = await minted();
-        const remove = jest.fn().mockResolvedValue({});
+        const remove = jest.fn().mockResolvedValue({ count: 1 });
         const ctx = context({
             user: null,
-            prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)), delete: remove } }),
+            prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)), deleteMany: remove } }),
         });
 
         await expect(
             call(pushRelayRoutes(() => forwarder(`dead`)).send, { deviceId: `d1`, secret, notification }, { context: ctx }),
         ).rejects.toMatchObject({ status: 410 });
-        expect(remove).toHaveBeenCalledWith({ where: { id: `d1` } });
+        expect(remove).toHaveBeenCalledWith({ where: { id: `d1`, secretHash: hash } });
+    });
+
+    it(`preserves a registration renewed while an old send waits on the provider`, async () => {
+        const { secret, hash } = await minted();
+        let stored: ReturnType<typeof row> | undefined = row(hash);
+        const entered = Promise.withResolvers<void>();
+        const answer = Promise.withResolvers<ApnsOutcome>();
+        const apns: ApnsForwarder = {
+            enabled: true,
+            send: async () => {
+                entered.resolve();
+                return answer.promise;
+            },
+        };
+        const remove = jest.fn(async () => {
+            stored = undefined;
+        });
+        const deleteMany = jest.fn(async ({ where }: { where: { id: string; secretHash: string } }) => {
+            if (stored?.id !== where.id || stored.secretHash !== where.secretHash) {
+                return { count: 0 };
+            }
+            stored = undefined;
+            return { count: 1 };
+        });
+        const ctx = context({
+            prisma: fakePrisma({
+                pushDevice: {
+                    findUnique: jest.fn(async () => (stored === undefined ? null : { ...stored })),
+                    upsert: jest.fn(async ({ update }: { update: { secretHash: string } }) => {
+                        stored = { ...row(hash), ...update };
+                        return stored;
+                    }),
+                    delete: remove,
+                    deleteMany,
+                },
+            }),
+        });
+        const routes = pushRelayRoutes(() => apns);
+        const oldSend = call(routes.send, { deviceId: `d1`, secret, notification }, { context: ctx }).catch((error: unknown) => error);
+        await entered.promise;
+        const renewed = await call(routes.register, { platform: `ios`, token: `tok-1` }, { context: ctx });
+        const renewedHash = stored?.secretHash;
+        answer.resolve({ verdict: `dead` });
+        expect(await oldSend).toMatchObject({ status: 410 });
+        expect(renewed.deviceId).toBe(`d1`);
+        expect(renewedHash).toMatch(/^[0-9a-f]{64}$/);
+        expect(stored?.secretHash).toBe(renewedHash);
+        expect(deleteMany).toHaveBeenCalledWith({ where: { id: `d1`, secretHash: hash } });
     });
 
     it(`answers 502 on a transient: a misconfigured relay must never read as "prune every iPhone"`, async () => {
@@ -142,7 +190,7 @@ describe(`send`, () => {
         const remove = jest.fn();
         const ctx = context({
             user: null,
-            prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)), delete: remove } }),
+            prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row(hash)), deleteMany: remove } }),
         });
 
         await expect(
@@ -216,7 +264,9 @@ describe(`android channels`, () => {
     // One FCM token, one row per sandbox: the app knows which daemon to ask from the row, and registering again for one
     // sandbox rotates only that sandbox's secret, never the channel another sandbox holds.
     it(`files an editor app's registration under its sandbox, and rotates only that sandbox's row`, async () => {
-        const upsert = jest.fn().mockImplementation(async (args: { create: { sandbox: string } }) => ({ id: `e-${args.create.sandbox}`, ...args.create }));
+        const upsert = jest
+            .fn()
+            .mockImplementation(async (args: { create: { sandbox: string } }) => ({ id: `e-${args.create.sandbox}`, ...args.create }));
         const ctx = context({ prisma: fakePrisma({ pushDevice: { upsert } }) });
         const routes = pushRelayRoutes(
             () => forwarder(`delivered`),

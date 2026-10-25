@@ -106,8 +106,9 @@ export const pushRelayRoutes = (
             }
             const outcome = await forwarder.send(row.token, input.notification, { app: appOf(row.app), sandbox: row.sandbox });
             if (outcome.verdict === "dead") {
-                // Apple or Firebase says this device can never be reached again; drop our half too, so no half-dead channel lingers.
-                await context.prisma.pushDevice.delete({ where: { id: row.id } }).catch(() => undefined);
+                // Drop only the capability that was sent: register may have renewed this same row during the request.
+                // deleteMany also tolerates an unregister or another dead send removing it first.
+                await context.prisma.pushDevice.deleteMany({ where: { id: row.id, secretHash: row.secretHash } });
                 throw new ORPCError("GONE", { status: 410, message: "the device is no longer reachable" });
             }
             if (outcome.verdict === "transient") {

@@ -1,10 +1,21 @@
 import { call, ORPCError } from "@orpc/server";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import type { SandboxMember } from "@intentic/prisma";
 import type { OrpcContext } from "../context.js";
 import { inviteRoutes } from "./invite.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null, emailVerified: true };
-const sandboxRow = { id: `s1`, name: `dev`, image: null, ownerId: `u1`, token: `tok`, daemonUrl: null, lastSeenAt: null, tunnelToken: null, orgId: null };
+const sandboxRow = {
+    id: `s1`,
+    name: `dev`,
+    image: null,
+    ownerId: `u1`,
+    token: `tok`,
+    daemonUrl: null,
+    lastSeenAt: null,
+    tunnelToken: null,
+    orgId: null,
+};
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
@@ -150,21 +161,91 @@ describe(`invite routes`, () => {
             acceptedAt: null,
             inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
         };
-        const update = jest.fn().mockResolvedValue({});
-        const prisma = fakePrisma({ sandboxMember: { findUnique: jest.fn().mockResolvedValue(memberRow), update } });
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandboxMember: { findUnique: jest.fn().mockResolvedValue(memberRow), updateMany } });
 
         const result = await call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma, user: guest }) });
-        expect(update).toHaveBeenCalledWith({ where: { id: `m1` }, data: { acceptedAt: expect.any(Date) } });
+        expect(updateMany).toHaveBeenCalledWith({
+            where: {
+                id: `m1`,
+                inviteToken: `tok`,
+                email: `guest@example.com`,
+                acceptedAt: null,
+                OR: [{ inviteExpiresAt: null }, { inviteExpiresAt: { gte: expect.any(Date) } }],
+            },
+            data: { acceptedAt: expect.any(Date) },
+        });
         expect(result).toEqual({ sandboxId: `s1` });
 
         // A different Google account can't accept: the invite is locked to the invited email.
-        const wrong = fakePrisma({ sandboxMember: { findUnique: jest.fn().mockResolvedValue(memberRow), update: jest.fn() } });
+        const wrong = fakePrisma({ sandboxMember: { findUnique: jest.fn().mockResolvedValue(memberRow), updateMany: jest.fn() } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma: wrong }) }), `FORBIDDEN`);
     });
 
     it(`invite.accept 404s an unknown token`, async () => {
         const prisma = fakePrisma({ sandboxMember: { findUnique: jest.fn().mockResolvedValue(null) } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `nope` }, { context: context({ prisma }) }), `NOT_FOUND`);
+    });
+
+    it(`invite.accept refuses another account even after the invite was accepted`, async () => {
+        const prisma = fakePrisma({
+            sandboxMember: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: `m1`,
+                    sandboxId: `s1`,
+                    email: `guest@example.com`,
+                    acceptedAt: new Date(),
+                    inviteExpiresAt: null,
+                }),
+            },
+        });
+        await expectOrpcCode(call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma }) }), `FORBIDDEN`);
+    });
+
+    it(`invite.accept cannot spend a link rotated after its lookup`, async () => {
+        const stored: Pick<SandboxMember, `id` | `sandboxId` | `email` | `inviteToken` | `acceptedAt` | `inviteExpiresAt`> = {
+            id: `m1`,
+            sandboxId: `s1`,
+            email: user.email,
+            inviteToken: `tok`,
+            acceptedAt: null,
+            inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
+        };
+        const findUnique = jest.fn(async ({ where }: { where: { inviteToken: string } }) => {
+            if (where.inviteToken !== stored.inviteToken) {
+                return null;
+            }
+            const snapshot = { ...stored };
+            // A resend commits after the SELECT took its snapshot, before the acceptance write can run.
+            stored.inviteToken = `renewed-token`;
+            return snapshot;
+        });
+        const update = jest.fn(async ({ data }: { data: { acceptedAt: Date } }) => Object.assign(stored, data));
+        const updateMany = jest.fn(async ({ where, data }: { where: { inviteToken: string }; data: { acceptedAt: Date } }) => {
+            if (where.inviteToken !== stored.inviteToken) {
+                return { count: 0 };
+            }
+            Object.assign(stored, data);
+            return { count: 1 };
+        });
+        const prisma = fakePrisma({ sandboxMember: { findUnique, update, updateMany } });
+        await expectOrpcCode(call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma }) }), `CONFLICT`);
+        expect(stored.inviteToken).toBe(`renewed-token`);
+        expect(stored.acceptedAt).toBeNull();
+    });
+
+    it(`invite.accept remains idempotent when another acceptance wins the write`, async () => {
+        const member = { id: `m1`, sandboxId: `s1`, email: user.email, acceptedAt: null, inviteExpiresAt: null };
+        const prisma = fakePrisma({
+            sandboxMember: {
+                findUnique: jest
+                    .fn()
+                    .mockResolvedValueOnce(member)
+                    .mockResolvedValueOnce({ ...member, acceptedAt: new Date() }),
+                updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+            },
+        });
+        expect(await call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma }) })).toEqual({ sandboxId: `s1` });
     });
 
     it(`invite.preview names the tier the link grants, so the accept page can say what is being accepted`, async () => {

@@ -19,7 +19,10 @@ const device = { app: `device` } as const;
 const editor = { app: `editor`, sandbox: `sbx-1` } as const;
 
 // Google's two endpoints: the token exchange and the send, each answered as the test says.
-const google = (send: { status: number; body?: unknown }) => {
+const google = (
+    send: { status: number; body?: unknown; response?: Response },
+    exchange: () => Response | Promise<Response> = () => Response.json({ access_token: `ya29.token`, expires_in: 3600 }),
+) => {
     const calls: { url: string; body: string; authorization?: string }[] = [];
     const fetcher = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
         const headers = new Headers(init?.headers);
@@ -29,9 +32,9 @@ const google = (send: { status: number; body?: unknown }) => {
             ...(headers.get(`authorization`) === null ? {} : { authorization: headers.get(`authorization`) ?? `` }),
         });
         if (String(url).includes(`oauth2`)) {
-            return Response.json({ access_token: `ya29.token`, expires_in: 3600 });
+            return exchange();
         }
-        return Response.json(send.body ?? {}, { status: send.status });
+        return send.response ?? Response.json(send.body ?? {}, { status: send.status });
     });
     return { calls, fetcher: fetcher as unknown as typeof fetch };
 };
@@ -117,11 +120,94 @@ it(`mints one access token for many sends`, async () => {
     expect(calls.filter((entry) => entry.url.includes(`oauth2`))).toHaveLength(1);
 });
 
+it(`shares one pending token exchange across concurrent sends`, async () => {
+    const exchange = Promise.withResolvers<void>();
+    const { calls, fetcher } = google({ status: 200 }, async () => {
+        await exchange.promise;
+        return Response.json({ access_token: `ya29.shared`, expires_in: 3600 });
+    });
+    const fcm = createFcmForwarder(config(), fetcher);
+    const sends = Promise.all(Array.from({ length: 10 }, (_, index) => fcm.send(`fcm-${index}`, notification, device)));
+    const exchanges = calls.filter((entry) => entry.url.includes(`oauth2`)).length;
+    exchange.resolve();
+    expect(await sends).toEqual(Array.from({ length: 10 }, () => ({ verdict: `delivered` })));
+    expect(exchanges).toBe(1);
+    expect(calls.filter((entry) => entry.url.includes(`messages:send`)).map((entry) => entry.authorization)).toEqual(
+        Array.from({ length: 10 }, () => `Bearer ya29.shared`),
+    );
+});
+
+it(`releases an unused successful send body`, async () => {
+    const cancel = jest.fn();
+    const response = new Response(new ReadableStream({ cancel }));
+    const { fetcher } = google({ status: 200, response });
+    expect(await createFcmForwarder(config(), fetcher).send(`fcm-1`, notification, device)).toEqual({ verdict: `delivered` });
+    expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it(`releases a refused OAuth body and retries the exchange on the next send`, async () => {
+    const cancel = jest.fn();
+    let attempts = 0;
+    const { calls, fetcher } = google({ status: 200 }, () => {
+        attempts += 1;
+        return attempts === 1
+            ? new Response(new ReadableStream({ cancel }), { status: 503 })
+            : Response.json({ access_token: `ya29.retry`, expires_in: 3600 });
+    });
+    const fcm = createFcmForwarder(config(), fetcher);
+    expect(await fcm.send(`fcm-1`, notification, device)).toEqual({ verdict: `transient`, reason: `Google refused the service account (503)` });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(await fcm.send(`fcm-1`, notification, device)).toEqual({ verdict: `delivered` });
+    expect(calls.filter((entry) => entry.url.includes(`oauth2`))).toHaveLength(2);
+});
+
 it(`calls an uninstalled app's token dead, so both halves of the channel are dropped`, async () => {
-    const unregistered = google({ status: 404, body: { error: { status: `NOT_FOUND`, details: [{ errorCode: `UNREGISTERED` }] } } });
+    const unregistered = google({
+        status: 404,
+        body: {
+            error: { status: `NOT_FOUND`, details: [{ "@type": `type.googleapis.com/google.firebase.fcm.v1.FcmError`, errorCode: `UNREGISTERED` }] },
+        },
+    });
     expect(await createFcmForwarder(config(), unregistered.fetcher).send(`gone`, notification, device)).toEqual({ verdict: `dead` });
-    const invalid = google({ status: 400, body: { error: { status: `INVALID_ARGUMENT`, details: [{ errorCode: `INVALID_ARGUMENT` }] } } });
+    const invalid = google({
+        status: 400,
+        body: {
+            error: {
+                status: `INVALID_ARGUMENT`,
+                details: [{ "@type": `type.googleapis.com/google.firebase.fcm.v1.FcmError`, errorCode: `INVALID_ARGUMENT` }],
+            },
+        },
+    });
     expect(await createFcmForwarder(config(), invalid.fetcher).send(`garbled`, notification, editor)).toEqual({ verdict: `dead` });
+});
+
+it(`keeps a device when the message payload is invalid`, async () => {
+    const { fetcher } = google({
+        status: 400,
+        body: {
+            error: {
+                status: `INVALID_ARGUMENT`,
+                details: [
+                    {
+                        "@type": `type.googleapis.com/google.rpc.BadRequest`,
+                        fieldViolations: [{ field: `message.data`, description: `Message too big` }],
+                    },
+                ],
+            },
+        },
+    });
+    expect(await createFcmForwarder(config(), fetcher).send(`valid-token`, notification, editor)).toEqual({
+        verdict: `transient`,
+        reason: `FCM answered 400 INVALID_ARGUMENT`,
+    });
+});
+
+it(`keeps a device when a proxy or project lookup returns a bare 404`, async () => {
+    const { fetcher } = google({ status: 404, body: { error: { status: `NOT_FOUND` } } });
+    expect(await createFcmForwarder(config(), fetcher).send(`valid-token`, notification, editor)).toEqual({
+        verdict: `transient`,
+        reason: `FCM answered 404 NOT_FOUND`,
+    });
 });
 
 it(`reads Google's own trouble as transient, never as a dead phone`, async () => {

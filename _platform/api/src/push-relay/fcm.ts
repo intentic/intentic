@@ -3,6 +3,7 @@ import { parseJsonOr } from "@intentic/base/json";
 import type { PushApp } from "@intentic/api-contract";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import { createSign } from "node:crypto";
+import { z } from "zod";
 import type { Config } from "../config.js";
 import type { ApnsOutcome } from "./apns.js";
 
@@ -142,11 +143,30 @@ export const signAssertion = (account: ServiceAccount, nowSeconds: number): stri
 // FCM's error codes for a token that will never be delivered to again: the app was uninstalled, or the token is not
 // one (a pasted fragment, another project's).
 const DEAD_CODES = new Set(["UNREGISTERED", "INVALID_ARGUMENT", "SENDER_ID_MISMATCH"]);
+const FCM_ERROR_TYPE = "type.googleapis.com/google.firebase.fcm.v1.FcmError";
+const ErrorSchema = z.object({
+    error: z.object({
+        status: z.string().optional(),
+        details: z.array(z.object({ "@type": z.string().optional(), errorCode: z.string().optional() })).optional(),
+    }),
+});
 
-const errorCodeOf = (body: unknown): string | undefined => {
-    const details = (body as { error?: { details?: { errorCode?: unknown }[]; status?: unknown } } | undefined)?.error;
-    const detailed = details?.details?.find((detail) => typeof detail.errorCode === "string")?.errorCode;
-    return typeof detailed === "string" ? detailed : typeof details?.status === "string" ? details.status : undefined;
+const errorOf = async (response: Response) => {
+    // allow(silent-catch): a non-JSON refusal gives no evidence of a dead token, so it stays transient
+    const parsed = ErrorSchema.safeParse(await response.json().catch(() => undefined));
+    if (!parsed.success) {
+        return { code: undefined, dead: false };
+    }
+    const { status, details } = parsed.data.error;
+    const specific = details?.find((detail) => detail["@type"] === FCM_ERROR_TYPE)?.errorCode;
+    // INVALID_ARGUMENT also describes an invalid message payload (google.rpc.BadRequest), and a bare 404 may come
+    // from a proxy or the project lookup. Only FCM's token-specific detail can justify deleting a device.
+    return { code: specific ?? status, dead: specific !== undefined && DEAD_CODES.has(specific) };
+};
+
+const discardBody = async (response: Response): Promise<void> => {
+    // allow(silent-catch): the status already decides delivery/refusal; a failed cancellation cannot change it
+    await response.body?.cancel().catch(() => undefined);
 };
 
 export const createFcmForwarder = (config: Config, fetcher: typeof fetch = fetch): PushForwarder => {
@@ -156,10 +176,7 @@ export const createFcmForwarder = (config: Config, fetcher: typeof fetch = fetch
     }
 
     let cached: { token: string; until: number } | undefined;
-    const accessToken = async (): Promise<string> => {
-        if (cached !== undefined && Date.now() < cached.until) {
-            return cached.token;
-        }
+    const mintAccessToken = async (): Promise<string> => {
         const response = await fetcher(account.token_uri ?? "https://oauth2.googleapis.com/token", {
             method: "POST",
             headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -170,6 +187,7 @@ export const createFcmForwarder = (config: Config, fetcher: typeof fetch = fetch
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         if (!response.ok) {
+            await discardBody(response);
             throw new Error(`Google refused the service account (${response.status})`);
         }
         const answer = (await response.json()) as { access_token?: string; expires_in?: number };
@@ -178,6 +196,18 @@ export const createFcmForwarder = (config: Config, fetcher: typeof fetch = fetch
         }
         cached = { token: answer.access_token, until: Date.now() + (answer.expires_in ?? 3600) * 1000 - TOKEN_MARGIN_MS };
         return answer.access_token;
+    };
+
+    let refreshing: Promise<string> | undefined;
+    const accessToken = (): Promise<string> => {
+        if (cached !== undefined && Date.now() < cached.until) {
+            return Promise.resolve(cached.token);
+        }
+        // A fan-out shares the exchange as well as its result. A refusal clears it too, so the next send can retry.
+        refreshing ??= mintAccessToken().finally(() => {
+            refreshing = undefined;
+        });
+        return refreshing;
     };
 
     const send = async (token: string, notification: PushNotification, row: RelayRow): Promise<ApnsOutcome> => {
@@ -189,11 +219,11 @@ export const createFcmForwarder = (config: Config, fetcher: typeof fetch = fetch
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             });
             if (response.ok) {
+                await discardBody(response);
                 return { verdict: "delivered" };
             }
-            // allow(silent-catch): an error body that is not JSON carries no code, and the status alone decides below
-            const code = errorCodeOf(await response.json().catch(() => undefined));
-            if (response.status === 404 || (code !== undefined && DEAD_CODES.has(code))) {
+            const { code, dead } = await errorOf(response);
+            if (dead) {
                 return { verdict: "dead" };
             }
             return { verdict: "transient", reason: `FCM answered ${response.status}${code === undefined ? "" : ` ${code}`}` };

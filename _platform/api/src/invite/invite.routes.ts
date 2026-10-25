@@ -129,7 +129,26 @@ export const inviteRoutes = {
             throw new ORPCError(`FORBIDDEN`, { message: `This invite is for ${member.email}. Sign in with that Google account to accept.` });
         }
         if (decision === `accept`) {
-            await context.prisma.sandboxMember.update({ where: { id: member.id }, data: { acceptedAt: new Date() } });
+            const acceptedAt = new Date();
+            const accepted = await context.prisma.sandboxMember.updateMany({
+                where: {
+                    id: member.id,
+                    inviteToken: input.token,
+                    email: member.email,
+                    acceptedAt: null,
+                    OR: [{ inviteExpiresAt: null }, { inviteExpiresAt: { gte: acceptedAt } }],
+                },
+                data: { acceptedAt },
+            });
+            if (accepted.count === 0) {
+                // Another accept of this same link is idempotent; a resend, revoke or expiry invalidates this read.
+                const current = await context.prisma.sandboxMember.findUnique({ where: { inviteToken: input.token } });
+                if (current?.id !== member.id || inviteAcceptDecision(current, user.email, new Date()) !== `already-accepted`) {
+                    throw new ORPCError(`CONFLICT`, {
+                        message: `This invite changed while you were accepting it. Open the latest invite link and try again.`,
+                    });
+                }
+            }
         }
         return { sandboxId: member.sandboxId };
     }),

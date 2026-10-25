@@ -41,14 +41,14 @@ export const inviteAcceptDecision = (
     userEmail: string,
     now: Date,
 ): InviteAcceptDecision => {
+    if (userEmail.toLowerCase() !== member.email) {
+        return `wrong-email`;
+    }
     if (member.acceptedAt) {
         return `already-accepted`;
     }
     if (member.inviteExpiresAt && member.inviteExpiresAt < now) {
         return `expired`;
-    }
-    if (userEmail.toLowerCase() !== member.email) {
-        return `wrong-email`;
     }
     return `accept`;
 };

@@ -25,11 +25,14 @@ describe(`inviteAcceptDecision`, () => {
     it(`is idempotent once accepted`, () => {
         expect(inviteAcceptDecision({ ...member, acceptedAt: past }, `invitee@example.com`, now)).toBe(`already-accepted`);
     });
-    it(`rejects an expired link before checking identity`, () => {
+    it(`rejects an expired link for the invited address`, () => {
         expect(inviteAcceptDecision({ ...member, inviteExpiresAt: past }, `invitee@example.com`, now)).toBe(`expired`);
     });
     it(`locks to the invited email`, () => {
         expect(inviteAcceptDecision(member, `someone.else@example.com`, now)).toBe(`wrong-email`);
+    });
+    it(`keeps an accepted invite locked to the invited email`, () => {
+        expect(inviteAcceptDecision({ ...member, acceptedAt: past }, `someone.else@example.com`, now)).toBe(`wrong-email`);
     });
 });
 
