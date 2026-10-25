@@ -630,7 +630,7 @@ export const subagentHooks = (turn: SubagentTurn, paired?: (child: SubagentRecor
     // Appends the verification verdict to the delegating call's result as the parent reads it, via `additionalContext`
     // rather than rewriting the report itself, as a spawned subagent's report and `wait` answer carry it. Nothing is
     // appended when there is nothing to warn about. The tool is `Agent` today and `Task` in older CLIs (the stream's
-    // own spelling, sdk-stream.ts): a plain list, so it matches either.
+    // own spelling, claude-code-stream.ts): a plain list, so it matches either.
     PostToolUse: [
         {
             matcher: "Agent|Task",

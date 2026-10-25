@@ -16,7 +16,9 @@ import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { doorAdmission } from "./door-admission.js";
 import { mintConversationId } from "./fire/fire-sessions.js";
-import { fireOnThread, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
+import { fireOnThread } from "./fire/automation-fire.js";
+import { PAYLOAD_MAX } from "./fire/run-fire.js";
+import type { TurnStream } from "./fire/fire-options.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
 import { type SenderLane, senderLane } from "./senders.js";
 

@@ -19,7 +19,8 @@ import { createDomainEvents } from "../../seams/domain-events.js";
 import { fileHeldWakesStore } from "../held-wakes-store.js";
 import { fileScheduleCoverageStore } from "../schedule-coverage.js";
 import { type AutomationRecord, fileAutomationsStore } from "../automations-store.js";
-import { automationIdle, createAutomationsScheduler, fireAutomation } from "../scheduler.js";
+import { automationIdle, fireAutomation } from "../fire/automation-fire.js";
+import { createAutomationsScheduler } from "../scheduler.js";
 import { guardStateFile } from "./watch-condition.js";
 
 // Watches: an automation whose check decides, with no model, whether anything happened, remembers what it saw, retires

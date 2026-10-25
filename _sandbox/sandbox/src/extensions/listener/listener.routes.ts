@@ -11,7 +11,8 @@ import {
 import type { Context } from "hono";
 import { stream } from "hono/streaming";
 import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure, stopChannelTurn } from "../../automations/listeners.js";
-import { PAYLOAD_MAX, type TurnStream } from "../../automations/scheduler.js";
+import { PAYLOAD_MAX } from "../../automations/fire/run-fire.js";
+import type { TurnStream } from "../../automations/fire/fire-options.js";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { callingExtension, type ExtensionGrant } from "../../auth/grants.js";

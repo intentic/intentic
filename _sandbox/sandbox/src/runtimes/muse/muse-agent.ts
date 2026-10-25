@@ -5,7 +5,7 @@ import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/age
 import { loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import type { AgentRequest, MuseCredential } from "../../agent/providers/agent-request.js";
-import { POST_PLAN_MODE } from "../../agent/run/agent.js";
+import { POST_PLAN_MODE } from "../../agent/run/harness/claude-code-runner.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { opt } from "../../opt.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";

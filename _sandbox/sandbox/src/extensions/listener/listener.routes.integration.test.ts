@@ -19,7 +19,7 @@ import { automationConfig } from "../../harness/route-stores.testing.js";
 import type { Services } from "../../composition.js";
 import { fileThreadSessionsStore } from "../../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
-import { HELD_NOTICE, PAYLOAD_MAX } from "../../automations/scheduler.js";
+import { HELD_NOTICE, PAYLOAD_MAX } from "../../automations/fire/run-fire.js";
 import { listenerStateOf } from "./listener-state.js";
 import { listenerStatus } from "../../capabilities/status/listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";

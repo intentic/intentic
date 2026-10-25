@@ -9,20 +9,20 @@ import { type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-con
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRequest, pinnedRouting, runAgent } from "./agent.js";
-import type { AgentQuery, QueryFn } from "./sdk-stream.js";
-import { SteeringQueue } from "../checkpoints/agent-steering.js";
-import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
-import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/jobs/background-jobs.js";
-import { EDIT_TOOLS } from "../../rules/edit-tools.js";
-import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
-import { composeWirePrompt } from "../prompt/turn-preamble.js";
-import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
-import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
+import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRequest, pinnedRouting, runAgent } from "./claude-code-runner.js";
+import type { AgentQuery, QueryFn } from "./claude-code-stream.js";
+import { SteeringQueue } from "../../checkpoints/agent-steering.js";
+import { noteSubagentTask, resetSubagents } from "../../subagents/subagents.js";
+import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../../tools/jobs/background-jobs.js";
+import { EDIT_TOOLS } from "../../../rules/edit-tools.js";
+import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
+import { composeWirePrompt } from "../../prompt/turn-preamble.js";
+import { parkedCards } from "../../../conversations/actor/parked-cards.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
+import { ONE_SHOT_OWNER, workloadStamp } from "../../../seams/workload-stamp.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-jest.mock("../prompt/preset-prompt.js", () => ({
+jest.mock("../../prompt/preset-prompt.js", () => ({
     presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }),
 }));
 

@@ -19,7 +19,7 @@ import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTrans
 import { carriedRun, drawnOf, dropRunLog, saidMidTurn } from "./recovery/cut-turn-rows.js";
 import { offerAnswerWords, permissionAnswer, restoreParkedCard } from "./recovery/restored-offers.js";
 import type { Caller } from "../../../auth/auth.js";
-import { POST_PLAN_MODE } from "../agent.js";
+import { POST_PLAN_MODE } from "../harness/claude-code-runner.js";
 import { formatAnswers } from "../../../sessions/vocabulary/question-answers.js";
 import { OUTAGE_MAX_ATTEMPTS, outageRetryDue, outageRetryFired, providerOutage } from "../../providers/provider-health.js";
 import { type Routing, routingFor, sameLoop, sessionFor } from "../../../conversations/registry/routing.js";

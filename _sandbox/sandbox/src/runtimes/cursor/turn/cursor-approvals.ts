@@ -5,7 +5,7 @@ import { z } from "zod";
 import { opt } from "../../../opt.js";
 
 // The per-tool card of a Cursor turn sent in `default` mode, the one posture that asks a person (the Claude Code loop's
-// askOwner, agent/run/agent.ts): every call that changes something parks on a card until somebody answers. Raised from
+// askOwner, agent/run/harness/claude-code-runner.ts): every call that changes something parks on a card until somebody answers. Raised from
 // the three places a call can be stopped on this runtime: the preToolUse hook for Cursor's own tools, beforeMCPExecution
 // for an MCP server's, and the daemon's custom-tool handlers, which Cursor runs past every hook and never asks about
 // itself (options.d.ts: custom tools "never require interactive approval").

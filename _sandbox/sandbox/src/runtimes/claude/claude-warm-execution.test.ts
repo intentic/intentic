@@ -7,7 +7,7 @@ import {
     type AgentExecutionContext,
 } from "../../workload/agent-execution.js";
 import { forgetNamespaceEntry, registerMountEntry, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
-import type { HarnessRequest } from "../../agent/run/agent.js";
+import type { HarnessRequest } from "../../agent/run/harness/claude-code-runner.js";
 import { claudeKeepable, type ClaudeWarmDeps } from "./claude-warm.js";
 
 // Pure refresh ownership. Anchors are issued registry references with fake PIDs; no namespace/process/file API runs.

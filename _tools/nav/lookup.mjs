@@ -14,13 +14,13 @@ const rng = (seed) => () => {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
-export const runLookupSim = (tree, countTokens, { sample = 4000, seed = 7 } = {}) => {
+export const runLookupSim = (tree, countTokens, { sample = 4000, seed = 7, symbols } = {}) => {
     // Every exported top-level symbol, sorted for a stable order; the draw must depend on the seed, not file order.
     const candidates = [];
     for (const path of tree.source) {
         const file = tree.files.get(path);
         for (const declaration of file?.declarations ?? []) {
-            if (declaration.exported) {
+            if (symbols === undefined ? declaration.exported : symbols.includes(declaration.name)) {
                 candidates.push({ path, declaration });
             }
         }

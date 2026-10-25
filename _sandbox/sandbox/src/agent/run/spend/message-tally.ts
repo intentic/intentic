@@ -4,7 +4,7 @@ import { turnPulseOf } from "../turn/turn-pulse.js";
 import type { TokenCounts } from "./burn-weight.js";
 import { meterTokens } from "./token-meter.js";
 
-/* WHAT A CLAUDE CODE STREAM SPENT, as its messages and its results say it (agent/run/sdk-stream.ts's accounting).
+/* WHAT A CLAUDE CODE STREAM SPENT, as its messages and its results say it (agent/run/harness/claude-code-stream.ts's accounting).
 
    The CLI hands every model message on with the request's usage, the in-process helpers' messages too, and may hand
    one message on more than once (once per content block, each carrying the usage as it then stood). Counted by message

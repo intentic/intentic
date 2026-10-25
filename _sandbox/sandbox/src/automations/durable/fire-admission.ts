@@ -4,7 +4,7 @@ import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
 import type { JournalledFire } from "../../store/journals/turn-journal.js";
 import type { AutomationRecord } from "../automations-store.js";
-import type { FireOptions } from "../scheduler.js";
+import type { FireOptions } from "../fire/fire-options.js";
 import type { SenderLane } from "../senders.js";
 import { checkCondition, conditionOutside, rememberFiredCondition } from "../watch/watch-condition.js";
 

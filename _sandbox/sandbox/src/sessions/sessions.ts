@@ -260,7 +260,7 @@ interface StoredTurn {
 }
 
 /* A STORED SESSION READ BACK THROUGH THE ONE FOLD. The provider's store keeps whole messages, not frames, so they are
-   turned back into the frames the live stream sends for them (sdk-stream.ts, through the same SdkCallFrames for every
+   turned back into the frames the live stream sends for them (claude-code-stream.ts, through the same SdkCallFrames for every
    card) and folded by the fold the live run and the record use (transcript-fold.ts). Grouping is the fold's alone: which
    bubble a thought, a run of calls or a card lands in is decided in one place, so a turn read back from here is grouped
    as it was drawn live. Each prompt opens a turn of its own, and each turn ends as a settled one does: a card nobody

@@ -6,7 +6,8 @@ import type { AppEnv } from "../app-env.js";
 import { readBoundedText } from "../http/bounded-body.js";
 import { remoteIpOf } from "../http/remote-ip.js";
 import { doorAdmission } from "./door-admission.js";
-import { fireAutomation, PAYLOAD_MAX } from "./scheduler.js";
+import { fireAutomation } from "./fire/automation-fire.js";
+import { PAYLOAD_MAX } from "./fire/run-fire.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // POST /automations/:id/fire wakes an event automation from a webhook, authenticated by the door token (`?token=` or

@@ -3,7 +3,7 @@ import type { PersistedAgent } from "../../conversations/registry/agents-store.j
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { type RoleAnswer, sentenceReason } from "../../engines/role-answer.js";
 import { isBareConversationTitle, TITLE_MAX } from "../../seams/conversation-title.js";
-import { cannotBeAName } from "../../conversations/registry/agents-registry.js";
+import { cannotBeAName } from "../../conversations/registry/naming/title-policy.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
 import { BULLET, FENCE } from "@intentic/sandbox-contract/text/model-answer";
 

@@ -13,7 +13,7 @@ import { dispatchListenerMessage } from "../listeners.js";
 import { answeringWake, bootAutomations, daemonOn, hangingWake } from "./restart.testing.js";
 import { automationInboxesInFlight, interruptedFiresInFlight } from "../fire-resume.js";
 import { readKinds, RESUMES } from "../../seams/restart/in-flight.testing.js";
-import { automationIdle } from "../scheduler.js";
+import { automationIdle } from "../fire/automation-fire.js";
 import { dispatchWorkspaceEvent } from "../workspace-events.js";
 
 // Restart durability of what waits before a fire is admitted (inbox-store.ts): a channel message in its debounce or

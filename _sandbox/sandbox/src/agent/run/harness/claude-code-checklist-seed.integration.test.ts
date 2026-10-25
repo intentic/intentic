@@ -5,18 +5,18 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { type HarnessRequest, runAgent } from "./agent.js";
-import type { QueryFn } from "./sdk-stream.js";
-import { taskStoreDir } from "./task-store.js";
-import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { type HarnessRequest, runAgent } from "./claude-code-runner.js";
+import type { QueryFn } from "./claude-code-stream.js";
+import { taskStoreDir } from "../task-store.js";
+import { parkedCards } from "../../../conversations/actor/parked-cards.js";
+import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
 const actors = memoryFleet().conversations;
 const cards = parkedCards(actors);
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-jest.mock("../prompt/preset-prompt.js", () => ({
+jest.mock("../../prompt/preset-prompt.js", () => ({
     presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }),
 }));
 

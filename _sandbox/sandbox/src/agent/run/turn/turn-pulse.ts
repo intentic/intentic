@@ -49,7 +49,7 @@ const pulses = new Map<string, TurnPulse>();
 const RETRY_LOG_EVERY_MS = 10 * 60_000;
 const retryGate = createRepeatGate({ everyMs: RETRY_LOG_EVERY_MS });
 
-// The vendor's word for a retry, noted by the loop that reads it a moment before the frame goes out (sdk-stream.ts),
+// The vendor's word for a retry, noted by the loop that reads it a moment before the frame goes out (claude-code-stream.ts),
 // keyed by conversation since that loop knows no turn id.
 const causes = new Map<string, string>();
 

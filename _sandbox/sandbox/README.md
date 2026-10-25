@@ -2,6 +2,86 @@
 
 The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.
 
+## Key files
+
+- [src/main.ts](src/main.ts) — boot phases in the order the daemon needs.
+- [src/composition.ts](src/composition.ts) — service slices, dependency order and reaction wiring.
+- [src/app.ts](src/app.ts) — HTTP middleware and the raw and contract route doors.
+- [src/router.ts](src/router.ts) — domain route factories assembled into the contract's shape.
+- [src/agent/run/stream-agent.ts](src/agent/run/stream-agent.ts) — one turn, from placement to settlement.
+- [src/runtimes/runtime-table.ts](src/runtimes/runtime-table.ts) — provider and harness adapter selection.
+
+## Find the implementation
+
+Start with the behavior, then follow the owning module's imports. `agent/` prepares and runs turns; `runtimes/`
+adapts providers and harnesses to that engine. `conversations/` owns durable conversation identity, live actors,
+fleet cards, worktrees and landing. `sessions/` stores and reads provider sessions and transcript frames; a
+conversation can continue across several provider sessions. These boundaries follow ownership rather than the
+word “agent” in the UI.
+
+| Behavior | Start here | Follow for |
+| --- | --- | --- |
+| Start, continue or recover a turn | [agent/run/stream-agent.ts](src/agent/run/stream-agent.ts) | [turn admission](src/agent/run/turn/turn-admission.ts), [resume and recovery](src/agent/run/turn/turn-resume.ts), [provider/session routing](src/conversations/registry/routing.ts) |
+| Run the Claude Code loop | [harness/claude-code-runner.ts](src/agent/run/harness/claude-code-runner.ts) | [SDK stream frames](src/agent/run/harness/claude-code-stream.ts), [harness planning](src/agent/run/harness/harness-plan.ts); this harness also serves other providers |
+| Add or repair a runtime | [runtimes/runtime-table.ts](src/runtimes/runtime-table.ts) | The selected provider adapter and its execution module; [Claude's adapter](src/runtimes/claude/claude-provider.ts) connects to the shared harness |
+| Change conversation state or cards | [registry/agents-registry.ts](src/conversations/registry/agents-registry.ts) | [actor decisions](src/conversations/actor/conversation-decide.ts), [title policy](src/conversations/registry/naming/title-policy.ts), [summary projection](src/conversations/registry/projection/agent-summary.ts) |
+| Page or reconstruct a transcript | [conversations/transcript-page-answer.ts](src/conversations/transcript-page-answer.ts) | [session storage](src/sessions/session-store.ts), [session readers](src/sessions/sessions.ts) |
+| Change a turn's prompt | [agent/prompt/system-prompt.ts](src/agent/prompt/system-prompt.ts) | [guidance assembly](src/agent/prompt/guidance.ts) and the selected runtime's prompt adapter |
+| Create a worktree or land work | [worktrees/worktrees.ts](src/conversations/worktrees/worktrees.ts) | [landing](src/conversations/land/land.ts) and [turn placement](src/agent/run/placement/turn-placement.ts) |
+| Schedule or fire an automation | [automations/scheduler.ts](src/automations/scheduler.ts) | [admission and concurrency](src/automations/fire/automation-fire.ts), [wake execution](src/automations/fire/run-fire.ts), [fire options](src/automations/fire/fire-options.ts) |
+
+From the repository root, locate source first and then read the tests beside the owning seam:
+
+```sh
+iq "how does Continue choose a provider session?" --in _sandbox/sandbox/src --only src --budget 1800
+rg -n 'routingFor' _sandbox/sandbox/src -g '!*.test.ts' -g '!*.testing.ts'
+rg -n 'routingFor' _sandbox/sandbox/src -g '*.test.ts'
+```
+
+Source filtering reduces fixture matches while locating the implementation; the covering tests explain the
+behavior to preserve. Keep those tests beside their seams. Generated entry lists are
+[slice-registry.ts](src/bootstrap/slices/slice-registry.ts) and [app-raw-routes.ts](src/app-raw-routes.ts);
+[scripts/write-indexes.mjs](scripts/write-indexes.mjs) owns both. Environment settings start at
+[env.config.ts](src/env.config.ts).
+
+## Layout
+
+The directories under `src/` are layered, lowest first, and a value import may only reach its own layer or a lower
+one ([layers.json](layers.json), checked by `daemon-boundaries`). Above every layer sits the surface: the root files
+(`app.ts`, `composition.ts`, `router.ts`, `main.ts`), every `*.routes.ts` and every `*.testing.ts`. Inside each unit
+`subunits` lists (`agent/`, `conversations/`), each immediate subdirectory and the unit's root files are subunits, and a new
+value import closing a cycle between two of them fails too (standing ones: `_tools/checks/baselines/daemon-subunits.json`).
+
+<!-- >>> generated from layers.json: edit it there, then run node _tools/checks/layer-tables.mjs --fix -->
+| Layer | Holds | Directories |
+| --- | --- | --- |
+| foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` |
+| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `intentic/` `activity/` `audit/` `org/` |
+| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
+| agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
+| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `inventory/` `portability/` `migrations/` `history/` `retention/` |
+| composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
+| (none) | in no layer: the boundary check places no module here | `e2e/` |
+<!-- <<< end of generated layers.json -->
+
+Beside `src/`, the image copies a few directories as they are: `bin/` (the command runners and asking CLIs),
+`seed-skills/` (the skills baked into `/root/.claude/skills`), and `claude-policy/`, Claude Code's managed settings
+and the policy mod they run first (`/etc/claude-code`, `/opt/intentic-claude-policy`). `starter/` is the baked starter
+site's own build (`starter.Dockerfile`, run by `_tools/scripts/image/prepare-image-trees.sh`), with
+`normalize-starter.mjs`, which takes pnpm's clocks out of it so its image layer is the same bytes until the template
+changes. Each build resolves dependencies with a fresh registry metadata cache, so cached version lists cannot
+disagree with newly resolved transitive dependencies. `starter-site/` is intentic's own first page, laid over the
+template's there. `src/` itself is not shipped: the image runs `dist/`.
+`golden/host-files.json` is not copied: it names every file the daemon and `ic` both touch across the container
+boundary, with an example of each body the daemon defines, written by `src/system/host-files.test.ts` and read by
+ic's own tests, so a rename on either side fails a test instead of a rollback.
+
+A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
+
+The asking CLIs (`capabilities`, `secrets`, `environment`, `grants`, `needs`) write errors to stdout.
+A need verdict exits 0 when met, 1 when refused, or 3 while open; misuse, HTTP/transport failures,
+unreadable answers and crashes exit 2 because no verdict was reached.
+
 ```mermaid
 flowchart LR
     editor["Editor<br/>web · desktop · mobile"] --> edge["Platform ingress edge"]
@@ -764,55 +844,6 @@ New conversation checkouts reserve room on the history filesystem before any rep
 floor is 2% of that volume, clamped to 5–20 GiB; the estimated checkout must leave that floor free. Existing checkouts
 and workspace conversations keep running. Storage reports current history space and each live repository's tracked
 blob sizes at HEAD, cached per repository and commit, so a large repository's cost is visible before another copy.
-
-## Key files
-
-- [src/main.ts](src/main.ts) — the entry point: boot phases in the one order that matters.
-- [src/composition.ts](src/composition.ts) — `Services` extends each module's own slice; `createServices` builds the core in dependency order, then every leaf slice, and `wireReactions` subscribes them to each other.
-- [src/bootstrap/slices/slice-registry.ts](src/bootstrap/slices/slice-registry.ts) — every leaf slice, built over the core and torn down with it, generated by `scripts/write-indexes.mjs`.
-- [src/app.ts](src/app.ts) — the Hono app: security headers, boot gate, CORS, auth, raw routes, then the oRPC handler.
-- [src/app-raw-routes.ts](src/app-raw-routes.ts) — every raw route table, generated by `scripts/write-indexes.mjs`.
-- [src/router.ts](src/router.ts) — the per-domain route factories assembled into the contract's shape.
-- [src/env.config.ts](src/env.config.ts) — the configuration schema read from the environment.
-- [src/agent/run/stream-agent.ts](src/agent/run/stream-agent.ts) — `streamAgent`: one turn, from placement to settlement.
-
-## Layout
-
-The directories under `src/` are layered, lowest first, and a value import may only reach its own layer or a lower
-one ([layers.json](layers.json), checked by `daemon-boundaries`). Above every layer sits the surface: the root files
-(`app.ts`, `composition.ts`, `router.ts`, `main.ts`), every `*.routes.ts` and every `*.testing.ts`. Inside each unit
-`subunits` lists (`agent/`, `conversations/`), each immediate subdirectory and the unit's root files are subunits, and a new
-value import closing a cycle between two of them fails too (standing ones: `_tools/checks/baselines/daemon-subunits.json`).
-
-<!-- >>> generated from layers.json: edit it there, then run node _tools/checks/layer-tables.mjs --fix -->
-| Layer | Holds | Directories |
-| --- | --- | --- |
-| foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` |
-| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `intentic/` `activity/` `audit/` `org/` |
-| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
-| agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
-| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `inventory/` `portability/` `migrations/` `history/` `retention/` |
-| composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
-| (none) | in no layer: the boundary check places no module here | `e2e/` |
-<!-- <<< end of generated layers.json -->
-
-Beside `src/`, the image copies a few directories as they are: `bin/` (the command runners and asking CLIs),
-`seed-skills/` (the skills baked into `/root/.claude/skills`), and `claude-policy/`, Claude Code's managed settings
-and the policy mod they run first (`/etc/claude-code`, `/opt/intentic-claude-policy`). `starter/` is the baked starter
-site's own build (`starter.Dockerfile`, run by `_tools/scripts/image/prepare-image-trees.sh`), with
-`normalize-starter.mjs`, which takes pnpm's clocks out of it so its image layer is the same bytes until the template
-changes. Each build resolves dependencies with a fresh registry metadata cache, so cached version lists cannot
-disagree with newly resolved transitive dependencies. `starter-site/` is intentic's own first page, laid over the
-template's there. `src/` itself is not shipped: the image runs `dist/`.
-`golden/host-files.json` is not copied: it names every file the daemon and `ic` both touch across the container
-boundary, with an example of each body the daemon defines, written by `src/system/host-files.test.ts` and read by
-ic's own tests, so a rename on either side fails a test instead of a rollback.
-
-A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
-
-The asking CLIs (`capabilities`, `secrets`, `environment`, `grants`, `needs`) write errors to stdout.
-A need verdict exits 0 when met, 1 when refused, or 3 while open; misuse, HTTP/transport failures,
-unreadable answers and crashes exit 2 because no verdict was reached.
 
 ## Commands
 

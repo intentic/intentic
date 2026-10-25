@@ -24,17 +24,9 @@ import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileScheduleCoverageStore } from "./schedule-coverage.js";
 import { nextDueAfter } from "./schedule-zone.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
-import {
-    automationIdle,
-    createAutomationsScheduler,
-    fireAutomation,
-    type FireOptions,
-    heldWakeQuiet,
-    LAND_QUIET_CAP_MS,
-    LAND_QUIET_MS,
-    nextOneTimeWakeAt,
-    type TurnStream,
-} from "./scheduler.js";
+import { automationIdle, fireAutomation } from "./fire/automation-fire.js";
+import { createAutomationsScheduler, heldWakeQuiet, LAND_QUIET_CAP_MS, LAND_QUIET_MS, nextOneTimeWakeAt } from "./scheduler.js";
+import type { FireOptions, TurnStream } from "./fire/fire-options.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";

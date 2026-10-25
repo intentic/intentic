@@ -1,6 +1,6 @@
 import { WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 import type { SSEStreamingApi } from "hono/streaming";
-import type { TurnStream } from "../automations/scheduler.js";
+import type { TurnStream } from "../automations/fire/fire-options.js";
 
 export interface SseTurnStream {
     readonly turn: TurnStream;

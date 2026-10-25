@@ -5,9 +5,9 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { type HarnessRequest, runAgent } from "./agent.js";
+import { type HarnessRequest, runAgent } from "./harness/claude-code-runner.js";
 import { CHUNK_BYTES, carriedCostOf, TAIL_LIMIT_BYTES } from "./carried-cost.js";
-import type { QueryFn } from "./sdk-stream.js";
+import type { QueryFn } from "./harness/claude-code-stream.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 

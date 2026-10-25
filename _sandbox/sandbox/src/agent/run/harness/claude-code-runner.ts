@@ -1,4 +1,4 @@
-import { timedHooks } from "./hook-timing.js";
+import { timedHooks } from "../hook-timing.js";
 import type {
     CanUseTool,
     EffortLevel,
@@ -12,9 +12,9 @@ import type {
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { whenAborted } from "@intentic/base/async";
-import { refreshClaudeSdk } from "../../engines/claude-sdk.js";
-import { withStderrTail } from "../../engines/failure-sentences.js";
-import { spawnAs } from "../../workload/workload-class.js";
+import { refreshClaudeSdk } from "../../../engines/claude-sdk.js";
+import { withStderrTail } from "../../../engines/failure-sentences.js";
+import { spawnAs } from "../../../workload/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -24,62 +24,62 @@ import { documentOf, isPlanDocumentPath } from "@intentic/sandbox-contract/text/
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { sendableEffort, sendableThinking } from "@intentic/sandbox-contract/models/agent-catalog";
 import { join, normalize } from "node:path";
-import { claudeStatePath } from "../../sessions/session-store.js";
-import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
-import { PANE_DOOR_PATH } from "../../workload/domain/agent-domain-view.js";
-import { namespaceTargetOf, nsenterArgv } from "../../workload/namespace-entry.js";
-import { sandboxEnv } from "../../conversations/worktrees/turn-sandbox.js";
-import { worktreeRedirectHooks } from "../../conversations/worktrees/worktree-redirect.js";
-import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
-import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
-import { depsNoticeHooks } from "../tools/notices/agent-deps.js";
-import { searchNoticeHooks } from "../verification/agent-search.js";
-import { editDiagnosticsHooks } from "../verification/agent-diagnostics.js";
-import { createShellEditTracker } from "../tools/agent-shell-edits.js";
-import { EDIT_TOOL_NAMES } from "../../rules/edit-tools.js";
-import { installSteeringHooks } from "../providers/agent-installs.js";
-import { toolResultHooks } from "../tools/tool-result-hooks.js";
-import { secretCommandHooks } from "../tools/agent-secrets.js";
-import { commandGateHooks } from "../../guard/command-guard.js";
-import { outboundGuardHooks } from "../../guard/outbound-guard.js";
-import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
-import { personaScopeHooks } from "../../personas/persona-scope.js";
-import { toolAllowlistHooks } from "../tools/tool-allowlist.js";
-import { jsExecutionServer } from "../../execution/js-tool.js";
-import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../seams/js-tool-names.js";
-import { mcpServersOf } from "../tools/agent-tools.js";
-import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
-import { terminalHelpServer } from "../../terminal/terminal-help.js";
-import { EventQueue } from "./event-queue.js";
+import { claudeStatePath } from "../../../sessions/session-store.js";
+import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../../conversations/worktrees/isolation.js";
+import { PANE_DOOR_PATH } from "../../../workload/domain/agent-domain-view.js";
+import { namespaceTargetOf, nsenterArgv } from "../../../workload/namespace-entry.js";
+import { sandboxEnv } from "../../../conversations/worktrees/turn-sandbox.js";
+import { worktreeRedirectHooks } from "../../../conversations/worktrees/worktree-redirect.js";
+import { browserArtifactHooks } from "../../../browser/cast/browser-artifacts.js";
+import { browserSessionHooks } from "../../../browser/sessions/browser-sessions.js";
+import { depsNoticeHooks } from "../../tools/notices/agent-deps.js";
+import { searchNoticeHooks } from "../../verification/agent-search.js";
+import { editDiagnosticsHooks } from "../../verification/agent-diagnostics.js";
+import { createShellEditTracker } from "../../tools/agent-shell-edits.js";
+import { EDIT_TOOL_NAMES } from "../../../rules/edit-tools.js";
+import { installSteeringHooks } from "../../providers/agent-installs.js";
+import { toolResultHooks } from "../../tools/tool-result-hooks.js";
+import { secretCommandHooks } from "../../tools/agent-secrets.js";
+import { commandGateHooks } from "../../../guard/command-guard.js";
+import { outboundGuardHooks } from "../../../guard/outbound-guard.js";
+import { createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
+import { personaScopeHooks } from "../../../personas/persona-scope.js";
+import { toolAllowlistHooks } from "../../tools/tool-allowlist.js";
+import { jsExecutionServer } from "../../../execution/js-tool.js";
+import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../../seams/js-tool-names.js";
+import { mcpServersOf } from "../../tools/agent-tools.js";
+import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../../tools/agent-terminals.js";
+import { terminalHelpServer } from "../../../terminal/terminal-help.js";
+import { EventQueue } from "../event-queue.js";
 import { insideRel } from "@intentic/base/contained";
-import { planRevision } from "../prompt/plan-revision.js";
-import { trialUnavailableFrame } from "./frames/error-frames.js";
-import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
-import { harnessEnv } from "../providers/harness-credentials.js";
-import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
-import { opt } from "../../opt.js";
-import { routedEndpointOf } from "../providers/routed-refusal.js";
-import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
-import { checklistCloseHooks } from "./checklist-close.js";
-import { heldChildrenHooks } from "../subagents/held-children-close.js";
-import { commandNotesHooks, commandWire } from "./command-turn.js";
-import { PINNED_ENV } from "./harness/pinned-env.js";
-import { reviewHooks } from "./harness/review-findings.js";
-import { turnCheckHooks } from "./turn-checks.js";
-import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
-import { checklistSeedOf } from "./task-store.js";
-import { carriedCostOf } from "./carried-cost.js";
-import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
-import { noteChildWork } from "../subagents/child-verification.js";
-import { subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
-import { endTurnSubagents, recordInto } from "../subagents/subagent-transcript.js";
-import { ASK_TOOL_NAMES } from "../../sessions/vocabulary/question-answers.js";
-import { uiServer } from "../pages/ui-server.js";
-import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
-import { McpAppHost } from "../pages/mcp-apps.js";
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import { CLAUDE_INSTRUCTION_FILES } from "../providers/claude/claude-builtins.js";
-import { storedPromptTitle } from "../../sessions/vocabulary/prompt-envelope.js";
+import { planRevision } from "../../prompt/plan-revision.js";
+import { trialUnavailableFrame } from "../frames/error-frames.js";
+import type { AgentRequest, HarnessCredential } from "../../providers/agent-request.js";
+import { harnessEnv } from "../../providers/harness-credentials.js";
+import { ONE_SHOT_OWNER, workloadStamp } from "../../../seams/workload-stamp.js";
+import { opt } from "../../../opt.js";
+import { routedEndpointOf } from "../../providers/routed-refusal.js";
+import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./claude-code-stream.js";
+import { checklistCloseHooks } from "../checklist-close.js";
+import { heldChildrenHooks } from "../../subagents/held-children-close.js";
+import { commandNotesHooks, commandWire } from "../command-turn.js";
+import { PINNED_ENV } from "./pinned-env.js";
+import { reviewHooks } from "./review-findings.js";
+import { turnCheckHooks } from "../turn-checks.js";
+import { settingsHookChangeHooks } from "./settings-hook-gate.js";
+import { checklistSeedOf } from "../task-store.js";
+import { carriedCostOf } from "../carried-cost.js";
+import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../../prompt/system-prompt.js";
+import { noteChildWork } from "../../subagents/child-verification.js";
+import { subagentInParentTree, subagentHooks, type SubagentTurn } from "../../subagents/subagents.js";
+import { endTurnSubagents, recordInto } from "../../subagents/subagent-transcript.js";
+import { ASK_TOOL_NAMES } from "../../../sessions/vocabulary/question-answers.js";
+import { uiServer } from "../../pages/ui-server.js";
+import { PAGE_TOOL_NAMES } from "../../pages/page-names.js";
+import { McpAppHost } from "../../pages/mcp-apps.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { CLAUDE_INSTRUCTION_FILES } from "../../providers/claude/claude-builtins.js";
+import { storedPromptTitle } from "../../../sessions/vocabulary/prompt-envelope.js";
 
 // The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the
 // container's own credential.
@@ -762,7 +762,7 @@ const permissionGate = (
     shell: { sessionId: string | undefined },
     documents: TurnDocuments,
     prose: TurnProse,
-    // The posture as the SESSION holds it, which the CLI moves too, not only this gate (sdk-stream.ts).
+    // The posture as the SESSION holds it, which the CLI moves too, not only this gate (claude-code-stream.ts).
     posture: TurnPosture,
 ): CanUseTool => {
     // The plan card: raised from the turn's latest prose, answered by the owner.

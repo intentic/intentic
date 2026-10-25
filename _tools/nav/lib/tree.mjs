@@ -4,8 +4,8 @@ import { classifyLines, listFiles, listTracked, readAt } from "./files.mjs";
 import { declarationsOf, functionsOf, longestChain, moduleFactsOf, nestingOf, parseFile } from "./parse.mjs";
 import { packageMap } from "./resolve.mjs";
 
-export const buildTree = (root, ref, countTokens, onProgress) => {
-    const { source, tests } = listFiles(root, ref);
+export const buildTree = (root, ref, countTokens, onProgress, scope = "") => {
+    const { source, tests } = listFiles(root, ref, scope);
     const packages = packageMap(root, listTracked(root, ref), (r, p) => readAt(r, p, ref));
     const known = new Set([...source, ...tests]);
 

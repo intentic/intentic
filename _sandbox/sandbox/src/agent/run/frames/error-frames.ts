@@ -80,7 +80,7 @@ export const rateLimitFrame = async (allowance: TurnAllowance | undefined, named
     };
 };
 
-// Reports the provider outage as `provider-outage`; sdk-stream.ts's api_retry handles the wait from here.
+// Reports the provider outage as `provider-outage`; claude-code-stream.ts's api_retry handles the wait from here.
 export const retryStormFrame = (attempts: number, status: number | undefined): ErrorEvent => ({
     kind: "error",
     code: "provider-outage",

@@ -9,7 +9,7 @@ import type { AgentRequest, CodexCredential, CodexHostedProvider, TurnTools } fr
 import { splitAttachments, withFileNote } from "../../sessions/vocabulary/attachment-note.js";
 import { opt } from "../../opt.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
-import { POST_PLAN_MODE } from "../../agent/run/agent.js";
+import { POST_PLAN_MODE } from "../../agent/run/harness/claude-code-runner.js";
 import { codedFailure, type FailureRule } from "../../agent/run/frames/error-frames.js";
 import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
 import { isRateLimited } from "../../engines/failure-sentences.js";

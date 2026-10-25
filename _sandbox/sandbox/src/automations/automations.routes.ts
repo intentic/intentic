@@ -16,7 +16,7 @@ import type { AutomationRecord } from "./automations-store.js";
 import { nextRunOf, sandboxZone } from "./schedule-zone.js";
 import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
 import { HeldWakeNotApproved } from "./held-wakes-store.js";
-import { fireAutomation, recordHeldWake, runHeldWake } from "./scheduler.js";
+import { fireAutomation, recordHeldWake, runHeldWake } from "./fire/automation-fire.js";
 import { forgetHeldWake } from "./durable/fire-admission.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { guardStateFile, sourceEnv } from "./watch/watch-condition.js";

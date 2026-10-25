@@ -2,8 +2,8 @@
 // is first-party TS/Vue/Node script, excluding `.d.ts`, fixtures and snapshots; tests are listed but held out of the
 // shape metrics. Every count reports physical, code, and comment/blank lines together.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx", ".vue", ".mjs", ".js"]);
 
@@ -36,23 +36,31 @@ const extensionOf = (path) => {
     return dot === -1 ? "" : path.slice(dot);
 };
 
-// All git-tracked paths in a tree, unfiltered; workspace import resolution needs the package.json manifests that source
-// filtering drops.
+// All present tracked and untracked/nonignored paths (or only committed paths at a ref), unfiltered; workspace import
+// resolution needs the package.json manifests that source filtering drops.
 export const listTracked = (root, ref) => {
-    const args = ref ? ["ls-tree", "-r", "--name-only", ref] : ["ls-files"];
-    return execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 })
+    const args = ref ? ["ls-tree", "-r", "--name-only", ref] : ["ls-files", "--cached", "--others", "--exclude-standard"];
+    const paths = execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 })
         .split("\n")
         .filter(Boolean);
+    return [...new Set(paths)].filter((path) => ref || existsSync(join(root, path)));
 };
 
-// Splits tracked files into source and test. `ref` reads a git ref instead of the working tree, for a baseline without
+// Splits listed files into source and test. `ref` reads a git ref instead of the working tree, for a baseline without
 // checkout.
-export const listFiles = (root, ref) => {
+export const listFiles = (root, ref, scope = "") => {
     const all = listTracked(root, ref);
+    const prefix = relative(root, resolve(root, scope)).split("\\").join("/");
+    if (prefix === ".." || prefix.startsWith("../")) {
+        throw new Error(`nav: scope is outside the repository: ${scope}`);
+    }
 
     const source = [];
     const tests = [];
     for (const path of all) {
+        if (prefix !== "" && path !== prefix && !path.startsWith(`${prefix}/`)) {
+            continue;
+        }
         if (!SOURCE_EXTENSIONS.has(extensionOf(path))) {
             continue;
         }
@@ -60,6 +68,9 @@ export const listFiles = (root, ref) => {
             continue;
         }
         (isTest(path) ? tests : source).push(path);
+    }
+    if (scope !== "" && source.length + tests.length === 0) {
+        throw new Error(`nav: no source or tests in scope: ${scope}`);
     }
     return { source: source.sort(), tests: tests.sort() };
 };

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { type HarnessRequest, runAgent } from "../src/agent/run/agent.js";
+import { type HarnessRequest, runAgent } from "../src/agent/run/harness/claude-code-runner.js";
 import { sumUsage, type UsageFrame } from "../src/agent/run/turn/turn-usage.js";
 import { parkedCards } from "../src/conversations/actor/parked-cards.js";
 import type { AgentExecutionLease } from "../src/workload/agent-execution.js";

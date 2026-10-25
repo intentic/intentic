@@ -54,8 +54,8 @@ const entrySurface = (tree, entry, depth = 0, seen = new Set()) => {
     return names;
 };
 
-const snapshotOf = (ref) => {
-    const tree = buildTree(root, ref, estimateTokens);
+const snapshotOf = (ref, scope = "") => {
+    const tree = buildTree(root, ref, estimateTokens, undefined, scope);
 
     // 1. Every exported name anywhere in the tree, without its location.
     const treeExports = new Set();
@@ -95,6 +95,7 @@ const snapshotOf = (ref) => {
     return {
         generatedAt: new Date().toISOString(),
         ref: ref ?? "(working tree)",
+        scope,
         treeExports: [...treeExports].sort(),
         packages,
         frozen,
@@ -104,7 +105,7 @@ const snapshotOf = (ref) => {
 const snapshot = () => {
     const ref = arg("ref", undefined);
     const out = arg("out", join(root, "_tools/nav/baselines/surface.json"));
-    const result = snapshotOf(ref);
+    const result = snapshotOf(ref, arg("in", ""));
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
     console.log(
@@ -121,7 +122,7 @@ const check = () => {
         process.exit(2);
     }
     const before = JSON.parse(readFileSync(baselinePath, "utf8"));
-    const after = snapshotOf(arg("ref", undefined));
+    const after = snapshotOf(arg("ref", undefined), before.scope ?? "");
 
     const findings = [];
 

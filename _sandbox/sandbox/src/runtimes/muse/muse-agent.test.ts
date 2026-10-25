@@ -8,7 +8,7 @@ import { memoryFleet } from "../../conversations/registry/agents-registry.testin
 import { createMuseAgent } from "./muse-agent.js";
 import { type FakeMuseOptions, fakeMuse, museItem, museShellApproval } from "./muse-host.testing.js";
 import { PLANNING_REFUSAL } from "./muse-asks.js";
-import { POST_PLAN_MODE } from "../../agent/run/agent.js";
+import { POST_PLAN_MODE } from "../../agent/run/harness/claude-code-runner.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);

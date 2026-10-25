@@ -1,4 +1,4 @@
-import type { HarnessRequest } from "../run/agent.js";
+import type { HarnessRequest } from "../run/harness/claude-code-runner.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { outsideResultHooks } from "../../guard/outside-results.js";
 import { redactionHooks } from "./agent-redaction.js";

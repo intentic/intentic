@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // What this costs an agent to work in, not the CPU; deterministic and offline, so results are reproducible.
-// - measure [--ref R] [--label L | --out PATH]: full picture of one tree, written to baselines/L.json or PATH.
+// - measure [--ref R] [--in PATH] [--tasks JSON] [--label L | --out PATH]: full picture of one tree, written to baselines/L.json or PATH.
 // - targets [--top N]: files ranked by tokens the tree burns on each, not by size.
 // - compare A B: delta table between two measurements; refuses to mix tokenizers.
 // - calibrate: checks the token estimator's chars/token band.
@@ -16,19 +16,27 @@ import { runLookupSim } from "./lookup.mjs";
 import { measureShape } from "./metrics.mjs";
 import { arg } from "./lib/args.mjs";
 import { compareRows, glyphOf, n, pct } from "./lib/compare.mjs";
+import { runReplay } from "./replay.mjs";
 
 const root = repoRoot(import.meta.url);
-
 
 const measure = async () => {
     const ref = arg("ref", undefined);
     const sample = Number(arg("sample", "4000"));
+    const scope = arg("in", "");
+    const tasks = arg("tasks", undefined);
     const { count, label } = await tokenCounter();
 
     process.stderr.write(`nav: parsing ${ref ?? "working tree"}…\n`);
-    const tree = buildTree(root, ref, count, (done, total) => {
-        process.stderr.write(`\r     ${done}/${total} files`);
-    });
+    const tree = buildTree(
+        root,
+        ref,
+        count,
+        (done, total) => {
+            process.stderr.write(`\r     ${done}/${total} files`);
+        },
+        scope,
+    );
     process.stderr.write("\rnav: measuring shape…                    \n");
     const shape = measureShape(tree);
 
@@ -44,10 +52,14 @@ const measure = async () => {
         ref: tree.ref,
         head: gitHead(ref),
         tokenizer: label,
+        scope,
         shape,
         bench,
         lookup,
     };
+    if (tasks !== undefined) {
+        report.replay = runReplay(tree, count, JSON.parse(readFileSync(tasks, "utf8")));
+    }
 
     const out = arg("out", join(root, "_tools/nav/baselines", `${arg("label", "head").replace(/[^\w.-]/g, "_")}.json`));
     mkdirSync(dirname(out), { recursive: true });
@@ -108,6 +120,12 @@ const printReport = (report) => {
     line("tokens returned p50 / mean / p90", `${n(lookup.tokensReturned.p50)} / ${n(lookup.tokensReturned.mean)} / ${n(lookup.tokensReturned.p90)}`);
     line("tool calls (mean)", lookup.toolCalls.mean);
     line("lookups needing an extra window", lookup.needingExtraWindow);
+    if (report.replay !== undefined) {
+        console.log("\nSESSION TASK REPLAY — fixed symbols, simulated search and bounded reads");
+        for (const task of report.replay) {
+            line(task.task, `${task.symbol}: ${n(task.fileTokens)} file / ${n(task.lookupTokens)} lookup tokens (${task.home}:${task.line})`);
+        }
+    }
 
     console.log("\nWHAT SPLITTING COSTS — reported whichever way it moved");
     line("modules", shape.cost.modules);
@@ -119,7 +137,7 @@ const printReport = (report) => {
 const targets = async () => {
     const top = Number(arg("top", "20"));
     const { count } = await tokenCounter();
-    const tree = buildTree(root, arg("ref", undefined), count);
+    const tree = buildTree(root, arg("ref", undefined), count, undefined, arg("in", ""));
     const resolver = makeResolver(tree);
     const bench = runBench(tree, count, resolver);
 
@@ -146,6 +164,9 @@ const compare = () => {
     if (before.tokenizer !== after.tokenizer) {
         console.error(`refusing to compare: '${before.tokenizer}' vs '${after.tokenizer}'. Re-measure both with the same one.`);
         process.exit(2);
+    }
+    if ((before.scope ?? "") !== (after.scope ?? "")) {
+        throw new Error(`refusing to compare different scopes: '${before.scope ?? ""}' vs '${after.scope ?? ""}'`);
     }
 
     console.log(`\n=== ${before.ref} @ ${before.head}  →  ${after.ref} @ ${after.head} ===`);

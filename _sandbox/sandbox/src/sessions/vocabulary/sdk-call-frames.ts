@@ -20,7 +20,7 @@ export interface ToolAnswer {
 type ToolCallFrame = Extract<AgentEvent, { kind: "tool_call" }>;
 type ToolResultFrame = Extract<AgentEvent, { kind: "tool_call_update" }>;
 
-// ONE CARD PER SDK CALL, WHICHEVER WAY THE CALL IS READ. The live stream (sdk-stream.ts) and a session read back from the
+// ONE CARD PER SDK CALL, WHICHEVER WAY THE CALL IS READ. The live stream (claude-code-stream.ts) and a session read back from the
 // provider's own store (sessions.ts) both turn a call and its result into frames here, and both hand those frames to the
 // one fold (transcript-fold.ts), so a card drawn live and the same card read back are the same card: name, target,
 // input, the call-time diff, and a picture its answer carried.

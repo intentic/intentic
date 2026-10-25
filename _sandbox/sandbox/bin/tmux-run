@@ -123,7 +123,7 @@ fallback() {
 }
 
 # EVERY tmux call below is made from the mount namespace named by $INTENTIC_TMUX_NS (set per turn by
-# src/agent/run/agent.ts, and only for an isolated one).
+# src/agent/run/harness/claude-code-runner.ts, and only for an isolated one).
 #
 # A tmux client that finds no server running FORKS one, and that server keeps the mounts of whoever forked it
 # — forever, for every pane it ever creates. This wrapper is such a client and the agent's Bash hook runs it
@@ -301,7 +301,7 @@ fi
 # Stamp the session with the conversation that owns it (a tmux user option the daemon's reaper lists by —
 # platform/reaper.ts). On the SESSION rather than in any pane's environment, because the fact has to outlive
 # every pane: a session whose commands have all finished has no process left to read an environ from. The
-# stamp arrives in this wrapper's own environment, inherited from the turn's CLI (agent.ts workloadStamp).
+# stamp arrives in this wrapper's own environment, inherited from the turn's CLI (claude-code-runner.ts workloadStamp).
 # `=<name>:` — set-option refuses the bare `=<name>` exact form ("no such session"); the trailing colon makes
 # it read the target as a SESSION, exactly as capture-pane needs (src/terminal/terminal-session.ts).
 # Idempotent per command; best-effort like everything else here.

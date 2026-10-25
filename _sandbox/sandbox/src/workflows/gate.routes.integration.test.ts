@@ -13,7 +13,7 @@ import type { Services } from "../composition.js";
 import { compressResponses } from "../http/compress-responses.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import { createGateRoute, settledWithin } from "./gate.routes.js";
-import { PAYLOAD_MAX } from "../automations/scheduler.js";
+import { PAYLOAD_MAX } from "../automations/fire/run-fire.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";

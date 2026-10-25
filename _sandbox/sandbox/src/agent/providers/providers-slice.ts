@@ -28,7 +28,7 @@ import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
 import { type BurnRates, burnRatesDocument, createBurnRates } from "../run/spend/burn-rates.js";
 import { fileReadingsLog, readingsLogDocument } from "../run/spend/readings-log.js";
-import { type HarnessRequest, runAgent } from "../run/agent.js";
+import { type HarnessRequest, runAgent } from "../run/harness/claude-code-runner.js";
 import { judgeCommand, type JudgeFacts } from "../tools/command-judge.js";
 import type { AgentRequest, ContainerCredential } from "./agent-request.js";
 import type { ProviderCatalog, ProviderModule } from "./provider-module.js";

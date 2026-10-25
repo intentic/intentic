@@ -7,7 +7,9 @@ import type { Services } from "../composition.js";
 import { defineInFlight } from "../seams/restart/in-flight.js";
 import { opt } from "../opt.js";
 import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
-import { fireOnThread, resumable, type ThreadFireOptions, type ThreadPlace } from "./scheduler.js";
+import { fireOnThread } from "./fire/automation-fire.js";
+import { resumable } from "./scheduler.js";
+import type { ThreadFireOptions, ThreadPlace } from "./fire/fire-options.js";
 
 type JournalledFire = Extract<JournalEntry, { kind: "automation" }>;
 

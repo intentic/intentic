@@ -1,6 +1,6 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
-import type { TurnStream } from "../automations/scheduler.js";
+import type { TurnStream } from "../automations/fire/fire-options.js";
 import type { Services } from "../composition.js";
 import { threadKey } from "../seams/thread-key.js";
 import { defineDocument } from "../store/evolution/documents.js";

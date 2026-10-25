@@ -17,7 +17,7 @@ import { createDomainEvents } from "../../seams/domain-events.js";
 import { fileHeldWakesStore } from "../held-wakes-store.js";
 import { fileScheduleCoverageStore } from "../schedule-coverage.js";
 import { type AutomationRecord, fileAutomationsStore, WATCH_VALUE_MAX } from "../automations-store.js";
-import { automationIdle, fireAutomation, runHeldWake } from "../scheduler.js";
+import { automationIdle, fireAutomation, runHeldWake } from "../fire/automation-fire.js";
 
 // A watch's fires end to end, through the real store, shell and held-wakes queue: what it compares, when it starts over,
 // how two approved holds are told apart, and that an end date is said once.

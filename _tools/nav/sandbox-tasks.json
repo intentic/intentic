@@ -1,0 +1,12 @@
+[
+    { "task": "Conversation title policy", "symbol": "cannotBeAName", "session": "lively-forge-ur78", "guessedPaths": ["_sandbox/sandbox/src/conversations/registry/summary.ts"] },
+    { "task": "Conversation card projection", "symbol": "describedBy", "session": "lively-forge-ur78" },
+    { "task": "Transcript pagination", "symbol": "transcriptPageAnswer", "session": "witty-harbor-pknz", "guessedPaths": ["_sandbox/sandbox/src/transcripts/transcripts.ts"] },
+    { "task": "Continue on another provider", "symbol": "routingFor", "session": "quick-moth-vbnp" },
+    { "task": "Runtime health", "symbol": "healthReady", "session": "plain-comet-kqht" },
+    { "task": "Child admission", "symbol": "spawnChild", "session": "sleek-gale-9u2w" },
+    { "task": "Landing", "symbol": "landAgent", "session": "sleek-heron-qqcz", "guessedPaths": ["_sandbox/sandbox/src/agents"] },
+    { "task": "Automation fire admission", "symbol": "fireAutomation", "session": "crisp-comet-ywnf" },
+    { "task": "Claude Code execution", "symbol": "runAgent", "session": "sleek-gale-9u2w" },
+    { "task": "Claude Code stream", "symbol": "streamSdk", "session": "sleek-gale-9u2w" }
+]

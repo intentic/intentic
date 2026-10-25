@@ -3,33 +3,33 @@
 // emitted by runAgent, not here.
 import type { Options, Query, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import { within } from "@intentic/base/async";
-import { sdk } from "../../engines/claude-sdk.js";
+import { sdk } from "../../../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { FastModeState } from "@intentic/sandbox-contract/schemas/providers/fast-mode";
 import { type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
-import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
-import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
-import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "./frames/error-frames.js";
-import { isSafeguardRefusal, RefusalFork } from "./refusal-fork.js";
-import { InformationalLines } from "./informational.js";
-import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";
-import type { TurnAllowance } from "../providers/harness-credentials.js";
-import { opt } from "../../opt.js";
-import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
-import { noteRetryCause } from "./turn/turn-pulse.js";
-import { MessageTally } from "./spend/message-tally.js";
-import { promptFingerprint } from "./prompt-fingerprint.js";
-import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
-import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
-import { TaskChecklist, type TaskOutput, TaskOutputSchema } from "../../sessions/vocabulary/task-checklist.js";
-import { PageDrafts } from "../pages/page-draft.js";
-import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
-import type { ChecklistSeed } from "./task-store.js";
-import { SdkCallFrames, type ToolUseBlock } from "../../sessions/vocabulary/sdk-call-frames.js";
+import { browserServerOfTool } from "../../../browser/sessions/browser-sessions.js";
+import { localCommandText, unknownCommandName } from "../../providers/agent-commands.js";
+import type { SteeringQueue } from "../../checkpoints/agent-steering.js";
+import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "../frames/error-frames.js";
+import { isSafeguardRefusal, RefusalFork } from "../refusal-fork.js";
+import { InformationalLines } from "../informational.js";
+import { probeRoutedEndpoint, type RoutedEndpoint } from "../../providers/routed-refusal.js";
+import type { TurnAllowance } from "../../providers/harness-credentials.js";
+import { opt } from "../../../opt.js";
+import { type CacheCreationBuckets, ttlFromCacheCreation } from "../turn/prompt-cache.js";
+import { noteRetryCause } from "../turn/turn-pulse.js";
+import { MessageTally } from "../spend/message-tally.js";
+import { promptFingerprint } from "../prompt-fingerprint.js";
+import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../../subagents/subagents.js";
+import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../../tools/jobs/background-jobs.js";
+import { TaskChecklist, type TaskOutput, TaskOutputSchema } from "../../../sessions/vocabulary/task-checklist.js";
+import { PageDrafts } from "../../pages/page-draft.js";
+import { PAGE_TOOL_NAMES } from "../../pages/page-names.js";
+import type { ChecklistSeed } from "../task-store.js";
+import { SdkCallFrames, type ToolUseBlock } from "../../../sessions/vocabulary/sdk-call-frames.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.

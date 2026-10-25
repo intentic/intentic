@@ -1383,27 +1383,27 @@
         "count": 291,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/agent.ts": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts": {
         "count": 1069,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cyclomatic": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#baseOptions#cyclomatic": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#lines": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#baseOptions#lines": {
         "count": 141,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/agent.ts#permissionGate#lines": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#permissionGate#lines": {
         "count": 109,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/agent.ts#runAgent.<anonymous>#cognitive": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#runAgent.<anonymous>#cognitive": {
         "count": 40,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/agent/run/agent.ts#runAgent#lines": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-runner.ts#runAgent#lines": {
         "count": 188,
         "why": "standing when the check arrived (2026-10-16)"
     },
@@ -1415,19 +1415,19 @@
         "count": 135,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/sdk-stream.ts": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-stream.ts": {
         "count": 1007,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onResult#cyclomatic": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-stream.ts#onResult#cyclomatic": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onStreamEvent#cognitive": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-stream.ts#onStreamEvent#cognitive": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onStreamEvent#cyclomatic": {
+    "_sandbox/sandbox/src/agent/run/harness/claude-code-stream.ts#onStreamEvent#cyclomatic": {
         "count": 30,
         "why": "standing when the check arrived (2026-10-16)"
     },

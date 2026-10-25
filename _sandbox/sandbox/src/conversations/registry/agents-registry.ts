@@ -1,28 +1,16 @@
-import type {
-    AgentChecklist,
-    AgentReaction,
-    AgentStatus,
-    AgentSummary,
-    LandConflictReason,
-    LandedMessageDraft,
-    SessionOwner,
-} from "@intentic/sandbox-contract/schemas/agents";
+import type { AgentStatus, AgentSummary, LandConflictReason, LandedMessageDraft, SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
 import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
-import { deriveTitle, planParts } from "@intentic/sandbox-contract/text/title";
-import { keepWarmCap } from "@intentic/sandbox-contract/schemas/keep-warm";
+import { planParts } from "@intentic/sandbox-contract/text/title";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
 import { routingFor } from "./routing.js";
-import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../engines/failure-sentences.js";
-import { isBareConversationTitle } from "../../seams/conversation-title.js";
 import type { JournalledTurn, TurnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
-import { queueView } from "../actor/conversation-queue.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
 import { nextOf } from "../actor/conversation-next.js";
 import { limitHold, reportedFailure, switchedEntry } from "./limit-ending.js";
@@ -35,78 +23,29 @@ import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } fr
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation } from "../actor/identity-latch.js";
-import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
+import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
-import {
-    type AgentsStore,
-    type AgentTitleSource,
-    type Composition,
-    endingStatus,
-    isIsolated,
-    type Landing,
-    type PersistedAgent,
-    type Postures,
-    type Remover,
-    type RepoRecord,
-    type Social,
-    type StoredProfile,
-    type Totals,
-} from "./agents-store.js";
+import { type AgentsStore, type AgentTitleSource, type Composition, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { landingInputs, mainTreeWriters, readsMainFiles, renamedRemovers, type StandingChange } from "../land/standing-probe.js";
 import { subagentCountsOf } from "../actor/subagent-roster.js";
+import { sanitizeTitle, withHomeTitle, automaticMayWrite, openingTitle } from "./naming/title-policy.js";
+import { postures, reportedUnfinished, queueClause, describedBy, spentBy, liveReadings } from "./projection/agent-summary.js";
 
 // The persisted half of the fleet: the in-memory entry list (loaded once, written through on persisted mutations), the
 // AgentSummary each card is projected as, and the roster's subscribers. Every card-visible change broadcasts the full
 // roster as a snapshot, never a diff (system.routes relays it onto /events); what a turn is doing lives in its actor.
 
-const MAX_TITLE_LENGTH = 80;
 // How long a watched standing stands with no ref or checkout event about it: a move the feed missed shows within this.
 const STANDINGS_MAX_MS = 60_000;
-// Numeric so promoteTitle's comparison is one `<=`; an entry with no title reads as `derived`, replaceable by anything.
-const TITLE_RANK: Record<AgentTitleSource, number> = { derived: 0, model: 1, plan: 2, user: 3 };
+
 // One line cut silently to `limit`: what is stored is compared and re-sent, where a `…` would be noise. A parameter, not
 // a constant, since a title's card width and a changelog sentence's length must not share one ceiling.
 const sanitizeLine = (text: string, limit: number): string | undefined => {
     const clean = oneLine(text, limit, { ellipsis: false });
     return clean === "" ? undefined : clean;
-};
-
-const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(prompt, MAX_TITLE_LENGTH);
-
-// A home is a person's standing conversation, not the job their first message described. Derive its name wherever an
-// entry enters the fleet, including older homes with model or plan titles. A person's explicit rename always stands.
-const withHomeTitle = (entry: PersistedAgent): PersistedAgent => {
-    if (entry.identity.home !== true || entry.social.title?.source === "user") {
-        return entry;
-    }
-    const owner = entry.social.owner;
-    const who = owner?.name?.trim() || owner?.email;
-    const text = oneLine(who === undefined ? "Home" : `Home · ${who}`, MAX_TITLE_LENGTH, { ellipsis: false });
-    return { ...entry, social: { ...entry.social, title: { text, source: "derived" } } };
-};
-
-// What cannot name a conversation's work: a provider's failure sentence, a tool-call stand-in, a model's answer about
-// itself, or a bare label (a project or file name with nothing done to it). Never written by an automatic source, and a
-// stored one forfeits its rank (automaticMayWrite); the naming pass reads a stored one as no name at all
-// (agent/models/title-namer.ts). A person's own rename is the exception both ways.
-export const cannotBeAName = (title: string): boolean =>
-    isBareConversationTitle(title) || isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
-
-// Whether an automatic source may write `clean` over what is stored. A person's rename stands whatever it says, and what
-// cannot be a name is never written. Otherwise the new title must strictly outrank the stored one, whose
-// rank is forfeit when it cannot be a name, or be the one automatic write that is not a rename: the same words from the
-// same source, adding the work word they lacked (a parent's description of its child opens as a `model` name, and the
-// naming pass gives it only the board's category).
-const automaticMayWrite = (title: Social["title"], clean: string, source: AgentTitleSource, action: string | undefined): boolean => {
-    if (title?.source === "user" || cannotBeAName(clean)) {
-        return false;
-    }
-    const currentRank = title === undefined ? TITLE_RANK.derived : cannotBeAName(title.text) ? -1 : TITLE_RANK[title.source];
-    const addsAction = title !== undefined && title.text === clean && title.source === source && title.action === undefined && action !== undefined;
-    return TITLE_RANK[source] > currentRank || addsAction;
 };
 
 // One-line scrub on its own limit (MAX_NOTE_LENGTH), never the title's 80-character card width: sharing that ceiling
@@ -117,82 +56,9 @@ const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MA
 // backstop; the drafter clips on a word boundary before this is reached.
 const sanitizeSubject = (subject: string): string | undefined => sanitizeLine(subject, MAX_SUBJECT_LENGTH);
 
-// Live context readings: how full the window is, how large it is, and how long what is already cached stays cheap to
-// re-send. One clause on the summary, since no reader wants one without the others.
-const contextFill = (state: ConversationState | undefined): Pick<AgentSummary, "contextTokens" | "contextWindow" | "promptCache" | "keepWarm"> => ({
-    ...opt("contextTokens", state?.turn.contextTokens),
-    ...opt("contextWindow", state?.turn.contextWindow),
-    ...opt("promptCache", cacheClock(state)),
-    ...opt("keepWarm", state?.keepWarm),
-});
-
-// The cache's deadline, the date change, and how far a hold could reach where the daemon can keep it: its provider's
-// refresh budget, less what a live hold already spent (the same cap arming applies, cache-keepwarm.ts).
-const cacheClock = (state: ConversationState | undefined): AgentSummary["promptCache"] => {
-    const cache = state?.turn.promptCache;
-    if (state === undefined || cache === undefined) {
-        return undefined;
-    }
-    const rollsAt = nextPromptDayAt(cache.at);
-    const budget = state.turn.keepable?.budget;
-    const spent = state.keepWarm?.ended === undefined ? (state.keepWarm?.refreshes ?? 0) : 0;
-    return { ...cache, rollsAt, ...opt("keepableUntil", budget === undefined ? undefined : keepWarmCap(cache, rollsAt, budget - spent)) };
-};
-
-// Where the checklist stands, for a card rather than for a verdict: the live list while the daemon still holds it,
-// else what the last turn recorded as left open. An empty list is no list, and says so by carrying nothing.
-const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined): AgentChecklist | undefined => {
-    const live = state?.turn.checklist;
-    if (live !== undefined) {
-        return live.length === 0 ? undefined : { done: live.filter((item) => item.status === "completed").length, total: live.length };
-    }
-    // The only reading that survives a daemon restart, and only for a turn that ended with work open: `unfinished` is
-    // persisted, the runtime list is not.
-    const steps = entry.unfinished?.steps;
-    return steps === undefined ? undefined : { done: steps.total - steps.open, total: steps.total };
-};
-
-// What the actor keeps for its card between turns; nothing for a conversation this daemon has not heard from.
-const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "needs">> =>
-    state ?? {};
-
-// The per-conversation overrides of a sandbox-wide default (absent means inherit), projected together since the card's
-// menu and the chat's control read them together.
-const postures = (held: Postures): Partial<Pick<AgentSummary, "autoLand" | "limitPolicy" | "outagePolicy" | "stopPolicy" | "memoryPolicy">> => ({
-    ...opt("autoLand", held.autoLand),
-    ...opt("limitPolicy", held.limit),
-    ...opt("outagePolicy", held.outage),
-    ...opt("stopPolicy", held.stopped),
-    ...opt("memoryPolicy", held.memory),
-});
-
 // How many different emoji one conversation may carry. Bounded by kinds, not by presses: a hundred people agreeing is
 // still one chip, while a hundred different emoji is a row no card can draw.
 export const MAX_REACTION_KINDS = 24;
-
-// Flat presses grouped into the card's chips. Both orders come straight off press order — the emoji by whoever used it
-// first, the names within one by who marked it first — so a second person pressing an existing chip never moves it.
-const groupedReactions = (reactions: Social["reactions"]): AgentReaction[] | undefined => {
-    if (reactions.length === 0) {
-        return undefined;
-    }
-    const chips = new Map<string, AgentReaction>();
-    for (const { emoji, email, name, at } of reactions) {
-        const who = { email, ...(name !== undefined ? { name } : {}), at };
-        const chip = chips.get(emoji);
-        if (chip === undefined) {
-            chips.set(emoji, { emoji, by: [who] });
-        } else {
-            chip.by.push(who);
-        }
-    }
-    return [...chips.values()];
-};
-
-// What the entry says the last turn left open, except while a turn is running, where it would be noise on a card
-// already working through that very list.
-const reportedUnfinished = (entry: PersistedAgent, state: ConversationState | undefined): Partial<Pick<AgentSummary, "unfinished">> =>
-    state?.phase.kind === "running" ? {} : opt("unfinished", entry.unfinished);
 
 // Session id and account move together: a session resumes only under the account that minted it. Taken from the frame,
 // not the request; a frame naming none leaves the existing account alone rather than clearing it.
@@ -224,18 +90,6 @@ const ownerOf = (
     const parentId = parentOfActor(held.identity.startedBy ?? turn.startedBy);
     const opener = turn.owner ?? (parentId === undefined ? undefined : entryOf(parentId)?.social.owner);
     return opener === undefined ? {} : { owner: { email: opener.email, ...opt("name", opener.name), since: now } };
-};
-
-// The title a conversation opens with: the turn's own, else its prompt cut to a line the way the browser would. Either
-// is `derived`, which the naming pass replaces, unless the turn says its title is a name an agent chose (a parent's
-// description of the child it spawned), which keeps that authority; a head cut from the prompt never does.
-const openingTitle = (turn: BeginTurn): Social["title"] => {
-    const named = turn.title === undefined ? undefined : sanitizeTitle(turn.title);
-    if (named !== undefined) {
-        return { text: named, source: turn.titleSource ?? "derived" };
-    }
-    const derived = sanitizeTitle(deriveTitle(turn.prompt));
-    return derived === undefined ? undefined : { text: derived, source: "derived" };
 };
 
 // An authored title, a browser derivation, or a mid-turn rename all stand as written; a turn naming none is titled the
@@ -383,79 +237,6 @@ const restored = (entry: PersistedAgent): PersistedAgent => {
         : rest;
 };
 
-// Written onto the entry at every change, so a conversation no actor has heard of since a restart shows it too.
-const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queue"> => (queue === undefined ? {} : { queue: queueView(queue) });
-
-// What the card says the conversation is: where it works, where it came from and as whom, its name, who answers for it
-// and what people left on it, and the settings its last turn ran under.
-const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt }: PersistedAgent) => ({
-    provider: profile.provider,
-    harness: profile.harness,
-    ...(placement.kind === "worktree" ? { branch: placement.branch, ...opt("runner", placement.runner) } : {}),
-    ...opt("startIn", identity.startIn),
-    ...opt("actsAs", identity.actsAs),
-    ...opt("lastActsAs", profile.actsAs),
-    ...opt("sessionId", sessionId),
-    ...opt("origin", identity.origin),
-    ...opt("startedBy", identity.startedBy),
-    ...opt("owner", social.owner),
-    // The fence it was born with, on the summary because visibleTo() filters summaries: without it every fenced reader's
-    // board is empty, their own conversations included.
-    ...opt("areas", identity.areas),
-    ...opt("forkedFrom", identity.forkedFrom),
-    ...opt("fresh", identity.fresh),
-    ...opt("home", identity.home),
-    ...opt("title", social.title?.text),
-    ...opt("titleAction", social.title?.action),
-    ...opt("model", profile.model),
-    ...opt("effort", profile.effort),
-    ...opt("thinking", profile.thinking),
-    ...opt("fast", profile.fast),
-    ...opt("account", profile.account),
-    ...opt("landRequested", social.landRequested),
-    ...opt("reactions", groupedReactions(social.reactions)),
-    ...opt("seenAt", social.seenAt),
-    ...opt("unsentAt", social.unsentAt),
-    ...opt("archivedAt", archivedAt),
-});
-
-// Lifetime totals plus the running turn's not-yet-flushed usage, each shown once it is more than nothing, so a chip
-// appears on content rather than as a column of zeros. Subagents: the running count from the roster its actors hold,
-// the lifetime total from the entry, since the roster forgets a finished child.
-const spentBy = (totals: Totals, usage: TurnUsage, running: number) => {
-    const costUsd = totals.costUsd + usage.costUsd;
-    const inputTokens = totals.inputTokens + usage.inputTokens;
-    const outputTokens = totals.outputTokens + usage.outputTokens;
-    const toolUses = totals.toolUses + usage.toolUses;
-    const subagents = { running, total: totals.subagents + usage.subagents };
-    return {
-        ...(costUsd > 0 ? { costUsd } : {}),
-        ...(inputTokens > 0 ? { inputTokens } : {}),
-        ...(outputTokens > 0 ? { outputTokens } : {}),
-        ...(totals.turns > 0 ? { turns: totals.turns } : {}),
-        ...(toolUses > 0 ? { toolUses } : {}),
-        ...(subagents.total > 0 ? { subagents } : {}),
-    };
-};
-
-// What the actor holds for the card: the live turn's readings, the checklist, and the loop, workflow, watches and jobs
-// its pumps last published. An empty list is turned absent, indistinguishable from never having watched.
-const liveReadings = (entry: PersistedAgent, state: ConversationState | undefined) => {
-    const { loop, workflow, watches, jobs, needs } = cardReadings(state);
-    return {
-        ...contextFill(state),
-        ...opt("activity", state?.turn.activity),
-        ...opt("checklist", checklistOf(entry, state)),
-        ...(state?.phase.kind === "running" ? { startedAt: state.phase.startedAt } : {}),
-        ...opt("loop", loop),
-        ...opt("workflow", workflow),
-        ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
-        awaitingWake: state !== undefined && awaitingWake(state),
-        ...(jobs !== undefined && jobs.length > 0 ? { jobs: [...jobs] } : {}),
-        ...(needs !== undefined && needs.length > 0 ? { needs: [...needs] } : {}),
-    };
-};
-
 export interface AgentsRegistry {
     readonly init: () => Promise<void>;
     // Takes in the rows an arrival just wrote for `ids`, each read back as a boot reads it and replacing what this process
@@ -588,6 +369,7 @@ export interface FleetStore {
 
 // Milliseconds between two sends of the roster, however many changes land between them.
 export const ROSTER_WINDOW_MS = 100;
+
 // How long a change the feed reports waits before a refusing card is re-probed: long enough for a commit's burst of
 // ref and file events to arrive as one, short enough that the card moves while the person is still looking.
 export const REFUSAL_RECHECK_MS = 1_000;

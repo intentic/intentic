@@ -11,7 +11,7 @@ import { beginTurn } from "../../../../conversations/actor/conversation-actors.t
 import { KEEP_WARM_PROMPT } from "../../../../runtimes/claude/claude-warm.js";
 import type { RoutedTurn } from "../../../../seams/turn-starter.js";
 import type { AgentRequest, TurnHooks } from "../../../providers/agent-request.js";
-import type { HarnessRequest } from "../../agent.js";
+import type { HarnessRequest } from "../../harness/claude-code-runner.js";
 import { assertAgentExecution, type AgentExecutionLease } from "../../../../workload/agent-execution.js";
 import { rootExecution } from "../../../../workload/agent-execution.testing.js";
 import { armKeepWarm, autoKeepWarm, dropKeepWarm, keepableOf, keepWarmDueOf, noteKeepable, stopKeepWarm, tendKeepWarm } from "../cache-keepwarm.js";

@@ -3,7 +3,7 @@ import { serialLock } from "@intentic/base/async";
 import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import type { Services } from "../composition.js";
 import { firedBy } from "./fire/fire-sessions.js";
-import { fireAutomation } from "./scheduler.js";
+import { fireAutomation } from "./fire/automation-fire.js";
 import { perDaemon } from "./durable/daemon-memory.js";
 import { addWorkspaceEvent, consumeInbox, dropWorkspaceBacklog, type WorkspaceEntry } from "./durable/inbox-store.js";
 

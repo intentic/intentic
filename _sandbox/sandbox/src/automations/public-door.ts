@@ -9,7 +9,8 @@ import { threadKey } from "../seams/thread-key.js";
 import { fileInstallsStore, type InstallsDocument, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { doorAdmission } from "./door-admission.js";
-import { fireOnThread, type FireOutcome, type ThreadFireOptions } from "./scheduler.js";
+import { fireOnThread } from "./fire/automation-fire.js";
+import type { FireOutcome, ThreadFireOptions } from "./fire/fire-options.js";
 
 // Public door: routes an anonymous browser reaches directly (Visitor chat, bug intake), each a stranger's script tag
 // rather than an extension, driving fireAutomation directly. No credential; app.ts's auth skip names exactly these

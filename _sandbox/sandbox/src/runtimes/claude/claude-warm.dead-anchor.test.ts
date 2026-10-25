@@ -4,7 +4,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { unstubbed } from "@intentic/testing";
 import { ANCHOR_READY, type IsolationPlan, startMountAnchor } from "../../conversations/worktrees/isolation.js";
 import { AgentDomainRefusedError, createAgentExecutionService } from "../../workload/agent-execution.js";
-import type { HarnessRequest } from "../../agent/run/agent.js";
+import type { HarnessRequest } from "../../agent/run/harness/claude-code-runner.js";
 import type { RoutedTurn } from "../../seams/turn-starter.js";
 import { keepableOf } from "../../agent/run/turn/cache-keepwarm.js";
 import { claudeWarm } from "./claude-warm.js";

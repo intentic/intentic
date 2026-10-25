@@ -3,7 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { ProviderWarm, WarmReplay, WarmTurn } from "../../agent/providers/provider-module.js";
 import type { HarnessCredential, TurnHooks, TurnSpec } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
-import type { HarnessRequest } from "../../agent/run/agent.js";
+import type { HarnessRequest } from "../../agent/run/harness/claude-code-runner.js";
 import type { Services } from "../../composition.js";
 import type { IsolationAnchor } from "../../conversations/worktrees/isolation.js";
 import { opt } from "../../opt.js";
@@ -13,7 +13,7 @@ import { agentExecutionScope, assertAgentExecution, requireRootAgentExecution, t
 
 // Keeping a Claude conversation's prompt cache warm: one forked, unsaved request on the subscription account that served
 // the last turn, carrying that turn's prefix (system prompt, tools, model, reasoning) and a one-word prompt. The Claude
-// Code loop turns `policy.keepWarm` into the refresh's own options (agent/run/agent.ts keepWarmOptions).
+// Code loop turns `policy.keepWarm` into the refresh's own options (agent/run/harness/claude-code-runner.ts keepWarmOptions).
 //
 // A refresh resends the whole session the CLI keeps on disk, which holds every value as it really is (the gateway gives
 // the runtime back what it masked), so it is routed exactly as a turn is: behind the privacy shield's gateway while the

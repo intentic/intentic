@@ -9,7 +9,8 @@ import { WEBCHAT_PROVIDER } from "../../webchat/webchat-config.js";
 import { outboxKeyOf } from "../../webchat/webchat-outbox.js";
 import type { AutomationRecord } from "../automations-store.js";
 import { answeringWake, bootAutomations, daemonOn, hangingWake } from "./restart.testing.js";
-import { automationIdle, createAutomationsScheduler, fireAutomation, recordHeldWake, runHeldWake } from "../scheduler.js";
+import { automationIdle, fireAutomation, recordHeldWake, runHeldWake } from "../fire/automation-fire.js";
+import { createAutomationsScheduler } from "../scheduler.js";
 
 // Restart durability of fires the scheduler admitted (../scheduler.ts, fire-admission.ts, ../fire-resume.ts): each test builds
 // what a daemon had at the moment it died, kills it, and boots a second daemon on the same history with nothing of the

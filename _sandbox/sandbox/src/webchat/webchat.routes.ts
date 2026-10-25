@@ -12,7 +12,7 @@ import { streamSSE } from "hono/streaming";
 import type { z } from "zod";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../automations/public-door.js";
-import { PAYLOAD_MAX } from "../automations/scheduler.js";
+import { PAYLOAD_MAX } from "../automations/fire/run-fire.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
