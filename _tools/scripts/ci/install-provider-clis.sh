@@ -34,19 +34,32 @@ pin_from() {
     printf '%s' "${found}"
 }
 
-# Three tries, because a download that fails is not always a failure npm reports as one. OpenCode 2 ships each build as
-# an OPTIONAL dependency of about 200 MB, and npm drops an optional one whose download fails without saying why; its
-# postinstall then finds no build for this runner and fails the step (verify-providers on radarsu-worker-1, 2026-10-20:
-# three of the four linux-x64 tarballs never arrived, and the musl one that did does not run on glibc). Another try
-# fetches what is missing; a real refusal (a pin that does not exist) fails all three the same way.
+# Three tries for registry downloads. OpenCode's platform build is required explicitly: npm can silently drop a failed
+# optional download, leaving postinstall to report only "Failed to install OpenCode". These jobs run on Debian/glibc;
+# require the build postinstall prefers on this CPU, at the launcher's exact version.
 install_npm() {
-    local name="$1" spec="$2" try
+    local name="$1" spec="$2" try platform
+    local -a extra=()
     if [ "${latest}" = "1" ]; then
         spec="${name}@latest"
     fi
+    if [ "${name}" = "@opencode/cli" ]; then
+        if [ "${latest}" = "1" ]; then
+            spec="${name}@$(npm view "${spec}" version)"
+        fi
+        case "$(node -p process.arch)" in
+            x64)
+                platform=linux-x64-baseline
+                if grep -qw avx2 /proc/cpuinfo; then platform=linux-x64; fi
+                ;;
+            arm64) platform=linux-arm64 ;;
+            *) echo "install-provider-clis: unsupported OpenCode architecture" >&2; return 1 ;;
+        esac
+        extra=(--omit=optional "${name}-${platform}@${spec##*@}")
+    fi
     for try in 1 2 3; do
         echo "==> ${spec}$([ "${try}" -gt 1 ] && echo " (try ${try} of 3)")"
-        if npm install -g "${spec}"; then
+        if npm install -g --foreground-scripts "${extra[@]}" "${spec}"; then
             return 0
         fi
         [ "${try}" -lt 3 ] && sleep $((try * 15))
@@ -57,8 +70,7 @@ install_npm() {
 
 install_npm "@openai/codex" "$(pin_from "${packs}/codex.Dockerfile" '@openai/codex@[0-9][0-9.]*')"
 install_npm "@opencode/cli" "$(pin_from "${packs}/opencode.Dockerfile" '@opencode/cli@[0-9][0-9.]*')"
-# OpenCode 2 fetches every build for the runner's OS and CPU (about 200 MB each) and links the one this runner uses into its bin; the
-# rest are dropped, as the pack does, so a warm runner's cache does not carry four copies.
+# Postinstall links the platform build into the launcher's bin; drop its source package, as the pack does.
 rm -rf "$(npm root -g)"/@opencode/cli/node_modules/@opencode/cli-* "$(npm root -g)"/@opencode/cli-*
 
 # @cursor/sdk is a MODULE the daemon imports, not a CLI on PATH, and its licence grants no redistribution, so it
