@@ -1,7 +1,6 @@
 import type { IconName } from "@intentic/ui";
 import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import { sessionCategory } from "../../../app/sessionCategory";
 import { type StandingChip, standingChip } from "../../../models/agent-status/agentStatus-chips";
 import { type TileRim, tileRim } from "../../../models/agent-status/agentStatus-lanes";
 import { activityIcon, activityLine, agentStatusMeta, cornerInk } from "../../../models/agent-status/agentStatus-meta";
@@ -16,7 +15,7 @@ import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import { statusIcon, statusLabel } from "../models/catalog";
 import type { Conversation } from "../../../models/conversations/session/conversation";
-import { isArchived, originOf, tabLabel } from "./tabs";
+import { isArchived, originOf } from "./tabs";
 import { t } from "@intentic/ui/i18n";
 
 // Everything a rail row is handed that isn't a primitive, derived in one place per card. Kept apart from the list
@@ -59,23 +58,21 @@ const statusOf = (entry: OpenChat): CardView[`status`] => {
     return { name: icon.name, spin: icon.spin, class: `text-xs ${cornerInk(icon.class)}`, "aria-label": statusLabel(status) };
 };
 
-// Model label as the pickers show it; falls back to the provider name when no model is recorded yet. `activeModel` is
-// what last ran, as its runtime reported it; `sentModel` what the last turn went out under, for a runtime that reports
-// none; `model` is what the composer would send next, which is only the answer before anything was sent: a pick made
-// while a reply runs applies from the next message, so the card must not claim it answers the one in flight.
-const modelOf = (entry: OpenChat): string | undefined => {
+// Model label as the pickers show it, undefined while no model is recorded yet. `activeModel` is what last ran, as its
+// runtime reported it; `sentModel` what the last turn went out under, for a runtime that reports none; `model` is what
+// the composer would send next, which is only the answer before anything was sent: a pick made while a reply runs
+// applies from the next message, so the card must not claim it answers the one in flight.
+const recordedModel = (entry: OpenChat): string | undefined => {
     const { agent, conversation } = entry;
     const provider = agent?.provider ?? conversation.selection.provider.value;
     const model = agent?.model ?? conversation.activeModel.value ?? conversation.selection.state.value.sentModel ?? conversation.selection.model.value;
-    if (model !== null && model !== ``) {
-        return modelLabelFor(provider, model);
-    }
-    return sessionCategory(tabLabel(conversation), agent?.titleAction) === undefined ? undefined : providerLabel(provider);
+    return model !== null && model !== `` ? modelLabelFor(provider, model) : undefined;
 };
 
-// What tells a chat apart from another of the same title: the model it runs on, else at least its provider.
+// What tells a chat apart from another of the same title: the model it runs on, else at least its provider, since the
+// identity tile wears no provider's mark.
 export const modelOrProvider = (entry: OpenChat): string =>
-    modelOf(entry) ?? providerLabel(entry.agent?.provider ?? entry.conversation.selection.provider.value);
+    recordedModel(entry) ?? providerLabel(entry.agent?.provider ?? entry.conversation.selection.provider.value);
 
 // Live-line text prefers the registry's activity frames (richer); falls back to the conversation's own streaming state
 // so a working card stays findable even when the fleet join is cold.
@@ -111,7 +108,7 @@ const hasMeta = (entry: OpenChat, reach: ReachLine | undefined): boolean =>
     (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
     originOf(entry.conversation) !== undefined ||
     isArchived(entry.conversation) ||
-    modelOf(entry) !== undefined;
+    recordedModel(entry) !== undefined;
 
 export interface CardViews {
     /** This card's view model, the held one when its fields are value-equal to the last pass. */
@@ -143,7 +140,8 @@ export const createCardViews = (): CardViews => {
                 rim: entry.agent === undefined ? undefined : tileRim(entry.agent, { quiet: false }),
                 live: liveOf(entry),
                 snippet,
-                model: modelOf(entry),
+                // A filed agent always names what it runs on, its provider at least; an unfiled draft only a model picked.
+                model: recordedModel(entry) ?? (entry.agent === undefined ? undefined : providerLabel(entry.agent.provider)),
                 cooling: entry.agent === undefined ? undefined : cacheCooling(entry.agent, now),
                 warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
                 stamps,

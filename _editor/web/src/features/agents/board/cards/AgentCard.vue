@@ -49,8 +49,9 @@ import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // user to exactly this place for exactly this refusal.
 import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import { sessionCategory } from "../../../../app/sessionCategory";
+import { sessionKind, sessionModule } from "../../../../models/agent-status/sessionKind";
 import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
+import SessionTopic from "../../../../parts/capabilities/SessionTopic.vue";
 import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
@@ -144,8 +145,8 @@ const parent = computed(() => parentOf(props.agent.startedBy));
 // Whether this card's archive or restore moves its children with it, as a run's takes its steps.
 const takesFamily = computed(() => (props.family ?? 0) > 0);
 const meta = computed(() => agentStandingMeta(props.agent));
-// Identity tile's category, undefined for an unreadable title; read here too since the tooltip is this card's.
-const category = computed(() => sessionCategory(props.agent.title, props.agent.titleAction));
+// What the identity tile draws, read here too since the tooltip over it is this card's.
+const kind = computed(() => sessionKind(props.agent));
 const lane = computed(() => props.placed ?? laneOf(props.agent));
 // Sandbox chip contents, or nothing when this is the box the app is already pointed at.
 // Read live from the roster rather than passed in, since the owner can rename or re-image a sandbox at any time.
@@ -327,7 +328,7 @@ const relanding = computed(() => props.pending === `reland` || (relandOffered.va
 const costShown = computed(() => !maker.value && props.agent.costUsd !== undefined);
 const diffShown = computed(() => !maker.value && props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0));
 const stats = computed(() => costShown.value || diffShown.value);
-// THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
+// THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The tile's glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
 // a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
 // `tileRim` draws one reading on it: the agent's own checklist, plus a segment for the session's ending, which is the
@@ -335,20 +336,18 @@ const stats = computed(() => costShown.value || diffShown.value);
 // unfinished work on every finished card, and "$3.26 of what?" has no denominator to draw against.
 // Plain ink on a receipt, where the reading is history rather than a live gauge.
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
-// One hover for a tile carrying the category as well, since two nested tooltips would raise two boxes over the same
-// 28 pixels. Context fullness is said here and nowhere else on the card. Either half can be missing: a title the
-// category reading declines still has its readings, and a fresh agent has a category and nothing measured yet. A
-// reading not taken leaves its row empty and the card drops it.
+// One hover for the tile, since two nested tooltips would raise two boxes over the same 28 pixels: the kind it draws
+// in words, the package it is tinted by, its working children, and its readings. Context fullness is said here and
+// nowhere else on the card. A reading not taken leaves its row empty and the card drops it.
 const tileHint = computed((): TooltipValue => {
-    const type = category.value?.type;
     const list = props.agent.checklist;
     const percent = contextPct(props.agent.contextTokens, props.agent.contextWindow);
-    if (list === undefined && percent === undefined) {
-        return type;
-    }
+    const running = props.agent.subagents?.running ?? 0;
     return {
-        title: type ?? t(`agents.agentCard.progress`),
+        title: kind.value.label,
         rows: [
+            { label: t(`agents.sessionKind.package`), value: sessionModule(props.agent)?.name ?? `` },
+            { label: t(`agents.sessionKind.subagents`), value: running === 0 ? `` : t(`agents.sessionKind.working`, { count: running }, running) },
             { label: t(`agents.agentCard.steps`), value: list === undefined ? `` : `${Math.min(list.done, list.total)}/${list.total}` },
             { label: t(`agents.agentCard.context`), value: percent === undefined ? `` : `${percent}%` },
         ],
@@ -389,17 +388,13 @@ const openWarm = (event: MouseEvent): void => {
     warmAnchor.value = event.currentTarget as HTMLElement;
     warmOpen.value = true;
 };
-// Says which provider runs it exactly once: while the tile wears the provider mark this needs no floor.
-// Once the category glyph replaces that mark, a card with no recorded model would otherwise never say the provider at
-// all.
+// Says which provider runs it exactly once: the tile wears no provider's mark, so a card with no recorded model names
+// at least the provider.
 const model = computed(() => {
     if (maker.value) {
         return undefined;
     }
-    if (props.agent.model !== undefined) {
-        return modelLabelFor(props.agent.provider, props.agent.model);
-    }
-    return category.value === undefined ? undefined : providerLabel(props.agent.provider);
+    return props.agent.model === undefined ? providerLabel(props.agent.provider) : modelLabelFor(props.agent.provider, props.agent.model);
 });
 // Which login actually served this turn (from the turn's own session frame), not the composer's current pick, which may
 // differ after a mid-chat switch.
@@ -608,46 +603,50 @@ const grab = (event: PointerEvent): void => {
              wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
              letter or two beside a long chip and the press seats. -->
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <!-- Kind-of-work glyph tinted by the title's category (sessionCategory: audit=blue magnifier, redesign=purple arrows, new=green plus, fix=red wrench). -->
+            <!-- The session's kind as a glyph, tinted by the package it works in (sessionKind.ts); a dot for the everyday single agent. -->
             <span v-tooltip.top="tileHint" class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
                 <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="28" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
-                <IdentityTile :title="agent.title" :action="agent.titleAction" :provider="agent.provider" class="h-5.5 w-5.5 text-xs" />
+                <IdentityTile :session="agent" class="h-5.5 w-5.5 text-xs" />
                 <UnsentMark v-if="agent.unsent && !draftCorner" badge :preview="unsentWords" :at="agent.draftAt" />
             </span>
-            <input
-                v-if="edit.editing"
-                v-model="edit.draft"
-                type="text"
-                maxlength="80"
-                :aria-label="t(`agents.words.agentTitle`)"
-                class="ui-field-box ui-field-inline min-w-0 grow basis-28 select-text px-1 font-semibold"
-                :class="live ? 'text-sm' : 'text-xs'"
-                @click.stop
-                @keydown.enter.stop.prevent="edit.commit()"
-                @keydown.esc.stop.prevent="edit.cancel()"
-                @blur="edit.blurCommit()"
-                @vue:mounted="edit.focusInput"
-            />
-            <template v-else>
-                <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
-                <!-- Its whole text in a hover, only while it is cut short. -->
-                <button
-                    type="button"
-                    v-tooltip.top.overflow="displayTitle"
-                    :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-                    class="min-w-0 grow basis-28 rounded-sm text-left font-semibold text-content"
-                    :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
-                    @click.stop="openCard"
-                    @dblclick.stop="reviewCard"
-                >
-                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
-                        run.text
-                    }}</span>
-                    <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
-                    <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
-                </button>
-            </template>
+            <!-- The topic over the title (SessionTopic): what the work is about and the package it is in, in the tile's hue. -->
+            <span class="flex min-w-0 grow basis-28 flex-col gap-0.5">
+                <SessionTopic :session="agent" />
+                <input
+                    v-if="edit.editing"
+                    v-model="edit.draft"
+                    type="text"
+                    maxlength="80"
+                    :aria-label="t(`agents.words.agentTitle`)"
+                    class="ui-field-box ui-field-inline min-w-0 select-text px-1 font-semibold"
+                    :class="live ? 'text-sm' : 'text-xs'"
+                    @click.stop
+                    @keydown.enter.stop.prevent="edit.commit()"
+                    @keydown.esc.stop.prevent="edit.cancel()"
+                    @blur="edit.blurCommit()"
+                    @vue:mounted="edit.focusInput"
+                />
+                <template v-else>
+                    <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
+                    <!-- Its whole text in a hover, only while it is cut short. -->
+                    <button
+                        type="button"
+                        v-tooltip.top.overflow="displayTitle"
+                        :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
+                        class="min-w-0 rounded-sm text-left font-semibold text-content"
+                        :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
+                        @click.stop="openCard"
+                        @dblclick.stop="reviewCard"
+                    >
+                        <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                            run.text
+                        }}</span>
+                        <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
+                        <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
+                    </button>
+                </template>
+            </span>
             <span class="ml-auto flex shrink-0 items-center gap-2.5">
                 <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a
                      phone. Clustered tight where a pointer is fine; a touch target is 44px, so a coarse one keeps the gap. -->

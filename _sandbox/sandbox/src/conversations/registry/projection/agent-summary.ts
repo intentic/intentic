@@ -102,6 +102,7 @@ export const describedBy = ({ placement, identity, profile, social, sessionId, a
     ...opt("home", identity.home),
     ...opt("title", social.title?.text),
     ...opt("titleAction", social.title?.action),
+    ...opt("titleTopic", social.title?.topic),
     ...opt("model", profile.model),
     ...opt("effort", profile.effort),
     ...opt("thinking", profile.thinking),

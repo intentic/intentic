@@ -118,7 +118,6 @@
             "machine": "Machine",
             "newActivity": "New activity",
             "notNewMessage": "Not a new message",
-            "progress": "Progress",
             "renameAgent": "Rename agent",
             "reopens": "Reopens",
             "resendsAt": "Resends",
@@ -1008,6 +1007,21 @@
                 "ask": "Fresh session"
             },
             "menuItem": "Fresh session: {kind}"
+        },
+        "sessionKind": {
+            "home": "Home conversation",
+            "automation": "Automation · {source}",
+            "fixer": "Fixing main's checks",
+            "review": "Review session",
+            "test": "Test pass",
+            "ask": "Fresh session on finished work",
+            "fork": "Fork",
+            "orchestrator": "Runs subagents",
+            "child": "Subagent",
+            "solo": "Single agent",
+            "package": "Package",
+            "subagents": "Subagents",
+            "working": "{count} working"
         }
     },
     "app": {

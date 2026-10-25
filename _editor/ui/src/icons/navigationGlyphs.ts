@@ -68,6 +68,10 @@ export const NAVIGATION_GLYPHS = {
     screen: {
         outline: `M4 3h16l2 2v10l-2 2H4l-2-2V5Z M12 17v4 M7 21h10 M6 7h8v6H6Z`,
     },
+    // A house under a pitched roof, its door a pointed arch: a person's own long-running conversation.
+    home: {
+        outline: `M3 11 12 3l9 8 M5 9v10l2 2h10l2-2V9 M10 21v-5l2-2 2 2v5`,
+    },
     // Two staggered guardian faces: helpers share the Agents tile's face and pointed crown.
     subagents: {
         outline: `M3 10h3l2-3 2 3h3l2 2v6l-3 3H5l-3-3v-6Z M6 15h1 M10 15h1 M12 6h2l2-3 2 3h2l2 2v6l-3 3h-1 M18 11h1`,

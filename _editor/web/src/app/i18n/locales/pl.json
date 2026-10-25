@@ -118,7 +118,6 @@
             "machine": "Maszyna",
             "newActivity": "Nowa aktywność",
             "notNewMessage": "To nie nowa wiadomość",
-            "progress": "Postęp",
             "renameAgent": "Zmień nazwę agenta",
             "reopens": "Wraca",
             "resendsAt": "Wysyła",
@@ -1008,6 +1007,21 @@
                 "ask": "Świeża sesja"
             },
             "menuItem": "Świeża sesja: {kind}"
+        },
+        "sessionKind": {
+            "home": "Rozmowa domowa",
+            "automation": "Automatyzacja · {source}",
+            "fixer": "Naprawia testy na main",
+            "review": "Sesja przeglądu",
+            "test": "Przebieg testów",
+            "ask": "Nowa sesja na gotowej pracy",
+            "fork": "Rozgałęzienie",
+            "orchestrator": "Uruchamia subagentów",
+            "child": "Subagent",
+            "solo": "Pojedynczy agent",
+            "package": "Pakiet",
+            "subagents": "Subagenci",
+            "working": "{count} pracuje"
         }
     },
     "app": {

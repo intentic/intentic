@@ -118,7 +118,6 @@
             "machine": "Maschine",
             "newActivity": "Neue Aktivität",
             "notNewMessage": "Keine neue Nachricht",
-            "progress": "Fortschritt",
             "renameAgent": "Agent umbenennen",
             "reopens": "Öffnet wieder",
             "resendsAt": "Sendet",
@@ -1008,6 +1007,21 @@
                 "ask": "Frische Sitzung"
             },
             "menuItem": "Frische Sitzung: {kind}"
+        },
+        "sessionKind": {
+            "home": "Home-Unterhaltung",
+            "automation": "Automatisierung · {source}",
+            "fixer": "Repariert die Checks auf main",
+            "review": "Review-Sitzung",
+            "test": "Testdurchlauf",
+            "ask": "Neue Sitzung auf fertiger Arbeit",
+            "fork": "Abzweigung",
+            "orchestrator": "Startet Subagenten",
+            "child": "Subagent",
+            "solo": "Einzelner Agent",
+            "package": "Paket",
+            "subagents": "Subagenten",
+            "working": "{count} aktiv"
         }
     },
     "app": {

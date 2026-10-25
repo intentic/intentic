@@ -10,7 +10,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
 import { startAgent } from "../../../../models/fleet/agentActions";
-import { EXAMPLE_DIFF, EXAMPLE_FILES } from "./exampleRun";
+import { EXAMPLE_DIFF, EXAMPLE_FILES, EXAMPLE_SESSION } from "./exampleRun";
 
 const t = useT();
 
@@ -33,7 +33,7 @@ const startOwn = (): void => {
         @click="open = true"
     >
         <span class="flex items-center gap-2.5">
-            <IdentityTile :title="t(`agents.exampleCard.title`)" action="new" provider="claude" class="h-7 w-7 text-xs" />
+            <IdentityTile :session="EXAMPLE_SESSION" class="h-7 w-7 text-xs" />
             <span class="min-w-0 flex-1 text-xs font-semibold leading-snug text-content">{{ t(`agents.exampleCard.title`) }}</span>
         </span>
         <!-- The tag leads the facts line rather than the title's, so the title reads whole at a lane's width. -->

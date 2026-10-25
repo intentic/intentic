@@ -8,7 +8,8 @@ import { headSha } from "../../git/changes/changes.js";
 import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "../../git/changes/changes-porcelain.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
-import { agentRepoChanges, anchorOf } from "./agent-changes.js";
+import { agentRepoChanges, agentRepoModules, anchorOf } from "./agent-changes.js";
+import { type DiffStat, diffStatOf, sumDiffStats } from "./change-modules.js";
 import { branchSha, mainBranchOf } from "../../git/agent-refs.js";
 import { withConversationTrailer } from "../../git-identity.js";
 import { writeChangesPatch, writePatch } from "./patch/land-patch.js";
@@ -39,7 +40,7 @@ export interface LandOutcome extends LandResult {
     readonly repos: RepoRecord[];
     // The parent conversation whose checkout the work was written into instead of the main tree (land-target.ts).
     readonly into?: string;
-    readonly diff: { files: number; insertions: number; deletions: number };
+    readonly diff: DiffStat;
     // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.
     readonly adjudicated: boolean;
     // Repos whose lockfile could not be regenerated for a manifest the delta changed; the land went ahead without it.
@@ -410,15 +411,11 @@ const tipOf = async ({ worktrees, entry, git }: LandRun, repo: string, main: str
     return { tip: (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim(), refDir: worktree };
 };
 
-// Totalled by the review's own reader, so the card's count can't disagree with the review.
-const cumulativeDiff = async ({ worktrees, entry, git }: LandRun, composed: RepoRecord): Promise<LandOutcome["diff"]> => {
-    const diff = { files: 0, insertions: 0, deletions: 0 };
-    for (const change of await agentRepoChanges(worktrees, entry, composed, "cumulative", git)) {
-        diff.files += 1;
-        diff.insertions += change.additions ?? 0;
-        diff.deletions += change.deletions ?? 0;
-    }
-    return diff;
+// Totalled by the review's own reader, so the card's count can't disagree with the review; its packages are bucketed
+// by the review's own rule, off the tree the review reads them from.
+const cumulativeDiff = async ({ worktrees, entry, git }: LandRun, composed: RepoRecord): Promise<DiffStat> => {
+    const changes = await agentRepoChanges(worktrees, entry, composed, "cumulative", git);
+    return diffStatOf(changes, changes.length === 0 ? [] : await agentRepoModules(worktrees, entry, composed.repo), composed.repo);
 };
 
 // `measure`: an outstanding delta stays on the branch; an already-landed match still advances. A delta that now
@@ -599,12 +596,7 @@ export const landAgent = async (
                 for (const composed of entry.placement.repos) {
                     plannings.push(await planRepo(run, composed));
                 }
-                const diff = { files: 0, insertions: 0, deletions: 0 };
-                for (const planning of plannings) {
-                    diff.files += planning.diff.files;
-                    diff.insertions += planning.diff.insertions;
-                    diff.deletions += planning.diff.deletions;
-                }
+                const diff = sumDiffStats(plannings.map((planning) => planning.diff));
                 const changed = plannings.some((planning) => planning.changed);
                 // Only where nothing else moved: a land that also wrote is plainly `changed`, and records its tips anyway.
                 const advanced = !changed && plannings.some((planning) => planning.advanced === true) ? { advanced: true as const } : {};

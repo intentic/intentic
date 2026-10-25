@@ -8,6 +8,7 @@ import { focusComposer } from "../../../models/conversations/tabs/useChat-tabs";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { useT } from "@intentic/ui/i18n";
 import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
+import { useAgents } from "../../../models/fleet/useAgents";
 import { contextPct } from "../../../models/agent-status/agentStatus-meta";
 import { lastWords } from "./lastWords";
 
@@ -21,7 +22,8 @@ import { lastWords } from "./lastWords";
 const t = useT();
 
 const router = useRouter();
-const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
+const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage } = useChat();
+const { agentById } = useAgents();
 
 const open = ref(false);
 // Whether the box has ever opened: its closing animation must not play on a box that starts closed.
@@ -31,6 +33,8 @@ const slot = useTemplateRef(`slot`);
 const pill = useTemplateRef(`pill`);
 
 const title = computed(() => active.value.title.value ?? undefined);
+// The agent behind the chat, whose kind and package the tile draws as its board card does; none for an unsent chat.
+const session = computed(() => agentById(active.value.conversationId));
 // Where the conversation stands, for the open pad's header: the last words said in it, by either side.
 const said = computed(() => lastWords(messages.value));
 
@@ -207,7 +211,7 @@ const restingLine = computed(() => {
                     @click="onPress"
                 >
                     <!-- The board's identity mark (AgentCard), as a plain filled face: one chat wears one face wherever it is named. -->
-                    <IdentityTile :title="title" :provider="provider" class="h-6 w-6 text-xs" />
+                    <IdentityTile :session="session" class="h-6 w-6 text-xs" />
                     <span
                         class="min-w-0 truncate text-2xs"
                         :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
@@ -241,7 +245,7 @@ const restingLine = computed(() => {
                     @click="openChat"
                 >
                     <span class="flex w-full min-w-0 items-center gap-2">
-                        <IdentityTile :title="title" :provider="provider" class="h-6 w-6 text-2xs" />
+                        <IdentityTile :session="session" class="h-6 w-6 text-2xs" />
                         <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title ?? t(`chat.words.newChat`) }}</span>
                         <span v-if="streaming" class="inline-flex shrink-0 items-center gap-1.5 text-2xs text-link">
                             <span class="ui-freshness-dot h-1.5 w-1.5 rounded-full" aria-hidden="true"></span>{{ t(`ui.status.working`) }}

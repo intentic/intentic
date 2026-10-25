@@ -92,7 +92,7 @@ const closeRow = (event: Event): void => {
     <RailCard
         :data-chat-tab="props.conversation.conversationId"
         :title="tabLabel(props.conversation)"
-        :title-action="props.agent?.titleAction"
+        :session="props.agent"
         :needle="props.needle"
         :match-case="props.matchCase"
         :provider="props.agent?.provider ?? props.conversation.selection.provider.value"

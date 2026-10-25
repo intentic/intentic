@@ -118,7 +118,6 @@
             "machine": "Machine",
             "newActivity": "Nouvelle activité",
             "notNewMessage": "Pas un nouveau message",
-            "progress": "Progression",
             "renameAgent": "Renommer l'agent",
             "reopens": "Rouvre",
             "resendsAt": "Renvoi",
@@ -1008,6 +1007,21 @@
                 "ask": "Nouvelle session"
             },
             "menuItem": "Nouvelle session : {kind}"
+        },
+        "sessionKind": {
+            "home": "Conversation d'accueil",
+            "automation": "Automatisation · {source}",
+            "fixer": "Répare les vérifications de main",
+            "review": "Session de revue",
+            "test": "Passe de tests",
+            "ask": "Nouvelle session sur un travail terminé",
+            "fork": "Embranchement",
+            "orchestrator": "Lance des sous-agents",
+            "child": "Sous-agent",
+            "solo": "Agent unique",
+            "package": "Paquet",
+            "subagents": "Sous-agents",
+            "working": "{count} en cours"
         }
     },
     "app": {

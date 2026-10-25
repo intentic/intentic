@@ -247,7 +247,13 @@ export const AgentSummarySchema = z.object({
         .string()
         .optional()
         .describe(
-            "One word for the kind of work the naming pass read in it (fix, audit, redesign). Never part of the displayed name: a board tints and glyphs a card by it. Absent for a title nothing named an action for.",
+            "One word for the kind of work the naming pass read in it (fix, audit, redesign). Never part of the displayed name. Absent for a title nothing named an action for.",
+        ),
+    titleTopic: z
+        .string()
+        .optional()
+        .describe(
+            "A few words for the part of the product the work is about (Devices view, Sandbox API), as the naming pass read it. Never part of the displayed name: a board shows it as a label above the title. A rename keeps it. Absent for a conversation no naming pass has read.",
         ),
     status: AgentStatusSchema.describe(
         "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn; landing means its work is being carried into the workspace right now, and nothing may act on its branch until that settles.",
@@ -554,6 +560,13 @@ export const AgentSummarySchema = z.object({
         })
         .optional()
         .describe("Everything it has written, measured from where it started. Independent of how much has been merged."),
+    // Read off the same changes `diff` counts, so the two can't disagree.
+    modules: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "The packages its changes fall in, most-changed first, at most three: each the folder name of the nearest manifest (package.json, Cargo.toml, pyproject.toml, go.mod) above a changed file, or the repository's name for a file outside every package. Absent until it has changed something.",
+        ),
     // How much of what this agent landed is still in the working tree, since a discard after landing is invisible to
     // commit-based readings; absent is the steady state and carries no line.
     landedPresence: z

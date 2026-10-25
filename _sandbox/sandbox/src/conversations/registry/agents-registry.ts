@@ -27,6 +27,7 @@ import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import { type AgentsStore, type AgentTitleSource, type Composition, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
+import { countsOf, rankedModules } from "../land/change-modules.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { landingInputs, mainTreeWriters, readsMainFiles, renamedRemovers, type StandingChange } from "../land/standing-probe.js";
@@ -264,8 +265,8 @@ export interface AgentsRegistry {
     // Sets the title per the source ranking (AgentTitleSource): a rename always lands, an automatic source only moves
     // it up, or adds the action its own words lacked. A rejected promotion still returns the entry's current summary,
     // not `undefined`. `action` is the naming pass's one work word, stored beside the title and never shown; any other
-    // source clears it.
-    readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string) => Promise<AgentSummary | undefined>;
+    // source clears it. `topic` is the label the board shows above the title; a title that names none keeps the old one.
+    readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string, topic?: string) => Promise<AgentSummary | undefined>;
     // Records what the landed work did, as a commit subject; no ranking, the newest land simply describes the most
     // current claim. Broadcast so the Changes panel picks it up immediately.
     readonly setLandedSubject: (
@@ -516,7 +517,7 @@ export const createFleet = (
 
     // The one place the title-rank comparison is applied, so every caller agrees on who may rename what. A rename
     // always lands, even a second one; anything else must strictly outrank what's there, or only add its action.
-    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource, action?: string): boolean => {
+    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource, action?: string, topic?: string): boolean => {
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
         if (entry === undefined || clean === undefined) {
@@ -529,11 +530,14 @@ export const createFleet = (
         if (source !== "user" && !automaticMayWrite(held, clean, source, action)) {
             return false;
         }
-        if (held?.text === clean && held.source === source && held.action === action) {
+        // A new title rewords the work far more often than it moves it (a rename, a plan's heading), so one that names no
+        // topic keeps the one it had.
+        const label = topic ?? held?.topic;
+        if (held?.text === clean && held.source === source && held.action === action && held.topic === label) {
             return false;
         }
         // A title from a source that names no action loses the previous one's category.
-        replace({ ...entry, social: { ...entry.social, title: { text: clean, source, ...opt("action", action) } } });
+        replace({ ...entry, social: { ...entry.social, title: { text: clean, source, ...opt("action", action), ...opt("topic", label) } } });
         return true;
     };
 
@@ -749,7 +753,8 @@ export const createFleet = (
             ...opt("landedMessageDraft", messageDrafts.get(entry.id)),
             // The finished sentence itself, the moment it exists, for the Changes panel's 'From' chip.
             ...opt("landedMessage", entry.landing.message),
-            ...opt("diff", entry.landing.diff),
+            ...opt("diff", countsOf(entry.landing.diff)),
+            ...opt("modules", rankedModules(entry.landing.diff?.modules)),
             // Present only when some of what this agent landed is no longer in the tree; absence says nothing.
             ...opt("landedPresence", presenceOnCard(presences.of(entry.id), entryOf)),
             // Stands until a land runs to a verdict, whatever turns run meanwhile.
@@ -926,11 +931,11 @@ export const createFleet = (
             broadcast();
             return touched.map((entry) => entry.id);
         },
-        setTitle: async (id, title, source, action) => {
+        setTitle: async (id, title, source, action, topic) => {
             if (entryOf(id) === undefined || sanitizeTitle(title) === undefined) {
                 return undefined;
             }
-            if (promoteTitle(id, title, source, action)) {
+            if (promoteTitle(id, title, source, action, topic)) {
                 await persist();
                 broadcast();
             }

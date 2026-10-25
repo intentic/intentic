@@ -1,22 +1,10 @@
 import type { WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
+import { moduleOf } from "@intentic/sandbox-contract/models/module-of";
 
 // Groups a change list by module (longest matching dir wins) instead of by path, so a review reads by system area.
-// Shared by the Changes panel and the fleet's agent review so the two never define buckets differently.
-
-// Longest matching module dir wins, so a nested package claims its own files before its parent.
-// dir "" claims what nothing deeper claims; the trailing separator keeps `_apps/webx` from matching `_editor/web`.
-export const moduleOf = (path: string, modules: readonly WorkspaceModule[]): WorkspaceModule | undefined => {
-    let best: WorkspaceModule | undefined;
-    for (const candidate of modules) {
-        if (candidate.dir !== `` && !path.startsWith(`${candidate.dir}/`)) {
-            continue;
-        }
-        if (best === undefined || candidate.dir.length > best.dir.length) {
-            best = candidate;
-        }
-    }
-    return best;
-};
+// Shared by the Changes panel and the fleet's agent review so the two never define buckets differently; the rule
+// itself lives in the contract (moduleOf), where the sandbox names a card's packages by it too.
+export { moduleOf };
 
 export interface ModuleGroup<T> {
     readonly key: string;

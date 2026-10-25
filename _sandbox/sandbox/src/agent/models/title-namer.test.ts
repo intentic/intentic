@@ -24,7 +24,7 @@ jest.mock("./role-model.js", () => ({
     },
     roleModelIsSet: async () => modelSet(),
 }));
-const { cleanSessionTitle, nameAgentTitle: nameAgentTitleInExecution, splitTitleAction } = await import("./title-namer.js");
+const { cleanSessionTitle, nameAgentTitle: nameAgentTitleInExecution, splitTitleAction, splitTitleTopic } = await import("./title-namer.js");
 
 const nameAgentTitle = (services: Services, conversationId: string, prompt: string): Promise<void> =>
     withAgentExecution(services.agentExecution, { localCwd: WORKSPACE_ROOT }, (execution) =>
@@ -79,6 +79,20 @@ test("splits the action word off the displayed name", () => {
     expect(splitTitleAction("· fix")).toEqual({ title: "· fix" });
     // Only the last segment is the action; a name with its own separators keeps everything before it.
     expect(splitTitleAction("Auth · session · refresh")).toEqual({ title: "Auth · session", action: "refresh" });
+});
+
+// The board's label over the title: cut off the front of the name, never displayed in it.
+
+test("splits the topic off the front of the name", () => {
+    expect(splitTitleTopic("Devices view | Fix redirect to sign-in · fix")).toEqual({ rest: "Fix redirect to sign-in · fix", topic: "Devices view" });
+    expect(splitTitleTopic("Boot. | Fix flaky boot timing test · fix")).toEqual({ rest: "Fix flaky boot timing test · fix", topic: "Boot" });
+    // Only the first bar is the topic's; a name with no topic stands whole.
+    expect(splitTitleTopic("Sandbox API | Find leaky | slow patterns · audit")).toEqual({ rest: "Find leaky | slow patterns · audit", topic: "Sandbox API" });
+    expect(splitTitleTopic("Sandbox freezes · fix")).toEqual({ rest: "Sandbox freezes · fix", topic: undefined });
+});
+
+test("drops a topic too long to be a label and keeps the name after it", () => {
+    expect(splitTitleTopic("The whole devices view and its sync | Fix sync status · fix")).toEqual({ rest: "Fix sync status · fix", topic: undefined });
 });
 
 test("returns empty for a reply with nothing in it", () => {
@@ -142,13 +156,13 @@ test.each(["derived", "model", "plan", "user"] as const)("a home with a %s title
 
 test("names a still-derived conversation from the prompt that just opened its turn", async () => {
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
-    ask.mockResolvedValue({ value: "Fleet board broadcast · wire" });
+    ask.mockResolvedValue({ value: "Fleet board | Fleet board broadcast · wire" });
     await nameAgentTitle(
         servicesWith({ text: "We should look at the fleet board and figure out why it…", source: "derived" }, setTitle),
         "c1",
         "we should look at the fleet board and figure out why it stops updating",
     );
-    expect(setTitle).toHaveBeenCalledWith("c1", "Fleet board broadcast", "model", "wire");
+    expect(setTitle).toHaveBeenCalledWith("c1", "Fleet board broadcast", "model", "wire", "Fleet board");
 });
 
 test("leaves a conversation that already answers to a better name alone", async () => {
@@ -165,7 +179,7 @@ test("keeps the words of a name an agent chose as the conversation opened, and g
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "testaudit picks · audit" });
     await nameAgentTitle(servicesWith({ text: "Test audit reviewer, batch 24", source: "model" }, setTitle), "sub-1", "Review the test audit, batch 24");
-    expect(setTitle).toHaveBeenCalledWith("sub-1", "Test audit reviewer, batch 24", "model", "audit");
+    expect(setTitle).toHaveBeenCalledWith("sub-1", "Test audit reviewer, batch 24", "model", "audit", undefined);
 });
 
 test("asks nothing about a model name past the opening turn, nor about one that already has its action", async () => {
@@ -198,7 +212,7 @@ test("passes the caller's live execution context unchanged to the title model", 
         expect(executions).toEqual([lease.context]);
         expect(executions[0]).toBe(lease.context);
         assertAgentExecutionContext(lease.context);
-        expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");
+        expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix", undefined);
     } finally {
         lease.release();
         services.agentExecution.close(admission);
@@ -209,7 +223,7 @@ test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass 
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
     await nameAgentTitle(servicesWith({ text: stolen, source: "model" }, setTitle), "c1", "fix the auth tests");
-    expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");
+    expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix", undefined);
 });
 
 test.each(["Intentic", "boot.test.ts", "src/start.ts src/boot.test.ts"])("refuses a bare label %s inside the model answer contract", async (label) => {
@@ -236,7 +250,7 @@ test.each([
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: `${title} · ${action}` });
     await nameAgentTitle(servicesWith({ text: "Opening request", source: "derived" }, setTitle), "c1", "the opening request");
-    expect(setTitle).toHaveBeenCalledWith("c1", title, "model", action);
+    expect(setTitle).toHaveBeenCalledWith("c1", title, "model", action, undefined);
 });
 
 test.each(["model", "plan"] as const)("repairs a bare %s title from the original request on a later turn", async (source) => {
@@ -248,7 +262,7 @@ test.each(["model", "plan"] as const)("repairs a bare %s title from the original
     expect(pages).toEqual([[expect.objectContaining({ id: "c1" }), { before: 1 }]]);
     expect(requests[0]?.prompt).toContain(`Opening user message:\n${opening}`);
     expect(requests[0]?.prompt).not.toContain("\nContinue\n");
-    expect(setTitle).toHaveBeenCalledWith("c1", "Audit Intentic for critical vulnerabilities", "model", "audit");
+    expect(setTitle).toHaveBeenCalledWith("c1", "Audit Intentic for critical vulnerabilities", "model", "audit", undefined);
 });
 
 test.each(["Intentic", "boot.test.ts", ...STOLEN_TITLES])("preserves an explicit user rename reading %s", async (title) => {

@@ -89,6 +89,7 @@ export const ICONS = {
     google: BRAND_GLYPHS[`google`],
     hammer: OBJECT_GLYPHS[`hammer`],
     history: STATUS_GLYPHS[`history`],
+    home: NAVIGATION_GLYPHS[`home`],
     image: OBJECT_GLYPHS[`image`],
     "info-circle": STATUS_GLYPHS[`info-circle`],
     infrastructure: NAVIGATION_GLYPHS[`infrastructure`],

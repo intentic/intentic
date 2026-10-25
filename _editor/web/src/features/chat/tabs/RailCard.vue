@@ -12,6 +12,8 @@ import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { markSegments } from "../../../lib/markSegments";
 import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
 import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
+import SessionTopic from "../../../parts/capabilities/SessionTopic.vue";
+import type { SessionFacts } from "../../../models/agent-status/sessionKind";
 import MatchLine from "../../../components/MatchLine.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -23,9 +25,9 @@ const props = defineProps<{
     needle?: string;
     matchCase?: boolean;
     provider?: AgentProvider;
-    // The session's stored work word (AgentSummary.titleAction), which tints the identity tile; rows without one
-    // (personas) let the tile read the title.
-    titleAction?: string;
+    // The agent behind a session row, what its identity tile and the topic over its title are read from
+    // (sessionKind.ts); absent for a chat no agent stands behind yet, which draws the plain everyday tile.
+    session?: SessionFacts;
     // Icon for a row that isn't a session and so has no identity tile.
     icon?: IconName;
     // Spread onto the Icon via v-bind; the host derives it once (agentStatusMeta) rather than field by field.
@@ -106,13 +108,7 @@ const chipHint = computed((): Tip | undefined =>
                         class="absolute inset-0"
                         :class="rim.tone"
                     />
-                    <IdentityTile
-                        v-if="provider !== undefined"
-                        :title="title"
-                        :action="titleAction"
-                        :provider="provider"
-                        class="h-4.5 w-4.5 text-2xs"
-                    />
+                    <IdentityTile v-if="provider !== undefined" :session="session" class="h-4.5 w-4.5 text-2xs" />
                     <!-- A row that is not a session (a workflow run, a search hit) wears its glyph on the same disc. -->
                     <span v-else class="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-primary-600/15">
                         <Icon :name="icon!" class="text-2xs" :class="quiet ? 'text-subtle' : 'text-link'" />
@@ -120,16 +116,20 @@ const chipHint = computed((): Tip | undefined =>
                     <!-- A mark pinned to the disc (UnsentMark's badge). -->
                     <slot name="tile" />
                 </span>
-                <!-- Clamped to two lines; most titles fit whole at this width. -->
-                <span
-                    class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4"
-                    :class="quiet ? 'text-muted' : 'text-content'"
-                >
-                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
-                        run.text
-                    }}</span>
-                    <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
-                    <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
+                <!-- The topic over the title, as on the board's card (SessionTopic). -->
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <SessionTopic :session="session" />
+                    <!-- Clamped to two lines; most titles fit whole at this width. -->
+                    <span
+                        class="line-clamp-2 min-w-0 text-xs font-semibold leading-4"
+                        :class="quiet ? 'text-muted' : 'text-content'"
+                    >
+                        <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                            run.text
+                        }}</span>
+                        <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
+                        <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
+                    </span>
                 </span>
                 <slot name="trailing" />
                 <!-- The corner's marks left of the standing, as on the board's card (its stamps). -->

@@ -1,3 +1,5 @@
+import type { SessionFacts } from "../../../../models/agent-status/sessionKind";
+
 // The example card's recorded run: SAMPLE CONTENT, labelled "Example" wherever it is drawn (ExampleAgentCard). Code is
 // code in every language, so the diff is the same for every reader; the words around it are in the catalog.
 
@@ -12,6 +14,9 @@ export const EXAMPLE_FILES: readonly ExampleFile[] = [
     { path: `src/components/Header.vue`, additions: 7, deletions: 1 },
     { path: `src/styles.css`, additions: 15, deletions: 1 },
 ];
+
+// What the card's tile reads: one person's single agent, working in one package, the everyday kind a board is full of.
+export const EXAMPLE_SESSION = { id: `example`, modules: [`web`] } satisfies SessionFacts;
 
 export const EXAMPLE_DIFF = `--- a/src/components/Header.vue
 +++ b/src/components/Header.vue
