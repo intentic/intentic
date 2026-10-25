@@ -1134,7 +1134,7 @@ pub fn home_facts(state: State<'_, AppState>) -> HomeFacts {
 /// nobody is looking at is a stopped setup nobody finds out about.
 #[tauri::command]
 pub fn setup_alert(app: AppHandle) {
-    crate::windows::alert_setup(&app);
+    crate::windows::setup::alert_setup(&app);
 }
 
 /* WHERE THE INSTALL HAS GOT TO, as This device draws it (src/device/useDevice.ts `progressShown`). The web's
@@ -1181,14 +1181,14 @@ pub struct SetupReport {
 /// workspace page (windows.rs `announce_setup`). Nothing is stored: a page that opens later hears the next one.
 #[tauri::command]
 pub fn setup_progress(app: AppHandle, report: SetupReport) {
-    crate::windows::announce_setup(&app, &report);
+    crate::windows::setup::announce_setup(&app, &report);
 }
 
 /// The calling window's page has measured its content (fitWindow.ts): size that window to it. The window is
 /// the caller's own, handed to the command by Tauri, so a page can only ever size the window it stands in.
 #[tauri::command]
 pub fn fit_to_content(app: AppHandle, window: tauri::WebviewWindow, height: f64) {
-    crate::windows::fit_to_content(&app, &window, height);
+    crate::windows::bounds::fit_to_content(&app, &window, height);
 }
 
 /// The close confirmation's answer (windows.rs). `remember` is the dialog's "always do this" — the only thing
@@ -1200,7 +1200,7 @@ pub fn close_workspace(app: AppHandle, action: CloseAction, remember: bool) {
     // Handled OFF this callback, because answering destroys the very webview that called it — the WebView2 COM
     // re-entrancy the workspace window's navigation handler already steps around the same way (windows.rs).
     tauri::async_runtime::spawn(async move {
-        crate::windows::resolve_close(&app, action, remember);
+        crate::windows::close::resolve_close(&app, action, remember);
     });
 }
 

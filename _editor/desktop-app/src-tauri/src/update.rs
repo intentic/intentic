@@ -544,7 +544,7 @@ pub fn refusal(app: &AppHandle) -> Option<&'static str> {
         );
         return Some(BUSY);
     }
-    if crate::windows::unsaved_windows() > 0 {
+    if crate::windows::unsaved::unsaved_windows() > 0 {
         return Some(UNSAVED);
     }
     None
@@ -578,7 +578,7 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
     // Asked again at the last moment the install can still be put back: reading a bundle of a hundred megabytes
     // takes a while, and a window edited meanwhile would be lost to the Windows installer, which ends this process
     // where nothing can ask (windows.rs `hold_quit`). The staged update goes back to be offered again.
-    if crate::windows::unsaved_windows() > 0 {
+    if crate::windows::unsaved::unsaved_windows() > 0 {
         *app.state::<UpdateState>().ready.lock().unwrap() = Some(staged);
         return Err(UNSAVED.to_string());
     }
@@ -632,7 +632,7 @@ pub fn install(app: &AppHandle, restart: bool) -> Result<(), String> {
 /// held once asked for (windows.rs `hold_quit`), so it is not asked for. It waits, and the offer means it from then
 /// on (`take_offer`); a quit meanwhile lands on the new version at the next launch all the same.
 fn restart_onto_update(app: &AppHandle) -> Result<(), String> {
-    if crate::windows::unsaved_windows() > 0 {
+    if crate::windows::unsaved::unsaved_windows() > 0 {
         app.state::<UpdateState>()
             .restart_due
             .store(true, Ordering::SeqCst);

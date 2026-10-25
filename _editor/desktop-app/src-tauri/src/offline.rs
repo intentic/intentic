@@ -104,7 +104,7 @@ pub fn watch(window: &tauri::Webview, app_origin: &url::Url) {
             // window handlers in windows.rs).
             tauri::async_runtime::spawn(async move {
                 // The offline page draws no bar: the window it is shown in wears the platform's (windows.rs).
-                crate::windows::page_has_no_bar(&window);
+                crate::windows::chrome::page_has_no_bar(&window);
                 if let Ok(page) = page.parse() {
                     let _ = window.navigate(page);
                 }

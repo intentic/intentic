@@ -71,7 +71,7 @@ fn drawn_label(label: &str, shown: Option<&str>) -> bool {
 
 /// Whether the frame is where the reader can see it: shown, and not minimised to the taskbar.
 pub fn on_screen(app: &AppHandle) -> bool {
-    frame(app).is_some_and(|frame| crate::windows::window_on_screen(&frame))
+    frame(app).is_some_and(|frame| crate::windows::bounds::window_on_screen(&frame))
 }
 
 /// `work` run on the main thread, and its answer: at once on that thread, waited for from any other. Building and
@@ -102,8 +102,8 @@ fn ensure(app: &AppHandle) -> Option<Window> {
 
 fn build(app: &AppHandle) -> Option<Window> {
     let mode = app.state::<AppState>().ui_mode();
-    let screen = crate::windows::work_area(app);
-    let (size, min) = crate::windows::opening_bounds(screen.map(|screen| screen.size));
+    let screen = crate::windows::bounds::work_area(app);
+    let (size, min) = crate::windows::bounds::opening_bounds(screen.map(|screen| screen.size));
     let built = WindowBuilder::new(app, FRAME)
         .title("Intentic")
         .inner_size(size.0, size.1)
@@ -113,7 +113,7 @@ fn build(app: &AppHandle) -> Option<Window> {
         .decorations(false)
         .shadow(true)
         // What shows before the first face has painted, in the light that face will paint in.
-        .background_color(crate::windows::face_background(mode))
+        .background_color(crate::windows::mode::face_background(mode))
         // Shown with the first face (`show`), placed first, so it never appears where the platform cascaded it.
         .visible(false)
         .build();
@@ -127,10 +127,10 @@ fn build(app: &AppHandle) -> Option<Window> {
     // On Windows this is what attaches the resize borders of a frameless window, which Tauri does by itself only for a
     // window built with its webview (tauri-runtime-wry's `undecorated_resizing`).
     let _ = frame.set_resizable(true);
-    crate::windows::settle_background(&frame, mode);
+    crate::windows::mode::settle_background(&frame, mode);
     watch(app, &frame);
     if let Some(screen) = screen {
-        crate::windows::place_in_work_area(&frame, screen, size);
+        crate::windows::bounds::place_in_work_area(&frame, screen, size);
     }
     Some(frame)
 }
@@ -146,13 +146,13 @@ fn watch(app: &AppHandle, frame: &Window) {
         // keeps the session it signed in with.
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            crate::windows::request_close(&handle);
+            crate::windows::close::request_close(&handle);
         }
         /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS — in both faces, so the hidden one
         is right when it comes back. */
         WindowEvent::Resized(_) => {
             for face in faces(&handle) {
-                crate::windows::announce_frame(&face, false);
+                crate::windows::chrome::announce_frame(&face, false);
             }
         }
         _ => {}

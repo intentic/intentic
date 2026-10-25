@@ -57,7 +57,7 @@ use state::Face;
 /// through here, carrying which of those it was: only the first is a link this app watched its own window ask
 /// for, and `setup_link::Source` is what that distinction buys.
 pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_link::Source<'_>) {
-    windows::handle_link(app, link, source);
+    windows::links::handle_link(app, link, source);
 }
 
 /// Open the platform's sign-in page in the default browser (see auth.rs): the local shell's way to agents. It has no
@@ -480,7 +480,7 @@ pub fn run() {
             code: Some(code),
             ..
         } => {
-            if windows::hold_quit(app, code) {
+            if windows::quit::hold_quit(app, code) {
                 api.prevent_exit();
             } else {
                 launch::exit_requested(code);

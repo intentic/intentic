@@ -25,7 +25,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::setup_link::LocalVerb;
 use crate::sidecar::Granted;
 use crate::state::{AppState, RecentView};
-use crate::windows::FilesWindow;
+use crate::windows::local_pages::FilesWindow;
 
 /// The label prefix of a local window: `files-1`, `files-2`, one per grant (and one for the spare).
 pub const FILES: &str = "files-";
@@ -635,7 +635,7 @@ fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> 
                 .lock()
                 .unwrap()
                 .insert(window.label().to_string(), grant.clone());
-            crate::windows::wear_face(app, &window, &title, &face_given(&grant.face));
+            crate::windows::local_pages::wear_face(app, &window, &title, &face_given(&grant.face));
         }
         None => {
             let label = next_label(&files);
@@ -644,7 +644,7 @@ fn open_new(app: &AppHandle, asked: &Path, folder: bool) -> Result<(), Trouble> 
                 .lock()
                 .unwrap()
                 .insert(label.clone(), grant.clone());
-            if let Err(error) = crate::windows::show_files_window(
+            if let Err(error) = crate::windows::local_pages::show_files_window(
                 app,
                 &label,
                 &title,
@@ -750,7 +750,9 @@ fn build_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
         face_init(Some(&grant.face)),
         route.map(route_init).unwrap_or_default()
     );
-    if let Err(error) = crate::windows::show_home_face(app, &format!("{name} · Intentic"), &init) {
+    if let Err(error) =
+        crate::windows::local_pages::show_home_face(app, &format!("{name} · Intentic"), &init)
+    {
         files.windows.lock().unwrap().remove(crate::windows::HOME);
         let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
         return Err(Trouble::Failed(error));
@@ -896,7 +898,7 @@ fn build_spare(app: &AppHandle) {
         });
         label
     };
-    if let Err(error) = crate::windows::show_files_window(
+    if let Err(error) = crate::windows::local_pages::show_files_window(
         app,
         &label,
         "Intentic",

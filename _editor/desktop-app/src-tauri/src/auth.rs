@@ -149,7 +149,7 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     // the reader's look: the page adopts that one over the profile's (windows.rs `look_init_script`).
     let look = app.state::<crate::state::AppState>().ui_look();
     if let Some(mode) = early_mode(args.profile.as_deref(), look) {
-        crate::windows::apply_mode(app, mode);
+        crate::windows::mode::apply_mode(app, mode);
     }
     crate::windows::show_workspace_at(app, Some(&path));
 }
