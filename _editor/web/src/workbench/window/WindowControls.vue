@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useTheme } from "@intentic/ui";
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
     announceDesktopMode,
@@ -11,6 +11,8 @@ import {
 } from "../../app/environments/desktop";
 import { BAR, type BarEdges, barsChanged, type Corner, cornerHolder, SURFACE } from "./controlsReserve";
 import { handBackOwnPanel } from "./floating";
+import { themeRowValue } from "../../skins/themeRow";
+import { useSkin } from "../../skins/useSkin";
 import { domLayout, pressOf, windowGesture } from "./windowGesture";
 import { useT } from "@intentic/ui/i18n";
 
@@ -22,8 +24,11 @@ const t = useT();
 const frameless = desktopFrameless();
 const maximized = ref(false);
 const controls = ref<HTMLElement>();
-/* The app's own screens follow this page's light; it cannot see this window's storage, so the scheme is announced. */
-const { scheme } = useTheme();
+/* The app's own screens follow this page's light; it cannot see this window's storage, so the scheme is announced, and
+   the look the reader keeps here beside it, which the app's other pages adopt (desktop.ts `announceDesktopMode`). */
+const { scheme, choice: schemeChoice } = useTheme();
+const { skin, choice: skinChoice } = useSkin();
+const look = computed(() => themeRowValue(schemeChoice.value, skinChoice.value, skin.value));
 const route = useRoute();
 
 /* A floating panel's × is its dock (windows.rs), said as one, so the workspace takes the panel back without waiting. */
@@ -238,8 +243,8 @@ onMounted(() => {
     schedule();
     /* The app is waiting to hear this. */
     workDesktopWindow(`ready`);
-    announceDesktopMode(scheme.value);
-    stopAnnouncing = watch(scheme, (next) => announceDesktopMode(next));
+    announceDesktopMode(scheme.value, look.value);
+    stopAnnouncing = watch([scheme, look], ([nextScheme, nextLook]) => announceDesktopMode(nextScheme, nextLook));
 });
 
 onUnmounted(() => {

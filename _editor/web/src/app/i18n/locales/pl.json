@@ -10570,7 +10570,7 @@
             "intenticAccountSwitchBefore": "Twoje konto intentic to {account}. Przełącz je, zanim ten sandbox się zwiąże, inaczej właścicielem zostanie niewłaściwe.",
             "intenticReady": "Intentic {version} jest gotowy",
             "limitedConnectionToSandbox": "Ograniczone połączenie z tym sandboxem",
-            "liveAgentOutputMay": "Wyjście agenta na żywo może się opóźniać. Nadrobi je, gdy wrócisz do sieci.",
+            "liveAgentOutputMay": "Część wyjścia agentów na żywo czeka na swoją kolej, aż odpowie szybsza droga.",
             "newVersionIntenticOut": "Jest nowa wersja Intentic",
             "nothingToUpload": "Nie ma czego wysłać",
             "partIntenticDidNot": "Część Intentic się nie wczytała",
@@ -10600,7 +10600,7 @@
             "passkeyNudgeAdd": "Dodaj klucz",
             "passkeyNudgeLater": "Nie teraz",
             "analyticsConsentTitle": "Pomożesz nam zobaczyć, gdzie intentic przeszkadza?",
-            "analyticsConsentDetail": "Jeśli się zgodzisz, zapiszemy, jak używasz aplikacji: otwierane strony, kliknięcia i zamaskowane nagranie interfejsu. Zawartość Twojej przestrzeni roboczej jest pomijana.",
+            "analyticsConsentDetail": "Kliknięcia i zamaskowane nagranie. Nigdy Twoja praca.",
             "analyticsConsentHint": "Analityka produktu działa przez PostHog. Nagranie zastępuje gwiazdkami każdy tekst, który nie jest słowami samej aplikacji, a edytor i terminale zasłania. Odpowiedź zmienisz w każdej chwili w Ustawieniach, w sekcji Dane i prywatność. Polityka prywatności na intentic.dev/privacy mówi dokładnie, co jest zapisywane.",
             "analyticsConsentAllow": "Zezwól",
             "analyticsConsentDecline": "Nie, dziękuję"

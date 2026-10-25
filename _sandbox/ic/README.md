@@ -29,8 +29,10 @@ flowchart LR
   machine and its side (`host`, `os`: `windows`, `linux/archlinux`), and a code already redeemed on another machine, or
   on the other side of this one, is refused with the platform's own sentence instead of starting a second copy
   (2026-10-05). It pulls the published image even when it is cached, so the moving `stable` tag runs the newest
-  release, unless its caller would rather start now on the image the machine already holds (`INTENTIC_REUSE_IMAGE=1`,
-  the desktop app's setups; never with `SELF_HOST`). A pull, or a load of the image fetched ahead, whose engine went
+  release: seconds when the copy here is current, only the new layers when it is not, and the copy itself when the
+  registry cannot be reached. The desktop app's setups used to start on the copy the machine held
+  (`INTENTIC_REUSE_IMAGE=1`), which put a fresh install's first sandbox on whatever release an earlier one left
+  (2026-10-25). A pull, or a load of the image fetched ahead, whose engine went
   away (Docker Desktop quit, Intentic's engine stopped) stops at once rather than retrying against nothing, and the
   setup report says which engine stopped and how to start it again in its `remedy`; a transfer that broke on the
   network is still tried three times, and its report now carries a fix too (2026-10-12).

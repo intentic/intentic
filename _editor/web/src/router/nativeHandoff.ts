@@ -3,7 +3,7 @@ import { type DaemonSession, DaemonSessionSchema } from "@intentic/sandbox-contr
 import type { LocationQuery, RouteLocationNormalized, RouteLocationRaw, Router } from "vue-router";
 import { z } from "zod";
 import { EMBED_QUERY, embedded, LOOK_QUERY, type NativeLook, nativeLook, nativeLookOf, rememberLook, tellNative } from "../app/environments/nativeApp";
-import { type ThemeRow, themeRowLook } from "../features/settings/themeRow";
+import { type ThemeRow, themeRowLook } from "../skins/themeRow";
 import { returnPath } from "../lib/routes/signIn";
 import { AGENT_VIEW, CHANGES_VIEW, mobileChatPath, PHONE_HOME } from "../lib/routes/phoneScreens";
 import { useSkin } from "../skins/useSkin";

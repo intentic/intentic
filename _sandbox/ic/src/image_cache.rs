@@ -12,7 +12,9 @@
 // itself, ahead of the first setup (2026-10-21), and says how far it is in the same markers, its bytes read off docker's
 // own layer lines against the sizes the registry lists ([`pull_ahead`]). Before, it skipped such a device on the
 // grounds that Docker would pull the image itself, which it did only once a setup had started: the median first setup
-// waited 96 s on that pull (199 s at p90).
+// waited 96 s on that pull (199 s at p90). A copy Docker already holds is pulled again too, which is a no-op when it is
+// current and brings down only the new layers when it is not (2026-10-25): it used to answer `ready` on sight, and an
+// earlier install's copy, releases behind, then started the newest app's first sandbox.
 //
 // The cache is `~/.intentic/image-cache/<image>/`: `blobs/sha256/<hex>` (an OCI layout's own blob paths), `state.json`
 // (what a watcher reads: the manifest being fetched, bytes done and due), and `lock`, held by whichever process is
@@ -707,9 +709,13 @@ pub fn prefetch(image: &str) -> crate::util::Result<()> {
     let Some(reference) = Reference::parse(image) else {
         crate::util::bail!("{image} is not an image this can fetch ahead (it needs a registry and a tag); the setup will pull it instead.");
     };
-    if crate::docker::daemon_refusal().is_none() && crate::docker::image_exists(image) {
-        say("ready", 0, 0);
-        return Ok(());
+    // A copy Docker already holds is asked about rather than taken as current (2026-10-25): one an earlier install left
+    // can be releases behind, and the setup ahead would start a sandbox on it. Docker's pull is the registry's answer,
+    // a no-op when the copy is current, and only the new layers when the tag moved.
+    if crate::docker::daemon_refusal().is_none() {
+        if let Some(held) = crate::docker::image_id(image) {
+            return pull_ahead(&reference, image, &say, Some(&held));
+        }
     }
     let Some(dir) = dir_for(&reference) else {
         crate::util::bail!("could not find this account's home folder to keep the image in.");
@@ -720,7 +726,7 @@ pub fn prefetch(image: &str) -> crate::util::Result<()> {
     // pull when it is up. A fetch an earlier run started (before the restart that installed Docker) is still carried on.
     if read_state(&dir).is_none() && docker_installed() {
         if crate::docker::daemon_refusal().is_none() {
-            return pull_ahead(&reference, image, &say);
+            return pull_ahead(&reference, image, &say, None);
         }
         say("skipped", 0, 0);
         return Ok(());
@@ -844,20 +850,27 @@ pub fn observe_pull(line: &str) {
     }
 }
 
-/// The image into Docker by Docker's own pull, ahead of the first setup, where its engine already answers: the setup then
-/// finds it there (`INTENTIC_REUSE_IMAGE`) instead of pulling it in front of the person. Its bytes are read off docker's
+/// The image into Docker by Docker's own pull, ahead of the first setup, where its engine already answers: the setup's
+/// own pull (connect.rs) then finds it current instead of downloading it in front of the person. Its bytes are read off docker's
 /// layer lines against the registry's sizes, so the app's bar fills as the cache's would; a registry that will not say
 /// leaves the pull running with nothing counted. Docker shares one pull of an image between everyone asking for it, so
 /// a setup that starts meanwhile joins this one rather than starting over.
+///
+/// `held`: the id of the copy Docker held before, for a pull that refreshes it. Such a pull says nothing until a layer
+/// moves, and ends `ready` with nothing counted when the copy was current (or the registry was out of reach and the
+/// copy stays): the same answer an image already in Docker always gave, so the app shows no download that never was.
 fn pull_ahead(
     reference: &Reference,
     image: &str,
     say: &dyn Fn(&str, u64, u64),
+    held: Option<&str>,
 ) -> crate::util::Result<()> {
     let plan = Registry::new(reference).resolve().ok();
     let pulling = Pulling::of(plan.as_ref());
     let total = pulling.total;
-    say("fetching", 0, total);
+    if held.is_none() {
+        say("fetching", 0, total);
+    }
     if let Ok(mut slot) = PULLING.lock() {
         *slot = Some((pulling, Instant::now()));
     }
@@ -868,6 +881,10 @@ fn pull_ahead(
         *slot = None;
     }
     match pulled {
+        Ok(()) if refreshed_nothing(held, crate::docker::image_id(image).as_deref()) => {
+            say("ready", 0, 0);
+            Ok(())
+        }
         Ok(()) => {
             say("ready", total, total);
             crate::ui::note(&format!(
@@ -881,6 +898,12 @@ fn pull_ahead(
             crate::util::bail!("could not pull {image} ahead: {stop}")
         }
     }
+}
+
+/// Whether a pull that refreshed the copy `held` (its id before the pull) left Docker holding that same copy, `now`:
+/// nothing was fetched. A pull of an image nobody held always fetched it. Pure.
+fn refreshed_nothing(held: Option<&str>, now: Option<&str>) -> bool {
+    held.is_some() && held == now
 }
 
 /// `ic image load`: the cache into Docker now, with a verdict a person can read. Support's way to finish a prefetch by
@@ -1285,6 +1308,18 @@ mod tests {
         let mut blind = Pulling::of(None);
         blind.observe("aaaaaaaaaaaa: Pull complete");
         assert_eq!((blind.bytes(), blind.total), (0, 0));
+    }
+
+    /* A copy Docker held is refreshed, and says it fetched nothing only when Docker still holds that same copy. */
+    #[test]
+    fn a_refresh_fetched_something_only_when_the_copy_changed() {
+        // Current already, or the registry out of reach and the copy kept: nothing to show.
+        assert!(refreshed_nothing(Some("sha256:old"), Some("sha256:old")));
+        // The tag had moved: the new release came down.
+        assert!(!refreshed_nothing(Some("sha256:old"), Some("sha256:new")));
+        // Nothing was held: the pull fetched the whole image.
+        assert!(!refreshed_nothing(None, Some("sha256:new")));
+        assert!(!refreshed_nothing(None, None));
     }
 
     #[test]

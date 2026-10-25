@@ -18,6 +18,7 @@ import { createIndexTargets, ownWork } from "./changes/index-targets.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitFailureReason } from "./git.js";
 import { createPushRuns } from "./ops/push-run.js";
+import { arrivalLanding } from "./remote/project-arrival.js";
 import { gitImplementer, indexRoutes } from "./index.routes.js";
 import { opt } from "../opt.js";
 
@@ -39,10 +40,7 @@ export const capRepoChanges = (
         conflicted,
         staged: staged.length > stagedBudget ? staged.slice(0, stagedBudget) : staged,
         unstaged: unstaged.length > unstagedBudget ? unstaged.slice(0, unstagedBudget) : unstaged,
-        truncated: {
-            staged: Math.max(0, staged.length - stagedBudget),
-            unstaged: Math.max(0, unstaged.length - unstagedBudget),
-        },
+        truncated: { staged: Math.max(0, staged.length - stagedBudget), unstaged: Math.max(0, unstaged.length - unstagedBudget) },
     };
 };
 
@@ -276,9 +274,10 @@ export const createGitRoutes = (services: Services) => {
         await syncRootExcludes(services.config.historyRoot, repoIds);
         // Project repos get the same heavy-dir excludes in info/exclude, so a fresh pip install doesn't show 50k changes.
         await syncProjectExcludes(services.workspace.root, repoIds);
+        // A project folder mid-copy waits for the commit that files it as received (remote/project-arrival.ts): no phantom 99+.
         const candidates = [
             { repo: "root", dir: services.workspace.root },
-            ...repoIds.map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
+            ...repoIds.filter((id) => !arrivalLanding(id)).map((id) => ({ repo: id, dir: join(services.workspace.root, id) })),
         ];
         scannedRepos = candidates.length;
         // Each candidate has its own .git, so scans run concurrently, up to SCAN_CONCURRENCY at once.

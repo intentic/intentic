@@ -11162,7 +11162,7 @@
             "intenticAccountSwitchBefore": "Tu cuenta de intentic es {account}. Cámbiala antes de que este sandbox se vincule, o el propietario será el equivocado.",
             "intenticReady": "Intentic {version} está listo",
             "limitedConnectionToSandbox": "Conexión limitada con este sandbox",
-            "liveAgentOutputMay": "La salida en vivo del agente puede retrasarse. Se pone al día cuando vuelves a estar en línea.",
+            "liveAgentOutputMay": "Parte de la salida en vivo de los agentes espera su turno hasta que responda una ruta más rápida.",
             "newVersionIntenticOut": "Hay una nueva versión de Intentic",
             "nothingToUpload": "Nada que subir",
             "partIntenticDidNot": "Una parte de Intentic no se cargó",
@@ -11192,7 +11192,7 @@
             "passkeyNudgeAdd": "Añadir una passkey",
             "passkeyNudgeLater": "Ahora no",
             "analyticsConsentTitle": "¿Nos ayudas a ver dónde intentic estorba?",
-            "analyticsConsentDetail": "Si dices que sí, registramos cómo se usa la app: las páginas que abres, tus clics y una reproducción enmascarada de la interfaz. El contenido de tu espacio de trabajo queda fuera.",
+            "analyticsConsentDetail": "Clics y una reproducción enmascarada. Nunca tu trabajo.",
             "analyticsConsentHint": "La analítica del producto funciona con PostHog. La reproducción sustituye por asteriscos cada texto que no sea el de la propia app, y deja en blanco el editor y los terminales. Puedes cambiar tu respuesta cuando quieras en Ajustes, Datos y privacidad. La política de privacidad en intentic.dev/privacy explica exactamente qué se registra.",
             "analyticsConsentAllow": "Permitir",
             "analyticsConsentDecline": "No, gracias"

@@ -26,6 +26,16 @@ export const ARRIVAL_WINDOW_MS = 60 * 60_000;
 // More arrival commits than this is not an arrival any more, and keeps the log read short.
 const ARRIVAL_COMMITS_MAX = 50;
 
+// THE FOLDERS STILL LANDING (2026-10-25). The quiet commit leaves a window as long as the copy itself in which every
+// file delivered so far is an uncommitted add, so the review still opened on "99+" and dropped to nothing once the copy
+// went quiet: a flicker the owner reads as changes they never made. A folder is landing from the batch that reached it
+// until the quiet commit that files it has run, and the review leaves its rows out meanwhile (git.routes.ts), since
+// they are about to be committed as the folder received. Keyed by the folder's name, which is its repo's.
+const landing = new Set<string>();
+
+/** Whether the project folder `name` is mid-copy: files reached it and the commit that files them is still to run. */
+export const arrivalLanding = (name: string): boolean => landing.has(name);
+
 // Whether the repo at `dir` still stands at its arrival. An unborn repo is not: there is nothing to tell. One git cannot
 // read throws, for the caller to log.
 export const arrivalOpen = async (dir: string, name: string, now: number, git: GitRunner = defaultGit): Promise<boolean> => {
@@ -62,6 +72,8 @@ export interface ProjectArrivalDeps {
     // The workspace watcher's batches, root-relative; an empty batch is "something moved, too much to name".
     readonly subscribe: (listener: (paths: string[]) => void) => () => void;
     readonly logger: Pick<Logger, "info" | "warn">;
+    // Told when the folder stops landing, so a review that left its rows out reads it again.
+    readonly landed?: () => void;
     readonly quietMs?: number;
     readonly now?: () => number;
     readonly git?: GitRunner;
@@ -78,13 +90,21 @@ export const followProjectArrival = (deps: ProjectArrivalDeps): (() => void) => 
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let unsubscribe: (() => void) | undefined;
+    // Bumped by every arm, so a settle knows whether a batch came in while it ran (the folder is still landing).
+    let armed = 0;
+    const landed = (): void => {
+        if (landing.delete(name)) {
+            deps.landed?.();
+        }
+    };
     const stop = (): void => {
         stopped = true;
         clearTimeout(timer);
         unsubscribe?.();
         unsubscribe = undefined;
+        landed();
     };
-    const settle = async (): Promise<void> => {
+    const settle = async (generation: number): Promise<void> => {
         if (stopped) {
             return;
         }
@@ -98,11 +118,20 @@ export const followProjectArrival = (deps: ProjectArrivalDeps): (() => void) => 
         } catch (error) {
             // Left for the next quiet, or the next turn's boundary, which commits the folder whatever stands.
             logger.warn({ err: error, repo: name }, "project folder: what file sync delivered could not be committed yet");
+        } finally {
+            // Ended here only when no later batch armed the next quiet; a failed commit ends it too, since what is left
+            // uncommitted is then for the review to show.
+            if (generation === armed) {
+                landed();
+            }
         }
     };
     const arm = (): void => {
+        armed += 1;
+        const generation = armed;
+        landing.add(name);
         clearTimeout(timer);
-        timer = setTimeout(() => void settle(), quietMs);
+        timer = setTimeout(() => void settle(generation), quietMs);
         timer.unref?.();
     };
     void arrivalOpen(join(workspaceRoot, name), name, now(), git)

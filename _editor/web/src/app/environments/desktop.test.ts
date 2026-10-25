@@ -172,6 +172,15 @@ test("links sent together reach the app one at a time, the first at once", async
     }
 });
 
+/* THE LOOK RIDES BESIDE THE SCHEME, so the app hands the reader's look to the next page it builds (windows.rs). */
+test("the look the reader keeps is announced beside the scheme", async () => {
+    const { announceDesktopMode } = await load();
+    const { sent } = recordedLocation();
+    fakeWindow().__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null };
+    announceDesktopMode(`dark`, `sanctum`);
+    expect(sent).toEqual([`intentic://window?do=mode&mode=dark&look=sanctum`]);
+});
+
 /* THE ACCOUNT'S SANDBOXES, handed to the app for its local windows: one row each, in a shape the app takes whole. */
 test("the roster link carries each sandbox's id, name, place and whether it is shared, and nothing else", async () => {
     const { desktopRosterLink } = await load();

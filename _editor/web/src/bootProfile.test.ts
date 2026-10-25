@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
-import { THEME_ROW, type ThemeRow, themeRowLook } from "./features/settings/themeRow";
+import { THEME_ROW, type ThemeRow, themeRowLook } from "./skins/themeRow";
 
 // index.html's pre-paint script adopts an arriving profile before any module loads, so it cannot import the table it
 // applies — it spells the values out. This reads them back and fails if they have parted from @intentic/constants.
@@ -80,6 +80,8 @@ interface Browser {
     readonly tab?: Record<string, string>;
     /** The Android app's own object, as it injects it before any script runs. */
     readonly app?: { readonly look: () => string };
+    /** The look the desktop app hands every page it builds before any script runs (windows.rs `look_init_script`). */
+    readonly desktopLook?: string;
 }
 
 const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult => {
@@ -106,6 +108,7 @@ const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult
         history: { replaceState: (_state: null, _title: string, next: string): void => void (url = next) },
         sessionStorage: storageOver({ ...browser.tab }),
         intenticNative: browser.app,
+        __INTENTIC_LOOK__: browser.desktopLook,
         // `no-preference` matches neither query, which is what `light` models here: the dark one simply misses.
         ...(os === `silent` ? {} : { matchMedia: (query: string): { matches: boolean } => ({ matches: os === `dark` && query.includes(`dark`) }) }),
     };
@@ -262,7 +265,7 @@ describe(`the light the first frame is painted in`, () => {
 
 // THE ANDROID APP'S WEBVIEW wears the app's look over the one stored here, from the first frame, and writes nothing. The
 // script spells each look as the pair the Theme row stores for it; this runs every look through both and fails if the
-// script and the row (features/settings/themeRow.ts) ever part.
+// script and the row (skins/themeRow.ts) ever part.
 describe(`the first frame inside the Android app`, () => {
     const looks = (result: BootResult) => ({ mode: result.attributes.get(`data-mode`), skin: result.attributes.get(`data-skin`) });
     // What the row's pair resolves to on a screen, under an OS in `os`: useTheme's and useSkin's own rule.
@@ -297,5 +300,57 @@ describe(`the first frame inside the Android app`, () => {
             mode: undefined,
             skin: undefined,
         });
+    });
+});
+
+// THE DESKTOP APP'S PAGES are origins with a storage each: the workspace on the platform's, every local window on the
+// app's own bundle. The app hands each the look the reader was last seen in, which a page adopts while its origin holds
+// no look the reader chose, so a first sandbox opens in the look the app was just showing rather than in a profile's.
+describe(`the first frame of a page the desktop app built`, () => {
+    const looks = (result: BootResult) => ({ mode: result.attributes.get(`data-mode`), skin: result.attributes.get(`data-skin`) });
+    const worn = (row: ThemeRow, os: `light` | `dark`) => {
+        const { scheme, skin } = themeRowLook(row);
+        const dark = scheme === `system` ? os === `dark` : scheme === `dark`;
+        const sanctum = skin === `system` ? dark : skin === `sanctum`;
+        return { mode: dark ? `dark` : undefined, skin: sanctum ? `sanctum` : undefined };
+    };
+    const SIGN_IN = `https://app.intentic.dev/desktop-auth/complete?handoff=h&verifier=v&profile=desk`;
+
+    it(`adopts every look the app hands an origin that holds none, and stores it as the Theme row would`, () => {
+        for (const row of THEME_ROW) {
+            for (const os of [`light`, `dark`] as const) {
+                const result = boot(`https://app.intentic.dev/`, { desktopLook: row }, os);
+                expect({ row, os, ...looks(result) }).toEqual({ row, os, ...worn(row, os) });
+                const { scheme, skin } = themeRowLook(row);
+                expect(result.stored).toEqual({ [PROFILE_KEYS.scheme]: scheme, [PROFILE_KEYS.skin]: skin });
+            }
+        }
+    });
+
+    // The bug this exists for: the sign-in's desk profile painted the first sandbox in daylight under sanctum.
+    it(`wears the app's look over an arriving profile's, keeping the rest of the profile`, () => {
+        const { stored, attributes } = boot(SIGN_IN, { desktopLook: `sanctum` }, `light`);
+        expect(attributes.get(`data-mode`)).toBe(`dark`);
+        expect(attributes.get(`data-skin`)).toBe(`sanctum`);
+        expect(stored).toEqual({
+            [PROFILE_KEYS.scheme]: `dark`,
+            [PROFILE_KEYS.skin]: `sanctum`,
+            [PROFILE_KEYS.audience]: `maker`,
+            [PROFILE_STORAGE_KEY]: `desk`,
+        });
+    });
+
+    it(`leaves a look the reader chose on this origin, whatever the app hands it later`, () => {
+        const chosen = { [PROFILE_KEYS.scheme]: `light`, [PROFILE_KEYS.skin]: `none` };
+        const result = boot(`https://app.intentic.dev/`, { stored: chosen, desktopLook: `sanctum` }, `dark`);
+        expect(looks(result)).toEqual({ mode: undefined, skin: undefined });
+        expect(result.stored).toEqual(chosen);
+    });
+
+    it(`ignores a look it cannot name, and a page the Android app wears its own look in`, () => {
+        expect(boot(`https://app.intentic.dev/`, { desktopLook: `neon` }).stored).toEqual({});
+        const native = boot(`https://app.intentic.dev/settings?embed=native&look=light`, { desktopLook: `sanctum` });
+        expect(looks(native)).toEqual(worn(`light`, `light`));
+        expect(native.stored).toEqual({});
     });
 });

@@ -105,13 +105,13 @@ export const takeHandedToFolder = (): boolean => {
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag" | "raise";
 
-// The app's own screens (its setup card, its close question) are drawn in whatever light this page announced
-// last: it has no way to read this window's localStorage, so the scheme travels as a link, on load and on change.
-export const announceDesktopMode = (scheme: `light` | `dark`): void => {
+// The app's own screens are drawn in the light this page last announced, by link since it cannot read this storage; the
+// look rides beside it, handed to every page the app builds next, each its own origin (windows.rs `look_init_script`).
+export const announceDesktopMode = (scheme: `light` | `dark`, look?: `system` | `light` | `dark` | `sanctum`): void => {
     if (desktopVersion() === undefined) {
         return;
     }
-    openDesktopLink(`intentic://window?do=mode&mode=${scheme}`);
+    openDesktopLink(`intentic://window?do=mode&mode=${scheme}${look === undefined ? `` : `&look=${look}`}`);
 };
 
 /* WHO IS SIGNED IN, AND THE SANDBOXES THIS PAGE'S SWITCHER LISTS, handed to the app for its local windows. */

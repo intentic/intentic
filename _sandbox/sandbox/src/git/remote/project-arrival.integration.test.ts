@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createLogger } from "../../logger.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { ARRIVAL_WINDOW_MS, arrivalOpen, commitArrival, followProjectArrival } from "./project-arrival.js";
+import { ARRIVAL_WINDOW_MS, arrivalLanding, arrivalOpen, commitArrival, followProjectArrival } from "./project-arrival.js";
 import { ensureProjectRepo, initialSubject } from "./project-repo.js";
 import { ensureRootRepo } from "./root-repo.js";
 
@@ -86,6 +86,7 @@ test("following the arrival commits once the folder goes quiet, and only on batc
     const armed = new Promise<void>((resolve) => {
         subscribed = resolve;
     });
+    let landings = 0;
     const stop = followProjectArrival({
         workspaceRoot: root,
         name: NAME,
@@ -96,6 +97,9 @@ test("following the arrival commits once the folder goes quiet, and only on batc
             return () => listeners.delete(next);
         },
         logger: createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" }),
+        landed: () => {
+            landings += 1;
+        },
         quietMs: 50,
     });
     const announce = (paths: string[]): void => {
@@ -107,16 +111,24 @@ test("following the arrival commits once the folder goes quiet, and only on batc
         // Subscribed once the arrival is read open; the start's own quiet finds nothing to commit.
         await armed;
         await new Promise((resolve) => setTimeout(resolve, 150));
+        // The start's quiet ran and found nothing: the folder is not landing, and the review reads it as it stands.
+        expect(arrivalLanding(NAME)).toBe(false);
+        const landingsBefore = landings;
         await deliver(project);
         // Another folder's batch moves nothing.
         announce(["elsewhere/file.txt"]);
         await new Promise((resolve) => setTimeout(resolve, 150));
         expect(await git(project, "status", "--porcelain")).not.toBe("");
+        expect(arrivalLanding(NAME)).toBe(false);
         announce([`${NAME}/package.json`, `${NAME}/src/index.ts`]);
+        // Mid-copy: the review leaves the folder out until the quiet commit has filed it.
+        expect(arrivalLanding(NAME)).toBe(true);
         const deadline = Date.now() + 2000;
-        while ((await git(project, "status", "--porcelain")) !== "" && Date.now() < deadline) {
+        while (arrivalLanding(NAME) && Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 20));
         }
+        expect(arrivalLanding(NAME)).toBe(false);
+        expect(landings).toBe(landingsBefore + 1);
         expect(await git(project, "status", "--porcelain")).toBe("");
         expect(await subjects(project)).toEqual([initialSubject(NAME), initialSubject(NAME)]);
     } finally {

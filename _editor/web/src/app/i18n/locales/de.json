@@ -11162,7 +11162,7 @@
             "intenticAccountSwitchBefore": "Ihr intentic-Konto ist {account}. Wechseln Sie, bevor diese Sandbox gebunden wird, sonst wird das falsche ihr Eigentümer.",
             "intenticReady": "Intentic {version} ist bereit",
             "limitedConnectionToSandbox": "Eingeschränkte Verbindung zu dieser Sandbox",
-            "liveAgentOutputMay": "Die Live-Ausgabe des Agenten kann hinterherhinken. Sie holt auf, sobald Sie wieder online sind.",
+            "liveAgentOutputMay": "Ein Teil der Live-Ausgabe der Agenten wartet, bis ein schnellerer Weg antwortet.",
             "newVersionIntenticOut": "Eine neue Version von Intentic ist da",
             "nothingToUpload": "Nichts hochzuladen",
             "partIntenticDidNot": "Ein Teil von Intentic wurde nicht geladen",
@@ -11192,7 +11192,7 @@
             "passkeyNudgeAdd": "Passkey hinzufügen",
             "passkeyNudgeLater": "Nicht jetzt",
             "analyticsConsentTitle": "Helfen Sie uns zu sehen, wo intentic im Weg steht?",
-            "analyticsConsentDetail": "Mit Ihrem Ja erfassen wir, wie die App genutzt wird: die Seiten, die Sie öffnen, Ihre Klicks und eine maskierte Aufzeichnung der Oberfläche. Die Inhalte Ihres Workspace bleiben außen vor.",
+            "analyticsConsentDetail": "Klicks und eine maskierte Aufzeichnung. Nie Ihre Arbeit.",
             "analyticsConsentHint": "Die Produktanalyse läuft über PostHog. Die Aufzeichnung ersetzt jeden Text, der nicht zur Beschriftung der App selbst gehört, durch Sternchen und blendet Editor und Terminals aus. Sie können Ihre Antwort jederzeit unter Einstellungen, Daten & Datenschutz ändern. Die Datenschutzerklärung unter intentic.dev/privacy sagt genau, was erfasst wird.",
             "analyticsConsentAllow": "Erlauben",
             "analyticsConsentDecline": "Nein, danke"

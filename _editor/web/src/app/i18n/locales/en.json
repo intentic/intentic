@@ -11162,7 +11162,7 @@
             "intenticAccountSwitchBefore": "Your intentic account is {account}. Switch before this sandbox binds, or the wrong one becomes its owner.",
             "intenticReady": "Intentic {version} is ready",
             "limitedConnectionToSandbox": "Limited connection to this sandbox",
-            "liveAgentOutputMay": "Live agent output may lag. It clears when you are back online.",
+            "liveAgentOutputMay": "Some live agent output waits its turn until a faster route answers.",
             "newVersionIntenticOut": "A new version of Intentic is out",
             "nothingToUpload": "Nothing to upload",
             "partIntenticDidNot": "Part of Intentic did not load",
@@ -11192,7 +11192,7 @@
             "passkeyNudgeAdd": "Add a passkey",
             "passkeyNudgeLater": "Not now",
             "analyticsConsentTitle": "Help us see where intentic gets in the way?",
-            "analyticsConsentDetail": "With your yes, we record how the app is used: the pages you open, your clicks and a masked replay of the interface. Your workspace's contents are left out.",
+            "analyticsConsentDetail": "Clicks and a masked replay. Never your work.",
             "analyticsConsentHint": "Product analytics run through PostHog. The replay replaces every piece of text that is not the app's own wording with asterisks, and blanks the editor and terminals. You can change your answer any time under Settings, Data & privacy. The privacy policy at intentic.dev/privacy says exactly what is recorded.",
             "analyticsConsentAllow": "Allow",
             "analyticsConsentDecline": "No, thanks"

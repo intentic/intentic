@@ -8,7 +8,7 @@ import { readContractFreshness, uncompiledRoutes } from "../client/sandbox/contr
 import { daemonReady } from "../client/sandbox/useDaemonBoot";
 import { driftedRoutes, driftScope, missingRoutes, unknownDaemonRoutes } from "../client/sandbox/useDaemonRoutes";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../features/settings/themeRow";
+import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../skins/themeRow";
 import { queryClient } from "../lib/queryPersistence";
 import { navigation } from "../workbench/navigation/navigation";
 import { useSkin } from "../skins/useSkin";

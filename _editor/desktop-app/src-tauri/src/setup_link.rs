@@ -587,8 +587,10 @@ pub enum WindowVerb {
     /// popped-out chat's `window.resizeTo`, which a webview ignores for the same reason as `focus()`.
     Fit(u32),
     /// The page saying which colour scheme it is drawn in, on load and whenever it changes — how the app's
-    /// own faces come to be drawn in the same light as the workspace they stand in for.
-    Mode(crate::state::Mode),
+    /// own faces come to be drawn in the same light as the workspace they stand in for. And beside it the look the
+    /// reader keeps there (`&look=`, state.rs `Look`), which every page the app builds next is handed before it
+    /// paints; absent from a page older than that, and a look this app cannot name is no look.
+    Mode(crate::state::Mode, Option<crate::state::Look>),
     /// The workspace's page saying it shows this sandbox, connected and drawn (`window?do=shown&sandbox=<id>`): what a
     /// folder's setup waits for before it calls the folder ready (windows.rs `warm_workspace`).
     Shown(String),
@@ -964,7 +966,10 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             "drag" => WindowVerb::Drag,
             "raise" => WindowVerb::Raise,
             "fit" => WindowVerb::Fit(get("width")?.parse().ok()?),
-            "mode" => WindowVerb::Mode(crate::state::Mode::parse(&get("mode")?)?),
+            "mode" => WindowVerb::Mode(
+                crate::state::Mode::parse(&get("mode")?)?,
+                get("look").and_then(|look| crate::state::Look::parse(&look)),
+            ),
             "shown" => WindowVerb::Shown(get("sandbox").filter(|id| is_sandbox_id(id))?),
             _ => return None,
         })),
@@ -1565,11 +1570,24 @@ L"}"#,
             ),
             (
                 "intentic://window?do=mode&mode=light",
-                WindowVerb::Mode(crate::state::Mode::Light),
+                WindowVerb::Mode(crate::state::Mode::Light, None),
             ),
             (
                 "intentic://window?do=mode&mode=dark",
-                WindowVerb::Mode(crate::state::Mode::Dark),
+                WindowVerb::Mode(crate::state::Mode::Dark, None),
+            ),
+            (
+                "intentic://window?do=mode&mode=dark&look=sanctum",
+                WindowVerb::Mode(crate::state::Mode::Dark, Some(crate::state::Look::Sanctum)),
+            ),
+            (
+                "intentic://window?do=mode&mode=light&look=system",
+                WindowVerb::Mode(crate::state::Mode::Light, Some(crate::state::Look::System)),
+            ),
+            // A look this app cannot name is no look; the scheme beside it still counts.
+            (
+                "intentic://window?do=mode&mode=dark&look=neon",
+                WindowVerb::Mode(crate::state::Mode::Dark, None),
             ),
         ] {
             assert_eq!(parse_link(link, APP), Some(Link::Window(verb)), "{link}");

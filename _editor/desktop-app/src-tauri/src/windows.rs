@@ -14,7 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::SetupReport;
 use crate::setup_link::{parse_link, LauncherTo, Link, NoticeVerb, SetupArgs, Source, WindowVerb};
-use crate::state::{AppState, CloseAction, Face, Mode};
+use crate::state::{AppState, CloseAction, Face, Look, Mode};
 
 /* ONE WINDOW OF THE APP ON SCREEN — these two labels are two FACES of it, not two windows: the hosted workspace, and
 the main local window (`HOME`), the editor's shell on a folder of this computer with This device beside it. They are two
@@ -416,6 +416,16 @@ fn face_init_script(mode: Option<Mode>) -> String {
     }
 }
 
+/// What every page of the editor the app builds reads before it paints (web index.html, the app's local.html and
+/// sandbox.html): the reader's look as a page last announced it (state.rs `Look`), adopted there while that page's own
+/// origin holds no look the reader chose. Nothing when no page has said, and the page decides as a browser tab would.
+fn look_init_script(look: Option<Look>) -> String {
+    match look {
+        Some(look) => format!("window.__INTENTIC_LOOK__ = \"{}\";", look.id()),
+        None => String::new(),
+    }
+}
+
 /// The frame between "window mapped" and the page's first paint, in the same light the page will paint in.
 /// Mirrors `--color-canvas` (@intentic/ui semantic-colors.css) in each scheme. Nothing announced means light,
 /// the same answer the pages themselves reach when the OS will not say — and [`settle_background`] corrects it
@@ -447,6 +457,15 @@ fn settle_face_background(face: &Webview, mode: Option<Mode>) {
 
 fn os_says_dark(window: &Window, mode: Option<Mode>) -> bool {
     mode.is_none() && matches!(window.theme(), Ok(tauri::Theme::Dark))
+}
+
+/// A page announced its scheme and, from a page that knows it, the look it is in: the look is what the next page built
+/// adopts (`look_init_script`), the scheme what the app's own faces are drawn in.
+fn announced(app: &AppHandle, mode: Mode, look: Option<Look>) {
+    if let Some(look) = look {
+        app.state::<AppState>().remember_ui_look(look);
+    }
+    apply_mode(app, mode);
 }
 
 /// The page announced its scheme, or the sign-in handoff implied one: remember it, and repaint the close question if
@@ -917,6 +936,9 @@ macro_rules! hosted_page {
                 update_told(&crate::update::stage(app), false),
                 label == WORKSPACE,
             ))
+            // The look the reader was last seen in, on whichever of the app's pages: this origin's storage is not
+            // theirs, and a first sandbox opened in a profile's daylight under a reader the app had just shown sanctum.
+            .initialization_script(look_init_script(state.ui_look()))
             .on_navigation({
                 let app = app.clone();
                 let label = label.to_string();
@@ -1135,6 +1157,8 @@ macro_rules! local_page {
                 update_told(&crate::update::stage(app), true),
                 false,
             ))
+            // The look the reader was last seen in, as every hosted page is handed it (`hosted_page`).
+            .initialization_script(look_init_script(state.ui_look()))
             .initialization_script($init)
             // A page starting over has no unsaved changes yet: it says again what it holds once it mounts, and until
             // then nothing of the page before it may hold a close. And whether a spare's page has loaded, so only one
@@ -2083,7 +2107,7 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
         WindowVerb::Raise => raise(&page),
         WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
         // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
-        WindowVerb::Mode(mode) => apply_mode(app, mode),
+        WindowVerb::Mode(mode, look) => announced(app, mode, look),
     }
 }
 
@@ -2570,7 +2594,7 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // The workspace's listening for its wake word: for the tray's rows and the next launch (wake.rs).
         Some(Link::Wake(args)) => crate::wake::reported(app, args),
         // The page saying what light it is drawn in; about this app's faces, not the workspace window.
-        Some(Link::Window(WindowVerb::Mode(mode))) => apply_mode(app, mode),
+        Some(Link::Window(WindowVerb::Mode(mode, look))) => announced(app, mode, look),
         // The page's own title bar, working the window it is drawn in (`work_the_window`). Nothing is parked
         // and no face is swapped: these are presses on one window, answered on that window — and only a window
         // of the app's own sends them (`parse_link`).
@@ -3087,6 +3111,20 @@ mod mode_tests {
         );
         assert!(mode_script(Mode::Dark).contains("setAttribute('data-mode', 'dark')"));
         assert!(mode_script(Mode::Light).contains("removeAttribute('data-mode')"));
+    }
+
+    /* THE LOOK EVERY EDITOR PAGE IS HANDED: the name its pre-paint script and the Theme row both use. */
+    #[test]
+    fn a_known_look_is_handed_to_every_page_and_none_leaves_it_to_the_page() {
+        assert_eq!(
+            look_init_script(Some(Look::Sanctum)),
+            "window.__INTENTIC_LOOK__ = \"sanctum\";"
+        );
+        assert_eq!(
+            look_init_script(Some(Look::System)),
+            "window.__INTENTIC_LOOK__ = \"system\";"
+        );
+        assert_eq!(look_init_script(None), "");
     }
 
     #[test]

@@ -11162,7 +11162,7 @@
             "intenticAccountSwitchBefore": "Votre compte intentic est {account}. Changez-en avant que ce sandbox ne se lie, sinon c'est le mauvais qui en devient propriétaire.",
             "intenticReady": "Intentic {version} est prêt",
             "limitedConnectionToSandbox": "Connexion limitée à ce sandbox",
-            "liveAgentOutputMay": "La sortie en direct de l'agent peut prendre du retard. Elle se remet à jour dès votre retour en ligne.",
+            "liveAgentOutputMay": "Une partie de la sortie en direct des agents attend son tour jusqu'à ce qu'une route plus rapide réponde.",
             "newVersionIntenticOut": "Une nouvelle version d'Intentic est sortie",
             "nothingToUpload": "Rien à envoyer",
             "partIntenticDidNot": "Une partie d'Intentic ne s'est pas chargée",
@@ -11192,7 +11192,7 @@
             "passkeyNudgeAdd": "Ajouter une passkey",
             "passkeyNudgeLater": "Pas maintenant",
             "analyticsConsentTitle": "Nous aider à voir où intentic vous gêne ?",
-            "analyticsConsentDetail": "Avec votre accord, nous enregistrons la façon dont l'application est utilisée : les pages que vous ouvrez, vos clics et une rediffusion masquée de l'interface. Le contenu de votre espace de travail est exclu.",
+            "analyticsConsentDetail": "Clics et rediffusion masquée. Jamais votre travail.",
             "analyticsConsentHint": "L'analyse produit passe par PostHog. La rediffusion remplace par des astérisques tout texte qui ne fait pas partie des libellés de l'application, et masque l'éditeur et les terminaux. Vous pouvez modifier votre réponse à tout moment dans Réglages, Données et confidentialité. La politique de confidentialité sur intentic.dev/privacy indique précisément ce qui est enregistré.",
             "analyticsConsentAllow": "Autoriser",
             "analyticsConsentDecline": "Non merci"

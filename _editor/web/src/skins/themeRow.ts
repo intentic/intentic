@@ -1,5 +1,5 @@
 import type { SchemeChoice } from "@intentic/ui";
-import type { Skin, SkinChoice } from "../../skins/useSkin";
+import type { Skin, SkinChoice } from "./useSkin";
 
 // ONE ROW OVER TWO STORED CHOICES. The app's look is a scheme (`system`/`light`/`dark`) and a skin
 // (`system`/`none`/`sanctum`), but two controls could show a light scheme under a dark skin with no way back, so

@@ -26,7 +26,7 @@ import { useFileNesting } from "../../models/workspace/tree/useFileNesting";
 import { useIconRailSize } from "../../workbench/window/useIconRailSize";
 import { useSkin } from "../../skins/useSkin";
 import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";
-import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
+import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "../../skins/themeRow";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { embedded, tellNative } from "../../app/environments/nativeApp";
 

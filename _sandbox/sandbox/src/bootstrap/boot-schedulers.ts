@@ -27,7 +27,7 @@ import type { BootPhase } from "./boot-phase.js";
 import { publicAddressOf } from "../env.config.js";
 import { reportedPairings } from "../hosts/device-reports.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
-import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { announceUnwatchedWrite, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { projectDirOf } from "../system/project-dir.js";
 
@@ -112,6 +112,8 @@ const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "rol
                 name,
                 withRepoLock: services.agentWorktrees.withRepoLock,
                 subscribe: subscribeWorkspaceChanges,
+                // The review left the folder out while it landed; open windows read it again now it stands committed.
+                landed: announceUnwatchedWrite,
                 logger: services.logger,
             }),
         );

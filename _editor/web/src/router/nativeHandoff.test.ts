@@ -4,7 +4,7 @@ import { useTheme } from "@intentic/ui/theme";
 import type { DaemonSession } from "@intentic/sandbox-contract/schemas/system";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import type { IntenticNative, NativeMessage } from "../app/environments/nativeApp";
-import { THEME_ROW } from "../features/settings/themeRow";
+import { THEME_ROW } from "../skins/themeRow";
 import { useSkin } from "../skins/useSkin";
 
 // The router inside the Android app's WebView, against a real router in the shell's shape. The page is the app's from

@@ -1,5 +1,5 @@
 import type { SchemeChoice } from "@intentic/ui";
-import type { Skin, SkinChoice } from "../../skins/useSkin";
+import type { Skin, SkinChoice } from "./useSkin";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
 
 // The Theme row is one control over two preferences, so the mapping has to answer for pairs the row cannot make:

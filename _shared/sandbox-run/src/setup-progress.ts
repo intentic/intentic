@@ -24,8 +24,8 @@ export interface PlanInput {
     /** `windows` swaps the first two steps. */
     readonly os: string;
     /**
-     * The sandbox image is on this machine already, so the setup starts on it with nothing to download
-     * (commands.rs `INTENTIC_REUSE_IMAGE`). Unknown reads as absent: the pull's share then waits on the bar for a download
+     * The sandbox image is on this machine already, so the setup's pull has at most a release's new layers to bring
+     * down (commands.rs `sandbox_image_ready`). Unknown reads as absent: the pull's share then waits on the bar for a download
      * that may never come, which is the honest side to be wrong on.
      */
     readonly imageReady?: boolean | undefined;

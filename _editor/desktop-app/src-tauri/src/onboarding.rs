@@ -1233,11 +1233,11 @@ fn ensure_prefetch_loop(app: &AppHandle) {
     });
 }
 
+/* A COPY DOCKER HOLDS IS NOT THE NEWEST (2026-10-25). The launch used to skip the download whenever Docker held the image
+ * at all, so a copy an earlier install left stayed what the next sandbox started on, releases behind the app that had
+ * just been installed. The download now runs anyway: `ic image prefetch` refreshes such a copy by Docker's own pull, a
+ * no-op answered as `imageInDocker` when it is current, and only a release's new layers when it is not. */
 fn run_prefetch_loop(app: &AppHandle) {
-    let fresh = lock_store(|store| store.prefetch.state == "idle");
-    if fresh && !installing() && nothing_to_fetch() {
-        skip_prefetch(app, "imageInDocker");
-    }
     loop {
         let installing = installing();
         let next = lock_store(|store| {
@@ -1264,7 +1264,8 @@ fn run_prefetch_loop(app: &AppHandle) {
                 step_aside(app);
                 std::thread::sleep(PREFETCH_TICK);
             }
-            Next::Recheck if nothing_to_fetch() => skip_prefetch(app, "imageInDocker"),
+            // The setup it stepped aside for asked the registry itself: a copy it left is current.
+            Next::Recheck if image_in_docker() => skip_prefetch(app, "imageInDocker"),
             Next::Recheck | Next::Fetch => fetch_unless_metered(app),
         }
     }
@@ -1272,6 +1273,12 @@ fn run_prefetch_loop(app: &AppHandle) {
 
 fn fetch_unless_metered(app: &AppHandle) {
     if !PREFETCH_ANYWAY.load(Ordering::SeqCst) && metered() {
+        // Refreshing a copy is not worth a metered connection's bytes before anyone asked for a sandbox, nor a question
+        // about it: the setup's own pull asks the registry when one is made.
+        if image_in_docker() {
+            skip_prefetch(app, "imageInDocker");
+            return;
+        }
         lock_store(|store| store.prefetch.state = "metered".into());
         emit(app);
         wait_out_metered();
@@ -1347,9 +1354,10 @@ fn stop_prefetch_runs() {
     }
 }
 
-/// Docker is up and already holds the sandbox image: a PC set up before, or one whose setup has finished (a finished
-/// setup is a sandbox running from that image, loaded or pulled into Docker). Nothing is left to fetch ahead.
-fn nothing_to_fetch() -> bool {
+/// Docker is up and already holds a copy of the sandbox image: a PC set up before, or one whose setup has finished (a
+/// finished setup is a sandbox running from that image, loaded or pulled into Docker). Whether that copy is the newest
+/// release is the registry's to say, which only a pull asks.
+fn image_in_docker() -> bool {
     scripts::engine_listening() && crate::commands::sandbox_image_ready()
 }
 

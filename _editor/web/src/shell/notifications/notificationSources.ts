@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, type Ref } from "vue";
 import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
@@ -200,6 +200,30 @@ export const outageCardShown = (input: {
     input.notice.sayAtOnce ||
     (input.availability === `busy` ? input.elapsedMs >= BUSY_CARD_AFTER_MS : input.availability === `unreachable` || input.availability === `detached`);
 
+// Shown only once every faster address failed AND HTTP/1.1's 6-connection cap made a stream wait: a new sandbox
+// answers on plain HTTP alone for its first minute, and a card about a limit nobody has hit only covers the chat box.
+// Put away for the sandbox it was shown on, for the page's life.
+const holdTransportNotice = (activeSandboxId: Readonly<Ref<string | undefined>>): void => {
+    const { transportStarved } = useEndpoint();
+    const dismissedOn = ref<string | undefined>(undefined);
+    hold(`transport`, () =>
+        transportStarved.value && dismissedOn.value !== activeSandboxId.value
+            ? {
+                  kind: `condition`,
+                  tone: `info`,
+                  icon: `wifi`,
+                  title: t(`shell.notificationSources.limitedConnectionToSandbox`),
+                  detail: t(`shell.notificationSources.liveAgentOutputMay`),
+                  // Plain HTTP on 127.0.0.1 is HTTP/1.1, which a browser caps at six connections across every window, one per streaming agent.
+                  hint: t(`shell.notificationSources.transportHint`),
+                  dismiss: () => {
+                      dismissedOn.value = activeSandboxId.value;
+                  },
+              }
+            : undefined,
+    );
+};
+
 // Call order is stack order, growing up from the corner: most transient first (upload, seconds) to most permanent
 // last (a new build), so frequent changes never shove a fixed one.
 export const startNotificationSources = (): void => {
@@ -256,21 +280,7 @@ export const startNotificationSources = (): void => {
     // A reply being read aloud: what the voice is doing before its first word, and Stop once the reply has scrolled away.
     holdReadAloudNotice();
 
-    // Shown only when every faster address fails: HTTP/1.1 hits the browser's 6-connection cap.
-    const { degradedTransport } = useEndpoint();
-    hold(`transport`, () =>
-        degradedTransport.value
-            ? {
-                  kind: `condition`,
-                  tone: `info`,
-                  icon: `wifi`,
-                  title: t(`shell.notificationSources.limitedConnectionToSandbox`),
-                  detail: t(`shell.notificationSources.liveAgentOutputMay`),
-                  // Plain HTTP on 127.0.0.1 is HTTP/1.1, which a browser caps at six connections across every window, one per streaming agent.
-                  hint: t(`shell.notificationSources.transportHint`),
-              }
-            : undefined,
-    );
+    holdTransportNotice(activeSandboxId);
 
     // Open on a sandbox without the platform (features/sandbox/recovery/directMode.ts): what still works and what waits,
     // until the next session check the platform answers takes the window back.

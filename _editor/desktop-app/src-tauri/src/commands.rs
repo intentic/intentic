@@ -281,9 +281,9 @@ pub(crate) fn setup_image() -> String {
         .unwrap_or_else(|| "ghcr.io/intentic/sandbox:stable".to_string())
 }
 
-/// Whether this machine holds the image a setup runs, so the setup starts on it with no download (`INTENTIC_REUSE_IMAGE`
-/// below): what a folder's dialog and its progress are drawn by (project.rs). Asked briefly, since a stopped engine
-/// makes this a "no" rather than a reason to wait.
+/// Whether this machine holds the image a setup runs, so the setup's pull has at most a release's new layers to bring
+/// down, and none once the launch's download has refreshed it (onboarding.rs): what a folder's dialog and its progress
+/// are drawn by (project.rs). Asked briefly, since a stopped engine makes this a "no" rather than a reason to wait.
 pub(crate) fn sandbox_image_ready() -> bool {
     scripts::docker_output(
         &["image", "inspect", "--format", "{{.Id}}", &setup_image()],
@@ -329,10 +329,9 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     if let Some(image) = ctx.sandbox_image.clone() {
         env.push(("SANDBOX_IMAGE".into(), image));
     }
-    // A sandbox image this machine already holds starts this one, instead of a registry pull on every setup: seconds
-    // when nothing moved, minutes of download when `:stable` did (ic's connect.rs `reuses_local_image`). The machine
-    // agent's update loop keeps that tag current, and the new sandbox offers anything newer as every sandbox does.
-    env.push(("INTENTIC_REUSE_IMAGE".into(), "1".into()));
+    // No `INTENTIC_REUSE_IMAGE` (2026-10-25): a setup that started on the copy this machine held started a fresh install's
+    // first sandbox on whatever release an earlier one left, already behind. `ic` asks the registry for `:stable` even
+    // with a copy here (seconds when it is current), and runs the copy when the registry cannot be reached.
 
     /* Elevate only to install Docker, and only when there is none — the same trade the setup screen's "I already have Docker" checkbox makes. */
     let elevate = ctx.host == Host::Unix && !ctx.docker_ready;
@@ -1414,11 +1413,11 @@ mod tests {
     }
 
     #[test]
-    fn a_setup_starts_on_the_image_this_machine_holds_and_an_update_still_pulls() {
+    fn a_setup_never_starts_on_a_copy_of_the_image_without_asking_the_registry() {
         for host in [Host::Windows, Host::Unix] {
+            // A copy this machine held from an earlier install would start a new sandbox releases behind.
             let setup = setup_script(&setup_args("c"), &context(host, true));
-            assert_eq!(env_of(&setup, "INTENTIC_REUSE_IMAGE"), Some("1"));
-            // An update is asked for to GET the newer image: reusing the old one there would be no update at all.
+            assert_eq!(env_of(&setup, "INTENTIC_REUSE_IMAGE"), None);
             let update = recreate_script("work", None, false, host, RELEASE);
             assert_eq!(env_of(&update, "INTENTIC_REUSE_IMAGE"), None);
         }

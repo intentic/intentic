@@ -145,8 +145,10 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     );
     *ASKED_IN.lock().unwrap() = attempt.asked_in;
     // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
-    // be drawn in that light from here on rather than waiting for the page to announce it.
-    if let Some(mode) = mode_of_profile(args.profile.as_deref()) {
+    // be drawn in that light from here on rather than waiting for the page to announce it. Unless the app has seen
+    // the reader's look: the page adopts that one over the profile's (windows.rs `look_init_script`).
+    let look = app.state::<crate::state::AppState>().ui_look();
+    if let Some(mode) = early_mode(args.profile.as_deref(), look) {
         crate::windows::apply_mode(app, mode);
     }
     crate::windows::show_workspace_at(app, Some(&path));
@@ -185,6 +187,19 @@ fn mode_of_profile(profile: Option<&str>) -> Option<crate::state::Mode> {
         "desk" => Some(crate::state::Mode::Light),
         _ => None,
     }
+}
+
+/// The light to draw the app's faces in before the signed-in page has said, as the profile names it: none once a page
+/// has announced the reader's look, which the page then wears instead of the profile's, so drawing the profile's
+/// daylight under it would only be a flash of the wrong light (2026-10-25).
+fn early_mode(
+    profile: Option<&str>,
+    look: Option<crate::state::Look>,
+) -> Option<crate::state::Mode> {
+    if look.is_some() {
+        return None;
+    }
+    mode_of_profile(profile)
 }
 
 #[cfg(test)]
@@ -306,6 +321,24 @@ mod tests {
         // `default` follows the OS, which only the page can read: nothing for the binary to paint early.
         assert_eq!(mode_of_profile(Some("default")), None);
         assert_eq!(mode_of_profile(None), None);
+    }
+
+    /* A LOOK THE READER WAS SEEN IN OUTRANKS THE PROFILE'S, so its daylight is never painted early under sanctum. */
+    #[test]
+    fn a_seen_look_keeps_the_profiles_light_off_the_app() {
+        assert_eq!(
+            early_mode(Some("desk"), None),
+            Some(crate::state::Mode::Light)
+        );
+        assert_eq!(
+            early_mode(Some("desk"), Some(crate::state::Look::Sanctum)),
+            None
+        );
+        assert_eq!(
+            early_mode(Some("desk"), Some(crate::state::Look::System)),
+            None
+        );
+        assert_eq!(early_mode(None, None), None);
     }
 
     #[test]

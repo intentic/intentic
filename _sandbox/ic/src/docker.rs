@@ -1734,6 +1734,27 @@ mod tests {
     }
 
     #[test]
+    fn a_registry_out_of_reach_leaves_the_copy_this_machine_holds_to_run() {
+        // A setup asks the registry even when a copy is here (connect.rs): offline, that copy is what it starts on.
+        let mut attempts = 0;
+        let ended = pull_retrying(
+            IMAGE,
+            &mut || {
+                attempts += 1;
+                Ok(Streamed {
+                    ok: false,
+                    said: "Error response from daemon: Get \"https://ghcr.io/v2/\": dial tcp: lookup ghcr.io: no such host".to_string(),
+                })
+            },
+            &|| true,
+            &mut |_| panic!("no wait: the copy is here"),
+            &mut || panic!("no logout: nothing refused the pull"),
+        );
+        assert_eq!(attempts, 1);
+        assert!(ended.is_ok());
+    }
+
+    #[test]
     fn a_broken_transfer_is_still_retried_to_the_limit() {
         let broke = "read tcp 10.0.0.2:52344->140.82.121.33:443: read: connection reset by peer";
         let run = scripted(&[broke, broke, broke]);

@@ -91,6 +91,43 @@ impl Mode {
     }
 }
 
+/// The look the reader keeps, as the editor's Theme row names it (web `skins/themeRow.ts`): one of four,
+/// where [`Mode`] is only the light it resolves to. Kept because the app's pages live on different origins — the
+/// workspace on the platform's, every local window and the sandbox face on the app's own bundle — and each origin has
+/// a storage of its own: a look chosen in one was nothing to the next, so a first sandbox opened in the light of an
+/// arriving profile under a reader the app had just shown sanctum (2026-10-25). Every page is handed this before it
+/// paints and adopts it while its own storage holds no look of the reader's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Look {
+    System,
+    Light,
+    Dark,
+    Sanctum,
+}
+
+impl Look {
+    /// The wire spelling, on a link and in the page's own Theme row.
+    pub fn parse(value: &str) -> Option<Look> {
+        match value {
+            "system" => Some(Look::System),
+            "light" => Some(Look::Light),
+            "dark" => Some(Look::Dark),
+            "sanctum" => Some(Look::Sanctum),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Look::System => "system",
+            Look::Light => "light",
+            Look::Dark => "dark",
+            Look::Sanctum => "sanctum",
+        }
+    }
+}
+
 /// Which of the app's two faces the user was last seen choosing: the workspace (the hosted editor) or Home (the
 /// main local window, windows.rs `HOME`: the editor's shell on a folder of this computer, with This device beside
 /// it). What a launch and the tray's "Open Intentic" open onto (lib.rs `opening`), kept on disk as `last-face.json`.
@@ -213,6 +250,9 @@ pub struct AppState {
     /// card opened before the workspace (a resume after a restart, the tray's "Home") is drawn the
     /// way the workspace was last seen rather than the way this binary happens to default.
     ui_mode: Mutex<Option<Mode>>,
+    /// The reader's look, as the page they last saw announced it beside its scheme; `None` until any page has said,
+    /// and from a page older than the announcement. See [`Look`].
+    ui_look: Mutex<Option<Look>>,
     /// Whether a sandbox has ever run on THIS machine. Kept on disk because the question is asked at the one
     /// moment nothing can be measured: a launch whose Docker is not running cannot be asked what it hosts.
     hosts_sandboxes: Mutex<bool>,
@@ -253,6 +293,7 @@ impl AppState {
         let settings = read_json(&config_dir.join("settings.json")).unwrap_or_default();
         let names = read_json(&config_dir.join("sandboxes.json")).unwrap_or_default();
         let ui_mode = read_json(&config_dir.join("ui-mode.json"));
+        let ui_look = read_json(&config_dir.join("ui-look.json"));
         let hosts_sandboxes = read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false);
         let workspace_seen = read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false);
         let last_face = face_or_migrated(
@@ -277,6 +318,7 @@ impl AppState {
             names: Mutex::new(names),
             install_id: Mutex::new(None),
             ui_mode: Mutex::new(ui_mode),
+            ui_look: Mutex::new(ui_look),
             hosts_sandboxes: Mutex::new(hosts_sandboxes),
             workspace_seen: Mutex::new(workspace_seen),
             last_face: Mutex::new(last_face),
@@ -395,6 +437,21 @@ impl AppState {
         }
         *held = Some(mode);
         write_json(&self.config_dir.join("ui-mode.json"), &mode);
+        true
+    }
+
+    pub fn ui_look(&self) -> Option<Look> {
+        *self.ui_look.lock().unwrap()
+    }
+
+    /// Remember the look a page announced beside its scheme. Written only when it changed, as the scheme is.
+    pub fn remember_ui_look(&self, look: Look) -> bool {
+        let mut held = self.ui_look.lock().unwrap();
+        if *held == Some(look) {
+            return false;
+        }
+        *held = Some(look);
+        write_json(&self.config_dir.join("ui-look.json"), &look);
         true
     }
 
@@ -714,6 +771,7 @@ mod tests {
             install_id: Mutex::new(None),
             // Read the way `load` reads it: the test below is about what survives a launch.
             ui_mode: Mutex::new(read_json(&config_dir.join("ui-mode.json"))),
+            ui_look: Mutex::new(read_json(&config_dir.join("ui-look.json"))),
             hosts_sandboxes: Mutex::new(
                 read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false),
             ),
@@ -824,6 +882,25 @@ mod tests {
         assert_eq!(state_in(&dir).ui_mode(), Some(Mode::Light));
         assert_eq!(Mode::parse("dark"), Some(Mode::Dark));
         assert_eq!(Mode::parse("sepia"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_ui_look_is_kept_across_launches_and_written_only_on_change() {
+        let dir = std::env::temp_dir().join(format!("intentic-look-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+        assert_eq!(state_in(&dir).ui_look(), None);
+        let state = state_in(&dir);
+        assert!(state.remember_ui_look(Look::Sanctum));
+        assert!(
+            !state.remember_ui_look(Look::Sanctum),
+            "same answer, nothing to write"
+        );
+        assert_eq!(state_in(&dir).ui_look(), Some(Look::Sanctum));
+        for look in [Look::System, Look::Light, Look::Dark, Look::Sanctum] {
+            assert_eq!(Look::parse(look.id()), Some(look));
+        }
+        assert_eq!(Look::parse("sepia"), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

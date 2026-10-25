@@ -62,6 +62,13 @@ const degradedTransport = computed(() => {
     return id !== undefined && endpoints.value[id]?.kind === `local-insecure`;
 });
 
+// The sandbox whose plain-HTTP pool actually made a stream wait (the overflow below). The plain address alone costs
+// nothing until a third agent streams at once, and a brand-new sandbox answers on it for its first minute or so while
+// its tunnel and certificate come up: telling the reader then names a limit that has not touched them.
+// allow(module-state): one flag for the one window's active route
+const starvedOn = ref<string | undefined>(undefined);
+const transportStarved = computed(() => degradedTransport.value && starvedOn.value === activeSandboxId.value);
+
 // Stream capacity depends on the protocol the browser negotiated with the address in use (streamBudget.ts), read live
 // since the endpoint can change mid-stream. All three stream hooks live here because this module alone knows the
 // transport.
@@ -85,6 +92,7 @@ setStreamOverflow(() => {
         return true;
     }
     if (kind === `local-insecure`) {
+        starvedOn.value = id;
         resolvedAt.delete(id);
     }
     return false;
@@ -140,6 +148,10 @@ const resolve = async (): Promise<void> => {
             // Stamped even when the answer is unchanged, so a still-missing certificate still buys another interval.
             resolvedAt.set(id, Date.now());
             endpoints.value = { ...endpoints.value, [id]: endpoint };
+            // A better route is a fresh start: plain HTTP again later has to make a stream wait again to be said.
+            if (endpoint.kind !== `local-insecure` && starvedOn.value === id) {
+                starvedOn.value = undefined;
+            }
         }
     })().finally(() => resolving.delete(id));
     resolving.set(id, attempt);
@@ -225,5 +237,17 @@ const reset = (sandboxId: string): void => {
 };
 
 export function useEndpoint() {
-    return { daemonBase, usingLocal, degradedTransport, resolve, demote, demoteIfUnreachable, reset, recheckAfterWake, routeRechecked, onRouteLost };
+    return {
+        daemonBase,
+        usingLocal,
+        degradedTransport,
+        transportStarved,
+        resolve,
+        demote,
+        demoteIfUnreachable,
+        reset,
+        recheckAfterWake,
+        routeRechecked,
+        onRouteLost,
+    };
 }

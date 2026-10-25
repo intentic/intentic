@@ -121,7 +121,7 @@
                 // INSIDE THE ANDROID APP'S WEBVIEW the look is the app's, worn over the one stored here and never
                 // written over it: what its object says now, else what its address or this tab last said
                 // (src/app/environments/nativeApp.ts reads the same, and src/bootProfile.test.ts runs this against it).
-                // Each look is the pair of choices the Theme row stores for it (src/features/settings/themeRow.ts).
+                // Each look is the pair of choices the Theme row stores for it (src/skins/themeRow.ts).
                 var EMBED_LOOKS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"] };
                 var embedLook = null;
                 try {
@@ -135,6 +135,29 @@
                             tab ? tab.getItem("intentic.embed.look") : null,
                         ];
                         for (var o = 0; o < lookOffers.length && embedLook === null; o++) if (owns.call(EMBED_LOOKS, lookOffers[o])) embedLook = lookOffers[o];
+                    }
+                } catch (e) {}
+                // INSIDE THE DESKTOP APP the look is the one the reader was last seen in on any of its pages
+                // (windows.rs `look_init_script`): each of those pages is an origin with a storage of its own, so a
+                // first sandbox used to open in an arriving profile's daylight under a reader the app had just shown
+                // sanctum. Adopted only while this origin holds no look the reader chose (nothing stored, or what a
+                // profile put there), and stored, so useTheme and useSkin read the same a module later and a look
+                // chosen here is never undone by one handed later (src/bootProfile.test.ts runs this).
+                try {
+                    var appLook = window.__INTENTIC_LOOK__;
+                    if (embedLook === null && typeof appLook === "string" && owns.call(EMBED_LOOKS, appLook)) {
+                        var profiledBy = localStorage.getItem("ui-profile");
+                        var profiled = profiledBy !== null && owns.call(PROFILES, profiledBy) ? PROFILES[profiledBy] : {};
+                        var LOOK_KEYS = ["ui-color-scheme", "ui-skin"];
+                        var chosen = false;
+                        for (var k = 0; k < LOOK_KEYS.length; k++) {
+                            var kept = localStorage.getItem(LOOK_KEYS[k]);
+                            if (kept !== null && kept !== (owns.call(profiled, LOOK_KEYS[k]) ? profiled[LOOK_KEYS[k]] : null)) chosen = true;
+                        }
+                        if (!chosen) {
+                            localStorage.setItem("ui-color-scheme", EMBED_LOOKS[appLook][0]);
+                            localStorage.setItem("ui-skin", EMBED_LOOKS[appLook][1]);
+                        }
                     }
                 } catch (e) {}
                 var handed = embedLook === null ? null : EMBED_LOOKS[embedLook];

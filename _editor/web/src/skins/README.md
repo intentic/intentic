@@ -49,5 +49,5 @@ canvas band and stop pinning, since a pinned header with nothing behind it would
 
 - [useSkin.ts](useSkin.ts) — the preference, the rule that resolves `system`, and the dark pin.
 - [sanctum.css](sanctum.css) — the one skin, as role tokens and surfaces under `[data-skin="sanctum"]`.
-- [../features/settings/themeRow.ts](../features/settings/themeRow.ts) — how the four looks map onto scheme and skin.
+- [themeRow.ts](themeRow.ts) — how the four looks map onto scheme and skin.
 - [useWallpaper.ts](useWallpaper.ts) — the wallpaper preference and the attribute it writes.

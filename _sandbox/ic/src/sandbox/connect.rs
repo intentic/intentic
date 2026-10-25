@@ -387,41 +387,18 @@ fn connect(
         );
     } else if keeps_image && is_registryless(&sandbox_image) {
         bail!("the image this sandbox runs ({sandbox_image}) is no longer on this machine, so it cannot be reinstalled as it is. Nothing was changed.\n       Run `ic sandbox update {slug}` first, or name the image to use in SANDBOX_IMAGE.");
-    } else if reuses_local_image(env("INTENTIC_REUSE_IMAGE").as_deref(), self_host)
-        && docker::image_exists(&sandbox_image)
-    {
-        step(
-            "pulling-image",
-            &format!("using the sandbox image already on this machine ({sandbox_image})."),
-        );
-        // Anything fetched ahead for it is a second copy nothing will read.
-        crate::image_cache::discard(&sandbox_image);
     } else {
-        // An image fetched ahead of Docker (`ic image prefetch`, which the desktop app starts while Docker is still being
-        // installed) is finished and loaded here instead of pulled; without one, or if it cannot be used, the pull.
-        let fetched = match crate::image_cache::load_if_cached(&sandbox_image, &log) {
-            crate::image_cache::Cached::Loaded => {
-                step(
-                    "pulling-image",
-                    &format!(
-                        "loaded the sandbox image downloaded ahead of time ({sandbox_image})."
-                    ),
-                );
-                Ok(())
-            }
-            crate::image_cache::Cached::Nothing => fetch_image(&sandbox_image, &log),
-            crate::image_cache::Cached::Failed(why) => match docker::engine_gone(&why) {
-                // Docker went away before it could take the download in, and a pull would ask the same engine. The
-                // download stays where it is (discarded only once Docker has the image), so the re-run loads it.
-                Some(stop) => Err(stop),
-                None => {
-                    crate::ui::warn(&format!(
-                        "the sandbox image downloaded ahead of time could not be used ({why}); pulling it instead."
-                    ));
-                    fetch_image(&sandbox_image, &log)
-                        .map(|()| crate::image_cache::discard(&sandbox_image))
-                }
-            },
+        /* A COPY THIS MACHINE HOLDS IS ASKED ABOUT, NEVER TRUSTED AS CURRENT (2026-10-25). The desktop app's setups used to
+        start on whatever `:stable` the machine held (`INTENTIC_REUSE_IMAGE`), on the word that the machine agent kept that
+        tag current: it does only for a running sandbox, every six hours, so a copy an earlier install or a removed sandbox
+        left was releases behind, and a fresh install of the newest app welcomed its person into a sandbox that already
+        had an update to take. The pull is the registry's answer: seconds when the copy is current, only the new layers
+        when the tag moved, and the copy itself when the registry cannot be reached (docker.rs `pull`). Anything fetched
+        ahead for it is then a second copy nothing will read. */
+        let fetched = if docker::image_exists(&sandbox_image) {
+            fetch_image(&sandbox_image, &log).map(|()| crate::image_cache::discard(&sandbox_image))
+        } else {
+            fetch_absent_image(&sandbox_image, &log)
         };
         if let Err(stop) = fetched {
             // The report keeps the fix apart from what happened, so the wizard shows it as the fix.
@@ -1212,13 +1189,31 @@ pub(crate) fn is_registryless(image: &str) -> bool {
     }
 }
 
-/// Whether this setup runs the image this machine already holds rather than asking the registry for a newer one:
-/// only when its caller asked (`INTENTIC_REUSE_IMAGE=1`, which the desktop app sets on a setup), and never for a
-/// self-host setup, whose tunnel step runs the image too. A second sandbox on a machine then skips a registry round
-/// trip, and one whose `:stable` moved since the last pull skips gigabytes; the machine agent's update loop keeps
-/// that tag current, and the sandbox's own update check offers anything newer, as it does every sandbox running.
-fn reuses_local_image(asked: Option<&str>, self_host: bool) -> bool {
-    !self_host && asked == Some("1")
+/// The image into Docker on a machine that holds no copy of it: an image fetched ahead of Docker (`ic image prefetch`,
+/// which the desktop app starts while Docker is still being installed) is finished and loaded instead of pulled;
+/// without one, or if it cannot be used, the pull.
+fn fetch_absent_image(image: &str, log: &Log) -> std::result::Result<(), docker::PullStop> {
+    match crate::image_cache::load_if_cached(image, log) {
+        crate::image_cache::Cached::Loaded => {
+            step(
+                "pulling-image",
+                &format!("loaded the sandbox image downloaded ahead of time ({image})."),
+            );
+            Ok(())
+        }
+        crate::image_cache::Cached::Nothing => fetch_image(image, log),
+        crate::image_cache::Cached::Failed(why) => match docker::engine_gone(&why) {
+            // Docker went away before it could take the download in, and a pull would ask the same engine. The
+            // download stays where it is (discarded only once Docker has the image), so the re-run loads it.
+            Some(stop) => Err(stop),
+            None => {
+                crate::ui::warn(&format!(
+                    "the sandbox image downloaded ahead of time could not be used ({why}); pulling it instead."
+                ));
+                fetch_image(image, log).map(|()| crate::image_cache::discard(image))
+            }
+        },
+    }
 }
 
 /// Make the image runnable. A registry-less reference (a dev tag like intentic-sandbox:dev) can only resolve
@@ -1754,18 +1749,6 @@ mod tests {
         assert!(is_registryless("alpine"));
         // A bare namespaced name is still Docker Hub's — `library/alpine` has no registry host.
         assert!(is_registryless("library/alpine:3"));
-    }
-
-    #[test]
-    fn the_local_image_is_reused_only_when_the_caller_asked_and_nothing_else_runs_it() {
-        // The desktop app's setup: the copy this machine holds starts the sandbox, with no registry in the loop.
-        assert!(reuses_local_image(Some("1"), false));
-        // Anyone else (the one-liner, a script that set nothing) keeps asking the registry for the newest release.
-        assert!(!reuses_local_image(None, false));
-        assert!(!reuses_local_image(Some("0"), false));
-        assert!(!reuses_local_image(Some("yes"), false));
-        // A self-host setup's tunnel step runs this image too, and must never run a stale copy of it.
-        assert!(!reuses_local_image(Some("1"), true));
     }
 
     #[test]
