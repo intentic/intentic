@@ -155,9 +155,13 @@ test("cursor holds every mode, a tool list, the terminal panel and its own skill
     const cursor = capabilitiesOf("cursor", "native");
     expect(cursor.permissions).toBe("modes");
     expect(cursor.terminals).toBe(true);
-    expect(cursor.skillDiscovery).toBe("native");
+    expect(cursor.skillDiscovery).toEqual({ workspace: true, builtIn: false, kit: true });
     expect(cursor.toolAllowlist).toBe(true);
-    expect(limitationsOf(cursor)).toEqual(["no plugins", "secrets masked in shell output only, not in files the agent reads"]);
+    expect(limitationsOf(cursor)).toEqual([
+        "no plugins",
+        "secrets masked in shell output only, not in files the agent reads",
+        "edit checks said as the turn ends, not after each edit",
+    ]);
 });
 
 // Devin runs the ACP floor under its own name: what the floor gained (approvals, questions) it has too, and the effort

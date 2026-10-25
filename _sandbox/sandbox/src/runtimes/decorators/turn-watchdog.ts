@@ -3,6 +3,7 @@
 // each vendor stops differently.
 
 import { within } from "@intentic/base/async";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 
 export interface TurnTimeouts {
     readonly inactivityMs: number;
@@ -108,6 +109,20 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
         },
     };
 };
+
+/**
+ * What an expired watchdog ends a turn with, the same for every loop: silence past its window is a provider that stopped
+ * answering mid-turn, coded `provider-outage` so the daemon re-runs it on backoff; the hard cap is the turn's own ceiling,
+ * coded `turn-cap` as the Claude Code loop's is, its work perhaps half done and the next move the user's. `said` puts the
+ * loop's own words around why it stopped. 2026-10-25: Muse called both an outage, OpenCode threw the cap uncoded, and
+ * ACP and Pi coded neither.
+ */
+export const expiredFrame = (clock: Pick<TurnWatchdog, "capRemaining" | "expiry">, said: (why: string) => string): Extract<AgentEvent, { kind: "error" }> => ({
+    kind: "error",
+    code: clock.capRemaining() > 0 ? "provider-outage" : "turn-cap",
+    message: said(clock.expiry()),
+    own: true,
+});
 
 // How long a wait on a held clock sleeps before it looks again. A timer cannot be set for ever, and the release restarts
 // the silence window a whole window out, so a look this often re-arms well before the next deadline.

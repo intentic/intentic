@@ -12,6 +12,7 @@ import { z } from "zod";
 import { decidePermission } from "./acp-permissions.js";
 import { recordOptions, type SessionOptions } from "./acp-model.js";
 import { noteMode, type SessionModes } from "./acp-modes.js";
+import type { PreparedTerminal } from "./acp-terminal.js";
 
 // How a connection hands each session's traffic to the turn bound to it, kept apart from the process that carries it
 // (acp-connection.ts) so the in-process test fixture routes exactly the same way without a spawn.
@@ -29,8 +30,10 @@ export interface TurnHooks {
         readonly cwd: string;
         readonly onCreate: () => void;
         // The rulebook's word before the daemon runs a command for the agent: resolves to run it, throws the refusal.
-        // The daemon executes terminal/create itself, so this is the one check between the agent and the shell.
-        readonly admit: (request: CreateTerminalRequest) => Promise<void>;
+        // The daemon executes terminal/create itself, so this is the one check between the agent and the shell. Resolves
+        // to the line the one command runner made of it (acp-terminal.ts acpTerminalShell), or undefined to run the
+        // agent's own words.
+        readonly admit: (request: CreateTerminalRequest) => Promise<PreparedTerminal | undefined>;
     };
 }
 

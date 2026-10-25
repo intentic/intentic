@@ -447,7 +447,7 @@ test("Grok receives the connected browser granted to its persona, and no other a
         undefined,
     );
     // The daemon's own servers ride the same lease after it (daemon-tools/door-tools.ts); no other browser does.
-    const daemonOwn = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code"]);
+    const daemonOwn = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "terminal"]);
     expect(request.tools.remote?.filter((tool) => !daemonOwn.has(tool.name))).toEqual([routed]);
     expect(request.tools.sdkServers).toBeUndefined();
     // 2026-10-25: OpenCode turns held the accounts' browser and were told nothing of it. Now they are, by the name

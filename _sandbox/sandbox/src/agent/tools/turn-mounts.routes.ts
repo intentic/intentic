@@ -89,6 +89,11 @@ export const createTurnMountRoute =
         mounts: Pick<TurnMounts, "resolve">,
         endpoints: MountEndpoints,
         clean?: (tool: string, result: ToolOutput, conversationId: string | undefined) => Promise<ToolOutput>,
+        // Every stored secret's value masked to its reference in what a tool answered, for every target and every
+        // runtime: the one place every mounted call's result passes. Claude's PostToolUse hook also masks; masking twice
+        // finds nothing the second time. Until 2026-10-25 only Claude, Pi and Cursor masked, so a script the code server
+        // ran printed a resolved secret straight to a Codex, OpenCode, ACP or Muse model.
+        mask?: (result: ToolOutput) => Promise<ToolOutput>,
     ) =>
     async (c: Context<AppEnv>): Promise<Response> => {
         const name = c.req.param("mount") ?? "";
@@ -106,19 +111,19 @@ export const createTurnMountRoute =
         }
         const handle = rpcOf(endpoints, target, call);
         return answerRpc(c, async (message) => {
-            const answer = await handle(message);
-            // Daemon servers already pass through sealedDoor. Transport messages and notifications are untouched.
+            const answered = await handle(message);
+            // Transport messages and notifications are untouched.
             const toolCall = message.method === "tools/call" ? ToolCallSchema.safeParse(message.params) : undefined;
-            if (
-                reach.cleanOutput === false ||
-                target.kind === "daemon" ||
-                clean === undefined ||
-                toolCall?.success !== true ||
-                answer?.result === undefined
-            ) {
+            if (toolCall?.success !== true || answered?.result === undefined) {
+                return answered;
+            }
+            const masked = mask === undefined ? answered.result : await mask(answered.result);
+            const answer = masked === answered.result ? answered : { ...answered, result: masked };
+            // Daemon servers already pass through sealedDoor's cleaning.
+            if (reach.cleanOutput === false || target.kind === "daemon" || clean === undefined) {
                 return answer;
             }
-            const result = await clean(`mcp__${name}__${toolCall.data.name}`, answer.result, call.conversationId);
-            return result === answer.result ? answer : { ...answer, result };
+            const result = await clean(`mcp__${name}__${toolCall.data.name}`, masked, call.conversationId);
+            return result === masked ? answer : { ...answer, result };
         });
     };

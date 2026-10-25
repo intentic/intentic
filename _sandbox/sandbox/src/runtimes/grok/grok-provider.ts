@@ -78,6 +78,10 @@ export const planGrokTurn = async (
     const catalog = await services.openCode.xaiModels();
     const valid = new Set(catalog.models.map((entry) => entry.id));
     const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
+    // A sealed request reads nothing past its prompt, so nothing is mounted for it (the OpenCode loop denies every tool).
+    if (context.base.policy.sealed === true) {
+        return armPlan(services.grokAgent, { ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } }, OPENCODE_XAI_PROVIDER);
+    }
     // Leased last, once nothing can refuse the turn: only the loop it arms releases it.
     const { mounted, tools, hooks } = await doorToolsOf(services, input, context, granted, false);
     // Overrides base's input.model with the validated id; the adapter folds attachment paths into the prompt. OpenCode
@@ -103,6 +107,9 @@ export const planGrokTurn = async (
 // its route. Health keys off the runtime, so the runtime's own answer is Grok's and each hosted provider has its own.
 const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps & OpenCodeHostedDeps> = {
     runtime: "opencode",
+    // Serves helpers too (a commit subject, a title): planGrokTurn, the hosted route's plan and the OpenCode loop read
+    // `policy.sealed`.
+    sealed: true,
     preflight: (services, input, context, granted) =>
         input.agent === "grok" ? planGrokTurn(services, input, context, granted) : planOpenCodeRouteTurn(services, input, context, granted),
     hostHealth: (services, provider) => (provider === "grok" ? OPENCODE_ADAPTER.health(services) : openCodeRouteHealth(services, provider)),

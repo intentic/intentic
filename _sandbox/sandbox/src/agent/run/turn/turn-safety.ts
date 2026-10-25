@@ -45,6 +45,8 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
             judging: settings.commandJudge,
             // Whether outside content caused this turn, the same distinction the admission floor draws, read for the taint.
             ...opt("outsideWake", input.outsideWake),
+            // The owner's action rules, which every runtime's command guard checks before a command runs.
+            ...opt("actionRules", Object.keys(settings.actionRules).length > 0 ? settings.actionRules : undefined),
         },
         tools: {
             ...base.tools,

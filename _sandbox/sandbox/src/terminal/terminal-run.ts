@@ -29,6 +29,9 @@ export interface TerminalRunOptions {
     readonly timeoutMs?: number;
     // Called when the wrapper is spawned, not queued; announcing too early names a tab tmux hasn't made yet.
     readonly onStarted?: () => void;
+    // The command already runs itself through bin/tmux-run in the session (the one command runner's rewrite,
+    // runtimes/decorators/shell-line.ts), so it is run as written rather than wrapped in a second window.
+    readonly direct?: boolean;
 }
 
 export interface TerminalRunResult {
@@ -88,7 +91,8 @@ export const createTerminalRunner = (): TerminalRunner => {
             ...(options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
         };
         try {
-            const { stdout } = visible
+            const { stdout } =
+                visible && options.direct !== true
                 ? await execFileAsync(
                       TMUX_RUN_BIN,
                       [

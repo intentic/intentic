@@ -290,3 +290,28 @@ test("a conversation reaches a device only while one of its live turns mounts it
     turn.release();
     expect(mounts.reaches("conv-a", { kind: "device", id: "rog" })).toBe(false);
 });
+
+// 2026-10-25: only Claude, Pi and Cursor masked what a tool answered, so a script the code server ran could print a
+// resolved secret straight to a Codex, OpenCode, ACP or Muse model. The door is where every mounted call's result passes.
+test("the door masks what a mounted tool answered, for every target, and leaves other messages alone", async () => {
+    const mounts = mountsAt();
+    const leak = { content: [{ type: "text", text: "token=s3cr3t-value" }] };
+    const daemon = { handle: async (message: RpcMessage) => ({ jsonrpc: "2.0" as const, id: message.id ?? null, result: leak }), close: () => undefined };
+    const route = createTurnMountRoute(
+        mounts,
+        unstubbed<MountEndpoints>("endpoints", { daemon: (target, message, call) => target.server.handle(message, call.signal) }),
+        undefined,
+        async (result) => JSON.parse(JSON.stringify(result).replaceAll("s3cr3t-value", "<masked:api>")),
+    );
+    const app = new Hono<AppEnv>().all("/mcp/:mount", route);
+    const { token } = mounts.lease("conv-a").open({ name: "code", target: { kind: "daemon", server: daemon } });
+    const send = async (body: unknown) =>
+        (await app.request("/mcp/code", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body) })).json();
+    expect(await send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "run", arguments: {} } })).toEqual({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: "token=<masked:api>" }] },
+    });
+    // A listing is not a tool's answer, and passes as it came.
+    expect(await send({ jsonrpc: "2.0", id: 2, method: "tools/list" })).toEqual({ jsonrpc: "2.0", id: 2, result: leak });
+});

@@ -136,6 +136,7 @@ export type CodexItem =
           readonly type: "mcp_tool_call";
           readonly server: string;
           readonly tool: string;
+          readonly arguments?: unknown;
           readonly status: "in_progress" | "completed" | "failed";
           readonly result?: { readonly content: readonly CodexMcpContent[] };
           readonly error?: { readonly message: string };
@@ -401,6 +402,7 @@ const mcpItem = (id: string, item: JsonObject): CodexItem => {
         type: "mcp_tool_call",
         server: string(item, "server", "mcpToolCall"),
         tool: string(item, "tool", "mcpToolCall"),
+        ...opt("arguments", item["arguments"] ?? undefined),
         status: status(item["status"], "mcpToolCall"),
         ...opt("result", mcpResultOf(item["result"])),
         ...opt("error", error),
@@ -1335,8 +1337,7 @@ function* notificationEvents(notification: AppServerNotification, scope: CodexNo
         return;
     }
     if (notification.method === "turn/plan/updated") {
-        // Keyed by the started turn, not the current one, so a steer that opens a new turn keeps the same
-        // checklist.
+        // Keyed by the started turn, not the current one, so a steer that opens a new turn keeps the same checklist.
         const event = todoEvent(notification.params, startedTurnId, turnIds);
         if (event !== undefined) {
             yield event;
@@ -1477,8 +1478,7 @@ async function* startCodexTurn(connection: CodexAppServerConnection, turn: Codex
     }
     await requiredServers(connection, threadId, turn.requiredMcp ?? [], turn.signal);
 
-    // Read before the turn starts, since the prompt may name a skill; an empty popover is the cost of failure
-    // here.
+    // Read before the turn starts, since the prompt may name a skill; an empty popover is the cost of failure here.
     const skills = await connection
         .request("skills/list", { cwds: [turn.options.workingDirectory], forceReload: false })
         .then(skillsFrom)

@@ -928,3 +928,13 @@ describe("the gate over installs", () => {
         ]);
     });
 });
+
+// 2026-10-25: the owner's action rules ran only in the Claude Code loop's own Bash hook; they live in the guard every
+// runtime's gate is built from now.
+test("the owner's action rules refuse a held outbound send before any other tier is asked", async () => {
+    const send = `curl -s -X POST "https://discord.com/api/v10/channels/123/messages" -d '{"content":"hi"}'`;
+    const h = harness({ actionRules: { "discord.*": "hold" } });
+    expect(reasonOf(await h.run(send))).toContain(".intentic/config/approvals/");
+    expect(await h.run("ls -la")).toEqual({});
+    expect(h.events).toEqual([]);
+});

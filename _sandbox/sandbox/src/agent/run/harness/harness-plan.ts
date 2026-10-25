@@ -142,11 +142,10 @@ const harnessPolicy = (base: TurnPolicy, settings: SandboxSettings, context: Tur
     ...base,
     ...opt("toolSearch", context.toolSearch),
     // hashlineEdits owns file mutation via its own MCP server, so native Edit/Write are dropped (Read stays, for viewing
-    // images/PDFs).
-    ...(settings.hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
+    // images/PDFs). Added to what planning denied, never in its place: replacing the list once dropped every persona
+    // and `Skill(<id>)` denial whenever the setting was on (2026-10-25).
+    ...(settings.hashlineEdits ? { disallowedTools: [...new Set([...(base.disallowedTools ?? []), "Edit", "Write"])] } : {}),
     ...delegationCaps(settings),
-    // The sniffer's rulebook, forwarded only when the owner wrote a rule, the same no-hook economy as above.
-    ...(Object.keys(settings.actionRules).length > 0 ? { actionRules: settings.actionRules } : {}),
 });
 
 // The Bash pipeline's filters: the output-cleaner spec (empty lets the filter's own default apply), the holdout fraction,

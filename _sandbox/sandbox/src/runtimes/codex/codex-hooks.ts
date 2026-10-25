@@ -1,23 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
 import type { TurnTools } from "../../agent/providers/agent-request.js";
-import { maskTargets } from "../../agent/tools/agent-redaction.js";
-import { bashTmuxHooks, tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
+import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 import { toolAllowed } from "../../agent/tools/tool-allowlist.js";
 import type { EditReviewer } from "../../agent/verification/agent-diagnostics.js";
-import { handoffDirOf, type TurnPlacement } from "../../conversations/worktrees/isolation.js";
-import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
+import type { TurnPlacement } from "../../conversations/worktrees/isolation.js";
 import { GATE_SERVER, type GateCall, type GateHooks, NOT_A_HOOK } from "../daemon-tools/policy-gate-server.js";
 import type { PolicyInput, PolicyVerdict } from "../daemon-tools/policy-gate.js";
 import { opt } from "../../opt.js";
 import type { JsonValue } from "./codex-app-server.js";
-import { createMaskWrapper } from "./codex-mask-script.js";
+import { createShellLines, type ShellLineOutcome } from "../decorators/shell-line.js";
 
 // The owner's policy in front of every Codex tool: per-thread hooks whose handlers are `mcp_tool` calls on the daemon's
 // `gate` server (policy-gate-server.ts, mounted on the turn's door lease by daemon-servers.ts). PreToolUse sees every
@@ -128,6 +123,11 @@ export const codexListName = (call: Pick<GateCall, "tool" | "input">): string =>
     return files.added.length > 0 && files.changed.length === 0 && files.deleted.length === 0 ? "Write" : "Edit";
 };
 
+// A patch names its files in its own text; the persona's folder fence reads every one of them. Any other call's path is
+// the gate's own to read off its input.
+const codexPaths = (call: Pick<GateCall, "tool" | "input">): readonly string[] | undefined =>
+    call.tool === "apply_patch" ? Object.values(patchFiles(call.input)).flat() : undefined;
+
 // Whether the list names any shape of this tool: the tool itself, or the shell narrowed to some command.
 const listsTool = (list: readonly string[], tool: string): boolean => list.some((entry) => entry.trim() === tool || entry.trim().startsWith(`${tool}(`));
 
@@ -147,13 +147,16 @@ const serverTools = (list: readonly string[], server: string): readonly string[]
  * own server stays whole: its tools are the hooks' way in.
  */
 export const codexAllowlistConfig = (list: readonly string[] | undefined, servers: readonly string[]) => {
+    // Codex's own subagents are off on every turn, list or not: their threads never reach the gate, so a child ran shell
+    // and patches with no rulebook, no secret wrapper and no delegation caps (2026-10-25). A Codex turn delegates through
+    // the daemon's `subagents` server instead, the gated door every other runtime uses.
     const config: CodexConfigLayer = {};
+    config["features.multi_agent"] = false;
     if (list === undefined) {
         return config;
     }
     config["web_search"] = "disabled";
     config["features.image_generation"] = false;
-    config["features.multi_agent"] = false;
     // Each of these is on by default and off unless the list names its tool.
     const offUnlisted = [
         ["Read", "features.view_image"],
@@ -206,48 +209,6 @@ export interface CodexHookSession {
 
 const CommandInputSchema = z.object({ command: z.string() }).loose();
 
-type RewriteOutcome = { readonly command: string } | { readonly refuse: string };
-
-const SECRETS_UNREADABLE =
-    "The sandbox's secrets could not be read, so this command's output could not be masked and it was not run. Retry once; if it fails again, say what you could not run.";
-
-// The terminal panel's own rewrite, the one the Claude loop's Bash hook makes (agent-terminals.ts): the command written
-// to files, its secret references resolved there, run in the conversation's tmux session through bin/tmux-run.
-const tmuxRewrite = (options: CodexHookSessionOptions) => {
-    const hook = bashTmuxHooks(
-        Object.keys(options.tools.cliEnv ?? {}),
-        options.isolation,
-        options.conversationId,
-        options.tools.secrets,
-        options.tools.heavyCommands,
-        options.tools.offloadCommands,
-    ).PreToolUse?.[0]?.hooks[0];
-    return async (command: string, call: GateCall): Promise<RewriteOutcome | undefined> => {
-        if (hook === undefined || call.session === undefined) {
-            return undefined;
-        }
-        const input: PreToolUseHookInput = {
-            hook_event_name: "PreToolUse",
-            session_id: call.session,
-            transcript_path: "",
-            cwd: call.cwd ?? options.cwd,
-            tool_name: "Bash",
-            tool_input: { command },
-            tool_use_id: call.id ?? randomUUID(),
-        };
-        const answer = await hook(input, call.id, { signal: AbortSignal.timeout(60_000) });
-        const output = "hookSpecificOutput" in answer ? answer.hookSpecificOutput : undefined;
-        if (output?.hookEventName !== "PreToolUse") {
-            return undefined;
-        }
-        if (output.permissionDecision === "deny") {
-            return { refuse: output.permissionDecisionReason ?? "The terminal wrapper refused this command." };
-        }
-        const rewritten = CommandInputSchema.safeParse(output.updatedInput).data?.command;
-        return rewritten === undefined ? undefined : { command: rewritten };
-    };
-};
-
 /**
  * One Codex run's side of the gate: the key its hooks carry, the record of every answer, and the rewrite of a shell
  * command the rules let through (the terminal panel's wrapper, secret references, the masking wrapper).
@@ -255,75 +216,38 @@ const tmuxRewrite = (options: CodexHookSessionOptions) => {
 export const createCodexHookSession = (options: CodexHookSessionOptions): CodexHookSession => {
     const key = randomUUID();
     const records = new Map<string, CodexGateRecord>();
-    const terminals = options.terminals ?? tmuxRunEnabled();
-    const tmux = terminals ? tmuxRewrite(options) : undefined;
-    const masks = createMaskWrapper(handoffDirOf(options.isolation?.anchor) ?? tmpdir());
-    const secrets: SecretAccess | undefined = options.tools.secrets;
-    let surfaced = false;
-
-    // The shell command as it will run: in the panel's session or with its references resolved, then under the mask
-    // while there are stored values to mask.
-    const shellRewrite = async (command: string, call: GateCall): Promise<RewriteOutcome> => {
-        const panel = await tmux?.(command, call);
-        if (panel !== undefined && "refuse" in panel) {
-            return panel;
-        }
-        let executed = panel?.command;
-        if (executed === undefined && secrets !== undefined) {
-            const resolved = await resolveCommandSecrets(command, secrets);
-            if ("refusal" in resolved) {
-                return { refuse: resolved.refusal };
-            }
-            executed = resolved.command;
-        }
-        executed ??= command;
-        if (panel !== undefined && !surfaced && call.session !== undefined) {
-            const session = agentSessionName(call.session);
-            if (session !== undefined) {
-                surfaced = true;
-                options.push({ kind: "terminal", session });
-            }
-        }
-        if (secrets === undefined) {
-            return { command: executed };
-        }
-        let targets;
-        try {
-            targets = maskTargets(await secrets.list());
-        } catch {
-            return { refuse: SECRETS_UNREADABLE };
-        }
-        return { command: targets.length === 0 ? executed : await masks.wrap(executed, targets) };
-    };
+    // The one command runner every judged shell shares (shell-line.ts): Codex reads a command's output itself, so it is masked.
+    const shell = createShellLines({
+        tools: options.tools,
+        isolation: options.isolation,
+        owner: options.conversationId,
+        terminals: options.terminals ?? tmuxRunEnabled(),
+        mask: true,
+        onPanel: (session) => options.push({ kind: "terminal", session }),
+    });
+    const shellRewrite = (command: string, call: GateCall): Promise<ShellLineOutcome> =>
+        shell.line(command, { session: call.session, cwd: call.cwd ?? options.cwd, id: call.id }, AbortSignal.timeout(60_000));
 
     const settle = async (call: GateCall, policy: PolicyVerdict, asked: boolean): Promise<PolicyVerdict> => {
-        const id = call.id;
+        const remember = (record: CodexGateRecord): void => void (call.id === undefined ? undefined : records.set(call.id, record));
         // The gate's own tools are offered to the model beside every other server's; they are the hooks' way in, not its.
         const verdict: PolicyVerdict = call.tool.startsWith(`mcp__${GATE_SERVER}__`) ? { decision: "deny", reason: NOT_A_HOOK } : policy;
         if (verdict.decision === "deny") {
-            if (id !== undefined) {
-                records.set(id, { allowed: false, asked });
-            }
+            remember({ allowed: false, asked });
             return verdict;
         }
         const input = verdict.decision === "rewrite" ? verdict.input : call.input;
         const command = call.tool === "Bash" ? CommandInputSchema.safeParse(input).data?.command : undefined;
         if (command === undefined) {
-            if (id !== undefined) {
-                records.set(id, { allowed: true, asked });
-            }
+            remember({ allowed: true, asked });
             return verdict;
         }
         const outcome = await shellRewrite(command, call);
         if ("refuse" in outcome) {
-            if (id !== undefined) {
-                records.set(id, { allowed: false, asked });
-            }
+            remember({ allowed: false, asked });
             return { decision: "deny", reason: outcome.refuse };
         }
-        if (id !== undefined) {
-            records.set(id, { allowed: true, asked, ...opt("said", outcome.command === command ? undefined : command) });
-        }
+        remember({ allowed: true, asked, ...opt("said", outcome.command === command ? undefined : command) });
         if (outcome.command === command && verdict.decision === "allow") {
             return verdict;
         }
@@ -358,6 +282,7 @@ export const createCodexHookSession = (options: CodexHookSessionOptions): CodexH
         gateHooks: {
             key,
             listName: codexListName,
+            paths: codexPaths,
             settle,
             original: (call) => {
                 const said = call.id === undefined ? undefined : records.get(call.id)?.said;
@@ -366,6 +291,6 @@ export const createCodexHookSession = (options: CodexHookSessionOptions): CodexH
             afterTool,
         },
         record: (id) => records.get(id),
-        dispose: () => masks.dispose(),
+        dispose: () => shell.dispose(),
     };
 };

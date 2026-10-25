@@ -83,6 +83,13 @@ const mapped = (briefing: TurnBriefing, entry: ConversationEntry | undefined): b
 const mapDue = (settings: SandboxSettings, arm: boolean | undefined, input: AgentTurn, turns: number): boolean =>
     (arm ?? EXPERIMENTS.workspaceMap.on(settings)) && input.forkOf === undefined && turns === 0;
 
+/** Whether the model's session holds none of what a turn's opening notes said: a session it starts fresh (a new
+ *  conversation, a lost session reseeded, another runtime taking over; a fork resumes its origin's), or a compaction that
+ *  summarized them away. A note keyed here is said once per session the model actually holds, never once per
+ *  conversation or on every message. */
+export const notesDue = (turns: number, sessionId: string | undefined, entry: ConversationEntry | undefined): boolean =>
+    sessionId === undefined || compactedSinceLastTurn(entry, turns);
+
 // Said once on the opening message, and again after a compaction summarizes away the history that held it. `>=`
 // inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it.
 const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined, turns: number): boolean =>

@@ -3,16 +3,16 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
-import { declaredChecks } from "../../rules/repo-checks.js";
-import { standing } from "../../rules/rules.js";
 import { jsExecutionServer } from "../../execution/js-tool.js";
 import { JS_SUBJECT } from "../../guard/command-guard.js";
 import { sealedDoor } from "../../guard/outside-results.js";
 import { GATE_SERVER, gateServer } from "./policy-gate-server.js";
+import { policyLimitsOf } from "./policy-gate.js";
 import type { TurnPersona } from "../../personas/personas.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
-import { type HarnessHooksDeps, turnChecksOf } from "../../agent/run/harness/harness-hooks.js";
+import { checkHooksOf, type HarnessHooksDeps } from "../../agent/run/harness/harness-hooks.js";
+import type { TurnHooks } from "../../agent/providers/agent-request.js";
 import {
     accountsFactoryFor,
     depsServerFor,
@@ -30,6 +30,8 @@ import { sdkServerDoor } from "./sdk-door.js";
 import type { TurnRemoteTools } from "../../agent/tools/turn-tools.js";
 import type { InProcessServer } from "../../agent/tools/turn-mounts.js";
 import { createTurnRelay, type TurnRelay } from "./turn-relay.js";
+import { ownedAgentSession, terminalHelpServer } from "../../terminal/terminal-help.js";
+import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 
 // The daemon's own tools for a runtime that is not the Claude Code loop: the same servers that loop mounts in-process
 // (harness-servers.ts, agent.ts), built for this turn, held to the same persona decisions, and served through the MCP door
@@ -54,6 +56,9 @@ export interface DaemonServersTurn {
     // Mount the policy gate server (runtimes/daemon-tools/policy-gate-server.ts) for a runtime whose own hooks call it. Off by default:
     // a runtime that consults the gate in-process gains nothing from offering its model three more tools.
     readonly gate?: boolean;
+    // Servers the loop serves through a seam of its own instead (Cursor's custom tools: `ask`, `code`, the subagent
+    // tools), left out here so its model is offered each tool once.
+    readonly served?: ReadonlySet<string>;
 }
 
 export interface DaemonServers {
@@ -63,6 +68,10 @@ export interface DaemonServers {
     readonly relay: TurnRelay;
     // Whether the diagnostics server is among them, for the prompt (TurnTools.diagnostics).
     readonly diagnostics: boolean;
+    // The request's hooks every arm spreads over its own: the relay, the owner's per-edit checks and the repositories'
+    // turn checks, the same ones a Claude Code turn is planned with (harness-hooks.ts), which each loop says where it can
+    // (its own hook after an edit, or runtimes/decorators/ending-checks.ts as the turn ends).
+    readonly hooks: Pick<TurnHooks, "relay" | "editReviewers" | "turnChecks">;
 }
 
 // How long a client should wait on one call, where its runtime takes a per-server timeout. A card waits on a person, a
@@ -74,6 +83,7 @@ const TIMEOUTS = new Map([
     ["accounts", CARD_WAIT_MS],
     ["secrets", CARD_WAIT_MS],
     ["code", CARD_WAIT_MS],
+    ["terminal", CARD_WAIT_MS],
     [GATE_SERVER, CARD_WAIT_MS],
     ["subagents", CHILD_WAIT_MS],
     ["deps", CHILD_WAIT_MS],
@@ -132,6 +142,17 @@ const codeServer = (turn: DaemonServersTurn, relay: TurnRelay, secrets: SecretAc
           });
 };
 
+// The terminal hand-off, as the Claude Code loop's (terminal-help.ts): where the loop's commands run in the panel's tmux
+// panes (shell-line.ts and each loop's own wrapper), the owner can be asked to type into the one waiting. The session is
+// the newest one the conversation's commands stamped as its own, since each loop names it from an id of its own.
+const terminalServer = (turn: DaemonServersTurn, relay: TurnRelay): McpSdkServerConfigWithInstance | undefined => {
+    const { hooks, signal } = turn.context.base;
+    const conversationId = turn.input.conversationId;
+    return conversationId === undefined || !turn.persona.powers.shell || !tmuxRunEnabled()
+        ? undefined
+        : terminalHelpServer({ session: () => ownedAgentSession(conversationId), conversationId, signal, push: relay.push, cards: hooks.cards });
+};
+
 /**
  * The daemon's own servers for one non-Claude turn, mounted on its lease, with the relay its loop attaches to. Every
  * name the returned servers literal holds is reserved in the contract and held to its outside-result classification by
@@ -143,7 +164,7 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
     const signal = context.base.signal;
     const secrets = context.base.tools.secrets ?? turnSecretAccess(deps, input, signal);
     const accounts = accountsFactoryFor(deps, input, context, granted);
-    const checks = turnChecksOf(deps, context, declaredChecks(standing(turn.settings.rules, "turn.ending"))).turnChecks;
+    const checks = checkHooksOf(deps, context, turn.settings);
     const servers = {
         ui: doorUiServer(turn, relay),
         accounts: accounts?.(relay.push, signal),
@@ -160,6 +181,7 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
         deps: depsServerFor(deps, turn),
         diagnostics: diagnosticsServerFor(deps, turn),
         code: codeServer(turn, relay, secrets),
+        terminal: terminalServer(turn, relay),
         gate:
             turn.gate === true
                 ? gateServer({
@@ -169,17 +191,17 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
                               gate: guard?.gate,
                               push: relay.push,
                               hold: relay.hold,
-                              allowedTools: context.base.policy.allowedTools,
+                              ...policyLimitsOf(context.base.policy),
                           };
                       },
                       mark: relay.mark,
-                      turnChecks: checks,
+                      turnChecks: checks.turnChecks,
                       hooks: relay.gateHooks,
                   })
                 : undefined,
     } satisfies Record<string, McpSdkServerConfigWithInstance | undefined>;
     const tools = Object.entries(servers).flatMap(([name, config]) =>
-        config === undefined
+        config === undefined || turn.served?.has(name) === true
             ? []
             : [
                   turn.mounted.lease.open({
@@ -197,5 +219,5 @@ export const daemonServersFor = (deps: DaemonServersDeps, turn: DaemonServersTur
                   }),
               ],
     );
-    return { tools, relay, diagnostics: servers.diagnostics !== undefined };
+    return { tools, relay, diagnostics: servers.diagnostics !== undefined, hooks: { relay, ...checks } };
 };

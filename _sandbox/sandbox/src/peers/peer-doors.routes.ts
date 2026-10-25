@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { cleanMcpResult } from "../guard/mcp-output.js";
+import { maskDeep, maskTargets } from "../agent/tools/agent-redaction.js";
 import { daemonEndpoint, createTurnMountRoute } from "../agent/tools/turn-mounts.routes.js";
 import { judgeIndependentCommand } from "../agent/tools/command-judge.js";
 import { workingNames } from "../bootstrap/working-now.js";
@@ -70,6 +71,8 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                     conversationId,
                 });
             },
+            // SAFETY: maskDeep keeps a value's shape and changes only its strings, so a tool result stays a tool result.
+            async (result) => maskDeep(result, maskTargets(await services.secretRegistry())) as typeof result,
         ),
     };
 });

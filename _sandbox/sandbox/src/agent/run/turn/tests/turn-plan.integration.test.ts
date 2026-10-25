@@ -288,12 +288,15 @@ test("an isolated turn is not told its dependencies are missing just because the
 
 // Needs a real SKILL.md on disk, hence integration rather than unit. Pins the asymmetry: a runtime with no skill loader
 // gets the catalogue once; native loaders that load skills themselves are never told, to avoid a duplicate list.
-test("a runtime without a skill loader receives the catalogue once; native loaders are not told twice", async () => {
+test("each runtime is told the skills its own loader does not read, once per session it holds", async () => {
     const root = await mkdtemp(join(tmpdir(), "turn-skills-"));
-    const skillDir = join(root, ".agents", "skills", "quill");
-    await mkdir(skillDir, { recursive: true });
-    const skillDescription = "Draws quills. Use when asked for quills.";
-    await writeFile(join(skillDir, "SKILL.md"), `---\nname: quill\ndescription: ${skillDescription}\n---\n\nDraw a quill.\n`);
+    const skill = async (dir: string, name: string, description: string): Promise<void> => {
+        await mkdir(join(dir, name), { recursive: true });
+        await writeFile(join(dir, name, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n\nDo it.\n`);
+    };
+    await skill(join(root, ".agents", "skills"), "quill", "Draws quills. Use when asked for quills.");
+    const baked = join(root, "baked");
+    await skill(baked, "compass", "Finds north. Use when lost.");
     const skillContext: TurnContext = {
         ...context,
         base: { ...base, spec: { ...base.spec, cwd: root } },
@@ -301,31 +304,31 @@ test("a runtime without a skill loader receives the catalogue once; native loade
         effectiveCwd: root,
     };
     const workspace = unstubbed<Services["workspace"]>("workspace", { root });
+    const config = { ...testConfig, builtInSkillsDir: baked };
     const openCode = unstubbed<Services["openCode"]>("openCode", {
         shielded: async () => true,
         connected: async () => true,
         xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
     });
 
-    const grok = await planTurn(servicesWith({ workspace, openCode }), turn({ agent: "grok" }), skillContext);
-    expect(wire(grok)).toContain(SKILL_CATALOG_NOTE_HEADER);
-    expect(wire(grok)).toContain(skillDescription);
-    expect(wire(grok)).toContain(join(root, ".agents", "skills", "quill", "SKILL.md"));
+    // Codex reads the workspace's `.agents/skills` itself, never the image's: it is told the image's alone.
+    const codexConfig = { ...codexServices().config, builtInSkillsDir: baked };
+    const codex = await planTurn(codexServices({ workspace, config: codexConfig }), turn({ agent: "codex" }), skillContext);
+    expect(wire(codex)).toContain(SKILL_CATALOG_NOTE_HEADER);
+    expect(wire(codex)).toContain(join(baked, "compass", "SKILL.md"));
+    expect(wire(codex)).not.toContain("Draws quills");
 
+    // A follow-up on the session that heard it is not told again.
     const followup = await planTurn(
-        servicesWith({
-            workspace,
-            openCode,
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(2) }),
-        }),
-        turn({ agent: "grok", conversationId: "grok-skills" }),
-        skillContext,
+        codexServices({ workspace, config: codexConfig, agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(2) }) }),
+        turn({ agent: "codex", conversationId: "codex-skills" }),
+        { ...skillContext, base: { ...skillContext.base, spec: { ...skillContext.base.spec, sessionId: "thread-1" } } },
     );
     expect(wire(followup)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
 
-    const codex = await planTurn(codexServices({ workspace }), turn({ agent: "codex" }), skillContext);
-    expect(wire(codex)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
-
-    const claude = await planTurn(harnessServices({ workspace }), turn(), skillContext);
+    // OpenCode's server reads both origins, and the Claude Code loop every one: neither is told them a second time.
+    const grok = await planTurn(servicesWith({ workspace, openCode, config }), turn({ agent: "grok" }), skillContext);
+    expect(wire(grok)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
+    const claude = await planTurn(harnessServices({ workspace, config }), turn(), skillContext);
     expect(wire(claude)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
 });

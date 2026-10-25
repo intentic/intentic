@@ -9,9 +9,9 @@ import type {
 import { z } from "zod";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract/events/requests";
-import { toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { diffContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
-import { toolCallOpened } from "../decorators/vendor-events.js";
+import { toolCard } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
 
 // Maps ACP session/update notifications onto AgentEvent frames; an update with no UI mapping returns undefined. ACP's
@@ -109,12 +109,12 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string, terminalE
             return text === "" ? undefined : { kind: "thinking", text };
         }
         case "tool_call":
-            return toolCallOpened({
+            return toolCard({
                 id: update.toolCallId,
                 name: update.title,
                 category: categoryOf(update.kind, update.title),
                 status: update.status ?? "in_progress",
-                target: toolTarget(update.rawInput),
+                input: update.rawInput,
                 locations: mapLocations(update.locations, cwd),
                 content: mapContent(update.content, cwd),
             });

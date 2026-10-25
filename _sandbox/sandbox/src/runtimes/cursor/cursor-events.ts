@@ -4,8 +4,8 @@ import type { TodoItem, ToolCallContent } from "@intentic/sandbox-contract/event
 import { isRecord } from "@intentic/base/escape";
 import { z } from "zod";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { diffContent, toolInput, toolLocations, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
-import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
+import { diffContent, toolLocations, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
+import { toolCard, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
 import { unshieldedCommand } from "./cursor-hook-script.js";
 
@@ -33,15 +33,18 @@ const CURSOR_TOOL_NAMES: Record<string, string> = {
 
 // MCP calls are named for the tool they called, not "mcp", which would collapse every connected account's actions into
 // one row. Spelled server__tool so the shared taxonomy's trailing-verb categorisation works unchanged.
-const nameOf = (call: ToolCall): string => {
+// The call's name in the canonical vocabulary, which its card is categorized by and shown from.
+const canonicalOf = (call: ToolCall): string => {
     if (call.type === "mcp") {
         const args = call.args as { providerIdentifier?: unknown; toolName?: unknown };
         const tool = typeof args.toolName === "string" ? args.toolName : "call";
         const provider = typeof args.providerIdentifier === "string" ? args.providerIdentifier : "mcp";
-        return displayNameOf(`mcp__${provider}__${tool}`);
+        return `mcp__${provider}__${tool}`;
     }
-    return CURSOR_TOOL_NAMES[call.type] ?? displayNameOf(call.type);
+    return CURSOR_TOOL_NAMES[call.type] ?? call.type;
 };
+
+const nameOf = (call: ToolCall): string => displayNameOf(canonicalOf(call));
 
 // An MCP call's own arguments, which Cursor nests one level down beside the server and tool names.
 const mcpArgsOf = (call: ToolCall): unknown => (call.type === "mcp" ? (call.args as { args?: unknown } | undefined)?.args : undefined);
@@ -177,14 +180,13 @@ const completedText = (call: ToolCall, result: CallResult): string | undefined =
 // A call's card as it opens; `parent` is the task call whose subagent made it. A call with no one-line target keeps its
 // input (an MCP call's own arguments, a task's prompt).
 const openedCard = (callId: string, call: ToolCall, cwd: string, parent?: string): AgentEvent => {
-    const target = targetOf(call, cwd);
-    return toolCallOpened({
+    return toolCard({
         id: callId,
-        name: nameOf(call),
-        target,
+        name: canonicalOf(call),
+        target: targetOf(call, cwd),
         locations: toolLocations(call.args, cwd),
         content: startedContent(call, cwd),
-        input: toolInput(call.type === "mcp" ? mcpArgsOf(call) : call.args, target),
+        input: call.type === "mcp" ? mcpArgsOf(call) : call.args,
         parentToolUseId: parent,
     });
 };

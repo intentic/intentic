@@ -171,3 +171,32 @@ describe("createPolicyGate: placing a call in its turn", () => {
         expect(await gate.consult("a", { tool: "Bash", input: { command: "ls" } })).toEqual({ decision: "deny", reason: "new" });
     });
 });
+
+// 2026-10-25: a persona's withheld tools and folders bound only the Claude Code loop; every runtime's gate reads them now.
+describe("the persona's limits, on every runtime's gate", () => {
+    const allowAll = gateAnswering({ allow: true });
+    const scope = { cwd: "/w", fence: ["notes"], sandbox: false } as const;
+
+    test("a tool the persona withholds is refused in the one vocabulary, a skill entry is never a tool call", async () => {
+        const turn = turnWith(allowAll, { deniedTools: ["Edit", "Write", "Bash", "Skill(x)"] });
+        expect(await consultPolicy(turn, { tool: "Edit", input: { file_path: "/w/notes/a.md" } })).toMatchObject({ decision: "deny" });
+        expect(await consultPolicy(turn, { tool: "Bash", input: { command: "ls" } })).toMatchObject({
+            decision: "deny",
+            reason: expect.stringContaining("not available to the persona"),
+        });
+        expect(await consultPolicy(turn, { tool: "Read", input: { file_path: "/w/notes/a.md" } })).toEqual({ decision: "allow" });
+        expect(await consultPolicy(turn, { tool: "Skill", input: {} })).toEqual({ decision: "allow" });
+    });
+
+    test("a file outside the folders, or the sandbox's config, is refused; one inside passes", async () => {
+        const turn = turnWith(allowAll, { scope });
+        expect(await consultPolicy(turn, { tool: "Read", input: { file_path: "/w/notes/a.md" } })).toEqual({ decision: "allow" });
+        expect(await consultPolicy(turn, { tool: "Read", input: { file_path: "/w/src/a.ts" } })).toMatchObject({ decision: "deny", reason: expect.stringContaining("src/a.ts") });
+        // A patch names several files; one outside is enough.
+        expect(await consultPolicy(turn, { tool: "Edit", input: {}, paths: ["notes/a.md", "src/b.ts"] })).toMatchObject({ decision: "deny" });
+        expect(await consultPolicy(turnWith(allowAll, { scope: { cwd: "/w", fence: undefined, sandbox: false } }), { tool: "Write", input: { file_path: "/w/.intentic/config/settings.json" } })).toMatchObject({
+            decision: "deny",
+            reason: expect.stringContaining("sandbox's own configuration"),
+        });
+    });
+});

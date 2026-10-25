@@ -6,6 +6,16 @@
 // that grants it.
 export type ExecutionBackend = "shell" | "js";
 
+// Which origins of skills a runtime's loader reads by itself (AgentCapabilities.skillDiscovery).
+export interface SkillDiscovery {
+    readonly workspace: boolean;
+    readonly builtIn: boolean;
+    readonly kit: boolean;
+}
+
+const EVERY_SKILL: SkillDiscovery = { workspace: true, builtIn: true, kit: true };
+const NO_SKILL_LOADER: SkillDiscovery = { workspace: false, builtIn: false, kit: false };
+
 export interface AgentCapabilities {
     // Which loop serves the turn; `opencode-gemini` stays separate since adapter health keys off this field.
     readonly runtime: "claude-code" | "codex" | "opencode" | "opencode-gemini" | "acp" | "devin" | "kimi-cli" | "grok-build" | "pi" | "cursor" | "muse";
@@ -41,8 +51,12 @@ export interface AgentCapabilities {
     readonly warm: boolean;
     // How much of the owner's instructions this runtime takes: replace the base, append to it, or no seam at all.
     readonly instructions: "replace" | "append" | "none";
-    // How the runtime discovers loaded skills: scans its own filesystem, or the daemon names them in the opener.
-    readonly skillDiscovery: "native" | "prompt";
+    // Which of a turn's skills the runtime's own loader finds; the rest are named, with their paths, in the note a fresh
+    // session opens with (the sandbox's agent/run/decide/turn-skills.ts), less the ones the turn may not use:
+    // workspace - the workspace's loaded skills (.agents/skills, or the .claude/skills projection of them);
+    // builtIn - the product's own skills the image bakes (/root/.claude/skills);
+    // kit - the worn persona's own skills, which the daemon hands the loader per turn.
+    readonly skillDiscovery: SkillDiscovery;
     // Whether the owner's safety policy reaches this runtime, and how:
     // hooks - its own pre-execution hook can park a call and wait for a card (Claude Code only).
     // approval - a vendor approval channel the daemon answers from policy; the vendor picks which calls to raise.
@@ -69,6 +83,12 @@ export interface AgentCapabilities {
     // every tool call the loop makes passes a check the daemon answers, or the loop is built with only the listed tools.
     // A runtime that runs some tool without asking anyone cannot keep it, so a turn carrying a list never starts on one.
     readonly toolAllowlist: boolean;
+    // When the owner's per-edit checks (the `file.edited` rules, the byte scan) reach the model: `after-edit` where the
+    // loop's own hook answers each edit or write as it lands (Claude Code's PostToolUse, Codex's and Pi's gate), so the
+    // model reads them beside the call; `turn-end` where nothing stands after a call, so the daemon reads the files the
+    // turn's edit calls touched as it ends and says the findings back as one more prompt, beside the repositories' turn
+    // checks (runtimes/decorators/ending-checks.ts).
+    readonly editChecks: "after-edit" | "turn-end";
 }
 
 // The Claude Code Agent SDK loop, the ceiling every other runtime is measured against: the only one that owns the whole
@@ -89,7 +109,7 @@ export const CLAUDE_CODE: AgentCapabilities = {
     recovery: true,
     warm: true,
     instructions: "replace",
-    skillDiscovery: "native",
+    skillDiscovery: EVERY_SKILL,
     // The only runtime with its own pre-execution hook, so the only one where a hold can park instead of refusing.
     rulebook: "hooks",
     secrets: "masked",
@@ -98,6 +118,7 @@ export const CLAUDE_CODE: AgentCapabilities = {
     // A PreToolUse hook refuses every call off the list, under bypassPermissions and in subagents too
     // (agent/tools/tool-allowlist.ts).
     toolAllowlist: true,
+    editChecks: "after-edit",
 };
 
 // Codex app-server: item-level events, the turn's remote MCP servers and the daemon's own over http, per-thread hooks
@@ -131,7 +152,8 @@ export const CODEX: AgentCapabilities = {
     // thread/start's own fields: baseInstructions replaces Codex's base prompt, developerInstructions adds a developer
     // message.
     instructions: "replace",
-    skillDiscovery: "native",
+    // Codex reads the workspace's `.agents/skills` itself; the built-ins and a persona's kit are named in the note.
+    skillDiscovery: { workspace: true, builtIn: false, kit: false },
     // A per-thread PreToolUse hook puts every function tool (the shell, apply_patch, every MCP tool, spawn_agent) to the
     // door's gate before it runs, which may park it on a card (codex-hooks.ts). Codex fails a hook open, so the gate is
     // confirmed connected before the turn starts, a command or patch Codex asks approval for runs only if the gate
@@ -148,6 +170,7 @@ export const CODEX: AgentCapabilities = {
     // too unless listed, and each MCP server is cut to its listed tools (`enabled_tools`). The residual: a known-safe
     // read-only command off the list runs if the in-process gate fails after it connected, and the turn is then stopped.
     toolAllowlist: true,
+    editChecks: "after-edit",
 };
 
 // OpenCode (the Grok runtime): its own agentic loop and tools, with the turn's remote MCP servers mounted on the shared
@@ -196,7 +219,9 @@ export const OPENCODE: AgentCapabilities = {
     // A prompt that replaces the base (the owner's own under `custom`, a small window's paragraph) runs on the daemon's
     // twin agents, whose base is blank, so it is the whole system text; anything else is added to OpenCode's own base.
     instructions: "replace",
-    skillDiscovery: "prompt",
+    // The server's skill roots are the workspace's loaded skills and the built-ins (opencode.ts serverConfig); a persona's
+    // kit, which changes per turn on a server shared by every turn, is named in the note.
+    skillDiscovery: { workspace: true, builtIn: true, kit: false },
     // OpenCode raises its permission asks for every shell command, a subagent's included (the server's own rules ask about
     // them all, and a child session inherits them); the daemon answers from the rulebook, a hold parked on a card while
     // the turn's inactivity watchdog is held. The JS backend consults the same gate. Not `hooks`: which calls ask is still
@@ -213,6 +238,7 @@ export const OPENCODE: AgentCapabilities = {
     // session inherits them. Every built-in tool has its own permission action (checked against 2.0.26), and a shell entry
     // narrowed to a command is checked against each command's ask (runtimes/opencode/allowlist/opencode-allowlist.ts).
     toolAllowlist: true,
+    editChecks: "turn-end",
 };
 
 // The same OpenCode loop, serving Gemini instead of xAI, identical abilities. The Claude Code loop announces itself in
@@ -252,13 +278,14 @@ export const ACP: AgentCapabilities = {
     isolation: "cwd",
     commands: true,
     terminals: true,
-    // A failure the agent words as a spent allowance or an outgrown window is coded (error-frames.ts codedFailure), but the
-    // words are each agent's own and the protocol marks no outage, so nothing promises the codes auto-resume keys off.
-    recovery: false,
+    // A failure the agent words as a spent allowance or an outgrown window is coded at the turn's one exit
+    // (error-frames.ts codedFailure), and an agent gone silent mid-turn is coded an outage by the shared watchdog
+    // (turn-watchdog.ts expiredFrame), so a turn the provider dropped is re-run once it is back, as every loop's is.
+    recovery: true,
     warm: false,
     // ACP's calls carry no system field: the agent owns its instructions, the persona note rides the message.
     instructions: "none",
-    skillDiscovery: "prompt",
+    skillDiscovery: NO_SKILL_LOADER,
     // In the protocol floor, so every agent has it; which calls it asks about is entirely its own choice. A terminal the
     // daemon runs for it (terminal/create) is asked about here too, unless the permission for it already was.
     rulebook: "approval",
@@ -267,6 +294,7 @@ export const ACP: AgentCapabilities = {
     privacy: "none",
     // Which calls the agent asks permission for is its own choice, and most run reads without asking.
     toolAllowlist: false,
+    editChecks: "turn-end",
 };
 
 // Devin's own CLI (`devin acp`), the ACP floor with one seam an installed agent lacks: the daemon picks the model, from
@@ -339,7 +367,8 @@ export const PI: AgentCapabilities = {
     // keeps Pi from loading AGENTS.md a second time beside the daemon's own note.
     instructions: "replace",
     // `--skill` per loaded skill, the persona's filter applied, with Pi's own discovery off (`--no-skills`).
-    skillDiscovery: "native",
+    // Pi's own discovery is off, and every skill the turn may use is handed to it by path (`--skill`, pi-adapter.ts).
+    skillDiscovery: EVERY_SKILL,
     // The daemon's extension, loaded with `-e` ahead of any other and whatever the card's command says of discovery, puts
     // every tool call (MCP and codemode calls included) to the turn's own hook socket before it runs, where a held one
     // parks on a card while Pi waits (pi-hooks.ts). A call it cannot ask about is refused, as a handler that throws is,
@@ -356,6 +385,7 @@ export const PI: AgentCapabilities = {
     // The same socket refuses every call off the turn's list, Pi's tools read under the Claude loop's names (bash as
     // Bash, find as Glob) and MCP tools under the same `mcp__<server>__<tool>`; fail closed as above.
     toolAllowlist: true,
+    editChecks: "after-edit",
 };
 
 // Cursor's own runtime, driven through `@cursor/sdk` from this daemon's process; an embedding surface, so most seams
@@ -372,7 +402,9 @@ export const CURSOR: AgentCapabilities = {
     permissions: "modes",
     // True since the daemon supplies its own ask tool; Cursor's own can fabricate an answer, so it's disallowed.
     questions: true,
-    // The turn's remote MCP servers plus host callbacks; everything but a Claude Code plugin checkout.
+    // The turn's remote MCP servers, the daemon's own door servers among them (accounts, secrets, watch, deps,
+    // diagnostics), plus host callbacks for the three it runs in the daemon's process instead (ask, code, the subagent
+    // tools: cursor-tools.ts); everything but a Claude Code plugin checkout.
     mcp: "tools",
     // The JS backend rides Cursor's custom-tool seam rather than an MCP server, and consults the rulebook in its
     // handler, since the hook file only covers the shell.
@@ -401,7 +433,9 @@ export const CURSOR: AgentCapabilities = {
     // Cursor's own loader reads every SKILL.md under `.agents/skills/` of each workspace root it is given: the cwd holds
     // the loaded skills, and the worn persona's kit is laid out as a second root (`local.dirs`); a skill the persona
     // withholds is refused at the read tool, the seam the Claude loop's `Skill(<name>)` denial is (cursor-skills.ts).
-    skillDiscovery: "native",
+    // The workspace's skills from the turn's own tree and the persona's kit as a projected root (cursor-skills.ts); the
+    // built-ins, outside every root it is given, are named in the note.
+    skillDiscovery: { workspace: true, builtIn: false, kit: true },
     // The full hook tier, the only foreign runtime to reach it: a hold parks since the vendor waits on the hook.
     rulebook: "hooks",
     // Every shell command runs through the hook script: a `{{secret:name}}` reference resolves into what the script runs once
@@ -421,6 +455,7 @@ export const CURSOR: AgentCapabilities = {
     // cannot place in a turn. A turn carrying a list does not start unless those hooks are installed, and a hook the
     // daemon cannot answer refuses a live turn's call.
     toolAllowlist: true,
+    editChecks: "turn-end",
 };
 
 // Muse Code, Meta's coding agent, driven over the Muse Session Protocol: one `muse serve` host per turn, born in the turn's
@@ -460,7 +495,7 @@ export const MUSE: AgentCapabilities = {
     instructions: "none",
     // Muse loads a trusted workspace's own skills from its own directories, which are not the daemon's; the daemon names
     // the loaded ones in the opener.
-    skillDiscovery: "prompt",
+    skillDiscovery: NO_SKILL_LOADER,
     // Muse's approval channel, answered from the rulebook; which commands Muse runs without asking (its own allow rules)
     // is its choice.
     rulebook: "approval",
@@ -469,4 +504,5 @@ export const MUSE: AgentCapabilities = {
     privacy: "none",
     // Edits and reads run without asking anyone, so no answer the daemon gives can keep a call off a list.
     toolAllowlist: false,
+    editChecks: "turn-end",
 };

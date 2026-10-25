@@ -28,7 +28,7 @@ import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import { childRerunHorizonMs } from "../subagents/child-records.js";
 import { type ScriptRunDoor, scriptRunDoor } from "../subagents/workflows/script-runs.js";
-import { withRuntimeSubagents } from "../subagents/runtime-subagents.js";
+import { runtimeFrames } from "./frames/runtime-frames.js";
 import { checkoutDirtyPaths } from "../tools/agent-shell-edits.js";
 import { scanProducedDocuments, withProducedDocuments } from "../tools/produced-documents.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
@@ -87,14 +87,6 @@ import { errorMessage } from "@intentic/base/errors";
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
 // runtime: the Claude Code loop, Codex and Cursor enter it (agent-runtimes.ts), each with its own process born there.
 const entersNamespace = (input: RoutedTurn): boolean => capabilitiesOf(input.agent, input.harness).isolation === "namespace";
-
-// A runtime's frames as the turn reads them. The Claude Code loop files its own subagents from the SDK's task stream
-// (agent.ts); every other runtime reports its own as frames, filed on their way through here, so a subagent Codex,
-// Cursor or OpenCode starts is on the roster the same way. A turn with no conversation has nowhere to file one.
-const runtimeFrames = (services: Services, input: RoutedTurn, frames: AsyncIterable<AgentEvent>): AsyncIterable<AgentEvent> =>
-    input.conversationId === undefined || capabilitiesOf(input.agent, input.harness).runtime === "claude-code"
-        ? frames
-        : withRuntimeSubagents(frames, { conversationId: input.conversationId, conversations: services.conversations, subagentsDir: undefined });
 
 // The documents each command wrote, named on its card (produced-documents.ts), so the chat can list what a turn made
 // even when a script made it. Asked in the daemon's copy of the checkout, of names the agent gave from its own root. A

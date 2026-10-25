@@ -26,8 +26,6 @@ import { connectedTranslatorProviders } from "../../agent/providers/translator.j
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
 import { engineReady } from "../../engines/engine-resolve.js";
-import { standing } from "../../rules/rules.js";
-import { editReviewersOf } from "../../agent/run/harness/harness-hooks.js";
 import { turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import { daemonServersFor, type DaemonServersDeps } from "../daemon-tools/daemon-servers.js";
 import { createCodexAgent } from "./codex-agent.js";
@@ -216,12 +214,8 @@ export const planCodexTurn = async (
             diagnostics: daemon.diagnostics,
             ...browserFields(services.workspace.root, mounted),
         },
-        hooks: {
-            ...context.base.hooks,
-            relay: daemon.relay,
-            // The `file.edited` moment, as the Claude loop's harness runs it, asked after each patch (codex-hooks.ts).
-            ...editReviewersOf(services, context, standing(settings.rules, "file.edited")),
-        },
+        // The `file.edited` checks are asked after each patch (codex-hooks.ts), the turn checks at the gate's stop.
+        hooks: { ...context.base.hooks, ...daemon.hooks },
         credential: withCodexAllowance(services, route.credential, model),
     };
     // Attribution key: the shared subscription serving every ChatGPT turn, a hosted route's account where it picked one,

@@ -45,6 +45,11 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const launch = acpLaunchOf(capability.config);
+    // A sealed request reads nothing past its prompt, so nothing is mounted for it, and the ACP loop refuses every call
+    // the agent asks about (acp-agent.ts), as Devin's arm does.
+    if (context.base.policy.sealed === true) {
+        return armPlan((request) => services.acpAgent(provider, launch, request), { ...context.base, credential: { kind: "container" } });
+    }
     // Resolved by planTurn; without one the turn is the open, attended default, which may drive the credential-free browser.
     // A warm session keeps the MCP config it was opened with, so its turns share the conversation's bearer.
     const mounted = await turnToolsOf(services, granted, {
@@ -73,7 +78,7 @@ export const planAcpTurn = async (
                 // The browser stack's facts (ports, output dir) feed the Claude Code hooks and observer, which an ACP agent
                 // has none of: its browsers are servers in `remote` like everything else.
                 tools: { ...context.base.tools, ...opt("remote", tools.length > 0 ? tools : undefined), diagnostics: daemon.diagnostics },
-                hooks: { ...context.base.hooks, relay: daemon.relay },
+                hooks: { ...context.base.hooks, ...daemon.hooks },
                 credential: { kind: "container" },
             },
             context.attachmentPaths,
@@ -83,6 +88,8 @@ export const planAcpTurn = async (
 
 export const ACP_ADAPTER: AgentAdapter<"acp", AcpAdapterDeps> = {
     runtime: "acp",
+    // Serves helpers too (a commit subject, a title): planAcpTurn and the ACP loop read `policy.sealed`.
+    sealed: true,
     preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent),
     // Installed is runnable, since an ACP agent carries its own credentials; the only failure here is nothing
     // installed. Liveness per agent isn't probed; a spawn failure surfaces as the turn's own refusal instead.

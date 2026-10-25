@@ -4,21 +4,22 @@ import { join } from "node:path";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { MaskTarget } from "../../agent/tools/agent-redaction.js";
 
-// The wrapper a Codex shell command runs through while the turn holds stored secrets: Codex hands a hook no way to
-// rewrite a command's output (its PostToolUse takes no replaced output for a shell), so the command is rewritten instead
-// to run under this script, which prints what it printed with every stored value turned back into its
-// `{{secret:name}}` reference before Codex, and so its model, reads it. The command and the values travel by a file the
-// script deletes as it reads it, so neither stands in the command line Codex shows, logs and hands back to the model.
-// Kept apart from the hook that writes it (codex-hooks.ts) because this is text another process runs.
+// The wrapper a shell command the daemon judges but does not read the output of runs through while the turn holds stored
+// secrets (shell-line.ts): Codex hands a hook no way to rewrite a command's output (its PostToolUse takes no replaced
+// output for a shell), and an ACP agent reads a terminal's output itself, so the command is rewritten instead to run
+// under this script, which prints what it printed with every stored value turned back into its `{{secret:name}}`
+// reference before the loop, and so its model, reads it. The command and the values travel by a file the script deletes
+// as it reads it, so neither stands in the command line the loop shows, logs and hands back to the model. Kept apart
+// from the code that writes it because this is text another process runs.
 
-const SCRIPT_NAME = "intentic-codex-mask.mjs";
+const SCRIPT_NAME = "intentic-mask.mjs";
 
 // Plain JavaScript with no template literals, so nothing in it reads as this file's interpolation. A value is held back
 // only while the output so far ends in what could still be the start of one; anything else goes out at once, so a prompt
 // waiting on input is seen.
 export const maskScript = (): string =>
     [
-        `// managed by intentic: written per Codex turn (src/runtimes/codex/codex-mask-script.ts).`,
+        `// managed by intentic: written per turn (src/runtimes/decorators/mask-script.ts).`,
         `import { spawn } from "node:child_process";`,
         `import { existsSync, readFileSync, rmSync } from "node:fs";`,
         `import { constants } from "node:os";`,
@@ -105,7 +106,7 @@ export const maskScript = (): string =>
 // One turn's wrapper: its script and the files each wrapped command travels by, in a directory only the daemon's user
 // can read, removed when the turn ends.
 export interface MaskWrapper {
-    // The command line Codex runs in place of `command`, its output masked against `targets`.
+    // The command line the loop runs in place of `command`, its output masked against `targets`.
     readonly wrap: (command: string, targets: readonly MaskTarget[]) => Promise<string>;
     readonly dispose: () => Promise<void>;
 }
@@ -114,7 +115,7 @@ export const createMaskWrapper = (root: string): MaskWrapper => {
     let dir: Promise<string> | undefined;
     const ready = (): Promise<string> => {
         dir ??= (async () => {
-            const made = await mkdtemp(join(root, "intentic-codex-"));
+            const made = await mkdtemp(join(root, "intentic-mask-"));
             await writeFile(join(made, SCRIPT_NAME), maskScript(), { mode: 0o600 });
             return made;
         })();

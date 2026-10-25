@@ -76,6 +76,9 @@ export const configSchema = z.object({
     webqPluginDir: z.string().default(""),
     // Image-baked extensions dir; each subdir is an extension checkout, enumerated with git-installed ones.
     extensionsDir: z.string().default(""),
+    // Where the image bakes the product's own skills (Dockerfile: seed-skills), which a runtime whose loader does not
+    // read them is told of or handed (agent/run/decide/turn-skills.ts); empty ⇒ none.
+    builtInSkillsDir: z.string().default("/root/.claude/skills"),
     // Bundled translator (CLIProxyAPI): `url` sets ANTHROPIC_BASE_URL, `token` its bearer; both Dockerfile-set.
     translator: z
         .object({

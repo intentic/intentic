@@ -135,6 +135,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
         OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-clean", ...stamp },
         { kind: "delta", text: "Looking." },
+        { kind: "text_end" },
         edit,
         check,
         checked,
@@ -568,6 +569,7 @@ test("a routed runtime's readings are re-measured, the cache clock dropped, and 
         { kind: "preamble", notes: [LANDING_CHECKS_NOTE] },
         { kind: "session", sessionId: "thread-1", ...stamp },
         { kind: "delta", text: "on it" },
+        { kind: "text_end" },
         edit,
         { kind: "account_usage", windows: [...windows], ...stamp },
         // Nobody publishes this provider's cache lifetime, so the instant goes with the TTL it never had.

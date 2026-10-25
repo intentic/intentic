@@ -5,7 +5,7 @@ import { z } from "zod";
 import { type TurnChecks, turnCheckReports, turnChecksNote } from "../../agent/run/turn-checks.js";
 import { sdk } from "../../engines/claude-sdk.js";
 import { sealOutside } from "../../guard/outside-results.js";
-import { consultPolicy, guardFailed, type PolicyInput, type PolicyTurn, type PolicyVerdict } from "./policy-gate.js";
+import { consultPolicy, guardFailed, type PolicyCall, type PolicyInput, type PolicyTurn, type PolicyVerdict } from "./policy-gate.js";
 
 // The policy gate (policy-gate.ts) as an MCP server a turn mounts on the daemon's door, for a runtime whose own hooks can
 // call an MCP tool (Codex's per-thread `hooks` with an `mcp_tool` handler): `pre_tool_use` before a tool runs,
@@ -36,6 +36,9 @@ export interface GateHooks {
     readonly key?: string;
     // The tool's name as the turn's tool list spells it (Codex's `apply_patch` is the list's `Edit` or `Write`).
     readonly listName?: (call: GateCall) => string;
+    // The files a call touches, where the input names them in a shape the gate cannot read (a Codex patch), for the
+    // persona's folder fence.
+    readonly paths?: (call: GateCall) => readonly string[] | undefined;
     // Runs after the policy answered, on its verdict: the loop's own rewrite of a call the rules let through (its shell
     // wrapper, a secret resolved), and its record of what was answered. `asked` says a card went to a person on the way.
     readonly settle?: (call: GateCall, verdict: PolicyVerdict, asked: boolean) => Promise<PolicyVerdict>;
@@ -51,7 +54,7 @@ export interface GateServerDeps {
     readonly turn: () => PolicyTurn | undefined;
     // Marks the turn's taint bit when a result brought outside content in.
     readonly mark: (source: string) => void;
-    // The repositories' `turn` checks bound to this turn (harness-hooks.ts turnChecksOf); absent runs none at stop.
+    // The repositories' `turn` checks bound to this turn (harness-hooks.ts checkHooksOf); absent runs none at stop.
     readonly turnChecks?: TurnChecks | undefined;
     // The loop's additions, late-bound like `turn`.
     readonly hooks?: () => GateHooks | undefined;
@@ -104,6 +107,15 @@ const noticingCards = async (turn: PolicyTurn | undefined, run: (turn: PolicyTur
     return { verdict, asked };
 };
 
+// A hooked call as the policy reads it: the tool in the one vocabulary (the loop's own translator), and the files it
+// touches where the loop can name them better than the input's path field.
+const policyCallOf = (hooks: GateHooks | undefined, call: GateCall): PolicyCall => ({
+    tool: hooks?.listName?.(call) ?? call.tool,
+    input: call.input,
+    cwd: call.cwd,
+    paths: hooks?.paths?.(call),
+});
+
 export const gateServer = (deps: GateServerDeps): McpSdkServerConfigWithInstance => {
     // Once per turn, whatever was found: a second stop is the model's answer to the first (turn-checks.ts).
     let stopped = false;
@@ -135,8 +147,7 @@ export const gateServer = (deps: GateServerDeps): McpSdkServerConfigWithInstance
                     try {
                         const hooks = deps.hooks?.();
                         const call: GateCall = { tool: tool_name, input: tool_input, cwd, id: tool_use_id, session: session_id };
-                        const tool = hooks?.listName?.(call) ?? tool_name;
-                        const { verdict, asked } = await noticingCards(deps.turn(), (turn) => consultPolicy(turn, { tool, input: tool_input, cwd }));
+                        const { verdict, asked } = await noticingCards(deps.turn(), (turn) => consultPolicy(turn, policyCallOf(hooks, call)));
                         const settled = hooks?.settle === undefined ? verdict : await hooks.settle(call, verdict, asked);
                         return json(preToolUseAnswer(settled));
                     } catch (error) {

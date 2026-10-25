@@ -1,6 +1,7 @@
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import type { TurnContext } from "../../agent/providers/adapter.js";
@@ -50,6 +51,12 @@ const services = (overrides: Partial<Services> = {}): Services =>
         async *cursorAgent() {},
         // Off, as on a fresh sandbox: a turn carries no shield.
         privacyShield: privacySliceFake().privacyShield,
+        // A fresh sandbox's settings: no rule declares an edit or turn check.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+        // The daemon's own door servers (daemon-servers.ts): no conversation here is a spawned child, and nothing has run.
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
+        dependencies: unstubbed<Services["dependencies"]>("dependencies", {}),
         ...overrides,
     });
 
@@ -70,6 +77,10 @@ const planned = async (granted: readonly Capability[], overrides: Partial<Servic
     return (plan as { request: AgentRequest }).request;
 };
 
+// The daemon's own servers every runtime reaches at the door (daemon-servers.ts), mounted after the turn's own.
+const DOOR = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "gate", "terminal"]);
+const own = (request: AgentRequest) => request.tools.remote?.filter((tool) => !DOOR.has(tool.name));
+
 beforeEach(() => {
     browserServers.mockReset();
     browserServers.mockResolvedValue({ servers: [], accounts: {}, ports: {}, passkeys: {} });
@@ -82,14 +93,12 @@ test("a connected browser extension reaches the turn as an http MCP server named
     const request = await planned([{ kind: "webext", id: "chrome", config: {} } as Capability], mounts);
     const token = request.tools.remote?.[0]?.token ?? "";
 
-    expect(request.tools.remote).toEqual([{ name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`, token }]);
+    expect(own(request)).toEqual([{ name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`, token }]);
     expect(mounts.turnMounts.resolve(token, "chrome")).toEqual({ target: { kind: "webext", id: "chrome" }, conversationId: "conv-1" });
-    expect(cursorMcpServers(request)).toEqual({
-        chrome: {
-            type: "http",
-            url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`,
-            headers: { Authorization: `Bearer ${token}` },
-        },
+    expect(cursorMcpServers(request)["chrome"]).toEqual({
+        type: "http",
+        url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/chrome`,
+        headers: { Authorization: `Bearer ${token}` },
     });
 });
 
@@ -100,7 +109,7 @@ test("a connected machine reaches the turn with the conversation the command gat
     const request = await planned([{ kind: "device", id: "radarsu-rog", config: {} } as Capability], mounts);
     const token = request.tools.remote?.[0]?.token ?? "";
 
-    expect(request.tools.remote).toEqual([{ name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/radarsu-rog`, token }]);
+    expect(own(request)).toEqual([{ name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/radarsu-rog`, token }]);
     expect(mounts.turnMounts.resolve(token, "radarsu-rog")).toEqual({ target: { kind: "device", id: "radarsu-rog" }, conversationId: "conv-1" });
 });
 
@@ -111,12 +120,18 @@ test("the daemon's own tools and the workspace's mcp capabilities arrive togethe
         tools: [{ name: "platform", url: "https://platform.example/mcp", token: "internal" }],
     });
 
-    expect(request.tools.remote?.map((tool) => tool.name)).toEqual(["platform", "saldeo"]);
+    expect(own(request)?.map((tool) => tool.name)).toEqual(["platform", "saldeo"]);
 });
 
-// Absent, not empty: an empty list would still read as "this turn has tools" to anything checking the field.
-test("a sandbox with nothing connected carries no tools field at all", async () => {
-    expect((await planned([])).tools.remote).toBeUndefined();
+// The daemon's own servers reach a Cursor turn as they reach every other runtime's, less the three it serves as custom
+// tools in the daemon's process (cursor-tools.ts): its model is offered each tool once.
+test("a sandbox with nothing connected still carries the daemon's own servers, never the three Cursor serves itself", async () => {
+    const request = await planned([]);
+    const names = (request.tools.remote ?? []).map((tool) => tool.name);
+    expect(own(request)).toEqual([]);
+    expect(names).toContain("diagnostics");
+    expect(names.filter((name) => ["ui", "code", "subagents"].includes(name))).toEqual([]);
+    expect(Object.keys(request.hooks)).toContain("relay");
 });
 
 // The privacy shield reads a Cursor turn channel by channel rather than refusing it: the request carries the turn's

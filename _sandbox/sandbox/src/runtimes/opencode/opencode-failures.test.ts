@@ -1,5 +1,6 @@
 import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { opt } from "../../opt.js";
+import { type EventOf, sessionNotice } from "./opencode-frames.js";
 import { executionErrorFrame, OUTAGE_ATTEMPTS, RATE_LIMIT_PATIENCE_MS, retryFrame, retryHandover, type StructuredError } from "./opencode-failures.js";
 import { OPENCODE_XAI_PROVIDER } from "./xai-models.js";
 
@@ -100,4 +101,20 @@ describe("a retry OpenCode scheduled", () => {
         expect(retryFrame({ attempt: 2, at: 5, error: failure("provider.rate-limit", "slow down") })).toEqual({ kind: "provider_retry", attempt: 2, nextAttemptAt: 5, status: 429 });
         expect(retryFrame({ attempt: 3, at: 9, error: failure("provider.transport", "socket hang up") })).toEqual({ kind: "provider_retry", attempt: 3, nextAttemptAt: 9 });
     });
+});
+
+// What an OpenCode session says of itself between its calls is filed as every loop's is: a compaction as one, so the
+// notes the summary dropped are said again (opencode-frames.ts sessionNotice).
+const compacted = (reason: "auto" | "manual"): EventOf<"session.compaction.ended"> => ({
+    id: "evt_1",
+    created: 1,
+    type: "session.compaction.ended",
+    durable: { aggregateID: "s1", seq: 1, version: 1 },
+    data: { sessionID: "s1", reason, text: "summary" },
+});
+
+test("a compaction is filed as every loop's is, and a delta is no session notice", () => {
+    expect(sessionNotice(compacted("auto"))).toEqual({ kind: "compact", trigger: "auto" });
+    expect(sessionNotice(compacted("manual"))).toEqual({ kind: "compact", trigger: "manual" });
+    expect(sessionNotice({ id: "evt_2", created: 2, type: "session.text.delta", data: { sessionID: "s1", assistantMessageID: "m1", ordinal: 0, delta: "hi" } })).toBeUndefined();
 });

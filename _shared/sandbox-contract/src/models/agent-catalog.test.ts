@@ -110,7 +110,7 @@ describe("the pi provider", () => {
     it("takes the turn's instructions, skills, questions, MCP servers, the daemon's own tools and namespace", () => {
         const pi = capabilitiesOf("pi", "native");
         expect(pi.instructions).toBe("replace");
-        expect(pi.skillDiscovery).toBe("native");
+        expect(pi.skillDiscovery).toEqual({ workspace: true, builtIn: true, kit: true });
         expect(pi.questions).toBe(true);
         expect(pi.mcp).toBe("tools");
         expect(pi.execution).toEqual(["shell", "js"]);
@@ -275,13 +275,15 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(acp).not.toContain("no code runs, shell only");
     expect(acpCaps.commands).toBe(true);
     expect(acpCaps.terminals).toBe(true);
-    // Per-tool approvals and questions ride the protocol's own seams (request_permission, form elicitation); effort,
-    // isolation and recovery stay off, since the record is every agent's and the pooled process is every conversation's.
+    // Per-tool approvals and questions ride the protocol's own seams (request_permission, form elicitation); effort and
+    // isolation stay off, since the record is every agent's and the pooled process is every conversation's. Recovery is
+    // the turn's one exit's (a failure coded by its words, a silent agent coded an outage), so it is every agent's too.
     expect(acpCaps.permissions).toBe("modes");
     expect(acpCaps.questions).toBe(true);
     expect(acp).not.toContain("no per-tool approvals");
     expect(acp).not.toContain("no clarifying questions");
-    expect(acp).toEqual(expect.arrayContaining(["no effort control", "worktree by cwd only", "no auto-resume after outage"]));
+    expect(acp).toEqual(expect.arrayContaining(["no effort control", "worktree by cwd only"]));
+    expect(acp).not.toContain("no auto-resume after outage");
 
     // Codex takes the daemon's own servers too, over the door, so only plugins are missing.
     const codexCaps = capabilitiesOf("codex", "native");
@@ -307,16 +309,17 @@ test("every axis a record can lack has words for it", () => {
         recovery: false,
         warm: false,
         instructions: "none",
-        skillDiscovery: "prompt",
+        skillDiscovery: { workspace: false, builtIn: false, kit: false },
         rulebook: "none",
         secrets: "none",
         privacy: "none",
         toolAllowlist: false,
+        editChecks: "turn-end",
     };
 
-    // Fourteen disclosable axes, fourteen sentences; `fastMode` is disclosed via fastAllowed, and `warm` (keep-warm, off by
+    // Fifteen disclosable axes, fifteen sentences; `fastMode` is disclosed via fastAllowed, and `warm` (keep-warm, off by
     // default) is no limit on the turn itself.
-    expect(limitationsOf(nothing)).toHaveLength(14);
+    expect(limitationsOf(nothing)).toHaveLength(15);
     expect(limitationsOf(nothing).join(" ")).not.toContain("fast");
 });
 

@@ -1,3 +1,4 @@
+import { CURSOR } from "@intentic/sandbox-contract/models/agent-runtimes";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -15,22 +16,21 @@ import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import type { CursorCatalog } from "./models/cursor-catalog.js";
 import { createCursorEventMapper } from "./cursor-events.js";
 import { type CursorRunHandle, type CursorSession, inProcessHost, namespacedHost, type NamespacedHostInput } from "./cursor-host.js";
-import { type CursorGateTurn, type CursorHookService, LIST_HOOKS } from "./cursor-hooks.js";
+import { type CursorHookService, LIST_HOOKS } from "./cursor-hooks.js";
 import { opt } from "../../opt.js";
 import { selectionFor } from "./models/cursor-models.js";
 import { CURSOR_SDK_MISSING, cursorSdk, cursorSdkEntry } from "./cursor-sdk.js";
 import { cursorCustomTools, cursorMcpServers, TOOLS_WITHHELD } from "./cursor-tools.js";
-import { type CursorOwner, cursorOwner } from "./turn/cursor-approvals.js";
-import { cursorSecrets, secretMaskedCustomTools } from "./turn/cursor-secrets.js";
+import { cursorOwner } from "./turn/cursor-approvals.js";
+import { secretMaskedCustomTools } from "./turn/cursor-secrets.js";
 import { type CursorSkills, NO_SKILLS, projectKit } from "./turn/cursor-skills.js";
-import { cursorTerminalOf } from "./turn/cursor-terminal.js";
+import { hookTurn } from "./turn/cursor-hook-turn.js";
 import { cursorToolsOption, listedCustomTools, listedMcpServers } from "./turn/cursor-tool-list.js";
 import { cursorCommands, type CursorCommand, expandCursorCommand } from "./cursor-commands.js";
 import type { TurnShield } from "../../privacy/privacy-shield.js";
 import {
     CURSOR_SHIELD_NOTE,
     createEventRestorer,
-    cursorHookShield,
     instructionRefusal,
     SHIELD_WITHHELD,
     shieldedCustomTools,
@@ -354,36 +354,6 @@ const turnOptions = async (input: TurnOptionsInput): Promise<AgentOptions> => {
     };
 };
 
-// What the hook service holds for one live turn (cursor-hooks.ts).
-const hookTurn = (input: {
-    readonly agentId: string;
-    readonly request: AgentRequest<CursorCredential>;
-    readonly shellEnv: Record<string, string>;
-    readonly systemAppend: string | undefined;
-    readonly gate: CursorGateTurn["gate"];
-    readonly push: (event: AgentEvent) => void;
-    readonly shield: TurnShield | undefined;
-    readonly list: readonly string[] | undefined;
-    readonly owner: CursorOwner | undefined;
-    readonly skills: CursorSkills | undefined;
-}): CursorGateTurn => {
-    const { request, shellEnv, skills } = input;
-    return {
-        conversationId: input.agentId,
-        ...opt("cliEnv", Object.keys(shellEnv).length > 0 ? shellEnv : undefined),
-        ...opt("systemAppend", input.systemAppend),
-        gate: input.gate,
-        push: input.push,
-        ...opt("shield", input.shield === undefined ? undefined : cursorHookShield(input.shield)),
-        ...opt("allowedTools", input.list),
-        ...opt("secrets", request.tools.secrets === undefined ? undefined : cursorSecrets(request.tools.secrets)),
-        // The shell in the terminal panel; the session is named from Cursor's agent id, as the conversation's is.
-        ...opt("terminal", cursorTerminalOf(input.agentId, { envKeys: Object.keys(shellEnv), isolation: request.spec.isolation, owner: request.spec.conversationId })),
-        ...opt("owner", input.owner),
-        ...opt("deniedSkills", skills === undefined || skills.denied.length === 0 ? undefined : skills.denied),
-    };
-};
-
 // How one send of a phase ended, and the steering messages its run handed back, known once the phase's channel closes.
 interface PhaseOutcome {
     readonly errored: boolean;
@@ -593,7 +563,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // Rulebook axis "hooks" makes a hold park on a card, not refuse, while the hook process waits on the socket.
         // Built ahead of the options because the JS backend rides a custom tool and consults this gate from inside its
         // own handler, where no hook can reach it.
-        const { gate, taint, release } = vendorTurnGate(request);
+        const { gate, taint, release } = vendorTurnGate(request, { push });
         // Ends with the attempt, so a card a hook or a tool still holds open is settled once the run is gone.
         const ended = new AbortController();
         // Whether the phase now running puts calls to a person (cursor-approvals.ts): a plan's read-only first phase
@@ -711,13 +681,13 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                     prompt: `${PLAN_PREAMBLE}${basePrompt}`,
                     async *plan(prompt) {
                         const outcome = yield* send(prompt, true);
-                        // Session never changes across phases; reporting undefined here keeps the emulation's seed rather
-                        // than reassigning it.
+                        // One session across phases (and the checks' follow-up): undefined keeps the emulation's seed.
                         return { sessionId: undefined, planText: outcome.planText, errored: outcome.errored };
                     },
                     execute: () => send(EXECUTE_PROMPT, false),
                 }),
                 () => send(basePrompt, false),
+                { followUp: (note) => send(note, false), editChecks: CURSOR.editChecks },
             );
         } catch (error) {
             if (error instanceof SystemPromptRefused) {

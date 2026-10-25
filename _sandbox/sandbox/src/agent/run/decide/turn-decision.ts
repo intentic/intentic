@@ -7,6 +7,7 @@ import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities
 import type { Rule, SandboxSettings, SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { mayDelegate, personaCapabilities, personaPrompt, type TurnPersona } from "../../../personas/personas.js";
+import { personaLimitsRefusal } from "./persona-limits.js";
 import { withRepoChecks } from "../../../rules/repo-checks.js";
 import { gatedCapabilities } from "../../../secrets/credential-gating.js";
 import { withinReach } from "../../../secrets/credential-reach.js";
@@ -229,6 +230,10 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
     const { capabilities } = runtime;
     const premise = premiseOf(facts, input, runtime);
     const { persona } = premise;
+    const unheld = personaLimitsRefusal(persona, runtime);
+    if (unheld !== undefined) {
+        return unheld;
+    }
     const warnings = [...personaWarnings(persona, input), ...routeWarnings(facts.accountRoute, input)];
     // What the declared window will not pay for; undefined for every model whose window holds a full turn.
     const trim = turnTrim(facts.declared?.window, capabilities.instructions);

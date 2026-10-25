@@ -25,6 +25,7 @@ export type RuntimeGuidanceDeps = Pick<Services, "hostReach" | "webextReach" | "
 const UI_SERVER = "ui";
 const WATCH_SERVER = "watch";
 const SUBAGENTS_SERVER = "subagents";
+const TERMINAL_SERVER = "terminal";
 
 export interface RuntimeGuidanceTurn {
     readonly capabilities: AgentCapabilities;
@@ -53,8 +54,8 @@ const runtimeGuidanceFacts = async (deps: RuntimeGuidanceDeps, turn: RuntimeGuid
         desktop: mounted.has(DESKTOP_SERVER),
         diagnostics: request.tools.diagnostics === true,
         pages: turn.chatPages && mounted.has(UI_SERVER),
-        // The terminal hand-off rides the Claude Code loop's tmux wrapper alone.
-        terminal: false,
+        // The terminal hand-off, where the door mounted it (daemon-servers.ts terminalServer).
+        terminal: mounted.has(TERMINAL_SERVER),
         uiAsk: mounted.has(UI_SERVER),
         watch: mounted.has(WATCH_SERVER),
         subagents: mounted.has(SUBAGENTS_SERVER),

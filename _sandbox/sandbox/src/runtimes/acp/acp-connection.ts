@@ -122,9 +122,9 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         const app = routeSessions(client({ name: "intentic" }), routing)
             .onRequest(methods.client.terminal.create, async ({ params }) => {
                 const context = terminalContext(params.sessionId);
-                await context.admit(params);
+                const prepared = await context.admit(params);
                 context.onCreate();
-                return { terminalId: terminals.create(context.session, context.cwd, params) };
+                return { terminalId: terminals.create(context.session, context.cwd, params, prepared) };
             })
             .onRequest(methods.client.terminal.output, ({ params }) => {
                 const response = terminals.output(params.terminalId);

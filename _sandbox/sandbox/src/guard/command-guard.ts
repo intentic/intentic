@@ -1,4 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import type { AdmissionRule,CommandClass,CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
+import { outboundRefusal } from "./outbound-guard.js";
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import {
@@ -9,7 +11,6 @@ import {
     matchCommand,
     mergeSpans,
 } from "@intentic/sandbox-contract/policy/command-classes";
-import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { CommandJudgeMode, SafetyLogEntry, SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
@@ -42,6 +43,9 @@ export interface CommandGuardOptions {
     readonly steered?: (() => boolean) | undefined;
     // Whether this transport can pause for an answer; false if the runtime's own watchdog aborts a paused turn.
     readonly canPark?: boolean;
+    // The owner's action rules (SandboxSettings.actionRules), checked on every command before the safety tiers: a
+    // classified outbound send they deny or hold is refused (outbound-guard.ts), on every runtime this guard serves.
+    readonly actionRules?: Readonly<Record<string, AdmissionRule>> | undefined;
     // The turn's own signal, so a parked card settles when the turn is stopped instead of holding it open.
     readonly signal: AbortSignal;
     // Where a held command's card is parked, so the owner's answer finds it.
@@ -235,6 +239,13 @@ const keepLine = async (options: CommandGuardOptions, line: string | undefined, 
     }
 };
 
+// The owner's action rules on one command, asked first in every consult: a refusal for an outbound send they deny or
+// hold, else undefined.
+const outboundOutcome = (options: CommandGuardOptions, program: string): GuardOutcome | undefined => {
+    const reason = options.actionRules === undefined ? undefined : outboundRefusal(options.actionRules, program);
+    return reason === undefined ? undefined : { allow: false, reason };
+};
+
 export const createCommandGuard = (options: CommandGuardOptions): CommandGuard => {
     // Programs the user has already said yes to this turn, keyed by exact text so a yes means only this command.
     const granted = new Set<string>();
@@ -406,7 +417,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
     return {
         enforcing: true,
         async *consult(program, subject, where) {
-            const installed = yield* installTier(program, subject, where);
+            const installed = outboundOutcome(options, program) ?? (yield* installTier(program, subject, where));
             if (installed?.allow === false) {
                 return installed;
             }

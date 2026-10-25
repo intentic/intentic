@@ -9,9 +9,8 @@ import { conditionHolds } from "../../rules/rules.js";
 /* WHAT A REPOSITORY'S OWN `turn` CHECKS FOUND IN A TURN'S CHANGE, said back to it once at Stop. */
 
 // Nothing here holds the turn, its land, a commit or a push: the model reads what was found once, and fixes it or says
-// why not. The Claude Code loop says it from the SDK's Stop hook; Pi, whose turn the daemon drives prompt by prompt,
-// hears it as one more prompt once its last one settles (runtimes/pi/pi-agent.ts). A Cursor or ACP turn ends without
-// these checks, as every turn did while the moment ran nothing.
+// why not. The Claude Code loop says it from the SDK's Stop hook, Codex from its gate's stop; every other loop hears it as
+// one more prompt once its last one settles (runtimes/decorators/ending-checks.ts).
 
 // The longest a Stop waits on one check, whatever the check allows itself: past this the turn has sat at its last word
 // long enough, and the check is reported as one that could not run.
@@ -115,7 +114,7 @@ const shortNames = (reports: readonly TurnCheckReport[]): string => {
 
 /** The notice row itself: one plain line for a reader of the transcript, with the note the model was told behind it
  *  (`sent`, disclosed under the row), since the note rode to the model and nowhere else. */
-export const turnChecksNotice = (reports: readonly TurnCheckReport[]): AgentEvent => {
+export const turnChecksNotice = (reports: readonly TurnCheckReport[], sent = turnChecksNote(reports)): AgentEvent => {
     const found = reports.filter(({ run }) => run.status === "failed");
     const unrun = reports.filter(({ run }) => run.status !== "failed");
     const line =
@@ -123,7 +122,7 @@ export const turnChecksNotice = (reports: readonly TurnCheckReport[]): AgentEven
             ? `Checks found problems in this change (${shortNames(found)})${unrun.length > 0 ? `, and ${shortNames(unrun)} could not run` : ""}. Sent to the agent.`
             : `Checks could not run on this change (${shortNames(unrun)}). The agent was told.`;
     // A muted line either way: the agent, not the reader, is the one asked to act on it.
-    return { kind: "agent_notice", level: "info", source: TURN_CHECKS_SOURCE, text: line, sent: turnChecksNote(reports) };
+    return { kind: "agent_notice", level: "info", source: TURN_CHECKS_SOURCE, text: line, sent };
 };
 
 /** The repositories' `turn` checks as a Stop matcher (agent.ts mergeHooks), beside the checklist note (checklist-close.ts).

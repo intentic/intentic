@@ -17,6 +17,7 @@ import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets
 import { outOfReachNote, reachCliEnv, withinReach } from "../../../secrets/credential-reach.js";
 import { gatewayHeld, shellEnvOf } from "../../../capabilities/cli-env.js";
 import { SKILL_CATALOG_NOTE_TITLE, skillCatalogNoteOf } from "../../../store/loaded-skills.js";
+import { catalogFor } from "./turn-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import { type InstallReach, setupNoticeFor, setupNoticeTitle } from "../../../workspace/layout/workspace-setup.js";
 import type { SearchTool } from "../../prompt/guidance.js";
@@ -100,10 +101,11 @@ const workspaceNotes = (
     send: TurnPremise["send"],
     isolated: boolean,
     canInstall: boolean,
-    denied: readonly string[],
+    access: { readonly denied: readonly string[]; readonly persona: string | undefined },
 ): TurnNote[] => {
     const setupNotice = setupNoticeFor(facts.setup, installReachOf(isolated, capabilities, canInstall));
-    const skillCatalogNote = facts.skillCatalog === undefined ? undefined : skillCatalogNoteOf(facts.skillCatalog, deniedSkillNames(denied));
+    const skillCatalogNote =
+        facts.skillCatalog === undefined ? undefined : skillCatalogNoteOf(catalogFor(facts.skillCatalog, access.persona), deniedSkillNames(access.denied));
     return [
         ...(isolated && capabilities.isolation === "cwd"
             ? [context.base.spec.sessionId === undefined ? worktreeNote(context.localCwd, facts.root) : worktreeReminder(facts.root)]
@@ -207,7 +209,10 @@ export const honoured = (
             notes: premise.briefing.keep([
                 // First, when there is one: who the turn acts as belongs ahead of anything about files or tools.
                 ...(placement.userNotes ?? []),
-                ...workspaceNotes(facts, context, capabilities, send, isolated, persona.powers.files === "write" && persona.powers.shell, access.denied),
+                ...workspaceNotes(facts, context, capabilities, send, isolated, persona.powers.files === "write" && persona.powers.shell, {
+                    denied: access.denied,
+                    persona: persona.persona?.id,
+                }),
                 ...turnNotes(facts, premise, planned.spawn, access.withheld),
             ]),
             systemPromptMode: prompt.mode,

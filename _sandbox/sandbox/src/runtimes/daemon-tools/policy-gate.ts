@@ -2,7 +2,9 @@ import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Logger } from "pino";
-import { allowlistRefusal, toolAllowed } from "../../agent/tools/tool-allowlist.js";
+import { allowlistRefusal, denylistRefusal, toolAllowed, toolDenied } from "../../agent/tools/tool-allowlist.js";
+import { type PersonaScope, scopeRefusal } from "../../personas/persona-scope.js";
+import { editedPath } from "../../rules/edit-tools.js";
 import { askCwdOf, askProgramOf, CONSULT_FAILED, VendorToolInputSchema } from "../decorators/vendor-ask.js";
 import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 import { type CommandGuard, consultWith, type GuardOutcome, JS_SUBJECT, type GuardSubject, vendorSubject } from "../../guard/command-guard.js";
@@ -26,6 +28,9 @@ export interface PolicyCall {
     readonly program?: string | undefined;
     // Where it runs, when the runtime says per call; otherwise read off the input, else the gate's own.
     readonly cwd?: string | undefined;
+    // The files a call touches, when the runtime already knows them (a Codex patch names several); otherwise read off
+    // the input's path field (rules/edit-tools.ts editedPath).
+    readonly paths?: readonly string[] | undefined;
 }
 
 // `hold` is not a verdict of its own: a call the rules hold parks inside `consult` on a card (its frames pushed to the
@@ -49,6 +54,11 @@ export interface PolicyTurn {
     readonly hold?: (() => () => void) | undefined;
     // The turn's tool list, when it carries one: a call off it is refused before anything else is asked.
     readonly allowedTools?: readonly string[] | undefined;
+    // What the persona withholds (TurnPolicy.disallowedTools) and the folders it works in (TurnPolicy.personaScope), in
+    // the one tool vocabulary every runtime's translator maps onto (rules/tool-vocabulary.ts). Until 2026-10-25 only the
+    // Claude Code loop read either, so a read-only or fenced persona on Codex, Cursor or Pi edited and ran anything.
+    readonly deniedTools?: readonly string[] | undefined;
+    readonly scope?: PersonaScope | undefined;
     // A change the turn makes to a call before it runs (a path redirect, a shield reading a token back), asked after the
     // tool list and before the rules, so the rules read the call that will actually run.
     readonly rewrite?: ((call: PolicyCall) => Promise<PolicyRewrite>) | undefined;
@@ -104,6 +114,44 @@ const listRefusal = (turn: PolicyTurn, call: PolicyCall): PolicyVerdict | undefi
     return toolAllowed(turn.allowedTools, { name: call.tool, command })
         ? undefined
         : { decision: "deny", reason: allowlistRefusal({ name: call.tool, command }, turn.allowedTools) };
+};
+
+// A turn's limits as the gate reads them, from its policy: the tool list, what the persona withholds, and its folders.
+// One spelling for every runtime that builds a PolicyTurn, so a limit added to the policy reaches all of them at once.
+export const policyLimitsOf = (policy: {
+    readonly allowedTools?: readonly string[] | undefined;
+    readonly disallowedTools?: readonly string[] | undefined;
+    readonly personaScope?: PersonaScope | undefined;
+}): Pick<PolicyTurn, "allowedTools" | "deniedTools" | "scope"> => ({
+    allowedTools: policy.allowedTools,
+    deniedTools: policy.disallowedTools,
+    scope: policy.personaScope,
+});
+
+// The persona's half alone, undefined when it puts no limit on the turn, for a runtime that carries it on its own field.
+export const personaLimitsOf = (policy: {
+    readonly disallowedTools?: readonly string[] | undefined;
+    readonly personaScope?: PersonaScope | undefined;
+}): Pick<PolicyTurn, "deniedTools" | "scope"> | undefined =>
+    policy.disallowedTools === undefined && policy.personaScope === undefined ? undefined : { deniedTools: policy.disallowedTools, scope: policy.personaScope };
+
+// The persona's limits: a refusal for a tool it withholds, or for a file outside its folders (or the sandbox's own
+// config, where it may not change it); else undefined.
+export const personaRefusal = (turn: Pick<PolicyTurn, "deniedTools" | "scope">, call: PolicyCall): string | undefined => {
+    if (turn.deniedTools !== undefined && toolDenied(turn.deniedTools, { name: call.tool })) {
+        return denylistRefusal({ name: call.tool });
+    }
+    if (turn.scope === undefined) {
+        return undefined;
+    }
+    const paths = call.paths ?? [editedPath(call.input)].filter((path) => path !== undefined);
+    for (const path of paths) {
+        const refused = scopeRefusal(turn.scope, call.tool, path);
+        if (refused !== undefined) {
+            return refused;
+        }
+    }
+    return undefined;
 };
 
 // The turn's own rewrite: a refusal, or the call that will actually run and the input it was changed to, if it was.
@@ -164,6 +212,10 @@ export const consultPolicy = async (turn: PolicyTurn | undefined, call: PolicyCa
     const listed = listRefusal(turn, call);
     if (listed !== undefined) {
         return listed;
+    }
+    const withheld = personaRefusal(turn, call);
+    if (withheld !== undefined) {
+        return { decision: "deny", reason: withheld };
     }
     const rewrite = await rewriteOf(turn, call, options);
     if ("verdict" in rewrite) {

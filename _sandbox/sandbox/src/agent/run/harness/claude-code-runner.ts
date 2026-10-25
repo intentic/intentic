@@ -41,7 +41,6 @@ import { installSteeringHooks } from "../../providers/agent-installs.js";
 import { toolResultHooks } from "../../tools/tool-result-hooks.js";
 import { secretCommandHooks } from "../../tools/agent-secrets.js";
 import { commandGateHooks } from "../../../guard/command-guard.js";
-import { outboundGuardHooks } from "../../../guard/outbound-guard.js";
 import { createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
 import { personaScopeHooks } from "../../../personas/persona-scope.js";
 import { toolAllowlistHooks } from "../../tools/tool-allowlist.js";
@@ -49,7 +48,7 @@ import { jsExecutionServer } from "../../../execution/js-tool.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME } from "../../../seams/js-tool-names.js";
 import { mcpServersOf } from "../../tools/agent-tools.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../../tools/agent-terminals.js";
-import { terminalHelpServer } from "../../../terminal/terminal-help.js";
+import { sessionOfShell, terminalHelpServer } from "../../../terminal/terminal-help.js";
 import { EventQueue } from "../event-queue.js";
 import { insideRel } from "@intentic/base/contained";
 import { planRevision } from "../../prompt/plan-revision.js";
@@ -347,7 +346,6 @@ export const mergeHooks = (...sets: Partial<Record<HookEvent, HookCallbackMatche
 };
 
 // True only for a non-empty rulebook, so an absent or empty one wires no hook and costs nothing.
-const hasRules = <T extends object>(rules: T | undefined): rules is T => rules !== undefined && Object.keys(rules).length > 0;
 
 // CLI scheduling tools are dead here (the process dies at turn end); automations and the watch tools replace them.
 const CLI_SCHEDULER_TOOLS = ["ScheduleWakeup", "CronCreate", "CronDelete", "CronList"];
@@ -513,6 +511,8 @@ const baseOptions = (
                     // The same install rule and ledger every runtime's gate is built with (vendor-gate.ts).
                     installs: request.hooks.projectInstalls,
                     onImageInstall: request.hooks.onImageInstall,
+                    // The owner's action rules, in the same guard every runtime's gate is built from.
+                    actionRules: request.policy.actionRules,
                 }),
                 // tmux wrapper carries the secret exit so the rewrites compose in order; without tmux the exit stands
                 // alone.
@@ -531,9 +531,6 @@ const baseOptions = (
                       : {},
                 toolResultHooks(request, taint),
                 installSteeringHooks(),
-                // Checks classified outbound calls against owner action rules before they run, even under
-                // bypassPermissions.
-                hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
                 ...policyBoundaryHooks(request.policy),
                 ...sessionHooks(request.spec, request.hooks.children),
                 // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
@@ -941,7 +938,7 @@ export async function* runAgent(
                 ? {}
                 : {
                       terminal: terminalHelpServer({
-                          shell,
+                          session: sessionOfShell(shell),
                           ...(request.spec.conversationId === undefined ? {} : { conversationId: request.spec.conversationId }),
                           signal: request.signal,
                           push,

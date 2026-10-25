@@ -1,19 +1,16 @@
 import { isAbsolute, resolve } from "node:path";
-import type { HookCallback, HookJSONOutput, PostToolUseHookInput, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, HookJSONOutput, PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { JsonValue } from "@intentic/base/fetch-json";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { WITHHELD, redactionHooks, withheld } from "../../agent/tools/agent-redaction.js";
-import { bashTmuxHooks } from "../../agent/tools/agent-terminals.js";
+import { createShellLines } from "../decorators/shell-line.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { mcpServerOf, sealOutside } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
-import { resolveCommandSecrets } from "../../secrets/secret-access.js";
-import { hasSecretReferences } from "../../secrets/secret-registry.js";
 import type { HookAnswer, HookEndpoint } from "../daemon-tools/hook-socket.js";
-import { createPolicyGate, guardFailed } from "../daemon-tools/policy-gate.js";
+import { createPolicyGate, guardFailed, policyLimitsOf } from "../daemon-tools/policy-gate.js";
 
 // The daemon's end of the Pi extension's tool hooks (pi-extension.ts): one turn's Pi posts every tool call to a socket
 // of this turn's own (pi-rpc.ts) before it runs, and every result after, and does what the answer says. Before a call:
@@ -119,17 +116,7 @@ type TextBlock = { readonly type: "text"; readonly text: string };
 
 const textBlock = (text: string): TextBlock => ({ type: "text", text });
 
-// The hook callbacks the Claude Code loop runs, called here on a Pi call shaped as their input: one rewrite and one mask,
-// whichever runtime's shell they serve.
-const preToolUse = (tool: string, input: ToolInput, id: string, session: string, cwd: string): PreToolUseHookInput => ({
-    hook_event_name: "PreToolUse",
-    tool_name: tool,
-    tool_input: input,
-    tool_use_id: id,
-    session_id: session,
-    transcript_path: "",
-    cwd,
-});
+// The Claude Code loop's mask hook, called here on a Pi result shaped as its input.
 const postToolUse = (tool: string, input: ToolInput, response: Content, cwd: string): PostToolUseHookInput => ({
     hook_event_name: "PostToolUse",
     tool_name: tool,
@@ -148,7 +135,6 @@ export const createPiHooks = (request: AgentRequest, options: PiHooksOptions): P
     const policy = createPolicyGate();
     let live: PiHookTurn | undefined;
     let sessionKey: string | undefined;
-    let surfaced = false;
     // Marks a result made before the loop attached: the taint bit may only err toward set, so none is dropped.
     const marks: string[] = [];
     const mark = (source: string): void => {
@@ -164,46 +150,27 @@ export const createPiHooks = (request: AgentRequest, options: PiHooksOptions): P
     });
 
     const tools = request.tools;
-    const tmuxHook: HookCallback | undefined = options.tmux
-        ? bashTmuxHooks(
-              Object.keys(tools.cliEnv ?? {}),
-              request.spec.isolation,
-              request.spec.conversationId,
-              tools.secrets,
-              tools.heavyCommands,
-              tools.offloadCommands,
-          ).PreToolUse?.[0]?.hooks[0]
-        : undefined;
     const maskHook: HookCallback | undefined = tools.secrets === undefined ? undefined : redactionHooks(tools.secrets.list).PostToolUse?.[0]?.hooks[0];
 
-    // A shell line as it will run: through the panel's tmux session where there is one, else with its secret
-    // references resolved in place. A reference the turn may not use refuses the call.
+    // A shell line as it will run, through the one command runner every judged shell shares (shell-line.ts): in the
+    // panel's tmux session once Pi has named its session, else with its secret references resolved in place. Unmasked
+    // there, since every result reaches the model through toolResult's mask. A reference the turn may not use refuses it.
+    const shell = createShellLines({
+        tools,
+        isolation: request.spec.isolation,
+        owner: request.spec.conversationId,
+        terminals: options.tmux,
+        mask: false,
+        // The first line through the panel's session puts it in the panel, as ACP's first terminal does.
+        onPanel: (session) => live?.push({ kind: "terminal", session }),
+    });
     const shellLine = async (input: ToolInput, id: string, cwd: string): Promise<{ readonly refuse: string } | { readonly input: ToolInput }> => {
         const command = CommandSchema.safeParse(input).data?.command;
         if (command === undefined) {
             return { input };
         }
-        const session = sessionKey === undefined ? undefined : agentSessionName(sessionKey);
-        if (tmuxHook !== undefined && sessionKey !== undefined && session !== undefined) {
-            const said = saidBy(await tmuxHook(preToolUse("Bash", input, id, sessionKey, cwd), id, { signal: request.signal }));
-            if (said?.permissionDecision === "deny") {
-                return { refuse: said.permissionDecisionReason ?? "This command could not be run." };
-            }
-            if (said?.updatedInput === undefined) {
-                return { input };
-            }
-            // The first line through the panel's session puts it in the panel, as ACP's first terminal does.
-            if (!surfaced) {
-                surfaced = true;
-                live?.push({ kind: "terminal", session });
-            }
-            return { input: said.updatedInput };
-        }
-        if (tools.secrets === undefined || !hasSecretReferences(command)) {
-            return { input };
-        }
-        const resolved = await resolveCommandSecrets(command, tools.secrets);
-        return "refusal" in resolved ? { refuse: resolved.refusal } : { input: { ...input, command: resolved.command } };
+        const said = await shell.line(command, { session: sessionKey, cwd, id }, request.signal);
+        return "refuse" in said ? said : { input: said.command === command ? input : { ...input, command: said.command } };
     };
 
     const toolCall = async (payload: JsonValue): Promise<HookAnswer> => {
@@ -316,7 +283,7 @@ export const createPiHooks = (request: AgentRequest, options: PiHooksOptions): P
                 gate: turn.gate,
                 push: turn.push,
                 hold: turn.hold,
-                allowedTools: request.policy.allowedTools,
+                ...policyLimitsOf(request.policy),
             });
             return () => {
                 retire();

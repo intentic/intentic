@@ -181,8 +181,9 @@ const session = (sessionId: string, created = true, spent?: TurnTokens): TurnSes
 const raised = (frame: AgentEvent): RaisedFrame => ({ type: "intentic.frame", frame });
 const timedOut = (message: string): OpenCodeTurnEvent => ({ type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message, own: true } });
 
-// The running total of a session nothing has spent on yet, as the fake server reports every session it holds.
-const NOTHING_SPENT: TurnTokens = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 };
+// The running total of a session nothing has spent on yet, as the fake server reports every session it holds: OpenCode's
+// zero cost is no price at all (opencode-frames.ts tokensOf), so it carries none.
+const NOTHING_SPENT: TurnTokens = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 // The session a runner turn over the fake server says it runs on.
 const ran = (sessionId: string, created = true): TurnSession => session(sessionId, created, NOTHING_SPENT);
 
@@ -320,7 +321,15 @@ test("a subagent call runs under its card: its session's calls, thinking, prose 
 
     expect(await collect(createOpenCodeAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "s1" },
-        { kind: "tool_call", id: "sub-1", name: "Task", category: "other", status: "in_progress" },
+        // No one-line target, so the card keeps the call's own arguments, as every runtime's does (vendor-events.ts toolCard).
+        {
+            kind: "tool_call",
+            id: "sub-1",
+            name: "Task",
+            category: "other",
+            status: "in_progress",
+            input: JSON.stringify({ agent: "explore", description: "Map the reads", prompt: "Find every read of users." }),
+        },
         { kind: "subagent", id: "sub-1", subagentKind: "subagent", agentType: "explore", description: "Map the reads" },
         { kind: "delta", text: "Looking for reads.", parentToolUseId: "sub-1" },
         { kind: "tool_call", id: "cc1", name: "Grep", category: "search", status: "in_progress", target: "from(users)", parentToolUseId: "sub-1" },
@@ -348,7 +357,14 @@ test("a subagent call that fails ends its subagent failed, with OpenCode's own w
 
     expect(await collect(createOpenCodeAgent(runner), request)).toEqual([
         { kind: "session", sessionId: "s1" },
-        { kind: "tool_call", id: "sub-2", name: "Task", category: "other", status: "in_progress" },
+        {
+            kind: "tool_call",
+            id: "sub-2",
+            name: "Task",
+            category: "other",
+            status: "in_progress",
+            input: JSON.stringify({ agent: "general", description: "Port the job", prompt: "Port it." }),
+        },
         { kind: "subagent", id: "sub-2", subagentKind: "subagent", agentType: "general", description: "Port the job" },
         { kind: "tool_call_update", id: "sub-2", status: "failed", content: [{ type: "text", text: "Subagent failed: out of credits" }] },
         { kind: "subagent_update", id: "sub-2", status: "failed", error: "Subagent failed: out of credits" },
@@ -726,7 +742,8 @@ test("an OpenCode turn mounts the turn's remote servers, and a call to one reads
     expect(calls.map((call) => call.mounts)).toEqual([mounts]);
     expect(events).toEqual([
         { kind: "session", sessionId: "s1" },
-        { kind: "tool_call", id: "c1", name: "Browser navigate", category: "other", status: "in_progress", target: "https://example.com" },
+        // Categorized by its canonical name, as the Claude Code loop's is: going somewhere is a fetch.
+        { kind: "tool_call", id: "c1", name: "Browser navigate", category: "fetch", status: "in_progress", target: "https://example.com" },
         { kind: "done" },
     ]);
 });

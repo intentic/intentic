@@ -66,7 +66,8 @@ import { discoverRepos } from "./workspace/layout/repo-discovery.js";
 import { filePushStore, pushDocument, type PushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { createPortForwards } from "./ports/port-forwards.js";
-import { cachedScan, type ListeningPort, listenerFingerprint, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
+import { cachedScan, listenerFingerprint } from "./ports/port-scan.js";
+import { scanPortsWith } from "./ports/owned-ports.js";
 import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
 import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
 import { createSpeech, type Speech } from "@intentic/speech/transcribe";
@@ -191,8 +192,7 @@ export interface Services
     readonly reach: ReachReporter;
     // Makes a turn's browser router, which the turn then mounts.
     readonly browserRouters: BrowserRouterFactory;
-    // What a conversation's last turn was granted (its turn standing), for a lower layer that sees only a call's
-    // conversation: the owner's-browser door answers a site ask with the sandbox account that covers it (webext-peer.ts).
+    // What a conversation's last turn was granted, for the owner's-browser door's account redirect (webext-peer.ts).
     readonly turnGranted: (conversationId: string) => readonly string[] | undefined;
     // The sandbox's own desktop as a turn mounts it, beside its browsers; a seam here rather than an import in
     // agent/tools/turn-tools.ts, since the desktop builds on the browser stack's display and the browser reaches the agent.
@@ -401,19 +401,6 @@ const createReaper = ({ conversations, agents, events, logger }: Pick<Services, 
         onOwnerStopped: (listener) => events.subscribe("run.settled", (settled) => listener(settled.conversationId)),
         logger,
     });
-
-// Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
-const scanPortsWith = (logger: Logger) => async (): Promise<ListeningPort[]> => {
-    const [listeners, panes] = await Promise.all([
-        scanListeningPorts(),
-        // The ports list never fails for want of owners: unknown panes leave each port unowned, said in the log.
-        panePids().catch((error: unknown) => {
-            logger.warn({ err: error }, "ports: terminal panes could not be listed, ports show no owning session");
-            return new Map<number, string>();
-        }),
-    ]);
-    return withOwningSessions(listeners, panes);
-};
 
 // Slice members a slice builder leaves out, each because the builder importing it would close a cycle between
 // subsystems (daemon-boundaries): the builder's Omit<…> type names them, and this Pick of the same names is checked

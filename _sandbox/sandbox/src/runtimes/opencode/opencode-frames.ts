@@ -1,8 +1,10 @@
 import type { OpenCodeEvent } from "@opencode/client";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { editDiffContent, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
-import { toolCallOpened, type TurnTokens } from "../decorators/vendor-events.js";
+import { displayNameOf } from "@intentic/agent-context/tool-calls";
+import { editDiffContent } from "../../sessions/vocabulary/tool-calls.js";
+import { toolCard, type TurnTokens } from "../decorators/vendor-events.js";
+import { retryFrame } from "./opencode-failures.js";
+import { opt } from "../../opt.js";
 
 // OpenCode 2's events as frames, the parts a turn's own session and its subagents' sessions share: tool cards, and what
 // one model step spent. OpenCode announces a tool call in three steps: its name as the model starts writing it, its
@@ -44,12 +46,15 @@ export const sessionOf = (event: OpenCodeEvent): string | undefined => {
 // What one model call cost, as the usage frame counts it. OpenCode reports reasoning apart from the output it is billed
 // as (2.0.26 takes it out of the provider's completion count), so it is added back: the usage frame has no reasoning
 // bucket, and a thinking model's spend would otherwise read as a fraction of what it was.
+// OpenCode prices a call from its own model catalog and says 0 where it holds no price (a subscription route, a model the
+// catalog does not list), so a zero is an unknown price, not a free call: left out, the turn is filed as unpriced
+// (turn-settlement.ts costOf) rather than as costing nothing. 2026-10-25: 142 OpenCode turns were filed at $0.
 export const tokensOf = (tokens: EventOf<"session.step.ended">["data"]["tokens"], cost: number): TurnTokens => ({
     inputTokens: tokens.input,
     outputTokens: tokens.output + tokens.reasoning,
     cacheReadTokens: tokens.cache.read,
     cacheCreationTokens: tokens.cache.write,
-    costUsd: cost,
+    ...opt("costUsd", cost > 0 ? cost : undefined),
 });
 
 // One step's spend; keyed per step, since OpenCode reports each model call on its own.
@@ -65,7 +70,7 @@ export const unreportedTokens = (before: TurnTokens, after: TurnTokens, reported
         outputTokens: left("outputTokens"),
         cacheReadTokens: left("cacheReadTokens"),
         cacheCreationTokens: left("cacheCreationTokens"),
-        costUsd: Math.max(0, (after.costUsd ?? 0) - (before.costUsd ?? 0) - (reported.costUsd ?? 0)),
+        ...opt("costUsd", after.costUsd === undefined ? undefined : Math.max(0, after.costUsd - (before.costUsd ?? 0) - (reported.costUsd ?? 0))),
     };
 };
 
@@ -100,7 +105,9 @@ export const toolCards = (view: TurnView): ToolCards => {
         calls.set(id, fresh);
         return fresh;
     };
-    const nameOf = (call: Call): string => displayNameOf(view.toolName(call.raw ?? "tool"));
+    // The call's name in the canonical vocabulary, which its card is categorized by and shown from.
+    const canonicalOf = (call: Call): string => view.toolName(call.raw ?? "tool");
+    const nameOf = (call: Call): string => displayNameOf(canonicalOf(call));
 
     const finished = (id: string, call: Call, failed: boolean, text: string, parent: string | undefined): AgentEvent => {
         const name = nameOf(call);
@@ -111,15 +118,7 @@ export const toolCards = (view: TurnView): ToolCards => {
             return { kind: "tool_call_update", id, status, content };
         }
         call.opened = true;
-        return toolCallOpened({
-            id,
-            name,
-            status,
-            target: toolTarget(call.input),
-            locations: toolLocations(call.input, view.cwd),
-            content,
-            parentToolUseId: parent,
-        });
+        return toolCard({ id, name: canonicalOf(call), status, input: call.input, cwd: view.cwd, content, parentToolUseId: parent });
     };
 
     return {
@@ -140,13 +139,7 @@ export const toolCards = (view: TurnView): ToolCards => {
                     }
                     call.opened = true;
                     return [
-                        toolCallOpened({
-                            id: event.data.id,
-                            name: nameOf(call),
-                            target: toolTarget(call.input),
-                            locations: toolLocations(call.input, view.cwd),
-                            parentToolUseId: parent,
-                        }),
+                        toolCard({ id: event.data.id, name: canonicalOf(call), input: call.input, cwd: view.cwd, parentToolUseId: parent }),
                     ];
                 case "session.tool.progress":
                     return [];
@@ -157,4 +150,17 @@ export const toolCards = (view: TurnView): ToolCards => {
             }
         },
     };
+};
+
+// What the session says of itself between its calls: a retry it scheduled, and a compaction, filed as every loop's is so
+// the notes the summary dropped are said again (turn-premise.ts notesDue).
+export const sessionNotice = (event: OpenCodeEvent): AgentEvent | undefined => {
+    switch (event.type) {
+        case "session.retry.scheduled":
+            return retryFrame(event.data);
+        case "session.compaction.ended":
+            return { kind: "compact", trigger: event.data.reason };
+        default:
+            return undefined;
+    }
 };

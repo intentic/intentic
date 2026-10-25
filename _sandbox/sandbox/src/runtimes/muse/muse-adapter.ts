@@ -152,7 +152,7 @@ export const planMuseTurn = async (services: MuseAdapterDeps, input: RoutedAgent
                 ...context.base,
                 spec: { ...context.base.spec, ...opt("model", credential.model), ...opt("steering", context.steering) },
                 tools: { ...context.base.tools, ...opt("remote", remote.length > 0 ? remote : undefined), diagnostics: daemon.diagnostics },
-                hooks: { ...context.base.hooks, relay: daemon.relay },
+                hooks: { ...context.base.hooks, ...daemon.hooks },
                 credential: credential.credential,
             },
             context.attachmentPaths,

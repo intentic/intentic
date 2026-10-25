@@ -23,6 +23,7 @@ import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";
 import { harnessServers, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import { type DaemonServersDeps, daemonServersFor, type DaemonServersTurn } from "./daemon-servers.js";
+import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 import { createTurnMounts } from "../../agent/tools/turn-mounts.js";
 import { createTurnMountRoute, daemonEndpoint, type MountEndpoints } from "../../agent/tools/turn-mounts.routes.js";
 
@@ -117,7 +118,8 @@ const restricted = (powers: Partial<TurnPersona["powers"]>): TurnPersona => ({ .
 
 test("an open turn reaches the daemon's servers through the door, each answering its own tools", async () => {
     const door = doorFor({ input, context: contextOf(cardsAnswering().cards), persona: OPEN, granted: [], settings: { ...SETTINGS, chatPages: false } });
-    expect(door.names).toEqual(["ui", "subagents", "watch", "deps", "diagnostics"]);
+    // The terminal hand-off rides only where commands run in the panel's tmux panes (tmux-run is in the image).
+    expect(door.names).toEqual(["ui", "subagents", "watch", "deps", "diagnostics", ...(tmuxRunEnabled() ? ["terminal"] : [])]);
     expect(door.built.diagnostics).toBe(true);
     expect(await door.toolsOf("ui")).toEqual(["ask"]);
     expect(await door.toolsOf("watch")).toContain("start");
@@ -137,8 +139,9 @@ test("a persona's powers withhold exactly what they withhold from the Claude loo
             harnessServers(deps, { input, context, persona, browser: NO_BROWSER, desktop: false, granted: [], secrets: turnSecretAccess(deps, input, context.base.signal), hashlineEdits: false }),
         );
         const door = doorFor({ input, context, persona, granted: [], settings: SETTINGS });
-        // The door adds only what the Claude loop mounts in agent.ts itself (`ui`), never a server the persona was denied.
-        expect(door.names.filter((name) => name !== "ui")).toEqual(claude);
+        // The door adds only what the Claude loop mounts in claude-code-runner.ts itself (`ui`, `terminal`), never a server
+        // the persona was denied.
+        expect(door.names.filter((name) => name !== "ui" && name !== "terminal")).toEqual(claude);
         door.lease.release();
     }
 });

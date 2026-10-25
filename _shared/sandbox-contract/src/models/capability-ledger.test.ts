@@ -23,7 +23,7 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     isolation: "enforced",
     // system-prompt.ts composes standing instructions against this: replace, append, or a user-message note.
     instructions: "enforced",
-    // turn-plan.ts notes the catalogue only for "prompt"; "native" runtimes use their own loader instead.
+    // agent/run/decide/turn-skills.ts names in the opening note only the skills whose origin the loader does not read.
     skillDiscovery: "enforced",
     // turn-plan.ts plans jsExecution only where "js" is declared; without it no Code tool is mounted.
     execution: "enforced",
@@ -41,6 +41,9 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // automation ladder passes such rungs over, and agent/tools/tool-allowlist.ts refuses every off-list call on the
     // Claude Code loop.
     toolAllowlist: "enforced",
+    // runtimes/decorators/ending-checks.ts reads a "turn-end" loop's edited files as its turn ends and says the
+    // owner's per-edit checks back with the repositories' turn checks; an "after-edit" loop's own hook said them.
+    editChecks: "enforced",
 
     // Descriptive: true of the runtime but nothing consults these; wiring one up moves it to enforced.
     questions: "descriptive",

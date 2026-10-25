@@ -1,3 +1,4 @@
+import { OPENCODE } from "@intentic/sandbox-contract/models/agent-runtimes";
 import { OPENCODE_GEMINI_PROVIDER } from "@intentic/sandbox-contract/models/provider-specs";
 import { basename } from "node:path";
 import type { OpenCodeClient, OpenCodeEvent, PermissionRule } from "@opencode/client";
@@ -13,24 +14,25 @@ import { loadAttachments } from "../../agent/prompt/attachment-images.js";
 import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
-import { DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog, withTurnCap } from "../decorators/turn-watchdog.js";
+import { DEFAULT_TURN_TIMEOUTS, EXPIRED, expiredFrame, type TurnTimeouts, type TurnWatchdog, turnWatchdog, withTurnCap } from "../decorators/turn-watchdog.js";
 import { modelUnavailableFrame } from "../../agent/run/frames/error-frames.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import type { TurnRelay } from "../daemon-tools/turn-relay.js";
 import { planPhaseOf, type TurnCapture, type TurnTokens, usageTotals } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
+import { personaLimitsOf } from "../daemon-tools/policy-gate.js";
 import { opt } from "../../opt.js";
 import { isChatModel, OPENCODE_XAI_PROVIDER, parseModelSuggestions } from "./xai-models.js";
 import { openCodeBackendLabel, type OpenCodeLease, type OpenCodeService } from "./opencode.js";
-import { OPENCODE_AGENTS, SERVER_PERMISSIONS } from "./opencode-config.js";
-import { allowlistRules } from "./allowlist/opencode-allowlist.js";
+import { OPENCODE_AGENTS } from "./opencode-config.js";
+import { sessionRulesOf } from "./allowlist/opencode-session-rules.js";
 import { type ShellRoute, shellPaneOf, shellRouteOf } from "./shell/opencode-shell.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
-import { type ApprovalVerdict, DEFAULT_MODE_ASKS, type PermissionAsk, type SessionJudge, type SessionJudges } from "./opencode-permissions.js";
-import { isToolEvent, sessionOf, stepTokens, tokensOf, toolCards, type TurnView, unreportedTokens } from "./opencode-frames.js";
-import { errorDetail, executionErrorFrame, type FailureTarget, isModelInvalid, retryFrame } from "./opencode-failures.js";
-import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, sessionToolRules } from "./opencode-mcp.js";
+import type { ApprovalVerdict, PermissionAsk, SessionJudge, SessionJudges } from "./opencode-permissions.js";
+import { isToolEvent, sessionNotice, sessionOf, stepTokens, tokensOf, toolCards, type TurnView, unreportedTokens } from "./opencode-frames.js";
+import { errorDetail, executionErrorFrame, type FailureTarget, isModelInvalid } from "./opencode-failures.js";
+import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts } from "./opencode-mcp.js";
 import { openCodeSubagents } from "./opencode-subagents.js";
 import { commandIn, commandsAt } from "./opencode-commands.js";
 import {
@@ -100,6 +102,7 @@ export interface OpenCodeTurn {
     // The turn's tool list (TurnPolicy.allowedTools): its session offered only the listed tools (allowlist/opencode-allowlist.ts),
     // and every command its shell runs checked against the list's shell entries.
     readonly allowedTools?: readonly string[];
+    readonly persona?: SessionJudge["persona"];
     // How a command its sessions' shell runs is routed (shell/opencode-shell.ts), for the session it is created on, a card for
     // the panel going to `push`: in the conversation's terminal pane, its secret references resolved, its output masked.
     readonly shell?: (sessionId: string, push: (frame: AgentEvent) => void) => ShellRoute;
@@ -132,9 +135,6 @@ export interface OpenCodeTurn {
     readonly capMs?: number;
     readonly signal: AbortSignal;
 }
-
-// Every tool denied, OpenCode's own included: the wildcard keeps this from tracking OpenCode's tool names in step.
-const NO_TOOLS: readonly PermissionRule[] = [{ action: "*", resource: "*", effect: "deny" }];
 
 // The session's own instruction entry the turn's standing instructions ride in; one key, replaced by every message.
 const INSTRUCTIONS_KEY = "intentic";
@@ -264,14 +264,11 @@ const finished = async (consumed: Consumed, progress: TurnProgress): Promise<boo
     return !consumed.reading.queue.waiting();
 };
 
-// What an expired watchdog means for the turn: silence past its limit is a provider that stopped answering mid-turn,
-// coded so the daemon re-runs it on backoff; reaching the hard cap is not, and ends the turn as a plain failure.
-const expired = (consumed: Consumed, label: string): HandedOver | Error => {
-    const why = `${label} turn on the OpenCode loop timed out: ${consumed.reading.clock.expiry()}.`;
-    return consumed.reading.clock.capRemaining() > 0
-        ? { type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message: why, own: true } }
-        : new Error(why);
-};
+// What an expired watchdog means for the turn, coded as every loop's is (turn-watchdog.ts expiredFrame).
+const expired = (consumed: Consumed, label: string): HandedOver | Error => ({
+    type: "intentic.failed",
+    frame: expiredFrame(consumed.reading.clock, (why) => `${label} turn on the OpenCode loop timed out: ${why}.`),
+});
 
 // The turn's own session's ending, where it ends the turn: an interruption the turn did not ask for is a failure naming
 // why; a failure xAI named alternatives for is healed once instead.
@@ -488,6 +485,7 @@ const judgeOf = (turn: OpenCodeTurn, sessionId: string, queue: TurnQueue, clock:
         push,
         hold: clock.hold,
         ...opt("allowedTools", turn.allowedTools),
+        ...opt("persona", turn.persona),
         ...opt("shell", turn.shell?.(sessionId, push)),
         ...opt(
             "approve",
@@ -505,18 +503,6 @@ const judgeOf = (turn: OpenCodeTurn, sessionId: string, queue: TurnQueue, clock:
     };
 };
 
-// The rules a turn's session runs with: none for a sealed request; a turn's tool list, which denies everything else
-// (allowlist/opencode-allowlist.ts); else its mounted servers' (opencode-mcp.ts). In `default` mode, the asks that put edits and
-// fetches on a per-tool card.
-const rulesOf = (turn: OpenCodeTurn, mounts: OpenCodeMounts): PermissionRule[] => {
-    if (turn.sealed === true) {
-        return [...NO_TOOLS];
-    }
-    const asks = turn.approve === undefined ? [] : DEFAULT_MODE_ASKS;
-    return turn.allowedTools === undefined
-        ? [...sessionToolRules(mounts), ...asks]
-        : allowlistRules(turn.allowedTools, mounts, { plan: turn.agent === "plan", asks, serverAsks: SERVER_PERMISSIONS });
-};
 
 // Runs on a leased client; even setup before the session has a judge belongs to this turn's server lifetime.
 async function* runOpenCodeTurn(
@@ -539,7 +525,7 @@ async function* runOpenCodeTurn(
         const mounts = turn.mounts ?? openCodeMounts(undefined, []);
         const provider = turn.provider ?? OPENCODE_XAI_PROVIDER;
         const variant = turn.model === undefined ? undefined : openCode.variant(provider, turn.model, turn.effort);
-        const session = await sessionFor(c, turn, rulesOf(turn, mounts), variant);
+        const session = await sessionFor(c, turn, sessionRulesOf(turn, mounts), variant);
         const sessionId = session.id;
         sealedSession = turn.sealed === true ? sessionId : undefined;
         const queue = turnQueue();
@@ -809,18 +795,19 @@ async function* streamTurn(
             case "session.usage.updated":
                 spend.total(tokensOf(event.data.tokens, event.data.cost));
                 break;
-            case "session.retry.scheduled":
-                yield retryFrame(event.data);
-                break;
             case "session.execution.failed":
                 yield executionErrorFrame(event.data.error, context.target);
                 capture.errored = true;
                 return capture;
-            default:
-                if (isToolEvent(event)) {
+            default: {
+                const notice = sessionNotice(event);
+                if (notice !== undefined) {
+                    yield notice;
+                } else if (isToolEvent(event)) {
                     yield* cards.frames(event);
                     yield* subagents.call(event);
                 }
+            }
         }
     }
     const total = spend.frame();
@@ -963,6 +950,7 @@ const openCodeTurnOf =
             taint: base.taint,
             ...opt("approve", !sealed && request.policy.permissionMode === "default" ? approveVia(request) : undefined),
             ...opt("allowedTools", request.policy.allowedTools),
+            ...opt("persona", personaLimitsOf(request.policy)),
             ...opt("shell", sealed ? undefined : base.shell),
             ...opt("ask", sealed ? undefined : askVia(request)),
             ...opt("steering", channel?.steering),
@@ -1113,6 +1101,7 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, backend: string = OP
             request,
             () => openCodePlan(context, run, prompt, images),
             () => run({ prompt, images, sessionId: request.spec.sessionId, agent: "build" }, context),
+            { followUp: (note, sessionId) => run({ prompt: note, images: [], sessionId, agent: "build" }, context), editChecks: OPENCODE.editChecks },
         );
         let surfacedError = false;
         try {

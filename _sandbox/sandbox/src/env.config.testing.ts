@@ -12,6 +12,8 @@ export const testConfig: Config = {
     workspaceRoot: WORKSPACE_ROOT,
     historyRoot: join(tmpdir(), "intentic-test-history"),
     extensionsDir: EXTENSIONS_DIR,
+    // None: what the image bakes is no fixture of the tests that read a turn's skills.
+    builtInSkillsDir: "",
     agentAuthDir: "",
     logLevel: "silent",
     logPretty: false,

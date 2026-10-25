@@ -1,8 +1,8 @@
+import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { forkedExec } from "@intentic/base/git";
 import { sdk } from "../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
@@ -101,9 +101,37 @@ export const settleTerminalHelpFor = (session: string): void => {
     publishRuntimeChange("terminals");
 };
 
+/** The newest `agent-` session a conversation's commands stamped as its own (tmux-run's `@intentic_owner`, from the
+ *  INTENTIC_TURN_OWNER its wrapper inherits): how a loop the daemon serves at its door names its terminal, whatever id
+ *  the loop cut the session's name from. Undefined with no tmux server, or none of the conversation's. */
+export const ownedAgentSession = async (conversationId: string): Promise<string | undefined> => {
+    let stdout: string;
+    try {
+        ({ stdout } = await forkedExec("tmux", ["list-sessions", "-F", "#{session_activity} #{session_name} #{@intentic_owner}"]));
+    } catch {
+        // allow(silent-catch): no tmux server at all is nothing to hand over, the same answer as no session of its own.
+        return undefined;
+    }
+    return stdout
+        .split("\n")
+        .flatMap((line) => {
+            const [activity, name, owner] = line.split(" ");
+            return name?.startsWith("agent-") === true && owner === conversationId ? [{ name, at: Number(activity) || 0 }] : [];
+        })
+        .toSorted((a, b) => a.at - b.at)
+        .at(-1)?.name;
+};
+
+/** The Claude Code loop's terminal: the session its own id names, once its init frame has said it. */
+export const sessionOfShell =
+    (shell: { readonly sessionId: string | undefined }) =>
+    async (): Promise<string | undefined> =>
+        shell.sessionId === undefined ? undefined : agentSessionName(shell.sessionId);
+
 export interface TerminalHelpDeps {
-    // Read at call time, not captured: a fresh session only learns its id from the init frame.
-    readonly shell: { readonly sessionId: string | undefined };
+    // The tmux session the turn's commands run in, read at call time, not captured: a fresh session only learns its id
+    // from the init frame.
+    readonly session: () => Promise<string | undefined>;
     readonly conversationId?: string | undefined;
     readonly signal: AbortSignal;
     readonly push: (event: AgentEvent) => void;
@@ -124,8 +152,7 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
                     message: z.string().min(1).describe("What you need the owner to do at the terminal, in one or two sentences"),
                 },
                 async ({ message }) => {
-                    const sessionId = deps.shell.sessionId;
-                    const session = sessionId === undefined ? undefined : agentSessionName(sessionId);
+                    const session = await deps.session();
                     if (session === undefined) {
                         return fail("this turn has no terminal of its own: run the command with Bash first");
                     }

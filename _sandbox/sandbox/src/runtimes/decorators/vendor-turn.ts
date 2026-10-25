@@ -57,8 +57,9 @@ export type TextPlanPhase = (
 ) => AsyncGenerator<AgentEvent, PlanPhaseResult>;
 
 // A text-only plan flow: planning names every attachment in the note, a direct run sends the pictures it read natively.
+// What the checks found as the turn ends rides one more phase on the session the run ended on (ending-checks.ts).
 export async function* textPlanTurn(
-    capabilities: Pick<AgentCapabilities, "permissions">,
+    capabilities: Pick<AgentCapabilities, "permissions" | "editChecks">,
     request: Pick<AgentRequest, "spec" | "policy" | "hooks" | "signal">,
     native: boolean,
     phase: TextPlanPhase,
@@ -73,5 +74,6 @@ export async function* textPlanTurn(
             execute: (sessionId) => phase(EXECUTE_PROMPT, [], sessionId, false),
         }),
         () => phase(withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]), attached.images, request.spec.sessionId, false),
+        { followUp: (note, sessionId) => phase(note, [], sessionId, false), editChecks: capabilities.editChecks },
     );
 }

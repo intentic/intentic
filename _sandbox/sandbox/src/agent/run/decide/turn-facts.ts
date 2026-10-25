@@ -15,7 +15,6 @@ import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceab
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import type { ConversationReach } from "../../../secrets/credential-reach.js";
-import { type CatalogSkill, loadedSkillCatalog } from "../../../store/loaded-skills.js";
 import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
@@ -37,7 +36,8 @@ import type { TurnContext } from "../../providers/adapter.js";
 import type { PrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { opt } from "../../../opt.js";
 import { EXPERIMENTS } from "./experiments.js";
-import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
+import { type ConversationEntry, notesDue, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
+import { skillsUnseen, type TurnSkillCatalog, turnSkillCatalog } from "./turn-skills.js";
 import { runtimeRoute } from "../../../privacy/privacy-trust.js";
 
 // Every read a turn is planned on, each timed under the `turn.plan.*` span diagnostics read and run beside the others
@@ -72,9 +72,9 @@ export interface AdmittedTurnFacts {
     readonly areas: readonly Area[];
     // What a person allowed this conversation beyond its persona, if anything.
     readonly grant: ConversationGrant | undefined;
-    // The loaded skills, for a runtime with no skill loader on its opening turn; rendered once the persona is known, so a
-    // skill this turn may not use is never offered (honoured.ts).
-    readonly skillCatalog: readonly CatalogSkill[] | undefined;
+    // The skills the runtime's loader does not read, on a turn whose session holds no note of them; rendered once the
+    // persona is known, so a skill this turn may not use is never offered (honoured.ts).
+    readonly skillCatalog: TurnSkillCatalog | undefined;
     readonly contextNote: TurnNote | undefined;
     // A fresh session's account of the work it started from (context/fresh-session.ts); absent for any other conversation.
     readonly fresh?: FreshFacts;
@@ -127,9 +127,16 @@ const manifests = (
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
         // Both halves of the turn's fence, the conversation's and its persona's, resolve through this.
         services.perf.track("turn.plan.areas", {}, () => services.areas.list()),
-        // For a runtime with no skill loader, on the opening turn, with paths as the agent sees them.
-        capabilities.skillDiscovery === "prompt" && conversationTurns === 0
-            ? services.perf.track("turn.plan.skills", {}, () => loadedSkillCatalog(context.localCwd, context.effectiveCwd))
+        // The skills the runtime's loader does not read (turn-skills.ts), with paths as the agent sees them, whenever its
+        // session holds no earlier note of them.
+        skillsUnseen(capabilities.skillDiscovery) && notesDue(conversationTurns, context.base.spec.sessionId, entry)
+            ? services.perf.track("turn.plan.skills", {}, async () =>
+                  turnSkillCatalog(
+                      capabilities.skillDiscovery,
+                      { localCwd: context.localCwd, effectiveCwd: context.effectiveCwd, builtIn: services.config.builtInSkillsDir },
+                      await services.personas.list(),
+                  ),
+              )
             : Promise.resolve(undefined),
         services.perf.track("turn.plan.context", {}, () => contextNoteIfDue(services, input, entry, conversationTurns)),
         // Every turn, never cached: a check the owner switched off this morning must not keep running.

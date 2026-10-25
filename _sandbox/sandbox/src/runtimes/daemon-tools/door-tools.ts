@@ -55,7 +55,7 @@ export const doorToolsOf = async (
         return {
             mounted,
             tools: { ...withSecrets.base.tools, ...opt("remote", remote.length > 0 ? remote : undefined), diagnostics: daemon.diagnostics },
-            hooks: { ...context.base.hooks, relay: daemon.relay },
+            hooks: { ...context.base.hooks, ...daemon.hooks },
         };
     } catch (error) {
         mounted.release();

@@ -1,5 +1,5 @@
 import { isAbsolute, join } from "node:path";
-import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
+import type { Rule, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { agentRepoAnchor } from "../../../conversations/land/agent-changes.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
@@ -11,7 +11,8 @@ import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
 import { installedCopyDirtyPaths, installedCopyReviewer } from "./installed-copy.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
-import { reposOf } from "../../../rules/rules.js";
+import { reposOf, standing } from "../../../rules/rules.js";
+import { declaredChecks } from "../../../rules/repo-checks.js";
 import { workspaceRelative } from "../../../rules/workspace-relative.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -56,7 +57,7 @@ const underRoots = (file: string, roots: readonly string[]): string | undefined 
 // sandbox runs (installed-copy.ts), then each repository's own edit checks, run in the turn's own tree and named
 // as the agent sees it. Firings stamp the settings list only, so a per-edit check
 // doesn't spam a feed row per save.
-export const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
+const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
     const isolation = context.base.spec.isolation;
     const roots = [context.localCwd, isolation?.plan?.root, deps.workspace.root].filter((root): root is string => root !== undefined);
     // Read by the daemon itself, so an isolated turn's file is its worktree's copy whether or not a namespace is entered.
@@ -122,7 +123,7 @@ const childBaseOf = async (deps: HarnessHooksDeps, conversationId: string, repo:
 // The `turn.ending` moment: each repository's own `turn` checks, run once as an isolated turn is about to stop, in the
 // repository they name in the turn's own tree and through its namespace, as the edit checks are. Isolated turns only: a
 // main-tree turn's working tree carries everyone's uncommitted work, and a check of it would charge the turn with theirs.
-export const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "turnChecks"> => {
+const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "turnChecks"> => {
     const isolation = context.base.spec.isolation;
     const conversationId = context.base.spec.conversationId;
     if (rules.length === 0 || !ownWorktree(isolation) || conversationId === undefined) {
@@ -148,6 +149,17 @@ export const turnChecksOf = (deps: HarnessHooksDeps, context: TurnContext, rules
         },
     };
 };
+
+/** The two check moments every runtime's turn carries, from the owner's settings: the `file.edited` reviewers and the
+ *  repositories' declared `turn` checks. Each loop says them where it can (its own hook, or ending-checks.ts). */
+export const checkHooksOf = (
+    deps: HarnessHooksDeps,
+    context: TurnContext,
+    settings: Pick<SandboxSettings, "rules">,
+): Pick<TurnHooks, "editReviewers" | "turnChecks"> => ({
+    ...editReviewersOf(deps, context, standing(settings.rules, "file.edited")),
+    ...turnChecksOf(deps, context, declaredChecks(standing(settings.rules, "turn.ending"))),
+});
 
 // The turn's dirty files for shell-edit attribution, by both names (checkoutDirtyPaths reuses the repo list), plus the
 // installed extensions' checkouts: they sit in the shared tree under a hidden directory no repo walk enters, and a

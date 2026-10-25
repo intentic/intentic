@@ -1,5 +1,5 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, idleWait, SETTLED, turnWatchdog, watchedPull, withTurnCap } from "./turn-watchdog.js";
+import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, expiredFrame, idleWait, SETTLED, turnWatchdog, watchedPull, withTurnCap } from "./turn-watchdog.js";
 
 // The clock's arithmetic at its edges, with the system time held still, and the waits it drives under fake timers.
 
@@ -337,4 +337,21 @@ test("the cap's own remainder ignores the silence window, and a held clock has n
 test("a turn's own cap replaces the loop's default, and none keeps it", () => {
     expect(withTurnCap(DEFAULT_TURN_TIMEOUTS, 90 * 60_000)).toEqual({ ...DEFAULT_TURN_TIMEOUTS, maxTurnMs: 90 * 60_000 });
     expect(withTurnCap(DEFAULT_TURN_TIMEOUTS, undefined)).toBe(DEFAULT_TURN_TIMEOUTS);
+});
+
+// Every loop ends an expired turn the same way: silence is an outage the daemon re-runs, the cap is the turn's own ceiling.
+test("an expired turn is coded the same for every loop: silence as an outage, the cap as the turn's ceiling", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(START);
+    const quiet = turnWatchdog({ inactivityMs: 1_000, maxTurnMs: 60_000 });
+    jest.setSystemTime(START + 2_000);
+    expect(expiredFrame(quiet, (why) => `X timed out: ${why}.`)).toEqual({
+        kind: "error",
+        code: "provider-outage",
+        message: "X timed out: nothing arrived for 2s, past the 1s silence limit, 2s into the turn.",
+        own: true,
+    });
+    const capped = turnWatchdog({ inactivityMs: 120_000, maxTurnMs: 1_000 });
+    jest.setSystemTime(START + 4_000);
+    expect(expiredFrame(capped, (why) => why)).toMatchObject({ code: "turn-cap", message: expect.stringContaining("cap") });
 });

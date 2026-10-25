@@ -16,10 +16,10 @@ import {
     turnWatchdog,
     watchedPull,
     withTurnCap,
+    expiredFrame,
 } from "../decorators/turn-watchdog.js";
 import { handoffDirOf } from "../../conversations/worktrees/isolation.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
-import { turnCheckReports, turnChecksNote, turnChecksNotice } from "../../agent/run/turn-checks.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
@@ -266,7 +266,7 @@ async function* runPiTurn(
         // it, so the next send resumes the conversation.
         sendAbort();
         proc.kill();
-        yield { kind: "error", message: `Pi timed out: ${clock.expiry()}. It was stopped; send again to retry.`, own: true };
+        yield expiredFrame(clock, (why) => `Pi timed out: ${why}. It was stopped; send again to retry.`);
         return settled(true);
     } finally {
         state.clock = undefined;
@@ -329,35 +329,6 @@ async function* hooksReady(hooks: PiHooks, proc: PiProcess, stop: AbortSignal): 
         yield { kind: "error", message: withStderrTail(UNHOOKED, proc.stderrTail()) };
     }
     return ready;
-}
-
-// The repositories' `turn` checks, once, as the turn is about to end (turn-checks.ts): what they found goes back to Pi as
-// one more prompt, which it fixes or answers, as the Claude Code loop's Stop hook says it. Bound only to a turn in its
-// own worktree (harness-hooks.ts turnChecksOf), and never run on one that failed or was stopped. Nothing waits on them
-// past that one prompt.
-async function* endingChecks(proc: PiProcess, state: PiTurnState, request: AgentRequest, timeouts: TurnTimeouts): AsyncGenerator<AgentEvent> {
-    const checks = request.hooks.turnChecks;
-    if (checks === undefined || checks.rules.length === 0 || request.signal.aborted) {
-        return;
-    }
-    let note: string | undefined;
-    let notice: AgentEvent | undefined;
-    try {
-        const reports = await turnCheckReports(checks);
-        note = reports.length === 0 ? undefined : turnChecksNote(reports);
-        notice = reports.length === 0 ? undefined : turnChecksNotice(reports);
-    } catch (error) {
-        // Never a failed turn: a check that cannot be run is no reason to keep the turn from ending.
-        checks.logger.warn({ err: error }, "turn checks: could not run the repositories' turn checks, so the turn ends without them");
-        return;
-    }
-    if (note !== undefined) {
-        // The boundary the report is read from (turn-runs.ts closingOf): what Pi says next answers the checks.
-        if (notice !== undefined) {
-            yield notice;
-        }
-        yield* runPiTurn(proc, state, request, { type: "prompt", message: note }, timeouts);
-    }
 }
 
 // Builds the Pi provider for the Services seam. `config` comes from the turn's resolved `pi` capability (planPiTurn); a
@@ -427,16 +398,12 @@ export const createPiAgent = (spawnPi: PiSpawn, timeouts: TurnTimeouts = DEFAULT
 
             // Raster attachments ride the prompt as native Pi ImageContent blocks; unreadable files degrade to a path note.
             // Pi resumes by the session file it reported, so a phase's own session id goes unread.
-            const last = { errored: false };
+            // The repositories' turn checks ride one more prompt once the last one settles (ending-checks.ts).
             yield* textPlanTurn(PI, request, true, async function* (text, images, _sessionId, planning) {
                 const message = { type: "prompt", message: text, ...(images.length > 0 ? { images: images.map(imageBlock) } : {}) };
                 const outcome = yield* runPiTurn(proc, state, request, message, timeouts, planning);
-                last.errored = outcome.errored;
                 return { sessionId: typeof sessionFile === "string" ? sessionFile : undefined, planText: outcome.planText, errored: outcome.errored };
             });
-            if (!last.errored) {
-                yield* endingChecks(proc, state, request, timeouts);
-            }
 
             yield* contextUsage(proc);
         }

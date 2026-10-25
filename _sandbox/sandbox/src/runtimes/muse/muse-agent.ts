@@ -1,3 +1,4 @@
+import { MUSE } from "@intentic/sandbox-contract/models/agent-runtimes";
 import { whenAborted } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -20,6 +21,7 @@ import {
     turnWatchdog,
     watchedPull,
     withTurnCap,
+    expiredFrame,
 } from "../decorators/turn-watchdog.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { answerApproval, answerApprovalStage, answerQuestions, type MuseAsks, musePosture } from "./muse-asks.js";
@@ -261,7 +263,7 @@ const stopFrames = (run: Run, next: Pulled): AgentEvent[] => {
         return [];
     }
     if (next === EXPIRED) {
-        return [{ kind: "error", code: "provider-outage", message: `Muse Code went quiet: ${run.clock.expiry()}. It was stopped; send again to carry on.`, own: true }];
+        return [expiredFrame(run.clock, (why) => `Muse Code timed out: ${why}. It was stopped; send again to carry on.`)];
     }
     const reason = next !== SETTLED && next.kind === "exit" ? next.reason : undefined;
     return [{ kind: "error", message: reason ?? "Muse Code exited mid-turn." }];
@@ -489,6 +491,8 @@ export const createMuseAgent = (options: MuseAgentOptions = {}) => {
                     },
                 }),
                 () => runPhase(run, { prompt, images: attached.images, planning: false }),
+                // What the checks found as the turn ends rides one more phase of the same session (ending-checks.ts).
+                { followUp: (note) => runPhase(run, { prompt: note, images: [], planning: false }), editChecks: MUSE.editChecks },
             );
         } catch (error) {
             if (!request.signal.aborted) {

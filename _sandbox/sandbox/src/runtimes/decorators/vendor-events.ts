@@ -1,7 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract/events/requests";
-import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
+import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
+import { toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
 
 // What every vendor event mapper builds the same way: a phase's held-back capture, its summed usage, a tool call's opening.
@@ -96,3 +97,41 @@ export const toolCallOpened = (call: {
     ...opt("input", call.input),
     ...opt("parentToolUseId", call.parentToolUseId),
 });
+
+/**
+ * A tool call's card from what the loop said of it, built one way for every mapper: shown under the shared display name
+ * and categorized by the canonical one (`mcp__browser__browser_navigate` is a fetch whatever a loop prints for it), its
+ * target, the files it names, and, where no one-line target says what it does, its own arguments (a browser call's
+ * `account` among them). `name` is the canonical name, or the loop's own where it has no other; a vendor's own words
+ * for any part win.
+ */
+export const toolCard = (call: {
+    readonly id: string;
+    readonly name: string;
+    // The call's arguments as the loop handed them, before any reading of them.
+    readonly input?: unknown;
+    // Where the loop ran, against which the files it names are made workspace paths; absent names none.
+    readonly cwd?: string | undefined;
+    readonly category?: ToolKind;
+    readonly status?: ToolCallStatus;
+    readonly target?: string | undefined;
+    readonly locations?: ToolCallLocation[] | undefined;
+    readonly content?: ToolCallContent[] | undefined;
+    readonly parentToolUseId?: string | undefined;
+}): Extract<AgentEvent, { kind: "tool_call" }> => {
+    const target = call.target ?? toolTarget(call.input);
+    const name = displayNameOf(call.name);
+    // A loop's own spelling the taxonomy does not know (OpenCode's `shell`) is read by the name it is shown under.
+    const category = toolCategoryOf(call.name);
+    return toolCallOpened({
+        id: call.id,
+        name,
+        category: call.category ?? (category === "other" ? toolCategoryOf(name) : category),
+        ...opt("status", call.status),
+        target,
+        locations: call.locations ?? (call.cwd === undefined ? undefined : toolLocations(call.input, call.cwd)),
+        content: call.content,
+        input: toolInput(call.input, target),
+        parentToolUseId: call.parentToolUseId,
+    });
+};

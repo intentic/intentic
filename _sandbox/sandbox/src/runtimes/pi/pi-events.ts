@@ -1,8 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
-import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { diffContent, resultText, toolLocations, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
-import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
+import { displayNameOf } from "@intentic/agent-context/tool-calls";
+import { diffContent, resultText, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
+import { toolCard, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 
 // Pure mapping of Pi RPC events onto AgentEvent frames (the opencode-agent streamTurn shape, rebuilt for a pull-per-event
 // transport); events with no UI mapping are dropped. Stateful where the protocol is: tool args arrive on
@@ -111,10 +111,10 @@ export const createPiEventMapper = (cwd: string, holdText = false): VendorEventM
                 if (id === undefined) {
                     return [];
                 }
-                const name = displayNameOf(str(event["toolName"]) ?? "tool");
+                const raw = str(event["toolName"]) ?? "tool";
                 const args = event["args"];
-                calls.set(id, { name, args });
-                return [toolCallOpened({ id, name, target: toolTarget(args), locations: toolLocations(args, cwd) })];
+                calls.set(id, { name: displayNameOf(raw), args });
+                return [toolCard({ id, name: raw, input: args, cwd })];
             }
             case "tool_execution_update": {
                 const id = str(event["toolCallId"]);
@@ -142,7 +142,7 @@ export const createPiEventMapper = (cwd: string, holdText = false): VendorEventM
                 if (known === undefined) {
                     // A call first seen at its end (the start was missed) arrives as one whole tool_call; its args are
                     // gone with the start event, so the card is name + output alone.
-                    return [toolCallOpened({ id, name, status: failed ? "failed" : "completed", content })];
+                    return [toolCard({ id, name, status: failed ? "failed" : "completed", content })];
                 }
                 return [{ kind: "tool_call_update", id, status: failed ? "failed" : "completed", content }];
             }

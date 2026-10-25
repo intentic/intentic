@@ -15,7 +15,9 @@ import { AskFieldsSchema, builtInAsk, type CursorOwner, mcpAsk } from "./turn/cu
 import { GATE_SCRIPT_NAME, gateScript, hooksJson, LIVE_TURNS_NAME, shieldedCommand, unshieldedCommand, wrappedCommand } from "./cursor-hook-script.js";
 import { type CursorSecrets, secretReadRefusal, secretWriteRefusal } from "./turn/cursor-secrets.js";
 import { type CursorTerminal, paneCommand } from "./turn/cursor-terminal.js";
-import { CUSTOM_TOOLS_SERVER, hookToolRefusal, mcpToolRefusal } from "./turn/cursor-tool-list.js";
+import { CUSTOM_TOOLS_SERVER, hookPersonaRefusal, hookToolRefusal, mcpToolRefusal } from "./turn/cursor-tool-list.js";
+import type { EditedRequest, GateRequest, McpRequest, ReadRequest, ShellCommandRequest, ShellOutputRequest, ToolRequest, TurnScopedRequest } from "./turn/cursor-hook-requests.js";
+import type { PersonaScope } from "../../personas/persona-scope.js";
 import { writeFileAtomic } from "@intentic/base/fs";
 
 // Owner's command rulebook enforced inside Cursor's own loop via beforeShellExecution, the owner's standing
@@ -92,6 +94,10 @@ export interface CursorGateTurn {
     // Skills the persona or a credential gate withholds from this turn: the read tool refuses their files, the seam the
     // Claude Code loop's `Skill(<name>)` denial stands in (cursor-skills.ts).
     readonly deniedSkills?: readonly string[] | undefined;
+    // What the persona withholds and the folders it works in (TurnPolicy.disallowedTools, personaScope), checked on every
+    // call a hook sees in the one tool vocabulary (runtimes/daemon-tools/policy-gate.ts personaRefusal).
+    readonly deniedTools?: readonly string[] | undefined;
+    readonly scope?: PersonaScope | undefined;
 }
 
 export interface CursorHookService {
@@ -110,48 +116,6 @@ export interface CursorHookService {
     // since another daemon can overwrite any of them after ready.
     readonly paths: () => { readonly socket: string; readonly script: string; readonly hooks: string };
     readonly close: () => Promise<void>;
-}
-
-// Only the three fields this reads are named; the payload carries more (model, generation_id, workspace roots) and none
-// of it changes the verdict.
-interface GateRequest {
-    readonly command?: unknown;
-    readonly conversation_id?: unknown;
-    readonly cwd?: unknown;
-}
-
-// Both hooks that answer from a turn's own state rather than from the rulebook; neither reads anything else it carries.
-interface TurnScopedRequest {
-    readonly conversation_id?: unknown;
-}
-
-// The privacy shield's hooks, each with what the script adds from its side of a mount namespace.
-interface ReadRequest extends TurnScopedRequest {
-    readonly file_path?: unknown;
-    readonly content?: unknown;
-    readonly image_base64?: unknown;
-    readonly document_base64?: unknown;
-    readonly opaque?: unknown;
-}
-interface ToolRequest extends TurnScopedRequest {
-    readonly tool_name?: unknown;
-    readonly tool_input?: unknown;
-    readonly existing_content?: unknown;
-}
-interface ShellCommandRequest extends TurnScopedRequest {
-    readonly id?: unknown;
-}
-interface ShellOutputRequest extends TurnScopedRequest {
-    readonly output?: unknown;
-    readonly aimed?: unknown;
-}
-interface McpRequest extends TurnScopedRequest {
-    readonly tool_name?: unknown;
-    readonly mcp_server_name?: unknown;
-}
-interface EditedRequest extends TurnScopedRequest {
-    readonly content?: unknown;
-    readonly edits?: unknown;
 }
 
 // Said to the model in place of a shielded command's output when its turn is gone: it ran past the turn that started it.
@@ -412,6 +376,10 @@ const resolveHeld = async (registry: TurnRegistry, turn: CursorGateTurn, held: {
     return undefined;
 };
 
+// A shell command the turn's list or its persona does not allow: the refusal, else undefined.
+const shellRefusal = (turn: CursorGateTurn, said: string): string | undefined =>
+    (turn.allowedTools === undefined ? undefined : hookToolRefusal(turn.allowedTools, "Shell", said)) ?? hookPersonaRefusal(turn, "Shell", {});
+
 // beforeShellExecution: the tool list's narrowing, the owner's rules, the person in `default` mode, and then the
 // command's secrets, in that order.
 const gateHandler =
@@ -426,8 +394,8 @@ const gateHandler =
             return denied(placed.refused);
         }
         const { turn } = placed;
-        // Again here, as well as in preToolUse: a call whose preToolUse never ran is still held to the list.
-        const listed = turn.allowedTools === undefined ? undefined : hookToolRefusal(turn.allowedTools, "Shell", said);
+        // Again here, as well as in preToolUse: a call whose preToolUse never ran is still held to the list and the persona.
+        const listed = shellRefusal(turn, said);
         if (listed !== undefined) {
             return denied(listed);
         }
@@ -492,7 +460,10 @@ const readHandler =
         const content = typeof payload.content === "string" ? payload.content : undefined;
         const placed = turnIn(registry, asString(payload.conversation_id));
         for (const turn of placed === undefined ? registry.turns.values() : [placed]) {
-            const refusal = deniedSkillRefusal(path, turn.deniedSkills) ?? ((await turn.secrets?.holds(path, content)) === true ? secretReadRefusal(path) : undefined);
+            const refusal =
+                deniedSkillRefusal(path, turn.deniedSkills) ??
+                hookPersonaRefusal(turn, "Read", { file_path: path }) ??
+                ((await turn.secrets?.holds(path, content)) === true ? secretReadRefusal(path) : undefined);
             if (refusal !== undefined) {
                 return { permission: "deny", user_message: refusal };
             }
@@ -516,8 +487,9 @@ const readHandler =
 // stored value, whose result would echo it. An MCP call is checked in beforeMCPExecution, which names its server.
 const preToolRefusal = async (turn: CursorGateTurn, tool: string, said: string | undefined, payload: ToolRequest): Promise<string | undefined> => {
     const listed = tool.startsWith("MCP:") || turn.allowedTools === undefined ? undefined : hookToolRefusal(turn.allowedTools, tool, said);
-    if (listed !== undefined) {
-        return listed;
+    const withheld = listed ?? (tool.startsWith("MCP:") ? undefined : hookPersonaRefusal(turn, tool, payload.tool_input));
+    if (withheld !== undefined) {
+        return withheld;
     }
     const target = tool === "Write" ? AskFieldsSchema.safeParse(payload.tool_input).data?.file_path : undefined;
     const existing = typeof payload.existing_content === "string" ? payload.existing_content : undefined;

@@ -614,3 +614,17 @@ test("the spawn teaching goes only to a loop the daemon's tools cannot reach, an
     expect(spawnNoteFor(true, { capabilities: withMcp("tools"), conversationTurns: 0 })).toBeUndefined();
     expect(spawnNoteFor(true, { capabilities: withMcp("full"), conversationTurns: 0 })).toBeUndefined();
 });
+
+// 2026-10-25: a persona's limits bind every runtime that checks each call; one that cannot is refused, as a tool list is.
+test.each([
+    ["Claude Code checks every call", "claude", "native", true],
+    ["an ACP agent cannot", "devin", "native", false],
+] as const)("a persona with limits: %s", (_case, agent, harness, runs) => {
+    const reader: Persona = { id: "reader", capabilities: [], powers: PersonaPowersSchema.parse({ files: "read", shell: false }) };
+    const decision = decideTurn({ ...FACTS, personas: [reader] }, turn({ actsAs: "reader", agent, harness }), context);
+    expect(decision.ok).toBe(runs);
+    if (!decision.ok) {
+        expect(decision.code).toBe("tools-unenforced");
+        expect(decision.message).toContain("no Edit, Write, NotebookEdit, Bash");
+    }
+});

@@ -77,7 +77,7 @@ test.each([
         ["turn.plan.window", "turn.plan.privacy", "turn.plan.capabilities", "turn.plan.personas", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
     ],
     [
-        "native Codex, told of the tree's dependencies in prose",
+        "native Codex, told of the tree's dependencies in prose and of the skills its loader does not read",
         { agent: "codex" },
         context,
         {},
@@ -89,6 +89,7 @@ test.each([
             "turn.plan.deps",
             "turn.plan.personas",
             "turn.plan.areas",
+            "turn.plan.skills",
             "turn.plan.context",
             "turn.plan.repo-checks",
         ],
@@ -130,14 +131,13 @@ test.each([
     [
         "an OpenCode follow-up, whose session already carries the catalogue",
         { agent: "grok", conversationId: "c-grok" },
-        context,
+        resumed,
         { agents: conversationAt(2) },
         [
             "turn.plan.settings",
             "turn.plan.window",
             "turn.plan.privacy",
             "turn.plan.capabilities",
-            "turn.plan.deps",
             "turn.plan.personas",
             "turn.plan.areas",
             "turn.plan.context",

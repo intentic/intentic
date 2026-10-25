@@ -58,6 +58,26 @@ const refusal = (scope: PersonaScope, sandboxPath: boolean): string => {
     return `This persona works ${where}, that path is outside it. If the task genuinely needs a file elsewhere in the workspace, stop and say so rather than working around it.`;
 };
 
+/**
+ * The fence's answer for one call, whatever runtime made it: the refusal sentence when a file tool (`tool` in Claude
+ * Code's names, which every runtime's translator maps onto) points at a path the persona may not touch, else undefined.
+ * One function for the Claude Code hook below and for every other runtime's gate (runtimes/daemon-tools/policy-gate.ts),
+ * so a persona's folders bind the same way on every loop. Only paths inside the workspace are judged.
+ */
+export const scopeRefusal = (scope: PersonaScope, tool: string, path: string): string | undefined => {
+    if (!(FENCED_TOOLS as readonly string[]).includes(tool)) {
+        return undefined;
+    }
+    const rel = workspaceRelative(scope.cwd, resolve(scope.cwd, path));
+    // Outside the workspace entirely: not this setting's question.
+    if (rel === undefined) {
+        return undefined;
+    }
+    const sandboxPath = !scope.sandbox && WRITE_TOOLS.has(tool) && isSandboxPath(rel);
+    const outsideFolders = !fenceAllows(scope.fence, rel);
+    return sandboxPath || outsideFolders ? `${rel}: ${refusal(scope, sandboxPath)}` : undefined;
+};
+
 export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [
         {
@@ -67,31 +87,12 @@ export const personaScopeHooks = (scope: PersonaScope): Partial<Record<HookEvent
                     if (input.hook_event_name !== "PreToolUse") {
                         return {};
                     }
-                    if (!(FENCED_TOOLS as readonly string[]).includes(input.tool_name)) {
-                        return {};
-                    }
                     const path = editedPath(input.tool_input);
                     // Absent path is the tool's own default (Glob/Grep search cwd, already in scope); nothing to judge.
-                    if (path === undefined) {
-                        return {};
-                    }
-                    const rel = workspaceRelative(scope.cwd, resolve(scope.cwd, path));
-                    // Outside the workspace entirely: not this setting's question.
-                    if (rel === undefined) {
-                        return {};
-                    }
-                    const sandboxPath = !scope.sandbox && WRITE_TOOLS.has(input.tool_name) && isSandboxPath(rel);
-                    const outsideFolders = !fenceAllows(scope.fence, rel);
-                    if (!sandboxPath && !outsideFolders) {
-                        return {};
-                    }
-                    return {
-                        hookSpecificOutput: {
-                            hookEventName: "PreToolUse",
-                            permissionDecision: "deny",
-                            permissionDecisionReason: `${rel}: ${refusal(scope, sandboxPath)}`,
-                        },
-                    };
+                    const reason = path === undefined ? undefined : scopeRefusal(scope, input.tool_name, path);
+                    return reason === undefined
+                        ? {}
+                        : { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } };
                 },
             ],
         },

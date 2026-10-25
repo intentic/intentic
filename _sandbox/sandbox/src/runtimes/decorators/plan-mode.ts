@@ -2,6 +2,7 @@ import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { planRevision } from "../../agent/prompt/plan-revision.js";
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
+import { type TurnEnding, withEndingChecks } from "./ending-checks.js";
 
 // Plan mode for a runtime whose capability row holds no approval modes (`permissions: "plan"`): a read-only planning
 // phase becomes the `plan` card, then, once approved, an executing phase resumes the same session; a rejection loops
@@ -35,7 +36,10 @@ export interface EmulatedPlan {
 const proposed = (capture: PlanPhaseResult, signal: AbortSignal): string | undefined =>
     capture.errored || capture.planText === undefined || capture.planText.trim() === "" || signal.aborted ? undefined : capture.planText;
 
-async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">, emulated: EmulatedPlan): AsyncGenerator<AgentEvent> {
+// A run that changes the tree: the one direct run, or the execution an approved plan starts.
+type Checked = (run: AsyncGenerator<AgentEvent, unknown>) => AsyncGenerator<AgentEvent, unknown>;
+
+async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">, emulated: EmulatedPlan, checked: Checked): AsyncGenerator<AgentEvent> {
     const { signal } = request;
     let prompt = emulated.prompt;
     let sessionId = request.spec.sessionId;
@@ -55,7 +59,7 @@ async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">
             return;
         }
         if (decision.approve) {
-            yield* emulated.execute(sessionId);
+            yield* checked(emulated.execute(sessionId));
             return;
         }
         prompt = planRevision(decision.feedback);
@@ -63,16 +67,20 @@ async function* emulate(request: Pick<AgentRequest, "spec" | "signal" | "hooks">
 }
 
 // A turn on `capabilities`' runtime: the emulated plan when the turn asked to plan and the row says the runtime cannot on
-// its own, else its one ordinary run. `emulated` is built only when it runs, since its phases hold per-turn state.
+// its own, else its one ordinary run. `emulated` is built only when it runs, since its phases hold per-turn state. With
+// `ending`, the run that changes the tree is followed by what the checks found on it (ending-checks.ts); a loop whose
+// own hook says them at its end (Codex's gate stop) passes none.
 export async function* planMode(
     capabilities: Pick<AgentCapabilities, "permissions">,
     request: Pick<AgentRequest, "spec" | "policy" | "signal" | "hooks">,
     emulated: () => EmulatedPlan,
     direct: () => AsyncGenerator<AgentEvent, unknown>,
+    ending?: TurnEnding,
 ): AsyncGenerator<AgentEvent> {
+    const checked: Checked = (run) => (ending === undefined ? run : withEndingChecks(request, run, ending));
     if (capabilities.permissions === "modes" || request.policy.permissionMode !== "plan") {
-        yield* direct();
+        yield* checked(direct());
         return;
     }
-    yield* emulate(request, emulated());
+    yield* emulate(request, emulated(), checked);
 }

@@ -1,4 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import { DELEGATE_TOOL_NAMES, READ_TOOL_NAMES, SHELL_TOOL_NAMES, WEB_TOOL_NAMES, WRITE_TOOL_NAMES } from "../rules/tool-vocabulary.js";
 import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs";
 import { type Fence, fenceIntersection } from "@intentic/sandbox-contract/policy/fence-paths";
 import { isSignedInAccount, personaAllowsCapability } from "@intentic/sandbox-contract/policy/persona-capability";
@@ -199,12 +200,13 @@ export const personaCliEnv = (
     return Object.fromEntries(Object.entries(cliEnv).filter(([key]) => !denied.some((suffix) => key.endsWith(suffix))));
 };
 
-// Denylist, not allowlist: an allowlist would need every future tool named, and goes stale by removing access.
-const EDIT_TOOLS = ["Edit", "Write", "NotebookEdit"];
-const READ_TOOLS = ["Read", "Glob", "Grep", "NotebookRead"];
-const SHELL_TOOLS = ["Bash", "BashOutput", "KillShell"];
-const WEB_TOOLS = ["WebFetch", "WebSearch"];
-const DELEGATE_TOOLS = ["Agent", "Task", "Workflow"];
+// Denylist, not allowlist: an allowlist would need every future tool named, and goes stale by removing access. In the
+// one tool vocabulary (rules/tool-vocabulary.ts), which every runtime's gate translates its own names into.
+const EDIT_TOOLS = WRITE_TOOL_NAMES;
+const READ_TOOLS = READ_TOOL_NAMES;
+const SHELL_TOOLS = SHELL_TOOL_NAMES;
+const WEB_TOOLS = WEB_TOOL_NAMES;
+const DELEGATE_TOOLS = DELEGATE_TOOL_NAMES;
 
 // Skill files are written once per workspace, so a refused account's skill stays visible; deny `Skill(<name>)` too, or
 // the tools' absence reads as a broken login. Same denylist rule as the SDK's own `skills` option.

@@ -8,7 +8,7 @@ import {
     type RequestPermissionRequest,
     type SessionNotification,
 } from "@agentclientprotocol/sdk/unstable";
-import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
+import { ACP, type AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
@@ -30,6 +30,7 @@ import {
     turnWatchdog,
     watchedPull,
     withTurnCap,
+    expiredFrame,
 } from "../decorators/turn-watchdog.js";
 import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { opt } from "../../opt.js";
@@ -53,7 +54,9 @@ import {
     type PersonDecision,
     refusePermission,
 } from "./acp-permissions.js";
-import { terminalProgram } from "./acp-terminal.js";
+import { acpTerminalShell, terminalProgram } from "./acp-terminal.js";
+import { promptUsage } from "./acp-usage.js";
+import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 
 // The ACP provider adapter, the seam runAgent/createCodexAgent/createOpenCodeAgent share: AgentRequest in, AgentEvent out,
 // over any agent speaking the Agent Client Protocol. One warm connection per agent, one session per conversation. A
@@ -79,7 +82,7 @@ class ModeNotLeft extends Error {}
 // The plan card is the daemon's on every ACP agent, whatever modes it advertises: the protocol has no signal that a plan
 // is ready for a yes, so the emulation (plan-mode.ts) runs the two phases, with the agent's own plan mode under the first
 // where it has one (acp-modes.ts).
-const EMULATED_PLAN: Pick<AgentCapabilities, "permissions"> = { permissions: "plan" };
+const EMULATED_PLAN: Pick<AgentCapabilities, "permissions" | "editChecks"> = { permissions: "plan", editChecks: ACP.editChecks };
 
 // The agent's MCP servers: the turn's remote list (every mount at the daemon's MCP door: browsers, the mcp-kind cards and
 // the daemon's own servers) over http where the agent advertises http MCP, else as stdio servers through the daemon's
@@ -342,6 +345,7 @@ const bindPhase = (connection: AcpConnection, request: AgentRequest, session: st
     };
     // terminal/create runs in the conversation's own tmux session; the first one surfaces it in the panel.
     const tmuxSession = agentSessionName(session);
+    const shell = acpTerminalShell(request, session, tmuxRunEnabled());
     let terminalSurfaced = false;
     if (turn.sealed) {
         // No form (absent declines it) and no terminal (absent refuses it); a permission is refused without asking.
@@ -386,22 +390,27 @@ const bindPhase = (connection: AcpConnection, request: AgentRequest, session: st
                       // agent asked about this very command already answered it.
                       admit: async (create: CreateTerminalRequest) => {
                           const program = terminalProgram(create);
-                          if (admitted.take(program)) {
-                              return;
-                          }
-                          const answer = await answerVendorAsk(
-                              { gate: turn.gate, push, hold: clock.hold },
-                              { tool: "terminal", program, cwd: create.cwd ?? undefined, canRefuse: true },
-                          );
+                          const answer = admitted.take(program)
+                              ? { allow: true as const }
+                              : await answerVendorAsk(
+                                    { gate: turn.gate, push, hold: clock.hold },
+                                    { tool: "terminal", program, cwd: create.cwd ?? undefined, canRefuse: true },
+                                );
                           if (!answer.allow) {
                               throw new Error(answer.reason);
                           }
+                          // Then run as every judged shell runs a line (acp-terminal.ts acpTerminalShell).
+                          return shell.prepare(create);
                       },
                   },
               }
             : {}),
     });
-    return { queue, held, unbind };
+    const release = (): void => {
+        unbind();
+        void shell.dispose();
+    };
+    return { queue, held, unbind: release };
 };
 
 // What the prompt's own answer says once it settles: a thrown failure, or a stop reason the agent gave up on. End_turn
@@ -507,12 +516,16 @@ async function* runAcpTurn(
                 cancel();
                 unbind();
                 connection.abandon(session);
-                yield { kind: "error", message: `ACP agent timed out: ${clock.expiry()}. It was stopped; send again to retry.`, own: true };
+                yield expiredFrame(clock, (why) => `ACP agent timed out: ${why}. It was stopped; send again to retry.`);
                 return { sessionId: session, planText: held.text, errored: true };
             }
             yield next;
         }
         await promptPromise;
+        const used = promptUsage(connection, session, response);
+        if (used !== undefined) {
+            yield used;
+        }
         const failed = settledFailure(response, failure, connection.stderrTail);
         if (failed !== undefined) {
             yield failureFrame(failed, failure);

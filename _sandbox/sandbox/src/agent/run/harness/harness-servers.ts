@@ -289,8 +289,9 @@ export const harnessServers = (
     const records = diagnosticsServerFor(deps, turn);
     return {
         ...(typist === undefined ? {} : { secrets: typist }),
-        // hashlineEdits swaps the native Edit/Write (disabled in the policy) for hash-anchored file tools.
-        ...(turn.hashlineEdits ? { hashline: createHashlineServer(turn.context.localCwd) } : {}),
+        // hashlineEdits swaps the native Edit/Write (disabled in the policy) for hash-anchored file tools; a persona that
+        // may not write is given no file-writing tool by another name.
+        ...(turn.hashlineEdits && turn.persona.powers.files === "write" ? { hashline: createHashlineServer(turn.context.localCwd) } : {}),
         subagents: subagentsServerFor(deps, turn),
         ...(watcher === undefined ? {} : { watch: watcher }),
         deps: depsServerFor(deps, turn),

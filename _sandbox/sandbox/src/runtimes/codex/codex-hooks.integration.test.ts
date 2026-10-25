@@ -6,7 +6,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { codexAllowlistConfig, codexHooksConfig, codexListName, createCodexHookSession, patchFiles } from "./codex-hooks.js";
-import { maskScript } from "./codex-mask-script.js";
+import { maskScript } from "../decorators/mask-script.js";
 
 // What a Codex thread's hooks ask the door's gate, and what this run does with the gate's answer.
 
@@ -47,7 +47,8 @@ test("a patch reads as the files it adds, changes and deletes, and as Write only
 });
 
 test("no list changes nothing; a list keeps a whole server it names whole and the shell it names at all", () => {
-    expect(codexAllowlistConfig(undefined, ["browser"])).toEqual({});
+    // Codex's own subagents never reach the gate, so they are off on every turn, list or not.
+    expect(codexAllowlistConfig(undefined, ["browser"])).toEqual({ "features.multi_agent": false });
     const config = codexAllowlistConfig(["Read", "Bash", "mcp__browser"], ["browser", "gate"]);
     expect(config).toEqual({ web_search: "disabled", "features.image_generation": false, "features.multi_agent": false, "tools.experimental_request_user_input.enabled": false });
     expect(codexAllowlistConfig([], ["browser"])).toMatchObject({ "features.shell_tool": false, "features.view_image": false, "mcp_servers.browser.enabled_tools": [] });
@@ -77,7 +78,7 @@ describe("a run's side of the gate", () => {
     test("a command with stored secrets runs under the mask, its references resolved out of sight, the model's words kept", async () => {
         const session = createCodexHookSession(options(secretsOf({ API_TOKEN: "tok-0123456789abcdef" })));
         const verdict = await session.gateHooks.settle?.({ tool: "Bash", input: { command: "curl -H 'x: {{secret:API_TOKEN}}' x" }, id: "c1" }, { decision: "allow" }, false);
-        expect(verdict).toEqual({ decision: "rewrite", input: { command: expect.stringMatching(/^node '?\S+intentic-codex-mask\.mjs'? '?\S+\.json'?$/u) } });
+        expect(verdict).toEqual({ decision: "rewrite", input: { command: expect.stringMatching(/^node '?\S+intentic-mask\.mjs'? '?\S+\.json'?$/u) } });
         expect(JSON.stringify(verdict)).not.toContain("tok-0123456789abcdef");
         expect(session.record("c1")).toEqual({ allowed: true, asked: false, said: "curl -H 'x: {{secret:API_TOKEN}}' x" });
         expect(session.gateHooks.original?.({ tool: "Bash", input: { command: "node …" }, id: "c1" })).toEqual({ command: "curl -H 'x: {{secret:API_TOKEN}}' x" });

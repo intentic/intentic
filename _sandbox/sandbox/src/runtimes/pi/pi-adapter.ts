@@ -23,11 +23,8 @@ import { personaSkillsRoot } from "../../personas/persona-kit.js";
 import { skillFolderNames } from "../../skill-file.js";
 import { loadedSkillsRoot } from "../../store/loaded-skills.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
-import { editReviewersOf, turnChecksOf } from "../../agent/run/harness/harness-hooks.js";
 import { turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import { turnPersona } from "../../personas/personas.js";
-import { declaredChecks } from "../../rules/repo-checks.js";
-import { standing } from "../../rules/rules.js";
 import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 
 // The Pi row: the reserved `pi` agent-kind capability, served over Pi's own RPC protocol. A plain adapter rather than a
@@ -40,15 +37,17 @@ export type PiAdapterDeps = TurnToolsDeps &
     DaemonServersDeps &
     Pick<Services, "capabilities" | "piAgent" | "probePiAgent" | "sandboxSettings" | "workspace">;
 
-// The skills a Pi turn loads (`--skill`, with Pi's own discovery off): the workspace's loaded skills less those the
-// persona or a credential gate denies (TurnPolicy.disallowedTools names them `Skill(<name>)`, as the Claude Code loop
-// is told), and the worn persona's own kit. Listed off the conversation's tree as the daemon sees it, named as Pi sees
-// it, so an isolated turn loads its worktree's copies.
-export const piSkillsOf = async (context: Pick<TurnContext, "localCwd" | "effectiveCwd" | "base" | "persona">): Promise<string[]> => {
+// The skills a Pi turn loads (`--skill`, with Pi's own discovery off): the workspace's loaded skills and the image's own
+// less those the persona or a credential gate denies (TurnPolicy.disallowedTools names them `Skill(<name>)`, as the
+// Claude Code loop is told), a workspace skill standing in for a built-in of its name, and the worn persona's own kit.
+// Listed off the conversation's tree as the daemon sees it, named as Pi sees it, so an isolated turn loads its
+// worktree's copies (AgentCapabilities.skillDiscovery: every origin).
+export const piSkillsOf = async (context: Pick<TurnContext, "localCwd" | "effectiveCwd" | "base" | "persona">, builtInRoot: string): Promise<string[]> => {
     const denied = new Set(context.base.policy.disallowedTools ?? []);
-    const loaded = (await skillFolderNames(loadedSkillsRoot(context.localCwd)))
-        .filter((name) => !denied.has(`Skill(${name})`))
-        .map((name) => join(loadedSkillsRoot(context.effectiveCwd), name));
+    const names = (await skillFolderNames(loadedSkillsRoot(context.localCwd))).filter((name) => !denied.has(`Skill(${name})`));
+    const baked = builtInRoot === "" ? [] : await skillFolderNames(builtInRoot);
+    const builtIn = baked.filter((name) => !denied.has(`Skill(${name})`) && !names.includes(name));
+    const loaded = [...names.map((name) => join(loadedSkillsRoot(context.effectiveCwd), name)), ...builtIn.map((name) => join(builtInRoot, name))];
     const persona = context.persona?.persona?.id;
     const kit =
         persona === undefined || (await skillFolderNames(personaSkillsRoot(context.localCwd, persona))).length === 0
@@ -79,7 +78,7 @@ export const planPiTurn = async (
         shell: context.persona?.powers.shell ?? true,
         extensions: context.persona?.powers.extensions,
     });
-    const skills = await piSkillsOf(context);
+    const skills = await piSkillsOf(context, services.config.builtInSkillsDir);
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     const settings = context.settings ?? (await services.sandboxSettings.get());
     // One secret seam for the turn: what its shell lines resolve, its results are masked against, and its typist uses.
@@ -96,12 +95,7 @@ export const planPiTurn = async (
                 ...withSecrets.base,
                 spec: { ...context.base.spec, ...opt("steering", context.steering) },
                 tools: { ...withSecrets.base.tools, ...opt("remote", tools.length > 0 ? tools : undefined), diagnostics: daemon.diagnostics },
-                hooks: {
-                    ...context.base.hooks,
-                    relay: daemon.relay,
-                    ...editReviewersOf(services, context, standing(settings.rules, "file.edited")),
-                    ...turnChecksOf(services, context, declaredChecks(standing(settings.rules, "turn.ending"))),
-                },
+                hooks: { ...context.base.hooks, ...daemon.hooks },
                 credential: { kind: "container" },
             },
             context.attachmentPaths,

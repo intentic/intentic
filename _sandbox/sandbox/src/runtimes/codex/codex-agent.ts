@@ -14,13 +14,12 @@ import { codedFailure, type FailureRule } from "../../agent/run/frames/error-fra
 import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
 import { isRateLimited } from "../../engines/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
-import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { resultContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { planPhaseOf, type TurnCapture } from "../decorators/vendor-events.js";
+import { planPhaseOf, toolCard, type TurnCapture } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { codexUsageFromRateLimits } from "../../usage/translator-usage.js";
 import {
@@ -663,7 +662,7 @@ function* mcpFrames(event: CodexItemEvent, item: ItemOf<"mcp_tool_call">, contex
     const name = `${item.server}.${item.tool}`;
     if (event.type === "item.started") {
         attachBrowserSession(item, capture.sessionId, context.browser);
-        yield { kind: "tool_call", id: item.id, name, category: toolCategoryOf(name), status: "in_progress" };
+        yield toolCard({ id: item.id, name: `mcp__${item.server}__${item.tool}`, input: item.arguments, cwd: context.cwd });
     } else if (event.type === "item.completed") {
         yield { kind: "tool_call_update", id: item.id, status: item.status === "failed" ? "failed" : "completed", content: mcpResultContent(item, name, context) };
     }

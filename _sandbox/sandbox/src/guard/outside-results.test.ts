@@ -200,8 +200,8 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
             ...mountedIn("agent/run/harness/harness-servers.ts", /(?<=export const harnessServers[\s\S]*?)\n {4}return \{\n[\s\S]*?\n {4}\};/),
             // What a non-Claude runtime reaches through the MCP door, the same servers built for its turn.
             ...mountedIn("runtimes/daemon-tools/daemon-servers.ts", /(?<=export const daemonServersFor[\s\S]*?)\n {4}const servers = \{\n[\s\S]*?\n {4}\} satisfies/),
-            constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
-            constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),
+            constantValue("browser/tools/browser-servers.ts", "ROUTED_BROWSER_SERVER"),
+            constantValue("browser/tools/browser-servers.ts", "ANONYMOUS_BROWSER_SERVER"),
             constantValue("desktop/desktop-tools.ts", "DESKTOP_SERVER"),
             constantValue("seams/js-tool-names.ts", "JS_SERVER_NAME"),
         ]);

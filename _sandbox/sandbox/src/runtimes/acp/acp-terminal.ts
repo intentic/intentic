@@ -2,6 +2,9 @@ import type { CreateTerminalRequest, TerminalExitStatus, TerminalOutputResponse 
 import { basename } from "node:path";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import type { AgentRequest } from "../../agent/providers/agent-request.js";
+import { createShellLines } from "../decorators/shell-line.js";
+import { workloadStamp } from "../../seams/workload-stamp.js";
 
 // ACP terminal/* over tmux: create runs the command in the agent-<id> session; the runner's promise later fills in
 // output and exit code. terminal/output is empty mid-run, since the live view is the terminal panel. kill aborts the
@@ -33,6 +36,40 @@ export const terminalProgram = (request: Pick<CreateTerminalRequest, "command" |
     return [request.command, ...args].join(" ");
 };
 
+// A terminal/create's line as the one command runner every judged shell shares rewrote it (shell-line.ts): its secret
+// references resolved, the heavy-command table, the turn's worktree, through bin/tmux-run in the turn's session, and
+// what it prints masked, since the agent reads a terminal's output itself. `env` is the turn's connector environment,
+// which the line forwards into the pane by name, and the conversation that owns the pane.
+export interface PreparedTerminal {
+    readonly command: string;
+    readonly env: Readonly<Record<string, string>>;
+}
+
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
+
+// The variables an agent set on its terminal, as the line's own first words: the rewritten line names only the turn's.
+const withEnv = (line: string, env: CreateTerminalRequest["env"]): string => {
+    const entries = (env ?? []).filter((entry) => ENV_NAME.test(entry.name));
+    return entries.length === 0 ? line : `${entries.map((entry) => `export ${entry.name}=${shellQuote(entry.value)};`).join(" ")} ${line}`;
+};
+
+/** One phase's terminal shell: `prepare` rewrites a create's line or throws the refusal; `dispose` once the phase ends. */
+export const acpTerminalShell = (request: Pick<AgentRequest, "spec" | "tools" | "signal">, session: string, terminals: boolean) => {
+    const shell = createShellLines({ tools: request.tools, isolation: request.spec.isolation, owner: request.spec.conversationId, terminals, mask: true });
+    return {
+        prepare: async (create: CreateTerminalRequest): Promise<PreparedTerminal> => {
+            const said = await shell.line(withEnv(terminalLine(create), create.env), { session, cwd: create.cwd ?? request.spec.cwd }, request.signal);
+            if ("refuse" in said) {
+                throw new Error(said.refuse);
+            }
+            // The conversation in the wrapper's own environment, which stamps the pane's session as the turn's (tmux-run).
+            const owner = request.spec.conversationId === undefined ? {} : workloadStamp(request.spec.conversationId);
+            return { command: said.command, env: { ...request.tools.cliEnv, ...owner } };
+        },
+        dispose: shell.dispose,
+    };
+};
+
 interface Handle {
     output: string;
     exit: TerminalExitStatus | undefined;
@@ -43,7 +80,8 @@ interface Handle {
 }
 
 export interface AcpTerminals {
-    readonly create: (session: string, cwd: string, request: CreateTerminalRequest) => string;
+    // `prepared`, the line the one command runner made of it, runs in place of the agent's own words.
+    readonly create: (session: string, cwd: string, request: CreateTerminalRequest, prepared?: PreparedTerminal) => string;
     readonly output: (terminalId: string) => TerminalOutputResponse | undefined;
     readonly waitForExit: (terminalId: string) => Promise<TerminalExitStatus> | undefined;
     readonly kill: (terminalId: string) => boolean;
@@ -79,11 +117,11 @@ export const createAcpTerminals = (runner: TerminalRunner): AcpTerminals => {
     let next = 0;
 
     return {
-        create: (session, cwd, request) => {
+        create: (session, cwd, request, prepared) => {
             const id = `acpterm-${(next += 1)}`;
             const controller = new AbortController();
-            const command = terminalLine(request);
-            const env = Object.fromEntries((request.env ?? []).map((entry) => [entry.name, entry.value]));
+            const command = prepared?.command ?? terminalLine(request);
+            const env = prepared?.env ?? Object.fromEntries((request.env ?? []).map((entry) => [entry.name, entry.value]));
             const partial: Omit<Handle, "done"> = {
                 output: "",
                 exit: undefined,
@@ -97,6 +135,7 @@ export const createAcpTerminals = (runner: TerminalRunner): AcpTerminals => {
                     window: "acp",
                     ...(Object.keys(env).length > 0 ? { env } : {}),
                     signal: controller.signal,
+                    direct: prepared !== undefined,
                 })
                 .then(
                     ({ code, output }) => {

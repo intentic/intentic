@@ -226,6 +226,7 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.secrets === "shell" ? ["secrets masked in shell output only, not in files the agent reads"] : []),
     ...(capabilities.secrets === "none" ? ["secrets reach the model unmasked"] : []),
     ...(capabilities.toolAllowlist ? [] : ["no tool lists: an automation limited to some tools won't run here"]),
+    ...(capabilities.editChecks === "turn-end" ? ["edit checks said as the turn ends, not after each edit"] : []),
 ];
 
 // Claude's compile-time model floor, shared by daemon and web pre-load; versioned ids only, never a tier alias.

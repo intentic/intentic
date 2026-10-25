@@ -28,16 +28,24 @@ const context = (disallowedTools: string[], persona?: string) => ({
     persona: persona === undefined ? undefined : { persona: { id: persona } },
 });
 
-test("a Pi turn loads every workspace skill the persona may use, named as Pi sees the tree", async () => {
+test("a Pi turn loads every workspace skill the persona may use, named as Pi sees the tree, and the image's own", async () => {
+    const baked = join(root, "baked");
+    for (const name of ["github", "intentic"]) {
+        mkdirSync(join(baked, name), { recursive: true });
+    }
     // SAFETY: piSkillsOf reads only the fields built here.
-    expect(await piSkillsOf(context(["Skill(reddit-work)"]) as never)).toEqual([join(loadedSkillsRoot(WORKSPACE_ROOT), "github")]);
+    expect(await piSkillsOf(context(["Skill(reddit-work)"]) as never, baked)).toEqual([
+        join(loadedSkillsRoot(WORKSPACE_ROOT), "github"),
+        // The workspace's `github` stands in for the image's of that name.
+        join(baked, "intentic"),
+    ]);
 });
 
 test("the worn persona's own kit rides along when it holds any skill", async () => {
     mkdirSync(join(personaSkillsRoot(root, "studio"), "voice"), { recursive: true });
     // SAFETY: piSkillsOf reads only the fields built here.
-    const skills = await piSkillsOf(context([], "studio") as never);
+    const skills = await piSkillsOf(context([], "studio") as never, "");
     expect(skills.at(-1)).toBe(personaSkillsRoot(WORKSPACE_ROOT, "studio"));
     // SAFETY: as above.
-    expect(await piSkillsOf(context([], "empty") as never)).toHaveLength(2);
+    expect(await piSkillsOf(context([], "empty") as never, "")).toHaveLength(2);
 });

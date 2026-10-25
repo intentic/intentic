@@ -25,6 +25,8 @@ import type { Services } from "../../composition.js";
 import { mayDelegate, turnPersona } from "../../personas/personas.js";
 import { createCursorAgent, type CursorTurnExtras } from "./cursor-agent.js";
 import { type HarnessServersDeps, turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
+import type { HarnessHooksDeps } from "../../agent/run/harness/harness-hooks.js";
+import { type DaemonServers, daemonServersFor } from "../daemon-tools/daemon-servers.js";
 import { cursorSkillsOf } from "./turn/cursor-skills.js";
 import { type CursorCatalog, createCursorCatalog } from "./models/cursor-catalog.js";
 import { type CursorStore, fileCursorStore, readCursorCredentials } from "./accounts/cursor-credentials.js";
@@ -66,11 +68,15 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
     };
 };
 
+// The door servers a Cursor turn takes as custom tools instead, run in the daemon where a card can park (cursor-tools.ts).
+const CURSOR_SERVED: ReadonlySet<string> = new Set(["ui", "code", "subagents"]);
+
 // What a Cursor turn is planned from: the account store and catalog, the refusal ledger that places an unnamed account,
 // and the seams its MCP tools and browser stack are mounted from.
 export type CursorPlanDeps = TurnToolsDeps &
     HarnessServersDeps &
-    Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "providerRefusals" | "privacyShield" | "workspace">;
+    HarnessHooksDeps &
+    Pick<Services, "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "providerRefusals" | "privacyShield" | "sandboxSettings">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
 // daemon-wide, unlike Codex's or OpenCode's processes.
@@ -107,13 +113,14 @@ export const planCursorTurn = async (
     }
     // The same remote MCP set every arm mounts, which cursorMcpServers turns into http servers: a browser, a machine, an
     // extension card or an mcp capability the owner granted must reach a Cursor turn like any other.
+    // Read before the lease opens, so a settings read that throws leaves nothing leased.
+    const settings = context.settings ?? (await services.sandboxSettings.get());
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
         anonymousBrowser: persona.powers.browser,
         shell: persona.powers.shell,
         extensions: persona.powers.extensions,
     });
-    const tools = mounted.tools;
     // The privacy shield reads this turn channel by channel (cursor-shield.ts); undefined when there is nothing to read
     // for. A policy that cannot be read refuses the turn, as the gateway refuses a request it cannot read the policy for.
     let privacy: Awaited<ReturnType<typeof services.privacyShield.forTurn>>;
@@ -125,6 +132,20 @@ export const planCursorTurn = async (
     }
     // The skills the turn's persona brings and withholds, which Cursor's own loader takes (cursor-skills.ts).
     const skills = await cursorSkillsOf(context);
+    // The sandbox's stored secrets, which every shell command this turn runs resolves and masks through the hooks
+    // (cursor-secrets.ts): the same registry and release gates a Claude Code turn spends them through.
+    const secrets = context.base.tools.secrets ?? turnSecretAccess(services, input, context.base.signal);
+    // The daemon's own servers every other runtime mounts at the door (accounts, secrets, watch, deps, diagnostics), less
+    // the three Cursor serves as custom tools in its own process (cursor-tools.ts), and the turn's check hooks.
+    let daemon: DaemonServers;
+    try {
+        const withSecrets: TurnContext = { ...context, base: { ...context.base, tools: { ...context.base.tools, secrets } } };
+        daemon = daemonServersFor(services, { input, context: withSecrets, persona, granted, settings, mounted, served: CURSOR_SERVED });
+    } catch (error) {
+        mounted.release();
+        throw error;
+    }
+    const tools = [...mounted.tools, ...daemon.tools];
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
@@ -132,9 +153,8 @@ export const planCursorTurn = async (
             ...context.base.tools,
             ...(tools.length > 0 ? { remote: tools } : {}),
             ...browserFields(services.workspace.root, mounted),
-            // The sandbox's stored secrets, which every shell command this turn runs resolves and masks through the hooks
-            // (cursor-secrets.ts): the same registry and release gates a Claude Code turn spends them through.
-            secrets: context.base.tools.secrets ?? turnSecretAccess(services, input, context.base.signal),
+            secrets,
+            diagnostics: daemon.diagnostics,
         },
         credential: { kind: "cursor-key", apiKey: account.apiKey },
         hooks: {
@@ -144,6 +164,8 @@ export const planCursorTurn = async (
             // A spawned child its parent gave a result schema hands its value back here, whatever its persona's shelves.
             ...opt("result", childResultDoor(services, input.conversationId)),
             ...opt("privacy", privacy),
+            // The relay its loop attaches to, and the checks said as the turn ends (runtimes/decorators/ending-checks.ts).
+            ...daemon.hooks,
         },
     };
     // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold

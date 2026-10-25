@@ -152,7 +152,7 @@ export const planDevinTurn = async (
                 ...context.base,
                 spec: { ...context.base.spec, model },
                 tools: { ...context.base.tools, ...opt("remote", tools.length > 0 ? tools : undefined), diagnostics: daemon.diagnostics },
-                hooks: { ...context.base.hooks, relay: daemon.relay },
+                hooks: { ...context.base.hooks, ...daemon.hooks },
                 credential: { kind: "container" },
             },
             context.attachmentPaths,
