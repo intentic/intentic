@@ -260,6 +260,10 @@
             "noBranch": "sin rama",
             "askAgent": "Pedírselo al agente",
             "addsTo": "Añade {names} a {manifest}",
+            "addsAcross": "Añade {names} a {count} manifiesto | Añade {names} a {count} manifiestos",
+            "inManifests": "{count} manifiesto | {count} manifiestos",
+            "showManifests": "Mostrar",
+            "hideManifests": "Ocultar",
             "pickFile": "Archivo cambiado",
             "reviewedOption": "✓ {label} (revisado)",
             "unmarkReviewed": "Desmarcar {label} como revisado"

@@ -644,3 +644,40 @@ it(`names the dependencies the work adds, per manifest, and says nothing when it
     expect(el.textContent).toContain(`Adds @remotion/cli, react, remotion to video/package.json`);
     expect(el.textContent).toContain(`Adds react to docs/package.json`);
 });
+
+// A dependency taken on across a monorepo (typescript into every package.json) used to draw a line per manifest, ninety
+// of them, pushing the file list and its diff off the screen. Past a few it is one line naming each dependency once,
+// most widespread first, which opens onto where each one goes.
+it(`folds a dependency added across many manifests into one line that opens onto where it goes`, async () => {
+    const [root, ...rest] = changes.repos;
+    const packages = [`a`, `b`, `c`, `d`, `e`];
+    const adding: AgentChanges = {
+        ...changes,
+        repos: [
+            {
+                ...root!,
+                addedDependencies: packages.map((name) => ({
+                    path: `packages/${name}/package.json`,
+                    added: name === `c` ? [`@typescript/native-preview`, `typescript`] : [`typescript`],
+                })),
+            },
+            ...rest,
+        ],
+    };
+    const el = await mount([], adding);
+
+    expect(el.textContent).toContain(`Adds typescript, @typescript/native-preview to 5 manifests`);
+    expect(el.textContent).not.toContain(`packages/a/package.json`);
+
+    const toggle = el.querySelector<HTMLButtonElement>(`button[aria-expanded]`)!;
+    expect(toggle.getAttribute(`aria-expanded`)).toBe(`false`);
+    toggle.click();
+    await nextTick();
+
+    expect(toggle.getAttribute(`aria-expanded`)).toBe(`true`);
+    expect(el.textContent).toContain(`typescript5 manifests`);
+    expect(el.textContent).toContain(`@typescript/native-preview1 manifest`);
+    for (const name of packages) {
+        expect(el.textContent).toContain(`packages/${name}/package.json`);
+    }
+});

@@ -260,6 +260,10 @@
             "noBranch": "aucune branche",
             "askAgent": "Demander à l'agent",
             "addsTo": "Ajoute {names} à {manifest}",
+            "addsAcross": "Ajoute {names} à {count} manifeste | Ajoute {names} à {count} manifestes",
+            "inManifests": "{count} manifeste | {count} manifestes",
+            "showManifests": "Afficher",
+            "hideManifests": "Masquer",
             "pickFile": "Fichier modifié",
             "reviewedOption": "✓ {label} (examiné)",
             "unmarkReviewed": "Ne plus marquer {label} comme examiné"

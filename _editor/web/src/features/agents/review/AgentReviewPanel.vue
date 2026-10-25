@@ -8,7 +8,6 @@ import {
     EmptyState,
     explorerColorClass,
     iconForEntry,
-    Notice,
     ResizeSeam,
     SegmentedControl,
     type Tip,
@@ -26,7 +25,6 @@ import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
-import { stopAgent } from "../../../models/fleet/agentActions";
 import { boxNameOf, openInSandbox } from "../../../models/fleet/fleetScope";
 import { CONFLICT_ICON, reasonCopy } from "../../../models/conversations/review/conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
@@ -38,8 +36,6 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { defaultReviewListWidth, MAX_REVIEW_LIST_WIDTH, MIN_REVIEW_LIST_WIDTH, useLayout } from "../../../workbench/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../workbench/window/uiScale";
 import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
-// Where the user's own conflict half is resolved: the Changes panel, the same deep-link the card and the badges use.
-import { openChanges } from "../../../models/changes/openChanges";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
 import DiffToolbar from "../../workspace/viewers/DiffToolbar.vue";
 import FileDiffPane from "../../workspace/viewers/FileDiffPane.vue";
@@ -48,16 +44,13 @@ import { useChangeGrouping } from "../../../models/workspace/changes/useChangeGr
 import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../../models/workspace/changes/changeWeight";
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
-import AgentConflictReport from "./AgentConflictReport.vue";
-import AgentIgnoredReport from "./AgentIgnoredReport.vue";
-import AgentScratchReport from "./AgentScratchReport.vue";
 import AgentHistoryChip from "./AgentHistoryChip.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import ReviewWaitLine from "./ReviewWaitLine.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
 import ReviewFileSwitcher from "./ReviewFileSwitcher.vue";
 import ReviewTotals from "./ReviewTotals.vue";
-import ReviewUncarriedNotes from "./ReviewUncarriedNotes.vue";
+import ReviewNotes from "./notes/ReviewNotes.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
@@ -590,25 +583,6 @@ const openInWorkspace = (): void => {
 
 // Kit's toolbar icon button, plus this panel's own disabled treatment.
 const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
-// A notice that needs no decision: one line under the bar, no box, so only the bar reads as something to act on.
-const NOTE_LINE = `mx-2 mt-1.5 flex shrink-0 items-center gap-1.5 px-2 text-2xs text-muted`;
-
-// What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
-const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
-
-// What landing the work takes on: per manifest that gained any, the dependency names it declares now and did not
-// before, labelled the way the rows are. This is where a new dependency is approved, since a conversation installs
-// freely in its own copy.
-const addedDependencies = computed(() =>
-    changes.repos.value.flatMap((group) =>
-        (group.addedDependencies ?? []).map((manifest) => ({
-            key: `${group.repo}\u0000${manifest.path}`,
-            label: group.repo === `root` ? manifest.path : `${group.repo}/${manifest.path}`,
-            added: manifest.added,
-        })),
-    ),
-);
-
 // The file list's width is the reviewer's own call (a flat repo vs. a deep monorepo), sized and persisted exactly
 // like the workspace explorer's edge (drag, double-click reset, ResizeSeam). The seam speaks in pointer
 // coordinates while the stored width is in app pixels, so this computed is where the two meet.
@@ -621,76 +595,18 @@ const seamWidth = computed<number>({
 <template>
     <PlainResultReview v-if="maker" :agent-id="agentId" :changes="changes" :at="at" />
     <div v-else ref="panel" class="flex min-h-0 flex-1 flex-col">
-        <Notice v-if="changes.error.value" tone="danger" size="sm" class="mx-2 mt-2 shrink-0">
-            <span class="block font-medium">{{ t(`agents.agentReviewPanel.couldntReadAgentsChanges`) }}</span>
-            <span class="block break-words text-muted">{{ changes.error.value }}</span>
-        </Notice>
-
-        <!-- The one decision a refused land leaves, first: what conflicts, why, and what happens next. -->
-        <AgentConflictReport
-            v-if="changes.conflicts.value !== undefined && changes.conflicts.value.length > 0"
-            class="mx-2 mt-2"
-            :conflicts="changes.conflicts.value"
+        <!-- Everything said above the review, in one box that stops short of the screen. -->
+        <ReviewNotes
+            :agent-id="agentId"
+            :at="at"
+            :changes="changes"
             :streaming="streaming"
             :writing="writing"
-            :busy="changes.actionBusy.value"
-            :asked="changes.asked.value"
-            :queued="changes.fixQueued.value"
-            :box="remoteName"
-            @merge="changes.land('merge')"
-            @settle="changes.settle()"
-            @commit="openChanges"
-            @save-settings="(paths: readonly string[]) => changes.land(`check`, undefined, false, paths)"
-            @stop="stopAgent(agentId, at)"
-            @cancel="changes.cancelFix()"
-            @cross="cross"
+            :remote-name="remoteName"
             @chat="emit('chat')"
+            @cross="cross"
             @show="showConflicts"
         />
-
-        <!-- What a merge land left behind: everything else applied, these files carry markers to finish in the workspace. -->
-        <div v-if="resolvingPaths.length > 0" :class="NOTE_LINE">
-            <Icon name="info-circle" class="shrink-0 text-2xs text-info" />
-            <span class="min-w-0 flex-1 truncate" v-tooltip.bottom.overflow="resolvingPaths.join(`, `)">{{
-                t(`agents.agentReviewPanel.markersLeft`, { count: resolvingPaths.length }, resolvingPaths.length)
-            }}</span>
-            <button type="button" class="shrink-0 text-link underline-offset-2 hover:underline" @click="openChanges">
-                {{ t(`agents.agentConflictReport.openChanges`) }}
-            </button>
-        </div>
-
-        <!-- Work no land carries: stranded on another branch, or written where no repository stood. -->
-        <ReviewUncarriedNotes :agent-id="agentId" :at="at" :changes="changes" />
-
-        <!-- What no land carries: files that look like scratch, left in the conversation's copy until included or deleted. -->
-        <AgentScratchReport
-            v-if="changes.scratch.value.length > 0"
-            class="mx-2 mt-2"
-            :scratch="changes.scratch.value"
-            :busy="changes.actionBusy.value"
-            :streaming="streaming"
-            @include="changes.includeScratch"
-            @delete="changes.deleteScratch"
-        />
-
-        <!-- What no land carries because the repository ignores it (a render in out/): copied into the owner's tree on a
-             press, beside git rather than through it. -->
-        <AgentIgnoredReport
-            v-if="changes.ignored.value.length > 0"
-            class="mx-2 mt-2"
-            :ignored="changes.ignored.value"
-            :busy="changes.actionBusy.value"
-            :streaming="streaming"
-            @copy="changes.copyIgnored"
-        />
-
-        <!-- What landing this work takes on: one quiet line per manifest. Nothing is wrong, so nothing is tinted. -->
-        <div v-for="manifest in addedDependencies" :key="manifest.key" :class="NOTE_LINE">
-            <Icon name="box" class="shrink-0 text-2xs text-subtle" />
-            <span class="min-w-0 flex-1 truncate" v-tooltip.bottom.overflow="manifest.added.join(`, `)">{{
-                t(`agents.agentReviewPanel.addsTo`, { names: manifest.added.join(`, `), manifest: manifest.label })
-            }}</span>
-        </div>
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
         <!-- The review's frame and one line for the wait, the same one AgentDetail's own wait draws; a failed read is said above. -->

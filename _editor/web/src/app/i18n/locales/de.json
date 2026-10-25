@@ -260,6 +260,10 @@
             "noBranch": "kein Branch",
             "askAgent": "Agent fragen",
             "addsTo": "Fügt {names} zu {manifest} hinzu",
+            "addsAcross": "Fügt {names} zu {count} Manifest hinzu | Fügt {names} zu {count} Manifesten hinzu",
+            "inManifests": "{count} Manifest | {count} Manifeste",
+            "showManifests": "Zeigen",
+            "hideManifests": "Ausblenden",
             "pickFile": "Geänderte Datei",
             "reviewedOption": "✓ {label} (geprüft)",
             "unmarkReviewed": "{label} nicht mehr als geprüft markieren"

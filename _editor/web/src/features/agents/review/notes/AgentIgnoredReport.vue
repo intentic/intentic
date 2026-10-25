@@ -4,7 +4,7 @@ import { Button, explorerColorClass, formatBytes, iconForEntry, useExplorerStyle
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, ref } from "vue";
-import ChangeRowName from "../../../components/ChangeRowName.vue";
+import ChangeRowName from "../../../../components/ChangeRowName.vue";
 
 // What the conversation made for its owner that the repository's ignore rules keep out of every land: a render in
 // `out/`, a report as a PDF. The daemon lists only files a person opens, so build output never reaches this card.

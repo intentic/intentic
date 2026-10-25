@@ -3,8 +3,8 @@ import type { Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { OutsideCheckout } from "@intentic/sandbox-contract/schemas/git/git";
 import { computed } from "vue";
-import { draftStrayAsk } from "../../../models/fleet/agentActions";
-import type { useAgentChanges } from "./useAgentChanges";
+import { draftStrayAsk } from "../../../../models/fleet/agentActions";
+import type { useAgentChanges } from "../useAgentChanges";
 
 // The review's two quiet lines about work no land carries (AgentReviewPanel draws them under its bar): copies stranded
 // on a branch of their own, and files written where no checkout of a repository stood.

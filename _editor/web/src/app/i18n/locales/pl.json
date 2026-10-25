@@ -260,6 +260,10 @@
             "noBranch": "brak gałęzi",
             "askAgent": "Poproś agenta",
             "addsTo": "Dodaje {names} do {manifest}",
+            "addsAcross": "Dodaje {names} do {count} manifestu | Dodaje {names} do {count} manifestów | Dodaje {names} do {count} manifestów",
+            "inManifests": "{count} manifest | {count} manifesty | {count} manifestów",
+            "showManifests": "Pokaż",
+            "hideManifests": "Ukryj",
             "pickFile": "Zmieniony plik",
             "reviewedOption": "✓ {label} (przejrzany)",
             "unmarkReviewed": "Cofnij oznaczenie {label} jako przejrzanego"

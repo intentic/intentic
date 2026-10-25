@@ -260,6 +260,10 @@
             "noBranch": "no branch",
             "askAgent": "Ask the agent",
             "addsTo": "Adds {names} to {manifest}",
+            "addsAcross": "Adds {names} to {count} manifest | Adds {names} to {count} manifests",
+            "inManifests": "{count} manifest | {count} manifests",
+            "showManifests": "Show",
+            "hideManifests": "Hide",
             "pickFile": "Changed file",
             "reviewedOption": "✓ {label} (reviewed)",
             "unmarkReviewed": "Unmark {label} as reviewed"
