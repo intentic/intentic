@@ -248,8 +248,9 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
 
             <p v-if="scan.outcome === `partial`" class="text-2xs text-warning">{{ t(`sandbox.sandboxStorageCard.partial`) }}</p>
 
-            <!-- Shared columns stay aligned. A narrow card gives names and sizes their own line, with bars and actions below. -->
-            <ul class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 @sm/storage:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+            <!-- Shared columns stay aligned. A narrow card gives names and sizes their own line, with bars and actions below.
+                 The last column is the rows' chevron, after the action, where every row in the app keeps it. -->
+            <ul class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 @sm/storage:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto]">
                 <li
                     v-for="(row, index) in shown"
                     :key="row.category.id"
@@ -261,7 +262,6 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         :aria-expanded="open.has(row.category.id)"
                         @click="toggle(row.category.id)"
                     >
-                        <Icon :name="open.has(row.category.id) ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
                         <span class="min-w-0 break-words text-xs font-medium text-content">{{ row.text.label }}</span>
                     </button>
                     <Meter
@@ -298,8 +298,18 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                             {{ t(`sandbox.sandboxStorageCard.waiting`) }}
                         </span>
                     </div>
+                    <!-- The name button is the keyboard's way in; this is the same toggle for a pointer at the row's end. -->
+                    <button
+                        type="button"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        class="col-start-3 row-start-1 flex cursor-pointer items-center justify-end text-subtle transition-colors hover:text-content @sm/storage:col-start-5"
+                        @click="toggle(row.category.id)"
+                    >
+                        <Icon name="chevron-right" class="text-2xs transition-transform" :class="open.has(row.category.id) ? `rotate-90` : ``" />
+                    </button>
                     <!-- Opened, a row says why the space is held and shows its largest parts: the evidence for its size. -->
-                    <div v-if="open.has(row.category.id)" class="col-span-full flex flex-col gap-1.5 pt-1 pb-2 pl-4">
+                    <div v-if="open.has(row.category.id)" class="col-span-full flex flex-col gap-1.5 pt-1 pb-2">
                         <p class="text-2xs leading-relaxed text-muted">{{ row.text.reason }}</p>
                         <ul v-if="row.category.items.length > 0" class="flex flex-col gap-0.5">
                             <li v-for="item in row.category.items" :key="item.path" class="flex min-w-0 items-center gap-3 text-2xs">
@@ -337,7 +347,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                         note: t(`sandbox.sandboxStorageCard.systemProgramsFilesystem`),
                     }"
                 >
-                    <span class="min-w-0 break-words pl-4 @sm/storage:col-span-2">{{ t(`sandbox.sandboxStorageCard.uncounted`) }}</span>
+                    <span class="min-w-0 break-words @sm/storage:col-span-2">{{ t(`sandbox.sandboxStorageCard.uncounted`) }}</span>
                     <span class="text-right tabular-nums">{{ formatBytes(uncounted) }}</span>
                 </li>
             </ul>

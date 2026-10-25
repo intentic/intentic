@@ -169,13 +169,18 @@ const removeSkill = (skill: SkillSummary): void => {
 
                 <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
                 <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">
+                    <!-- Inset and chevron as the skill rows above it: the label starts at their lead, the chevron sits in their chevrons' column. -->
                     <summary
-                        class="flex cursor-pointer list-none items-center gap-2.5 py-2.5 pl-2.5 pr-3 transition-colors hover:bg-content/4 [&::-webkit-details-marker]:hidden"
+                        class="flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 transition-colors hover:bg-content/4 [&::-webkit-details-marker]:hidden"
                     >
-                        <Icon name="chevron-right" aria-hidden="true" class="shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90" />
                         <span class="text-sm text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
                         <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
                         <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">{{ t(`sandbox.agentSkills.toDropOneDrop`) }}</span>
+                        <Icon
+                            name="chevron-right"
+                            aria-hidden="true"
+                            class="ml-auto shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90"
+                        />
                     </summary>
                     <div class="divide-y divide-line-subtle border-t border-line-subtle">
                         <SkillRow

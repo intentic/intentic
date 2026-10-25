@@ -97,7 +97,6 @@ const undo = (): void => {
                                 :aria-label="t(`sandbox.agentPrivacyShield.rule.edit`, { rule: row.rule.title })"
                                 @click="editing = editing === row.rule.id ? undefined : row.rule.id"
                             >
-                                <Icon :name="editing === row.rule.id ? `chevron-down` : `chevron-right`" class="shrink-0 text-3xs text-subtle" />
                                 <span class="min-w-0">
                                     <span class="flex items-baseline gap-1.5">
                                         <span class="truncate text-xs text-content">{{ row.rule.title }}</span>
@@ -116,12 +115,24 @@ const undo = (): void => {
                                     }}</span>
                                 </span>
                             </button>
-                            <ToggleSwitch
-                                :model-value="row.rule.on"
-                                :disabled="!ready"
-                                :aria-label="t(`sandbox.agentPrivacyShield.rule.on`, { rule: row.rule.title })"
-                                @update:model-value="(on: boolean) => setOn(row.rule.id, on)"
-                            />
+                            <span class="flex shrink-0 items-center gap-3">
+                                <ToggleSwitch
+                                    :model-value="row.rule.on"
+                                    :disabled="!ready"
+                                    :aria-label="t(`sandbox.agentPrivacyShield.rule.on`, { rule: row.rule.title })"
+                                    @update:model-value="(on: boolean) => setOn(row.rule.id, on)"
+                                />
+                                <!-- The disclosure mark sits last, after the switch, as on every row in the app; the title button is its keyboard way in. -->
+                                <button
+                                    type="button"
+                                    tabindex="-1"
+                                    aria-hidden="true"
+                                    class="flex shrink-0 cursor-pointer items-center text-subtle transition-colors hover:text-content"
+                                    @click="editing = editing === row.rule.id ? undefined : row.rule.id"
+                                >
+                                    <Icon name="chevron-right" class="text-2xs transition-transform" :class="editing === row.rule.id ? `rotate-90` : ``" />
+                                </button>
+                            </span>
                         </div>
                         <PrivacyRuleEditor
                             v-if="editing === row.rule.id"

@@ -33,7 +33,8 @@ const questions = computed(() => [
                     class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-xs font-medium text-content transition-colors hover:bg-content/[0.03] [&::-webkit-details-marker]:hidden"
                 >
                     {{ item.q }}
-                    <Icon name="chevron-down" class="shrink-0 text-sm text-subtle transition-transform group-open:rotate-180" />
+                    <!-- The app's one disclosure mark: a chevron-right at the trailing edge that turns down when open. -->
+                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-transform group-open:rotate-90" aria-hidden="true" />
                 </summary>
                 <p class="px-4 py-3.5 text-xs leading-relaxed text-muted">{{ item.a }}</p>
             </details>

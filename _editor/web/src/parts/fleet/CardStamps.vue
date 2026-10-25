@@ -139,12 +139,20 @@ const runAgain = (stamp: Stamp): void => {
         <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end" :restore-focus="false">
             <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col p-1 text-left" data-stamps-card @pointerenter="onCardEnter" @pointerleave="onLeave">
                 <SectionHeader :label="t(`agents.stamps.heading`)" density="dense" class="px-1.5 py-0.5" />
-                <div v-for="stamp in stamps" :key="stamp.kind" class="flex items-start gap-1" data-stamp-row :data-stamp-kind="stamp.kind">
+                <!-- The hover wash is the whole line's, so it also covers the chevron, which sits last, after "Again". -->
+                <div
+                    v-for="stamp in stamps"
+                    :key="stamp.kind"
+                    class="flex items-start gap-1 rounded-md"
+                    :class="stamp.by === undefined ? undefined : `hover:bg-overlay`"
+                    data-stamp-row
+                    :data-stamp-kind="stamp.kind"
+                >
                     <component
                         :is="stamp.by === undefined ? `div` : `button`"
                         :type="stamp.by === undefined ? undefined : `button`"
                         class="flex min-w-0 flex-1 items-start gap-1.5 rounded-md px-1.5 py-1 text-left"
-                        :class="stamp.by === undefined ? undefined : `cursor-pointer hover:bg-overlay`"
+                        :class="stamp.by === undefined ? undefined : `cursor-pointer`"
                         v-tooltip.top="stamp.by === undefined ? undefined : t(`agents.stamps.openTitle`)"
                         @click="openCheck(stamp)"
                     >
@@ -167,7 +175,6 @@ const runAgain = (stamp: Stamp): void => {
                                 <Icon name="eye-slash" class="shrink-0 text-warning" />{{ unviewedOf(stamp) }}
                             </span>
                         </span>
-                        <Icon v-if="stamp.by !== undefined" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                     </component>
                     <button
                         v-if="offersAgain(stamp)"
@@ -178,6 +185,17 @@ const runAgain = (stamp: Stamp): void => {
                         @click="runAgain(stamp)"
                     >
                         {{ t(`agents.stamps.again`) }}
+                    </button>
+                    <!-- The same "open its chat" as the row's button, for a pointer at the line's end; the row's button is the keyboard's. -->
+                    <button
+                        v-if="stamp.by !== undefined"
+                        type="button"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        class="mt-1.5 shrink-0 cursor-pointer pr-1.5 text-subtle"
+                        @click="openCheck(stamp)"
+                    >
+                        <Icon name="chevron-right" class="text-2xs" />
                     </button>
                 </div>
             </div>

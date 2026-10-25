@@ -529,6 +529,10 @@ const pickedTier = ref(`collaborator`);
                             <template #lead><Icon name="cog" class="text-xs text-subtle" /></template>
                             <template #below><span>unused</span></template>
                         </DisclosureRow>
+                        <DisclosureRow title="With verbs" description="Facts, then verbs, then the chevron, always last">
+                            <template #meta><span>2h ago</span></template>
+                            <template #control><Button size="small" tier="boring" label="Copy" /></template>
+                        </DisclosureRow>
                         <DisclosureRow title="Nothing behind it" description="disabled: no arrow, no hover, no tab stop" disabled>
                             <template #lead><Icon name="box" class="text-xs text-subtle" /></template>
                         </DisclosureRow>

@@ -24,8 +24,8 @@ const {
     /** Forwarded to <Row>: `face` sizes `#lead` for a <PersonaFace> and pays for it out of the row's padding. */
     lead?: `icon` | `face`;
     // What the press target is (pressing the row always opens it; this only decides the button's edges).
-    // `header`: lead + title + description are one button; the chevron sits in the trailing cluster like
-    // <Row chevron>. `pair`: only the trailing chevron is; the headline's own controls (a link, a button)
+    // `header`: lead + title + description are one button; the chevron is the last thing on the row, after
+    // `#control`, exactly where <Row chevron> draws its own. `pair`: only the trailing chevron is; the headline's own controls (a link, a button)
     // keep their own clicks (see <Row>'s `headlineGuard`).
     hit?: `header` | `pair`;
     /** `rail`: evidence about this row, hangs off its title. `drawer`: a place of its own, full width, own boundary. */
@@ -146,18 +146,20 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
 
             <template v-if="$slots[`title`]" #title><slot name="title" /></template>
             <template v-if="$slots[`description`]" #description><slot name="description" /></template>
-            <!-- Trailing cluster matches <Row chevron>: facts, then the disclosure mark at the right edge. -->
-            <template v-if="$slots[`meta`] || !disabled" #meta>
-                <slot name="meta" />
+            <template v-if="$slots[`meta`]" #meta><slot name="meta" /></template>
+            <template v-if="$slots[`control`]" #control><slot name="control" /></template>
+            <!-- The disclosure mark takes <Row chevron>'s place: last in the trailing cluster, after the verbs, at the row's right edge. -->
+            <template v-if="!disabled" #chevron>
                 <!-- In `pair` this button IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
                 <component
-                    :is="hit !== `header` && !disabled ? `button` : `span`"
-                    :type="hit !== `header` && !disabled ? `button` : undefined"
-                    :aria-expanded="hit !== `header` && !disabled ? open : undefined"
-                    :aria-controls="hit !== `header` && !disabled ? bodyId : undefined"
-                    :aria-label="hit !== `header` && !disabled ? toggleLabel : undefined"
+                    :is="hit !== `header` ? `button` : `span`"
+                    :type="hit !== `header` ? `button` : undefined"
+                    :aria-expanded="hit !== `header` ? open : undefined"
+                    :aria-controls="hit !== `header` ? bodyId : undefined"
+                    :aria-label="hit !== `header` ? toggleLabel : undefined"
+                    class="flex shrink-0 items-center"
                     :class="
-                        hit !== `header` && !disabled
+                        hit !== `header`
                             ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`
                             : ``
                     "
@@ -165,7 +167,6 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                 >
                     <!-- Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get backwards. -->
                     <Icon
-                        v-if="!disabled"
                         name="chevron-right"
                         class="shrink-0 text-subtle transition group-hover:text-muted"
                         :class="[chevronSize, open ? `rotate-90` : ``]"
@@ -173,7 +174,6 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
                     />
                 </component>
             </template>
-            <template v-if="$slots[`control`]" #control><slot name="control" /></template>
 
             <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the lead so it starts
                  flush under the title. No rule beside it: the open row's wash and that indent already say whose evidence it is. -->

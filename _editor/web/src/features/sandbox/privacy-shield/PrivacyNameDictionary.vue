@@ -289,7 +289,6 @@ const INERT = `pointer-events-none opacity-60`;
                                     :aria-expanded="editing === row.list.id"
                                     @click="editing = editing === row.list.id ? undefined : row.list.id"
                                 >
-                                    <Icon :name="editing === row.list.id ? `chevron-down` : `chevron-right`" class="shrink-0 text-3xs text-subtle" />
                                     <span class="min-w-0">
                                         <span class="block truncate text-xs text-content">{{ row.list.title }}</span>
                                         <span class="block text-2xs text-muted">{{ row.kind }}</span>
@@ -305,6 +304,16 @@ const INERT = `pointer-events-none opacity-60`;
                                         :aria-label="t(`sandbox.agentPrivacyShield.dictionaryListOn`, { list: row.list.title })"
                                         @update:model-value="(on: boolean) => writeList(row.list.id, (list) => ({ ...list, on }))"
                                     />
+                                    <!-- The disclosure mark sits last, after the switch, as on every row in the app; the title button is its keyboard way in. -->
+                                    <button
+                                        type="button"
+                                        tabindex="-1"
+                                        aria-hidden="true"
+                                        class="flex shrink-0 cursor-pointer items-center text-subtle transition-colors hover:text-content"
+                                        @click="editing = editing === row.list.id ? undefined : row.list.id"
+                                    >
+                                        <Icon name="chevron-right" class="text-2xs transition-transform" :class="editing === row.list.id ? `rotate-90` : ``" />
+                                    </button>
                                 </span>
                             </div>
                             <PrivacyOwnListEditor

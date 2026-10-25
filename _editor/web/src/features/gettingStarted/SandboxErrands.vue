@@ -82,7 +82,6 @@ const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sand
                     <Icon name="wrench" class="text-xs" />
                 </span>
                 <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.words.finishSettingUp`, { name: option.name }) }}</span>
-                <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
                 <!-- In flow, not overlaid, so hovering never shifts the text; `.prevent` stops the anchor firing too. -->
                 <Icon
                     name="trash"
@@ -90,6 +89,8 @@ const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sand
                     v-tooltip.top="t(`ui.action.remove`)"
                     class="shrink-0 text-xs opacity-0 transition hover:text-danger group-hover:opacity-60"
                 />
+                <!-- Last, after the verb, so it stays in the same column as every other row's chevron in this menu. -->
+                <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
             </RouterLink>
         </template>
 

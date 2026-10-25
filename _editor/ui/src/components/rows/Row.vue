@@ -4,7 +4,15 @@ import { computed } from "vue";
 import { FACE_SIZES } from "../brand/personaFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
-import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
+import {
+    ROW_TIERS as TIERS,
+    ROW_TONES as TONES,
+    ROW_TOGGLE_SIZES,
+    type RowDensity,
+    type RowTone,
+    useRowDensity,
+    useRowFlushInline,
+} from "./row.js";
 
 const {
     as = `div`,
@@ -26,6 +34,9 @@ const {
     /** `button` for a row that is PICKED (rails, selectable lists): it's what puts the row on the tab order. */
     as?: `div` | `label` | `button`;
     interactive?: boolean;
+    // The row's "this opens" mark. Always the LAST thing on the row, after `#control`: it belongs to the whole row,
+    // not to any one action, so it sits in one column at the trailing edge whether a row has no verbs or five. A row
+    // that draws its own (a rotating disclosure toggle) passes it as `#chevron`, which takes the same place.
     chevron?: boolean;
     tone?: RowTone;
     // Leave unset inside a <RowGroup> (it publishes the tier); outside one this falls back to `comfortable`,
@@ -177,7 +188,7 @@ const picked = as === `button`;
         <!-- `ml-auto` only bites on the line this wraps onto, where it keeps the cluster on the row's right edge rather than under the icon. -->
         <!-- Never wider than the row: a cluster that outgrows even a line of its own (a member's role, areas and remove on a phone) breaks between its own items instead of running off the card's edge. -->
         <div
-            v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
+            v-if="$slots[`meta`] || $slots[`control`] || $slots[`chevron`] || chevron || href !== undefined"
             class="flex max-w-full flex-wrap items-center justify-end gap-2"
             :class="wideControl ? `grow basis-auto` : `ml-auto shrink-0`"
         >
@@ -187,7 +198,16 @@ const picked = as === `button`;
             </div>
             <!-- `display: contents` keeps the cluster's layout invisible while still catching clicks (`.stop`), so a control here never also toggles the row. -->
             <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
-            <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
+            <!-- Last, after every verb: the trailing edge is where every row in the app keeps its chevron, so they line up down a list. -->
+            <slot name="chevron">
+                <Icon
+                    v-if="chevron || href !== undefined"
+                    name="chevron-right"
+                    class="shrink-0 text-subtle transition group-hover:text-muted"
+                    :class="ROW_TOGGLE_SIZES[tier]"
+                    aria-hidden="true"
+                />
+            </slot>
         </div>
         <!-- A line of its own under the headline: the wrap spaces it by `gap-y-2`, and its margin makes up the rest of the 0.75rem. -->
         <div v-if="$slots[`below`]" class="mt-1 min-w-0 basis-full">
