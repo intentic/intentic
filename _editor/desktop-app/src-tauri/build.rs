@@ -82,6 +82,7 @@ const COMMANDS: &[&str] = &[
     "local_open_path",
     "local_recents",
     "local_forget_recent",
+    "local_unlink_folder",
     "local_roster",
     "local_title",
     "account_relay",

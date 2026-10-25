@@ -346,9 +346,7 @@ fn face_of(
         "path": granted.root,
         "sandbox": sandbox.has,
     });
-    if let Some(part_of) = &sandbox.part_of {
-        face["partOf"] = serde_json::Value::String(part_of.clone());
-    }
+    set_holder(&mut face, sandbox);
     if let Some(file) = &granted.file {
         face["file"] = serde_json::Value::String(file.clone());
     }
@@ -358,23 +356,103 @@ fn face_of(
     face
 }
 
+/// `sandbox` written into a face: `sandbox` always, `partOf`, `otherAccount` and `owner` only when they are so (the
+/// page reads an absent one as not), and taken out again when they no longer are ([`holders_changed`]).
+fn set_holder(face: &mut serde_json::Value, sandbox: &FolderSandbox) {
+    let Some(face) = face.as_object_mut() else {
+        return;
+    };
+    face.insert("sandbox".to_string(), serde_json::Value::Bool(sandbox.has));
+    let mut optional = |key: &str, value: Option<serde_json::Value>| match value {
+        Some(value) => {
+            face.insert(key.to_string(), value);
+        }
+        None => {
+            face.remove(key);
+        }
+    };
+    optional(
+        "partOf",
+        sandbox.part_of.clone().map(serde_json::Value::String),
+    );
+    optional(
+        "otherAccount",
+        sandbox
+            .other_account
+            .then_some(serde_json::Value::Bool(true)),
+    );
+    optional(
+        "owner",
+        sandbox.owner.clone().map(serde_json::Value::String),
+    );
+}
+
 /// Whether a window's folder is in a sandbox, and the folder it went in with when that is one around it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FolderSandbox {
     pub has: bool,
     /// The name of the folder around this one that went into the sandbox: this one is in it as part of that one.
     pub part_of: Option<String>,
+    /// The folder is synced with a sandbox of another account than the one signed in (project.rs `holder`): its button
+    /// says whose rather than offering a second sandbox for the same files. `has` is false then.
+    pub other_account: bool,
+    /// That account, when this app has seen it list the sandbox.
+    pub owner: Option<String>,
 }
 
 /// [`FolderSandbox`] for the folder at `root`, read off the projects this machine remembers (project.rs).
 fn folder_sandbox(app: &AppHandle, root: &Path) -> FolderSandbox {
-    match crate::project::covering_project(app, root) {
-        None => FolderSandbox::default(),
-        Some((project, inside)) => FolderSandbox {
+    let part_of = |project: &crate::state::Project, inside: &str| {
+        (!inside.is_empty()).then(|| crate::project::folder_name(Path::new(&project.path)))
+    };
+    if let Some((project, inside)) = crate::project::covering_project(app, root) {
+        return FolderSandbox {
             has: true,
-            part_of: (!inside.is_empty())
-                .then(|| crate::project::folder_name(Path::new(&project.path))),
+            part_of: part_of(&project, &inside),
+            ..FolderSandbox::default()
+        };
+    }
+    match crate::project::Holders::of(app).other_covering(root) {
+        None => FolderSandbox::default(),
+        Some((project, inside, owner)) => FolderSandbox {
+            has: false,
+            part_of: part_of(&project, &inside),
+            other_account: true,
+            owner,
         },
+    }
+}
+
+/// Who is signed in changed (a roster, a sign-in, a sign-out): every folder window whose folder now reads differently
+/// (its own sandbox, another account's, or none) keeps the new reading for its reloads and hears it as
+/// `intentic:holder`, so a folder's button follows an account switch without a reload.
+pub fn holders_changed(app: &AppHandle) {
+    let files = app.state::<LocalFiles>();
+    let folders: Vec<(String, PathBuf)> = files
+        .windows
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, grant)| grant.folder)
+        .map(|(label, grant)| (label.clone(), grant.root.clone()))
+        .collect();
+    for (label, root) in folders {
+        let sandbox = folder_sandbox(app, &root);
+        let face = {
+            let mut windows = files.windows.lock().unwrap();
+            let Some(grant) = windows.get_mut(&label) else {
+                continue;
+            };
+            let before = grant.face.clone();
+            set_holder(&mut grant.face, &sandbox);
+            if grant.face == before {
+                continue;
+            }
+            grant.face.clone()
+        };
+        if let Some(window) = app.get_webview(&label) {
+            let _ = window.eval(face_held(&face));
+        }
     }
 }
 
@@ -422,6 +500,19 @@ fn face_pointed(face: &serde_json::Value) -> String {
 fn face_sandboxed(face: &serde_json::Value) -> String {
     format!(
         "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.dispatchEvent(new CustomEvent('intentic:sandbox', {{ detail: {{ sandbox: true }} }})); }})();"
+    )
+}
+
+/// A running page whose folder reads differently since an account changed ([`holders_changed`]): its face is kept for
+/// its reloads, and the page hears the new reading as `intentic:holder`.
+fn face_held(face: &serde_json::Value) -> String {
+    let detail = serde_json::json!({
+        "sandbox": face["sandbox"],
+        "otherAccount": face.get("otherAccount").cloned().unwrap_or(serde_json::Value::Bool(false)),
+        "owner": face.get("owner").cloned().unwrap_or(serde_json::Value::Null),
+    });
+    format!(
+        "(function () {{ try {{ window.sessionStorage.setItem(\"{FACE_KEY}\", JSON.stringify({face})); }} catch (error) {{}} window.dispatchEvent(new CustomEvent('intentic:holder', {{ detail: {detail} }})); }})();"
     )
 }
 
@@ -1358,11 +1449,22 @@ pub async fn local_open_path(app: AppHandle, path: String) -> Result<(), String>
 #[tauri::command]
 pub async fn local_recents(app: AppHandle) -> Result<Vec<RecentView>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        crate::state::recent_views(state.recents(), &state.projects(), Path::exists)
+        let holders = crate::project::Holders::of(&app);
+        crate::state::recent_views(app.state::<AppState>().recents(), &holders, Path::exists)
     })
     .await
     .map_err(|error| format!("the recents could not be read: {error}"))
+}
+
+/// Home's Unlink on a folder another account's sandbox syncs (project.rs `unlink_other`): off the main thread, since
+/// the machine agent is asked.
+#[tauri::command]
+pub async fn local_unlink_folder(app: AppHandle, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::project::unlink_other(&app, Path::new(&path))
+    })
+    .await
+    .map_err(|error| format!("unlinking stopped: {error}"))?
 }
 
 #[tauri::command]
@@ -1519,7 +1621,7 @@ mod tests {
         };
         let held = FolderSandbox {
             has: true,
-            part_of: None,
+            ..FolderSandbox::default()
         };
         let face = face_of(4100, &grant, &folder, &held, false);
         assert_eq!(face["daemonUrl"], "http://127.0.0.1:4100");
@@ -1530,10 +1632,35 @@ mod tests {
         let covered = FolderSandbox {
             has: true,
             part_of: Some("code".into()),
+            ..FolderSandbox::default()
         };
         assert_eq!(
             face_of(4100, &grant, &folder, &covered, false)["partOf"],
             "code"
+        );
+        assert!(face.get("otherAccount").is_none(), "{face}");
+        // A folder another account's sandbox syncs says whose, and that it is not this account's to open.
+        let elsewhere = FolderSandbox {
+            other_account: true,
+            owner: Some("ada@example.com".into()),
+            ..FolderSandbox::default()
+        };
+        let mut told = face_of(4100, &grant, &folder, &elsewhere, false);
+        assert_eq!(
+            (&told["sandbox"], &told["otherAccount"], &told["owner"]),
+            (&false.into(), &true.into(), &"ada@example.com".into())
+        );
+        // The account it belongs to signs in: the face is the folder's own sandbox's, and says nothing of another.
+        set_holder(&mut told, &held);
+        assert_eq!(told["sandbox"], true);
+        assert!(
+            told.get("otherAccount").is_none() && told.get("owner").is_none(),
+            "{told}"
+        );
+        let heard = face_held(&face_of(4100, &grant, &folder, &elsewhere, false));
+        assert!(
+            heard.contains(r#"new CustomEvent('intentic:holder', { detail: {"otherAccount":true,"owner":"ada@example.com","sandbox":false} })"#),
+            "{heard}"
         );
         let document = Granted {
             root: "/home/me/app".into(),

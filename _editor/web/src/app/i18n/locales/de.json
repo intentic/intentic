@@ -4947,7 +4947,12 @@
             "dropFilesToAdd": "Dateien ablegen, um sie zu {name} hinzuzufügen",
             "opening": "{name} wird geöffnet…",
             "openingSlow": "Der Ordner wird noch gelesen. Bei einem großen Ordner oder einem in WSL dauert das beim ersten Mal etwas.",
-            "ownSandbox": "Eigene Sandbox"
+            "ownSandbox": "Eigene Sandbox",
+            "signInAs": "Als {owner} anmelden",
+            "otherAccount": "Gehört einem anderen Konto",
+            "otherAccountTitle": "Die Sandbox gehört {owner}",
+            "otherAccountUnknownTitle": "Die Sandbox gehört einem anderen Konto",
+            "otherAccountNote": "Sie sind mit einem anderen Konto angemeldet. Beim Wechseln werden Sie gefragt, welches Sie verwenden möchten."
         },
         "folderMenu": {
             "switchFolder": "{name}: Einen anderen Ordner öffnen",
@@ -4998,7 +5003,21 @@
             "openedHere": "Hier schon geöffnet",
             "privacy": "Im Verlauf Ihrer Werkzeuge auf diesem Computer gefunden. Nichts verlässt ihn.",
             "hide": "Diese Liste ausblenden",
-            "show": "Zuletzt verwendete Projekte anzeigen"
+            "show": "Zuletzt verwendete Projekte anzeigen",
+            "sandbox": "Sandbox",
+            "otherAccount": "Anderes Konto",
+            "otherAccountTip": "Gehört {owner}",
+            "otherAccountUnknownTip": "Gehört einem Konto, das nicht angemeldet ist",
+            "signInToOpen": "Melden Sie sich an, um sie zu öffnen",
+            "otherLead": "Dieser Ordner wird mit einer Sandbox von {owner} synchronisiert. Sie sind als {current} angemeldet und können sie daher hier nicht öffnen.",
+            "otherLeadNoCurrent": "Dieser Ordner wird mit einer Sandbox von {owner} synchronisiert, daher können Sie sie hier nicht öffnen.",
+            "otherLeadUnknown": "Dieser Ordner wird mit einer Sandbox eines Kontos synchronisiert, das hier nicht angemeldet ist, daher können Sie sie hier nicht öffnen.",
+            "switchTo": "Zu {owner} wechseln",
+            "switchAccount": "Konto wechseln",
+            "openFiles": "Nur die Dateien öffnen",
+            "unlink": "Von dieser Sandbox trennen…",
+            "unlinkConfirm": "Trennen",
+            "unlinkNote": "Der Ordner wird nicht mehr mit dieser Sandbox synchronisiert. Beide behalten ihre Dateien, und der Ordner kann eine eigene Sandbox bekommen."
         },
         "project": {
             "dialogTitle": "Mit einem Agenten an {name} arbeiten",

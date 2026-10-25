@@ -4947,7 +4947,12 @@
             "dropFilesToAdd": "Suelta archivos para añadirlos a {name}",
             "opening": "Abriendo {name}…",
             "openingSlow": "Aún leyendo la carpeta. Si es grande o está en WSL, puede tardar un poco la primera vez.",
-            "ownSandbox": "Su propio sandbox"
+            "ownSandbox": "Su propio sandbox",
+            "signInAs": "Iniciar sesión como {owner}",
+            "otherAccount": "Pertenece a otra cuenta",
+            "otherAccountTitle": "Su sandbox pertenece a {owner}",
+            "otherAccountUnknownTitle": "Su sandbox pertenece a otra cuenta",
+            "otherAccountNote": "Has iniciado sesión con otra cuenta. Al cambiar se te pregunta cuál usar."
         },
         "folderMenu": {
             "switchFolder": "{name}: abrir otra carpeta",
@@ -4998,7 +5003,21 @@
             "openedHere": "Ya se ha abierto aquí",
             "privacy": "Encontrados en el historial de tus herramientas en este ordenador. Nada sale de él.",
             "hide": "Ocultar esta lista",
-            "show": "Mostrar proyectos recientes"
+            "show": "Mostrar proyectos recientes",
+            "sandbox": "Sandbox",
+            "otherAccount": "Otra cuenta",
+            "otherAccountTip": "Pertenece a {owner}",
+            "otherAccountUnknownTip": "Pertenece a una cuenta que no ha iniciado sesión",
+            "signInToOpen": "Inicia sesión para abrirlo",
+            "otherLead": "Esta carpeta se sincroniza con un sandbox de {owner}. Has iniciado sesión como {current}, así que no puedes abrirlo desde aquí.",
+            "otherLeadNoCurrent": "Esta carpeta se sincroniza con un sandbox de {owner}, así que no puedes abrirlo desde aquí.",
+            "otherLeadUnknown": "Esta carpeta se sincroniza con un sandbox de una cuenta que no ha iniciado sesión aquí, así que no puedes abrirlo desde aquí.",
+            "switchTo": "Cambiar a {owner}",
+            "switchAccount": "Cambiar de cuenta",
+            "openFiles": "Abrir solo los archivos",
+            "unlink": "Desvincularla de ese sandbox…",
+            "unlinkConfirm": "Desvincular",
+            "unlinkNote": "La carpeta deja de sincronizarse con ese sandbox. Ambos conservan sus archivos, y la carpeta puede tener un sandbox propio."
         },
         "project": {
             "dialogTitle": "Trabajar en {name} con un agente",

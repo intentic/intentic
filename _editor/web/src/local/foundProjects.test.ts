@@ -66,6 +66,8 @@ const offer = (name: string, extra: Partial<OfferedProject> = {}): OfferedProjec
     wsl: undefined,
     git: false,
     sandbox: false,
+    holder: undefined,
+    owner: undefined,
     ...extra,
 });
 
@@ -116,4 +118,18 @@ it(`names tools and subscriptions as people know them`, () => {
     expect(subscriptionName(provider(`codex`, null))).toBe(`ChatGPT`);
     expect(subscriptionName(provider(`zed`, ` `))).toBe(`zed`);
     expect(foundSubscriptions([provider(`claude`, null), provider(`codex`, null), provider(`claude`, `max`)]).map((p) => p.provider)).toEqual([`claude`, `codex`]);
+});
+
+it(`says whose a folder's sandbox is, from the list that knows: an older app's word is the signed-in account's`, () => {
+    const offered = offeredProjects(
+        [place(`/home/ada/translate`, { sandbox: true, holder: `other`, owner: `ada@work.example` }), place(`/home/ada/shop`, { sandbox: true })],
+        [found(`/home/ada/translate`, { sandbox: true, holder: `other` }), found(`/home/ada/api`, { sandbox: true, holder: `signedOut` }), found(`/home/ada/notes`)],
+        [],
+    );
+    expect(offered.map(({ name, holder, owner }) => [name, holder, owner])).toEqual([
+        [`translate`, `other`, `ada@work.example`],
+        [`shop`, `mine`, undefined],
+        [`api`, `signedOut`, undefined],
+        [`notes`, undefined, undefined],
+    ]);
 });

@@ -1,4 +1,4 @@
-import type { LocalFoundProject, LocalFoundProvider, LocalPlace } from "../app/environments/localHost";
+import type { LocalFoundProject, LocalFoundProvider, LocalPlace, LocalSandboxHolder } from "../app/environments/localHost";
 
 // WHAT AN EMPTY MAIN WINDOW OFFERS IN PLACE OF ITS EMPTINESS (LocalEmptyFolder.vue): the folders this app opened before,
 // then the ones this computer's AI tools and editors worked in (the app's found.rs), one row per folder. Pure, so the
@@ -20,7 +20,19 @@ export interface OfferedProject {
     readonly wsl: string | undefined;
     readonly git: boolean;
     readonly sandbox: boolean;
+    /** Whose that sandbox is, when it has one: an app too old to say reads as the signed-in account's. */
+    readonly holder: LocalSandboxHolder | undefined;
+    /** The account it belongs to, when that is another one the app has seen. */
+    readonly owner: string | undefined;
 }
+
+// Whose a listed folder's sandbox is, from either list's word on it.
+const heldOf = (listed: {
+    readonly sandbox: boolean;
+    readonly holder?: LocalSandboxHolder | undefined;
+    readonly owner?: string | undefined;
+}): Pick<OfferedProject, `holder` | `owner`> =>
+    listed.sandbox ? { holder: listed.holder ?? `mine`, owner: listed.owner } : { holder: undefined, owner: undefined };
 
 /** How many folders the page offers: enough to find last week's, few enough to read at a glance. */
 export const OFFERED = 8;
@@ -110,6 +122,7 @@ export const offeredProjects = (
             wsl: wslOf(place.path),
             git: false,
             sandbox: place.sandbox,
+            ...heldOf(place),
         });
     }
     for (const project of found) {
@@ -132,6 +145,7 @@ export const offeredProjects = (
                       wsl: project.wsl ?? wslOf(project.path),
                       git: project.git,
                       sandbox: project.sandbox,
+                      ...heldOf(project),
                   }
                 : {
                       ...here,
@@ -141,6 +155,7 @@ export const offeredProjects = (
                       wsl: here.wsl ?? project.wsl ?? wslOf(project.path),
                       git: project.git,
                       sandbox: here.sandbox || project.sandbox,
+                      ...heldOf(here.sandbox ? here : project),
                   },
         );
     }

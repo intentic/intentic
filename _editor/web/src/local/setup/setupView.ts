@@ -310,7 +310,8 @@ export interface FolderButton {
     readonly label: string;
     /** The folder is on its way: the button says how far rather than what it does. */
     readonly busy: boolean;
-    readonly press: `ask` | `open` | `view`;
+    /** `switch`: the folder is synced with another account's sandbox, and a press signs in asking which account. */
+    readonly press: `ask` | `open` | `view` | `switch`;
 }
 
 // The folder on its way, not in yet: what its button says about how far, or what it waits for. A press shows the page,
@@ -348,11 +349,18 @@ export const folderButtonOf = (facts: {
     readonly setup: LocalFolderSetup | undefined;
     /** The reader is signing in, in the browser, from this window (useLocalProject.ts). */
     readonly signingIn?: boolean;
+    /** The folder is synced with a sandbox of another account (folderSandbox.ts `useOtherAccount`). */
+    readonly otherAccount?: { readonly owner: string | undefined } | undefined;
 }): FolderButton => {
-    const { setup } = facts;
+    const { setup, otherAccount } = facts;
     if (setup !== undefined && setup.state !== `ready`) {
         const [label, busy] = onItsWayLabel(setup, facts.signingIn === true);
         return { label, busy, press: `view` };
+    }
+    // Another account's: never a second sandbox for the same files, and never an open this account would be refused.
+    if (otherAccount !== undefined && !facts.hasSandbox) {
+        const label = otherAccount.owner === undefined ? t(`local.localFiles.otherAccount`) : t(`local.localFiles.signInAs`, { owner: otherAccount.owner });
+        return { label, busy: false, press: `switch` };
     }
     if (facts.hasSandbox || setup?.state === `ready`) {
         return { label: t(`local.localFiles.openSandbox`), busy: false, press: `open` };

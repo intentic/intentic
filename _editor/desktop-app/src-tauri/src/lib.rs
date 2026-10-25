@@ -60,17 +60,23 @@ pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_li
     windows::links::handle_link(app, link, source);
 }
 
-/// Open the platform's sign-in page in the default browser (see auth.rs): the local shell's way to agents. It has no
-/// account to reject, so this road never asks for the chooser; the link `intentic://signin?switch=1` is the one that
-/// does.
+/// Open the platform's sign-in page in the default browser (see auth.rs): the local shell's way to agents. It asks for
+/// the chooser only when told to switch (Home's way onto a folder another account's sandbox syncs), as the link
+/// `intentic://signin?switch=1` does.
 ///
 /// Which window pressed it decides where the reader lands afterwards: any window but the workspace is a local one —
 /// a folder's — and a sign-in asked for there is a sign-in about that folder, so it hands them back to this
 /// computer's face rather than to the account's sandbox list (auth.rs `complete_path`).
 #[tauri::command]
-fn sign_in(app: AppHandle, window: tauri::Webview) -> Result<(), String> {
+fn sign_in(
+    app: AppHandle,
+    window: tauri::Webview,
+    switch_account: Option<bool>,
+) -> Result<(), String> {
     let asked_in = (window.label() != windows::WORKSPACE).then(|| window.label().to_string());
-    auth::start(&app, false, asked_in)
+    // A switch (Home's "Switch to …" on a folder of another account): the sign-in page asks which account rather than
+    // answering with the one the browser holds (the web's DesktopAuth.vue `picking`).
+    auth::start(&app, switch_account.unwrap_or(false), asked_in)
 }
 
 /// What a launch opens onto. This device, in the main window, is for the two things a workspace window cannot
@@ -238,6 +244,7 @@ pub fn run() {
             local::local_open_path,
             local::local_recents,
             local::local_forget_recent,
+            local::local_unlink_folder,
             local::local_roster,
             local::local_title,
             account::account_relay,

@@ -295,13 +295,19 @@ mod tests {
             .collect();
         assert_eq!(rows, vec![Some(ROW), None]);
         let listed = roster(&[ROW, "cmvhzf5fr001501nteemkn3r9"]);
-        assert!(crate::project::stale_projects(&bound, &listed, &[]).is_empty());
+        let mut owners = std::collections::BTreeMap::new();
+        crate::state::learn_owners(&mut owners, &listed);
+        assert!(crate::project::stale_projects(&bound, &listed, &owners, &[]).is_empty());
         assert!(bound
             .iter()
             .all(|project| crate::project::is_live(&listed, project)));
         // Once the account no longer lists it, its folder is one whose sandbox went; the hosted one stays undecided.
-        let gone =
-            crate::project::stale_projects(&bound, &roster(&["cmvhzf5fr001501nteemkn3r9"]), &[]);
+        let gone = crate::project::stale_projects(
+            &bound,
+            &roster(&["cmvhzf5fr001501nteemkn3r9"]),
+            &owners,
+            &[],
+        );
         assert_eq!(
             gone.iter()
                 .map(|project| project.path.as_str())

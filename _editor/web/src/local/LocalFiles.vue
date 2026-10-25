@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { askLocalApp, LOCAL_OPEN_EVENT, localFace } from "../app/environments/local";
+import { localHost } from "../app/environments/localHost";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import WorkspaceTree from "../features/workspace/explorer/WorkspaceTree.vue";
 import { useWorkspaceTree } from "../models/workspace/tree/useWorkspaceTree";
@@ -22,7 +23,7 @@ import type { Disposable } from "@intentic/extension-api";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../workbench/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
-import { useFolderSandbox,useSandboxOpening } from "./folderSandbox";
+import { useFolderSandbox, useOtherAccount, useSandboxOpening } from "./folderSandbox";
 import { folderDrawn } from "./folderSwitch";
 import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import { useQuietChecks } from "./bring-back/useBringBack";
@@ -124,8 +125,11 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
 // page for it (setup/LocalSandboxSetup.vue) and made for it while the reader keeps working, the button saying how far it
 // is (setupView.ts `folderButtonOf`).
 const hasSandbox = useFolderSandbox();
+const otherAccount = useOtherAccount();
 const { setup, signingIn, ask: askForSandbox } = useLocalProject();
-const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.value, setup: setup.value, signingIn: signingIn.value }));
+const sandboxButton = computed(() =>
+    folderButtonOf({ hasSandbox: hasSandbox.value, setup: setup.value, signingIn: signingIn.value, otherAccount: otherAccount.value }),
+);
 // What agents changed there, looked for once the folder is in its sandbox (its first copy done), so Bring back appears
 // when there is something to bring back.
 useQuietChecks(() => face !== undefined && face.file === undefined && hasSandbox.value && (setup.value === undefined || setup.value.state === `ready`));
@@ -151,10 +155,25 @@ const sandboxTip = computed<Tip | undefined>(() => {
             return { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) };
         case `ask`:
             return { title: t(`local.localFiles.ownSandbox`), note: t(`local.localFiles.keepsFolderSynced`) };
+        case `switch`: {
+            const owner = otherAccount.value?.owner;
+            return {
+                title: owner === undefined ? t(`local.localFiles.otherAccountUnknownTitle`) : t(`local.localFiles.otherAccountTitle`, { owner }),
+                note: t(`local.localFiles.otherAccountNote`),
+            };
+        }
         default:
             return undefined;
     }
 });
+// Another account's sandbox: a sign-in that asks which account, in the browser.
+const switchAccount = async (): Promise<void> => {
+    try {
+        await localHost().signIn({ switchAccount: true });
+    } catch (failure) {
+        console.warn(`[local] the sign-in could not be started`, failure);
+    }
+};
 const router = useRouter();
 const toSandbox = (): void => {
     const press = sandboxButton.value.press;
@@ -172,6 +191,11 @@ const toSandbox = (): void => {
         case `ask`:
         case `view`:
             askForSandbox((path) => void router.push(path));
+            return;
+        // Another account's sandbox: a sign-in that asks which account, in the browser; the button follows the switch
+        // when the app says whose the folder's sandbox is now (folderSandbox.ts).
+        case `switch`:
+            void switchAccount();
     }
 };
 

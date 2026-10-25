@@ -149,3 +149,70 @@ it(`leaves a folder window, and a computer with nothing to offer, as the empty f
     expect(bare.el.textContent).not.toContain(`Show recent projects`);
     bare.unmount();
 });
+
+// 2026-10-25: a folder whose sandbox belongs to another account than the one signed in says so, and its row opens into
+// the ways on rather than into a folder whose button could only refuse the reader.
+describe(`a folder synced with another account's sandbox`, () => {
+    const OTHERS: LocalPlace[] = [
+        { path: `C:\\Users\\ada\\code\\translate`, folder: true, openedAt: 1_790_000_000, exists: true, sandbox: true, holder: `other`, owner: `ada@work.example` },
+        { path: `C:\\Users\\ada\\code\\shop`, folder: true, openedAt: 1_789_000_000, exists: true, sandbox: true, holder: `mine` },
+    ];
+    const hostOf = (extra: Partial<Omit<LocalHost, `point`>> = {}): ReturnType<typeof hostWith> => ({
+        ...hostWith({ providers: [], projects: [] }),
+        places: async () => OTHERS,
+        roster: async () => ({ account: { email: `ada@home.example` }, sandboxes: [] }),
+        ...extra,
+    });
+    const settle = async (): Promise<void> => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await nextTick();
+    };
+
+    it(`says "Other account" on its row, and "Has a sandbox" only on the signed-in account's own`, async () => {
+        const { el, unmount } = await mount(hostOf());
+        const [other, mine] = rows(el);
+        expect(other).toContain(`Other account`);
+        expect(other).not.toContain(`Has a sandbox`);
+        expect(mine).toContain(`Has a sandbox`);
+        unmount();
+    });
+
+    it(`opens in place into whose it is and the ways on, instead of into the folder`, async () => {
+        const signIn = jest.fn(async () => undefined);
+        const host = hostOf({ signIn });
+        const { el, unmount } = await mount(host);
+        rowButtons(el)[0]?.click();
+        await nextTick();
+        expect(host.point).not.toHaveBeenCalled();
+        const panel = el.querySelector(`[data-test="other-account-panel"]`);
+        expect(panel?.textContent).toContain(`belongs to ada@work.example`);
+        expect(panel?.textContent).toContain(`signed in as ada@home.example`);
+        el.querySelector<HTMLButtonElement>(`[data-test="switch-account"]`)?.click();
+        await settle();
+        expect(signIn).toHaveBeenCalledWith({ switchAccount: true });
+        expect(el.querySelector(`[data-test="other-account-panel"]`)?.textContent).toContain(`Finish signing in in your browser`);
+        el.querySelector<HTMLButtonElement>(`[data-test="open-files"]`)?.click();
+        await nextTick();
+        expect(host.point).toHaveBeenCalledWith(`C:\\Users\\ada\\code\\translate`);
+        unmount();
+    });
+
+    it(`unlinks only on a second press, then reads the list again`, async () => {
+        const unlink = jest.fn(async (_path: string) => undefined);
+        const places = jest.fn(async () => OTHERS);
+        const { el, unmount } = await mount(hostOf({ unlink, places }));
+        rowButtons(el)[0]?.click();
+        await nextTick();
+        const press = (): void => el.querySelector<HTMLButtonElement>(`[data-test="unlink"]`)?.click();
+        press();
+        await nextTick();
+        expect(unlink).not.toHaveBeenCalled();
+        expect(el.textContent).toContain(`Both keep their files`);
+        press();
+        await settle();
+        expect(unlink).toHaveBeenCalledWith(`C:\\Users\\ada\\code\\translate`);
+        expect(places).toHaveBeenCalledTimes(2);
+        expect(el.querySelector(`[data-test="other-account-panel"]`)).toBeNull();
+        unmount();
+    });
+});

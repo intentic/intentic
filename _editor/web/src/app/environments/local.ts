@@ -25,6 +25,11 @@ export interface LocalFace {
     // Set when that sandbox holds the folder as part of one around it that went in (project.rs `covering_project`): that
     // folder's name. It syncs as that one does, so how it syncs is that window's to change.
     readonly partOf?: string;
+    // Set when the folder is synced with a sandbox of ANOTHER account than the one signed in (project.rs `holder`):
+    // `sandbox` is false then, and the way to an agent is switching to that account, never a second sandbox.
+    readonly otherAccount?: boolean;
+    // That account, when the app has seen it list the sandbox.
+    readonly owner?: string;
     // Set on the app's main window (windows.rs `HOME`), the one the app shows for work of its own: a setup handed over
     // from the workspace, a Docker start at launch. Every other local window is a folder or a document opened beside it.
     readonly home?: boolean;
@@ -93,6 +98,8 @@ export const faceOf = (detail: unknown): LocalFace | undefined => {
         isText(face.path) &&
         isOptional(face.file, isText) &&
         isOptional(face.sandbox, (value) => typeof value === `boolean`) &&
+        isOptional(face.otherAccount, (value) => value === true || value === false) &&
+        isOptional(face.owner, isText) &&
         isOptional(face.home, (value) => typeof value === `boolean`);
     // SAFETY: every field LocalFace names was checked just above.
     return whole ? (detail as LocalFace) : undefined;
@@ -156,6 +163,9 @@ export const LOCAL_NAVIGATE_EVENT = `intentic:navigate`;
 // This window's folder has its own sandbox now (the app's project.rs `remember`): the way to an agent becomes the way to
 // that sandbox, without a reload (local/folderSandbox.ts).
 export const LOCAL_SANDBOX_EVENT = `intentic:sandbox`;
+// Who is signed in changed, and with it whose this window's folder's sandbox is (the app's local.rs `holders_changed`):
+// `detail` says `sandbox`, `otherAccount` and `owner` anew (local/folderSandbox.ts).
+export const LOCAL_HOLDER_EVENT = `intentic:holder`;
 // How the folder's sandbox, asked for by `sandbox`, is coming up (the app's project.rs `open_existing`), as
 // `detail.stage`: `starting` when it was stopped and is being started first, `shown` once the workspace is on screen.
 // The folder's button holds its "Opening" until then (local/folderSandbox.ts).

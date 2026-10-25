@@ -397,6 +397,9 @@ export interface LocalRecent {
     exists: boolean;
     // Whether the folder is in a sandbox, as the machine agent's pairings say (src-tauri/src/bindings.rs).
     sandbox: boolean;
+    // Whose that sandbox is, and the account it belongs to when that is another one (src-tauri/src/project.rs `holder`).
+    holder?: `mine` | `other` | `signedOut`;
+    owner?: string;
 }
 // The system dialog, then what was chosen: a folder shown in the window that asked, in place of its own; a document
 // opened where the app puts it. Nothing chosen changes nothing.
@@ -408,6 +411,8 @@ export const localOpenPath = (path: string): Promise<void> => invoke(`local_open
 export const localRecents = (): Promise<LocalRecent[]> => invoke(`local_recents`);
 /** Takes one entry off the recents, wherever it is in them; the folder or file itself is not touched. */
 export const localForgetRecent = (path: string): Promise<void> => invoke(`local_forget_recent`, { path });
+/** The folder stops syncing with another account's sandbox (src-tauri/src/project.rs `unlink_other`); rejects with a sentence. */
+export const localUnlinkFolder = (path: string): Promise<void> => invoke(`local_unlink_folder`, { path });
 // What this computer's AI tools say: the subscriptions signed in here, by who they are for, and the folders their
 // histories name (src-tauri/src/found.rs), in the shape the shell reads (the web's localHost.ts `LocalFound`).
 export const foundOnMachine = (): Promise<LocalFound> => invoke(`found_on_machine`);
@@ -577,7 +582,8 @@ export interface HomeFacts {
 }
 export const homeFacts = (): Promise<HomeFacts> => invoke(`home_facts`);
 // Platform sign-in in the default browser (auth.rs); the account comes back over `intentic://auth`.
-export const signIn = (): Promise<void> => invoke(`sign_in`);
+// `switchAccount` has the sign-in page ask which account rather than answer with the one the browser holds (lib.rs `sign_in`).
+export const signIn = (switchAccount = false): Promise<void> => invoke(`sign_in`, { switchAccount });
 // `remember` makes this answer the × from now on and retires the dialog; otherwise it applies once.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
 

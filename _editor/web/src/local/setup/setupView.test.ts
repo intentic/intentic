@@ -188,6 +188,17 @@ describe(`the folder's button`, () => {
         expect(folderButtonOf({ hasSandbox: true, setup: setupAt({ state: `ready` }, { made: true }) })).toMatchObject({ press: `open` });
     });
 
+    it(`offers no second sandbox for a folder another account's sandbox syncs: it says whose, and a press switches`, () => {
+        expect(folderButtonOf({ hasSandbox: false, setup: undefined, otherAccount: { owner: `ada@work.example` } })).toEqual({
+            label: `Sign in as ada@work.example`,
+            busy: false,
+            press: `switch`,
+        });
+        expect(folderButtonOf({ hasSandbox: false, setup: undefined, otherAccount: { owner: undefined } })).toMatchObject({ label: `Belongs to another account`, press: `switch` });
+        // Its own sandbox wins: the app says so once the account it belongs to is signed in.
+        expect(folderButtonOf({ hasSandbox: true, setup: undefined, otherAccount: { owner: `ada@work.example` } })).toMatchObject({ press: `open` });
+    });
+
     it(`says what the setup waits for, and shows its page, where that is done`, () => {
         expect(folderButtonOf({ hasSandbox: false, setup: setupAt({ state: `signedOut` }) })).toEqual({ label: `Sign in to continue`, busy: false, press: `view` });
         expect(folderButtonOf({ hasSandbox: false, setup: setupAt({ state: `signedOut` }), signingIn: true })).toMatchObject({ press: `view`, busy: true });

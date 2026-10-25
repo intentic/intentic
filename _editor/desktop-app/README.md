@@ -579,6 +579,21 @@ flowchart LR
   (`intentic-machine sync forget <slug>`, falling back to `sync uninstall --sandbox <id>` on an agent older than the
   verb), but only for a sandbox the agent syncs, and its folders' pairings go with it. A sandbox a folder's setup made
   moments ago, which the workspace may not list yet, is never let go of for a roster.
+
+  **Whose a folder's sandbox is** (2026-10-25). Every roster that names who is signed in teaches the app which account
+  each listed sandbox belongs to (`sandbox-owners.json`, by platform row, kept across a sign-out; `state.rs`
+  `learn_owners`). A sandbox counts as gone only when the account that owns it stops listing it (`project.rs`
+  `stale_projects`); one whose owner was never seen goes only when the same account's next listing drops it. Before
+  this, signing in with a second account read every sandbox of the first as gone, and the app had this machine's sync
+  let go of all their folders. `project.rs` `holder` sorts a folder's sandbox as the signed-in account's own (or shared
+  with it), another account's, or unknown while nobody is signed in. Home's Recent projects shows "Has a sandbox" only
+  for the first. Another account's says "Other account", and its row opens in place into whose it is, with three
+  actions: "Switch to <owner>" (a sign-in that asks which account, `sign_in` with `switchAccount`), "Open just the
+  files", and "Unlink it from that sandbox…" (`local_unlink_folder`, after a second press: this machine stops syncing
+  the folder, and the folder and that sandbox keep their files). A folder window on such a folder is told `otherAccount`
+  and `owner` in its face, so its button reads "Sign in as <owner>" rather than offering a second sandbox for the same
+  files. `project_create` refuses that too, and refuses a folder around or inside one. Windows hear a sign-in, a
+  sign-out or a switch as `intentic:holder` (`local.rs` `holders_changed`), so the button follows without a reload.
 - **"Ask about this".** A local window can hand one of its files to the workspace: the app grants it to the sidecar
   read-only, for the workspace's origin alone and for fifteen minutes (a handoff grant, never a window), and opens
   the workspace at `/?handoff=<base64url of { url, token, name }>`, where `url` is the sidecar's

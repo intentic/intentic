@@ -12608,7 +12608,12 @@
             "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}",
             "opening": "Otwieranie {name}…",
             "openingSlow": "Folder wciąż jest wczytywany. Duży folder lub folder w WSL za pierwszym razem potrzebuje chwili.",
-            "ownSandbox": "Własna piaskownica"
+            "ownSandbox": "Własna piaskownica",
+            "signInAs": "Zaloguj się jako {owner}",
+            "otherAccount": "Należy do innego konta",
+            "otherAccountTitle": "Jego sandbox należy do {owner}",
+            "otherAccountUnknownTitle": "Jego sandbox należy do innego konta",
+            "otherAccountNote": "Jesteś zalogowany na inne konto. Przy przełączaniu zostaniesz zapytany, którego użyć."
         },
         "folderMenu": {
             "switchFolder": "{name}: otwórz inny folder",
@@ -12659,7 +12664,21 @@
             "openedHere": "Otwierany tu wcześniej",
             "privacy": "Znalezione w historii narzędzi na tym komputerze. Nic stąd nie wychodzi.",
             "hide": "Ukryj tę listę",
-            "show": "Pokaż ostatnie projekty"
+            "show": "Pokaż ostatnie projekty",
+            "sandbox": "Sandbox",
+            "otherAccount": "Inne konto",
+            "otherAccountTip": "Należy do {owner}",
+            "otherAccountUnknownTip": "Należy do konta, które nie jest zalogowane",
+            "signInToOpen": "Zaloguj się, aby go otworzyć",
+            "otherLead": "Ten folder jest synchronizowany z sandboxem konta {owner}. Jesteś zalogowany jako {current}, więc nie możesz go stąd otworzyć.",
+            "otherLeadNoCurrent": "Ten folder jest synchronizowany z sandboxem konta {owner}, więc nie możesz go stąd otworzyć.",
+            "otherLeadUnknown": "Ten folder jest synchronizowany z sandboxem konta, które nie jest tu zalogowane, więc nie możesz go stąd otworzyć.",
+            "switchTo": "Przełącz na {owner}",
+            "switchAccount": "Przełącz konto",
+            "openFiles": "Otwórz tylko pliki",
+            "unlink": "Odłącz od tego sandboxa…",
+            "unlinkConfirm": "Odłącz",
+            "unlinkNote": "Folder przestanie się synchronizować z tym sandboxem. Oba zachowają swoje pliki, a folder może dostać własny sandbox."
         },
         "project": {
             "dialogTitle": "Popracuj nad {name} z agentem",

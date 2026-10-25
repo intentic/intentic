@@ -4947,7 +4947,12 @@
             "dropFilesToAdd": "Drop files to add them to {name}",
             "opening": "Opening {name}…",
             "openingSlow": "Still reading the folder. A big one, or one inside WSL, takes a moment the first time.",
-            "ownSandbox": "Its own sandbox"
+            "ownSandbox": "Its own sandbox",
+            "signInAs": "Sign in as {owner}",
+            "otherAccount": "Belongs to another account",
+            "otherAccountTitle": "Its sandbox belongs to {owner}",
+            "otherAccountUnknownTitle": "Its sandbox belongs to another account",
+            "otherAccountNote": "You're signed in with a different account. Switching asks which one to use."
         },
         "folderMenu": {
             "switchFolder": "{name}: open another folder",
@@ -4998,7 +5003,21 @@
             "openedHere": "Opened here before",
             "privacy": "Found in your tools' history on this computer. Nothing leaves it.",
             "hide": "Hide this list",
-            "show": "Show recent projects"
+            "show": "Show recent projects",
+            "sandbox": "Sandbox",
+            "otherAccount": "Other account",
+            "otherAccountTip": "Belongs to {owner}",
+            "otherAccountUnknownTip": "Belongs to an account that isn't signed in",
+            "signInToOpen": "Sign in to open it",
+            "otherLead": "This folder is synced with a sandbox that belongs to {owner}. You're signed in as {current}, so you can't open it from here.",
+            "otherLeadNoCurrent": "This folder is synced with a sandbox that belongs to {owner}, so you can't open it from here.",
+            "otherLeadUnknown": "This folder is synced with a sandbox of an account that isn't signed in here, so you can't open it from here.",
+            "switchTo": "Switch to {owner}",
+            "switchAccount": "Switch account",
+            "openFiles": "Open just the files",
+            "unlink": "Unlink it from that sandbox…",
+            "unlinkConfirm": "Unlink it",
+            "unlinkNote": "The folder stops syncing with that sandbox. Both keep their files, and the folder can have a sandbox of your own."
         },
         "project": {
             "dialogTitle": "Work on {name} with an agent",

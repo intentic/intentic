@@ -14,6 +14,13 @@ import { askLocalApp } from "./local";
 // editor's modules run (`__INTENTIC_LOCAL_HOST__`, _editor/desktop-app/src/host.ts), so it is there when the router
 // builds its routes. A window without one (a dev server, a test) gets `LINK_HOST`: what any local window can ask by link.
 
+/**
+ * Whose a folder's sandbox is, as the app can tell from who is signed in (its project.rs `holder`): the signed-in
+ * account's (or one shared with it), another account's, which this account cannot open, or nobody's to say while
+ * nobody is signed in.
+ */
+export type LocalSandboxHolder = `mine` | `other` | `signedOut`;
+
 /** A folder or a document of this computer the app remembers opening, newest first (the app's state.rs `RecentView`). */
 export interface LocalPlace {
     readonly path: string;
@@ -24,6 +31,10 @@ export interface LocalPlace {
     readonly exists: boolean;
     /** It has a sandbox of its own, kept in sync with it (the app's projects.json). */
     readonly sandbox: boolean;
+    /** Whose that sandbox is; absent from an older app, read as the signed-in account's. */
+    readonly holder?: LocalSandboxHolder;
+    /** The account it belongs to, when that is another one the app has seen list it. */
+    readonly owner?: string;
 }
 
 /** What this install knows that the shell draws differently by. */
@@ -65,6 +76,9 @@ export interface LocalFoundProject {
     readonly git: boolean;
     /** It has a sandbox of its own already (the app's projects.json). */
     readonly sandbox: boolean;
+    /** Whose that sandbox is, as for `LocalPlace`. */
+    readonly holder?: LocalSandboxHolder;
+    readonly owner?: string;
 }
 
 /** What this computer's own tools say. Read on this computer and never sent anywhere. */
@@ -441,12 +455,20 @@ export interface LocalHost {
     /** Take one entry off the recents; the folder or document itself is not touched. */
     forget(path: string): Promise<void>;
     /**
+     * The folder at `path` stops syncing with a sandbox of ANOTHER account (the app's project.rs `unlink_other`); the
+     * folder and that sandbox are both left as they are. Refused for any other folder.
+     */
+    unlink(path: string): Promise<void>;
+    /**
      * What this computer's AI tools say (the app's found.rs): the subscriptions signed in here and the folders their
      * histories name, newest first. Nothing where no app is behind the page.
      */
     found(): Promise<LocalFound>;
-    /** Platform sign-in, in the default browser: the account comes back to the app, which opens the workspace. */
-    signIn(): Promise<void>;
+    /**
+     * Platform sign-in, in the default browser: the account comes back to the app, which opens the workspace. With
+     * `switchAccount`, the page asks which account rather than answering with the one the browser is signed in as.
+     */
+    signIn(options?: { readonly switchAccount?: boolean }): Promise<void>;
     /** The workspace (agents and sandboxes), in this window's place, at its root or a path under it. */
     openWorkspace(path?: string): Promise<void>;
     /**
@@ -514,6 +536,7 @@ export const LINK_HOST: LocalHost = {
         return Promise.resolve();
     },
     forget: nothing,
+    unlink: nothing,
     found: () => Promise.resolve(NOTHING_FOUND),
     signIn: nothing,
     openWorkspace: nothing,

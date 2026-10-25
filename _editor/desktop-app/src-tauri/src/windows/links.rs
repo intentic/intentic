@@ -107,6 +107,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             app.state::<AppState>().remember_roster(roster.clone());
             let _ = tauri::Emitter::emit(app, "desktop://roster", &roster);
             crate::shell::roster_changed(app);
+            // Whose each folder's sandbox is follows who is signed in (local.rs).
+            crate::local::holders_changed(app);
             // Who is signed in is what a folder's sandbox waits for (folder_setup.rs).
             crate::folder_setup::account_changed();
         }

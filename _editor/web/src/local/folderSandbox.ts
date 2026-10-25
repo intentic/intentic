@@ -1,28 +1,63 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { readonly, ref, type Ref } from "vue";
-import { LOCAL_SANDBOX_EVENT, LOCAL_SANDBOX_OPENING_EVENT, localFace } from "../app/environments/local";
-import { openingStage } from "./appEvents";
+import { LOCAL_HOLDER_EVENT, LOCAL_SANDBOX_EVENT, LOCAL_SANDBOX_OPENING_EVENT, localFace } from "../app/environments/local";
+import { heldAnew, openingStage } from "./appEvents";
 
 // WHETHER THIS WINDOW'S FOLDER HAS ITS OWN SANDBOX: what the window was opened with (`face.sandbox`, the app's
 // projects.json), and true from the moment the app says one was made for it (`intentic:sandbox`, its project.rs
 // `remember`), without a reload. "Work on this with an agent" becomes the way to that sandbox, and its bring-back
-// appears (LocalFiles.vue). A folder never stops having one while its window is open: a sandbox removed elsewhere is
-// found out by the press that opens it. Scoped to the folder: another one pointed at in this window's place
-// (folderSwitch.ts) starts again from what its own face says.
+// appears (LocalFiles.vue). A sandbox removed elsewhere is found out by the press that opens it. Scoped to the folder:
+// another one pointed at in this window's place (folderSwitch.ts) starts again from what its own face says.
+//
+// AND WHOSE IT IS (2026-10-25): a folder synced with a sandbox of another account than the one signed in is not this
+// account's to open, and must not be given a second sandbox either; its button says whose instead (`face.otherAccount`,
+// `face.owner`). Both follow a sign-in, a sign-out or a switch as the app says them (`intentic:holder`).
+
+/** The folder is synced with another account's sandbox: that account, when the app knows it. */
+export interface OtherAccount {
+    readonly owner: string | undefined;
+}
+
+const otherOf = (): OtherAccount | undefined => {
+    const face = localFace();
+    return face?.otherAccount === true ? { owner: face.owner } : undefined;
+};
 
 const hasSandbox = sandboxRef(() => localFace()?.sandbox === true);
+const otherAccount = sandboxRef<OtherAccount | undefined>(otherOf);
 let listening = false;
 
 const heard = (): void => {
     hasSandbox.value = true;
+    otherAccount.value = undefined;
 };
 
-export const useFolderSandbox = (): Readonly<Ref<boolean>> => {
+const heldNow = (event: Event): void => {
+    const held = heldAnew(event);
+    if (held === undefined) {
+        return;
+    }
+    hasSandbox.value = held.sandbox;
+    otherAccount.value = held.otherAccount ? { owner: held.owner ?? undefined } : undefined;
+};
+
+const listen = (): void => {
     if (!listening && typeof window !== `undefined`) {
         listening = true;
         window.addEventListener(LOCAL_SANDBOX_EVENT, heard);
+        window.addEventListener(LOCAL_HOLDER_EVENT, heldNow);
     }
+};
+
+export const useFolderSandbox = (): Readonly<Ref<boolean>> => {
+    listen();
     return readonly(hasSandbox);
+};
+
+/** Whose the folder's sandbox is when it is another account's; undefined when it is this account's, or there is none. */
+export const useOtherAccount = (): Readonly<Ref<OtherAccount | undefined>> => {
+    listen();
+    return readonly(otherAccount);
 };
 
 // THE FOLDER'S SANDBOX ON ITS WAY TO THE SCREEN. "Open this folder's sandbox" is a link to the app, which looks first

@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { navigatedPath, openedPath, openingStage } from "./appEvents";
+import { heldAnew, navigatedPath, openedPath, openingStage } from "./appEvents";
 
 // Pins what a local window reads off the app's `intentic:open`: the entry to open, relative to its folder, or nothing.
 
@@ -37,4 +37,15 @@ test("the opening event names a stage the button knows, and anything else names 
         openingStage(event(null)),
         openingStage(new Event(`intentic:sandbox-opening`)),
     ]).toEqual([`starting`, `shown`, undefined, undefined, undefined]);
+});
+
+/* Whose the folder's sandbox is after an account changed (the app's local.rs `face_held`). */
+test("the holder event says whose the folder's sandbox is now, and anything else says nothing", () => {
+    const event = (detail: unknown): Event => new CustomEvent(`intentic:holder`, { detail });
+    expect([
+        heldAnew(event({ sandbox: false, otherAccount: true, owner: `ada@work.example` })),
+        heldAnew(event({ sandbox: true, otherAccount: false, owner: null })),
+        heldAnew(event({ sandbox: true })),
+        heldAnew(new Event(`intentic:holder`)),
+    ]).toEqual([{ sandbox: false, otherAccount: true, owner: `ada@work.example` }, { sandbox: true, otherAccount: false, owner: null }, undefined, undefined]);
 });

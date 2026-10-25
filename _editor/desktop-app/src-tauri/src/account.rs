@@ -308,6 +308,7 @@ async fn signed_off(app: &AppHandle, window: &Webview, held: Vec<Cookie<'static>
     apply(window, leftovers).await;
     app.state::<AppState>()
         .remember_roster(crate::setup_link::Roster::default());
+    crate::local::holders_changed(app);
     crate::folder_setup::account_changed();
     if let Some(workspace) = crate::frame::face(app, crate::windows::WORKSPACE) {
         if let Err(error) = workspace.eval("location.reload()") {
@@ -522,6 +523,7 @@ pub fn take_session(app: &AppHandle, session: &Session) {
     state.remember_roster(after.clone());
     let _ = tauri::Emitter::emit(app, "desktop://roster", &after);
     crate::shell::roster_changed(app);
+    crate::local::holders_changed(app);
     crate::folder_setup::account_changed();
 }
 

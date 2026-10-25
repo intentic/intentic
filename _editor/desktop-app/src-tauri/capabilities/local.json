@@ -61,6 +61,7 @@
         "allow-local-open-path",
         "allow-local-recents",
         "allow-local-forget-recent",
+        "allow-local-unlink-folder",
         "allow-local-roster",
         "allow-local-title",
         "allow-account-relay",

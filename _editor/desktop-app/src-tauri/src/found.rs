@@ -69,6 +69,23 @@ pub struct FoundProject {
     pub git: bool,
     /// It is in a sandbox already, as the machine agent's pairings say (bindings.rs).
     pub sandbox: bool,
+    /// Whose that sandbox is (project.rs `holder`), and the account it belongs to when that is another one: read at
+    /// every asking ([`with_holders`]), never kept with a reading, since a sign-in changes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holder: Option<crate::project::Holder>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+}
+
+/// `found` with whether each folder has a sandbox, and whose, as things stand now rather than at its reading.
+fn with_holders(mut found: Found, holders: &crate::project::Holders) -> Found {
+    for project in &mut found.projects {
+        let held = holders.at(Path::new(&project.path));
+        project.sandbox = held.is_some();
+        project.holder = held.as_ref().map(|(holder, _)| *holder);
+        project.owner = held.and_then(|(_, owner)| owner);
+    }
+    found
 }
 
 /// How many projects are offered: a page's worth, newest first.
@@ -112,15 +129,16 @@ impl FoundCache {
 pub async fn found_on_machine(app: AppHandle) -> Result<Found, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let cache = app.state::<FoundCache>();
+        let holders = crate::project::Holders::of(&app);
         if let Some(found) = cache.fresh() {
-            return found;
+            return with_holders(found, &holders);
         }
         let found = app.path().home_dir().map_or_else(
             |_| Found::default(),
             |home| scan_machine(&home, &app.state::<AppState>().projects()),
         );
         cache.keep(&found);
-        found
+        with_holders(found, &holders)
     })
     .await
     .map_err(|error| format!("this computer could not be read: {error}"))
@@ -939,6 +957,8 @@ impl Candidates {
                     sandbox: projects
                         .iter()
                         .any(|project| Path::new(&project.path) == candidate.host),
+                    holder: None,
+                    owner: None,
                     shown: candidate.shown,
                     name,
                     sources: candidate.sources,

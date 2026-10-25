@@ -4947,7 +4947,12 @@
             "dropFilesToAdd": "Déposez des fichiers pour les ajouter à {name}",
             "opening": "Ouverture de {name}…",
             "openingSlow": "Lecture du dossier en cours. Un grand dossier, ou un dossier dans WSL, prend un moment la première fois.",
-            "ownSandbox": "Son propre sandbox"
+            "ownSandbox": "Son propre sandbox",
+            "signInAs": "Se connecter en tant que {owner}",
+            "otherAccount": "Appartient à un autre compte",
+            "otherAccountTitle": "Son sandbox appartient à {owner}",
+            "otherAccountUnknownTitle": "Son sandbox appartient à un autre compte",
+            "otherAccountNote": "Vous êtes connecté avec un autre compte. Le changement vous demande lequel utiliser."
         },
         "folderMenu": {
             "switchFolder": "{name} : ouvrir un autre dossier",
@@ -4998,7 +5003,21 @@
             "openedHere": "Déjà ouvert ici",
             "privacy": "Trouvés dans l'historique de vos outils sur cet ordinateur. Rien ne le quitte.",
             "hide": "Masquer cette liste",
-            "show": "Afficher les projets récents"
+            "show": "Afficher les projets récents",
+            "sandbox": "Sandbox",
+            "otherAccount": "Autre compte",
+            "otherAccountTip": "Appartient à {owner}",
+            "otherAccountUnknownTip": "Appartient à un compte qui n'est pas connecté",
+            "signInToOpen": "Connectez-vous pour l'ouvrir",
+            "otherLead": "Ce dossier est synchronisé avec un sandbox de {owner}. Vous êtes connecté en tant que {current} : vous ne pouvez donc pas l'ouvrir d'ici.",
+            "otherLeadNoCurrent": "Ce dossier est synchronisé avec un sandbox de {owner} : vous ne pouvez donc pas l'ouvrir d'ici.",
+            "otherLeadUnknown": "Ce dossier est synchronisé avec un sandbox d'un compte qui n'est pas connecté ici : vous ne pouvez donc pas l'ouvrir d'ici.",
+            "switchTo": "Passer à {owner}",
+            "switchAccount": "Changer de compte",
+            "openFiles": "Ouvrir seulement les fichiers",
+            "unlink": "Le dissocier de ce sandbox…",
+            "unlinkConfirm": "Dissocier",
+            "unlinkNote": "Le dossier cesse d'être synchronisé avec ce sandbox. Chacun garde ses fichiers, et le dossier peut avoir son propre sandbox."
         },
         "project": {
             "dialogTitle": "Travailler sur {name} avec un agent",

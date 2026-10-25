@@ -35,3 +35,14 @@ export const openingStage = (event: Event): `starting` | `shown` | undefined => 
     const detail = OpeningDetail.safeParse(event.detail);
     return detail.success ? detail.data.stage : undefined;
 };
+
+const HolderDetail = z.object({ sandbox: z.boolean(), otherAccount: z.boolean(), owner: z.string().nullable() });
+
+/** Whose the folder's sandbox is now, as an `intentic:holder` says; nothing for any other shape. */
+export const heldAnew = (event: Event): z.infer<typeof HolderDetail> | undefined => {
+    if (!(event instanceof CustomEvent)) {
+        return undefined;
+    }
+    const detail = HolderDetail.safeParse(event.detail);
+    return detail.success ? detail.data : undefined;
+};

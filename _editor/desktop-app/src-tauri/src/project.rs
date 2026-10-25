@@ -3,7 +3,7 @@
 //! Agent pairings are authoritative (bindings.rs). Hosted sync/setup links carry project=<name>, never a filesystem path.
 //! Always use the requesting window's folder so a page cannot select a folder the user did not pick.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -507,6 +507,91 @@ pub(crate) fn is_live(roster: &Roster, project: &Project) -> bool {
     }
 }
 
+/// Whose a folder's sandbox is, as this app can tell from who is signed in: what Home's badge and a folder's button say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Holder {
+    /// The signed-in account's own or shared with it (or one this app cannot judge, a record with no sandbox id).
+    Mine,
+    /// Another account's: the folder is synced with a sandbox the signed-in account cannot open.
+    Other,
+    /// Nobody is signed in, so nobody can say.
+    SignedOut,
+}
+
+/// [`Holder`] of `project`'s sandbox, with the account it belongs to when that is another one this app has seen list
+/// it (state.rs `learn_owners`). A sandbox the signed-in account owns but no longer lists is still its own: it is
+/// either not listed yet (a roster from before it was made) or about to go ([`stale_projects`]). Pure.
+pub(crate) fn holder(
+    roster: &Roster,
+    owners: &BTreeMap<String, String>,
+    project: &Project,
+) -> (Holder, Option<String>) {
+    let Some(account) = &roster.account else {
+        return (Holder::SignedOut, None);
+    };
+    let Some(id) = &project.sandbox_id else {
+        return (Holder::Mine, None);
+    };
+    if roster.sandboxes.iter().any(|entry| &entry.id == id) {
+        return (Holder::Mine, None);
+    }
+    match owners.get(id) {
+        Some(owner) if owner.eq_ignore_ascii_case(&account.email) => (Holder::Mine, None),
+        owner => (Holder::Other, owner.cloned()),
+    }
+}
+
+/// Everything [`holder`] reads, taken once so a list of folders is judged against one roster.
+pub(crate) struct Holders {
+    roster: Roster,
+    owners: BTreeMap<String, String>,
+    projects: Vec<Project>,
+}
+
+impl Holders {
+    pub(crate) fn of(app: &AppHandle) -> Holders {
+        let state = app.state::<AppState>();
+        Holders {
+            roster: state.roster(),
+            owners: state.owners(),
+            projects: state.projects(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from(
+        roster: Roster,
+        owners: BTreeMap<String, String>,
+        projects: Vec<Project>,
+    ) -> Holders {
+        Holders {
+            roster,
+            owners,
+            projects,
+        }
+    }
+
+    /// Whose the sandbox of the folder at exactly `path` is, or nothing when that folder has none.
+    pub(crate) fn at(&self, path: &Path) -> Option<(Holder, Option<String>)> {
+        self.projects
+            .iter()
+            .find(|project| Path::new(&project.path) == path)
+            .map(|project| holder(&self.roster, &self.owners, project))
+    }
+
+    /// The folder holding `root` (itself or one around it) whose sandbox is another account's, with that account.
+    pub(crate) fn other_covering(&self, root: &Path) -> Option<(Project, String, Option<String>)> {
+        let others = self
+            .projects
+            .iter()
+            .filter(|project| holder(&self.roster, &self.owners, project).0 == Holder::Other);
+        let (project, inside) = holding(others.cloned(), root)?;
+        let owner = holder(&self.roster, &self.owners, &project).1;
+        Some((project, inside, owner))
+    }
+}
+
 /// The live project that holds `root`, and where `root` is inside it: the folder itself (""), or the nearest folder
 /// around it that went into a sandbox. A folder inside one that has a sandbox is in it already, so it is opened, told
 /// and brought back from as that one, never given a second sandbox beside it (2026-10-12).
@@ -570,11 +655,16 @@ pub(crate) fn live_project_of(app: &AppHandle, root: &Path) -> Option<Project> {
 /// Why `root` cannot become a project on this machine, against the projects it still has and the user's home.
 fn refusal_here(app: &AppHandle, root: &Path) -> Option<Refusal> {
     let roster = app.state::<AppState>().roster();
+    let owners = app.state::<AppState>().owners();
+    // Another account's folders are taken too: this machine syncs them already, and a second sandbox around or inside
+    // one would sync the same files twice.
     let mut taken: Vec<PathBuf> = app
         .state::<AppState>()
         .projects()
         .iter()
-        .filter(|project| is_live(&roster, project))
+        .filter(|project| {
+            is_live(&roster, project) || holder(&roster, &owners, project).0 == Holder::Other
+        })
         .map(|project| PathBuf::from(&project.path))
         .collect();
     // And the folders on their way to a sandbox of their own: two, one inside the other, would sync the same files twice.
@@ -781,6 +871,9 @@ pub fn create_named(app: &AppHandle, root: &Path, project: &str) -> Result<Creat
         open_existing(app, None, &existing);
         return Ok(Created::Opened);
     }
+    if let Some((_, _, owner)) = Holders::of(app).other_covering(root) {
+        return Err(other_account_sentence(owner.as_deref()));
+    }
     if let Some(why) = refusal_here(app, root) {
         return Err(why.sentence(root));
     }
@@ -796,6 +889,42 @@ pub fn create_named(app: &AppHandle, root: &Path, project: &str) -> Result<Creat
     }
     let record = crate::folder_setup::begin(app, root, project);
     Ok(Created::Started { name: record.name })
+}
+
+/// Why a folder another account's sandbox syncs gets no second one: the same files would sync twice, and the second
+/// setup would take the folder off the first sandbox without a word.
+pub(crate) fn other_account_sentence(owner: Option<&str>) -> String {
+    match owner {
+        Some(owner) => format!(
+            "This folder is synced with a sandbox of {owner}. Sign in as {owner} to open it, or unlink it from that sandbox first."
+        ),
+        None => "This folder is synced with a sandbox of another account. Sign in with that account to open it, or unlink it from that sandbox first.".to_string(),
+    }
+}
+
+/// Unlink, from Home: the folder at `path` stops syncing with a sandbox of another account, which keeps its copy and is
+/// otherwise untouched. Only such a folder: one of the signed-in account's own is let go of by removing its sandbox.
+/// BLOCKING: the agent is asked.
+pub fn unlink_other(app: &AppHandle, path: &Path) -> Result<(), String> {
+    let holders = Holders::of(app);
+    match holders.at(path) {
+        Some((Holder::Other, _)) => {}
+        Some(_) => {
+            return Err(
+                "Only a folder synced with another account's sandbox can be unlinked here."
+                    .to_string(),
+            )
+        }
+        None => return Ok(()),
+    }
+    release_folder(app, path);
+    if Holders::of(app).at(path).is_some() {
+        return Err(
+            "This computer's sync didn't let go of the folder. Try again in a moment.".to_string(),
+        );
+    }
+    crate::local::holders_changed(app);
+    Ok(())
 }
 
 /// Why a folder cannot be the first task's project, in the reader's words.
@@ -909,23 +1038,30 @@ pub(crate) fn release_folder(app: &AppHandle, folder: &Path) {
  * and nothing of this app's is left to say otherwise (2026-10-20). The account listing a sandbox no more is the
  * platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing. */
 
-/// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in. Never a
-/// sandbox a folder's setup made moments ago (`kept`, folder_setup.rs), which the workspace may not list yet, nor an
-/// entry with no sandbox id. Pure.
+/// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in: only the
+/// ones that account was seen to hold (`owners`, state.rs `learn_owners`). Another account's sandbox is not listed
+/// because it is not this account's, not because it went: reading it as gone had an account switch unpair every folder
+/// the other account synced (2026-10-25). One whose account was never seen goes only when the same account's listing
+/// drops it ([`dropped_sandboxes`]). Never a sandbox a folder's setup made moments ago (`kept`, folder_setup.rs), which
+/// the workspace may not list yet, nor an entry with no sandbox id. Pure.
 pub(crate) fn stale_projects(
     projects: &[Project],
     roster: &Roster,
+    owners: &BTreeMap<String, String>,
     kept: &[String],
 ) -> Vec<Project> {
-    if roster.account.is_none() {
+    let Some(account) = &roster.account else {
         return Vec::new();
-    }
+    };
     projects
         .iter()
         .filter(|project| {
             project.sandbox_id.as_deref().is_some_and(|id| {
                 !kept.iter().any(|held| held == id)
                     && !roster.sandboxes.iter().any(|entry| entry.id == id)
+                    && owners
+                        .get(id)
+                        .is_some_and(|owner| owner.eq_ignore_ascii_case(&account.email))
             })
         })
         .cloned()
@@ -1039,7 +1175,8 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
     tauri::async_runtime::spawn_blocking(move || {
         let rows = crate::folder_setup::known_rows(&app);
         let kept: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
-        let stale = stale_projects(&app.state::<AppState>().projects(), &after, &kept);
+        let state = app.state::<AppState>();
+        let stale = stale_projects(&state.projects(), &after, &state.owners(), &kept);
         let mut gone: Vec<(Option<String>, String)> = Vec::new();
         for project in stale {
             if let Some(id) = project.sandbox_id {
@@ -2037,6 +2174,12 @@ mod tests {
         }
     }
 
+    fn owners_of(rows: &[(&str, &str)]) -> BTreeMap<String, String> {
+        rows.iter()
+            .map(|(id, email)| ((*id).to_string(), (*email).to_string()))
+            .collect()
+    }
+
     fn project(sandbox_id: Option<&str>) -> Project {
         Project {
             path: r"C:\Users\me\Documents\test-remove-me".into(),
@@ -2057,10 +2200,69 @@ mod tests {
             project(None),
             project(Some("cm-machine")),
         ];
+        let owners = owners_of(&[
+            ("cm-gone", "me@example.com"),
+            ("cm-live", "me@example.com"),
+            ("cm-machine", "me@example.com"),
+        ]);
         let listed = roster_of(&["cm-live"], true);
-        let stale = stale_projects(&projects, &listed, &["cm-machine".to_string()]);
+        let stale = stale_projects(&projects, &listed, &owners, &["cm-machine".to_string()]);
         assert_eq!(stale, vec![project(Some("cm-gone"))]);
-        assert!(stale_projects(&projects, &roster_of(&[], false), &[]).is_empty());
+        assert!(stale_projects(&projects, &roster_of(&[], false), &owners, &[]).is_empty());
+    }
+
+    /// (2026-10-25) Another account signing in lists none of the first one's sandboxes, which are not gone for that:
+    /// their folders stay paired, and only a sandbox the signed-in account was seen to hold goes when it stops listing it.
+    #[test]
+    fn another_accounts_sandboxes_are_not_gone_because_this_account_does_not_list_them() {
+        let projects = vec![
+            project(Some("cm-ada")),
+            project(Some("cm-unknown")),
+            project(Some("cm-mine")),
+        ];
+        let owners = owners_of(&[("cm-ada", "ada@example.com"), ("cm-mine", "ME@example.com")]);
+        let stale = stale_projects(&projects, &roster_of(&[], true), &owners, &[]);
+        assert_eq!(stale, vec![project(Some("cm-mine"))]);
+    }
+
+    /// Whose a folder's sandbox is: the signed-in account's when it lists it or was seen to hold it, another account's
+    /// (named when this app has seen it list it) otherwise, and nobody can say while nobody is signed in.
+    #[test]
+    fn a_folders_sandbox_is_mine_another_accounts_or_unknown_while_signed_out() {
+        let owners = owners_of(&[("cm-ada", "ada@example.com"), ("cm-mine", "me@example.com")]);
+        let listed = roster_of(&["cm-live"], true);
+        assert_eq!(
+            holder(&listed, &owners, &project(Some("cm-live"))),
+            (Holder::Mine, None)
+        );
+        assert_eq!(
+            holder(&listed, &owners, &project(Some("cm-mine"))),
+            (Holder::Mine, None)
+        );
+        assert_eq!(
+            holder(&listed, &owners, &project(None)),
+            (Holder::Mine, None)
+        );
+        assert_eq!(
+            holder(&listed, &owners, &project(Some("cm-ada"))),
+            (Holder::Other, Some("ada@example.com".to_string()))
+        );
+        assert_eq!(
+            holder(&listed, &owners, &project(Some("cm-old"))),
+            (Holder::Other, None)
+        );
+        assert_eq!(
+            holder(&roster_of(&[], false), &owners, &project(Some("cm-ada"))),
+            (Holder::SignedOut, None)
+        );
+        // A folder inside another account's is covered by it, and says whose it is.
+        let holders = Holders::from(listed, owners, vec![project(Some("cm-ada"))]);
+        let inside = Path::new(r"C:\Users\me\Documents\test-remove-me").join("src");
+        let (_, rest, owner) = holders.other_covering(&inside).unwrap();
+        assert_eq!(
+            (rest.as_str(), owner.as_deref()),
+            ("src", Some("ada@example.com"))
+        );
     }
 
     /// (2026-10-21) What this machine syncs is compared with the roster's rows, so it is named by the row too: the

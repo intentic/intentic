@@ -172,7 +172,8 @@ pub struct Recent {
 /// A recent as Home shows it (`local_recents`): the stored entry, plus two facts read at the moment of asking and
 /// never stored, since both change behind this app's back. `exists` is whether the path is there now (a folder
 /// moved or a drive unplugged is shown as such, with the way to forget it); `sandbox` is whether the folder has a
-/// sandbox, as the machine agent's pairings say (bindings.rs).
+/// sandbox, as the machine agent's pairings say (bindings.rs), and `holder` whose it is (project.rs `holder`), with
+/// `owner` the account it belongs to when that is another one this app has seen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentView {
@@ -181,25 +182,32 @@ pub struct RecentView {
     pub opened_at: u64,
     pub exists: bool,
     pub sandbox: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holder: Option<crate::project::Holder>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
 }
 
 /// The views of `recents`, in their order. `exists` is asked of the caller so the rule is testable without a disk.
 pub fn recent_views(
     recents: Vec<Recent>,
-    projects: &[Project],
+    holders: &crate::project::Holders,
     exists: impl Fn(&Path) -> bool,
 ) -> Vec<RecentView> {
     recents
         .into_iter()
         .map(|recent| {
             let path = Path::new(&recent.path);
-            let sandbox = recent.folder
-                && projects
-                    .iter()
-                    .any(|project| Path::new(&project.path) == path);
+            let held = if recent.folder {
+                holders.at(path)
+            } else {
+                None
+            };
             RecentView {
                 exists: exists(path),
-                sandbox,
+                sandbox: held.is_some(),
+                holder: held.as_ref().map(|(holder, _)| *holder),
+                owner: held.and_then(|(_, owner)| owner),
                 path: recent.path,
                 folder: recent.folder,
                 opened_at: recent.opened_at,
@@ -284,6 +292,36 @@ pub struct AppState {
     /// `intentic://roster`): what a local window shows of the account, since that window cannot ask the platform
     /// itself. Empty until the workspace has said, and again after a sign-out.
     roster: Mutex<Roster>,
+    /// Which account each sandbox was last listed under (`sandbox-owners.json`, by platform row), learned from every
+    /// roster that names who is signed in and never forgotten by a sign-out: what lets Home say whose a folder's
+    /// sandbox is while somebody else is signed in, and keeps an account switch from reading another account's
+    /// sandboxes as gone (project.rs `holder`, `stale_projects`).
+    owners: Mutex<BTreeMap<String, String>>,
+}
+
+/// Where [`AppState`]'s owners are kept.
+const OWNERS: &str = "sandbox-owners.json";
+
+/// What `roster` says about whose each of its sandboxes is, added to `owners`: an account's own sandbox is that
+/// account's, and a sandbox shared with it is recorded under it only when nothing better is known, since that is still
+/// the account that opens it from here. Whether anything changed. Pure.
+pub(crate) fn learn_owners(owners: &mut BTreeMap<String, String>, roster: &Roster) -> bool {
+    let Some(account) = &roster.account else {
+        return false;
+    };
+    let mut changed = false;
+    for entry in &roster.sandboxes {
+        let held = owners.get(&entry.id);
+        let better = match held {
+            None => true,
+            Some(email) => !entry.shared && !email.eq_ignore_ascii_case(&account.email),
+        };
+        if better {
+            owners.insert(entry.id.clone(), account.email.clone());
+            changed = true;
+        }
+    }
+    changed
 }
 
 impl AppState {
@@ -303,6 +341,8 @@ impl AppState {
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         let home_folder = read_json(&config_dir.join("home-folder.json"));
         let roster = read_roster(&config_dir);
+        let mut owners = read_json(&config_dir.join(OWNERS)).unwrap_or_default();
+        learn_owners(&mut owners, &roster);
         let _ = std::fs::remove_file(config_dir.join(RETIRED_PROJECTS));
         let default_home = app.path().home_dir().map_or_else(
             |_| config_dir.join("local"),
@@ -329,6 +369,7 @@ impl AppState {
             home_folder: Mutex::new(home_folder),
             default_home,
             roster: Mutex::new(roster),
+            owners: Mutex::new(owners),
         })
     }
 
@@ -414,14 +455,26 @@ impl AppState {
         self.roster.lock().unwrap().clone()
     }
 
-    /// Written only on a change: the workspace says it on every load and every change to either.
+    /// Written only on a change: the workspace says it on every load and every change to either. Whose each listed
+    /// sandbox is, is learned from it too ([`learn_owners`]).
     pub fn remember_roster(&self, roster: Roster) {
+        {
+            let mut owners = self.owners.lock().unwrap();
+            if learn_owners(&mut owners, &roster) {
+                write_json(&self.config_dir.join(OWNERS), &*owners);
+            }
+        }
         let mut held = self.roster.lock().unwrap();
         if *held == roster {
             return;
         }
         write_json(&self.config_dir.join("roster.json"), &roster);
         *held = roster;
+    }
+
+    /// Which account each sandbox was last listed under, by platform row.
+    pub fn owners(&self) -> BTreeMap<String, String> {
+        self.owners.lock().unwrap().clone()
     }
 
     pub fn ui_mode(&self) -> Option<Mode> {
@@ -791,7 +844,52 @@ mod tests {
             home_folder: Mutex::new(read_json(&config_dir.join("home-folder.json"))),
             default_home: default_home_folder(&config_dir.join("home")),
             roster: Mutex::new(read_roster(config_dir)),
+            owners: Mutex::new(read_json(&config_dir.join(OWNERS)).unwrap_or_default()),
         }
+    }
+
+    /// Whose a sandbox is, learned from every roster that names somebody and kept across a sign-out and a launch: an
+    /// account's own sandbox is its own, one shared with it is recorded only when nothing better is known.
+    #[test]
+    fn whose_each_sandbox_is_is_learned_from_the_rosters_and_kept() {
+        let dir = std::env::temp_dir().join(format!("intentic-owners-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let roster = |email: Option<&str>, rows: &[(&str, bool)]| Roster {
+            account: email.map(|email| crate::setup_link::RosterAccount {
+                email: email.into(),
+                name: None,
+                image: None,
+            }),
+            sandboxes: rows
+                .iter()
+                .map(|(id, shared)| RosterEntry {
+                    id: (*id).into(),
+                    name: (*id).into(),
+                    place: "own".into(),
+                    shared: *shared,
+                })
+                .collect(),
+        };
+        let state = state_in(&dir);
+        state.remember_roster(roster(
+            Some("ada@example.com"),
+            &[("cm-a", false), ("cm-shared", true)],
+        ));
+        state.remember_roster(roster(
+            Some("bob@example.com"),
+            &[("cm-b", false), ("cm-a", true)],
+        ));
+        state.remember_roster(roster(Some("cy@example.com"), &[("cm-shared", false)]));
+        state.remember_roster(Roster::default());
+        let owners = state_in(&dir).owners();
+        assert_eq!(owners["cm-a"], "ada@example.com");
+        assert_eq!(owners["cm-b"], "bob@example.com");
+        assert_eq!(owners["cm-shared"], "cy@example.com");
+        assert!(!learn_owners(
+            &mut owners.clone(),
+            &roster(None, &[("cm-x", false)])
+        ));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /* A WRITE SAYS WHETHER IT LANDED, which launch.rs `reached` counts on to try a lost stage again. */
@@ -1199,15 +1297,14 @@ mod tests {
                 opened_at: 1,
             },
         ];
-        let projects = [Project {
+        let projects = vec![Project {
             path: "/home/me/app".into(),
             dir: "app".into(),
             sandbox_id: Some("sbx".into()),
             slug: None,
         }];
-        let views = recent_views(recents, &projects, |path| {
-            path != Path::new("/home/me/gone")
-        });
+        let holders = crate::project::Holders::from(Roster::default(), BTreeMap::new(), projects);
+        let views = recent_views(recents, &holders, |path| path != Path::new("/home/me/gone"));
         assert_eq!(
             views
                 .iter()
@@ -1218,7 +1315,7 @@ mod tests {
         let wire = serde_json::to_value(&views[0]).unwrap();
         assert_eq!(
             wire,
-            serde_json::json!({ "path": "/home/me/app", "folder": true, "openedAt": 3, "exists": true, "sandbox": true })
+            serde_json::json!({ "path": "/home/me/app", "folder": true, "openedAt": 3, "exists": true, "sandbox": true, "holder": "signedOut" })
         );
     }
 
