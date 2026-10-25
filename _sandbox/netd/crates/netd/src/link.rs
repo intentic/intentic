@@ -1,19 +1,7 @@
-//! netd's half of the control socket: accepts Node's connection, reads what it sends, asks it questions and answers
-//! its. One Node at a time. A connection whose first frame does not decode is not Node's (an agent that took the socket
-//! for the HTTP one, `curl --unix-socket`): it is refused and the live link stands, since Node reads its link closing as
-//! the box going down. A reply netd cannot read refuses its own question and leaves the link up: that is how an
-//! older Node answers a question it does not know.
-//!
-//! Which connection is the link: a new one takes it at its first frame while no Node that said hello holds it (a
-//! restarted Node, whose predecessor's connection is gone or never said hello), and every question in flight on the old
-//! one fails. While a Node that said hello holds it, a new connection is held back until its own hello, and takes the
-//! link only if that names a newer start of the daemon (`GENERATION_ENV`, counted by netd as it spawns each one);
-//! one naming the same start or none is a copy, refused, and the live link stands. A connection that lost the link is
-//! closed and nothing it sent afterwards is applied (2026-10-05: the newest connection took the writer, and the older
-//! one's frames were still applied).
-//!
-//! The listener itself is kept: an accept that fails is retried, and after a few in a row the socket is bound again,
-//! rather than leaving a netd that no restarted Node can reach.
+//! Keep one Node control link; reject undecodable first frames without disturbing it, and fail unreadable replies only for their question.
+//! A hello-held link is replaced only by a newer daemon generation; without one, the new connection takes over at its first frame.
+//! Fail old in-flight questions, close displaced links and ignore their later frames. Same/unstamped generations are refused as copies.
+//! Retry accept failures and rebind after repeated errors so restarted Node always has a listener.
 
 use std::collections::HashMap;
 use std::io;

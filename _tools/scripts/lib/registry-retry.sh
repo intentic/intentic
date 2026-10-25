@@ -1,80 +1,8 @@
 #!/usr/bin/env bash
-# Retry a registry call that GHCR or the wire itself dropped — going too fast, losing an upload halfway, or
-# never answering the connect — and nothing else.
-#
-#   . "$(dirname "$0")/../lib/registry-retry.sh"
-#   registry_retry docker buildx build ... --push "$context"
-#   registry_retry docker pull "$image"
-#
-# ONE PIPELINE WRITES THE SANDBOX IMAGE SIX TIMES: two profiles (`standard` + `core-`) × two arches × the
-# images and release lanes, every one of them ending in a manifest PUT to ghcr.io under the same token,
-# inside about half an hour. GHCR answers a burst of those with a 403 whose body is not a permissions problem
-# at all:
-#
-#   failed to push ghcr.io/intentic/sandbox:core-1.197.0-arm64: denied: permission_denied:
-#   ... 403 "Forbidden" ... "You have exceeded a secondary rate limit. Please wait a few minutes ..."
-#
-# That is what killed the 1.197.0 release. The standard arm64 image pushed fine at 15:01:44; the core one —
-# 37 seconds behind it, every layer already uploaded, "pushing layers 0.2s done" — was refused on the
-# manifest alone, and the publish job behind it never ran. Nothing was wrong with the build, the token or the
-# Dockerfile, and re-running the pipeline by hand is how it was cleared both times it happened.
-#
-# THE REFUSAL IS A CLOCK, SO WAITING IS THE ENTIRE FIX. Retrying is safe on top of that: a push is
-# idempotent, the blobs that landed stay landed, and the build behind it is fully cached, so a second attempt
-# costs one manifest PUT rather than a rebuild.
-#
-# THE REGISTRY ALSO LOSES UPLOADS IT ACCEPTED. The sandbox image is ~1.5 GB and its export takes minutes;
-# GHCR hands out an upload session per blob and forgets some of them under load, which surfaces at the very
-# end of the push as an OCI `BLOB_UPLOAD_UNKNOWN`:
-#
-#   #119 pushing layers 202.7s done
-#   #119 ERROR: failed to push ghcr.io/intentic/sandbox:1.207.0-amd64: unknown: blob upload unknown to registry
-#
-# That is what killed the 1.207.0 release, on the amd64 half — and the `images` lane pushed the identical
-# bytes of that same commit twenty minutes later without complaint, which is the whole argument that nothing
-# was wrong with the build. It is the same "try it again" as the rate limit: the session is gone, a retry
-# opens a new one, and every blob that did land is skipped on the way back through.
-#
-# AND THE CONNECTION IS SOMETIMES NEVER MADE AT ALL. Reads count too — smoke-image.sh pulls each half back
-# off GHCR to boot it — and a pull is one HTTPS conversation with nothing of ours in it to get wrong:
-#
-#   docker: Error response from daemon: failed to resolve reference "ghcr.io/intentic/sandbox:1.254.1-amd64":
-#   ... dial tcp 140.82.121.33:443: connectex: A connection attempt failed because the connected party did not
-#   properly respond after a period of time
-#
-# That is what killed the 1.254.1 release, on the smoke gate, AFTER both halves had built and pushed clean —
-# and the second half pulled 5 GB off that same registry twenty seconds later. The dial never completed; there
-# was nothing to be wrong about yet. Matched on `dial tcp` and on Go's Windows spelling of a refused connect,
-# never on the `failed to resolve reference` around it: a tag that genuinely is not there says the same words
-# and must fail on the first attempt.
-#
-# AND SOMETIMES IT TAKES THE REQUEST AND NEVER ANSWERS IT. A connect that completes is not a reply: the blob
-# goes up, the PUT that commits it is sent, and ghcr.io returns no response headers at all until the client's
-# own deadline fires:
-#
-#   failed commit on ref "layer-sha256:e7dd12f8e8a7...": failed to do request:
-#   Put "https://ghcr.io/v2/intentic/ingress/blobs/upload/4.c1d01de0-...?digest=sha256%3Ae7dd12f8e8a7...":
-#   net/http: timeout awaiting response headers
-#
-# That is what killed images-platform on 213a4477, on the ingress push, with every other layer of it already
-# "Layer already exists" and the web image pushed clean seconds before. A deadline is not a verdict — the
-# registry never said anything that could be wrong — so it retries like the dropped session above, and the
-# blobs that landed are skipped on the way back through. Matched on the timeout wording only, never on the
-# `failed commit on ref` or `failed to do request` wrapper, which a real refusal arrives in too.
-#
-# ONLY THAT CLASS OF FAILURE RETRIES. A broken Dockerfile, a missing build context or a token that genuinely
-# lacks `packages: write` must fail on the FIRST attempt — three silent backoffs before the same error is how
-# a pipeline that fails in five minutes becomes one that fails in twenty and reads like an infrastructure flake. So the
-# decision is made on the command's own output, not on its exit status, which is 1 for all of them alike.
-# GHCR can also reject a blob HEAD after login succeeded and sibling images were accepted (51b5215). Retry
-# that existence probe with a fresh push/auth exchange; a persistent rejection still exhausts the budget.
-# This does not retry a rejected manifest write or the ordinary "unauthorized: authentication required".
-#
-# BOTH DIRECTIONS ARE ASSERTED, against the text those releases actually printed, by the `publish-retry` check
-# (_tools/checks/publish-retry.mjs, shared with npm-publish-retry.sh) — which reads the pattern list below back
-# out of this file rather than keeping a second copy, exercises the loop, and refuses a caller that sources
-# this without `set -o pipefail` (see the note in registry_retry: without it a failed push reports success and
-# is never retried).
+# Retry only output-confirmed registry transients: rate limits, lost blob uploads, connect/header timeouts and blob HEAD refusals.
+# Push retries reuse cached builds and uploaded blobs; genuine auth/manifest refusals, missing tags and build errors fail immediately.
+# Classify output, not exit status: unrelated failures also exit 1. Callers must enable pipefail so failed pushes reach this loop.
+# _tools/checks/publish-retry.mjs covers retryable and fatal cases and checks callers' pipefail setting.
 
 # Attempts and the base gap, in seconds. The gap grows per attempt (60s, 120s, 180s) because the limit is a
 # rolling window and the first retry is the one most likely to still be inside it. Overridable so a caller

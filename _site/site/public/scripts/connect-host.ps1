@@ -1,34 +1,10 @@
 <#
 .SYNOPSIS
-  intentic connect-host (Windows): connect THIS Windows device as a server (a deploy target) of an existing sandbox.
-
-.DESCRIPTION
-  The Windows counterpart of connect-host.sh. Windows cannot be a native SSH and Docker target, so, as connect.ps1's
-  SELF_HOST path does, a Docker-in-Docker container (its own dockerd and sshd) becomes the server, and the sandbox
-  deploys onto THAT over SSH. The sandbox here is REMOTE, so the server's sshd is exposed over its OWN Cloudflare tunnel
-  (ssh-<id>.<zone>): a cloudflared container that SHARES the Docker-in-Docker container's network namespace, so the
-  tunnel's ssh://localhost:22 origin resolves to its sshd. Then it registers with the sandbox's daemon (POST /enroll,
-  authed by the connection token). It does NOT create or recreate a sandbox; that already exists from setup.
-
-  The Infra screen hands out a single-use code (-Sandbox <host> -Code <code>): this script spends it at
-  https://<host>/system/redeem/ for the sandbox's address, the connection token, the zone and the server's name and id,
-  none of which pass through $env:. The Cloudflare token never rides the command: with no CF_TOKEN set, this script
-  asks for it, once, without echoing it, and does not store it. A tunnel minted elsewhere can be handed in instead, as
-  HOST_SSH_TUNNEL_TOKEN and HOST_SSH_HOSTNAME.
-
-  Reboot survival is weaker than a Linux server (no systemd): the containers are --restart unless-stopped, so they come
-  back only if Docker starts on login. Running the same command again restores them.
-
-  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
-
+  Enroll this Windows device as a deploy server: Docker-in-Docker supplies dockerd/sshd; cloudflared shares its network namespace.
+  Redeem a one-use code, prompt for CF_TOKEN without storing it, or accept a pre-minted tunnel. Containers resume only when Docker starts.
 .EXAMPLE
   irm https://intentic.dev/server/<SANDBOX_HOST>/<CODE> | iex
-
-.EXAMPLE
-  $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:CONNECT_TOKEN='<token>'; $env:ZONE='<zone>'; irm https://intentic.dev/connect-host.ps1 | iex
-
-.EXAMPLE
-  $env:SANDBOX_URL='...'; $env:CONNECT_TOKEN='...'; $env:HOST_SSH_TUNNEL_TOKEN='...'; $env:HOST_SSH_HOSTNAME='ssh-<id>.<zone>'; $env:HOST_NAME='server1'; irm https://intentic.dev/connect-host.ps1 | iex
+  No sandbox is recreated. Under irm | iex return LASTEXITCODE without ending PowerShell.
 #>
 param(
     [string]$SandboxUrl,
@@ -50,35 +26,10 @@ $SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/i
 $CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39' }
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

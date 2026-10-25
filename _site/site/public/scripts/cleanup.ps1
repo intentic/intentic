@@ -1,35 +1,19 @@
 <#
 .SYNOPSIS
-  intentic remove (Windows): a bootstrap shim. It finds or downloads the ic CLI and hands over to ic sandbox remove,
-  which takes sandboxes off this device: their containers, networks and named /work volumes, with /work and /history
-  kept recoverable for 7 days (ic sandbox restore <slug> brings one back). The flow, its questions and its output are
-  ic's (_sandbox/ic/src/sandbox/remove.rs); this file only maps the parameters older commands handed out onto it.
-
-  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
-
+  Bootstrap ic sandbox remove and translate legacy parameters. Data remains recoverable for seven days via ic sandbox restore.
+  Under irm | iex return LASTEXITCODE without ending PowerShell; ic owns selection, prompts and output.
 .PARAMETER Slug
-  One or more sandboxes to remove. Omit to pick (ic asks which).
-
+  Sandboxes to remove; omit to let ic ask which.
 .PARAMETER All
   Remove every sandbox on this device.
-
 .PARAMETER Yes
-  Answer the recoverable remove's question. It never answers a permanent delete's.
-
+  Confirm recoverable removal only; never permanent deletion.
 .PARAMETER Now
-  Delete the data now instead of keeping it recoverable. ic asks for the sandbox's name to confirm.
-
+  Permanently delete data after ic confirms the sandbox's name.
 .PARAMETER AgentAuth
-  Also remove the shared dev agent-auth volume (the AI logins of every dev sandbox).
-
+  Also remove shared dev agent logins.
 .EXAMPLE
-  irm https://intentic.dev/remove/<slug> | iex                                  # remove one sandbox (the card's command)
-
-.EXAMPLE
-  irm https://intentic.dev/remove | iex                                         # pick which to remove
-
-.EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/cleanup.ps1))) -All -Yes  # the older shape, still served
+  irm https://intentic.dev/remove/<slug> | iex
 #>
 param(
     [string[]]$Slug,
@@ -44,35 +28,10 @@ $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

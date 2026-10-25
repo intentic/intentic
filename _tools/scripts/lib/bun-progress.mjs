@@ -1,21 +1,7 @@
-// WHEN BUN FINISHES EVERY FILE AND DOES NOT EXIT. On run 37694899281 (2026-10-07) verify-clocks' daemon leg reported all
-// 125 of its files by 22:32:38 and then printed nothing until the job's 30-minute timeout killed it at 22:59:24: no
-// summary, no failure, 27 minutes of a runner held by a process waiting on a handle nobody closed. The leg before it had
-// run the same files and exited. A hang like that costs a whole job and says nothing about which test caused it.
-//
-// So on CI `suites` reads bun's output as it passes it through (it still prints every byte unchanged) and keeps three
-// facts: which test files have reported, whether any test failed, and when bun last printed. Bun stops a test at the
-// run's per-test timeout, so once it has been silent for longer than that, no test can still be running. What is left to
-// tell apart:
-//   every expected file has reported and the tree is idle   bun is stuck on its way out. The run is killed and keeps
-//                                                            its verdict: a failure seen fails it, otherwise it passes.
-//   bun printed its summary and did not exit               the same, said by bun itself.
-//   silent past the limit                                   something never reported (a test spinning in a loop no
-//                                                            timeout can reach, a worker that never started). Killed
-//                                                            and FAILED, naming the files that never reported.
-// Idle matters because a test blocked in synchronous code burns a core and cannot be interrupted by bun's timeout; a
-// process stuck at exit burns nothing. Linux only, like the memory ceiling: without /proc nothing reads as idle, and
-// only the hard limit acts.
+// Observe Bun output unchanged on CI, tracking reported files, failures and last output to detect hangs past the per-test timeout.
+// If all files reported and the process tree is idle, or Bun printed its summary, kill the stuck exit while preserving the verdict.
+// Otherwise silence past the hard limit fails the run and names missing files; a CPU-busy test is not an idle exit hang.
+// Idle detection requires Linux /proc; without it only the hard limit applies.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { processTree } from "./memory-ceiling.mjs";

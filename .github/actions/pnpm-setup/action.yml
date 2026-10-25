@@ -44,22 +44,9 @@ runs:
     - name: Drop the directories a rename left behind
       shell: bash
       run: |
-        # THE WORKSPACE OUTLIVES THE COMMIT. Every job on the fleet checks out with `clean: false`, so a
-        # rename leaves its OLD directory standing: the moved package's node_modules and dist are untracked,
-        # `git clean -ffdx` keeps both by name at any depth (prepare-workspace's allowlist), and no git
-        # operation will ever remove the directory around them. It is then a ghost — zero tracked files, still
-        # in every `ls`, still guessed at — which is exactly what the layout check's first rule fails on.
-        #
-        # AND NO COMMIT COULD FIX IT. The check passed on a fresh clone and failed on the fleet, naming
-        # directories that do not exist in git; `pnpm prepass` ran it in preflight, in verify-core and in
-        # verify-platform then, so one stale runner made three jobs fail at once and a re-run reproduced it exactly
-        # (run 34046947138), and `quick`'s push check still runs it after this step. The prune belongs HERE,
-        # beside the Playwright and pnpm-state cleanups above, for the same reason they are here: it is the
-        # persistent workspace being repaired, so it has to happen in the step every job on that workspace shares
-        # rather than in whichever job noticed last.
-        #
-        # --prune deletes exactly the directories the check would have named, and nothing else: a ghost whose
-        # remaining content is a live mount is left alone (that is an agent worktree, not a runner).
+        # Prune ghost package directories left by renames on retained checkouts; preserved node_modules/dist can keep untracked shells alive.
+        # A fresh clone cannot expose this runner-only state, and rerunning the same checkout cannot repair it.
+        # --prune removes exactly the layout check's ghosts; live mounts belong to agent worktrees and must remain.
         node _tools/checks/layout.mjs --prune
 
     - name: Drop stale pruned deploy trees
@@ -89,26 +76,9 @@ runs:
       env:
         LOCKFILE_DRIFT: ${{ inputs.lockfile-drift }}
       run: |
-        # DROP PNPM'S "nothing changed" SHORTCUT FIRST, because on these runners it is wrong in a way that
-        # cannot be recovered from. The workspace is `injectWorkspacePackages: true`, so an in-repo package is
-        # not symlinked into its consumers — it is COPIED (hard-linked) into the virtual store at install time.
-        # A checkout REPLACES a changed file rather than writing through it, so the store copy keeps the old
-        # inode and the old contents, and pnpm re-syncs an injected package only after that package's own
-        # `build` script (syncInjectedDepsAfterScripts) — which the 16 extensions consumed as SOURCE do not
-        # have. Their copies were therefore frozen at whatever the runner installed first.
-        #
-        # And this state file is what stopped the install from noticing: with the lockfile and every manifest
-        # unchanged it answers "Already up to date" in 0.3s without looking at a single file, so the copies
-        # could never be repaired by running the install again — not even with --force, which was measured
-        # taking the same shortcut. Main deadlocked on exactly that: `cmp` was renamed to `ui` across the ui
-        # kit and its call sites in one commit, every runner kept typechecking web against a copy of the
-        # preview extension that still said `cmp`, typecheck failed before `build` could run, and the build was
-        # the only thing that would have re-synced anything. Two pipelines died on source that was correct in
-        # git, and no re-run could have passed.
-        #
-        # Removing the file costs the install its shortcut — ~5s of real work against 0.3s of assertion — and
-        # is what makes a fresh checkout produce a node_modules that matches it. The persistent workspace
-        # (`clean: false`, which is worth minutes elsewhere) is precisely why this cannot be left to chance.
+        # Remove pnpm's state shortcut so injected workspace copies are refreshed after checkout replaces source inodes.
+        # Source-consumed packages have no build script to resync them; unchanged manifests/lockfile otherwise leave stale code in the store.
+        # Even --force can take that shortcut. Persistent node_modules needs this invalidation before every install.
         rm -f node_modules/.pnpm-workspace-state-v1.json
         # The frozen install's own words decide the fallback, not its exit code: only a lockfile that disagrees with
         # the manifests (pnpm's OUTDATED_LOCKFILE and its two kin) is drift. A registry that drops the connection is

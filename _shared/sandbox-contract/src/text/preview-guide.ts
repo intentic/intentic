@@ -1,21 +1,9 @@
 import { z } from "zod";
 
-// What the daemon puts first in a workspace web page it serves for a preview (GET /workspace/preview/{ticket}/*), and
-// what that page may say to the editor framing it. The page runs as it would on a static file server, in a frame
-// sandboxed without `allow-same-origin`, so its origin is opaque: it cannot read the editor, the daemon's API or any
-// storage. This script is what keeps a page written for an ordinary origin working there, and what lets the editor
-// print it, show a Copy button over it, and say which of its files are missing:
-// - `localStorage`, `sessionStorage` and `document.cookie` throw in an opaque origin, and a page that touches them at
-//   load stops dead; each is stood in for by one held in memory for the page's life.
-// - A Vite build whose base is an absolute path preloads chunks from the server's root, outside the ticket; its
-//   `vite:preloadError` is cancelled, so the import itself, which is relative, goes ahead.
-// - `new Worker(url)` refuses any script an opaque origin did not make, which is every one; a worker is started from a
-//   script made here that loads the real one, its own relative imports and fetches resolved against where it lives.
-// - A link to another site opens in a new tab (most refuse to be framed); a link within the page's own files is
-//   followed in the frame, as a browser would.
-// - Every file it loads from beside itself is told, so the editor redraws it when one changes, and every one that
-//   fails, so the editor can name it.
-// - `intenticPrint` is answered with the page as it stands, addresses made absolute and canvases drawn as pictures.
+// Inject into opaque-origin previews: in-memory storage/cookies, cancelled Vite preload errors and worker wrappers keep static pages working.
+// Worker-relative imports/fetches resolve from the real script; external links open tabs and internal links stay framed.
+// Report loaded/missing adjacent files for refresh/error UI; intenticPrint returns current DOM with absolute URLs and rasterized canvases.
+// Keep allow-same-origin off so previews cannot reach editor/daemon storage or APIs.
 export const PREVIEW_GUIDE_SCRIPT = `(() => {
     const say = (message) => parent.postMessage({ intenticHtmlPreview: message }, "*");
     const memory = () => {

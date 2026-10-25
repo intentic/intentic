@@ -8,26 +8,10 @@ import { hostedTierIn } from "./hosted-shape.js";
 import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 import { carriedFreeMinutes, carriedStandingOf, GOOGLE_SUBJECT_SELECT } from "./abuse/carried-standing.js";
 
-/* THE HOUR METER. A hosted machine's awake minutes are paid for out of one of two kinds of hours, and every minute is
- * charged to exactly one of them:
- *
- *   THE ACCOUNT'S FREE HOURS: the free rung's monthly figure (@intentic/constants hosted-tiers, the operator's own in
- *   `config.hosted`), ramped for a new account, and spent by every machine of the account that does not stand on a
- *   paid slot. Released machines' minutes stay in it, so letting a machine go and asking for another never starts a
- *   fresh month.
- *
- *   A MACHINE'S OWN MONTH: its rung's figure, while it stands on a paid slot the account holds (hosted-plan.ts
- *   `slotHolders`). A slot's hours are that machine's alone, so two machines on two rungs are two ceilings and the
- *   expensive one never spends the cheap one's hours.
- *
- * A comped account's minutes are charged the same way and counted against nothing. Which hours a minute went to is
- * written on its row when it is charged (`tier`), so moving a machine or losing a plan changes what the NEXT minute
- * spends and never re-prices one already spent.
- *
- * A stretch opens at wake (the platform's own stamp) and closes later by asking Fly, since a machine stops itself from
- * inside. It counts live while open, towards the hours the machine spends now; enforced at wake, and past a grace
- * hour on the tick (hosted-meter.ts). Every stretch write locks the machine row and charges in its transaction; the
- * writers race in specs/HostedStretch.tla. */
+/* Charge each awake minute once: account free hours (including released machines) or the paid slot's machine-specific month.
+ * Comped accounts accrue minutes without a ceiling. Store tier at charge time so later plan changes never reprice past minutes.
+ * Open stretches at platform-stamped wake; close from Fly observations and count live usage while open.
+ * Enforce at wake and after tick grace; lock the machine row and charge within the same transaction (specs/HostedStretch.tla). */
 
 // The calendar month a moment belongs to, UTC, as the `YYYY-MM` rows are keyed by.
 export const usageMonth = (at: Date): string => at.toISOString().slice(0, 7);

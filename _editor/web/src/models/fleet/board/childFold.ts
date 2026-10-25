@@ -6,25 +6,10 @@ import { subagentLive } from "../subagentRoster";
 import { activeLaneOrder, attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../useAgents-fleet";
 import { parentOf } from "../../agent-status/ownership";
 
-// CHILDREN RIDE UNDER THEIR PARENT. A conversation another one spawned (`startedBy: agent:<id>`) is drawn as a slim row
-// under the card of the conversation that started it, never as a card of its own while that card is on the board: an
-// orchestrator that delegates to thirty children otherwise fills the board with thirty cards telling one story, and the
-// story's own card is lost among them. What a child stops on is its parent's news first, as the sandbox routes it (its
-// ending is reported to its parent, and a question is the parent's to answer), so a stop only reaches the reader when it
-// is theirs to answer (callsOwner), and then the parent's card carries it: the card moves to the lane that asks, as a
-// workflow run's card does for its steps (useWorkflowRuns.laneOfRun). Pure over the lanes, as withoutSteps is, so every
-// count, window and range the board reads is taken from the cards it actually draws.
-//
-// AN AUTOMATION'S RUNS RIDE ITS LATEST RUN (sandbox-contract models/agent-stack.ts). Every fire of an automation that
-// starts an agent opens a conversation of its own, so one on a ten-minute clock would fill the board with a card per run.
-// Its earlier runs ride the card of its latest instead, as rows in its tray, by the same rules as a spawned child, save
-// whom a stop is news to: nothing supervises a run, so it calls the reader until a later run has moved past it
-// (runCallsOwner). A run with work to land keeps its card (standsAlone), and archiving the card files the whole stack.
-//
-// A CARD'S TRAY HOLDS EVERY AGENT IT STARTED, whichever mechanism started it. A conversation it spawned rides here from
-// the fold; a subagent its own runtime ran in-process (the roster's `subagent` kind: the runtime's Agent/Task tool) has no
-// conversation, so it never reaches the fold as a card, and joins the tray from the roster, dealt by the same rules into
-// the same rows. What it asks of the reader it asks through its parent's own turn, whose card already carries it.
+// Fold spawned conversations under their visible parent; callsOwner promotes only reader-owned stops to the parent's lane.
+// Stack earlier automation runs under the latest; they call the reader until superseded, but work awaiting land keeps a separate card.
+// Archiving a card files its whole stack. Runtime in-process subagents join the same tray from the roster, not as conversation cards.
+// Keep folding pure over lanes so counts, windows and ranges describe the cards actually drawn.
 
 // Most urgent first: a family stands in the most urgent lane any of it asks for.
 const URGENCY = { attention: 0, active: 1, finished: 2 } as const satisfies Record<FleetLane, number>;

@@ -3,21 +3,9 @@ use std::sync::{LazyLock, Mutex};
 
 use tauri::{Manager, Webview, Window, WindowEvent};
 
-/* WHETHER A WINDOW OF THE PAGE IS WHERE THE READER CAN SEE IT, told to its page.
-
-A page decides by `document.visibilityState` whether anybody is looking at it, and two things hang on the answer: the
-idle flag it reports to its sandbox, which is what holds push back from the reader's phone (the daemon skips a member
-with a tab in use, `_sandbox/sandbox/src/push/push.ts`), and whether news is told quietly or out loud. On Windows that
-answer is always "visible": WebView2 hears it only from the controller's IsVisible, which this app leaves alone
-(webview_sync.rs has why), so a workspace hidden in the tray for a whole day reported somebody watching it, and no
-push reached their phone all that time. WebKitGTK follows its window, so on Linux this says what the page already
-knew.
-
-So the app says it: a page is shown when its window is visible and not minimised and, for one of the two faces sharing
-the app's window (frame.rs), when it is the face that window draws; its page hears
-`intentic-desktop-shown` with `{ shown }` whenever that changes, and once when its bar comes up (windows.rs
-`chrome_is_up`), which is a page that has just loaded and knows nothing. The page reads no event as shown, which is
-what every app before this one meant. */
+/* Report visible, non-minimized, active-face windows through intentic-desktop-shown { shown }, and seed the state at chrome_is_up.
+ * WebView2's unchanged IsVisible makes document.visibilityState unreliable, otherwise hidden windows suppress phone push and loud notices.
+ * Linux already follows window visibility; missing events mean shown for compatibility with older apps. */
 
 /// The DOM event the page listens on, dispatched by `eval` like every other word the app says to a page.
 const SHOWN_EVENT: &str = "intentic-desktop-shown";

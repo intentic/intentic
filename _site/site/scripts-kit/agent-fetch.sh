@@ -1,19 +1,6 @@
-# ---- bootstrap the agent binary (identical in device.sh and sync.sh: generated from one source) ----
-#
-# Only when this device has no agent that can take the handover: one that can skips straight to `setup`, which asks
-# the release channel itself and self-updates first. "Can" is asked by RUNNING the handover's own help, never by
-# comparing versions: an agent that answers `version` can still be older than the words this script speaks to it, and
-# then it is the `setup` that would have updated it that it cannot understand. That is what renaming the `computer`
-# route to `device` did: every device paired before the rename answered the card's own command with "No command
-# registered for `device`", with no route back to the self-update.
-#
-# The download is pinned to the tag `releases/latest` resolves to right now (one HEAD, no body, no API rate limit), so
-# an interrupted transfer resumes against the exact release it started from, never a splice of two. What lands is
-# probed by running it (`version` answering is the only proof the file is a working agent rather than 95 MB of
-# captive-portal login page) and only a probed binary is moved into place.
-#
-# Inputs from the embedding script: $ROUTE (device or sync), $SPEAKS (the handover's flags newer than the route, or
-# empty), $os and $arch. Output: $BIN.
+# Bootstrap only if the installed agent cannot run the handover's help; version alone does not prove route/flag compatibility.
+# Pin downloads to the tag resolved by releases/latest so interrupted transfers cannot splice releases.
+# Run version before installing the binary to reject broken downloads. Inputs: ROUTE, SPEAKS, os, arch; output: BIN.
 
 agent_version() {
     # The subshell keeps the SHELL's own "Bus error" for a truncated binary off the screen.

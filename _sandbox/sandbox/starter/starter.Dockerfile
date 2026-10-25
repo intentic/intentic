@@ -1,18 +1,7 @@
 # syntax=docker/dockerfile:1
-# THE STARTER SITE the sandbox image bakes, built on its own so the image can carry it as a layer that keeps its digest.
-# prepare-image-trees.sh builds this with `--output type=local` into .image-out/layers/starter, and the image copies that
-# with `COPY --link --from=trees layers/starter/ /` (_sandbox/sandbox/Dockerfile, which says why the starter is baked).
-#
-# WHY NOT A RUN IN THE IMAGE, as it was. It ran right after the per-commit CLI tree, so it re-ran on every release, and a
-# pnpm install is never the same bytes twice: 1.342.0 → 1.344.0 shipped it as a new 189 MB layer (886 MB unpacked) with
-# nothing in it changed. Here it still re-runs every time, but normalize-starter.mjs takes out the clocks, pids and temp
-# paths pnpm leaves behind, so two builds from the same template and lockfile are the same bytes, on any runner.
-#
-# The same Node and pnpm as the image, because the install records absolute paths and versions it must find there:
-# $PNPM_HOME is the image's, the store is the one the seeded starter pins as its storeDir (src/scaffold/starter-site.ts),
-# and pnpm 12 fetches the template's own pnpm into the package-manager store. The FROM line and PNPM_VERSION are held to
-# the image's by packs.integration.test.ts and the tool-pins check. Debian trixie on both, so the few native binaries the
-# template's packages download match the image's glibc.
+# Build the starter separately into .image-out/layers/starter; normalize volatile pnpm metadata so identical inputs retain a layer digest.
+# Match sandbox Node, pnpm, Debian and absolute store paths so native binaries and seeded store references work in the runtime image.
+# prepare-image-trees.sh exports the local layer; the sandbox Dockerfile copies it from the named trees context.
 FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS build
 # git: the scaffold inits the repo it lays down (dropped below; the daemon inits its own). curl: pnpm's installer.
 # libatomic1: the template's own pnpm (11, which pnpm 12 fetches for it) is a binary that links it; the image has it

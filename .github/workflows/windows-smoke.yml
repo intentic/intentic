@@ -1,21 +1,6 @@
-# The Windows desktop smoke tiers, as ONE definition called three times.
-#
-# WHAT THIS REPLACES. ci.yml's `desktop-verify-windows`, release.yml's `windows-verify` and nightly.yml's
-# `desktop-windows` were three copies of the same eleven steps — checkout, pnpm, node, a subtree-filtered
-# install, a subtree-filtered build, reconcile, doctor, download the artifact, install, run, teardown —
-# differing in an artifact name, an installer path and how far up the tiers they go. Each copy carried its own
-# comments, and those comments pointed at each other ("for the reason ci.yml's desktop-verify-windows spells
-# out"), which is the shape of knowledge that only stays true while somebody keeps three files in step.
-#
-# A reusable workflow rather than a composite action, for the reason verify.yml gives: `runs-on` and the
-# `timeout-minutes` are job-level keys a composite action cannot set, and this is a whole job.
-#
-# THE ONE WINDOWS MACHINE. `[self-hosted, windows-desktop]` is a label the Linux fleet does not carry, and that
-# is load-bearing: `runs-on` is an AND over labels, so a Windows box carrying `intentic` would be handed
-# container jobs it cannot run. There is exactly one such machine and it runs one job at a time, so every call
-# to this workflow serializes against every other — see docs/ops/ci-runner-windows.md, including why it must be
-# started from a logged-in session rather than installed as a service (a service session has no desktop, and
-# every assertion here reads a window).
+# Shared Windows smoke job for CI, release and nightly; a reusable workflow owns runs-on/timeouts as well as steps.
+# The windows-desktop label must stay distinct from the Linux fleet's intentic label; label sets are ANDed.
+# Calls serialize on one interactive Windows runner; service session 0 has no desktop for window assertions. See ci-runner-windows.md.
 name: windows smoke
 
 on:

@@ -1,33 +1,8 @@
 #!/usr/bin/env bash
-# Lint the workflow files themselves — actionlint for correctness, zizmor for the security shapes.
-#
-#   bash _tools/scripts/verify/lint-workflows.sh
-#
-# WHY THIS EXISTS. The workflows are the part of this repository with the most privilege and the least review,
-# and the failures they have produced all share one shape: something stopped happening and the pipeline said
-# nothing. A trigger that could never fire (three times — the workflow-policy check now covers that one). An image
-# tag no pipeline had ever pushed. A `${{ }}` expanded into a shell line as script rather than data. Two
-# standard tools read all of that straight off the checkout, in about a second, and the checkout gate was growing a
-# hand-written YAML line scanner to approximate a fraction of it.
-#
-# WHAT EACH ONE IS FOR, because they do not overlap:
-#   actionlint  the workflow is VALID and COHERENT — expressions typecheck against the contexts they name,
-#               `needs` edges point at jobs that exist, `runs-on` names a label the fleet actually carries
-#               (.github/actionlint.yaml declares the three self-hosted ones), matrix keys resolve.
-#   zizmor      the workflow is SAFE — template injection into `run:`, credential persistence, unpinned
-#               actions and images, over-broad `secrets: inherit`. .github/zizmor.yml holds this repository's
-#               deliberate exceptions, each with the reason and what would retire it.
-#
-# NOT BAKED INTO ci-base, unlike every other tool the jobs use, and the reason is the bootstrap edge ci.yml's
-# header describes: a pull request that adds a tool to ci-base cannot use it, because the image is built there
-# but only pushed from main. A linter that fails the very pull request adding it is a linter nobody
-# lands. Two pinned binaries into the shared cache cost ~1s warm and a few seconds cold, once per runner.
-#
-# THE PINS ARE BYTES, NOT TAGS. Each tool is fetched at an exact version and checked against a sha256 before it
-# is unpacked, so a moved release asset fails here instead of running. actionlint's hash is the one its own
-# published checksums file states; zizmor publishes no checksum file for this asset, so its hash was recorded
-# from the download — trust-on-first-use, which pins the bytes without vouching for them. Re-verify by hand
-# when bumping either version, and note which kind of hash you are writing down.
+# Run actionlint for workflow validity and zizmor for injection, credentials and supply-chain rules; exceptions live in .github/zizmor.yml.
+# Cache pinned binaries instead of relying on ci-base, so a PR adding the tool can run before its new image is published.
+# Verify sha256 before execution: actionlint uses upstream checksums; zizmor's recorded download hash is trust-on-first-use.
+# Re-verify each hash when bumping versions and retain that distinction.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 cd "$(repo_root)"
@@ -87,14 +62,8 @@ echo "actionlint:"
 echo "  clean"
 
 echo "zizmor:"
-# AT FULL SENSITIVITY — no confidence floor, which is only possible because the findings were fixed rather
-# than filtered. This started at 186 findings and ran at `--min-confidence high` to keep the gate meaningful
-# while the Low-confidence backlog (34 `artipacked` — checkouts persisting the token into a workspace six jobs
-# share) was still open. That backlog is now 2, both named by line in .github/zizmor.yml with the reason.
-#
-# The floor is gone deliberately: at `high`, adding a checkout without `persist-credentials: false` would have
-# passed silently and the cleanup would have eroded one job at a time. Running with no floor is what makes the
-# fix stick.
+# Run with no confidence floor so new credential-persisting checkouts cannot silently erode the fixes.
+# Deliberate exceptions live in .github/zizmor.yml or inline beside the specific step and its reason.
 "$CACHE_ROOT/zizmor-$ZIZMOR_VERSION/zizmor" \
     --no-progress --no-online-audits \
     --config .github/zizmor.yml .github/workflows/ .github/actions/

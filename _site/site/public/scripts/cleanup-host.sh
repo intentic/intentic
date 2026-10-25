@@ -1,41 +1,13 @@
 #!/bin/sh
-# intentic cleanup-host: remove EVERYTHING intentic put on THIS server (a deploy target). A bootstrap shim: it finds or
-# downloads the ic CLI and hands over to `ic machine remove` (_sandbox/ic/src/machine/remove.rs), which discovers the
-# footprint, shows it, asks once, then removes the deployed stacks and their volumes, /opt/intentic, the host SSH tunnel
-# connector and the service user. It keeps Docker Engine, openssh-server and the cloudflared binary, and it cannot reach
-# your Cloudflare account: remove the server on the Infra screen and apply, and the prune deletes its tunnels and DNS.
-#
-#   curl -fsSL https://intentic.dev/cleanup-host | sh
-#
-# It needs root. Run without it from the site, it says why and runs itself again through sudo.
-#
-# Optional (read by ic):
-#   CONFIRM=1     skip the confirmation (headless runs)
-#   HOST_USER     the service user connect-host created (default: intentic)
-#   KEEP_USER=1   leave the service user and its home (and SSH keys) in place
-# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`).
+# POSIX bootstrap for ic machine remove: confirm and remove deployed stacks/volumes, /opt/intentic, SSH connector and service user.
+# Keep Docker, openssh-server and cloudflared; remove the server through Infra and apply to prune Cloudflare tunnels/DNS.
+# Elevate through sudo when needed. CONFIRM=1 skips prompts; HOST_USER overrides intentic and KEEP_USER=1 preserves its home/keys.
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
-# is dash on Debian, Ubuntu and WSL.
-#
-#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   kit_say <sentence>                       narration under the running step
-#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
-#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
-#   kit_settle                               the running step is done
-#   kit_finished <verdict>                   a flow's past-tense verdict
-#   kit_stop <headline> [problem] [fix] [code]
-#                                            stop: the running step settles as failed, the stop block goes to stderr,
-#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix> [names]
-#                                            run again through sudo when not root, keeping the named settings (see below)
-#   kit_confirm <question> <consequence> <flag>
-#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
-#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+# POSIX-sh output helpers for bootstrap scripts; see docs/ops/cli-output-protocol.md for the shared protocol.
+# ic or intentic-machine owns the display after handover; suspend/resume around commands that print their own output.
+# kit_stop exits (default 1, usage 2). kit_confirm exits 0 on refusal and stops without a terminal unless a flag answers it.
 
 case "${INTENTIC_UI:-}" in
     rich | plain | nested) kit_mode="$INTENTIC_UI" ;;

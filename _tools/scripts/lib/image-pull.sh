@@ -1,35 +1,7 @@
 #!/usr/bin/env bash
-# Pull an image onto this runner, and tell a REGISTRY fault apart from an IMAGE STORE one.
-#
-#   . "$(dirname "$0")/../lib/image-pull.sh"
-#   image_pull ghcr.io/intentic/sandbox:1.285.0-amd64
-#
-# A pull is two halves with nothing in common. The first is a conversation with ghcr.io, and registry-retry.sh
-# is the whole judgment about it — rate limits, dropped uploads, a dial that was never answered. The second
-# happens after the last byte has landed: the layers are unpacked into this daemon's image store, each onto the
-# snapshot the one below it left behind. That store is SHARED MUTABLE STATE on a host this pipeline does not
-# have to itself — six runner processes, the owner's own sandboxes, and a disk reconciler that prunes — and a
-# chain that loses a link mid-unpack fails the pull with every byte already in hand:
-#
-#   failed to prepare extraction snapshot "extract-867389931-0Kfz sha256:278bf3cda023":
-#   NotFound: parent snapshot sha256:ceeb23b44c46 does not exist: not found
-#
-# THAT IS WHAT KILLED RELEASE 1.285.0. Both halves had built and pushed clean, the smoke gate pulled the
-# standard half back to boot it, every layer of that very pull reported "Download complete" — and the unpack
-# died on a parent that was there when the extraction started. Sixty seconds later the core half unpacked its
-# own 5 GB off the same registry, onto the same daemon, without a complaint. Nothing was wrong with the image,
-# the registry, or the tag.
-#
-# IT WAS REPORTED AS THE REGISTRY, which is the second half of the bug and the reason this file exists rather
-# than another pattern in registry-retry.sh. The gate printed "the REGISTRY refused or dropped it, which says
-# nothing about this image" over a registry that had just handed over 5 GB without an error — the same
-# mis-diagnosis smoke-image.sh's own pull step was written to end, pointed one hop further out. A verdict that
-# names the wrong culprit costs the next person the whole investigation.
-#
-# AND THE REMEDY IS NOT REGISTRY-RETRY'S REMEDY. That helper asks again, which is right for a refusal that is
-# really a clock. Asking again HERE reproduces the same error until the attempts run out: the broken chain is
-# on disk, and the next `docker pull` walks straight back onto it. What clears it is dropping the half-unpacked
-# image first, so the extraction starts from a parent this daemon still holds.
+# image_pull separates registry transients (registry-retry.sh) from local extraction-store failures on shared runners.
+# A missing parent snapshot can fail after every layer downloaded; another pull alone reuses the same broken chain.
+# Drop the half-unpacked image before retrying local-store recovery, and report it as a store fault rather than a registry refusal.
 IMAGE_PULL_ATTEMPTS="${IMAGE_PULL_ATTEMPTS:-3}"
 IMAGE_PULL_DELAY="${IMAGE_PULL_DELAY:-5}"
 

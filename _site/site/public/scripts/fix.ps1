@@ -1,21 +1,9 @@
 <#
 .SYNOPSIS
-  intentic fix (Windows): a bootstrap shim for the one command a sandbox that stopped answering hands out. The work
-  itself lives in the ic CLI (_sandbox/ic, ic sandbox fix): it checks every layer of this device between you and the
-  sandbox (network, Docker, WSL, the disk, the container, its daemon), fixes what is safe to fix, asks in this window
-  before anything disruptive, and says what is left for you. This script only finds or downloads the binary and
-  forwards.
-
-  The code is the one the browser's recovery panel put in the command (-Code, or $env:FIX_CODE in the older shape). It
-  names the sandbox and lets this run report its progress back to that page; without it the run still fixes, the page
-  just cannot watch it. Other arguments are ic's own flags (--yes, --accept docker-app), forwarded verbatim.
-
-  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
-
+  Bootstrap ic sandbox fix; ic diagnoses host/container/daemon problems and asks before disruptive repair. Extra flags pass through.
+  Code/FIX_CODE enables recovery-page progress reporting; without it repair still runs. Under irm | iex return LASTEXITCODE without exiting.
 .EXAMPLE
-  irm https://intentic.dev/fix/<code> | iex                            # the recovery panel's command
-.EXAMPLE
-  irm https://intentic.dev/fix.ps1 | iex                               # no code: every sandbox here, unobserved
+  irm https://intentic.dev/fix/<code> | iex
 #>
 # The code is named only, never positional: PowerShell would otherwise bind the first argument to it, so
 # `fix.ps1 --auto` would hand ic `--code --auto`.
@@ -29,35 +17,10 @@ $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

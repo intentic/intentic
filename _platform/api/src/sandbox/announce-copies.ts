@@ -2,27 +2,10 @@ import { AnnounceBodySchema, type DuplicateCopies } from "@intentic/api-contract
 import { z } from "zod";
 import { HOUR_MS } from "../durations.js";
 
-/* WHICH COPIES OF A SANDBOX ARE ANNOUNCING (2026-10-05). The connect token is the sandbox's identity, and any container
- * holding it is accepted: pasting the setup command into PowerShell and into WSL on one PC, or restoring a backup on a
- * second machine, makes two containers that both announce, the last write winning on the row, while the edge hands the
- * tunnel back and forth between them every minute. A daemon new enough names which copy it is (`instance`, minted once
- * per container start, with the machine's name and side, AnnounceBodySchema), and the row keeps the last two distinct
- * copies that announced (`seenInstances`), each with when it first and last did.
- *
- * Two copies are side by side when both have announced within the last hour and the stretches over which each is known
- * to run overlap by SIDE_BY_SIDE_MS or more: from the later one's first announce to the earlier one's latest. A restart
- * mints a new instance whose first announce comes after the old one's last, so its stretches never overlap; a cutover
- * whose old container announces once more as it stops overlaps by a minute; two copies that keep running overlap more
- * with every heartbeat, and are named within about an hour of the second one starting. The brief this answers asked for
- * "two instances within ten minutes of each other, and both again within the hour": with an hourly heartbeat at a
- * jittered minute, two live copies can announce up to an hour apart forever, so the overlap of their stretches is what
- * is read rather than the gap between two announces, and it covers that case too.
- *
- * `duplicateSince` is set by the announce that proves the overlap and kept while it lasts; it clears on the first
- * announce after the other copy has been silent an hour. The owner's summary names both copies (`duplicateCopies`)
- * while either still announces; the registry's half of "one instance per sandbox", whose other half is netd
- * standing down after it is displaced again and again. A read-modify-write without a lock: two announces racing can
- * lose one entry, which the next heartbeat writes back. */
+/* Track the last two announced container instances; a connect token can be copied, causing competing tunnels.
+ * Duplicates require both copies heard within an hour and overlapping lifetimes of at least SIDE_BY_SIDE_MS, excluding restarts/cutovers.
+ * Keep duplicateSince until a copy is silent an hour; expose duplicateCopies while either still announces.
+ * Updates are unlocked: racing announces may lose an entry temporarily, repaired by the next heartbeat. */
 
 // How long two copies' known running stretches must overlap before they are called two copies rather than a cutover.
 export const SIDE_BY_SIDE_MS = 10 * 60_000;

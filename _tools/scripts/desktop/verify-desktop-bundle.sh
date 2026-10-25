@@ -1,46 +1,8 @@
 #!/usr/bin/env bash
-# Verify what a built desktop installer actually CONTAINS, without installing or launching anything.
-#
-#   verify-desktop-bundle.sh [<dist-bin dir>]        # default: _editor/desktop-app/dist-bin
-#
-# Four regression classes, all invisible to `tauri build` (which succeeds happily either way) and all of which
-# reach a user as "the app installed and then could not do the thing":
-#
-#   1. A SCRIPT DID NOT SHIP. tauri.conf.json bundles by GLOB, over the directory stage-desktop-scripts.sh
-#      fills from the commit before each build, which is what makes "a script added to the site is bundled by
-#      construction" true — and also what makes it silently untrue the day the glob is narrowed, a build path
-#      reaches the bundler without staging, or a bundler drops a file it cannot stat. The app spawns these by
-#      basename at run time, so a missing one is a launcher button that fails only once a user presses it.
-#      Every script the COMMIT carries must be present AND byte-identical.
-#
-#   2. THE DEEP LINK IS NOT REGISTERED. `intentic://` is the entire channel from the SPA into the app — setup,
-#      recreate, sign-in, and the credential coming back. On the installed paths that registration is a
-#      `x-scheme-handler/intentic` MIME entry in the .desktop file, written by the bundler from
-#      tauri.conf.json's `plugins.deep-link`. Nothing else in the pipeline reads that config, so a bad edit
-#      there produces a perfectly working build whose sign-in never returns. The MIME entry is only half of it:
-#      an Exec line with no `%u` field code is launched with no arguments, so the entry wins the handler lookup
-#      and then drops the link — see _editor/desktop-app/src-tauri/main.desktop. Both halves are asserted.
-#
-#   3. THE GLIBC FLOOR MOVED. A glibc symbol is versioned: a binary linked on a newer Debian asks for a newer
-#      GLIBC_x.y, installs cleanly on an older system and dies in the loader. The floor is declared once, as the
-#      deb's `libc6 (>= x.y)` in tauri.conf.json, which is also what makes apt and dnf refuse an unsupported
-#      system. glibc-floor.mjs fails any ELF in the Linux payloads (the AppImage's vendored libraries included)
-#      that imports a newer version, and a .deb or .rpm whose own metadata does not carry the floor.
-#
-#   4. THE ic CLI DID NOT SHIP BESIDE THE APP, as intentic-ic[.exe] and never as a bare `ic` (the deb would put that on
-#      every PATH as /usr/bin/ic). tauri.conf.json's second `externalBin`, staged per target by stage-desktop-ic.sh. The app points every script it runs at that file (INTENTIC_IC_PATH), and a shim installs it
-#      from there instead of downloading the same release from GitHub. An installer without it still works, and
-#      quietly needs github.com again before a first setup can start, which is the whole of what it is there to stop.
-#
-#   5. THE LOCAL FILES SIDECAR DOES NOT START. The AppImage bundler REWRITES intentic-files (linuxdeploy sets its
-#      rpath), and a rewrite can leave a binary the loader cannot map: linuxdeploy's own patchelf 0.8 did that to
-#      bun 1.4.3's output, which then segfaulted on start (_tools/scripts/lib/appimage-env.sh). Every bundle built,
-#      and shipped a folder sidecar that could not run. The one thing here that executes anything: the extracted
-#      sidecar's `version`, which needs no display and touches nothing.
-#
-# This is deliberately the cheap tier: it is archive inspection, runs in seconds, needs no display, no
-# Docker and no privileges — and it is the ONLY automated check that reaches inside the Windows NSIS installer,
-# which is cross-built by cargo-xwin and never otherwise opened before it reaches a user.
+# Inspect installers for byte-identical launcher scripts, intentic:// registration (including Exec %u), and the declared glibc floor.
+# Require the bundled intentic-ic CLI under its namespaced filename; a bare ic would pollute the user's PATH.
+# Also execute the extracted local-files sidecar's version: AppImage rpath rewriting can leave an otherwise valid bundle unlaunchable.
+# Defaults to _editor/desktop-app/dist-bin; archive inspection needs no display, Docker or privileges and covers Windows NSIS too.
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$(dirname "$0")/../lib/repo-root.sh"

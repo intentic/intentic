@@ -1,22 +1,10 @@
 //! MOVING A PC'S SANDBOXES BETWEEN ENGINES — `ic engine move --to intentic|docker-desktop` (2026-10-09).
 #![cfg_attr(not(windows), allow(dead_code))]
 
-/* One engine per side of a PC: every `docker` ic, the desktop app and the machine agent spawn goes to the engine this
-account's sandboxes run on (engine.json's `active`), so the sandboxes move together and the PC switches once, at the end.
-
-A sandbox moves in four steps. Its container is stopped and renamed `<name>.moved` on the engine it leaves, so nothing
-there can start it again under its own name while its files are copied. Its image goes across by `docker save | docker
-load` (the exact build, a locally-built environment included), and each of its volumes by a tar stream between two
-helper containers, checked afterwards against a list of every file and its size on both sides. A stopped placeholder
-carrying the old container's env and mounts is created on the new engine, and the ordinary reshape (recreate.rs) makes
-the sandbox from it: the run contract, the same shape, the same health waits as every swap. Containers that live beside
-a sandbox (the Windows deploy target, an old tunnel sidecar) are committed, carried and created again as they were.
-
-Nothing on the engine being left is changed or deleted. A move that fails anywhere puts every sandbox of this run back
-where it was, and the PC is not switched. A move that succeeds leaves the old copies stopped there for KEEP_DAYS, named
-in the journal (moves.json), and `ic engine cleanup` (also run by the daily tidy) removes them once those days are up.
-Moving back is a move in the other direction. Sandboxes kept by another side of the PC (ic inside a WSL distro) stay on
-Docker Desktop, which that side keeps reaching through its WSL integration. */
+/* Move all sandboxes for this side/account before switching engine.json active: stop/rename originals, transfer exact images and checked volumes,
+ * then reshape placeholders through the normal run/health contract; carry companion containers too. Other WSL sides retain their engine.
+ * Any failure restores all originals without switching. Success keeps stopped old copies in moves.json for KEEP_DAYS before cleanup.
+ * Moving back is another move; never delete source data during transfer. */
 
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};

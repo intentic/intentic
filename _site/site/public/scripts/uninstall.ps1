@@ -1,35 +1,17 @@
 <#
 .SYNOPSIS
-  intentic uninstall (Windows): a bootstrap shim. It finds the ic CLI this PC already has (installed, or carried by the
-  desktop app), downloads it only when there is none, and hands over to ic uninstall, which takes Intentic itself off
-  this PC. ic shows what it found and asks before it removes anything: remove everything, the sandboxes and their data
-  included (confirmed by typing how many sandboxes there are), or keep the sandboxes running. The flow, its questions
-  and its output are ic's (_sandbox/ic/src/uninstall/), and this file only finds ic. Running it again is safe: ic finds
-  what is left and removes only that.
-
-  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
-
-  Words after the switches below go to ic unchanged, so ic's own spelling works too (--dry-run, --json). -Confirm <n>
-  becomes --confirm <n>.
-
+  Prefer installed/bundled ic, downloading only if absent, then delegate to ic uninstall. Repeated runs remove only what remains.
+  Forward extra ic flags unchanged; -Confirm becomes --confirm. Under irm | iex return LASTEXITCODE without ending PowerShell.
 .PARAMETER DryRun
-  Say what would be removed, and remove nothing.
-
+  Preview removal without changing anything.
 .PARAMETER KeepSandboxes
-  Keep the sandboxes running. Only the desktop app, folder sync and the caches are removed.
-
+  Remove app/sync/caches while preserving running sandboxes.
 .PARAMETER Yes
-  Answer the uninstall question. Without -DeleteData it keeps every sandbox and saved password.
-
+  Confirm uninstall; retain sandbox data/passwords unless DeleteData is explicit.
 .PARAMETER DeleteData
-  Delete the sandboxes and the saved passwords as well. With sandboxes on this PC, ic also wants their count:
-  -Confirm <n>, or typed when it asks.
-
+  Include sandbox data and saved passwords; sandboxes also require -Confirm <count> or a typed count.
 .EXAMPLE
-  irm https://intentic.dev/uninstall | iex                                     # see what is here, then choose
-
-.EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/uninstall))) -DryRun     # only say what would be removed
+  & ([scriptblock]::Create((irm https://intentic.dev/uninstall))) -DryRun
 #>
 param(
     [switch]$DryRun,
@@ -45,35 +27,10 @@ $PSNativeCommandUseErrorActionPreference = $false
 $UninstallTyped = @($args)
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

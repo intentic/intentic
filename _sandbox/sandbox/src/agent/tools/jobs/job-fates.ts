@@ -17,29 +17,10 @@ import {
     awaitedByRun,
 } from "./background-jobs.js";
 
-// What happens to what a turn leaves running, decided the moment it ends, from facts the sandbox holds and never from
-// the turn's prose. A job goes one of three ways:
-// - handed over, when the agent kept it for the person with the `keep` tool (keepBackgroundJob), or it listens on a port
-//   this conversation already handed over (a restarted server): it keeps running, wakes nothing and holds no land, and
-//   the person stops it (chat, Preview). The reply's words decide nothing: "I stopped the old server and started a fresh
-//   one at http://localhost:5173" hands one over and "I stopped the server on localhost:5173" does not, and no reading
-//   of either sentence told them apart;
-// - stopped, when it listens on a port the turn reached itself, or one an earlier turn of the conversation reached (the
-//   preview it restarted and did not open again), and nobody kept it: the instrument of the agent's own look, which the
-//   sandbox reclaims rather than leave holding memory, the land and a six-hour watch. A call reaches it by what it was
-//   given: its one-line target, or the input of a call that has none (Playwright code that goes to the page, a
-//   delegation's prompt); on 2026-10-12 a turn that only ever reached its demo server through `browser_run_code_unsafe`
-//   left it awaited, and the watch held a finished conversation's land;
-// - stopped too, when it sits at a prompt (input-wait.ts: blocked reading its terminal, nothing moving) and nobody kept
-//   it: no agent is left to answer it, and awaiting it armed a six-hour watch that held the land the whole time. On
-//   2026-10-04 an `npx eslint` asking "Ok to proceed? (y)" did exactly that to a conversation whose work was done;
-// - stopped too, when a turn that was cut off left it awaited (background-jobs.ts JobRecord.cut) and the next run that
-//   ended cleanly never reached it: nobody chose to wait on it, and the run that carried the work on finished without
-//   it. On 2026-10-20 a transcript scan outlived the re-run that finished its conversation's work by hours, holding a
-//   six-hour wake that would have started a turn on a conversation already done. A run that did reach it (waited on it,
-//   read its output) makes the wait its own, as if it had ended on it;
-// - awaited, anything else: work whose exit the conversation waits on (background-adoption.ts), a listener the turn
-//   never reached included (a test suite's own server mid-run), so a turn that ended to wait on its tests keeps them.
+// Classify leftover jobs from sandbox facts, never reply prose: keep explicitly kept jobs or listeners on already-handed-over ports.
+// Stop unkept listeners reached by this conversation and jobs waiting at an input prompt; neither should hold land or wake a finished turn.
+// Also stop cut-off awaited jobs the next clean run never reached; reaching one adopts its wait into that run.
+// Await everything else, including unreached test servers, so finishing a turn to wait on its tests keeps them alive.
 
 export interface JobFateDeps {
     readonly conversations: Pick<ConversationActors, "holdings" | "send">;

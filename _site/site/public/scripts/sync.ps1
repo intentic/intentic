@@ -1,30 +1,7 @@
-# intentic desktop sync: sync a local folder on THIS Windows device two ways with your sandbox's /work (block-delta,
-# near real time), and mirror the sandbox's dev-server ports onto this device's localhost (both powered by Mutagen).
-# Runs as YOU (no admin): it installs the one device agent into %USERPROFILE%\.intentic\machine and registers per-user
-# logon entries so it resumes after a reboot. `intentic-machine sync uninstall` removes everything.
-#
-# THIS IS A BOOTSTRAP SHIM: its whole job is to put an agent that understands `sync setup` on a device that has none,
-# then hand over to it, and that agent decides everything else (self-updating, putting the bin folder on your PATH,
-# fetching the windowless launcher), so re-running this command still upgrades a device. The decisions live once, in
-# the agent (_devices/machine/src/install.ts), where they are compiled and tested.
-#
-# Usage (the platform's Desktop sync card hands you this):
-#   irm https://intentic.dev/sync/<SANDBOX_HOST>/<CODE> | iex
-# where CODE is a single-use code the sandbox minted: this script spends it at https://<SANDBOX_HOST>/system/redeem/
-# for the sandbox's address, its pairing token, and the folder and takeover the card set, none of which pass through
-# $env:. The older shape (SANDBOX_URL and PAIR_TOKEN set in $env:) still works.
-#
-# Optional env:
-#   SYNC_DIR            local folder to sync (default: %USERPROFILE%\intentic\<id>)
-#   SYNC_REMOTE_DIR     the sandbox folder it syncs with: /work (the default), or /work/<name> for a project folder of
-#                       your own, which also needs SYNC_PROJECT
-#   SYNC_PROJECT        any non-empty value: SYNC_DIR is your own project, synced into SYNC_REMOTE_DIR with no sandbox
-#                       state backup and no git bridge writing into it
-#   TAKEOVER            any non-empty value takes over sync from another device already connected to this sandbox
-#   AGENT_BIN           local dev: run this command instead of the installed agent, whitespace-separated
-#   INTENTIC_AGENT_ONLY 1: put the agent on this device and stop, enrolling nothing (the desktop app, at launch)
-#
-# The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
+# User-level Mutagen sync/port forwarding; bootstrap a compatible intentic-machine, then hand over to sync setup and self-update.
+# Redeem /sync/<SANDBOX_HOST>/<CODE> or use legacy SANDBOX_URL/PAIR_TOKEN env inputs; SYNC_DIR selects the local folder.
+# SYNC_PROJECT marks an owner's project at SYNC_REMOTE_DIR, avoiding sandbox-state backups/git bridging; TAKEOVER replaces another device.
+# AGENT_BIN overrides for dev; INTENTIC_AGENT_ONLY=1 installs without enrolling. Under irm | iex, return the code in LASTEXITCODE.
 param(
     [string]$Sandbox,
     [string]$Code
@@ -37,35 +14,10 @@ $ErrorActionPreference = 'Stop'
 $route = 'sync'
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

@@ -1,27 +1,9 @@
 import { copyTemplates, staticCopy } from "@intentic/ui/i18n";
 
-// What of a piece of on-screen text a session replay (and a click event, eventPrivacy.ts) may keep. Default-deny: text is
-// turned into asterisks unless one of the rules below recognises it, so a view added later is masked before anyone has
-// heard of it. The rules, in the order they are tried:
-//
-//  - The interface's own wording: a message an i18n catalog spells out (`staticCopy`), the product's name, and text with
-//    no letters or digits in it (a separator, a bullet, a full stop).
-//  - A quantity standing alone: "3", "42%", "1.5 GB", "about 3 min left", "4 / 10". A bare number is at most three digits
-//    or comma-grouped, so a PIN, a postcode, a year, a phone number or an IP address does not read as one.
-//  - Our sentence around a value: a message with placeholders (`copyTemplates`, "{count} files changed") keeps its
-//    wording, and each value is judged by these same rules, so "3 files changed" replays whole and "Delete
-//    src/a.ts?" keeps "Delete" and stars the path. A piece of such a message rendered on its own (an `<i18n-t>` slot's
-//    neighbours) is our wording too, and so is each part of text joined by " · ".
-//  - Inside `pre` or `code` nothing is kept: those hold commands with setup codes in them, and code.
-//  - Inside `[data-replay="diagnostic"]`, the words are kept: what a machine reported about a failed setup, which is
-//    the one thing a replay of a stuck setup has to show. Addresses, paths, emails, hostnames and identifiers in it are
-//    still starred (`scrubDiagnostic`).
-//
-// The catalogs make a sound allowlist because `_tools/checks/i18n-literals.mjs` ratchets English typed into templates,
-// so chrome reaches the screen through them and no component needs a marker. A literal still typed into a template is
-// masked, which is the safe direction.
-//
-// The privacy policy says what a replay holds (_site/site-content/src/legal.ts). Change one, change the other.
+// Default-deny replay/event text: allow catalog wording, product names, punctuation and quantities (bare numbers <=3 digits or comma-grouped).
+// Judge template values recursively, including i18n-t fragments and middle-dot parts; unknown literals remain masked.
+// Keep no pre/code text. Diagnostic regions allow setup wording after scrubbing addresses, paths, emails, hosts and identifiers.
+// i18n-literals.mjs keeps UI copy in catalogs; changes to these rules must also update the privacy policy in legal.ts.
 
 // The product's name, drawn by the shell's mark from a constant rather than a catalog.
 const BRAND = new Set([`intentic`, `Intentic`]);

@@ -41,22 +41,8 @@ if [ "${SANDBOX_VM:-}" = "1" ]; then
     cd /work
 fi
 
-# HOW THIS SANDBOX IS REACHED
-#
-# NOT FROM HERE, any more. ~150 lines used to sit at this spot enabling a zrok environment, claiming the
-# `sandbox-<id>` name, binding a share to it, and reclaiming whatever the previous container had left holding
-# that name — because on the hub, reachability was STATE: an account per sandbox, a name, a share, and a
-# terminator that a `docker rm -f` killed without telling anyone, so a recreated box came up 502 on its own
-# address and fought its dead predecessor for the name.
-#
-# The edge the platform runs now answers the question that state existed for — "which sandbox may serve this
-# hostname?" — by PARSING it: every public name ends in the sandbox's own 12-hex id (sandbox-contract's
-# hostnames.ts), so ownership is arithmetic and the only thing to provision is a signed grant naming that id.
-# Nothing to enable, claim, bind or reclaim, and a second tunnel for an id simply displaces the first.
-#
-# What remains is one outbound dial, and it belongs to the DAEMON rather than to this script — it reads the
-# grant and the edge out of its own environment (ingress-contract.ts's ENV_SANDBOX_GRANT / ENV_INGRESS_URL),
-# which is why the entrypoint no longer has a reachability step at all.
+# Reachability belongs to the daemon's outbound tunnel, using the signed grant and ingress URL from its environment.
+# The edge derives sandbox ownership from the hostname's ID; replacing a tunnel displaces the old one without hub-side provisioning.
 
 # sshd backs the local-sync path: the laptop's Mutagen connects over SSH and auto-injects its agent, which
 # reads/writes /work. It is reached on 127.0.0.1 here — the daemon carries the stream in from its own HTTPS
@@ -115,30 +101,9 @@ mkdir -p /run/sshd
 # Only local sync rides it, so an sshd that will not start costs that and nothing else: netd and the daemon still start.
 /usr/sbin/sshd || echo "intentic: sshd did not start; local sync stays down until the next start" >&2
 
-# DNS THAT CANNOT FREEZE THE DAEMON.
-#
-# Measured in this sandbox: reverse-resolving the Docker gateway (the address EVERY browser and host connection
-# arrives from) takes 8.004s and ends in NXDOMAIN. Docker's embedded resolver has no PTR record for it, forwards
-# to the host, is answered by nobody, and glibc pays its full ladder — two attempts at the 4s per-query timeout.
-# One lookup per peer, done in sequence, and the daemon's event loop is dead for the whole run: 6 peers froze it
-# for 48s, 16 for 128s. No heartbeat goes out, so the browser's 10s liveness watchdog declares the sandbox gone
-# and the UI locks up — the outage users actually report. Container IPs on the same network resolve instantly
-# (the embedded server knows them); it is only the gateway that costs 8s.
-#
-# Two independent guards, because either alone leaves a hole:
-#  - names for the local subnet's ends in /etc/hosts. nsswitch is `files dns`, and glibc's files backend answers
-#    REVERSE lookups too, so the gateway's PTR never reaches the resolver at all. 8.004s -> 0.001s, measured.
-#  - a bounded resolver ladder, which caps every OTHER unresolvable name (a telemetry host, a typo'd remote) at
-#    ~4s instead of 8s. Docker leaves an edited resolv.conf alone, but only for the life of the container.
-#
-# That per-query timeout is spent on names that DO resolve as well, and the embedded resolver serializes its
-# forwards: measured in this sandbox, one name costs 41ms alone, ~1s under 100 concurrent lookups, ~3s under 300.
-# At timeout:1 a busy fleet turned a slow lookup into a hard failure — a turn died on `dial tcp: lookup
-# chatgpt.com: i/o timeout` while the same credential served other turns either side of it. 2s per attempt clears
-# the measured band and still halves glibc's cap.
-#
-# Both files are runtime bind mounts that a recreate resets, which is why this lives here and not in the image —
-# and both are written in place: `sed -i` renames, and renaming onto a bind mount fails with EBUSY.
+# Add local subnet endpoints to /etc/hosts to avoid slow gateway PTR lookups blocking the daemon's event loop.
+# Bound other DNS retries at 2s per attempt: 1s failed under concurrent load, while defaults allowed long stalls.
+# Apply on every boot and write in place; recreate resets these bind mounts and sed -i's rename fails with EBUSY.
 gateway="$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')"
 if [ -n "$gateway" ] && ! grep -q "^${gateway}[[:space:]]" /etc/hosts 2>/dev/null; then
     printf '%s\tdocker-gateway\n' "$gateway" >> /etc/hosts
@@ -148,23 +113,9 @@ if [ -f /etc/resolv.conf ] && ! grep -q 'timeout:' /etc/resolv.conf 2>/dev/null;
         /etc/resolv.conf > /tmp/resolv.conf.new && cat /tmp/resolv.conf.new > /etc/resolv.conf && rm -f /tmp/resolv.conf.new
 fi
 
-# The daemon's own flags, for the exec at the end of this script.
-#
-# --report-on-fatalerror: a V8 fatal error (heap limit, native OOM) prints only to stderr and dies — and
-# stderr lives in `docker logs`, which the next recreate erases. The diagnostic report lands on /history
-# instead, where the next boot's death check (src/system/boot/boot-marker.ts) finds and names it — without this,
-# a daemon that dies on a fatal error dies without a trace.
-# --max-old-space-size: V8 sizes its default heap from /proc/meminfo, which inside a container is the HOST's memory,
-# not this cgroup's — so on a 20 GB machine the daemon is handed roughly a 4 GB ceiling whatever `--memory` said, and
-# a leak has that much room to grow into before anything says a word. Measured on a 16 GiB sandbox: the daemon drifted
-# from 731 MB to 1.50 GB in an hour and nothing objected, because the ceiling it was climbing toward belonged to the
-# machine. An explicit value is the only way the heap is sized to the sandbox.
-#
-# A quarter of the cap, held between 768 MiB and 3 GiB: the daemon is one process among the turns, browsers and
-# toolchains it supervises, so it may not have the box; and a sandbox at the 4 GiB floor must still get a workable
-# heap. An unreadable or unlimited cgroup falls back to the middle of that range rather than to V8's host-derived
-# guess. Crossing it is a fatal error, which is the point: --report-on-fatalerror above writes the report the next
-# boot's death check reads, so a leak ends as a named diagnosis instead of the kernel picking a victim.
+# Persist fatal-error reports on /history so the next boot can diagnose failures after container logs disappear.
+# Size V8's heap from this sandbox's cgroup cap, not host memory: use one quarter, clamped to 768 MiB-3 GiB.
+# Missing/unlimited cgroups use a bounded fallback; crossing the heap cap yields a report instead of unbounded growth and a kernel victim.
 heap_mb=1536
 cgroup_max="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
 # A cap past the engine's own total never binds, so the smaller of the two is what this box has.

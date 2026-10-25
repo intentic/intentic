@@ -4,25 +4,9 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Manager, Webview, Window, WindowEvent};
 
-/* WEBVIEW2 TAKES ITS WINDOW'S GEOMETRY AGAIN EVERY TIME THE WINDOW COMES BACK (Windows only).
-
-wry keeps the WebView2 controller in step with two messages, WM_SIZE (skipped while minimised) and WM_MOVE, and
-Tauri never sets the controller's visibility. Most of what this app does to a page window happens where the webview
-cannot see it: windows are built hidden and their page loaded before they are shown, sized, placed and maximised while
-hidden (windows.rs `take_frame`), hidden to the tray for hours, minimised, and dragged between monitors of different
-scale. The page's own copy of its size and scale can be left behind the window's by that, and what the reader then
-gets is a page DRAWN in one place and HIT-TESTED in another.
-
-(2026-10-01) Seen as every control of the right-docked chat answering only at its bottom-right corner (the effort
-picker, the composer's buttons) on WebView2 runtime 154 across a 100% and a 150% monitor, and cured by F5. A reload
-changes nothing about the window, its bounds or its scale; what it does is re-send the page every size and scale it
-has, and so does a resize, so this resizes: at each moment the copy can have gone stale, the controller's bounds go one pixel shorter and straight back.
-The page sees two `resize` events, nothing it lays out is persisted from them (usePanelHeight clamps on a drag,
-not on a resize), and the height moves rather than the width so no width breakpoint flips on the way. Rejected:
-keeping the controller's IsVisible in step with the window, which Microsoft recommends for minimise/restore. It would
-have made `document.visibilityState` honest too, but a hidden WebView2 on runtime 152+ reports a ~70×39 viewport
-(WebView2Feedback#5689), and this page answers a narrow viewport by switching to its mobile shell and undocking the
-chat. */
+/* Hidden/moved/scaled Windows windows can leave WebView2's layout and hit testing out of sync despite wry's WM_SIZE/WM_MOVE handling.
+ * Nudge controller height down one pixel and back at those transitions to resend size/scale without crossing width breakpoints.
+ * Do not toggle controller IsVisible: hidden WebView2 reports a ~70×39 viewport, switching the page to its mobile shell. */
 
 /// How long after a window comes back, or changes scale, before its webview is nudged: long enough for the resize
 /// the platform sends behind a restore (and tao behind a new scale) to land, and for WebView2 to have noticed the new

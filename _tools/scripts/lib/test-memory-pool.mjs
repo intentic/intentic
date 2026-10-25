@@ -1,26 +1,7 @@
-// THE CI HOST'S TEST MEMORY, AS ONE POOL EVERY JOB ON IT DRAWS FROM. Six runner processes share one machine
-// (docs/ops/ci-runner.md) and no container can see the others, so every fan-out used to be sized as if all six were
-// running the heaviest suite at once: test-workers.mjs divided the free memory by CI_HOST_JOBS and then by turbo's four
-// tasks, which on the 26 GB fleet comes to one bun worker per package, always. The web suite (875 files) ran on that one
-// worker for 19 to 25 minutes while most of the machine's cores sat idle (measured 2026-10-07).
-//
-// A pool says what a division can only guess: what the other jobs hold RIGHT NOW. The host's test budget is TEST_SLOTS
-// files of one GiB each in TEST_SLOTS_DIR (a directory every job mounts, /ci-cache/test-slots on the fleet), and a run
-// holds a slot by holding an flock on its file. A run takes what it wants of what is free, at most SHARE_PERCENT of it so
-// the job that starts a second later is not left with nothing, and the kernel gives the slots back when the holder exits,
-// however it exits: a killed job cannot leak one.
-//
-// FIRST COME WAS NOT ENOUGH. On the second pipeline after the pool landed (run 37694899281, 2026-10-07) the web suite,
-// the one the platform gate waits on, found 2 slots free and ran its 877 files on ONE worker for 14.6 minutes, while
-// verify-clocks (which gates nothing) and a superseded push's jobs held the rest; on the run before, with the pool to
-// itself, the same suite took 4.3 minutes on four. So the pool has three more knobs, all off unless a job sets them:
-//   TEST_SLOTS_RESERVED  the first N slots only a gate run may take (TEST_SLOTS_PRIORITY=gate: verify.yml's groups,
-//                        whose suites production and the release wait on); every other run draws from the rest.
-//   TEST_SLOTS_CAP       the most slots one run of this job may hold (verify-clocks: its two zones are worth a few
-//                        workers, not the box).
-//   TEST_SLOTS_WAIT      seconds a run that got less than it needs may keep polling for more (acquireAtLeast). A big
-//                        suite that starts short-handed stays short-handed, since bun's worker count is fixed at start,
-//                        so a bounded wait for room is worth minutes; a small suite never waits.
+// Shared CI memory budget: flock TEST_SLOTS one-GiB files in TEST_SLOTS_DIR; kernel releases slots even when a job is killed.
+// Acquire at most SHARE_PERCENT of free slots, respecting TEST_SLOTS_CAP, so concurrent jobs retain room.
+// TEST_SLOTS_RESERVED protects slots for TEST_SLOTS_PRIORITY=gate; other jobs use the rest.
+// TEST_SLOTS_WAIT bounds acquireAtLeast polling: Bun's worker count cannot grow once a large suite starts short-handed.
 import { spawn } from "node:child_process";
 
 export const SLOT_BYTES = 1024 ** 3;

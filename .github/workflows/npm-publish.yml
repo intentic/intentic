@@ -1,45 +1,7 @@
-# Publish the @intentic/* packages to npm, with provenance, at the tag semantic-release pushes.
-#
-# THE TAG CARRIES THE VERSION; THE TREE DOES NOT. Every first-party package.json stays at 0.0.0 in git — the
-# release version is stamped transiently, in CI only, by set-versions.sh (packages.sh says why). release.yml
-# does that in each of its build jobs; a checkout of the tag is therefore an UNSTAMPED tree, so this workflow
-# stamps it too, before anything is built or packed. Without that step publish-npm.sh's version assertion
-# fails on the first package every time ("_tools/base is at 0.0.0, not the released <version>") — the first
-# thing this workflow hit once it started running at all.
-#
-# DISPATCHED, NOT TAG-TRIGGERED. semantic-release pushes its tag with the built-in GITHUB_TOKEN, and GitHub
-# refuses to start a workflow from any event that token created — its loop guard. `on: push: tags` was
-# therefore a trigger that could never fire, which is how npm fell ~30 versions behind the tags while every
-# release reported a pass. workflow_dispatch is the documented exception to that guard, so it is the one
-# trigger the release job can pull (dispatch-publish.sh). The dispatch names THE TAG as its ref, which this
-# workflow depends on twice over: the checkout gets the released commit and the version stamped from its tag,
-# and the OIDC claim and the provenance attestation name that commit rather than whatever main had drifted to.
-#
-# Auth is TOKENLESS. `id-token: write` lets npm exchange this run's OIDC token for a short-lived publish
-# credential, which is also what makes the provenance attestation possible: the attestation names this
-# repository, this workflow file, and this commit. Registering the trusted publisher is a ONE-TIME step per
-# package, from an authenticated maintainer machine —
-#   npm trust github <name> --file npm-publish.yml --repo intentic/intentic --allow-publish
-# — or the same thing by hand on npmjs.com (Settings -> Trusted publisher -> GitHub Actions); a package that is
-# missing it fails the exchange rather than falling back to anything. The package has to EXIST first, which is
-# what check-publishable.mjs reads at plan time.
-#
-# PROVENANCE NEEDS A PUBLIC REPOSITORY. The attestation is published to a public transparency log, so npm
-# refuses `--provenance` from a private repo — this repository is public, which is what makes the attestation
-# publishable at all. Were it ever private again the publish would fail at that step, and that is the correct
-# failure: an unattested tarball is not what this pipeline promises.
-#
-# PROVENANCE ALSO NEEDS A GITHUB-HOSTED RUNNER, WHICH IS WHY THIS ONE JOB IS OFF THE FLEET. npm builds the
-# attestation's builder id out of the runner's own environment — `https://github.com/actions/runner/
-# $RUNNER_ENVIRONMENT`, libnpmpublish/lib/provenance.js — and the registry reads it back and accepts only
-# "github-hosted". On `[self-hosted, intentic]` every package packs, signs, uploads and then 422s on the PUT:
-# `Unsupported GitHub Actions runner environment: "self-hosted"`. That is what v1.208.0 died of, on the first
-# of the 29, after a full install and build. Nothing about it is fixable job-side — the only choices
-# are a hosted runner or an unattested tarball, so: ubuntu-24.04, cold caches and all (publish-npm.sh asserts
-# the same fact before it packs anything, and the workflow-policy check keeps the pairing from drifting back).
-#
-# A release that half-published this way is repaired with `publish-npm.sh <version> --interactive` from an
-# authenticated maintainer machine, or by re-running this workflow: publish-npm.sh skips versions already up.
+# Dispatch at the release tag: GITHUB_TOKEN tag pushes cannot trigger workflows. Stamp its 0.0.0 package versions before build/pack.
+# OIDC/provenance requires a public repository, a GitHub-hosted runner and a registered trusted publisher for every existing package.
+# Keep checkout, version and attestation on the tagged commit. Self-hosted runners are rejected by npm's provenance validation.
+# Reruns skip published versions; publish-npm.sh <version> --interactive is the maintainer recovery/bootstrap path.
 name: npm publish
 
 # Run it by hand from a tag the same way the release job does: Actions ▸ npm publish ▸ Run workflow, with the

@@ -330,45 +330,10 @@ fn shown_face(app: &AppHandle) -> Option<Window> {
     crate::frame::frame(app).filter(|frame| frame.is_visible().unwrap_or(false))
 }
 
-/// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
-/// navigation this window intercepts, so no IPC is ever exposed to remote content.
-///
-/// The install id rides along so the SPA's analytics can say which app an event came from, and join it to what
-/// This device reported about the same install (state.rs). It is a random per-install id and grants nothing:
-/// remote content that reads it learns only that it is inside an app, which the version already told it.
-///
-/// `update` is the third value and the newest: the version this app has already DOWNLOADED and is one restart
-/// away from running, or null. It is here as well as on the event (update.rs `announce_to_workspace`) because
-/// the two cover different orderings — the event reaches a page that is already open, and this reaches a page
-/// that loads afterwards. Without it a webview navigated at any point after the download would draw no banner
-/// and the app would look, from inside, exactly as up to date as it is not.
-///
-/// `loopbackUngated` is the fourth and is about the WINDOW rather than the app: this webview does not gate the
-/// reach for loopback (`BROWSER_ARGS` on Windows, WebKit having no such check anywhere else), so the page may
-/// dial the sandbox on this machine without first showing the card that explains a dialog nothing is going to
-/// raise. It grants nothing — the page could always make the request; this only says nobody will interrupt it.
-///
-/// `frameless` is the fifth and is the page's INSTRUCTION TO DRAW A TITLE BAR: this window has no platform
-/// frame, so the three buttons it used to carry are the page's to draw, in the bar it already has across the
-/// top of every column (the SPA's WindowControls.vue). It is a claim about the window rather than a permission,
-/// and it is the half that stops an app OLDER than the page from ending up with two sets of controls: a build
-/// that still opens a decorated window simply never says this, and the page draws nothing.
-///
-/// `projectSync` is the sixth and is about what this BUILD understands: a sync link carrying `project=` (a
-/// hosted sandbox holding one folder, setup_link.rs) is copied into that folder's project and nowhere else. The
-/// web setup hands a folder to a hosted machine only when the app says this, because an older build reads the
-/// same link as a whole-`/work` sync and would pour the sandbox's workspace into the user's folder.
-///
-/// `notices` is the seventh, and also about the build: it puts up the system's notifications and the tab's mark on
-/// its icon when the page asks (`intentic://notice`, `intentic://badge`; notice.rs, badge.rs), so the page offers
-/// them in its settings and sends them only to an app that says this.
-///
-/// `wake` is about the WINDOW: the workspace face, and only it, has the microphone (microphone.rs), a tray that says
-/// what its listening is doing and switches it, and a page kept loaded in the tray for it (wake.rs). So only there does
-/// the page offer to listen for its wake word inside the app; a floating panel or a local window is told `false`.
-///
-/// `sandboxWakes` is the last, and about the build: it starts a sandbox asleep on this computer the moment the page
-/// asks (`intentic://sandbox-wakes`, sandbox_wakes.rs), so the page sends that link only to an app that says this.
+/// Advertises desktop/window capabilities without exposing IPC; handoffs use intercepted intentic:// links.
+/// installId is a non-secret analytics id; update seeds pages loaded after the download event. frameless requests page-drawn controls.
+/// Gate projectSync and sandboxWakes links on build support to avoid unsafe older behavior; notices enables native notifications/badges.
+/// loopbackUngated describes browser behavior, not permission. wake is true only for the microphone-enabled workspace window.
 fn workspace_init_script(install_id: &str, update: Option<&str>, wake: bool) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),

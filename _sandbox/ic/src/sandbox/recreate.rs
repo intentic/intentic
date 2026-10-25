@@ -2038,23 +2038,10 @@ fn gone_back_from(
         .cloned()
 }
 
-/// Whether this container follows the official registry — the question an UNATTENDED prepare asks before
-/// touching anything. Judged from the run contract's own stamps (index.ts writes both at `docker run`; the
-/// agent can write neither): the base the overlay extends when the container is an overlay build, else the
-/// image it was run from. Pure, because a wrong answer here is silent in both directions — a skipped stock
-/// sandbox never gets its background download, and a tracked dev sandbox gets an "update ready" card that
-/// would move it onto :stable.
-///
-/// A rollback pin reads as off-registry ON PURPOSE: a rolled-back sandbox is a person mid-decision, and the
-/// next release is theirs to take by hand (the update card still offers it — this only stops the download
-/// from happening behind their back). Their next update puts the base back on the registry, and the timer
-/// resumes with it. A container carrying neither stamp predates the run contract; a background job does not
-/// guess about a box it cannot classify.
-/// Was this sandbox's image built from a checkout on this machine (the dogfood loop's `intentic-sandbox:dev`,
-/// or an environment overlay composed on top of it)? Exactly that one tag, never "any non-registry image":
-/// a rollback pin is a local tag too, and an update off one is how a rolled-back sandbox rejoins its channel.
-/// The daemon's twin, which decides what the Environment card offers, is DEV_SANDBOX_IMAGE in the contract's
-/// policy/overlay-lint.ts.
+/// Classify unattended updates from run-contract stamps: overlay base when present, otherwise the original image; never guess for unstamped boxes.
+/// Rollback pins intentionally skip background downloads until a manual update restores registry tracking.
+/// Checkout-built detection matches the dev image tag exactly (including overlays), not every local/non-registry tag.
+/// Keep that predicate aligned with DEV_SANDBOX_IMAGE in sandbox-contract policy/overlay-lint.ts.
 fn built_from_checkout(current_base: Option<&str>, sandbox_image: Option<&str>) -> bool {
     current_base.or(sandbox_image) == Some(DEV_TAG)
 }

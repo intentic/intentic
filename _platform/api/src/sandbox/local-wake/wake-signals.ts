@@ -3,22 +3,9 @@ import { Client, type Notification } from "pg";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 
-/* "SOMEBODY ASKED FOR THIS SANDBOX", SAID TO WHOEVER HOLDS ITS MACHINE'S ASK (2026-10-19). A machine whose sandboxes
- * sleep may hold its wakes ask open here (host-report.ts, POST /host-report/wakes), and `sandbox.wake` says through
- * this hub that a request was just stamped, so the held ask answers at once instead of on its next look. The stamp in
- * `wakeRequestedAt` stays the truth: a signal only says "look now", and losing one costs the held ask's re-check
- * interval, never the wake.
- *
- * The api runs as several replicas, so the browser's wake and the machine's held ask can be on different ones. A wake
- * is said here in two ways: to this process's waiters directly, and to every replica through Postgres `NOTIFY` on
- * WAKE_CHANNEL, which each replica hears on one connection of its own kept `LISTEN`ing. That connection is a plain `pg`
- * client on DATABASE_URL, as jobs-lock.ts's advisory locks are, so it needs the same thing they do: a session that
- * lasts, which a transaction-pooling proxy in front of Postgres would not give. The replica that said it hears its own
- * notification too, which ends nothing: its waiters were already told.
- *
- * Rejected: a hub in each process only (a wake landing on another replica than the held ask would wait for the
- * re-check, as often as not), and a second store or broker for one message type (Postgres is already shared by every
- * replica). */
+/* Wake requests notify local held-ask waiters and other replicas via Postgres NOTIFY; wakeRequestedAt remains the source of truth.
+ * Losing a signal costs only the recheck interval. Duplicate self-notifications are harmless after local waiters have answered.
+ * Each replica keeps a LISTEN connection on DATABASE_URL: require session affinity, not a transaction-pooling proxy. */
 
 // The channel every replica listens on; its payload is a tunnel id.
 export const WAKE_CHANNEL = `sandbox_wake`;

@@ -8,23 +8,10 @@ import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { ClaudeSeatStore } from "./claude-seats.js";
 
-// The way back for a seat mark (claude-seats.ts). A turn answering on the account clears the mark (providerAnswered),
-// but once an account is marked, turns that name no account are kept off it (blocked-account.ts), so no turn would ever
-// run there again to clear it. An admin can turn access back on and a single-account user would still be held. So the
-// mark is re-tested here, and a probe that gets an answer clears it.
-//
-// WHICH CALL: the refusal belongs to the Messages API. It is the API's own sentence, and the CLI passes it through
-// (failure-sentences.ts, NOT_ENTITLED_PHRASES). The OAuth usage and profile reads that headroom and the limit-reset
-// probe make are answered for a refused seat as for any other, which is why the mark exists at all, so they show
-// nothing about it. The cheapest call that meets the same gate a turn does is the smallest legal Messages request:
-// Claude Code's own identity line, one word in, one token out, on the smallest seed model. It costs one token of the
-// account's own allowance per probe, and the schedule below keeps probes rare.
-//
-// WHEN: on three occasions, never on a timer. (1) A turn whose conversation remembers the account is being planned,
-// and would be moved or held for the mark. (2) The account list is read. (3) A person picks the account in the composer
-// (switch-account.ts). The first two are rationed per account: the first probe comes FIRST_RECHECK_MS after the mark,
-// and each probe that finds no answer doubles the wait, up to LONGEST_RECHECK_MS. A person's pick, or a person pressing
-// re-measure on the list, asks at once. A probe already on its way is shared, never repeated.
+// Recheck seat marks with a minimal Messages request on the smallest seed model (one token); usage/profile reads do not test entitlement.
+// Trigger on planning a conversation that remembers the account, listing accounts, or a person's pick/re-measure; never on a timer.
+// Ration automatic probes from FIRST_RECHECK_MS with exponential backoff to LONGEST_RECHECK_MS; explicit picks probe immediately.
+// Share in-flight probes and clear the mark on an answer so blocked accounts can recover after access is restored.
 
 /** What one probe learned: served, refused for the seat again, or nothing either way (offline, spent, a new wording). */
 export type SeatProbe =

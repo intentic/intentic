@@ -9,29 +9,10 @@ use tauri::{AppHandle, Manager, Wry};
 use crate::setup_link::{WakeArgs, WakeState};
 use crate::windows::WORKSPACE;
 
-/* THE WAKE WORD, HEARD WITH THE APP IN THE TRAY (2026-10-13).
-
-The workspace's page can listen on the microphone for a wake word ("Leon" unless the reader named another) and does all
-of the listening itself: the microphone, the audio worklet, the transcription, what a heard word starts. A browser tab
-listens while it is open. This app's window spends most of its life closed to the tray, so the app's part is to keep
-that page somewhere it can go on listening, and to say in the tray what it is doing:
-
-- the page has the microphone without a prompt nobody would see (microphone.rs), and an audio context that starts with
-  nobody there to click (windows.rs `BROWSER_ARGS`);
-- the × hides the workspace rather than destroying it, as it always has, so a page that was listening goes on listening;
-- a launch whose page was listening when the app last ran loads the workspace hidden (`resume_on_launch`), so it listens
-  again after a restart with nothing on screen, a launch at sign-in included (autostart.rs). On Windows, that is all it
-  takes. On Linux WebKitGTK answers no `getUserMedia` made while the window is off screen until the window is shown
-  (measured on 2.54, 2026-10-13: the request waited, and was answered the moment the window came up), so there the page
-  is ready and starts listening the first time the reader opens it; capture that began on screen goes on after the ×;
-- the tray says what the page last said, "Listen for “Leon”" ticked while it is wanted, and pauses, resumes or switches
-  it off by telling the page (`send`), which does it and says so again.
-
-The page says what it is doing on `intentic://wake?state=…&word=…` whenever that changes (setup_link.rs `WakeArgs`), and
-is told on `intentic-desktop-wake` with `{ do: "on" | "off" | "pause" | "resume", minutes? }`. The app keeps whether
-listening is wanted, and the word, in `wake.json`, which is all the next launch needs; the page keeps its own settings.
-The tray's rows come with "Open workspace", once an account has been seen (lib.rs `offer_workspace`): listening is the
-workspace's, and an install that never signed in has no workspace to listen in. */
+/* Keep the microphone-enabled workspace alive in the tray, resuming hidden on launch when wake.json says listening was wanted.
+ * Linux must show the window once before WebKitGTK permits capture; capture then survives hiding. The page owns all audio/transcription.
+ * Read page state via intentic://wake and send intentic-desktop-wake commands (on/off/pause/resume); persist only wanted state and word.
+ * Tray controls reflect page reports. Offer Open workspace only after an account has been seen. */
 
 /// The word a page listens for until it says otherwise: the web's own default.
 pub const DEFAULT_WORD: &str = "Leon";

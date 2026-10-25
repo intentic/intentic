@@ -105,24 +105,9 @@ const lockfileRewriteOnly = () => {
     );
 };
 
-// THE CHECKS, WITH TIDINESS JUDGED AGAINST THE COMMIT THE RANGE IS BUILT ON.
-//
-// A `code` failure fails outright: the tree does not work, and it does not matter who made it so. A `tidy` failure is
-// a real cost with a measurement behind it (manifest.mjs splits the two by what a failure MEANS), and it used to fail
-// nowhere anybody could act: `--tidy=warn` waves every one of them through CI's preflight, and nightly.yml's `tidy` job
-// read them the next morning on a commit with no author attached. That job then failed on 14 of its 24 runs, 13 of them
-// for `layout` or `paths`, every finding traceable to one line in one commit a day or two old.
-//
-// WHERE THE WORK MEETS. A branch measured against its own base is a tree that never becomes main. What becomes main is
-// the pushed range, and the difference between the two is every other conversation's work, which is exactly where a
-// counting rule breaks: two branches that each add one file to a directory of thirty are each innocent in their own
-// worktree and over the limit together. Lands meet on the main tree, and the push is where their sum is first asked this
-// question, of the whole range.
-//
-// Judged against the base rather than failed wholesale, for the reason the tidy job's own comment gives: a gate that
-// fails a push for state nobody in it produced teaches everyone that a failure means nothing. What fails is the lines the range
-// ADDED (turn-findings.mjs); what was already standing is named and charged to no one. The judging is measure-change.mjs's
-// (judgeTidy), `Allow:` trailers in the range included.
+// Judge the combined pushed range against its base: code failures fail outright, while tidy findings fail only for added lines.
+// Measuring the merged result catches limits exceeded by individually valid branches without charging existing problems to the push.
+// turn-findings.mjs and measure-change.mjs share attribution; honor Allow: trailers from the pushed range.
 {
     const verdicts = checkVerdicts(root);
     if (verdicts === undefined) {

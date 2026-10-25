@@ -1,19 +1,7 @@
-/* WHETHER AN ACCOUNT CAN CARRY ONE MORE AGENT, with no I/O: the projection the fan-out planner (budget-planner.ts)
-   places children by and holds them on.
-
-   Ten Opus children went onto one account in four minutes because each spawn read the same figure, "84% left", and
-   nothing counted the ones already headed there; the five-hour window was empty in fifty minutes (2026-10-20). What
-   that figure could carry was knowable: about eight points an hour an agent, so thirteen agents had an hour of it, and
-   the children needed more than that. A projection asks it of every window the model spends:
-
-     usable  = points left, less the owner's reserve
-     burn    = (what runs on the account now + the child) / what one point costs      points an hour
-     horizon = the sooner of the window's reset and the child's expected run
-     fits    = burn × horizon ≤ usable
-
-   A window that resets before the child would finish only has to last until then: it refills. Every figure in here is
-   an estimate, which is why a child that does not fit waits rather than is refused, and why one always goes where
-   nothing of its parent's kind runs (budget-planner.ts). */
+/* Pure account-capacity projection: usable = points left - owner reserve; burn includes running agents plus the proposed child.
+ * horizon = min(window reset, expected child duration); every spent window must satisfy burn * horizon <= usable.
+ * Resets refill windows, so capacity only needs to last until reset. Estimates that do not fit cause waiting, not refusal.
+ * budget-planner still lets one child go where none of the parent's kind is running. */
 
 /** One window an account's model spends, as a projection reads it. */
 export interface BudgetWindow {

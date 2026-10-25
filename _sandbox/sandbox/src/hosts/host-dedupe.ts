@@ -2,22 +2,9 @@ import type { SharedIdentity } from "@intentic/sandbox-contract/schemas/devices"
 import { isDerivedMachineId } from "@intentic/sandbox-contract/schemas/hosts";
 import type { Services } from "../composition.js";
 
-// (2026-10-18) ONE COMPUTER'S ONE OS INSTALL HOLDS ONE KEY INTO THIS SANDBOX, so an older key of the same install is
-// dead weight. The machine agent keeps one link per sandbox address (upsertLink in _devices/machine), and a pairing
-// replaces it there; so once a newer enrollment of the same machine id and environment has connected, every enrollment
-// made before it was overwritten on that computer and can never be presented again. Revoking it takes nothing away.
-// It only stays behind as a credential nobody holds: under a card renamed outside the rename path, it is the
-// "leftover connection" the Devices screen lists.
-//
-// Three guards keep this from cutting a real machine off:
-// - Only ids an agent said count. A derived id (`card:<name>`) is a placeholder from before the agent reported one,
-//   and proves nothing about which computer it is.
-// - Only enrollments made BEFORE the connection that supersedes them. The store appends each pairing (enrollment.ts
-//   `issue`), so its list is oldest first; an older key presenting itself while a newer one exists is not the overwrite
-//   above, and is left alone.
-// - Never one that is connected right now. Two live connections claiming one identity are two computers sharing an id
-//   (a cloned VM, a copied home folder), or one agent reaching this sandbox at two addresses: either way both are in
-//   use, so both are kept and the Devices screen says so (`sharedIdentities`).
+// Revoke superseded enrollments only after a newer connection proves the same agent-reported machine id and environment.
+// Derived placeholder ids prove nothing. Use append order to remove only older entries; never revoke one connected now.
+// Simultaneous live identities may be clones or alternate addresses, so keep both and expose sharedIdentities instead.
 
 type Enrolled = { readonly id: string; readonly card: string; readonly machineId: string; readonly environment: string };
 type Online = (id: string) => boolean;

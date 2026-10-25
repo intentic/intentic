@@ -13,21 +13,9 @@ use crate::sandbox::{backup, container_of, live_slugs, mirror, now_ms, parked_of
 use crate::ui;
 use crate::util::{bail, Result};
 
-/* WHAT UPDATES LEAVE BEHIND, cleared. Every overlay rebuild tags a new image and leaves the one before it dangling,
-every removed sandbox leaves its environment builds and rollback pins, and every channel record outlives its sandbox.
-On a machine that has hosted a dozen sandboxes that is tens of gigabytes, and a full disk is how the NEXT update
-fails. `ic sandbox tidy` removes what nothing on this machine can use any more; it never deletes a volume.
-
-Every store it looks after has a rule (the audit's rule 5, 2026-10-05):
-- images of sandboxes that are gone, and builds and pins nothing names any more: removed, each sandbox's only while
-  no other ic run holds it;
-- overlay builds left dangling by a rebuild (they carry the `dev.intentic.base-id` label every build gets): removed;
-- channel records of sandboxes that are gone, and report-only records of another side's sandboxes: moved to
-  `records-archive/`, which keeps them 90 days;
-- volumes no container, record or trash entry claims: named, and in an unattended run put into the trash, which
-  starts the same seven-day window a removal does instead of leaving them for ever;
-- this side's backups of a sandbox gone for 30 days, or of a sandbox another side keeps and has backed up since:
-  removed, never the only copy of a live sandbox. */
+/* Reclaim unused images/builds/pins under sandbox locks; never directly delete volumes. Archive stale/report-only records for 90 days.
+ * Unclaimed volumes enter removal trash in unattended runs, retaining the seven-day undo window.
+ * Remove backups only for sandboxes gone 30 days or already backed up by their current side; never remove a live sandbox's only copy. */
 
 /// The image families ic builds or pins per sandbox: `<prefix><slug>:<tag>`.
 const FAMILIES: [&str; 3] = [

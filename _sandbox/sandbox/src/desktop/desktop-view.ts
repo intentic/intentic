@@ -20,23 +20,9 @@ import {
 } from "./agent-desktop.js";
 import { parseJsonWith } from "@intentic/base/json";
 
-/* /system/desktop-view: the sandbox's own desktop (agent-desktop.ts) as live video, and the owner's hands on it. The
-   picture is x11grab of the whole display (videocast.ts), the hands XTEST on the same display (xinput.ts): one space,
-   so a click lands on the pixel it was aimed at. Taking it over holds the desktop for the owner, which is what refuses
-   the agent's own input while they drive; handing back, going idle or closing the view lets it go.
-
-   Or one window alone, for a tab that shows one program: `window=<id>` on the socket's address, beside the ticket, with
-   an id from system.desktop's `list`. The picture is then that window's inside (no frame, no title bar: the tab is the
-   frame), clamped to the screen, and followed as it moves or resizes, each new place a fresh stream with its own
-   `ready`. Pointer coordinates still arrive in the picture's own pixels and are moved onto the window here. Taking
-   over raises the window first, so the keys go to what the owner is looking at. When the window closes the view says
-   `gone` and closes the socket (1000): there is nothing left to show.
-
-   Wire, client to server, JSON: ping; pause and resume (nobody is looking); control {driving} (take over, hand back);
-   and, while driving, mouse {action, x, y, button, deltaX, deltaY}, key {key, ctrl, alt, shift} and text
-   {text}, in the picture's own pixels. Server to client: ready {kind: "video", width, height, scale, codec}, then
-   binary H.264 frames (tags 3 and 4, as videocast.ts encodes them); pong; held {owner} whenever the hold changes; and,
-   on a window's view only, gone once that window has closed, just before the socket does. */
+/* /system/desktop-view streams x11grab H.264 and XTEST input in one coordinate space; owner control holds out agent input until handback/idle/close.
+ * window=<list id> crops/follows a window, remaps pointer pixels and raises it for keys; movement/resize emits a new ready, closure sends gone/1000.
+ * Client JSON: ping, pause/resume, control and driving-only mouse/key/text. Server: ready, binary frame tags 3/4, pong and held owner changes. */
 
 type Socket = WSContext;
 

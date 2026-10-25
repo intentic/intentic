@@ -7,23 +7,10 @@ import type { SteeringQueue } from "../../checkpoints/agent-steering.js";
 import { adoptBackgroundJobs } from "../../tools/jobs/background-adoption.js";
 import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
 
-// THE TURN'S CLOSE, in the one order it runs (placedTurn, turn-placement.ts, drives it), however the turn ended:
-// 1. hush: the body has ended, so words said from here (a person's, a wake that fires now) wait in the conversation's
-//    queue for the next turn instead of going into a steering queue no model reads any more.
-// 2. judge jobs: each job the run left running is stopped, left to the person, or awaited (job-fates.ts); once per run.
-//    A run that ended cleanly also settles what an earlier, cut-off turn left awaited and it never reached.
-// 3. arm wakes: each awaited job, and each finished one whose exit the model never read, is handed to a watch
-//    (background-adoption.ts), marked as left by a cut-off turn when this one failed. A card the agent stopped waiting on (a device command, a secret's release, a payment:
-//    guard/held-asks.ts) holds the turn here, still live and parked on the card, until it settles; a yes or a decline
-//    with a note is queued as a wake in the gate's own words (guard/held-cards.ts), and a stop cancels the card. What the conversation holds then says whether it runs again by itself (awaitingWake,
-//    conversation-state.ts), so nothing later predicts it.
-// 4. land, a turn that ended clean only (placement.land): nothing while it awaits a wake, whose turn finishes the work;
-//    else the rules decide, and it lands under the lease (turn-landing.ts), a git operation only; its derived files are
-//    written again where it landed afterwards, in the background (rederive.ts).
-// 5. settle: the placement's books, then the conversation's actor.
-// 6. publish, once: the placement announces how the turn ended (PlacedTurnEnding).
-// The run registry announces `run.settled` after all of it; its listeners are independent of each other and of this
-// order (_sandbox/sandbox/docs/subsystems.md).
+// Close in order: hush steering into the next-turn queue, judge leftover jobs once, then arm watches for awaited/unread exits.
+// Park on held cards until settled (stop cancels); conversation state, not later guesses, decides awaitingWake.
+// Land only clean endings with no wake pending, under the lease; regenerate derived files afterward in the destination tree.
+// Settle placement then actor, publish PlacedTurnEnding once, and only then announce run.settled to independent listeners.
 
 // How a turn ended, as its close decided it: an error, a stop, waiting on a wake it armed, or finished.
 export type PlacedTurnEnding = "failed" | "stopped" | "awaiting-wake" | "finished";

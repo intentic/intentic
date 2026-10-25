@@ -1,23 +1,8 @@
 #!/usr/bin/env node
-// `node seed-buildinfo.mjs <buildinfo>`: before a type check whose program is incremental, gives a checkout that has no
-// build info yet the one a sibling worktree of the same repository holds at the same path, nearest commit first. A
-// conversation's worktree starts without `.cache/` (never committed, never mirrored), so its first web check ran from
-// nothing: 57 to 77 s, against 7.5 s once a build info exists (measured 2026-10-03). The program reuses only what each
-// file's content hash still matches, so a seed from a tree that differs re-checks exactly what differs and what imports
-// it: a new error is still reported. That is also its limit: a sibling on the same commit (a fan-out's children, work
-// started together) saves the minute, and one a few central modules apart saves nothing (four files apart, one of them
-// the chat's transcript state, measured 58 s), though it costs nothing either.
-//
-// Only for a `--noEmit` program (the web's vue-tsc): a `tsc -b` build info also vouches for emitted output this tree does
-// not have, which is why the worktree mirror leaves caches out (isolation.ts). Every failure is no seed: the check then
-// runs from nothing, as it did before.
-//
-// ON THE CI FLEET THE NEAREST BUILD INFO IS THE LAST PIPELINE'S, not this runner's own. Six runners keep six workspaces,
-// so the build info a runner already holds is from whichever push it last checked, often many commits back, and the web's
-// check there took 5 minutes under load (2026-10-07). With TSBUILDINFO_SHARE_DIR set (ci.yml points it at /ci-cache), a
-// check that passes saves its build info there (`--save`, after the check), and the next check on any runner starts from
-// that one when it is newer than its own. Every job container sees the checkout at the same path, so the relative paths a
-// build info records mean the same files on all of them; the program re-checks whatever hashes differ, as from a sibling.
+// node seed-buildinfo.mjs <buildinfo> seeds from a sibling worktree, nearest commit first; content hashes force changed inputs to recheck.
+// Only use with --noEmit programs: tsc -b build info also vouches for emitted files absent from this checkout. Any failure means no seed.
+// With TSBUILDINFO_SHARE_DIR, --save publishes a passing check for other CI runners; prefer it when newer than local build info.
+// Shared runners use identical checkout paths so recorded relative paths resolve consistently.
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

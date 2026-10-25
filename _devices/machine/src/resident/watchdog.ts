@@ -1,22 +1,9 @@
 import { Worker } from "node:worker_threads";
 import type { ExitRecord } from "./last-exit.js";
 
-/* THE AGENT'S OWN HANG WATCHDOG (2026-10-05). Every supervisor of this agent (the logon task through the launcher's
-   `--wait`, a systemd user unit, a LaunchAgent, the Windows side for a distro) restarts it when it EXITS, and none can
-   tell a hung one from a busy one: the heartbeat the agent stamps is only reported. An event loop stuck in a sync call
-   or a runaway loop answers nothing, links included, for as long as the machine stays up.
-
-   So the agent watches itself from a second thread. The main loop pings a Worker every five seconds; a Worker has an
-   event loop of its own, which keeps running while the main one is stuck. Three minutes without a ping, and the Worker
-   writes one line to the agent's log and kills the process. Nothing on the main thread can run by then, so it is a
-   SIGKILL from inside: on POSIX the exit is "killed by signal 9", which systemd's `Restart=on-failure` and launchd's
-   `KeepAlive { SuccessfulExit = false }` both restart; on Windows it is TerminateProcess with exit code 1, which the
-   launcher passes through to the logon task (whose repetition trigger restarts it within five minutes either way) and
-   the Windows side reads as a distro agent that stopped.
-
-   Checked under the compiled binary (`bun build --compile`, _tools/scripts/build/build-agent-binaries.sh): a Worker made
-   from source text (`eval: true`) runs there with no second file to bundle, and `process.kill(process.pid, "SIGKILL")`
-   from it ends the whole process. `process.exit` in a Worker ends only the Worker, in Node and in Bun alike. */
+/* A source-text Worker watches 5s main-loop pings and kills the process after 3m silence so existing supervisors restart a hung agent.
+ * Use process.kill(pid, SIGKILL), not process.exit (which ends only the Worker); Windows exits 1 and POSIX reports signal 9.
+ * Verified with bun build --compile: eval workers need no bundled second file and keep running when the main event loop stalls. */
 
 // How often the main loop says it is alive, and how long without that counts as stuck: long enough for the slowest sync
 // work the agent does on its loop (a cold `docker` spawnSync, a big JSON parse), short enough that a hung agent is

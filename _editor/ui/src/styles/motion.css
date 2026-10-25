@@ -1,18 +1,6 @@
-/* THE HOUSE MOTION — the durations and curves the interface moves by, the one switch that stills it, and the few
-   recipes the views that move are drawn with. The rest of the motion module is TypeScript (../motion/: the setting,
-   looping glyphs, folds, row reveals); this is the part a stylesheet has to say.
-
-   Motion is spent where it shows the reader something, not everywhere: a chart growing from its baseline says how
-   big each figure is as the eye follows it, rows arriving in reading order say how a board is laid out, the
-   workspace arriving says where the file tree and the editor are. A page switching or a menu opening says nothing a
-   static frame does not, so those do not move. A whole window changing what it shows is the exception: a cut there
-   reads as the window going blank, so it crossfades. A row of tabs is the other: the part under it cuts, but the
-   selection's rule glides from the tab left to the tab chosen (SegmentedControl.vue), carrying the eye to where it went.
-
-   THE SWITCH is `data-motion="reduced"` on <html>, written by ../motion/choice.ts from the Appearance setting and,
-   under `system`, the OS's reduce-motion answer. Under it every duration token reads 0ms and every transition is
-   stilled from base below, so no component carries its own opt-out (_tools/checks/reduced-motion.mjs). Loops that
-   say work is happening (a spinner, the thinking rosette) slow down instead of stopping, in their own files. */
+/* Shared motion tokens/recipes complement ../motion. data-motion="reduced" on html comes from Appearance/choice.ts,
+   zeroing durations and transitions globally; activity loops slow instead of stopping. Keep component-specific opt-outs out.
+   Motion should explain layout/state: chart/row reveals, workspace arrival, whole-window crossfades and tab-selection rules. */
 
 @theme {
     /* The house curve: fast out of the gate, a long settle. Tailwind's `ease-smooth`. */

@@ -16,21 +16,9 @@ import { type RegistryWatchHost, useRegistryWatch } from "../flow/useRegistryWat
 import { HERE, type SetupOnMachineApi, useSetupOnMachine } from "../flow/useSetupOnMachine";
 import { type SetupRow, type SetupRowHost, useSetupRow } from "../flow/useSetupRow";
 
-// ADDING A SANDBOX WHEN THE ACCOUNT ALREADY WORKS IN ONE: a name and where it runs, then one press. /setup is the first
-// run's page: it decides by itself where a first sandbox runs, explains every way there, and fills the screen while it
-// does. Someone who already has a sandbox and presses "Add sandbox" was sent there and asked first whether they did not
-// mean the one they had (2026-10-22), then given the whole onboarding to pick a machine they already knew. So the add
-// is a dialog over the workspace (AddSandboxDialog.vue), offering only what starts in one press:
-//
-//   - this computer, inside the desktop app, handed to the app with a fresh code as /setup's button hands it;
-//   - each connected machine that can make a sandbox (useSetupOnMachine's doors), pressed as /setup presses it;
-//   - a machine of ours, while the account has one to start (useHostedLane, the same lane /setup runs).
-//
-// Everything else (the command, the installer, an own Cloudflare zone, an address already answering) stays on /setup,
-// one link away as "More ways". The row is made only on the press, so there is no draft to discard on Cancel; one whose
-// start was refused before anything reached a machine is deleted again, the draft rule /setup keeps. Once a machine has
-// the code the row is kept, and the getting-started ring's "Finish setting up" reopens it on /setup if the dialog is
-// closed. The flows are /setup's own, keyed by the row, so that page resumes exactly the run this dialog started.
+// Existing accounts add through a dialog using /setup's flows: this desktop, capable connected machines or the hosted lane.
+// Other methods stay on /setup via More ways. Create the row only on press; delete it if refused before any machine gets its code.
+// Once handed off, retain the row and resume the same keyed run on /setup via Finish setting up if the dialog closes.
 
 type Platform = (typeof apiClient)[`sandbox`];
 

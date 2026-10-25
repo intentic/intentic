@@ -72,22 +72,10 @@ export const isSandboxContainerName = (name: string | undefined): name is string
     /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name) &&
     name.length > SANDBOX_CONTAINER_PREFIX.length;
 
-// One paired sandbox. sandboxId namespaces the ssh alias, the Mutagen sessions and the loopback port, and is
-// the key. syncToken is the enrollment-minted credential for GET /ports, the self-revoke on uninstall, and the
-// SSH transport itself; a pairing without one can do nothing but exist. mirroredPorts/skippedPorts are the last
-// reconcile's baseline and its negative. autoHealOff stops this agent
-// clearing the build output it left inside directories the sandbox deleted (residue.ts); it is off by default because
-// what that removes is content the session already ignores, which a build puts back. ignoredPorts is mirrorOff's
-// per-port form: numbers this device is never to take, which is a standing choice and not a reading, so nothing the
-// watcher learns ever rewrites it. remoteDir is which sandbox folder localDir holds, /work itself when absent (every
-// pairing made before it existed); `project` marks the owner's own folder synced into `/work/<name>`, which carries
-// no state backup and no git bridge (`isProjectPairing`), and the two only ever come together (`pairingProblem`).
-// `direction` is which way a project's files flow (`projectDirection`), and means nothing on any other pairing.
-// `transport` is how the sandbox's side is reached (`SyncTransport`), and `container` the sandbox container a docker
-// pairing reaches: only a project pairing's, and only ever a sandbox container's name (`pairingProblem`). `deliver` is
-// whether landed work is written into a project folder by itself (project-delivery.ts), which `setup --project` records.
-// WHETHER ITS FILE SYNC RUNS is no field of its own: it is read off the facts below (holds.ts `syncHolds`), each kept by
-// the one rule that observes it, and Mutagen is made to agree every pass.
+// Pairing key sandboxId namespaces SSH, Mutagen and ports; enrollment syncToken authorizes ports, self-revoke and transport.
+// mirrored/skipped ports are reconcile baselines; ignoredPorts is durable user choice. autoHealOff controls cleanup of ignored build residue.
+// remoteDir defaults to /work; project pairings target /work/<name>, omit state/git backup and alone admit direction/container/deliver options.
+// Compute whether sync runs from observed holds (holds.ts), never a second running flag; pairingProblem enforces project/transport invariants.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;

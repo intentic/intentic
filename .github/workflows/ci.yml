@@ -1,27 +1,7 @@
-# CI for the intentic monorepo.
-#
-# One workflow, one DAG, two INDEPENDENT verify groups — verify-core and verify-platform, plus the desktop
-# jobs — each gating only the artifacts it proves. A broken group publishes nothing of its own and
-# blocks nothing of anyone else's. That split is the whole reason this is one workflow rather than several:
-# `needs` edges only exist inside a workflow, and those edges are what the split buys.
-#
-# MEASUREMENT IS NEVER GATED, ONLY PUBLISHING IS. No verification job waits on another's success: each runs whatever
-# preflight concluded, and inside a job each step needs only what it reads, so one run says everything that is wrong
-# with a commit rather than the first thing, and main's fix agent gets that whole list at once. The jobs that push or
-# deploy (`images`, `images-arm64`, `images-platform`, `release`) name every proof they need, preflight included, and
-# when one of those gates fails `images-dry` still builds and boots the image without pushing it.
-#
-# Node + pnpm are pinned by package.json engines/packageManager and baked into ci-base, so no version appears
-# here. The runner requirements — six instances, a shared /ci-cache on the same filesystem as the work dir,
-# and the host Docker socket — are in docs/ops/ci-runner.md.
-#
-# FIRST RUN: ci-base is the one image with a bootstrap problem, because the jobs that could build it all run
-# INSIDE it — including `changes`, the job whose probe would otherwise notice it missing. On a repository that
-# has never published it, push it once by hand before the first pipeline:
-#   docker build -t ghcr.io/intentic/ci-base:latest _tools/ci-base && docker push ghcr.io/intentic/ci-base:latest
-# ci-desktop needs no such step and never did — its build job runs on the host runner, and the `changes` probe
-# builds it when its tag is absent, so a missing ci-desktop costs one pipeline, not a maintainer. Nothing else
-# here may assume an image is present merely because its Dockerfile did not change.
+# Independent core/platform/desktop verification groups gate only their artifacts; verification runs even when other checks fail.
+# Publishing requires every relevant proof, including preflight; images-dry still builds/boots recipe changes when a gate fails.
+# Bootstrap ci-base once before the first pipeline: jobs run inside it. ci-desktop's host-side build detects and repairs a missing image.
+# Node/pnpm pins live in package.json/ci-base; docs/ops/ci-runner.md describes the shared fleet and caches.
 name: CI
 
 on:
@@ -43,26 +23,9 @@ on:
         type: boolean
         default: false
 
-# Supersede a running pipeline on a pull request; never on main, where the release job must be allowed to
-# finish. This is `interruptible: true` — which every verify job carried and the release deliberately did not.
-#
-# The group is PER-SHA on push, so two main pipelines never share one. A shared group with
-# cancel-in-progress: false does not run them side by side — the newer run sits PENDING until the older one
-# finishes, which behind a release is up to two hours, and a third push cancels the pending second. Actions
-# has no per-job opt-out of a workflow-level cancel, so the shape that keeps the verify jobs cancellable
-# without ever queueing a main push is a group main pushes cannot collide in at all.
-# Releases stay serialized — by the release job's own `concurrency: release`.
-#
-# SUPERSEDED MEASUREMENT IS CANCELLED PER JOB. The workflow-level group above never cancels on main, so every push used
-# to be measured to the end even when a newer one had already landed on top of it: 54 of 248 main pipelines in
-# September and October 2026 were superseded before they finished, a quarter of all runner-minutes, on a fleet where
-# jobs were queueing for 18 minutes. So each job that only MEASURES carries a group of its own, per ref and per job,
-# with cancel-in-progress: when the newer push's copy of a job starts, the older push's copy stops. The jobs that
-# publish or deploy carry none, so a release, an image push or a production roll is never cut off halfway. A cancelled
-# gate is not a passed one: everything that publishes requires its gates to have SUCCEEDED (or, for netd-check, to
-# have been skipped), so a superseded push publishes nothing and the push on top of it publishes instead. Main's fix
-# agent reads a cancelled job as an outcome rather than a failure (ci/providers.ts), so it acts on the newest push.
-# The cost: a burst of pushes faster than a job finishes measures only the last of them.
+# Supersede PR runs, but give main pushes per-SHA workflow groups so they neither cancel nor queue behind each other's releases.
+# Measurement jobs cancel per ref/job; publishing/deploy jobs remain uninterrupted and require successful gates, never cancelled ones.
+# Serialize releases with the release job's own concurrency group. Fast push bursts may measure only the newest commit.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -123,25 +86,10 @@ jobs:
   # base images and publishes with provenance, and a third-party action in the critical path of every pipeline
   # is a supply-chain surface that buys nothing a `git diff --name-only` cannot.
   changes:
-    # THE FORK BOUNDARY. This repository is public and every job below runs on the self-hosted fleet, so a
-    # pull request from a fork would otherwise execute a stranger's code — install lifecycle scripts, tests,
-    # build scripts — on the hosts that hold the release credentials. The runners are not ephemeral, they
-    # share one /ci-cache across every job including `release`, and each mounts the host docker socket, so
-    # that execution is host root and a poisoned turbo entry is a supply-chain edge into a published artifact.
-    # So the fleet builds ONLY branches pushed to this repository. This guard is half of that; the repo's
-    # approval-for-all-outside-contributors setting is the other half, and it is not redundant — a
-    # `pull_request` event runs the workflow file from the PULL REQUEST'S OWN merge ref, so a fork that edits
-    # this file runs its edited copy with the line below deleted. Approval is what that case cannot get past.
-    #
-    # This job and `preflight` are the DAG roots; guarding both skips everything downstream, and the third
-    # copy is on `e2e-hermetic`, the one job whose condition names no `needs` output. Every remaining job is
-    # already unreachable on a pull request — `images`, `images-platform` and `release` require
-    # `github.event_name == 'push' && github.ref == 'refs/heads/main'`, and the rest derive from a `changes`
-    # output that is empty once this job is skipped. The workflow-policy check asserts that, so a job added
-    # without a guard or without a root in its `needs` fails the check instead of silently opening this back up.
-    #
-    # To run CI on an outside contribution, push its branch to this repository and open the pull request from
-    # there — having read the diff first.
+    # Fork code must not run on persistent self-hosted hosts with release caches/credentials and root-equivalent Docker access.
+    # Guard DAG roots plus jobs without needs outputs; workflow-policy checks coverage. Repository approval-for-all-outsiders is also required.
+    # PR workflows come from the PR merge ref, so a fork can remove this guard; repository approval protects that case.
+    # Review an outside contribution, then push its branch into this repository to run fleet CI.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # ON THE LIGHT LANE, with `preflight`: two runner processes on the same host that carry `intentic-light` and
     # nothing else, so no other job can land on them and the two roots never queue. On the six shared runners they
@@ -229,24 +177,9 @@ jobs:
           else
             base="$BASE_PUSH"
           fi
-          # The zero-SHA / force-push / first-push case (no usable base — treat everything as changed rather
-          # than silently skipping the jobs that decide whether anything is checked at all) now lives inside
-          # affected.mjs, so the two consumers of that decision cannot disagree about it.
-          #
-          # THE FOUR PRODUCT TRIGGERS, COMPUTED FROM THE WORKSPACE DEPENDENCY GRAPH rather than asserted by a
-          # regex over paths. affected.mjs walks every package.json's `workspace:` edges — the same graph turbo
-          # reads — from the changed files up through every package that transitively depends on one, and asks
-          # whether that set reaches the desktop app, the sandbox image's payload (read out of
-          # prepare-image-trees.sh, so there is no second copy of that list), or the platform apps.
-          #
-          # It replaces five hand-written regexes, two of which rested on a claim nothing checked — that
-          # `_editor` held no dependency of any image-bound package. IT WAS FALSE: the three extensions baked
-          # into the image depend on @intentic/extension-ui, which re-exports @intentic/ui out of _editor/ui,
-          # so every UI-kit change had been skipping the image rebuild silently. Checked against 150 commits of
-          # history: the two answers differ on 88 of them, and every difference read either way is the graph
-          # being right and the regex being coarse or blind.
-          #
-          # --explain puts the reasoning on stderr (visible in this log); stdout is job-output syntax.
+          # affected.mjs derives product triggers from workspace dependency edges and the payload list in prepare-image-trees.sh.
+          # Path regexes miss transitive edges such as extensions -> extension-ui -> editor UI; keep one dependency-graph decision.
+          # With no usable base, treat everything as changed. --explain writes reasoning to stderr and job outputs alone to stdout.
           node _tools/scripts/verify/affected.mjs "$base" "$HEAD_SHA" --explain >> "$GITHUB_OUTPUT"
 
           # THE TWO CI IMAGES, which the graph cannot answer: they are Dockerfiles for the containers the jobs
@@ -272,26 +205,9 @@ jobs:
           echo "ci-base=$(any "$changed_ci_base" "$(missing ghcr.io/intentic/ci-base:latest)")" >> "$GITHUB_OUTPUT"
           echo "ci-desktop=$(any "$changed_ci_desktop" "$(missing ghcr.io/intentic/ci-desktop:latest)")" >> "$GITHUB_OUTPUT"
 
-  # The checks that read the checkout and nothing else, run once, side by side, with no install.
-  #
-  # `_tools/checks/run.mjs` is the checkout half of `pnpm verify`: every test file sits in a type-check program,
-  # every machine-touching suite is named as one, and every package.json specifier is the one pnpm-lock.yaml
-  # recorded, among nineteen others. No node_modules, seconds of actual work.
-  #
-  # IT GATES WHAT PUBLISHES, NOT WHAT IS MEASURED. Every verification job below runs whatever this job concluded
-  # (`needs.preflight.result != 'skipped'`; a skip is the fork boundary's, see `changes`), and every job that publishes
-  # names `needs.preflight.result == 'success'` itself. This job used to be the root every verify group waited on to
-  # SUCCEED, so that a checkout invariant failing in seconds would not cost six frozen-lockfile installs. That bought
-  # minutes and cost rounds: across 300 main pipelines in September 2026 it failed 40 times, in 19 streaks, and 17 of
-  # the 18 streaks that had a run after them were followed by a run failing somewhere this job had hidden (a type
-  # error, broken tests, a desktop build), up to 21.7 hours later. A failure here now reports beside everything else
-  # in the same run, and main's fix agent is handed the run's whole list at once (_sandbox/sandbox/src/ci/main-fixer.ts).
-  #
-  # THE WORKFLOW LINT RUNS HERE TOO, and it is the one thing in this job that touches the network — two pinned
-  # binaries into /ci-cache, once per runner per version, ~1s warm. It sits in this job rather than in one of
-  # its own on purpose: the DAG's widest wave is five against six runner processes (docs/ops/ci-runner.md), and a
-  # fourth root would spend the single slot of headroom on a check that takes a second. What it buys is the
-  # class of bug this pipeline keeps producing — a workflow that stops doing something and reports success.
+  # Checkout-only invariants run without an install; their verdict gates publication, while independent verification still reports failures.
+  # Every publisher must explicitly require preflight success; verify groups no longer propagate that verdict.
+  # Workflow lint shares this job to avoid another root slot; its cached, pinned binaries are the only network dependency here.
   preflight:
     # The second DAG root — see the fork boundary on `changes`. The verify groups and `e2e-hermetic` hang off
     # this one (they wait for it, and its skip skips them), so it carries the same guard rather than inheriting one.
@@ -367,21 +283,9 @@ jobs:
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs" "_tools/turbo-cache/**/*.test.mjs"
 
-  # THE PUSH CHECK, the first answer a push gets: what only a range can answer, measured against the same base the
-  # `changes` job reads from the same event fields. It gates nothing and no job needs it. Main's fix agent hears this
-  # job with the rest of the run, once the run has finished measuring (_sandbox/sandbox/src/ci/main-fixer.ts).
-  #
-  # The push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) runs every check the manifest
-  # lists, with a `tidy` finding counted only when the range added it (preflight merely warns about tidiness, and the
-  # nightly tidy job reads it a day later with no author attached), the assertion ratchet over the range's test files,
-  # and `pnpm lint` over the files it changed. It is also where the checks that want an install (`needs: node_modules`
-  # in the manifest) run against a fresh one.
-  #
-  # NO TYPECHECK HERE ANY MORE. This job used to type-check the packages the push changed, to answer before the verify
-  # groups did. It never did: nearly every push touches @intentic/web, whose vue-tsc took 12 to 18 minutes here (6 GB of
-  # heap, out of memory on run 39494680942), so this job finished within minutes of the verify groups while running a
-  # third copy of the same check beside them on the same six-runner box, each copy missing the others' cache. The verify
-  # groups type-check every package of their closures on every push; that is where a type error is reported.
+  # Independently report range-based push checks: introduced tidy violations, assertion strength, changed-file lint and install-aware checks.
+  # Share the changes job's event/base decision; this job gates nothing and main's fix agent hears it with the run's other failures.
+  # Leave typechecking to the verify groups; duplicating their package closures here consumed shared-runner memory without earlier feedback.
   quick:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
@@ -450,29 +354,9 @@ jobs:
           BASE: ${{ steps.base.outputs.sha }}
         run: node _tools/scripts/verify/verify-push.mjs --base "$BASE"
 
-  # THE THINGS ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, that every
-  # new entry on it can apply to a database which already holds rows, and that replaying the lot produces
-  # schema.prisma. check-migrations.sh carries the full account; the short version is
-  # that a `challenge` column was added by editing a migration every deployed database had already applied,
-  # Prisma never re-ran it, and desktop sign-in returned an unhandled 500 in production for a week while every
-  # job in this file kept passing. It could not have been otherwise: every database CI builds is created FRESH
-  # from that same edited file, so the fresh ones were right, the deployed one was wrong, and each was
-  # perfectly consistent with itself. Only the history can say so, which is why this job reads the history.
-  #
-  # The rows half was added by the same lesson told the other way round: `tunnelId` arrived as ADD COLUMN NOT
-  # NULL with no default — a statement Postgres runs on an empty table and refuses on a used one — so it passed
-  # here, failed on the live database, and P3009'd every deploy after it until it was fixed forward by hand.
-  # An empty database cannot notice the difference, and every database this job builds is empty; reading the
-  # statement is the only place the difference exists before production finds it.
-  #
-  # A JOB OF ITS OWN rather than a step in preflight, for the two things it needs and preflight does not:
-  # `fetch-depth: 0` (preflight checks out shallow — the immutability half is a diff against the merge base),
-  # and a postgres to replay into. Which is also why it is not in the verify matrix: the parity half needs an
-  # EMPTY, DISPOSABLE database, and every other database in this pipeline is somebody's fixture.
-  #
-  # `services:` rather than a docker-run against the mounted socket: a container this job started would sit on
-  # the default bridge, and this job's container sits on the network Actions made for it — the runner is the
-  # only thing here that can put a database and a job on the same network, and `services` is how it is asked.
+  # Prove append-only applied migrations, safe additions to populated tables, and replay parity with schema.prisma.
+  # Fresh databases cannot expose edits to already-applied SQL or NOT NULL additions without defaults; check-migrations.sh reads both.
+  # Use full Git history and an empty disposable Postgres service; Actions services share this job's network, unlike host-socket docker run.
   migrations:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
@@ -615,26 +499,9 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: echo "pull request — image built for validation only, tag not moved"
 
-  # ci-base plus the Rust/Tauri/NSIS toolchain, for the three jobs that compile the desktop app. Its own image
-  # rather than more layers on ci-base: it is ~3.75 GB that the verify, images and release-adjacent jobs have
-  # no use for.
-  #
-  # It rebuilds when EITHER dir changes, because its FROM is ci-base's mutable `latest` — a ci-base bump that
-  # didn't rebuild this image would leave the desktop jobs on a stale base. `needs` orders it after that
-  # rebuild; the `if` tolerates a pipeline where ci-base was skipped.
-  #
-  # When ci-base FAILS this job skips, and a skip is the one result that carries no information downstream: it
-  # is what a job reports both when it had nothing to do and when its base could not be built. So every job
-  # that runs in this image guards on ci-base as well as on this one. Without that second guard a ci-base that
-  # built but could not push left the desktop jobs and the release running against the PREVIOUS ci-desktop —
-  # passing results, and a release, for a toolchain that is not the commit's. It read as an unrelated failure
-  # three jobs away.
-  #
-  # `!cancelled()` rather than `always()`, here and on every other guard in this file. Both override the
-  # default "skip me if a `needs` job was skipped", which is what these conditions need — but `always()` also
-  # runs the job when the RUN ITSELF was cancelled, so superseding a pull request left this 3.75 GB image
-  # build and the Rust job below still going, and a hand-cancelled main run would still have published images
-  # and rolled production.
+  # Separate heavy desktop toolchain image; rebuild when it or ci-base changes because its base tag is mutable.
+  # Downstream consumers must guard both builds: skipped ci-desktop can mean its base failed, not that its toolchain is current.
+  # Use !cancelled() to tolerate skipped needs without continuing image builds or deployments after an explicit run cancellation.
   ci-desktop:
     needs: [changes, ci-base]
     # Wrapped in ${{ }} because a bare leading `!` is a YAML tag indicator, not an operator.
@@ -674,46 +541,10 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: echo "pull request — image built for validation only, tag not moved"
 
-  # Build + test every product, as ONE JOB PER RELEASE GROUP rather than one job for the monorepo. A failed group
-  # publishes nothing of its own and blocks nothing of anyone else's — which is what makes the `needs` edges on
-  # the publishing jobs below mean anything.
-  #
-  # COVERAGE IS CHECKABLE RATHER THAN HOPED: with `turbo run <task> --dry=json`, the union of verify-core's and
-  # verify-platform's closures plus desktop-check's two packages is every package, for `typecheck` and for `build
-  # test` alike. Re-run that comparison when adding a group; a package in no group is a package nothing checks, and
-  # turbo will not say so.
-  #
-  # The groups deliberately OVERLAP on shared packages (_sandbox contracts, _deploy resources, _tools), because
-  # turbo's `pkg...` includes a package's dependencies: a shared lib break fails every dependent group, which is
-  # the correct blast radius. That overlap is NOT free, and pretending it was cost the most of anything in this file:
-  # the groups run side by side, so a task both closures hold is computed twice, never replayed from the other's cache.
-  # A third group, verify-site, held nothing verify-core did not except the web's suite (checked with --dry=json on
-  # 2026-10-07), and was removed for it. Keep the overlap to what a group's own gate needs.
-  # The OSS core: every npm-published package plus the sandbox image's tree.
-  #
-  # The two desktop packages are subtracted rather than left to fall in with the rest: the launcher UI is the
-  # desktop group's leaf, desktop-check owns it, and leaving it here would mean a vue-tsc error in a Tauri
-  # window still held up the sandbox images and the npm release — the same coupling one scope down.
-  #
-  # The platform web app is subtracted for the same reason at a bigger price tag. share-view declares it as a
-  # devDependency (it compiles web's SOURCE into its own bundle via an alias), and that one edge pulled web's
-  # 248-file test suite into this closure: ~13 of this job's 20 minutes, spent re-running the exact suite
-  # verify-platform was executing beside it — and this job is the gate for `images` and the entire release
-  # chain. The subtraction removes only web's OWN tasks from the target set; web#build still runs here as
-  # share-view's `^build` dependency, which is what keeps a web source change invalidating share-view.
-  # verify-platform owns web's tests; a web break still blocks the platform deploy, the artifact it can
-  # actually break.
-  #
-  # THE SCOPE IS NO LONGER A PARTITION. There used to be three of them — @intentic, @intentic-app, @intentic-dev
-  # — and each of the three verify jobs below was spelled as one of them. One repository publishing under three
-  # scopes was worth less than it cost (a package's name said which job ran it and nothing else), so there is
-  # now one scope and each job NAMES the set it owns. This one is everything, minus what a job below owns.
-  #
-  # AFTER ci-base, WHICH IT ONLY WAITS FOR. The suites here spawn tools the image carries on purpose (ruff, pyright,
-  # poppler, the PP-OCRv6 models: _tools/ci-base/Dockerfile) and fail on CI without them, so on the push that adds one this job
-  # must pull the image that push built, not the `latest` it replaces. `needs` orders it; the `if` runs it whatever
-  # ci-base did (skipped on almost every push, and a failed build leaves the previous image, which the suites then
-  # measure). The wait is `changes` plus a skip on an ordinary push, which runs beside preflight.
+  # Verify one release group per job; shared dependencies overlap, but minimize duplicate suites running concurrently.
+  # Compare turbo --dry=json closures when changing groups so every package's typecheck/build/test remains covered.
+  # Desktop owns its two packages; platform owns web tests. share-view still requires web#build, so subtract only web's own tasks here.
+  # Wait for this push's ci-base build, but run even if it skips/fails; otherwise newly added tools are tested against an older image.
   verify-core:
     needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
@@ -795,32 +626,10 @@ jobs:
       - run: bash _tools/scripts/ci/install-provider-clis.sh
       - run: pnpm e2e:providers
 
-  # THE SUITES THAT NEED MORE OF THE MACHINE THAN A VERIFY GROUP HAS, run where it is provided on purpose. Each one
-  # asks for its need with `requires(…, { lane: "machine" })` (@intentic/testing/requires): in this job, which names the
-  # lane in INTENTIC_CI_LANE, a missing need FAILS; in every other CI job the test stands down, titled with this lane.
-  # The workflow-policy check refuses a test naming a lane no job both sets and runs the file of, so a suite cannot be
-  # dropped from here and go quiet everywhere.
-  #
-  #   watch-check, isolation   CAP_SYS_ADMIN (unshare --mount, an overlay mount) and a history volume at /history,
-  #                            which a sandbox has: `--privileged`, and a tmpfs there, since an overlay's upperdir
-  #                            cannot sit on the container's own overlayfs root. `exec` because checks run from
-  #                            worktrees under it. Privileged adds nothing the host docker socket other jobs mount
-  #                            does not already hand a job, and the fork boundary holds as everywhere (`needs`).
-  #   turn-sandbox             a fenced conversation's bubblewrap sandbox (user and pid namespaces, an overlay inside
-  #                            one) under the same /history; bwrap is baked into ci-base. The fenced watch check runs
-  #                            in one too, so watch-check needs it as well.
-  #   claude-policy            CAP_SYS_ADMIN as above, to lay the image's Claude Code managed settings over /etc for
-  #                            one probe (its own tmpfs holds the overlay's upper layer), with the bundled CLI.
-  #   webq cli                 Playwright's Chromium, into the shared browser cache nightly's perf-browser also fills (the same
-  #                            catalog playwright), with its shared libraries installed per run. Not baked into
-  #                            ci-base: ~400 MB for one suite, and a browser every job could see wakes suites that
-  #                            stand down without one (images-platform's PLAYWRIGHT_BROWSERS_PATH note).
-  #   inject-template          the canonical template checkout, cloned at a pinned commit (~1 MB, a second).
-  #   iq-engine models         the models fetch-model.mjs bakes into the sandbox image, restored from the cache the
-  #                            `images` job keys and fills; a miss fetches them once and saves them for both.
-  #
-  # Only those files, not their packages: every other suite in them already runs in verify-core. Ordered after ci-base
-  # for verify-core's reason. A required success for `images` and the release, like verify-core.
+  # Machine-lane suites require privileged namespaces/overlay mounts, an exec-capable /history tmpfs, browser, template and model inputs.
+  # INTENTIC_CI_LANE=machine makes missing requirements fail here; other jobs stand down with the lane named.
+  # Run only these test files because their other package suites already run in verify-core; keep workflow-policy's lane coverage intact.
+  # Wait for ci-base, and require this proof before publishing sandbox images/releases.
   verify-machine:
     needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
@@ -1193,29 +1002,9 @@ jobs:
           INTENTIC_CI_LANE: netd
           INTENTIC_NETD_BINARY: ${{ env.CARGO_TARGET_DIR }}/debug/intentic-netd
 
-  # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
-  # came out. Two tiers, ordered by cost, each proving something the one before it cannot:
-  #
-  #   1. build-desktop.sh ends by running verify-desktop-bundle.sh over its own output — the bundled scripts
-  #      are present and byte-identical, and the .desktop entry registers intentic://. Seconds, no Docker.
-  #   2. verify-desktop-install.sh installs the .deb and the AppImage on a BARE Debian (no GUI libraries),
-  #      starts the app under Xvfb and fires a real xdg-open intentic:// at it. This is what catches an
-  #      incomplete Depends field — a package that installs cleanly everywhere except a user's machine.
-  #
-  # NOT on pull requests: this is a release-profile Tauri build, and desktop-check's debug build + clippy +
-  # tests is the fast gate. Tier 3 (verify-desktop-setup.sh, a real sandbox boot) is in nightly.yml.
-  #
-  # WINDOWS: the NSIS installer is also verified as an archive here (tier 1 reads it with 7z) — and EXECUTED by
-  # the two jobs below, which is a thing no Linux runner can do.
-  #
-  # ON DEMAND ONLY: a dispatch with desktop_smoke, to prove a desktop or CI-only fix on a branch on the same desktop
-  # runner before it reaches main. It used to run on every main push, and the desktop filter matches nearly every push
-  # (desktop-app's closure reaches the web editor and the sandbox): 15 of 15 pushes on 2026-10-19 and 10-20, 13
-  # runner-minutes each, plus the Windows build and smoke below, on a box whose jobs were queueing for up to 8 minutes.
-  # Main is now covered twice without it: nightly.yml's desktop-setup builds the same bundles and runs this same
-  # verify-desktop-install.sh before its setup tier, and a releasing push's release.yml linux-build runs the identical
-  # build-desktop.sh + verify-desktop-install.sh pair at the real version before anything is published. The cost, said
-  # plainly: a desktop packaging break on main now surfaces at the next nightly or release rather than on its push.
+  # On-demand desktop_smoke builds release-style Linux artifacts, inspects bundle contents, then installs/launches on bare Debian.
+  # Windows archives are inspected here; separate Windows jobs execute them. Real sandbox setup remains nightly.
+  # Main's same build/install proof runs nightly and at release time, so packaging-only regressions may surface there rather than per push.
   desktop-verify:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.desktop_smoke && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
@@ -1324,30 +1113,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # THE TIER NO OTHER JOB IN THIS REPO CAN RUN: the shipped Windows installer, executed on Windows.
-  #
-  # Everything else this pipeline knows about the Windows installer comes from reading it as an archive. This
-  # installs it unattended on a clean machine, asserts what landed on disk, fires a real intentic:// link at a
-  # machine where the app has never run — the state a first-time user is in, and the half that was broken on
-  # Linux for months while every after-launch assertion passed — launches it, fires the link again at the
-  # running instance, and uninstalls it with the app still running (its tray is where it lives, so that is the
-  # ordinary state at uninstall time).
-  #
-  # NO DOCKER, NO CREDENTIALS, NO NETWORK beyond the installer's own: everything it asserts is a property of the
-  # package and the OS. The tiers that DO need a Docker daemon and a connected account are in nightly.yml.
-  #
-  # `runs-on` names a label the Linux fleet does not carry, and that is load-bearing: `[self-hosted, intentic]`
-  # is an AND over labels, so a Windows box carrying `intentic` would be handed container jobs it cannot run.
-  # See docs/ops/ci-runner-windows.md — including why this runner must be started from a logged-in session rather
-  # than installed as a service (a service session has no desktop, and every assertion here reads a window).
-  # Tier 1 (and tier 4, the engine) on a windows_smoke dispatch, which is the only thing that builds its installer
-  # (desktop-windows-build). On main, nightly.yml's `deep` call runs tiers 1 to 4 every night and a releasing push's
-  # release.yml windows-verify runs tier 1 at the real version. A glob for the installer: this job builds at 0.0.0 and
-  # holds no version to demand, unlike release.yml's call.
-  #
-  # AFTER THE RELEASE'S VERDICT, and only when it released nothing: on a releasing push the release's own windows-verify
-  # runs the real-version installer on the same single Windows machine, and this one would be a redundant
-  # install/uninstall cycle in that machine's queue.
+  # Install the Windows artifact on an interactive Windows runner, test deep links before/after launch, then uninstall while running.
+  # Keep its label distinct from the Linux container fleet; service session 0 cannot drive desktop assertions.
+  # Dispatch smoke builds use an installer glob at 0.0.0; nightly covers all tiers and releases verify the real-version installer.
+  # Wait for the release verdict and run only when it released nothing, avoiding duplicate installer cycles on the single Windows host.
   desktop-verify-windows:
     needs: [desktop-windows-build, release]
     if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && needs.release.outputs.version == '' }}
@@ -1362,22 +1131,9 @@ jobs:
       # engine is what a new PC without Docker Desktop gets, so a regression there is every new user.
       engine: true
 
-  # The money path end to end, and the one suite that gates the platform deploy (`images-platform` needs it).
-  # The real api on a Postgres testcontainer with the migration history replayed, Stripe stood in for at the
-  # client's one seam: a paid checkout becomes a webhook, the webhook a plan row, and the row every consequence
-  # the platform reads off it — Billing state, the offer's `plan: true`, an unmetered meter, the slot count, a
-  # wake that reaches the provider. The unit tests check those pieces; nothing else checks they are connected.
-  #
-  # It is allowed to gate because it is hermetic, the argument verify-providers makes for itself: no vendor, so
-  # no way to fail for a reason that is not ours, and its one container is addressed through testcontainers'
-  # host/port mapping rather than a published port — the assumption that keeps `e2e:browser` out of CI.
-  #
-  # Separate from `e2e-hermetic` because that tier boots Docker-in-Docker and drives a CLI over SSH on
-  # 120-second waits: gating a landing on it would attach a sandbox-boot flake to the money path. Each job names
-  # its own filter, because the root script runs both tiers.
-  #
-  # Platform-gated and rooted like `migrations`, so the fork boundary follows from an empty `changes` output
-  # rather than from a guard this job restates.
+  # Gate platform deployment on the paid-checkout -> webhook -> plan -> entitlement/wake chain, using the real API and migrated Postgres.
+  # Stub Stripe at its client seam; local testcontainer port mapping keeps the suite hermetic without vendor credentials.
+  # Select this filter separately from sandbox/SSH e2e so their boot costs/failures do not gate billing; platform changes root it at changes.
   e2e-billing:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.changes.outputs.platform == 'true' && needs.preflight.result != 'skipped' }}
@@ -1405,24 +1161,9 @@ jobs:
           lockfile-drift: measure
       - run: pnpm turbo run e2e:hermetic --filter=@intentic/api
 
-  # THE SIGN-IN GATE, and the second suite `images-platform` waits on. A person with no session signs in, on the web and
-  # through the desktop app (its window, the browser page it opens, the `intentic://auth` link back, the landing that
-  # redeems it), against the web build that ships, the api harness (_platform/api/src/e2e/browser-api.ts) and a
-  # Postgres testcontainer with the migration history replayed. Google is stood in for at its two edges: the GIS
-  # script in the browser, and its JWKS inside the api's process. _tools/e2e/signin says what else is real.
-  #
-  # Written after 1.318.0, when a router guard for "Ask an agent about this" took the `handoff` off the desktop
-  # sign-in's landing and every desktop sign-in stopped on "This sign-in link is incomplete". verify-platform's unit
-  # tests passed, e2e-billing has no browser, and the post-deploy smoke only looks at /login's Google button, so the
-  # deploy went out. Every piece of the sign-in can pass on its own while the chain between them is broken; this is
-  # the one place the chain runs.
-  #
-  # Gating for the reason `e2e-billing` is: hermetic (Docker and Chromium, no vendor, no secret), so it cannot fail
-  # for a reason that is not ours. Its Postgres is reached through testcontainers' host/port mapping, and the api and
-  # the web listen inside this job's own container, which is what lets it run here when `e2e:browser` cannot.
-  #
-  # On `platform` as well as its own `signin` trigger, so it has run whenever `images-platform` would: a skip there
-  # would read as a failure to the gate.
+  # Exercise web and desktop sign-in as one chain using the shipping web build, API harness and migrated Postgres testcontainer.
+  # Stub only Google's browser/JWKS edges; local Docker/Chromium need no vendor credentials. See _tools/e2e/signin for harness scope.
+  # Run on platform as well as signin changes so images-platform always has this proof before deploying the editor.
   e2e-signin:
     needs: [changes, preflight]
     if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
@@ -1466,22 +1207,9 @@ jobs:
             _tools/e2e/.cache/signin/api.log
           retention-days: 7
 
-  # THE N-1 CHECK, and the third suite `images-platform` waits on. The hosted editor ships from every green push here,
-  # while a sandbox runs the release it last took (`:stable`, a few a day), so the editor that deploys always meets
-  # daemons older than itself, and until this job nothing ran it against one: the nightly e2e builds its daemon from the
-  # same checkout, and `desktop-verify` points at `:latest`. On 2026-10-15 every released daemon answered the editor's
-  # Sandbox page with "This sandbox's daemon doesn't provide 'org.policy'", a call main had added without asking whether
-  # the daemon served it.
-  #
-  # The sign-in tier's stack (this commit's web build, the api harness, Postgres) with a daemon from the released image
-  # beside it, reached through testcontainers' host/port mapping as the Postgres is, and the main pages walked: the
-  # board, the files, a chat, the Sandbox page. It fails on a call the daemon refused, a read that failed, an uncaught
-  # error, or the "too old" page (OLDEST_SUPPORTED_DAEMON in the contract). _tools/e2e/compat says the rest.
-  #
-  # Gating because it is quick and hermetic: the web build is the one `e2e-signin` restores from the same turbo cache,
-  # the walk itself takes about half a minute, and the one cost of its own is pulling `:stable` when it moved since this
-  # runner last did (about 70 s for the whole image, measured 2026-10-15). It runs on the same triggers as `e2e-signin`,
-  # so it has always run when `images-platform` would.
+  # Gate platform deploys on today's editor against the released stable daemon; same-checkout tests cannot detect unsupported new RPC calls.
+  # Reuse the sign-in harness plus the released-image testcontainer; walk board/files/chat/Sandbox and reject errors or the too-old page.
+  # Run on sign-in/platform triggers so every images-platform deployment has this backward-compatibility proof.
   e2e-compat:
     needs: [changes, preflight]
     if: ${{ !cancelled() && (needs.changes.outputs.platform == 'true' || needs.changes.outputs.signin == 'true') && needs.preflight.result != 'skipped' }}
@@ -1576,24 +1304,9 @@ jobs:
           path: .e2e-hermetic-logs/
           retention-days: 7
 
-  # Continuous image publishing: build + push sandbox + dind-host on every push to main that touches the core
-  # (moving `latest` + the commit SHA). The version-tagged image is the release job's.
-  #
-  # It needs `verify (core)` alone — not the whole matrix. A plain stage barrier would make this wait for the
-  # SLOWEST group and skip outright if any of them failed, so a site build or a desktop clippy warning would
-  # stop the images and the platform deploy for a reason neither has anything to do with. Both happened
-  # before the edges were narrowed.
-  #
-  # AND PREFLIGHT, BY NAME. No verification job hands preflight's verdict down any more (they all run whatever it
-  # concluded, so one run reports everything), which means verify-core can pass on a commit preflight refused. Every
-  # job that publishes therefore names preflight itself; leave it out and a commit with a failing check ships.
-  #
-  # AND NOT WHEN THE RELEASE BUILDS THE SAME IMAGE. On a releasing push the release's `images-amd64` and
-  # `sandbox-arm64` build this same tree at the real version, and release-images.sh then moves `latest` onto
-  # that build; this job and its arm64 twin were a second 46-minute build of the same bytes at 0.0.0, started a
-  # minute apart on the same fleet, for a tag the release was about to move anyway. Same shape desktop-verify
-  # uses: wait for the release call, run only when it released nothing. On a non-releasing push that wait is
-  # the release's one-minute `plan`; a release that failed leaves `latest` to this job, as before.
+  # Publish sandbox/dind-host on relevant main pushes; require core/machine proofs and preflight explicitly, without unrelated group gates.
+  # Verify groups run even when preflight fails, so their success alone cannot authorize a publish.
+  # Wait for the release verdict and skip when it released: versioned release builds also move latest, avoiding duplicate image work.
   images:
     needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
@@ -1674,30 +1387,10 @@ jobs:
       - run: TAGS="sha-${GITHUB_SHA::8}" IMAGES=dind-host bash _tools/scripts/image/publish-images.sh
         shell: bash
 
-  # THE IMAGE `images` WOULD HAVE SHIPPED, BUILT AND BOOTED, WHEN A GATE IN NETD OF IT FAILED. Publishing rightly
-  # waits on preflight and the verify groups, but the proof that rides with it — the prod-pruned tree builds, and the
-  # daemon in it boots and converges (smoke-image.sh) — is nobody else's, so a commit failing a gate used to learn
-  # about its broken image only after the gate was fixed: one more round. This job runs exactly when `images` would
-  # have run but for a failed gate (its condition is the complement of that one gate clause, with the recipe trigger below
-  # in place of `images`), builds the amd64 half of both profiles into this runner's docker store, boots them, and removes them.
-  #
-  # DRY BY ITS TOKEN, NOT BY A FLAG. `packages: read` is all it holds, so even a script that ignored PUSH=0 could not
-  # move a tag; PUSH=0 is what makes the build `--load` instead of `--push`, and SMOKE_PULL=0 what boots the loaded
-  # image instead of pulling a tag that does not exist. dind-host and the arm64 half are left to `images`: neither has
-  # a boot proof of its own to run here, and the arm64 half is a GitHub-hosted runner's hour.
-  #
-  # ONLY WHEN THE PUSH CHANGED THE IMAGE'S RECIPE (affected.mjs `images-recipe`): its Dockerfile, packs or scripts, or a
-  # manifest or lockfile that reaches the payload, which is what the prod-pruned tree is cut by. The broader `images`
-  # trigger matched nearly every push (the payload is most of the workspace), and main's gates fail on most pushes, so
-  # this ran on 10 of 15 pushes on 2026-10-19 and 10-20 for about 8 runner-minutes each. A failing push that changed only
-  # source now builds nothing here; the next push whose gates pass boots the real image in `images` before a tag moves.
-  #
-  # The cost, said plainly: one more amd64 image build, on the fleet, for each failing main push that changes the image's
-  # recipe, and an image break caused by source alone (an import of a package the pruned tree lacks) is found one round
-  # later than it was.
-  #
-  # NOT FOR A GATE THAT WAS CANCELLED. A gate a newer push superseded (SUPERSEDED in the header) did not fail: the push on
-  # top builds this image, published or dry, so building it here too would be one more image for a commit nobody ships.
+  # When a main push's image recipe changes and a gate fails, build/boot both amd64 profiles locally to expose image defects in the same run.
+  # packages:read enforces a dry run; PUSH=0 loads images and SMOKE_PULL=0 probes those local bytes. Remove them afterwards.
+  # Skip source-only changes and cancelled/superseded gates; published images still smoke-test source changes before tags move.
+  # Leave dind-host and hosted arm64 builds to images; this job owns only the sandbox boot proof.
   images-dry:
     needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
@@ -1900,30 +1593,9 @@ jobs:
           TAGS: ci-${{ github.run_id }}-${{ github.run_attempt }}
           TURBO_HASH: ''
 
-  # Platform image publishing: build + push web + api on every push to main that touches the platform, then
-  # roll the Komodo stack. Same philosophy as `images` — apps build job-side under turbo off the warm caches,
-  # and the Dockerfiles are pure COPY. docker:release's TURBO_HASH tag makes the release content-addressed, so
-  # the path filter is deliberately COARSE: a push that didn't change an app's actual inputs just re-tags the
-  # existing image registry-side.
-  #
-  # `e2e-billing` gates here because verify-platform's unit tests can all keep passing while the chain between
-  # them is broken, and this job rolls the Komodo stack — the last point at which a plan that takes payments and
-  # grants nothing is still ours to stop. It skips on the same `platform == 'true'` this job does, so it never
-  # withholds a deploy that should have happened.
-  #
-  # `e2e-signin` gates here for the same reason at the front door: this job is also what ships the web, and 1.318.0
-  # went out with every piece of the desktop sign-in passing its own tests and no one able to finish it. It runs on
-  # `platform` too, so it has always run when this job does.
-  #
-  # `e2e-compat` gates here because the web this job ships meets the sandboxes owners already run, not the daemon this
-  # commit builds: it opens today's editor on the released `:stable` image. Same triggers as `e2e-signin`.
-  #
-  # `migrations` gates here because this job is what puts a migration in front of the live database. The history it
-  # refuses (an edited applied migration, an ADD COLUMN NOT NULL with no default) is exactly what P3009'd every deploy
-  # until it was fixed forward by hand, so a deploy that went ahead of a failed migrations job would be the failure,
-  # not the warning. It runs on `platform` like this job, so a success is always there to require.
-  #
-  # And preflight, by name, for the reason `images` spells out.
+  # Publish platform images from job-side builds, then roll Komodo/Fly; TURBO_HASH aliases unchanged content without rebuilding.
+  # Require billing/sign-in end-to-end proofs, released-sandbox editor compatibility, append-only/replayable migrations and preflight.
+  # All proof triggers must cover this deploy trigger, or a missing/skipped gate could withhold or accidentally permit production changes.
   images-platform:
     needs: [changes, preflight, migrations, verify-platform, e2e-billing, e2e-signin, e2e-compat, netd-check]
     if: |

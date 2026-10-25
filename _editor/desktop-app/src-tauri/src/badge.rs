@@ -6,23 +6,9 @@ use tauri::{AppHandle, Manager, Webview, Window};
 
 use crate::setup_link::BadgeArgs;
 
-/* THE WORKSPACE TAB'S MARK, ON THE APP'S OWN ICON — where it can be seen with every window of the app out of sight.
-
-The browser tab is the one surface of the web app that stays in view from another tab or app, and this app's window
-has no tab: its title is fixed, and most of its life is spent in the tray. So the mark the tab would show (the web's
-tabSignal.ts: a count of what needs the reader, a check for a turn that finished while they were away, a dot while
-agents work, grey while the sandbox is unreachable) goes on the app's icon instead, in three places:
-
-- the tray icon, on both systems: the icon with the mark drawn on it, and the mark's meaning in its tooltip;
-- the taskbar button on Windows, as its overlay: the mark alone, in the corner Windows keeps for one;
-- the dock on Linux, as a count of what needs the reader, for the docks that draw one (Ubuntu's, Dash to Dock, KDE's
-  task manager, Plank), through the `com.canonical.Unity.LauncherEntry` signal they all listen for.
-
-The page draws both images (`intentic://badge`, setup_link.rs `BadgeArgs`) from the drawing its tab icon is made of, so
-the three cannot disagree, and the app draws nothing itself. Rejected (2026-10-02): flashing the taskbar button and a
-dock's "urgent" state for an ask, which repeat what the mark already shows and do it again every time, and the
-taskbar's progress bar while agents work, a moving thing in the corner of the eye for something the reader started on
-purpose. */
+/* Mirror tabSignal.ts on the native tray/taskbar/dock: needs-you count, away completion check, running dot or unreachable grey.
+ * The page supplies both drawings through intentic://badge so native and web marks agree; tray tooltip explains the state.
+ * Windows uses a taskbar overlay; Linux counts use com.canonical.Unity.LauncherEntry. Avoid redundant flashing or progress bars. */
 
 /// The tray's id (lib.rs `create_tray`).
 pub const TRAY: &str = "main";

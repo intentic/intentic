@@ -1,59 +1,18 @@
 #!/usr/bin/env bash
-# Build every desktop installer on the Linux release runner — the same single-runner cross-compile pattern
-# build-agent-binaries.sh uses for the machine agents:
-#   • Linux bundles (deb / rpm / AppImage) natively,
-#   • the Windows NSIS installer via cargo-xwin (MSVC target, no Windows runner),
-#   • latest.json — the tauri-updater manifest.
-#
-# Runs from release-prepare.sh: build-desktop.sh <version> --windows-prebuilt <dir>. Installs its own toolchain
-# when missing (idempotent), so the release job needs no extra before_script.
-#
-# Updater signing: set TAURI_SIGNING_PRIVATE_KEY (+ optional _PASSWORD) as masked CI variables — generate a
-# pair once with `pnpm --filter @intentic/desktop-app exec tauri signer generate`. The committed pubkey lives
-# in tauri.conf.json. Without the variable the installers still build; the .sig files and latest.json are
-# skipped, which means no auto-update for that release.
-#
-# Analytics: POSTHOG_HOST selects the capture origin for both TypeScript and Rust (default US; set EU
-# to https://eu.i.posthog.com). POSTHOG_KEY is baked into the app's own pages here (desktop-app/vite.config.ts, and vite.local.config.ts
-# for This device, which reports the app's setups and Docker starts), because a compiled
-# app has no container entrypoint to substitute one at start the way the web image does. Unset — which is
-# every local build and every CI/nightly build — leaves the app's own analytics off, so only installers a user
-# actually downloads report anything. Nothing about the workspace window depends on it: that face is the
-# hosted SPA and carries the key its own deployment was given.
-#
-# The artifacts land in _editor/desktop-app/dist-bin/, from where publish-github.sh attaches them to the GitHub
-# Release — the download surface the site and the updater both point at.
+# Build Linux bundles and cross-build Windows NSIS on Linux; place artifacts for publication in _editor/desktop-app/dist-bin/.
+# Missing tools install through the fallback below. TAURI_SIGNING_PRIVATE_KEY (optional _PASSWORD) enables signatures/updater metadata.
+# Without the signing key, installers build but auto-update assets are skipped; the public key is committed in tauri.conf.json.
+# POSTHOG_HOST/KEY are baked into native app pages at build time; unset keys disable their analytics. The hosted workspace SPA is separate.
 set -euo pipefail
 
 VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--windows-prebuilt <dir>|--assemble <windows-dir>]}"
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/desktop-artifacts.sh"
 . "$(dirname "$0")/../lib/appimage-env.sh"
-# Two verification jobs each want ONE side of this build, the release's linux-build job wants the Linux side,
-# and the publish wants the assembled whole. One build script either way, so the artifacts a CI job verifies
-# are produced by exactly the path that produces the released ones.
-#
-#   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify,
-#                   nightly's desktop-setup and the release's linux-build job, which exercise the Linux bundles on a
-#                   real host and have no use for an installer they cannot run.
-#   --windows-only  skips the Linux bundles. For the job that hands the NSIS installer to the Windows runner:
-#                   a deb/rpm/AppImage build costs it several minutes of artifacts nothing downstream opens.
-#   --windows-prebuilt <dir>
-#                   builds Linux and stages the already-tested NSIS candidate from this directory, so Windows
-#                   approves the bytes publish-github.sh actually attaches.
-#   --assemble <windows-dir>
-#                   builds NOTHING: the Linux bundles are already in dist-bin (the release's linux-build job
-#                   built, verified and shipped them as an artifact), and the NSIS candidate is staged from
-#                   this directory. What remains is the release-set work only the final job can do — the
-#                   updater manifest, the checksums, and the archive verification over the complete set.
-#                   This is the one mode that cannot empty dist-bin first — its inputs are already in it — so
-#                   the CALLER owes it a directory holding nothing but this release's artifacts. On a runner
-#                   that keeps its checkout, that means deleting the directory before the artifacts are
-#                   downloaded into it (release.yml's publish job), or the previous build's bundles are
-#                   assembled, verified and published alongside this one's.
-#
-# Only a run that ends holding BOTH platforms writes latest.json — a manifest naming a platform whose
-# installer the run did not produce would advertise an update that 404s, and that is true in both directions.
+# --linux-only/--windows-only build one platform; --windows-prebuilt stages tested NSIS bytes while building Linux.
+# --assemble <windows-dir> builds nothing: Linux inputs already reside in dist-bin, which this mode must not empty.
+# The caller must clear dist-bin before downloading this release's inputs, or stale bundles can be verified and published with them.
+# Write latest.json only when both platforms are present, so updater metadata never points at an installer the run did not produce.
 LINUX_ONLY=0
 WINDOWS_ONLY=0
 ASSEMBLE=0
@@ -130,22 +89,9 @@ if [ "$ASSEMBLE" -eq 1 ]; then
     chmod +x "$ROOT/_editor/desktop-app/dist-bin/$APPIMAGE_NAME"
 fi
 
-# --- toolchain: the FALLBACK path (idempotent; runs as root) ---
-# In CI none of this executes — _tools/ci-desktop bakes every tool below into the image the desktop jobs run in,
-# because installing them per job cost 2m53s (apt) + 41s (rustup) in release job 15686372011 and repeated in
-# desktop-check and desktop-verify. What is left here is what a developer machine needs, and it is what keeps
-# `build-desktop.sh <version>` a command anyone can run.
-# xdg-utils is not a compiler dep but a bundle INPUT: the `intentic://` deep-link scheme in tauri.conf.json makes
-# the AppImage bundler copy the host's /usr/bin/xdg-mime into the AppDir verbatim (it is what registers the scheme
-# on first run), and a host without it aborts the bundle — `failed to bundle project: xdg-mime binary not found`.
-# `file` is the same kind of input one level down: linuxdeploy's appimage output plugin shells into
-# appimagetool, which refuses to start without it — "file command is missing but required, please install it",
-# reported back through tauri as the contentless `failed to run linuxdeploy`. Absent from the CI job image
-# (node:24-trixie-slim carries no /usr/bin/file), present on most desktops, which is exactly the shape of
-# dependency that only ever fails in CI.
-# p7zip-full/rpm are not build inputs — they are what verify-desktop-bundle.sh (run at the end of this
-# script) uses to read back the rpm and the NSIS installer it just produced. Installed here so the verification
-# is unconditional: a verifier that skips when its tool is absent reports "verified" for a bundle nobody opened.
+# Idempotent root toolchain fallback; CI's _tools/ci-desktop image already provides these tools.
+# xdg-utils and file are AppImage bundle inputs, even when compilation succeeds without them.
+# p7zip-full/rpm make installer inspection unconditional; missing verification tools must not turn an unopened bundle into a pass.
 if [ "$ASSEMBLE" -eq 0 ] &&
     { ! command -v makensis >/dev/null 2>&1 || ! command -v xdg-mime >/dev/null 2>&1 ||
         ! command -v file >/dev/null 2>&1 ||

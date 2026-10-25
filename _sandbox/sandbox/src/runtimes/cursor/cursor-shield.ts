@@ -12,24 +12,10 @@ import { tokenPattern } from "../../privacy/tokens.js";
 import type { CursorHookShield } from "./cursor-hooks.js";
 import type { CursorRunHandle, CursorSession } from "./cursor-host.js";
 
-// THE PRIVACY SHIELD ON CURSOR'S RUNTIME. Cursor's agent sends what it reads to its own servers on its own wire, so the
-// gateway can't stand in front of it; but every channel its model reads through passes this daemon first, and each is
-// read by content here (agent-runtimes.ts `privacy: "hooks"`):
-// - every message sent to the agent (the prompt, a plan's revision, steering, a follow-up): masked on the session itself
-//   (shieldedSession), so no path that sends can forget to; the instructions the daemon hands over: masked before they
-//   are handed over (cursor-agent.ts);
-// - the rules Cursor loads itself (AGENTS.md, .cursor/rules): read before the turn, and a finding refuses it, the one
-//   thing that can't be masked (instructionRefusal);
-// - a file its read tool opens: refused when it holds personal data, since a read can be refused but not changed; the
-//   model is pointed at the shell, where the same file arrives masked (cursorHookShield.read);
-// - a shell command: rewritten by the preToolUse hook to run through the hook script, which hands its output here to be
-//   masked before Cursor reads it (cursor-hooks.ts, cursor-hook-script.ts);
-// - the built-in tools that read past both (grep, glob, ls, semantic search, fetch, lints): withheld (SHIELD_WITHHELD);
-// - MCP: every server behind the masking proxy (privacy/gateway/mcp-route.ts), the project's own (.cursor/mcp.json,
-//   which Cursor would otherwise start unproxied and unapproved) included, or the project's settings not loaded at all
-//   when one of its servers can't be proxied (projectMcp); the daemon's own tools: masked here;
-// - tokens the model writes: read back to their values in tool inputs, in the new lines of an edited file, and in
-//   everything the transcript shows.
+// Mask every session prompt/instruction; refuse personal data in project rules or direct reads, pointing reads to masked shell output.
+// Withhold bypassing built-ins and proxy every MCP server, including project settings; omit those settings when proxying is impossible.
+// Mask/seal tool outputs and resolve written tokens in inputs, edited lines and transcript rendering.
+// Cursor uses its own transport, so enforce every read channel through daemon hooks (privacy: "hooks"), beyond the model gateway.
 
 // Built-in tools whose output reaches the model past every channel above: off while the shield reads the turn. Names
 // in the SDK's own vocabulary; one it does not know makes Agent.create throw, so these are the ones it lists.

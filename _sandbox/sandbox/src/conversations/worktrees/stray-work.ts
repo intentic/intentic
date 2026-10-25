@@ -7,21 +7,9 @@ import { branchSha, carriedRef } from "../../git/agent-refs.js";
 import { opt } from "../../opt.js";
 import type { AgentWorktrees } from "./worktrees.js";
 
-// WORK A TURN LEFT ON A BRANCH OF ITS OWN, carried back onto `agent/<id>`. A conversation may stand its copy on another
-// branch: a CI branch to push, a pull request its owner asked it to work on. Review and land read `agent/<id>` only, so
-// until now whatever it committed there was stranded, reported on the review and never landed. At the end of every turn
-// the commits the turn made on that other branch are replayed onto `agent/<id>` (ref-only: no checkout moves, and the
-// copy stays exactly where the agent put it), so its own branch carries them and Land takes them like any other work.
-//
-// "The turn made" is decided by the refs as the turn opened: a commit reachable from none of the tips every local
-// branch and remote-tracking ref named then, nor from the main checkout's HEAD now, nor already on `agent/<id>`, is one
-// this turn wrote. That keeps out what the other branch held before (origin/main's commits under a branch cut from it,
-// a pull request's own history), which is not this conversation's to land. Commits only: uncommitted edits on the other
-// branch stay there, and the review says so.
-//
-// A marker ref, `refs/intentic/carried/<id>` (agent-refs.ts `carriedRef`), records the copy's HEAD as of the last carry
-// that went through: what the review reads to tell carried work from stranded work, and a second floor for the next
-// carry, so a turn that opens on the other branch never re-offers what an earlier one carried.
+// Replay this turn's commits from a chosen external branch onto agent/<id> by refs only; never move its checkout or uncommitted edits.
+// Exclude commits reachable from opening local/remote tips, current main HEAD or agent/<id>, keeping pre-existing PR/branch history out of land.
+// refs/intentic/carried/<id> records the last carried HEAD for review and acts as another floor against carrying the same work twice.
 
 // Every tip a local branch or remote-tracking ref names in each repository, as a turn opens: the floor below which
 // nothing is this turn's own. Undefined for a repository that could not be read, which then carries nothing.

@@ -27,59 +27,10 @@ import {
 } from "./gate-row.js";
 import { startAfterUpdate } from "./start-after-update.js";
 
-/* A HOSTED IMAGE CHANGE ASKS THE TARGET IMAGE FIRST, WAITS FOR ITS DAEMON AFTER, AND PUTS THE MACHINE BACK WHEN EITHER
- * SAYS NO.
- *
- * The self-hosted update runs the target image's own planner (`state-plan.js`, the daemon's conversion engine run
- * without writing) over the sandbox's data before it swaps anything (_sandbox/ic/src/sandbox/preflight.rs). A Fly
- * volume attaches to one machine, so the hosted planner runs on that machine: its config is replaced by a probe (the
- * target image, the same volume, the daemon's entrypoint swapped for a sleep, no restart), the planner is
- * run in it through Fly's exec, and the machine is stopped again. Then:
- *
- * - `ok: false` puts the previous config back (or, for a caller that asks `keepImage`, the target config on the image
- *   the machine already runs), starts it again when the caller asked for a running machine, and throws HostedImageKept
- *   with the failures in the owner's words. Nothing on the volume was converted.
- * - a planner that ran and failed, or answered something that is not a plan, refuses the same way: a check that
- *   crashed has not said the conversions would work, and a broken planner is a broken image.
- * - `ok: true` applies the target config.
- * - no plan to be had (an image from before the engine, a plan in a format newer than this platform reads, a probe
- *   that would not start, an exec Fly would not run) applies the target config too, as every image change did before
- *   this gate: a question an image cannot answer must not cost an update that would have worked. It is logged.
- *
- * THEN THE DAEMON IS WAITED FOR (daemon-health.ts). Started, the new version has to answer its own `/health` ready with
- * its state journal committed, and check in with the platform, within that module's budget. One that does not start,
- * crashes, never answers, reports its journal failed or never commits it, or never checks in, is put back on the
- * config it had, pinned to the digest it was running, and started there (HostedImageKept again). An episode the new
- * build opened and never committed is restored by the previous build's own boot (state-journal.ts), so the files go
- * back with the image.
- *
- * WHAT THE ROW KEEPS (gate-row.ts). A change that took leaves the image it replaced on the machine's row as the way back,
- * which the owner's rollback returns to (../hosted.ts). A change applied to a machine left stopped (a rebuild applied
- * while it sleeps), or one whose daemon was stopped from outside while it was waited for (an operator, the daemon's own
- * idle-stop), is ON TRIAL: the next start of that image, whoever asks for it, runs the same wait and goes back to the
- * kept image when it fails.
- *
- * A config replacement that keeps the running digest converts nothing, so it skips the probe, and waits for the daemon
- * only when that digest is on trial. A crash between the probe and the final config leaves the probe's marker in the
- * machine's environment, naming the image it ran before: the wake reads it as a config to re-apply (../hosted.ts), and
- * the next gate as the version to go back to.
- *
- * ONE CHANGE AT A TIME. The whole gate, probe to the daemon's verdict, runs under the app's lock (../hosted-app-lock.ts),
- * the one migrate and cleanup take and the meter's stop tries (../hosted-meter.ts): a second gate on the same machine
- * would replace the first one's probe under its exec, and that exec's failure reads as "no plan", which goes ahead, so a
- * refusal would be lost. A restart and a rebuild wait their turn; a wake does not wait (it is the browser's reflex,
- * repeated on its own) and answers HostedMachineBusy.
- *
- * WHAT THE PROBE CANNOT PROMISE. ic's probe mounts the data `:ro` with `--network none`. Fly has neither a read-only
- * volume mount nor a machine without a network, so here the volume is mounted read-write and the probe can reach the
- * internet. What stands in for both: the one command it runs is the planner, fixed argv with no shell, and the planner
- * has no write mode to select (state-plan.ts learns the version stamp with `write: false` and prints a plan; there is no
- * `--plan` flag because planning is all it does); the probe's environment carries none of the platform's credentials,
- * as ic's carries none; and nothing else boots.
- *
- * WHAT THE ROLLBACK DOES NOT COVER. The version put back is started, not waited for: it is the one that ran before. A
- * rollback that itself fails is logged at error and recorded on the machine's row, which hosted health reports and
- * mails (../hosted-health.ts) until the machine checks in again. */
+/* Under the app lock, probe the target image's planner: reject failed/malformed plans, allow unavailable or unsupported ones.
+ * Apply the config, then require daemon readiness, a committed journal and platform check-in; restore the pinned digest on failure.
+ * Stopped images stay on trial until next start; probe markers recover interrupted swaps. Fly probes have writable volumes/network,
+ * so run only fixed planner argv without platform credentials. Rollback failures persist on the row for hosted-health reporting. */
 
 // The planner the target image carries; an image built before the conversion engine has none.
 export const STATE_PLANNER = `/opt/sandbox/dist/state-plan.js`;

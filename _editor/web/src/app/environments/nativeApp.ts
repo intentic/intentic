@@ -1,20 +1,8 @@
 import { removeStoredValue, storedValue, storeValue } from "../storage/browserStorage";
 
-// THE ANDROID APP'S WEBVIEW. The native app (`dev.intentic.app`, _editor/android-app) draws sign-in, the board, a
-// conversation and the menu itself, and shows every other screen of this app in one WebView it keeps warm. It loads a
-// route with `?embed=native` (and `&look=`, the look it wears), and from then on this page leaves the way between
-// screens to the app: no rail, no back arrow, no edge swipe, and a navigation to a screen the app draws is handed to it
-// instead of drawn here (router/nativeHandoff.ts). Without the flag every function here answers "not in the app", so a
-// browser, the desktop app and the iOS shell run exactly as before.
-//
-// Two directions, two globals:
-// - the app to this page: `window.intenticEmbed` (router/nativeHandoff.ts), which the app calls with evaluateJavascript,
-//   so in the main frame only;
-// - this page to the app: `window.intenticNative`, the app's own object. Either an `addJavascriptInterface` object with
-//   one method per message, or the object `WebViewCompat.addWebMessageListener` injects, which takes each message as one
-//   JSON string through `postMessage`. The app should prefer the second: it is injected only into frames of the
-//   origins it names, while an addJavascriptInterface object is in every frame of the WebView, the sandbox's own apps
-//   under Browsers included.
+// Android's warm WebView uses ?embed=native (&look=...) for non-native screens; hide web navigation and hand native routes back.
+// Without the flag this bridge is inactive. Native -> page uses main-frame window.intenticEmbed; page -> native uses intenticNative.
+// Prefer origin-scoped WebViewCompat postMessage JSON over addJavascriptInterface, which exposes methods to every frame, including sandbox apps.
 
 export const EMBED_QUERY = `embed`;
 export const LOOK_QUERY = `look`;

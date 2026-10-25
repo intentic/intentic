@@ -1,18 +1,6 @@
-// What the browser tab says about this workspace while the reader is looking at something else: the one surface of the
-// app that stays in sight from another tab, another window or a pinned tab. Pure functions over plain data; the DOM
-// and the sound live in browserTab.ts and chimes.ts.
-//
-// Two channels, split by what a change costs the reader:
-// - The TITLE changes only for news the reader should act on. A browser marks a background tab whose title changed
-//   (Chrome dots a pinned one), so a title that flipped every time a turn started or ended would cry wolf all day.
-// - The ICON carries the same marks and one more, work under way: it changes quietly, and it is all a pinned tab or a
-//   crowded tab strip has room to show.
-//
-// One mark at a time, the first of these that holds:
-// 1. `asks`: something needs you, counted as the Agents tile counts it, so the tab and the rail never disagree.
-// 2. `offline`: the sandbox is not answering, so nothing below this line is true any more.
-// 3. `done`: a turn someone started finished while the reader was away; gone the moment they are back.
-// 4. `working`: a turn is running. Icon only.
+// Pure tab signal data; browserTab.ts/chimes.ts own DOM/sound. Title changes only for actionable news; the icon may also show work quietly.
+// Priority: asks (same count as Agents), offline (lower states no longer reliable), done (finished while away, cleared on return), working.
+// Working is icon-only, avoiding background-title alerts for every turn transition.
 
 import type { SandboxAvailability } from "../../features/sandbox/overview/availability";
 

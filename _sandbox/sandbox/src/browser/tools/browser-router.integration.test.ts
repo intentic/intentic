@@ -4,21 +4,9 @@ import { join } from "node:path";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RoutedScreenshot } from "./browser-router.js";
 
-// The router's contract, driven in-process against real child processes:
-// 1. handshake and tools/list are answered with no backend and no prepare; every listed tool gains an injected
-//    `account` parameter.
-// 2. a tool call resolves `account` to its owner, prepares that owner once, spawns it, strips the parameter, and
-//    returns the reply.
-// 3. an id outside the manifest is refused with the granted set named, and prepares nothing.
-// 4. a prepare that refuses an owner turns into a tool error, not a dead call.
-// 5. a sole-owner manifest serves tools with no `account` at all and routes everything to that owner.
-// 6. closing the router (the turn ending) kills the backends.
-// 7. a network tool's answer comes back with the credentials a site issued redacted, and its debugging facts intact.
-// 8. the fixed browser_webmcp_call is listed beside the probed tools and reaches the page tool the backend names
-//    webmcp_<name>, which no cached tool list could have carried.
-// 9. a screenshot's answer is handed on with its owner, conversation and request, so its provenance can be written.
-// The backend is a canary standing in for @playwright/mcp; it writes a marker file on spawn and echoes call arguments
-// back.
+// Exercise routing against canary child processes: list without prepare, inject/strip account, prepare once and reject ungranted owners cleanly.
+// Cover sole-owner omission, prepare errors, backend teardown, credential redaction with debug facts intact and live WebMCP tool dispatch.
+// Screenshot replies preserve owner/conversation/request provenance; the fake backend records spawning and echoes arguments.
 
 // What @playwright/mcp's browser_network_request answers for a token-exchange fetch, captured from the real server
 // (playwright-core renderRequestDetails / renderRequestPart) with the values swapped for fixtures. Each credential is

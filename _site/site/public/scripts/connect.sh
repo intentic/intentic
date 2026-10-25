@@ -1,51 +1,14 @@
 #!/bin/sh
-# intentic connect: a bootstrap shim. It gets Docker onto this device (the one step that may need administrator
-# rights), finds or downloads the ic CLI, and hands the flow over to `ic sandbox connect`, which does everything else:
-# the setup-code claim, tunnels, the launch, desktop sync. The flow lives in _sandbox/ic; this file stays the thing a
-# person can read before piping it into sh.
-#
-# Usage (the platform's setup screen hands you a copy-paste one-liner):
-#   curl -fsSL https://intentic.dev/setup/<SETUP_CODE> | sh
-#   curl -fsSL https://intentic.dev/connect | sh -s -- <SETUP_CODE>          (the older shape, still served)
-#   Headless/scripted: skip the code and pass everything as env vars (CONNECT_TOKEN=… SANDBOX_GRANT=… ./connect.sh).
-#
-# The setup code carries the sandbox's reachability grant on intentic's own edge (SANDBOX_GRANT, plus the INGRESS_URL it
-# dials); the sandbox opens the tunnel outbound with it from inside. CF_TOKEN is only for SELF_HOST, which publishes THIS
-# device's SSH for the deploy engine; it has nothing to do with reaching the sandbox.
-#
-# ELEVATION IS ASKED FOR, NEVER BAKED IN (docs/ops/cli-output-protocol.md). Installing Docker is the one step that
-# needs root, so it is the one step that asks for it, through sudo, after saying why. Everything else is a docker/curl
-# call the person can make themselves. A run that already IS root (the older `| sudo sh` one-liners, the desktop app's
-# pkexec when Docker is missing) installs without asking for sudo, as before.
-#
-# The ic binary is downloaded on EVERY run, so re-running the one-liner upgrades an existing install; only a failed
-# download falls back to what is installed. IC_BIN overrides for local dev (a checkout's own build). A run the desktop
-# app pins to its release copies the ic the app carries (INTENTIC_IC_PATH) instead, when that one is exactly the
-# release asked for.
-#
-# POSIX sh (this is piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`).
+# POSIX bootstrap: install Docker if needed, obtain ic, then hand setup-code claims, tunnels and launch to ic sandbox connect.
+# Elevate only Docker installation. Direct-token automation uses CONNECT_TOKEN/SANDBOX_GRANT; CF_TOKEN is solely for SELF_HOST SSH.
+# Refresh ic each run, falling back to installed bytes only on download failure; IC_BIN selects a development build.
+# Desktop release pins may copy an exactly matching INTENTIC_IC_PATH binary. Usage: curl -fsSL https://intentic.dev/setup/<CODE> | sh.
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
-# is dash on Debian, Ubuntu and WSL.
-#
-#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   kit_say <sentence>                       narration under the running step
-#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
-#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
-#   kit_settle                               the running step is done
-#   kit_finished <verdict>                   a flow's past-tense verdict
-#   kit_stop <headline> [problem] [fix] [code]
-#                                            stop: the running step settles as failed, the stop block goes to stderr,
-#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix> [names]
-#                                            run again through sudo when not root, keeping the named settings (see below)
-#   kit_confirm <question> <consequence> <flag>
-#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
-#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+# POSIX-sh output helpers for bootstrap scripts; see docs/ops/cli-output-protocol.md for the shared protocol.
+# ic or intentic-machine owns the display after handover; suspend/resume around commands that print their own output.
+# kit_stop exits (default 1, usage 2). kit_confirm exits 0 on refusal and stops without a terminal unless a flag answers it.
 
 case "${INTENTIC_UI:-}" in
     rich | plain | nested) kit_mode="$INTENTIC_UI" ;;

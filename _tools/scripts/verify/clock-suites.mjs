@@ -1,22 +1,8 @@
 #!/usr/bin/env node
-// THE SUITES THAT MEASURE TIME, IN ZONES THAT ARE NOT UTC: nightly.yml's `verify-clocks`.
-//
-// Every other CI job runs in a UTC container, the same clock the daemon ships on, which makes a whole class of defect
-// invisible there: a cron evaluated in the process's own zone, a day bucket that is the reader's only by coincidence. So
-// this runs the test files that can SEE a clock under the two extreme zones, Kiritimati (UTC+14) and Niue (UTC-11),
-// where every "is it the same calendar day" question is answered both ways on the same instant.
-//
-// THE FILES THAT CAN SEE A CLOCK, NOT EVERY FILE. It used to run the four packages' whole suites in both zones, the web's
-// 875 files among them: 47 runner-minutes a push, the largest single cost in the pipeline (2026-10-07), almost all of it
-// re-running suites whose answer cannot depend on the zone. A file is selected when its own text touches dates, zones,
-// crons or a fake clock (TIME below); 399 of 1887 files when this was written. What that can miss is a test that
-// exercises zone-dependent code without mentioning a date anywhere in itself, so a suite whose subject is time and whose
-// text is not names it in its body (a comment naming the zone is enough) to be picked up.
-//
-// Usage: clock-suites.mjs [--list] <package dir>...
-//   --list    print what would run, run nothing
-// Zones come from CLOCK_ZONES (comma-separated), defaulting to the two above. Every zone and package runs whatever the
-// one before it did, so one run names every failure; the exit code is 1 if any failed.
+// Run time-sensitive suites in Kiritimati (UTC+14) and Niue (UTC-11), exposing timezone bugs hidden by CI's default UTC.
+// Select files whose text mentions dates/zones/crons/fake clocks; indirect time tests must include a marker comment to be selected.
+// Usage: clock-suites.mjs [--list] <package dir>...; CLOCK_ZONES overrides the comma-separated zone list.
+// --list runs nothing; otherwise run every package/zone despite failures and exit 1 if any failed.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";

@@ -1,23 +1,7 @@
-# The CORE sandbox image — the floor: what the daemon and its web workspace need to function, nothing else.
-# Everything heavier (Chromium, Docker Engine, provider CLIs, semantic-search models, messaging gateways) is a
-# FEATURE PACK: a checked-in fragment under packs/ that _tools/scripts/image/compose-image-dockerfile.mjs splices at
-# the two marker lines below to build a published profile (image-packs/profiles.json — `standard` is what
-# ghcr.io/intentic/sandbox:stable ships), and that the daemon composes into the environment overlay when a
-# capability needs it on demand (src/image/packs.ts). Same fragment files both ways, so the baked and
-# on-demand paths cannot drift; a splice stamps /opt/packs/<name> so the daemon knows what its base carries.
-#
-# The monorepo is compiled OUTSIDE Docker: _tools/scripts/image/prepare-image-trees.sh builds the baked packages
-# (turbo, warm cache) and prunes their production trees into .image-out/, which enters this build as the named
-# context `trees`. Every layer here is a pinned tool install (registry-cache-stable) or a cheap tree COPY, so a
-# source change rebuilds in seconds — no pnpm install / turbo run inside a cacheless container. Build from the
-# REPO ROOT (the main context still carries the source-copied bits — iq plugin, skills, bin scripts,
-# entrypoint, connectors):
-#   bash _tools/scripts/image/prepare-image-trees.sh
-#   node _tools/scripts/image/compose-image-dockerfile.mjs standard > .image-out/Dockerfile.standard
-#   docker build --build-context trees=.image-out -f .image-out/Dockerfile.standard -t ghcr.io/intentic/sandbox .
-# (or build this file directly for the bare core profile). At run time `ic sandbox connect` (which connect.sh
-# hands to) mounts the workspace volume at /work. No agent credential comes in from outside: a provider is
-# signed in from inside the running sandbox, and its tokens live there, never in the image.
+# Core daemon/workspace image; image-packs/profiles.json adds the same fragments used by on-demand environment overlays.
+# prepare-image-trees.sh builds/prunes packages outside Docker and supplies the named trees context; build from the repository root.
+# compose-image-dockerfile.mjs splices profile packs at the markers below and stamps /opt/packs so the daemon can detect them.
+# Runtime mounts /work; provider credentials are created inside the running sandbox and must never enter this image.
 
 FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
@@ -34,44 +18,10 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # mount it is meant to fill, but with it gone an UNMOUNTED apt block would commit its .debs into the image.
 RUN rm -f /etc/apt/apt.conf.d/docker-clean \
     && printf 'Binary::apt::APT::Keep-Downloaded-Packages "true";\n' > /etc/apt/apt.conf.d/99intentic-keep-downloads
-# procps gives the interactive terminal (system/terminal.ts) real process tools — `ps`, `top`, `kill` — so the
-# owner can see what's running in the sandbox and reap a stuck dev command. zsh is the terminal's shell (below).
-# tmux backs the terminal's sessions: each web tab attaches a tmux session, and the tmux server outlives the
-# WebSocket, so a page reload / drop detaches (session + its running processes survive) instead of killing them.
-# curl + jq back the CLI-tool integrations (e.g. the Discord `cli` capability's skill has the agent call
-# Discord's REST API with `curl … | jq`); neither is in the slim base and the build stage's curl doesn't carry over.
-# openssh-server is the transport for the local-sync feature: Mutagen on the laptop connects over SSH (through the
-# sandbox's Cloudflare tunnel) to block-delta sync /work. Key-only (config drop-in below); the host key is NOT
-# baked — docker-entrypoint.sh generates it onto the /history volume at boot (see there for why).
-# openssh-client + sshpass + rsync back the `ssh` capability: the agent runs `ssh <alias>` / `rsync` against
-# connected machines, with sshpass -f for the password-auth ones. iproute2 gives `ip`/`ss` diagnostics.
-# Heavy or privilege-coupled capability tools (WireGuard) are NOT baked here — each capability carries a
-# Dockerfile fragment the daemon composes into the sandbox's environment overlay on enable (see
-# capabilities/capability.ts `fragment`), applied by an owner-run rebuild. Speech-to-text is not one of them:
-# its runtime is a dependency of the daemon's @intentic/speech (sherpa-onnx-node), and the standard image's `speech` pack bakes
-# the model, so the composer's microphone and Discord's voice calls need nothing composed.
-# python3 + make + g++ are the node-gyp toolchain: a runtime `pnpm install` (ensure-intent.ts, scaffold
-# inject-template.ts, or a dev in /work) compiles any native dep that ships no prebuild for this platform.
-# Uncommon toolchains (cmake, -dev headers) stay an overlay concern.
-# ripgrep backs the iq search CLI's lexical engine (iq-engine shells into `rg --json`).
-# python3-pip + python3-venv: python3 was already here for node-gyp, but with no way to INSTALL anything an
-# agent reaching for ordinary Python tooling (Pillow to inspect a screenshot, a one-off script's dependency)
-# hit `pip: command not found` and improvised. Debian marks the system interpreter externally-managed, so
-# `pip install` outside a venv refuses by design — venv is what makes pip usable rather than merely present.
-# python3-yaml + python3-pil are baked from Debian rather than left to pip BECAUSE of that refusal: an import
-# an agent reaches for mid-task cannot afford a venv detour first. Measured over 1146 session transcripts,
-# a missing import is the ONLY common Python failure here — 60 sessions, ~1 in 8 of those that run python3,
-# and it is PyYAML (36 sessions) and Pillow (24) almost exclusively; every other module is a one-off. The
-# failure is not a retry, it is a silent detour: 6 times in 10 the agent abandons Python and redoes the work
-# in Node. yq (below) was baked for the YAML case and did not move the number — agents keep importing yaml,
-# so the fix has to BE the import, not an alternative to it. Debian's packages sidestep PEP 668 entirely.
-# python-is-python3 for the rarer sibling: `python` unqualified is only 2 sessions in 1146, but both came
-# from runners that are not this image's usual agent (a delegated CLI, a loop attempt) writing `python -m`
-# out of habit, and Debian ships no such name. One package ends a whole class of no-such-command.
-# bubblewrap: a fenced conversation (one started by a member who holds areas) runs its turns and its watch checks in
-# a bwrap sandbox (conversations/worktrees/turn-sandbox.ts), and without one every fenced turn is refused. Here and
-# not in a pack, since who sees which areas is access control, not tooling; the desktop pack's WebKitGTK only pulled
-# it in by chance.
+# Core runtime, terminal, sync, search and native-build tools; heavy or privilege-coupled capabilities belong in packs/overlays.
+# SSH is key-only; generate host keys on persistent /history at boot, never in the image. tmux keeps processes alive across web disconnects.
+# Python venv/pip plus Debian PyYAML/Pillow avoid PEP 668 failures for common scripts; uncommon toolchains remain overlay additions.
+# bubblewrap is core access control: without it fenced turns must refuse to run, regardless of optional desktop tooling.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
@@ -106,61 +56,10 @@ RUN git config --global init.defaultBranch main
 # drop-in at boot.
 RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
     && printf '%s\n' 'PasswordAuthentication no' 'PermitRootLogin prohibit-password' 'PubkeyAuthentication yes' > /etc/ssh/sshd_config.d/intentic.conf
-# The terminal (system/terminal.ts) launches zsh with the oh-my-zsh "bira" theme + zsh-autosuggestions, so the
-# owner gets a real prompt and history autocomplete. Installed into root's home (the daemon/terminal run as
-# root); both take the default branch's source ARCHIVE (pin to a tag or commit if reproducibility matters).
-# Archives, not `git clone`, and the difference is whether this layer builds at all: GitHub answers an
-# unauthenticated `git-upload-pack` from datacenter egress with 401 and `WWW-Authenticate: Basic realm="GitHub"`,
-# and git turns that challenge into a username prompt that a build with no tty cannot answer — `could not read
-# Username for 'https://github.com'`, which is what took the `images` job down. The ref advertisement answers
-# 200 first, so the clone looks alive right up to the failure. Nothing here wanted the history anyway; --depth=1
-# said so, and neither directory is a repo the sandbox updates (omz's own updater is disabled below).
-#
-# THE HISTORY LIVES ON THE VOLUME, NOT IN THE CONTAINER. zsh-autosuggestions' default strategy is `history`: it
-# can only ghost-suggest what is in $HISTFILE, and oh-my-zsh leaves that at ~/.zsh_history — inside /root, the
-# container's own writable layer. Every rebuild (docker rm -f + docker run, same named volumes) therefore
-# shipped the plugin back working and the file back empty, and the owner re-typed what they had already typed.
-# /history is the daemon's volume, already home to the pane logs (/history/logs/terminals) that this is the
-# typed half of, and outside the /work the agent writes and Mutagen syncs.
-# `:=` rather than a plain assignment so a caller that already set HISTFILE keeps it: panel sessions do exactly
-# that (processes/managed-processes.ts), which is what keeps a dev-server command the DAEMON typed out of the
-# owner's suggestions.
-# Symlinking ~/.zsh_history onto the volume — the trick that persists ~/.claude (sessions/session-store.ts) —
-# does NOT work here and must not be reintroduced: HIST_SAVE_BY_COPY (on by default) rewrites the file by
-# renaming a temp over it whenever history is trimmed to SAVEHIST, which replaces the symlink with an ordinary
-# container-local file and silently ends the persistence a few dozen commands in.
-# HISTSIZE/SAVEHIST are set because oh-my-zsh only ever RAISES them (to 50000/10000) — a ceiling sized for a
-# file that died with the container. Matched to tmux's history-limit below, since both bound the same thing:
-# how far back the owner can reach in a terminal.
-#
-# zle_highlight is zsh's default list with ONE entry changed: `paste:standout` → `paste:none`. Since 5.1 zsh
-# draws a bracketed paste in reverse video until the next keystroke, which in the browser terminal read as "the
-# whole paste is selected" — and it is stated as the full list because assigning the variable REPLACES the
-# default, so `zle_highlight=(paste:none)` alone would also drop the region/isearch highlighting people rely on.
-# Bracketed paste itself stays on: a pasted newline still waits for Enter instead of running.
-#
-# DISABLE_AUTO_TITLE is not cosmetic here, it is the difference between a clean line and visible garbage. TERM
-# inside a pane is tmux-256color (default-terminal below), so oh-my-zsh's `title` takes its screen branch and
-# emits the hardstatus sequence ESC k <title> ESC \ twice per command: preexec sends the command's name, precmd
-# the cwd. A normal tmux client never sees either — tmux consumes them to name its window — but the browser is a
-# CONTROL-MODE client that gets every pane's bytes RAW, and xterm.js has no ESC k handler: it drops the escape
-# and PRINTS the payload as screen text. `git push origin main` therefore drew a stray `git` welded to the front
-# of the command's first line of output; the precmd copy escaped notice only because the prompt redraw's CR + ED
-# erased it. Nothing reads a terminal title in this stack anyway — the web UI draws the tab bar — so the honest
-# fix is to stop sending one, which also costs nothing per prompt. Stripping the sequence out of the live stream
-# instead would mean decoding and rewriting every chunk on the terminal's hot path; the pane LOGS do pay that
-# (the TitleStripper in logs/pane-log-clean.ts) because they must survive whatever any program emits, not just
-# our own shell. OSC 7, the cwd report, is a separate hook and stays: xterm swallows an unknown OSC silently.
-#
-# THE TWO HOOKS AT THE END ARE WHAT MAKES THE PANEL'S BUSY DOT LIVE. tmux tells nobody when a command starts or
-# stops inside a live pane — `pane_current_command` just reads differently the next time somebody asks — so the
-# daemon could only ever sample it, and the dot outlived the command by up to a poll. The shell knows the exact
-# moment, and it is our shell: preexec (a command is about to run) and precmd (a prompt is about to be drawn)
-# truncate one file in /run, which the daemon watches (terminal/prompt-signal.ts) and turns into a `terminals`
-# frame. Two syscalls and no fork, so it costs nothing per prompt; the braces put the redirection failure on
-# the group's stderr, so a missing /run/intentic/shell (no daemon has listened yet) is silent rather than a
-# line of noise above every prompt. They come after oh-my-zsh's source line because add-zsh-hook composes with
-# whatever omz and zsh-autosuggestions register there, and last-registered is simply last-run.
+# Fetch OMZ/plugin archives to avoid Git auth prompts. HISTFILE uses := on /history; HIST_SAVE_BY_COPY breaks history symlinks.
+# Keep zle_highlight's other defaults and bracketed paste when setting paste:none.
+# Disable OMZ titles: tmux control mode exposes ESC-k payloads as visible xterm text.
+# Register busy-dot hooks after OMZ; missing /run/intentic/shell must stay silent.
 RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
     && curl -fsSL https://github.com/ohmyzsh/ohmyzsh/archive/refs/heads/master.tar.gz \
         | tar -xz -C /root/.oh-my-zsh --strip-components=1 \
@@ -185,25 +84,10 @@ RUN mkdir -p /root/.oh-my-zsh /root/.oh-my-zsh/custom/plugins/zsh-autosuggestion
         'add-zsh-hook preexec _intentic_prompt_signal' \
         'add-zsh-hook precmd _intentic_prompt_signal' \
         > /root/.zshrc
-# tmux backs each terminal tab (one session per tab, attached by intentic-netd: _sandbox/netd's term/), as a
-# PERSISTENCE layer only: the browser's client is a CONTROL-MODE client (`tmux -C`), which gets every pane's
-# raw bytes as text notifications instead of a drawn screen, and xterm in the browser is the terminal that
-# interprets them. So nothing here is about how a pane LOOKS — no status bar (the web UI draws the tab bar), no
-# mouse (the browser's wheel scrolls xterm's own scrollback, a drag is a native selection, and a program that
-# wants the mouse asks xterm for it directly through the raw stream), no clipboard plumbing (an OSC 52 from a
-# program reaches xterm raw), and nothing bound to the prefix key (keystrokes are injected straight into the
-# pane, tmux never sees them as its own). default-command launches the oh-my-zsh zsh above (not /bin/sh);
-# destroy-unattached off keeps a session alive when its web client detaches on reload/drop — the whole point of
-# tmux-backed persistence; history-limit is how far back a fresh attach can replay (netd's term/hub.rs
-# captures it to seed xterm's scrollback), matched by the shell's HISTSIZE above.
-# The set-hook pipe-pane trio logs every pane (web tabs, panels, agent-run tmux, windows, splits) to
-# /history/logs/terminals — the crashed-session post-mortem the /logs routes serve (logs/log-files.ts keeps
-# the same hooks for re-arming a server that outlived a daemon restart). The stream is replayed through
-# pane-log-clean (a headless VT emulator) which owns each file and rewrites the rendered screen, so the
-# persisted log is what the terminal actually showed, not raw escape/redraw noise (the live pane still shows
-# raw color via the xterm WebSocket, unaffected). Pane width/height are passed so wrapping/cursor math match.
-# The session name is sanitized by the s||| format modifier because it lands in a shell command; the pane id
-# keeps names unique.
+# tmux provides persistence; control-mode clients feed raw pane bytes to browser xterm, which owns rendering, input and clipboard handling.
+# Keep detached sessions and match history-limit to shell history so reconnect can replay scrollback.
+# Hooks log every pane through pane-log-clean with matching dimensions; logs/log-files.ts rearms them after daemon restarts.
+# Sanitize session names before shell interpolation; include pane IDs to keep log filenames unique.
 RUN printf '%s\n' \
         'set -g status off' \
         'set -g history-limit 100000' \
@@ -241,21 +125,9 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.15.0 SHELL=/
 # and the catalog's, and the `tool-pins` check refuses a hand edit that moves only some of them.
 COPY --from=oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s bun /usr/local/bin/bunx && bun --version && bunx --version
-# node-gyp on PATH, for an agent compiling a native dep by hand. Pinned like every other tool in this image so a
-# bad upstream release fails a deliberate bump, not the next pipeline.
-# ponytail: bump alongside the node base image — node-gyp tracks the headers it compiles against.
-#
-# EVERY `npm install` IN THIS FILE MOUNTS ~/.npm AS A BUILD CACHE. npm keeps the downloaded tarball in
-# ~/.npm/_cacache next to the package it unpacked, and cacache stores it exactly as the registry served it —
-# already gzipped — so a layer that KEEPS that directory pays for the same bytes twice in every pull, and the
-# second copy barely compresses. Measured in the published image: 420 MiB of tarballs left behind by the global
-# installs and another 45 MiB by the playwright layer, ~23% of a 2 GB pull, for a cache nothing reads at runtime
-# (installs in /work are pnpm's, and its store lives on the volume).
-#
-# These installs used to end in `npm cache clean --force` for that reason. A cache MOUNT is strictly better and
-# replaces it: mounted content is never committed to a layer, so the image is just as small, and the tarballs
-# survive for the next build instead of being thrown away — which matters because every layer here re-runs
-# whenever the image's own base or an earlier layer moves. Cleaning it now would only empty the mount.
+# Pin node-gyp and bump it with the Node base so native builds use compatible headers.
+# Every npm install mounts ~/.npm as a BuildKit cache: tarballs survive rebuilds without duplicating package bytes in image layers.
+# Do not npm cache clean a mounted cache; it adds no image savings and discards the next build's downloads.
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g node-gyp@13.0.2 && node-gyp --version
 # The provider CLIs — `opencode` (Grok), `cli-proxy-api` (the subscription translator) and `codex` — are
@@ -272,41 +144,10 @@ RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
     && /usr/local/bin/cloudflared --version
-# The ordinary-CLI floor. Every install above is here because a FEATURE needs it; this layer is here because
-# an AGENT reaches for it. Mining this workspace's session transcripts (both `command not found` and invoked
-# binaries that resolve to nothing) shows a model does not adapt gracefully when a staple is missing — it
-# improvises around it and the work gets worse: `file` was reached for in 8 sessions, `netstat` in 7, `tree`
-# in 3, `lsof`/`fuser` in 3 more, and not once did the agent install any of them. That same mining is what put
-# pip and the tsx shim in this image; below is the rest of the list, held to tools that are small, generic,
-# and useful to the owner in a web terminal too.
-#   diagnostics — lsof/fuser answer "what is holding this port or file", the question an agent asks every time
-#     a dev server won't bind and the one `ss` only half answers; net-tools is muscle memory (netstat,
-#     ifconfig) that no amount of iproute2 displaces; strace is the only way to see where something hangs;
-#     psmisc also brings killall/pstree; ping/traceroute/dnsutils/netcat/socat are the reachability ladder.
-#   files & data — file identifies a blob before the agent cats 2 MiB of binary into its own context; tree is
-#     how a model asks for a directory's shape; unzip/zip/xz/zstd/bzip2 open what curl brings back; sqlite3
-#     reads the .db a project keeps in-repo; patch applies a diff that isn't a git commit; bsdextrautils/xxd
-#     (hexdump, column) read the bytes; libxml2-utils and moreutils cover the two idioms with no shell
-#     equivalent — xmllint and `cmd file | sponge file`.
-#   shell floor — less (git's pager; without it a terminal `git log` is an unpaged wall), nano + vim-tiny
-#     (nano takes Debian's `editor` alternative, so an interactive `git commit` stops erroring out — the
-#     tradeoff is that a no -m commit now waits on an editor instead of failing fast, which is why the agent
-#     is told to always pass -m; vim-tiny registers `vi` but NOT `vim`, so the symlink below spares everyone
-#     who types the name they actually know — it is the reduced build, which beats a missing one), bc,
-#     envsubst, uuidgen, dos2unix, and wget — curl is baked, but half the install instructions on the
-#     internet, and in the model's weights, say wget.
-#   git-lfs is the one whose absence is SILENT: cloning an LFS repo without it yields pointer files that look
-#     like content, so the agent reads 130-byte stubs and reports on them. `install --system` registers the
-#     filters image-wide; the package alone does not.
-# Deliberately NOT here: shellcheck (18 MiB for a linter agents don't run on themselves), cron/at (nothing
-# runs a cron daemon — automations own scheduling, and an inert crontab that accepts jobs it will never fire
-# is worse than no crontab), man-db (a slim base ships no man pages for it to read), htop/ncdu (interactive-
-# only: an agent that starts one just waits out its timeout — `top` and `du` already answer the same question
-# in one shot), ffmpeg/imagemagick/pandoc and the database clients (heavy and task-specific — capability or
-# overlay), the language toolchains (overlay, as above), and fd (Debian installs it as `fdfind`, and a tool
-# present under the wrong name costs more turns than an absent one). Placed after the pinned installs above
-# so adding a staple here never re-runs the Docker/Chromium layers, and before the tree COPYs so it stays
-# cache-stable across source changes.
+# Small generic CLIs agents and terminal users commonly reach for; keep heavy/task-specific tools and language toolchains in overlays.
+# git-lfs needs install --system as well as the package, or clones silently leave pointer files. vim-tiny needs the familiar vim alias.
+# Omit inert schedulers, absent man pages and interactive-only monitors; use existing automation and one-shot diagnostics.
+# Keep this layer after pinned installs and before tree copies so additions and source changes do not invalidate expensive tool layers.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update \
@@ -357,21 +198,9 @@ RUN set -eu; arch="$(dpkg --print-architecture)"; \
 # because Docker's classic store re-downloads every layer above the first changed one whatever its digest. The tree
 # COPY'd into /opt/sandbox below merges over it: the workspace's own packages, the .pnpm index and the daemon itself.
 COPY --link --from=trees layers/sandbox-deps/ /
-# THE STARTER SITE, baked so a new sandbox never builds it. A fresh workspace used to open empty, with nothing running
-# and nothing to look at; the daemon's first boot now copies this tree into /work and starts its dev server
-# (src/scaffold/starter-site.ts), so the preview is live seconds after the machine is. The install is the whole reason
-# this is baked: it takes a minute or two and cannot be made shorter, so it is paid once, at image build time, instead
-# of on every new user's clock.
-#
-# Built OUTSIDE this file now, by prepare-image-trees.sh through starter/starter.Dockerfile: the same CLI the Add-app
-# button runs scaffolds it (one code path, so the baked starter and a hand-added landing app cannot drift), on this
-# image's Node and pnpm, into this image's paths (/opt/starter, and the pnpm store under $PNPM_HOME it is installed
-# from), with intentic's own first page laid over the template's. It used to be a RUN right after the per-commit CLI
-# tree, so every release re-ran it, and a pnpm install is never the same bytes twice: 1.342.0 → 1.344.0 shipped it as a
-# new 189 MB layer (886 MB unpacked, pnpm's 176 MB metadata cache among it) with nothing in it changed. Built apart and
-# with pnpm's clocks taken out (starter/normalize-starter.mjs), two builds from the same template and lockfile are the
-# same bytes, so the layer keeps its digest until the template really changes. Placed with the other static layers,
-# below the CLI tree, for the classic store's sake.
+# Bake a ready-to-seed starter so first boot copies it into /work and starts the preview without paying an install delay.
+# prepare-image-trees.sh builds starter/starter.Dockerfile through the same scaffolder as Add app, with runtime Node/pnpm paths.
+# normalize-starter.mjs removes volatile install metadata so unchanged templates/lockfiles retain layer digests across releases.
 COPY --link --from=trees layers/starter/ /
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
@@ -414,60 +243,10 @@ COPY --from=trees sandbox /opt/sandbox
 # netd the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/netd). Built
 # on this image's Debian release by build-netd.sh, so it links against the glibc this layer carries.
 COPY --from=trees netd /opt/sandbox/netd
-# THE CLIS THE DAEMON'S TREE CARRIES, put on PATH in ONE layer. Each used to be a RUN of its own, nine layers of a few
-# KiB each against the 125-deep limit image-layers.integration.test.ts holds the budget for; one RUN costs one. What each
-# is for, and why it is a symlink rather than a tree of its own:
-#
-# The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
-# daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
-# bundled TypeScript 7 native binary) over whatever tsconfig project the agent points it at in /work.
-# Every question — `lsp diag`, `lsp rename`, and the sandbox's post-edit hook — is a fresh compiler run that
-# answers and exits; nothing stays resident, so a workspace pays memory only while a check is actually running.
-#
-# Symlinked out of the DAEMON'S tree rather than deployed as a tree of its own: @intentic/lsp is a dependency of
-# @intentic/sandbox, so /opt/sandbox already contains this exact package (and its bundled native compiler) — a
-# second `pnpm deploy` root shipped a 54 MiB duplicate of it, 14.6 MiB of the pull. Node resolves the CLI's
-# imports from the target's realpath inside /opt/sandbox/node_modules, the pane-log-clean precedent below. The
-# chmod is the intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying
-# the package fails the build here instead of leaving `lsp` off PATH.
-# The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)
-# and the daemon's /workspace/search backend (execFile `iq --json`). Symlinked out of the daemon's tree exactly
-# like lsp above: @intentic/iq is a dependency of @intentic/sandbox, so /opt/sandbox already carries it — a
-# second `pnpm deploy` root shipped a ~450 MiB duplicate of the engine's node_modules (onnxruntime,
-# transformers, ast-grep) for a CLI whose own code is under 1 MiB. Same chmod-as-existence-check rationale.
-# The webq CLI on PATH — the agent's web-fetch tool (URL → clean budgeted markdown, bounded site crawls,
-# shared 15-min cache). Symlinked out of the daemon's tree exactly like lsp and iq above: @intentic/webq is a
-# dependency of @intentic/sandbox, so /opt/sandbox already carries it and its deps (parse5; playwright is the
-# daemon's own copy). Uses the browser pack's Chromium when a page needs JS and degrades to static HTML with a
-# notice when this image doesn't carry it. Same chmod-as-existence-check rationale.
-# The fileq CLI on PATH — the agent's binary-file reader (docx/xlsx/pptx/pdf/images/audio → clean budgeted
-# markdown, cached by content under .intentic/local/cache/derived/ so a repeat read of unchanged bytes is instant).
-# Symlinked out of the daemon's tree exactly like lsp, iq and webq above: @intentic/fileq is a dependency of
-# @intentic/sandbox, and the daemon (src/derived/) spawns this very binary to render a file a person opens. The
-# skill that teaches agents it exists rides settings/skills.ts, not a plugin dir.
-# An agent's own `git diff`, `git show` and `git log -p` on a document print fileq's text instead of "Binary files
-# differ": the global attributes file names every derivable extension `diff=fileq` (a repo's own .gitattributes still
-# wins), and the textconv driver is `fileq read --plain`, which saves nothing for the temp file git hands it. The
-# daemon's diff routes are untouched: diff-partial.ts passes --no-textconv, and /diff/derived renders the sides itself.
-# Plain `rg` searches documents: fileq-rg-pre (POSIX sh, no Node on its fast path) prints a pdf's, docx's, xlsx's…
-# fresh shadow with `[p. N] ` page marks, else falls back to `fileq read --plain`. The config routes only document
-# globs to it, so code reads as before. The daemon points agents' shells at it (RIPGREP_CONFIG_PATH, derived/
-# search-env.ts) while the documentSearch setting keeps the shadows current. Symlinked like fileq above; the chmod is
-# the same existence check.
-#
-# pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
-# stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
-# the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's
-# realpath (/opt/sandbox/node_modules); tsc keeps the file's shebang, so chmod +x makes it directly runnable.
-# ocr on PATH: the text on an image, read on this machine by the privacy shield's own reader (PaddleOCR PP-OCRv6,
-# _sandbox/ocr), for an agent that must read a screenshot without sending it anywhere and for fileq's OCR tier. Its
-# models come with the privacy pack; without them it says so and exits 2. Symlinked out of the daemon's tree like lsp
-# and iq above: @intentic/ocr is a dependency of @intentic/sandbox, so node resolves onnxruntime-node and sharp from
-# the package's realpath inside /opt/sandbox/node_modules. Same chmod-as-existence-check rationale.
-# memory-room, the memory half of the heavy-command queue (queue-run, below), symlinked the same way: it asks the daemon's resource budget over its local socket
-# (src/workload/room-socket.ts), and where no daemon answers applies the same formula itself
-# (@intentic/constants/memory-room), so queue-run holds a suite off a pinned box without a second policy. Fails open
-# on every path, including this binary being absent.
+# Expose daemon dependencies through symlinks in one RUN to avoid duplicate trees and layers; Node resolves imports from realpaths.
+# chmod also checks that every CLI shipped. lsp starts a fresh compiler per request; OCR needs the privacy pack's models or exits 2.
+# fileq supplies Git textconv and rg document search; daemon diff routes use --no-textconv and render derived sides separately.
+# memory-room shares the daemon's admission formula and fails open when the daemon or CLI is unavailable.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
         /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
         /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
@@ -489,25 +268,10 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
     && git config --global diff.fileq.textconv 'fileq read --plain' \
     && mkdir -p /etc/fileq \
     && fileq ripgrep-config --pre /usr/local/bin/fileq-rg-pre > /etc/fileq/ripgreprc
-# The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
-# image-packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
-# daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.
-# Image-baked first-party extensions — one manifest checkout per subdir, enumerated by installedExtensions()
-# via SANDBOX_EXTENSIONS_DIR (the iq-plugin precedent): present in every sandbox, not removable, no capability
-# entry. connectors, social, computers, acp-agents and pi-agent are data-only (manifest + skill packs + client
-# image fragments) so they copy straight from context. The gateway extensions (discord, imap, slack, telegram,
-# whatsapp, google-workspace, microsoft-365) bake their MANIFESTS here — the cards exist in every image — while their deployed
-# runtime trees are the bake-only `messaging` feature pack (image-packs/messaging.Dockerfile, in the standard
-# profile); on a core image the daemon surfaces "not included in this image" instead of spawning a runtime that
-# isn't there. google-workspace (like microsoft-365 and imap) is in that group for its `bin` as much as its watcher: the manifest promises
-# both, and extensionRuntimeAbsent is all-or-nothing per extension, so shipping the CLI from context here would
-# make the watcher's absence on a core image invisible rather than stated. prawo rides the same way: a CLI-only
-# extension (`prawo`, Polish acts and rulings) whose tree is in the pack and whose manifest is here.
-#
-# The data-only packs are what makes the /capabilities grid: every card that is a ROW over a generic core
-# handler (a cli connector, a social platform, an OS pack, a browser or phone family, an ACP preset, the Pi agent) is one of these manifest
-# entries, so switching a pack off removes exactly its cards. Miss a COPY and those cards silently vanish from
-# the grid.
+# Codex lives only in its pinned pack; prepare-image-trees.sh prunes the duplicate daemon-tree binary.
+# Copy first-party manifests/data into every image; installedExtensions() discovers them through SANDBOX_EXTENSIONS_DIR.
+# Gateway/CLI runtime trees belong to the messaging pack. Keep their manifests here so core images explicitly report absent runtimes.
+# Missing manifest copies silently remove capability cards; do not copy partial runtimes that hide the missing pack.
 COPY _extensions/connectors /opt/extensions/connectors
 COPY _extensions/social /opt/extensions/social
 COPY _extensions/devices /opt/extensions/devices
@@ -592,66 +356,15 @@ COPY --chmod=755 _sandbox/output-cleaners/src/agent-output-filter.mjs /usr/local
 COPY --chmod=755 _sandbox/output-cleaners/src/cleaners.mjs _sandbox/output-cleaners/src/cleaner-shapes.mjs _sandbox/output-cleaners/src/log-templates.mjs _sandbox/output-cleaners/src/json-arrays.mjs _sandbox/output-cleaners/src/search-fairness.mjs _sandbox/output-cleaners/src/output-cap.mjs _sandbox/output-cleaners/src/repeated-output.mjs _sandbox/output-cleaners/src/text-shaping.mjs /usr/local/bin/
 # retrieve-output on PATH — the reversible half of the filter (fetch back elided output; the footer names it).
 COPY --chmod=755 _sandbox/output-cleaners/src/retrieve-output.mjs /usr/local/bin/retrieve-output
-# rtk is not baked: the `rtk` extension's environment fragment adds it for an owner who asks; nothing here execs it.
-# The VPN command the agent's vpn skill teaches and an owner can run in a terminal. It calls the daemon's /vpn
-# routes (never a VPN client directly), so agent-initiated and UI-initiated connects are the same operation.
-# The clients themselves are NOT baked — they ride the vpn capability's environment fragment, like WireGuard
-# always has, so a sandbox with no VPN carries neither the tooling nor the privileges.
-# The geo-exit command the agent's geo skill teaches. Same shape as vpn: it calls the daemon's /exit routes,
-# never tor or openvpn directly, so an exit the agent moves and one the owner moves are the same operation.
-# The clients are NOT baked either — tor rides the exit capability's fragment (and only tor's, which is why a
-# tor-only exit costs no container privileges at all).
-# NAMED `geo` BECAUSE `exit` IS A SHELL BUILTIN: a binary called exit is unreachable from any command line
-# (`exit list` exits the shell instead of running it). The capability and the routes keep the word.
-# The network-disk command the agent's netdisk skill teaches. Same shape as vpn: it calls the daemon's /netdisk
-# routes, never mount.cifs directly, so a disk the agent mounts and one the owner mounts are the same operation.
-# cifs-utils is NOT baked — it rides the netdisk capability's fragment; a sandbox with no disk carries no client.
-# The extension command: run an installed extension from a checkout of its source (dev mode) and go back. Same shape
-# as netdisk: it calls the daemon's /extensions/dev routes, the ones the Extensions tab's way back calls too, so an
-# install the agent points at a checkout and one the owner points back are the same operation.
-# The one-time-code command connector skills teach for services whose write path asks for a 2FA code (npm
-# publish --otp). Same shape as vpn: it calls the daemon's code mint and owns no totp logic, so the stored seed
-# never reaches a shell — only codes that die within their period do.
-# The capability-ask command the capabilities skill teaches: list what this sandbox can be connected to, and
-# ask the owner in chat to connect one. Same shape as vpn/otp — it relays through the daemon, which owns the
-# consent card and the setup watch; the CLI connects nothing and reads no credential.
-# The one module every asking command shares (bin/needs-cli.mjs): how an ask reaches the needs door and what its exit
-# codes mean, so capabilities, secrets, grants, environment and needs answer alike (docs/architecture/needs.md). Beside
-# them, since each imports it by its relative path.
+# These CLIs relay through daemon routes so shell and UI actions share policy; optional clients such as VPN, netdisk and rtk live in overlays.
+# Name the geo command separately from the shell's exit builtin. OTP returns short-lived codes without exposing stored seeds.
+# capability-ask requests the owner's consent; it connects nothing and reads no credentials.
+# Keep bin/needs-cli.mjs beside its callers: it shares the needs protocol and exit codes by relative import.
 COPY --chmod=644 _sandbox/sandbox/bin/needs-cli.mjs /usr/local/bin/needs-cli.mjs
-# The asks for reach a persona withholds, for a tool in the image, and the list of what a conversation still waits on.
-# Same shape as capabilities: they relay through the daemon, which owns every card; none reads a credential.
-# The automations command the intentic skill teaches: list what runs on its own, try a watch's check once, and propose a
-# new watch on a card the owner approves. Same shape as environment: it relays through the daemon, which owns the card
-# and the save; an agent never arms unattended work by itself.
-# The wallet command the wallet skill teaches: check the sandbox's USDC balance and pay x402-payable
-# endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
-# consent card and the ledger; the signing key lives with the platform and never enters this container.
-# The credential-approval command: which stored secrets and connected accounts the owner put behind a named
-# person, and the in-chat ask to release one (src/secrets/credential-gate.ts). Same shape as capabilities —
-# it relays through the daemon, which owns the policy, the card and the identity check. It reads NAMES and
-# approver addresses only; no route it can reach returns a credential.
-# The privacy command: whether the privacy shield is on, and the one change an agent may make to it, teaching a
-# dataset's values so each is masked wherever it appears (src/privacy/). Same shape as secrets: it relays through the
-# daemon, which owns the policy; the values it reads from a file go to the daemon and are never printed.
-# The child-agent command the spawn note teaches (src/agent/subagents/spawn-note.ts): start a full agent on any
-# connected provider from any runtime's shell, wait on it, list this conversation's children. Same shape as
-# services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
-# spawns nothing itself and reads no credential.
-# The devices command the device skills teach: carry a program built here to one of the owner's connected computers,
-# for that computer's app_start to run. Same shape as wallet: it relays through the daemon, which holds it to the
-# computers the turn reaches; the computer decides whether it may run anything at all.
-# The offloaded-command wrapper (src/offload/): put in front of a heavy line whose kind the owner sends to a runner on
-# one of their machines, by the Bash hook and the check after landing. It snapshots the tree, relays the run through the
-# daemon, brings back what the command changed, and runs the line here when the runner cannot take it.
-# The sandbox-fleet command the fleet skill teaches: the owner's other sandboxes, and the one door a new one
-# is created through (src/sandboxes/). Same shape as wallet — it relays through the daemon, which owns the
-# provisioning token, the consent card and the machine that builds it; the CLI holds no credential, and a
-# create that was not approved in chat mints nothing.
-# EVERY COMMAND ABOVE IS ONE COPY, not one each: an instruction is a layer, Docker's classic layer store refuses an image
-# deeper than 125 (`failed to register layer: max depth exceeded` on pull), and the environment overlay a rebuild
-# composes stacks its own layers on top of this image. One COPY per command took the standard image to 127 at
-# 1.338.0; src/image/image-layers.integration.test.ts holds the budget. A new command joins this list.
+# Shell commands relay to the daemon, which owns consent, policy, budgets and credentials; no CLI may bypass those gates.
+# Privacy values go to the daemon without printing; wallet keys stay on the platform and fleet creation requires approval.
+# Offloaded commands snapshot/return changes and fall back locally when the selected runner cannot accept the work.
+# Add commands to this single COPY: separate layers exhausted Docker's 125-depth limit and leave no room for environment overlays.
 COPY --chmod=755 \
     _sandbox/sandbox/bin/vpn \
     _sandbox/sandbox/bin/geo \

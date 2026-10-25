@@ -41,27 +41,10 @@ import {
     WakeAlarmBodySchema,
 } from "./ingress-schemas.js";
 
-/* EVERY ROUTE A MACHINE CALLS ON THE PLATFORM, outside the editor's oRPC contract under /rpc: the sandbox daemon, `ic`
- * on the owner's machine, the edge, a hosted image's builder and the trial's model translator. The platform registers
- * each under its entry here (`_platform/api/src/ingress.ts`) and the daemon calls each through it
- * (`_sandbox/sandbox/src/system/platform-client.ts`), so a path, a method or a body has one spelling.
- *
- * A route table rather than oRPC procedures: these routes predate the contract and are called by machines of every
- * release, so their paths sit at the root rather than under /rpc, most authenticate by a header oRPC's context would
- * have to carry, one takes a form and answers plain text, two stream bytes through untouched, and every refusal is
- * `{ "error": … }` (IngressErrorSchema) with the route's own status, which an older daemon and `ic` read today, where
- * oRPC's error body is its own. (2026-10-05)
- *
- * `{param}` is one path segment (ingressPath fills it). `auth` says what proves the caller:
- *   connect         the sandbox's connect token in CONNECT_TOKEN_HEADER
- *   connect-bearer  the connect token as a bearer, or in CONNECT_TOKEN_HEADER (an OpenAI-shaped client sends a bearer)
- *   provisioning    an account's API token with the `provision` scope, as a bearer
- *   report-key      the sandbox's host-report key as a bearer (HOST_REPORT_KEY_LABEL)
- *   platform-token  the edge's platform token, as a bearer
- *   build-secret    the build's own secret, in a header of the build report (the platform's hosted-build-script.ts)
- *   code            a live setup code or fix code in the body
- *   none            nobody: existence is not a secret
- * `body` is how the request is encoded and `answer` how a success is: `passthrough` is an upstream's bytes, relayed. */
+/* Shared root-level machine routes, registered by ingress.ts and called through platform-client.ts; preserve legacy paths and error/status formats.
+ * A table supports header auth, forms, plain text and byte passthrough without changing older callers to oRPC's /rpc or error envelope.
+ * ingressPath fills {param} segments; auth names the proof, body the request encoding, and answer the success encoding.
+ * Connect, provisioning, report-key, platform-token and build-secret proofs stay distinct; refusals use IngressErrorSchema. */
 
 export type IngressAuth = "connect" | "connect-bearer" | "provisioning" | "report-key" | "platform-token" | "build-secret" | "code" | "none";
 

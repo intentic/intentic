@@ -5,23 +5,9 @@ import { daemonGeneration, type DetachedKind } from "../../seams/workload-stamp.
 import { readText } from "../resources/cgroup.js";
 import { procUnits, type ScannedProcess, scanProcesses } from "../resources/process-scan.js";
 
-// WHAT AN EARLIER DAEMON RUN LEFT RUNNING (2026-10-05). Every process the daemon starts carries its run's generation
-// (seams/workload-stamp.ts `INTENTIC_DAEMON_GEN`), and a detached child of the daemon's own (an isolation anchor, a
-// watch check, an edit rule's command, the sign-in window's Chromium) also says what it is. intentic-netd ends a
-// crashed daemon's process group, but these sit in groups of their own, so before this pass an isolation anchor leaked
-// one `sleep infinity` per crash and nothing ever ended it. At boot, before anything is started, a stamped process of
-// an earlier run goes, except:
-// - what tmux holds (a pane's session, the server itself): the sessions have their own sweep and their own adoptions,
-//   the servers an agent kept for the person among them;
-// - what is meant to outlive the daemon (ADOPTED_PROGRAMS): the browsers' X displays and their window manager, VPN and
-//   exit clients, the agents' Docker engine, a loaded local model;
-// - an unstamped process, which is not the daemon's to judge however it was started.
-// An isolation anchor of an earlier run always goes: no turn survives a restart, so nothing will enter its namespace
-// again. Anchors from before the stamp are known by their shape (`sleep infinity` leading its own session in a mount
-// namespace of its own, orphaned).
-// Every command run through workload/run-check.ts (a watch check, an edit rule, a guard, a stop check, a probe, a JS
-// run, a Python check) carries its own deadline as well, which the reaper's minute sweep enforces whichever run started
-// them (overdueDetached).
+// Before boot starts work, remove processes stamped with earlier INTENTIC_DAEMON_GEN, except tmux-owned or ADOPTED_PROGRAMS survivors.
+// Leave unstamped processes alone, except recognizable legacy orphan isolation anchors; all old anchors go because turns do not survive restart.
+// workload/run-check commands also carry deadlines enforced by the minute reaper, regardless of their daemon generation.
 
 // Kernel names (comm, at most 15 characters) of programs meant to survive a daemon restart, adopted rather than
 // ended. dockerd and model servers normally run in a tmux panel and are spared by that already; named here for the

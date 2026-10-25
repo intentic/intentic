@@ -1,28 +1,7 @@
-# Publish the browser extension to the Chrome Web Store, at the tag semantic-release pushes — npm-publish.yml's
-# shape for an artifact that ships to a store instead of a registry.
-#
-# DISPATCHED, NOT TAG-TRIGGERED, like its two siblings and for the same reason: semantic-release pushes the tag
-# with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created. `on: push:
-# tags` here would be a trigger that cannot fire — the mistake npm-publish.yml and action-publish.yml each made
-# once, and the one the workflow-policy check now refuses. dispatch-publish.sh names this file; that is what makes it
-# reachable.
-#
-# THE TAG IS THE VERSION AND THE TREE IS NOT. Every first-party package.json stays at 0.0.0 in git, so the
-# checkout of a tag is an UNSTAMPED tree: set-versions.sh stamps it here before anything is built, and the
-# extension's build derives its manifest version from the stamped package version (scripts/stamp-manifest.mjs).
-# The store refuses an upload whose version is not strictly greater than the published one. An unstamped local
-# build deliberately maps the workspace's invalid all-zero sentinel to 0.0.0.1; only a tag-stamped build may
-# enter this automated release path.
-#
-# INERT UNTIL THE LISTING EXISTS. The five CHROME_WEBSTORE_* values are the store's OAuth client, a refresh
-# token for the publisher account, and the publisher/item ids from the dashboard. Without them the publish
-# step SKIPS loudly (a warning annotation on the run) rather than failing: an unlisted extension must not make
-# a release fail. _devices/webext/PUBLISHING.md is the one-time setup, and STORE-LISTING.md is what goes in
-# the listing form.
-#
-# ON THE FLEET, unlike npm-publish.yml. That one is GitHub-hosted because npm's provenance attestation refuses
-# any other runner; nothing here is attested, so this runs where the rest of the pipeline runs, with the shared
-# caches.
+# Dispatch the release tag and stamp package versions before building the Chrome extension; GITHUB_TOKEN tag pushes cannot trigger it.
+# Only tag-stamped versions enter this path: the store requires monotonic versions, while local 0.0.0 maps to a development sentinel.
+# Missing CHROME_WEBSTORE_* settings warn and skip until listing/OAuth setup is complete; see _devices/webext/PUBLISHING.md.
+# No npm provenance requirement applies here, so publish on the cached fleet runner.
 name: webstore publish
 
 # Run it by hand from a tag the same way the release job does: Actions ▸ webstore publish ▸ Run workflow, with

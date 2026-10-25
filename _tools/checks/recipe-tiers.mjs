@@ -1,23 +1,8 @@
 #!/usr/bin/env node
-// The kit's class recipes (_editor/ui/src/lib/ui.ts) name what they vary: a size, a tone, a state. A call site picks
-// the variant and passes LAYOUT only (a margin, `shrink-0`, `self-start`, a position, a hover-reveal), so this refuses:
-// 1. a class a recipe has a variant for, passed as an override — `ui.iconButton("h-8 w-8")` is `{ size: "lg" }`,
-//    `ui.textButton("text-2xs text-muted hover:text-content")` is `{ size: "xs", tone: "quiet" }`. Before the
-//    variants, 440 of 679 recipe calls passed overrides and the commonest were these, each site its own spelling.
-// 2. a retired recipe name: `linkButton`/`textAction` are `textButton` (one control, two tones, which call sites had
-//    already been turning into each other by override), `inputSm`/`inputInline`/`sectionLabelSm` are the size variant.
-//    They stay in the kit only because installed extensions call them through the host.
-// 3. `ui-chip-on` written by hand: the lit chip is `ui.chip({ on })`.
-// 4. A selection marked a second way: `ui-row-select-on` with a rule, ring or fill of its own beside it, or a hand tint
-//    (`bg-link/10`, `bg-primary-600/15`) put on what is selected. The one selected mark is `ui-row-select-on` (or
-//    `<Row selected>`, `ui.chip({ on })`), so /sandbox/models and /sandbox/personas cannot mark a pick two ways again.
-// 5. `ui.sectionLabel()` outside the kit: the section header is <SectionHeader> (drawn by <Section>, <RowGroup> and
-//    <NavRail>), which owns its size, its spacing and what may sit beside it; the recipe stays for installed extensions.
-// 6. A chip or a status pill given its own box: a padding, a height, a gap, a type size, a line height or a radius on a
-//    `ui.chip()`, a `ui-chip` or a `ui-status-pill`. Their sizes are decided once (utilities.css): the chip's
-//    `{ size: "sm" | "md" | "lg" }` with `{ lead }`/`{ trail }`, the pill's `-inline`/`-md`. ~60 call sites had each
-//    spelled one, the "Show fewer" chip at a lane's tail among them.
-// Exceptions: `allow(recipes): <reason>` at the site, saying why the geometry is the place's own.
+// Recipes own size/tone/state; callers pass named variants and layout classes only. Reject variant overrides and retired recipe names.
+// Use ui.chip({ on }) and one selection mark (ui-row-select-on/Row selected), without extra rings, fills or hand-written ui-chip-on.
+// SectionHeader owns headers; chip/pill recipes own box and type geometry. Legacy recipes remain only for installed extensions.
+// Exceptions require allow(recipes): <reason> explaining why the geometry belongs to that location.
 import { readFileSync } from "node:fs";
 import { boxOverrides } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { blank, classWordsOf, excusedAt, finishFindings, tags } from "./lib/templates.mjs";

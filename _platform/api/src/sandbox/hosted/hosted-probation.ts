@@ -14,33 +14,10 @@ import { withHostedAppLock } from "./hosted-app-lock.js";
 import { HostedNothingKept, hostedEnabled, rollbackHosted } from "./hosted.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted-usage.js";
 
-/* A NEW IMAGE IS WATCHED FOR A DAY AFTER IT CAME UP, and the one before it is put back when it keeps failing.
- *
- * The hosted half of `ic sandbox watch` (_sandbox/ic/src/sandbox/probation.rs). The state gate (gate/state-gate.ts) keeps a
- * hosted image change only once the new daemon has answered; whether that image still works hours later (it crash-loops
- * under real use, its journal never closes, it stops answering) it did not see, and nothing went back. Now the gate stamps
- * the row when it saw an image come up (`probationSince`), and this sweep looks at the machine every PROBATION_LOOK_MS
- * for `UPDATE_PROBATION.watchMs`. The rule is the contract's, not a copy: the same `judgeProbation` and `probationStep`
- * ic's Rust is tested against (golden/update-probation.json), over a look read through Fly's exec instead of Docker, with
- * the same strikes, grace and window. Three failed looks in a row, or a failure that cannot be waited out (a journal that
- * failed, a daemon netd cannot keep alive), put `previousImage` back through `rollbackHosted`, the path the owner's own
- * press takes: the planner is asked, the daemon waited for, the image left becomes the way forward and its platform digest
- * is skipped by later restarts.
- *
- * WHAT IT ACTS ON, AND WHAT IT LEAVES (convergence.md): only a row with `probationSince`, which only the gate writes, only
- * while a way back is kept (`previousImage`) and the image is not on trial (`unprovenImage`: the next start judges that
- * one). It looks only at a machine Fly says is started and has been for the gate's ready budget, under the app's lock
- * without waiting: a machine another change holds, a machine that is asleep (the daemon's idle-stop, an operator's or the
- * meter's stop: nothing to judge until it runs, as `ic sandbox stop` leaves nothing to judge), one still booting after a
- * wake, a Fly that will not answer, and a row that changed under the look are all skipped and looked at again. A machine
- * that crashed and was never started again is judged by the wake that starts it. Doubt is never a strike.
- *
- * WHAT IT DOES NOT DO. It does not mail the owner (ic leaves an outcome card on the sandbox's own volume; writing one into
- * a hosted machine is not done yet); the go-back is logged at warn and the owner finds the sandbox on its earlier version,
- * with the later one as the way forward. It does not retry a go-back that failed: the machine has just been stopped and
- * started once, so a failure ends the probation and is logged at error (a machine the gate could not put back is stranded
- * on its row and reported by hosted health, as ever). It looks at every machine on probation each tick, one at a time, and
- * a fleet where hundreds changed image in a day would want a cheaper first look. */
+/* Watch gate-stamped images with previousImage and no unprovenImage using the shared UPDATE_PROBATION policy for one day.
+ * After three failed looks or an unrecoverable journal/daemon failure, rollbackHosted restores the prior image and skips the failed digest.
+ * Skip asleep/booting/busy machines, uncertain Fly reads and changed rows; take the app lock without waiting. Doubt is not a strike.
+ * Process machines serially; log rollback outcomes without mailing. A failed rollback ends probation rather than retrying. */
 
 // How often a machine on probation is looked at. ic's agent looks once a minute; Fly's exec is a heavier question than a
 // `docker exec`, and three strikes in a row at this pace are about six minutes of an image that is plainly down.

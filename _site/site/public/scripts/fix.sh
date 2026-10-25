@@ -1,42 +1,14 @@
 #!/bin/sh
-# intentic fix: a bootstrap shim for the one command a sandbox that stopped answering hands out. The work itself lives in
-# the `ic` CLI (_sandbox/ic, `ic sandbox fix`): it checks every layer of this device between you and the sandbox
-# (network, Docker, WSL, the disk, the container, its daemon), fixes what is safe to fix, asks in this terminal before
-# anything disruptive, and says what is left for you. This script only finds or downloads the binary and forwards:
-#
-#   curl -fsSL https://intentic.dev/fix/<CODE> | sh                # the recovery panel's command
-#   curl -fsSL https://intentic.dev/fix | sh                       # no code: every sandbox here, unobserved
-#   sh fix.sh <CODE> --yes                                         # ic's own flags after the code, verbatim
-#
-# The CODE is the one the browser's recovery panel put in the command. It names the sandbox and lets this run report its
-# progress back to that page; without it the run still fixes, the page just cannot watch it.
-#
-# The binary is downloaded on EVERY run, so the fix is always the latest one, whatever `ic` this device had; only a
-# failed download falls back to what is installed. IC_BIN overrides for local dev (a checkout's own build).
-# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`). Piped, stdin is this script, so ic
-# asks its questions on the controlling terminal (/dev/tty), never on stdin.
+# POSIX bootstrap for ic sandbox fix; ic diagnoses network/Docker/WSL/disk/container/daemon and asks before disruptive repairs.
+# Optional CODE from /fix/<CODE> identifies the sandbox and reports progress to the recovery page; without it, repair still runs.
+# Refresh ic each run, with installed fallback on failed download; IC_BIN selects a development build.
+# Forward flags after the code unchanged. Piped stdin contains this script, so ic prompts on /dev/tty.
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
-# is dash on Debian, Ubuntu and WSL.
-#
-#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   kit_say <sentence>                       narration under the running step
-#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
-#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
-#   kit_settle                               the running step is done
-#   kit_finished <verdict>                   a flow's past-tense verdict
-#   kit_stop <headline> [problem] [fix] [code]
-#                                            stop: the running step settles as failed, the stop block goes to stderr,
-#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix> [names]
-#                                            run again through sudo when not root, keeping the named settings (see below)
-#   kit_confirm <question> <consequence> <flag>
-#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
-#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+# POSIX-sh output helpers for bootstrap scripts; see docs/ops/cli-output-protocol.md for the shared protocol.
+# ic or intentic-machine owns the display after handover; suspend/resume around commands that print their own output.
+# kit_stop exits (default 1, usage 2). kit_confirm exits 0 on refusal and stops without a terminal unless a flag answers it.
 
 case "${INTENTIC_UI:-}" in
     rich | plain | nested) kit_mode="$INTENTIC_UI" ;;

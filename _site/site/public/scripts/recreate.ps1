@@ -1,39 +1,11 @@
 <#
 .SYNOPSIS
-  intentic recreate (Windows): a bootstrap shim. The flow itself (update/rebuild/rollback, env replay, overlay
-  re-base, the run command the image emits) lives in the `ic` CLI (_sandbox/ic); this script only finds or downloads
-  the binary and forwards the parameter shapes the platform's cards hand out: -Slug alone = update, -Slug + -Hash =
-  rebuild (the SHA256 is the trust anchor - only overlay content that still hashes to what the owner
-  reviewed is ever built), -Slug + -Rollback = back to the image it ran before its last update, and
-  -Slug + -Prepare = download and build the next update without applying it, and -Slug + -Reshape <ic flags> =
-  the same image with a different share of this device (--memory/--cpus/--privileged/--gpus are ic's own
-  flags, forwarded verbatim after -Reshape). -Slug + -Shape <ic flags> sets a shape now or for the next restart
-  (`ic sandbox shape`), -Slug + -Start/-Stop/-Restart powers it through ic (a saved shape is applied), and -List
-  alone prints every sandbox here as JSON. -Slug + -RollbackTo <version|image> goes back to an older version this
-  device kept, and -Slug + -Versions lists those. -Slug + -Watch finishes or undoes a swap that was cut off and
-  judges a new version on probation, -Slug + -Backup backs the sandbox's data up now, and -Slug + -Doctor names
-  what stands between you and the sandbox, with the fix. -Slug + -Remove moves it to ic's trash: its /work and
-  /history stay recoverable for a week (`ic sandbox restore`).
-
+  Bootstrap ic for Windows update/rebuild/rollback/dev and legacy card parameters; ic owns env replay, overlays and container runs.
+  Rebuild requires the reviewed overlay hash. Under irm | iex return LASTEXITCODE; only file execution exits PowerShell.
 .EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123        # update
+  irm https://intentic.dev/update/<slug> | iex
 .EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/rebuild))) -Slug abc123 -Hash <sha256>   # rebuild
-.EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Rollback   # roll back
-.EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Prepare    # download it now
-.EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Reshape --memory 12g --cpus 4
-.EXAMPLE
-  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -RollbackTo 1.200.0   # an older version
-
-  The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE, and only
-  a run as a file (powershell -File, how the desktop app runs it) exits with it.
-
-.EXAMPLE
-  irm https://intentic.dev/update/<slug> | iex             # the same, by verb: /rollback/<slug>, /restart/<slug>,
-                                                           # /rebuild/<slug>/<sha256>
+  & ([scriptblock]::Create((irm https://intentic.dev/rebuild))) -Slug abc123 -Hash <sha256>
 #>
 param(
     # Required by every mode but -List. Not Mandatory: PowerShell would PROMPT for a missing one, and the desktop app
@@ -84,35 +56,10 @@ $ErrorActionPreference = 'Continue'
 $PSNativeCommandUseErrorActionPreference = $false
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

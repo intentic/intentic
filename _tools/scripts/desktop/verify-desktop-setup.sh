@@ -1,35 +1,8 @@
 #!/usr/bin/env bash
-# Does the setup the desktop app runs actually GO THROUGH, on a clean Docker host, using the exact script bytes
-# the installer ships?
-#
-#   verify-desktop-setup.sh [<dist-bin dir>]      # default: _editor/desktop-app/dist-bin
-#
-# The app's whole native capability is spawning `connect.sh` (scripts.rs states why at length). So the setup
-# journey splits in two, and this covers the expensive half:
-#
-#   • WHAT THE APP PASSES — the argv and env assembly, including the sh-positional / ps1-named divergence that
-#     silently misbinds. Unit-tested in _editor/desktop-app/src-tauri/src/commands.rs; costs milliseconds; both hosts.
-#   • WHAT THE SCRIPT THEN DOES — pull the image, run the container, wire the network, wait on /health. That is
-#     this file, and it needs a real Docker daemon, so it runs nightly rather than per-MR.
-#
-# The script is EXTRACTED FROM THE BUILT ARTIFACT, not read from _site/site/public/scripts/. That is the whole
-# point: verify-desktop-bundle.sh proves the bundled bytes match the source, and this proves those same bundled
-# bytes bring a sandbox up. Reading the source tree here would test a file no user ever runs.
-#
-# HERMETIC — no edge, no Google, no platform. connect.sh documents a direct-token path (CONNECT_TOKEN +
-# SANDBOX_GRANT + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: `/setup/claim`
-# only mints a reachability grant when the platform holds a signing key, so a code-claiming run cannot be
-# secret-free. The grant here is a dummy naming an unroutable ingress, so the daemon's tunnel DIAL fails and
-# retries harmlessly in the background — the entrypoint does not gate the daemon on it, and the daemon is
-# reached on the container's own published port.
-#
-# The dial failing is expected; the grant not ARRIVING is not, and the two look identical from outside the
-# container. That distinction is the whole of the read-back at the bottom of this file: this tier hands the
-# script a grant and an edge, and asserts they are on the container the script created. Without it, a connect
-# that silently dropped both passed every gate here — which is what shipped.
-#
-# What this therefore does NOT cover: the setup-code claim round trip against a real platform. That needs a
-# real signed grant and belongs with the other gated nightly suites, which self-skip without their secrets.
+# Nightly setup drill using connect.sh extracted from the installer; default input is _editor/desktop-app/dist-bin.
+# A clean Docker host and direct-token/dummy-grant inputs avoid platform/Google/edge dependencies; tunnel retries are expected.
+# Assert the grant and ingress reached the created container: absent inputs and failed dials look identical from outside.
+# Covers bundled setup behavior; commands.rs tests argv/env assembly and gated suites cover real setup-code claims.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/desktop-artifacts.sh"

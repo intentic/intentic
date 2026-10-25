@@ -4,22 +4,10 @@ import { readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/*
- * The pre-migration backup: the first step of the image's boot chain (Dockerfile CMD), before `prisma migrate deploy`.
- * When the database has migrations pending, it pg_dumps the database into MIGRATION_BACKUP_DIR, a persistent volume, and
- * a failed dump stops the boot before anything is migrated. Restoring is in the api README.
- *
- * Why a dump and not a down migration: the history is append-only with no down migrations, several migrations drop or
- * rename, and rolling the api image back past a migration cannot work, since the old image's boot refuses the newer
- * schema (`migrate diff --exit-code`). The dump taken just before a migration is the only way back.
- *
- *   MIGRATION_BACKUP_DIR     where dumps go (default /backups, the compose file's migration-backups volume)
- *   MIGRATION_BACKUP_KEEP    how many dumps to keep (default 10)
- *   MIGRATE_WITHOUT_BACKUP   1 or true: migrate even when the dump failed. For an operator who has a backup of their own.
- *
- * Its own three variables rather than fields in config.ts, because it runs before the api and loading the api's config
- * would make a migration wait on settings that have nothing to do with it.
- */
+/* Before prisma migrate deploy, pg_dump pending-migration databases into persistent MIGRATION_BACKUP_DIR (default /backups).
+ * Failed dumps stop boot unless MIGRATE_WITHOUT_BACKUP=1/true; MIGRATION_BACKUP_KEEP defaults to 10.
+ * Append-only migrations and older images' schema checks make dumps the recovery path; see the api README for restore steps.
+ * Read independent env vars before API config so unrelated settings cannot block migrations. */
 
 const DEFAULT_BACKUP_DIR = `/backups`;
 const DEFAULT_KEEP = 10;

@@ -1,21 +1,9 @@
 import { z } from "zod";
 
-// Closed set of command names; the daemon builds argv from the name alone (hosts/device-commands.ts). Never a free-text
-// command: the same socket carries `run_command`, which would grant a shell on the user's machine.
-// `sync-unpair` runs the machine's own `sync uninstall --sandbox` (terminates both Mutagen sessions, drops the pairing,
-// self-revokes enrollment); revoking from the sandbox side is a different route.
-// `dev-restart`, `dev-rebuild` and `sync-install` are the three whose argv the daemon fills from what only it knows — the
-// dev checkout on that machine, a freshly minted pairing token — which is also why none takes a path or a token from the
-// caller. The two dev commands are also why a machine-side op is the wrong shape for them: this door carries a COMMAND
-// STRING to a tool every released agent already has, so a sandbox can drive a machine whose agent predates the feature.
-// `dev-rebuild-log` is the read side of `dev-rebuild`: the build is detached out there, so its log is the only place its
-// progress exists, and polling this is what turns a fired-and-forgotten command into something with a progress bar.
-// `sync-clean` removes the build output left in directories the sandbox has deleted, which is what stops those
-// deletions from ever landing. It deletes only content the session already ignores, so it is the one command here whose
-// worst outcome is a rebuild — which is why it is a button and not a turn.
-// `mirror-ignore`/`mirror-unignore` are `mirror-off`'s per-port form, and the reason they exist: a port number that is
-// permanently taken on one machine's localhost has no answer in an all-or-nothing switch, so the choice lives where the
-// conflict does — one port, one device, durable — instead of muting every port the pairing serves.
+// Closed names let the daemon build argv without granting arbitrary shell access; dev/sync commands never accept caller paths or tokens.
+// Use existing run_command for older-agent compatibility; poll dev-rebuild-log because rebuilds are detached.
+// sync-unpair terminates sessions/revokes enrollment; sync-clean removes ignored build residue only.
+// mirror-ignore/unignore persists per-device port choices without muting all mirrored ports.
 export const DeviceCommandSchema = z.enum([
     "mirror-off",
     "mirror-on",

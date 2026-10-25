@@ -1,23 +1,6 @@
-//! THE ACCOUNT, FROM A LOCAL WINDOW: the platform calls a local window's account menu and Settings make, carried by the
-//! app with the session the workspace signed in with.
-//!
-//! A local window cannot hold that session itself. Its page is `tauri.localhost`, the session cookie is the
-//! platform's (`__Secure-better-auth.session_token`, HttpOnly, SameSite=Lax, host-only on the API's host), and the
-//! platform's CORS answers the workspace's origin alone. But every window of this app shares one browser profile (the
-//! same browser args, no data directory of its own, windows.rs), so the cookie the workspace's sign-in set is in the
-//! store a local window's webview reads. This module reads it there, sends the call itself, and writes back whatever
-//! cookie the answer sets, so the session rolls forward and a sign-out ends it for the workspace too.
-//!
-//! What may be asked is a short list ([`ROUTES`]), checked here and not in the page: the account (who, rename, avatar,
-//! sign out), the plan and its checkout, API tokens, the data export, and the account's sandboxes as its switcher reads
-//! and tidies them (list, remove, leave, the recently deleted and their restore, a hosted one's rollback), so a local
-//! window's switcher is the workspace's own (SandboxSwitcher.vue) rather than a second one that can only list. Deleting
-//! the account is not on it: that has to take this account's access off every sandbox's daemon first, and a local
-//! window reaches no daemon but its own folder's, so the page sends that one to the workspace. The cookie never reaches
-//! the page.
-//!
-//! The app makes calls of its own with the same session ([`platform_post`]): a folder's own sandbox (folder_setup.rs),
-//! its row and its setup code, each a fixed path written there, never one a page names.
+//! Proxy only ROUTES-allowlisted account calls using the shared webview profile's HttpOnly platform cookie; never expose it to the page.
+//! Send requests natively and apply response cookies so renewal/sign-out also affects the workspace; local-origin pages cannot call directly.
+//! Account deletion goes through the workspace to revoke daemon access. Internal platform_post calls use fixed paths, never page-supplied ones.
 
 use std::time::Duration;
 

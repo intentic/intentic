@@ -1,24 +1,8 @@
 #!/usr/bin/env bash
-# Shared per-app image release for the PLATFORM images (ghcr.io/intentic/{api,web,ingress}).
-# Runs from an app dir as its `docker:release` turbo task (turbo.json: dependsOn build), so the app and its
-# workspace deps are already built job-side with the warm turbo cache — each Dockerfile is a pure COPY of the
-# prepared tree, never an in-container install/compile of the app (the api adds one system package, pg_dump for its
-# pre-migration backup). The ingress is the exception: it is Rust, compiled in a BuildKit stage the way the sandbox's
-# netd is, so no job needs a toolchain. The OSS core images
-# (sandbox/dind-host) keep their own publish-images.sh: same job-side-build philosophy, but they ride
-# semantic-release with a trees payload and registry-cache machinery this flow doesn't need.
-#
-#   docker-release.sh <image> [--prune] [--build-context name=dir ...]
-#
-# --prune runs `pnpm deploy --prod` first, into a temporary directory OUTSIDE the repository (the api: a flat,
-# symlink-free prod tree the Dockerfile COPYs), removed when the script exits. The web skips it — nginx serves the
-# vite dist, no node_modules at runtime.
-#
-# Content-addressed skip: TURBO_HASH (set by turbo per task) covers the app's files, its workspace dependency
-# hashes, and the pruned lockfile — identical content always maps to the same `turbo-<hash>` tag. When that
-# tag already exists in the registry, the requested tags are aliased onto it registry-side (imagetools create)
-# and nothing is built or pushed, so a main push that only touched engine libs re-releases the platform for
-# the cost of two manifest calls. Outside turbo (no TURBO_HASH) the skip is disabled and every run builds.
+# Release platform images from prepared job-side builds; ingress alone compiles Rust in a BuildKit stage.
+# --prune deploys production dependencies into a temporary tree outside the repo; static web assets need no dependency tree.
+# TURBO_HASH tags identify content: reuse existing images through registry aliases. Without a hash, always build.
+# Sandbox/dind images use publish-images.sh for their release payload and registry-cache flow.
 set -euo pipefail
 # The platform's two images push several tags in a row into the same registry the sandbox images are filling
 # in the same pipeline, so they share its rate-limit window. registry-retry.sh says the rest — it wraps the

@@ -45,27 +45,10 @@ pub fn ic_url(version: &str) -> Option<String> {
     ))
 }
 
-/// What EVERY script this app spawns is told, whichever flow it is.
-///
-/// `INTENTIC_NO_PROMPT` is the second half of the same lesson as the pin above. These flows ask questions
-/// when they believe somebody is there, and they work that out by probing — `/dev/tty` on Unix, `CONOUT$` on
-/// Windows. Those probes are good, but this caller does not need to be guessed at: it is a GUI process
-/// spawning a child with no window, no console and closed stdin, and a question asked on that run is a run
-/// that never ends. The flag says so outright, and every prompt in `ic` then reads as "no answer" — which is
-/// what each of them already treats as a refusal.
-///
-/// `IC_VERSION` rides beside the pinned `IC_URL` so a script that finds that `ic` or a newer one installed skips the
-/// download (every shim's fetch block): the same binary fetched again on every setup, recreate and fix was seconds
-/// of nothing, most of them Windows PowerShell 5.1 redrawing its progress bar. "Or a newer one" since 2026-10-05: the
-/// shims used to require exactly this pin, and the machine agent moves `ic` up by itself, so an app left in the tray
-/// for days put an older `ic` back on every Start, Stop or Restart. The pin is a floor, never a ceiling.
-///
-/// `INTENTIC_IC_PATH` names the `ic` the installer put beside this app as `intentic-ic` (tauri.conf.json `externalBin`;
-/// never `ic`, which the deb would put on every PATH as /usr/bin/ic), so a shim that has to install `ic` copies that
-/// file to ~/.intentic/ic/bin rather than downloading the same release from GitHub, and a first setup no longer needs
-/// github.com before anything else has worked. Only when the file is there; and a shim copies it only
-/// when it answers `--version` with exactly the pinned `IC_VERSION`, so a build that pins nothing (`0.0.0`, `tauri
-/// dev`) or carries a stand-in (stage-desktop-ic.sh's placeholder) still downloads.
+/// Tell every GUI-spawned script INTENTIC_NO_PROMPT: no console/stdin means prompting would hang; unanswered prompts must refuse.
+/// IC_VERSION is a floor alongside pinned IC_URL, so newer installed ic versions survive app operations.
+/// INTENTIC_IC_PATH offers the bundled intentic-ic before network download, but only when its --version exactly matches the pin.
+/// Unpinned 0.0.0 dev builds and staging placeholders still download rather than installing a mismatched bundled binary.
 pub(crate) fn app_env(version: &str) -> Vec<(String, String)> {
     app_env_with(version, bundled_ic())
 }

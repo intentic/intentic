@@ -1,46 +1,8 @@
 #!/usr/bin/env bash
-# The three things about the migration history that nothing else in this pipeline can see.
-#
-#   check-migrations.sh [<base ref>]        # default: origin/${GITHUB_BASE_REF:-main}
-#
-# WHY THIS EXISTS. A desktop sign-in returned "Internal server error" for a week because `challenge` was added
-# to schema.prisma and written INTO an existing migration file — one every deployed database had already
-# applied. Prisma keys _prisma_migrations by migration NAME, so an edited file never re-runs: `migrate deploy`
-# said "No pending migrations to apply" over a table that was missing a column, and the API only found out by
-# throwing on the INSERT. Nothing failed anywhere. Every database CI builds is created fresh from the edited
-# file, so the fresh ones were correct and the deployed one was not — a divergence no test on a fresh database
-# can express, because both halves of it are consistent with themselves.
-#
-#   1. APPLIED MIGRATIONS ARE IMMUTABLE. A migration that exists on the base ref must be byte-identical here.
-#      Modified, renamed and deleted alike: renaming a directory is how the same file becomes a second
-#      migration that re-runs somewhere and is skipped elsewhere. New directories are the only allowed change,
-#      and are what a schema change is supposed to add.
-#
-#   2. A NEW MIGRATION CAN RUN ON A DATABASE THAT HAS ROWS. `ADD COLUMN … NOT NULL` with no `DEFAULT` is the
-#      one statement Postgres refuses on any table that is not empty — the existing rows would need a value it
-#      never supplies — so a migration carrying it is not "risky on production", it is a migration that can
-#      only ever apply where there is nothing to lose. Which is precisely the database check 3 builds, and
-#      every database a developer resets. THIS IS NOT HYPOTHETICAL EITHER: 20260831120000_ingress_reachability
-#      added `tunnelId` that way, passed here, and stopped dead on the live database with "column tunnelId of
-#      relation sandbox contains null values". Prisma records a failure as a WALL, not a skip — `migrate
-#      deploy` answers P3009 for every later migration too — so the api's boot chain never reached its second
-#      step and the platform served nothing until it was fixed forward by hand
-#      (20260901190000_tunnel_id_backfill). Add the column nullable, fill it, then constrain it.
-#
-#   3. THE MIGRATIONS AND THE SCHEMA AGREE. Replay the whole history into an empty database and diff the result
-#      against schema.prisma. Catches the other half of the same class — a schema.prisma edited with no
-#      migration written for it — which is equally invisible to a suite whose client is generated from the very
-#      file being checked. Skipped, loudly, when no database is offered, so a developer can run 1 and 2 alone.
-#
-# Together they hold the invariant the deployed database actually depends on: the migration list is append-only,
-# every entry on it can apply to a database that has been in use, and replaying the lot produces the schema the
-# code is compiled against. The API image re-checks the last one against its OWN database at boot (see
-# _platform/api/Dockerfile) — this is the check that keeps that one from ever having something to say.
-#
-# The clock starts at the commit that added this file. 20260802140000_desktop_handoff still carries the edit
-# that caused all of the above, because reverting it would itself be a modified migration — and a check whose
-# first act is to exempt something is not a check. Its column is added forward, by
-# 20260815120000_desktop_handoff_challenge, which is what every database ends up agreeing on.
+# Check migrations against <base ref> (default origin/${GITHUB_BASE_REF:-main}): existing files must remain byte-identical.
+# Reject new NOT NULL columns without defaults; for populated tables, add nullable, backfill, then constrain.
+# With a database, replay the history and compare it to schema.prisma; without one, report that this check was skipped.
+# Migration names key deployed state, so repairs must be new migrations: edited, renamed or deleted applied files cannot repair it.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 

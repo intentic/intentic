@@ -15,28 +15,9 @@ import { callTool } from "./device-reports.js";
 import { hostConnectionOf } from "./host-connection.js";
 import { errorMessage } from "@intentic/base/errors";
 
-// ONE INSTALL CONNECTS THE WHOLE COMPUTER. The owner connected a PC, not one of its shells, so the moment any
-// environment of a machine holds a socket the daemon puts an agent in the rest: from the Windows side into every WSL
-// distro it lists, from a distro onto the Windows side. Each lands as a connection of the SAME card
-// (`<card>::wsl:<distro>`), so there is nothing else to grant and nothing else to click.
-//
-// Done from here rather than by the agent: the pairing is a credential only the daemon may mint, and the crossing is
-// already a `run_command` argument the machine turns into argv (`wsl.exe --exec sh -lc`). Nothing new is asked of the
-// agent beyond the release that took `in`.
-//
-// AND A WINDOWS SIDE GONE SILENT IS PUT BACK FROM ITS DISTRO (2026-10-15). On 10-13 a desktop-app reinstall ran
-// `intentic-machine uninstall` on rog's Windows side while the agent in its WSL distro stayed connected, and for two days
-// nothing tried to put it back: the side was ENROLLED, which this file read as "already connected". A distro that answers
-// is a PC that is awake, so a Windows side with no socket beside it is an agent that is gone or stuck, not a laptop
-// asleep. Past SILENT_BEFORE_REVIVE_MS it is re-linked through the distro with the same install line a never-enrolled
-// side gets, when the distro connects and on a clock while it stays connected (the Windows side can drop with the distro
-// still up, which no connect says). Only that way round: a distro is never brought back from Windows, since a test distro
-// the owner stopped must stay stopped.
-//
-// What a revive costs on the PC: the install script keeps an installed agent that speaks the `device` route and only
-// downloads when there is none (device.ps1's Get-IntenticAgent), then hands over to `device setup`, which self-updates.
-// So a side whose agent was uninstalled downloads it again (the case it exists for), and one whose agent is merely stuck
-// re-runs setup with a fresh pairing and no download.
+// Enroll the PC's other environments under the same card: Windows -> listed WSL distros, or WSL -> Windows; only the daemon mints pairings.
+// A connected distro proves the PC is awake, so revive a silent Windows agent after SILENT_BEFORE_REVIVE_MS on connect and periodic checks.
+// Never revive a stopped distro from Windows. Reuse installed agents through device setup/self-update; download only when absent.
 
 // Long enough for a download and a first connect on somebody's laptop, short of the hub's own call ceiling.
 const INSTALL_TIMEOUT_MS = 4 * 60_000;

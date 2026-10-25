@@ -10,22 +10,9 @@ import ChildGroupRow from "./ChildGroupRow.vue";
 import ChildRow from "./ChildRow.vue";
 import { CHILD_ROWS } from "../../models/fleet/board/childRows";
 
-// THE AGENTS A CARD STARTED, hung under it rather than standing beside it as cards of their own (childFold): the
-// conversations it spawned and the subagents its runtime ran in-process alike. Each row's first glyph starts under the
-// card's title, so the rows read as the card's before a word of them is read, and they get no chrome at all: no rule
-// down the left, no border, no fill at rest, one line each. Top to bottom: a child asking what only the reader can
-// give, wearing its ask; the working ones, always in sight; then one row per thing the stopped ones stopped on, since
-// fifteen children refused by one provider are one fact about that provider, not fifteen; and the settled ones behind
-// one quiet toggle, since an orchestrator's thirty finished helpers are its history, not its news. Draws nothing on a
-// board that provides no trays (CHILD_ROWS), or for a card with nothing riding under it.
-//
-// OPEN ONLY UNDER THE CARD BEING LOOKED AT. Drawn under every card, the trays turned each lane into a list of lists, and
-// every helper an unwatched card's runtime started or finished pushed a row in or out and shook every card below it.
-// So a tray opens, folding out from under the card (@intentic/ui/motion, fold.ts), only under the card the reader is on (`focused`), under a card
-// whose child is on screen (the ring must be on something drawn), and under every card while a filter is on (a result
-// set must not hide its own matches). Every other card counts its family on itself instead (ChildCount), which moves no
-// card's height. The one exception is a child asking what only the reader can give: that is news, not history, and a
-// chat list's card, unlike the board's, carries no word of it, so its row stays in sight under any card.
+// Show spawned conversations and runtime subagents in a card's unboxed tray: reader asks, active work, grouped stopped reasons, then folded history.
+// Require CHILD_ROWS and actual children. Open trays for focused cards, visible children or active filters; otherwise show stable ChildCount.
+// Reader-only asks remain visible even under unfocused cards because chat cards have no other place to show that news.
 
 const props = defineProps<{
     agent: FleetAgent;

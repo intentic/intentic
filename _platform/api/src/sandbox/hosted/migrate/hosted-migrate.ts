@@ -29,25 +29,10 @@ import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvis
 import { hostedShapeFor, sameShape, shapeOfRow } from "../hosted-shape.js";
 import { runningImageOf } from "../gate/state-gate.js";
 
-/* MOVING A SANDBOX FROM ONE MACHINE TO ANOTHER, and being able to undo it.
- *
- * Two operations, and the difference is whether any data moves.
- *
- * A RESIZE replaces the guest where it stands: same app, same volume, same host, one restart, and the disk grown
- * first if the rung it is going to has more. Seconds, and nothing is copied.
- *
- * A MOVE builds a new volume from a fork or a snapshot and a new machine on it. It is what a region change needs, and
- * what a host with no room for the bigger guest leaves as the only way up. The APP does not change, so the hostname,
- * the connect token, its tunnel grant and the app name are all untouched: from outside, the sandbox is where it was.
- *
- * The safety rule is one sentence, and every step below is arranged around it: THE OLD DISK IS DESTROYED ONLY AFTER
- * THE NEW MACHINE HAS ANNOUNCED ITSELF ON THE NEW ONE. Before that, any failure destroys what this run built and
- * starts the original back up. A snapshot is taken before anything happens at all and outlives even the rollback, so
- * the disk as it was is recoverable after the machine has already been put back.
- *
- * Downgrades never shrink the disk. Fly volumes grow and never shrink, and a snapshot restores only into an
- * equal-or-larger volume, so the only way down is a file-level copy. Keeping the bigger disk costs $0.15 a GB a month
- * and removes the whole class of failure. */
+/* Resize in place (same app/volume/host), growing disk first if needed; region changes or full hosts require a copied-volume move.
+ * A move keeps app identity, hostname and credentials. Destroy the old disk only after the new machine announces from its replacement.
+ * Snapshot before any change and retain it through rollback; failures clean up new resources and restart the original.
+ * Never shrink disks on downgrade: snapshots require equal-or-larger volumes, so retaining capacity avoids a file-level copy. */
 
 export const MIGRATION_KINDS = ["resize", "move"] as const;
 export type MigrationKind = (typeof MIGRATION_KINDS)[number];

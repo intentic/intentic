@@ -1,27 +1,8 @@
 #!/usr/bin/env bash
-# REFUSE TO MOVE A SANDBOX TAG AHEAD OF THE EDGE THAT SERVES IT. Every script that points a moving tag a sandbox
-# pulls (`latest` in ci.yml's images-merge, `stable` in release-images.sh and rollback-stable.sh) runs this first.
-#
-#   require-edge-door.sh [door]
-#
-# A netd reaches the world through exactly one tunnel door on the edge (`INGRESS_TUNNEL_PATH`, held to netd's
-# own `tunnel::TUNNEL_PATH` by wire-manifests.test.ts), and it has no fallback: an edge that does not serve that door
-# answers its upgrade with a 404, and every sandbox on the new image is unreachable until the edge is redeployed.
-# So the question is not "did this pipeline roll the edge" but "does the edge that is live RIGHT NOW serve the door
-# this image dials", and the edge answers it itself: `/health` lists its doors (`"doors":["/tunnel/v1","/tunnel/v2"]`,
-# edge.rs). That covers every way an image gets published and every way an edge gets deployed, CI or by hand, where a
-# job dependency would cover one pipeline and pass on a skip.
-#
-# The door defaults to the one this checkout's netd dials. rollback-stable.sh passes the door of the version it
-# rolls back onto, since that is netd sandboxes will run.
-#
-# FAILS CLOSED: no answer, an answer that is not JSON, or a door list without this door is an error. An edge that
-# answers without a `doors` field predates the declaration, and every such build served `/tunnel/v1` alone.
-#
-#   EDGE_HEALTH_URL   the live edge's /health; default the hosted one, https://ingress.sbx.intentic.dev/health.
-#                     A self-hosted deployment publishing its own images names its own edge here.
-#   EDGE_DOOR_WAIT    seconds to keep asking before failing; default 1800 in CI, where the edge roll of the same push
-#                     (images-platform, deploy-ingress.sh) may still be in flight, and 0 elsewhere.
+# Before promoting sandbox tags, require the live edge's /health to declare the tunnel door this image dials; there is no fallback.
+# Default door comes from this checkout; rollback passes the target release's door. A legacy response without doors implies /tunnel/v1.
+# Fail closed on missing/invalid responses or incompatible doors; pipeline dependencies alone do not prove the live edge is ready.
+# EDGE_HEALTH_URL selects the edge; EDGE_DOOR_WAIT defaults to 1800 seconds in CI for an in-flight roll, otherwise 0.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 

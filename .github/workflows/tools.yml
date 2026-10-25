@@ -1,22 +1,6 @@
-# THE SANDBOX IMAGE'S PINNED TOOLS, KEPT CURRENT BY THE CLOCK RATHER THAN BY MEMORY.
-#
-# The core Dockerfile, its packs and the CI base image download ripgrep, jq, yq, gh, cloudflared, uv, ruff, pyright,
-# pnpm, Bun and Docker Engine at fixed versions (and ripgrep, jq, gh, and cloudflared's and Bun's images, at fixed
-# checksums), and the pi-agent extension's fragment the Pi CLI. Moving those was a chore nobody was assigned, so they
-# drifted a release or several behind.
-# _tools/scripts/tools/tool-pins.mjs lists every place each is written; this workflow is the assignee, the sibling of
-# engines.yml for everything that is not an agent engine.
-#
-# It runs no build and no test, and that is the design. It rewrites the pins (fetching the checksums and digests a new
-# version needs), checks what it wrote clears the checkout gates its output can fail, and opens ONE pull request. ci.yml
-# runs on that pull request as on anyone else's, the image build is what proves a checksum, and auto-merge lands it when
-# the suite passes. To stop one tool without stopping the rest, give it a `hold` in tool-pins.mjs.
-#
-# Uses the engines bump's token, `ENGINE_BUMP_TOKEN` (contents: write, pull requests: write), for the same reason: a
-# pull request opened with GITHUB_TOKEN starts no CI, so nothing would verify it. Without it this job fails rather than
-# leaving that looking fine.
-#
-# ONE LONG-LIVED BRANCH, force-pushed: a bump CI refuses stays open and failing, and tomorrow's run rewrites it.
+# Update tool-pins.mjs locations, checksums/digests and lockfile, then refresh one long-lived PR; normal CI proves the resulting image.
+# Require ENGINE_BUMP_TOKEN with contents/pull-requests write so the PR starts CI; the built-in token cannot trigger that proof.
+# A tool-pins.mjs hold pauses one tool; tomorrow's run refreshes a refused bump instead of accumulating PRs.
 name: Tools
 
 on:

@@ -1,20 +1,7 @@
 #!/usr/bin/env bash
-# Turn a built Intentic OS image into something a machine boots, with bootc-image-builder:
-#
-#   bash _os/os-image/disk.sh [--type qcow2|raw|anaconda-iso] [--image REF] [--config FILE] [--out DIR]
-#
-#   qcow2         a VM disk (what smoke.sh boots)
-#   raw           a disk image to write straight onto a machine's drive (dd, or a USB stick that becomes the system)
-#   anaconda-iso  the installer: boots from USB, erases the machine's first disk and installs Intentic OS on it,
-#                 encrypted, with the disk bound to the machine's TPM2 on its first boot (installer/bib-config.toml)
-#
-# --image  default ghcr.io/intentic/os:stable
-# --config bootc-image-builder's config. Default: installer/bib-config.toml for anaconda-iso, none otherwise.
-# --out    default _os/os-image/out/<type>
-#
-# bootc-image-builder reads the image from podman's container storage. With OS_ENGINE=podman (CI) that is the host's
-# own; with docker (a sandbox, a developer machine) the image is first copied into a podman store kept in a docker
-# volume, by the podman inside the image itself.
+# Build qcow2, raw or anaconda-iso boot media with bootc-image-builder; default image is ghcr.io/intentic/os:stable.
+# The ISO erases the first disk and installs encrypted, TPM2-bound storage; its default config is installer/bib-config.toml.
+# Output defaults to out/<type>. With Docker, copy the image into a volume-backed podman store; OS_ENGINE=podman uses the host store.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ENGINE="${OS_ENGINE:-$(command -v docker >/dev/null 2>&1 && echo docker || echo podman)}"

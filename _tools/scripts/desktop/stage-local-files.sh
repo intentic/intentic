@@ -1,23 +1,7 @@
 #!/usr/bin/env bash
-# Put what the desktop app's windows on local folders run where the bundlers can see them:
-#
-#   • intentic-files, the sidecar that serves a folder to those windows (_devices/local-files), compiled with bun
-#     for each Rust target triple asked for, as src-tauri/binaries/intentic-files-<triple>[.exe] — the name
-#     tauri.conf.json's `externalBin` looks for, and which the installer puts beside the app as intentic-files;
-#   • the ONLYOFFICE editor page (_extensions/onlyoffice/dist/editor), which tauri.conf.json's `resources` carry;
-#   • ripgrep, which a folder's search runs, into src-tauri/binaries/search/ (`resources` again; see stage_search);
-#   • for a Windows triple, "Open with Intentic" in Windows 11's context menu (_editor/desktop-app/explorer-menu): its
-#     DLL, and when this build signs Windows binaries and knows its certificate's subject (WINDOWS_SIGN_PUBLISHER),
-#     the identity package it registers, signed (explorer-menu-msix.mjs). Both land in src-tauri/binaries/explorer-menu/,
-#     which tauri.windows.conf.json puts beside the app. Without the package the DLL signs one on the user's PC
-#     instead, behind one UAC prompt (explorer-menu/README.md).
-#
-#   stage-local-files.sh                          # this host's triple
-#   stage-local-files.sh x86_64-pc-windows-msvc   # a cross build's
-#
-# Every cargo command against the app needs both (tauri-build copies the external binary and checks the resource
-# glob), so the app's Rust scripts run this first, as they run stage-desktop-scripts.sh. INTENTIC_VERSION stamps
-# the binary the way build-agent-binaries.sh stamps the machine agent; unset, it reports the working tree's 0.0.0.
+# Stage intentic-files per target, the ONLYOFFICE page and ripgrep before app cargo/bundle commands; Tauri checks these resources.
+# Windows also stages the Explorer DLL and, with WINDOWS_SIGN_PUBLISHER, a signed identity package; otherwise setup requires UAC.
+# Default to the host triple; INTENTIC_VERSION stamps the sidecar, otherwise it reports working-tree version 0.0.0.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 

@@ -7,21 +7,9 @@ import { chromium, type Browser, type BrowserContext, type Page } from "@playwri
 
 const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 
-// The site ships two skins, so it needs two sets of these. `--light` drives the app in its light scheme and writes
-// the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts). Both wear the Mist wallpaper, which
-// draws behind the board and the card pages: the dark set over Sanctum, the light set over the plain light look.
-//
-// Every shot of the code workspace is taken of the demo's `showcase` recording (_site/demo/src/mode.ts): seven agents on
-// an ordinary afternoon, served QUIET, so no card carries a cooling cache, a teammate's reaction or a key it is waiting
-// for, no pipeline is failing and nothing on the rail asks for attention it does not need. The recording's every-state
-// richness is for a visitor exploring the demo; a screenshot is a picture of the workspace at rest.
-//
-// `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather
-// than code, read as a maker) shot for the desk edition of the landing page. Those shots have no dark twin — the desk
-// edition is only ever light — so they frame themselves, and are named `desk-*` in the same directory.
-//
-// A shot that is gone from the catalogues below is gone from the site: delete its two files with it, since
-// src/lib/shots.ts globs the directories and a stale picture is a picture nobody re-shoots.
+// Capture paired dark/light site shots (--light) with Mist wallpaper; use the quiet showcase recording for code-workspace scenes.
+// --desk captures the light-only document workspace as desk-* files. Catalogues and _site/site/src/lib/shots.ts define the site pairing.
+// Remove obsolete image files with their catalogue entries: shots.ts globs directories and would keep serving stale pictures.
 const DESK = process.argv.includes("--desk");
 const LIGHT = process.argv.includes("--light") || DESK;
 const OUT_DIR = join(repoRoot(import.meta.url), `_site/site/src/assets/${LIGHT ? "product-light" : "product"}`);
@@ -906,21 +894,9 @@ const restPointer = async (page: Page): Promise<void> => {
 /** A browser context with everything the app reads before it boots already in place: look, audience, mode, rail. */
 const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext> => {
     const context = await browser.newContext(contextOptions(shot));
-    // TWO preferences decide how the app looks, and the light set needs both.
-    //
-    // `ui-skin` is the bigger of the two. Sanctum is the site's own carved design worn by the app, and it is DARK BY
-    // CONSTRUCTION — its README says turning it on forces the dark scheme — so the light set is the app with no skin,
-    // which is exactly the light theme the desk pages are built from. The dark set keeps Sanctum, which is why those
-    // shots sit so well on the carved pages.
-    //
-    // Both are written before the app boots, and the app applies them itself: `definePreference` reads storage at
-    // load and writes `data-mode`/`data-skin` onto <html> from it. An earlier version of this also forced the
-    // attributes from a MutationObserver over the whole document; that fired on every node the app rendered and
-    // stalled the boot far enough that the docked chat never mounted, which silently cost the two popped-out shots
-    // and mis-framed every clipped one.
-    //
-    // The wallpaper is a third, its own preference and worn under either look (skins/useWallpaper.ts). Mist has a dark
-    // and a light picture, and the scheme picks between them, so both sets ask for the same name.
+    // Set scheme and ui-skin before boot: dark uses Sanctum; light must clear that dark-only skin.
+    // Let preferences apply data-mode/data-skin; a whole-document MutationObserver previously stalled chat mounting and broke shots.
+    // Both schemes select Mist, whose dark/light image follows the scheme preference.
     await context.addInitScript(
         ({ scheme, skin, wallpaper }: { scheme: string; skin: string; wallpaper: string }) => {
             window.localStorage.setItem(`ui-color-scheme`, scheme);

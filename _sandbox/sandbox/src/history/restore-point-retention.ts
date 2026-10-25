@@ -14,21 +14,9 @@ import type { HistoryGitRunner } from "./history.js";
 // boundary costs one file. Rejected: grafts or replace refs, which keep the objects. A deleted repo's scope with nothing
 // newer than the cut is removed whole: nothing it holds is inside the window.
 
-// THE CUT AND THE COLLECTION ARE TWO STEPS (2026-10-18). The cut (`cutScopes`) is quick and runs under the history lock:
-// the boundary, the reflog, the pending mark, a deleted repo's scope. The collection (`collectScopes`) is the `gc`, which
-// on a multi-GB store repacks for minutes, and it runs OUTSIDE the lock, so snapshots (and every git action of the
-// owner's that takes one first) never wait on it. That is safe because it prunes with a grace, git's own model for a gc
-// beside writers: an unreachable object younger than RETENTION_GRACE_MS is kept, so the objects a snapshot is writing
-// at that moment, not yet named by its ref, are never taken. It is also why a collection that runs out of its budget
-// may be stopped at all: the stop ends `git gc` only, and a `repack` or `prune` it started runs on to its end, which
-// with a grace is as harmless as any gc beside a snapshot. Before (with `--prune=now`) the gc had to hold the lock, and
-// a stop that left its `prune --expire=now` running past the lock could take a fresh snapshot's objects.
-//
-// What a grace leaves for later: an object the cut made unreachable is dropped only once it, or the pack it sits in,
-// is older than the grace, and packs here are freshened by every snapshot that writes an object they already hold. The
-// first collection after a cut therefore loosens what it cannot drop yet, giving each such object its pack's time, and
-// the pending mark stays until a collection that starts a grace or more after that first one has run: by then
-// everything the cut left is older than the horizon. With the daily sweep that is the next day's pass.
+// Cut scopes under the history lock, then collect outside it so snapshots do not wait on multi-minute repacks.
+// RETENTION_GRACE_MS protects not-yet-referenced snapshot objects, including repack/prune children surviving a budget stop; never prune=now.
+// First collection loosens still-young objects with their pack times; keep the pending mark until a later collection starts beyond that grace.
 export const RETENTION_GRACE_MS = 60 * 60_000;
 
 // How long one sweep's collections may run in all. Outside the lock, a long one costs nobody a wait, so this only

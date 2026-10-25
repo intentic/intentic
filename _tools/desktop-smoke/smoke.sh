@@ -1,38 +1,8 @@
 #!/usr/bin/env bash
-# Does the artifact we are about to ship INSTALL, LAUNCH, and answer a deep link?
-#
-#   smoke.sh deb|appimage        # artifact mounted at /artifacts, runs inside the image next to this file
-#
-# The three things no amount of `cargo test` can tell you, in the order a user meets them:
-#
-#   1. INSTALL. `apt-get install` the built .deb on a host with no GUI libraries at all — so the package's own
-#      Depends field has to name everything the binary links against. Tauri's bundler generates that field and
-#      nothing else in the pipeline reads it; when it is wrong the build passes, the install is clean, and the
-#      app dies on first launch with a linker error the user cannot act on.
-#   2. LAUNCH. The process survives startup and maps its workspace window. This is where a missing library, a
-#      broken resource path or a panic in `setup()` actually surfaces.
-#   3. THE DEEP LINK. `intentic://` is the whole channel from the SPA into the app. The chain has four links —
-#      the .desktop MIME entry, the OS handler lookup, the second instance's argv, and the single-instance
-#      plugin's forward — and every one of them is invisible to a unit test. Firing a real `xdg-open` at a real
-#      installed app and watching it ask, then answering, then watching the setup screen appear exercises all
-#      four. It asks because everything xdg-open delivers is an EXTERNAL link, and windows.rs does not run one
-#      of those unasked — so the confirmation is part of the chain here, not an obstacle to it.
-#      Twice, because a link finds the app in one of TWO states and they share almost no mechanism. Running: the
-#      OS starts a second copy, whose argv the single-instance plugin forwards over DBus to the first. NOT
-#      running: the OS starts the app WITH the link in argv, and the app has to notice it at startup. The second
-#      is the first-time user's path — the state a machine is in the moment someone installs and clicks — and it
-#      is the one that was broken in both halves (no `%u` on the shipped Exec, no read-back at startup) while
-#      the running-app assertion passed on every build.
-#
-# Assertions are made against WINDOW TITLES via xdotool rather than against anything the app was modified to
-# emit: there is no test hook in this app, and there should not be one — the window appearing IS the behaviour
-# a user is promised.
-#
-# The app shows ONE window and swaps two screens through it (windows.rs), so the title is what says which
-# screen is up — and it is load-bearing here for a reason a count could not carry. The failure this tier exists
-# to catch is a link that is WON and then dropped: the OS starts the app, the app sees no url, and it opens on
-# the workspace. A window would appear either way. Only its title says whether the link arrived — and the
-# confirmation's title says it first, being a window that has no other reason to exist.
+# Exercise deb/AppImage installation, startup and real xdg-open deep links on the bare smoke host, with artifacts under /artifacts.
+# Test both running and stopped app states: single-instance forwarding and startup argv use different paths.
+# Confirm external-link prompts and screen-specific window titles; a window count cannot distinguish a dropped link from success.
+# Keep the host bare so the deb's Depends and AppImage's bundled libraries must satisfy runtime dependencies.
 set -euo pipefail
 # Placed next to the artifacts by verify-desktop-install.sh — see its `docker cp`. The artifact names carry a
 # version this script is never told, so it asks for one by kind instead of spelling a name it would have to

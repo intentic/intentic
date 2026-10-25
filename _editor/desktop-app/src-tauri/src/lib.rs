@@ -85,24 +85,9 @@ enum Opening {
     Home,
 }
 
-/// The launch decision, as a function of four facts — pure, because a launch is the one moment with no window
-/// for anything to go wrong in front of.
-///
-/// A PARKED SETUP OUTRANKS THE ENGINE: it is why this launch is happening at all (the sign-in entry, resume.rs),
-/// and the card that resumes it is the app's own face — opening the workspace instead left the user on the setup
-/// page they had already been through, with the parked setup waiting behind a tray menu nobody had been shown. It
-/// also starts Docker as one of its own steps (`ic docker prepare`), so a second thing starting it would draw two
-/// cards about one wait.
-///
-/// A SLEEPING ENGINE is the morning after a restart, and the reason a non-technical owner meets this face far
-/// more often than the first one: Docker Desktop does not start itself (scripts.rs has the whole of why), so a
-/// machine that hosts a sandbox has no engine, and the workspace this window would otherwise open loads onto
-/// nothing at all.
-///
-/// Past those two, the face the user was last seen choosing (state.rs `Face`): the workspace once it has been
-/// shown, the main window until then or once they go back to it. A machine that hosts a sandbox is no exception any
-/// more: the main window is a place to work, not a card on the way to the workspace, so going back to it is a choice
-/// the next launch keeps (2026-09-30; before, such a machine always opened the workspace).
+/// Pure launch priority: resume a parked setup first, then handle a sleeping engine before opening a workspace that cannot answer.
+/// Setup owns engine startup, avoiding competing Docker-start flows. Otherwise preserve the last chosen Face.
+/// Hosting a sandbox does not override a reader's choice to return to the main local window.
 const fn opening(
     parked: bool,
     hosts_sandboxes: bool,

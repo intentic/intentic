@@ -1,19 +1,6 @@
-/* `ic uninstall`: INTENTIC OFF THIS DEVICE, in one command, from whichever door a person comes in by.
-
-The Windows uninstaller's page and the `intentic.dev/uninstall` one-liner both end up here, so there is one list of
-what Intentic put on a device and one order to take it off in. Before 2026-10-18 that knowledge was in four places that each removed their own part: `ic sandbox remove`, `ic engine remove`,
-`intentic-machine uninstall` and the NSIS hook. None of them removed ic itself, and between them they left Mutagen and
-its data, PATH entries, the keyring, the engine's download cache, images, logs and `~/.intentic` behind.
-
-The run reads the device (inventory.rs), decides from that and the command line what to ask and what to do (plan.rs,
-pure), asks once, then runs its steps (steps.rs) as one checklist. A step that cannot finish leaves its thing behind
-with the command that finishes it, and the run carries on. The end names everything left and why, and what stays
-because it is not Intentic's (Docker Desktop, WSL, the synced folders' files).
-
-For the Windows uninstaller, `--dry-run --ini` answers the inventory its page shows the choice from, and the run's plain
-lines fill its details list. (2026-10-21) The desktop app's own "Uninstall Intentic…" read a `--dry-run --json`
-document and an `intentic-uninstall: {json}` line per step; it went, since the system's own uninstaller is the one way
-to remove an app, and both went with it. */
+/* Shared uninstall entry for Windows and the site's one-liner: inventory facts, pure plan, one confirmation, then checklist steps.
+ * Continue past failed steps and report leftovers with recovery commands; leave Docker Desktop, WSL and synced user files alone.
+ * Windows uses --dry-run --ini for its choice page and plain progress lines; the retired app-specific JSON protocol is unsupported. */
 
 mod host;
 mod inventory;

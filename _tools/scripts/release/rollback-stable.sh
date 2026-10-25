@@ -1,33 +1,8 @@
 #!/usr/bin/env bash
-# UN-SHIP A RELEASE — move stable back onto an earlier version, in one command.
-#
-# This is the counterweight to shipping on a pass. Releases used to sit on a `beta` lane for ~48h before a
-# nightly job promoted them, so a bad one could be caught in the gap and simply never pointed at; the gap cost
-# every release two days and caught nothing, so it is gone (ship-stable.sh). What replaces it is this: the
-# ability to put stable back where it was, deliberately, in the seconds after a bad release is noticed.
-#
-# It moves the SAME four pointers ship-stable.sh and release-images.sh move, in the order they set them, the
-# "latest" flag LAST. The flag is what this script reads to tell whether a rollback already happened (the guard
-# below), so it moves only once everything it vouches for has: moved first, a run that died on the images would leave
-# a re-run finding stable "already" on the version with the images and the tag still on the bad one, and exiting 0.
-# The images and the tag take seconds and every step is safe to repeat, so a run that stops anywhere is finished by
-# running it again; the bad version is served those seconds longer, which is the price:
-#   1. ghcr.io/intentic/sandbox:stable + :core-stable + dind-host:stable  (what `ic sandbox update` pulls)
-#   2. the git `stable` tag                   (the browsable stable source pointer)
-#   3. the GitHub Release's make_latest flag  (releases/latest/download/* and the update check)
-# and then tells the sandboxes still running the release it left:
-#   4. that release is WITHDRAWN on GitHub: a pre-release, so nothing offers it again, whose notes open with the
-#      line `Withdrawn: <reason>`. The sandbox daemon reads that line off the release body to tell a sandbox
-#      running the version, and to offer it the way back.
-#
-# The bad release is left published — its tag, its notes and its assets stay reachable by version, and a
-# sandbox pinned to that exact version keeps working. Rolling back only changes what UNPINNED users are
-# served, and what the sandboxes running the bad version are told.
-#
-# The version must be one this repo actually released (its images are looked up by tag and the run fails loudly
-# if they are not there). Rolling FORWARD is not this script's job — cut a release. The reason is the second
-# argument, or ROLLBACK_REASON (the Rollback workflow's field); without either it is "rolled back to <version>".
-#   GITHUB_TOKEN=… bash _tools/scripts/release/rollback-stable.sh 1.200.0 ["the update loses the tunnel on arm64"]
+# Roll stable back to an existing release: move image tags and the stable git tag before changing GitHub's latest flag.
+# latest is the completion guard; moving it last lets interrupted runs safely resume instead of skipping unfinished image changes.
+# Mark the bad release prerelease with "Withdrawn: <reason>" so daemons offer recovery; keep its versioned tag/assets reachable.
+# Pass a reason as argument 2 or ROLLBACK_REASON. Pinned versions remain available; rolling forward requires a new release.
 set -euo pipefail
 VERSION="${1:?usage: rollback-stable.sh <version> [reason]   (e.g. 1.200.0 — the version to put stable back onto)}"
 VERSION="${VERSION#v}"

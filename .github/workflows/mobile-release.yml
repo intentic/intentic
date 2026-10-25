@@ -1,32 +1,7 @@
-# Mobile apps — the store releases. mobile.yml proves the apps build; this ships them.
-#
-# `workflow_dispatch` ONLY, and deliberately so twice over: a tag trigger is a trigger this repository can
-# never fire (the workflow-policy check — semantic-release pushes tags with GITHUB_TOKEN, which starts no
-# workflows), and a store release is a human decision anyway — review timelines, phased rollouts and version
-# naming belong to whoever presses the button, not to whatever landed on main last. The button asks for the
-# marketing version; the BUILD number is this workflow's run number, so every upload is monotonic without
-# anyone maintaining a counter.
-#
-# Where each artifact lands, and where it deliberately stops:
-#   android  straight to the chosen Play track (internal by default). Promotion to production is either a
-#            re-dispatch with track=production or a click in the Play Console.
-#   ios      to App Store Connect, which lands it in TestFlight after Apple's automated processing.
-#            Submitting to App Review stays a console action — the one step of an iOS release that has
-#            questions (export compliance, review notes) no pipeline should answer on someone's behalf.
-#
-# Signing holds no local state to rot: Android signs with the upload keystore through AGP's injected signing
-# properties (Play App Signing holds the certificate that actually matters — assetlinks.json names ITS
-# fingerprint, not this key's), and iOS uses xcodebuild cloud signing — the App Store Connect API key mints
-# certificates and profiles on demand, so there is no .p12 to expire in a secret nobody remembers setting.
-#
-# The six secrets, all repository-level (README pointers: _editor/android-app, _editor/ios-app):
-#   ANDROID_KEYSTORE_BASE64    the upload keystore, base64 — mint once: keytool -genkeypair -keystore
-#                              android.keystore -alias android -keyalg RSA -keysize 4096 -validity 9125
-#   ANDROID_KEYSTORE_PASSWORD  its store password
-#   ANDROID_KEY_PASSWORD       its key password (the key's alias is `android`)
-#   PLAY_SERVICE_ACCOUNT_JSON  a Google Cloud service account with the Play "release manager" role, as JSON
-#   ASC_API_KEY_P8             an App Store Connect API key (.p8 contents), role App Manager
-#   ASC_KEY_ID / ASC_ISSUER_ID / APPLE_TEAM_ID   the key's id, its issuer id, and the developer team id
+# Manually dispatch mobile store releases with a marketing version; use the run number for monotonic build numbers.
+# Android uploads to the selected Play track; iOS stops at TestFlight, leaving review/compliance decisions to the App Store console.
+# Android uses the upload keystore (assetlinks needs Play App Signing's certificate); iOS uses cloud signing via App Store Connect API keys.
+# Package READMEs document signing secrets. GITHUB_TOKEN tag pushes cannot trigger this workflow; store promotion remains deliberate.
 name: Mobile release
 
 on:

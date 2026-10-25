@@ -1,23 +1,6 @@
-# The CI job image (ghcr.io/intentic/ci-base) — every CI job runs in this.
-# It exists to delete per-job tool installation: the docker-ce-cli + buildx apt install that the images,
-# images-platform and release jobs EACH repeated at runtime, the ripgrep install the test job repeated, and the
-# `curl https://bun.sh/install | bash` the release job repeated. Baked once here, all of that becomes free.
-#
-# The base is the SAME digest-pinned image the sandbox runtime uses (_sandbox/sandbox/Dockerfile) — deliberately,
-# not coincidentally. prepare-image-trees.sh runs `pnpm deploy` in THIS image and the resulting node_modules is
-# COPY'd into THAT one, so sharing a base makes the manylinux prebuilts (sharp, onnxruntime, ast-grep, davey,
-# mediaplex) glibc-identical by construction. It also rules out
-# the tempting shortcut of a docker-cli-alpine base with node bolted on: under musl, pnpm resolves musl builds
-# of those prebuilts and the glibc sandbox cannot load them.
-#
-# AND THE DEBIAN RELEASE IS WHAT THE DESKTOP BINARY IS LINKED AGAINST. ci-desktop builds on this image, so the
-# .deb and the AppImage that come out ask for whatever glibc this base ships (trixie: 2.41, and the binary
-# asks for GLIBC_2.39). _tools/desktop-smoke/Dockerfile is the host they are then installed and RUN on, and it
-# was left on bookworm when this moved to trixie — desktop-verify died in the loader on every artifact, twice
-# per run, on a build that was otherwise correct (run 34046947138). A smoke host older than this base does not
-# test an older user's machine; it tests a machine the artifact was never built for.
-# ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical — and
-# move _tools/desktop-smoke/Dockerfile's FROM to the same Debian release.
+# Shared CI tools. Keep this base digest identical to _sandbox/sandbox/Dockerfile: pnpm-deployed native modules run in that image.
+# Do not substitute musl/Alpine: its resolved native dependencies cannot load in the glibc sandbox.
+# ci-desktop inherits this base; when changing Debian releases, update _tools/desktop-smoke/Dockerfile to match.
 FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
 
 # What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package
@@ -25,31 +8,9 @@ FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e05
 # `Error response from daemon: denied` before its first step. That is exactly how the first Actions run failed.
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
-# Everything the jobs actually need, and nothing else — the full `node:24.22.1` image would supply most of this
-# but costs ~1.2GB more for a pile of toolchains no job invokes.
-#   ca-certificates + curl  fetch the docker apt key below; curl also backs assorted script steps
-#   git                     turbo hashes inputs through `git ls-files`, and semantic-release drives git directly
-#   python3 make g++        the node-gyp toolchain, for a native dep that ships no prebuild for this platform
-#   ripgrep                 the iq engine's lexical tier shells into `rg --json`, so the iq suites need it
-#   openssh-client          sandbox git access generates its ed25519 key with ssh-keygen, so that suite needs it
-#   zip + unzip             the workspace's Extract route spawns unzip, and its suite builds the fixtures with
-#                           zip; the sandbox runtime installs the same pair (tar and gzip come with the base)
-#   tmux                    the agent's shell-busy probe reads one tmux behaviour and nothing else (a window
-#                           whose command exited stays listed as a DEAD pane), so agent-terminals.integration
-#                           runs against a REAL private tmux server — stub it and the test asserts the stub
-#   procps                  the self-kill guard rewrites pkill/pgrep patterns, and agent-terminals.integration
-#                           proves the rewrite with a real pgrep; the sandbox runtime installs the same package
-#   zstd                    transcripts are compressed logs, so the transcript/record suites verify with zstdcat
-#   bubblewrap              a fenced conversation's turns and watch checks run in a bwrap sandbox (turn-sandbox.ts),
-#                           so verify-machine's turn-sandbox and watch-check suites need a real one; without it a
-#                           fenced check reports itself broken and the suite fails
-#   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
-#   poppler-utils, fonts-dejavu-core, python3-pil
-#                           fileq's OCR tier (pdftoppm's page images, read by the `ocr` command), proved by
-#                           derivers.integration on a scan it draws with Pillow in DejaVu; and the privacy shield's
-#                           PDF reader (pdftotext, pdftoppm)
-# The docker apt repo is added the same way the sandbox's docker feature pack adds it
-# (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
+# Tools required by jobs and integration tests, including real tmux/procps/bwrap behavior and fileq/privacy document rendering.
+# Keep the slim Node base plus explicit packages instead of the full image's unused toolchains.
+# Install Docker CLI/buildx from the same apt source as the sandbox Docker pack, avoiding per-job installation.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd bubblewrap \
         poppler-utils fonts-dejavu-core python3-pil \

@@ -1,30 +1,7 @@
-//! THIS ENGINE AS A WSL DISTRO'S DOCKER (2026-10-10): `ic engine wsl enable|disable <distro>`.
-//!
-//! Docker Desktop's WSL integration gives a distro three things, and a PC that drops Docker Desktop loses all three: a
-//! `/var/run/docker.sock`, bind mounts of the distro's own paths (`docker run -v ~/project:/x`, which Docker Desktop
-//! rewrites to a share of its own), and the `docker` CLI with its `compose` and `buildx` plugins (links into
-//! `/mnt/wsl/docker-desktop`). A developer who runs a sandbox from a checkout inside WSL needs every one of them: the dev
-//! sandbox bind-mounts its build output from the checkout, and the local platform's database is a `docker compose`
-//! service. This gives the distro the same from our engine:
-//!
-//! - the keeper serves the API on a socket in `/mnt/wsl/<engine>/` (one tmpfs every distro mounts, shared), which the
-//!   distro links as its `/run/docker.sock`, in its own docker group;
-//! - the distro's `/home` is bind-mounted under `/mnt/wsl/<engine>/distros/<distro>/home`, and the keeper links each
-//!   `/home/<user>` in the engine's distro to it, so a bind mount resolves there by the very path it was named with;
-//! - the static `docker` from the engine's pinned bundle, and pinned `compose` and `buildx`, are installed to
-//!   `/usr/local/lib/intentic/docker` and linked onto PATH and into `/usr/local/lib/docker/cli-plugins`, except where
-//!   the distro's own packages provide them; the plugins are linked into the default user's `~/.docker/cli-plugins`
-//!   too, which Docker Desktop never touches (`user_plugins_script` says why that matters).
-//!
-//! The distro's part (engine/rootfs/integrate) runs at every start of the distro from a systemd unit, and again from
-//! `ic engine start` once the engine is up, so either may start first.
-//!
-//! Docker Desktop may go on serving the same distro: its integration's proxy holds `/run/docker.sock` there while it
-//! runs, and so does a dockerd of the distro's own. Neither is taken over. The distro's default user gets a docker
-//! context instead, `intentic-engine`, naming our socket, and made current: every `docker` and `docker compose` of
-//! that user's (the dev loop's scripts, the machine agent) reaches our engine, and `docker --context default` the
-//! other one, so a PC keeps Docker Desktop for whatever still lives there. What a context does not reach is a program
-//! that opens `/var/run/docker.sock` itself rather than asking the CLI.
+//! `ic engine wsl enable|disable <distro>` provides a shared API socket, /home bind mounts and pinned Docker/compose/buildx tools.
+//! Integration runs at distro startup and after engine start, supporting either boot order and preserving distro-provided tools.
+//! Never take over another daemon's /run/docker.sock: select the intentic-engine CLI context instead; default still reaches the other daemon.
+//! Programs opening /var/run/docker.sock directly bypass the context. User plugin links keep Docker Desktop from overriding our plugins.
 
 use std::time::Duration;
 

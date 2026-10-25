@@ -15,37 +15,10 @@ use crate::sandbox::{container_of, inside, mirror, now_ms, parked_of, resolve_sl
 use crate::ui;
 use crate::util::{bail, Result};
 
-/* `ic sandbox sleep` AND `ic sandbox wakes` — A SANDBOX ON THIS COMPUTER THAT NOBODY USES, PUT TO SLEEP, AND STARTED
-AGAIN WHEN SOMEBODY OPENS IT.
-
-A local sandbox runs for as long as the computer does, and one nobody has touched for an hour holds its memory for
-nothing. The machine agent's keeper runs `ic sandbox sleep --idle <minutes>` on its sweeps: a sandbox whose daemon says
-it has been quiet that long (nobody in its editor, nothing working, no terminal in use, no workspace app open: the work
-signal's `quietSince`, chain.rs) and has no wake promised within that window is stopped through Docker, which its
-`unless-stopped` policy then leaves down, and its record says `asleep` (record.rs). Its page is told (a host report
-with `asleep`). Opening it in the browser leaves a wake request on the platform, which cannot reach this machine;
-`ic sandbox wakes`, which the agent polls while anything here sleeps, asks for those requests and starts each sandbox
-asked for, as a person's start. The keeper's fix run leaves a sandbox asleep alone and an attended fix starts it
-(chain.rs); every start, restart and recreate wakes it.
-
-THE ALARM (2026-10-18). A sleeping sandbox used to miss what it had scheduled: a cron came due with nothing running, and
-fired once, late, at the next start. Now the sleep reads the soonest moment the daemon promised (the signal's
-`nextWakeAt`, crons included) into the record as `wake_at`, and `ic sandbox wakes` starts the sandbox that long ahead of
-it which its wakes have been taking (`wake_lead`), on this machine's clock alone, before asking the platform anything:
-the daemon is up before the moment and fires it on the minute. A moment too close to be worth a sleep (`MIN_ASLEEP_MS`
-past the lead) keeps it awake instead. A sandbox the alarm woke that no person has used since (the signal's `personAt`)
-sleeps again after `ALARM_GRACE_MS` of quiet rather than the keeper's whole limit, so an hourly chore does not keep it up
-half the day.
-
-ASKED AT ONCE, AND HELD (2026-10-19). A run asked each platform in turn and started nothing until all had answered, so
-one record naming a platform that was not running (rog: a trashed sandbox's dev platform, whose refused localhost
-connect costs two seconds on Windows) delayed every wake on the machine. Every platform is now asked on a thread of its
-own, and each sandbox starts as soon as its own platform names it, one start at a time as before. With `--wait` the
-platform may hold the ask open until somebody asks for a wake, which takes the pause between two polls off every wake;
-the wait is cut to the soonest alarm, so a scheduled start never waits behind it. A record that outlived its sandbox
-kept the agent polling for good: the trash now clears `asleep` (trash.rs), and a run that still finds sleepers lists the
-engine's sandbox containers once, after its starts, and clears the record of every sleeper with neither its container
-nor a parked one. */
+/* Stops quiet sandboxes through Docker, records asleep, and wakes them on platform requests or local nextWakeAt alarms.
+ * Use learned wake_lead and MIN_ASLEEP_MS to avoid missed schedules or pointless sleeps; alarm-only wakes use ALARM_GRACE_MS.
+ * Ask platforms concurrently, start sandboxes serially as answers arrive, and cap --wait at the nearest alarm.
+ * Keeper fixes leave sleepers alone; attended fixes and starts wake them. Clear stale asleep records when containers are gone. */
 
 /// What `ic sandbox sleep` was asked.
 pub struct Args {

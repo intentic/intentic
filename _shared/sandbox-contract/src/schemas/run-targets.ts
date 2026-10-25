@@ -2,25 +2,9 @@ import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
 import { ArtifactNameSchema } from "./device-artifacts.js";
 
-// WHAT A REPOSITORY SAYS IT CAN BE RUN AS, ON ONE OF THE OWNER'S COMPUTERS (`<repo>/.intentic/run.json`). Beside the
-// build scripts it names and tracked with them, like `.intentic/checks.json`. One file serves two doors that must do the
-// same thing: an agent's `devices run <target>` in its own shell, and the editor's "Run on <device>" button, which runs
-// that very command in a terminal the owner watches. Each run builds in the sandbox, carries the build to the device
-// (`devices push`), opens the device ports the target says the sandbox needs (`devices reach`), and starts the program
-// there (the device's app_start). Nothing here runs by itself: a target runs when someone runs it.
-//
-//   {
-//     "targets": [{
-//       "name": "desktop",
-//       "device": "rog",
-//       "build": "bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --windows-only",
-//       "artifact": {
-//         "intentic-desktop.exe": "_editor/desktop-app/src-tauri/target/x86_64-pc-windows-msvc/release/intentic-desktop.exe",
-//         "intentic-files.exe": "_editor/desktop-app/src-tauri/binaries/intentic-files-x86_64-pc-windows-msvc.exe"
-//       },
-//       "program": "intentic-desktop.exe"
-//     }]
-//   }
+// <repo>/.intentic/run.json declares tracked targets shared by devices run <target> and the editor's Run on <device> terminal command.
+// Each explicit run builds in the sandbox, pushes artifacts, reaches the declared device ports and starts the program via app_start.
+// Targets name device, build, artifact mappings and program; declaring one never starts it automatically.
 
 export const RUN_TARGETS_FILE = `${STATE_DIR}/run.json`;
 

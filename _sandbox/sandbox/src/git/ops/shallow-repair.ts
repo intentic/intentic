@@ -5,21 +5,9 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { commonDirOf, gitDirOf } from "../git-dir.js";
 
-/* A WORKSPACE REPO CUT SHALLOW WHILE ITS WHOLE HISTORY IS STILL HERE IS MADE WHOLE AGAIN (2026-10-21).
-
-   One command anybody in the sandbox may run, `git fetch --depth N` in a full clone (an agent narrowing a fetch to save
-   time does), writes a `shallow` file that hides every commit behind the cut from every reader: `git log` and `blame`
-   end there, and the daily gc (git-gc.ts) counts the hidden history as unreachable and prunes it once its grace runs
-   out. A computer syncing the workspace follows the repo's history with a fetch (the machine agent's git bridge), and a
-   clone that does not hold the cut commit cannot take it, so the history there stopped where the cut began. intentic's
-   own repo was cut at 2026-10-04 this way with all 4,792 commits still on disk, and only the file in the way.
-
-   No flow of Intentic's makes a workspace repo shallow, and a clone made shallow on purpose (`clone --depth`) has nothing
-   behind its cut, so a cut with the whole of its history still behind it is one nobody wanted. That is checked, never
-   assumed: every object reachable from the commits behind the cut must be here (`rev-list --objects --quiet` fails on
-   the first missing one), and only then does the file go, under git's own lock for it. A cut with history missing
-   behind it is left as it is and said once per cut; nothing here fetches. Hourly, with the rest of maintenance, so a cut
-   is undone long before the gc's grace could take what it hid. */
+/* Hourly, undo an accidental shallow cut only after rev-list proves every object behind it still exists, before gc can prune hidden history.
+ * Remove the shallow file under git's lock. Intentionally shallow/missing-history clones remain untouched, with one report per cut.
+ * Never fetch here: the repair only exposes history already on disk, restoring log/blame and the sync git bridge. */
 
 // A commit id as the `shallow` file lists it: sha-1, or sha-256 in a repository that uses it.
 const SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;

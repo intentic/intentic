@@ -1,26 +1,7 @@
-# intentic device: connect THIS Windows device to your sandbox, so the agent can work on it: run PowerShell, read and
-# write files inside the folders you allow, and see the screen. Runs as YOU (no admin): it installs the one device agent
-# into %USERPROFILE%\.intentic\machine and registers a per-user logon entry so the device reconnects after a reboot.
-# `intentic-machine device uninstall` removes it. Nothing is opened on your network: the connection is outbound only.
-#
-# What the agent may actually do here is decided on the sandbox's capability card, not by this script, and is enforced
-# by the agent installed on this device. Revoking it there cuts this device off immediately.
-#
-# THIS IS A BOOTSTRAP SHIM: its whole job is to put an agent that understands `device setup` on a device that has none,
-# then hand over to it, and that agent decides everything else (self-updating, putting the bin folder on your PATH,
-# fetching the windowless launcher), so re-running this command still upgrades a device. The decisions live once, in
-# the agent (_devices/machine/src/install.ts), where they are compiled and tested.
-#
-# Usage (the device's capability card hands you this):
-#   irm https://intentic.dev/device/<SANDBOX_HOST>/<CODE> | iex
-# where CODE is a single-use code the sandbox minted: this script spends it at https://<SANDBOX_HOST>/system/redeem/
-# for the sandbox's address and pairing token, which never pass through $env:. The older shape still works:
-#   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; irm https://intentic.dev/device.ps1 | iex
-#
-# Optional: AGENT_BIN - local dev / dogfooding an unreleased build: run this command instead of the installed agent,
-#           whitespace-separated (e.g. "node C:\intentic\_devices\machine\dist\cli.js").
-#
-# The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
+# User-level Windows bootstrap for intentic-machine device setup; the agent owns installation, self-update and per-user startup.
+# Pair through /device/<SANDBOX_HOST>/<CODE> or legacy SANDBOX_URL/PAIR_TOKEN; AGENT_BIN selects a development command.
+# Connection is outbound only; capability-card permissions are enforced on the device and revocation disconnects immediately.
+# device uninstall removes this connection. Under irm | iex, return the code in LASTEXITCODE without ending the PowerShell session.
 param(
     [string]$Sandbox,
     [string]$Code
@@ -33,35 +14,10 @@ $ErrorActionPreference = 'Stop'
 $route = 'device'
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. Windows PowerShell 5.1 and pwsh 7.
-#
-# PURE ASCII, as every .ps1 here must be: 5.1 reads a BOM-less file in the ANSI code page. The glyphs are built from
-# their code points instead.
-#
-#   Invoke-IntenticScript { ... }            runs the script's body; the ONLY place a script ends. See below.
-#   Write-IntenticBegin <what> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   Write-IntenticStep <phase> <sentence> <label>
-#                                            a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   Write-IntenticSay <sentence>             narration under the running step
-#   Write-IntenticWarn <sentence>            a caution: degraded, not broken (stderr in plain)
-#   Suspend-IntenticLine / Resume-IntenticLine
-#                                            hand the screen to a command that prints its own lines, and take it back
-#   Complete-IntenticStep                    the running step is done
-#   Write-IntenticFinished <verdict> [address]
-#   Write-IntenticLater <what>, <command>, ...  the later footnotes under a verdict; rich only
-#   Stop-Intentic <headline> [problem] [fix] [code]
-#                                            the running step settles as failed, the stop block goes to stderr, and
-#                                            the script ends with the code (1 unless given; 2 for a wrong command line)
-#   Read-IntenticConfirm <question> <consequence> <flag>
-#                                            [y/N]: $true on yes; on no it says so and returns $false (the caller
-#                                            returns, exit code 0); nobody there is a stop naming the flag that answers
-#   Set-IntenticExit <code>                  the code the script ends with, when it is not 0 (a handover's own)
-#
-# WHY NO SCRIPT CALLS `exit`. Under `irm ... | iex`, and inside the `& { ... }` the site's Worker wraps a script in,
-# `exit` ends the person's whole PowerShell process, and the window can close on the one line that said what went
-# wrong. Invoke-IntenticScript runs the body, catches a stop, leaves the code in $LASTEXITCODE, and exits only when the
-# script runs as a file (`powershell -File`, how the desktop app runs these), where exiting is how the code gets out.
+# Bootstrap output helpers for PowerShell 5.1/7; see docs/ops/cli-output-protocol.md. Keep this file ASCII for BOM-less 5.1.
+# Invoke-IntenticScript owns termination: direct exit under irm | iex would close the user's PowerShell session.
+# Stops set LASTEXITCODE; only file execution exits the process. Read-IntenticConfirm returns false on refusal; callers must return.
+# Suspend/resume the line around commands that draw their own output; ic or intentic-machine owns the display after handover.
 
 $IntenticKit = @{ Mode = 'plain'; Color = $false; Label = ''; Open = $false; Clock = $null; Code = 0; Width = 80 }
 if ($env:INTENTIC_UI -eq 'rich' -or $env:INTENTIC_UI -eq 'plain' -or $env:INTENTIC_UI -eq 'nested') {

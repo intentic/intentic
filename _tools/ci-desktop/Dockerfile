@@ -14,24 +14,9 @@ FROM ghcr.io/intentic/ci-base:latest
 
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
-# The Tauri Linux build inputs, plus the ones that are bundle inputs rather than compiler inputs — the same list
-# build-desktop.sh installs at runtime, which is now its fallback path for a developer machine:
-#   libwebkit2gtk-4.1-dev …   what tauri/wry compile and link against
-#   nsis                      makensis, for the Windows installer the cross-build produces
-#   lld llvm clang            cargo-xwin's cross-linker (clang-cl + lld-link)
-#   xdg-utils                 the AppImage bundler COPIES the host's xdg-mime into the AppDir; absent host ⇒
-#                             "failed to bundle project: xdg-mime binary not found"
-#   file                      appimagetool refuses to start without it, surfacing as a contentless
-#                             "failed to run linuxdeploy"
-#   p7zip-full rpm            not build inputs: verify-desktop-bundle.sh reads back the rpm and the NSIS
-#                             installer it just produced, and a verifier that skips when its tool is missing
-#                             reports "verified" for a bundle nobody opened
-#   xz-utils                  tar shells out to it, and the zig tarball below is the only .tar.xz here
-#   osslsigncode              Authenticode signing FROM LINUX (_tools/scripts/build/sign-windows.sh). The Windows
-#                             installer is cross-built here, so `signtool.exe` does not exist and never will;
-#                             this is the tool that signs from a .pfx. The release signs with `jsign` instead
-#                             (the layer below); this one stays for a test certificate held as a file.
-#   jq                        sign-windows.sh reads the Azure token responses with it
+# Tauri/cargo-xwin inputs plus bundle tools: xdg-utils and file are required by AppImage, not just compilation.
+# p7zip/rpm let verification inspect every installer; xz unpacks Zig, and jq reads Azure signing responses.
+# osslsigncode handles file-held test certificates; release signing uses jsign below. build-desktop.sh carries the fallback installs.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf \

@@ -8,33 +8,10 @@ use crate::sandbox::{container_of, is_slug, slugs_of};
 use crate::ui;
 use crate::util::{bail, sha256_hex, Fail, Result};
 
-/* ENCRYPTION AT REST, ON BY DEFAULT.
-
-The daemon encrypts its credential stores (pasted secrets, the capability and extension vaults, the privacy vault and
-the AI-provider accounts: _sandbox/sandbox/src/store/encryption/at-rest.ts) only when KEY_ENV names a readable 32-byte
-key, which ic mounts read-only at KEY_MOUNT. That key used to come only from an operator who set HOST_FILE_ENV, so a
-sandbox set up the ordinary way kept its secrets in plain JSON on its volume. Now every sandbox ic makes or recreates
-gets one: the operator's own file when they name it, else a key ic makes for it once, from the operating system's
-random source, in this home's `keys/` beside the backup keys (backup.rs). That folder is in no volume and no bind the
-container has, so the container reads the key only through the read-only mount and can never write it, and a copy of
-the volume (a backup, a lost disk image) does not carry it.
-
-A key is made once and never again: the stores cannot be read without the key they were encrypted with. So a key that
-exists is used whatever a run asks, the container's own mount first (it is what the stores were encrypted with, an
-operator's file included), then ic's file. INTENTIC_AT_REST=off (SWITCH_ENV) only keeps a sandbox that has no key
-without one, for an operator who encrypts the disk instead, and the container carries that choice (`stamp`) so a later
-recreate by someone who did not say it again keeps it.
-
-Whose key it is follows where the stores are: the daemon's auth root, which is /work's own `.intentic/secrets/auth`
-unless the container mounts a logins volume at AUTH_MOUNT (a dev sandbox's, shared by every dev sandbox on the
-machine). The sandboxes sharing one share its key, named for the volume: a key per sandbox over one set of files would
-leave every sandbox but the first unable to read them, and the daemon refuses to boot over stores it cannot
-authenticate.
-
-The key lives as long as what it encrypted: a removed sandbox's stays with its volumes in the trash and goes when they
-are deleted for good (trash.rs), unless this side still holds backups of it, which hold the same encrypted stores and
-take it with them (tidy.rs). A logins volume's goes with the volume (remove.rs). An operator's own file is never
-deleted: it is theirs. */
+/* Mount a 32-byte at-rest key read-only: reuse the container's key first, then ic's key, or create one outside container volumes.
+ * INTENTIC_AT_REST=off is sticky and only applies without an existing key; replacing a key would make stored secrets unreadable.
+ * Key ownership follows the auth store: sandboxes sharing a logins volume must share its key.
+ * Keep keys with trash and backups until their encrypted data is gone; never delete an operator-supplied key. */
 
 /// Where the daemon reads the key (KEY_ENV names it), and the one a rotation reads the stores' old key from.
 pub const KEY_MOUNT: &str = "/run/secrets/intentic-at-rest-key";

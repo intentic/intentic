@@ -66,22 +66,9 @@ const installedModules = (at) => {
     return found;
 };
 
-// LENDS THE SNAPSHOT THE INSTALLED MODULES, so the two runs differ by the diff under test and by nothing else. Without
-// them a check that `needs: "node_modules"` measures a different thing in the snapshot — i18n-literals and vue-templates
-// read no template at all there and pass vouching for nothing — and then every line the real checkout prints reads as
-// newly introduced, which is the opposite of what this comparison is for.
-//
-// Lent per package rather than once at the root, because pnpm hoists nothing there: a workspace member resolves out of
-// its own node_modules, so a single root link would leave every member's check reading an empty tree.
-//
-// Linked, not installed: an install per run costs minutes, and what these four load from node_modules is a parser for
-// this repository's own source (vue/compiler-sfc, vue-i18n's compiler), not a dependency whose version is what any of
-// their findings is about. The one thing this cannot reproduce is the snapshot's own dependency set, so a diff that
-// moves the lockfile is measured against what is installed now rather than what was; `lockfile` and `peer-deps` are the
-// checks that read that, and they need no install.
-//
-// Returns the links so they can be taken back first: nothing that deletes a directory tree should be pointed at the
-// live node_modules through one of them, however sure we are that it would not follow.
+// Lend installed node_modules per package (pnpm does not hoist) so snapshot checks load the same parsers and measure comparable coverage.
+// Link rather than install; lockfile changes still use current parser dependencies, while lockfile/peer-deps checks judge versions separately.
+// Return links for removal before snapshot cleanup, keeping recursive deletion away from live dependency directories.
 const lendModules = (from, to) => {
     const links = [];
     for (const rel of installedModules(from)) {

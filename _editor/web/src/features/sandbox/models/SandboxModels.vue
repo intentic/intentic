@@ -43,21 +43,9 @@ import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
 import { useModelSources } from "./useModelSources";
 
-// SANDBOX ▸ MODELS: every way this sandbox can run a model, as a grid of peers, and one panel for whichever is open.
-//
-// A tile per provider and one for Local models, always the same tiles in the same places (providerGrid.ts), each saying
-// what it holds ("3 accounts", a dot for how they are) or why it is worth a look ("Free"). Pressing one opens its panel
-// below the grid, as a persona's tile opens its editor: the provider's accounts, the one button that adds one, and the
-// sign-in itself while it runs (ProviderPanel); or this machine's models and the servers it is pointed at
-// (LocalModelsPanel). That panel is the only door to a sign-in on the page, so there is never a second way to do one
-// thing, and no provider is promoted over another by where it sits.
-//
-// It replaced a list of what was connected stacked over three "ways in" lanes, and before that a page of its own at
-// /connect plus an AI-account card in Agent ▸ Models. Every link that offers a sign-in elsewhere (the chat's strip, the
-// model picker, setup's landing, a job whose model is not connected) lands here (lib/routes/modelsPath.ts), and the page
-// opens the tile it is about.
-//
-// One sign-in at a time: starting one replaces whichever was waiting, and every other panel says so before the press.
+// Stable peer tiles for each provider and Local models open the sole accounts/sign-in or local/server panel below the grid.
+// All sign-in links use modelsPath.ts to land here and open the relevant tile; never expose competing sign-in doors.
+// Starting a sign-in replaces the previous pending one, with other panels explaining that before the press.
 
 const t = useT();
 const route = useRoute();

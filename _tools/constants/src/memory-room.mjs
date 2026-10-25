@@ -1,34 +1,8 @@
 #!/usr/bin/env node
-// Whether this sandbox has room for more work, by one formula: the daemon's ResourceBudget
-// (_sandbox/sandbox/src/platform/resources/resource-budget.ts) judges every turn, child and heavy command with it and
-// serves the verdict on a local socket, and the scripts that run where no daemon answers (CI, a plain checkout, a
-// daemon restarting) apply the same functions to the same files. Plain JavaScript with no dependencies, so a script
-// imports it by path before any install, and `memory-room` runs it as a command.
-//
-//   limit  memory.high (where the kernel starts throttling the whole cgroup), else memory.max, else the machine's
-//          memory, never more than the machine's
-//   used   the working set (memory.current less the inactive file cache the kernel reclaims first) plus what was
-//          pushed to swap; at a root cgroup, which has no memory.current, the machine's own used memory and swap
-//   free   limit − the resident part of used, and never more than the machine itself has available (MemAvailable): a
-//          sandbox on a shared machine cannot take memory the machine does not have, whatever its own limit says.
-//          Swap is not subtracted: the limit bounds resident pages only, and cold pages parked in swap leave that room
-//          free. Counting them held every heavy command for minutes on a sandbox with 8 GB available (measured
-//          2026-09-26..10-02: 4.2 GiB of idle swap, 17 h of gate waits a week). Swap that is being paged back in shows
-//          as stall, below, which holds work whatever the bytes say.
-//          Once swap is nearly full (SWAP_FULL_SHARE of memory.swap.max, or of what the machine's swap can still take)
-//          that stops being true: nothing more can be parked there, so a page the work touches comes back only by
-//          pushing out another, and the swapped pages count against the limit with the resident ones. Measured
-//          2026-10-05: 12 GiB resident + 10 of 10 GiB swapped against a 20 GiB limit, load 38, a third of the time
-//          waiting on disk, and the formula still read 2.4 GiB free and started every turn.
-//   stall  memory PSI `full`: avg10, the share of the last ten seconds in which everything waited on memory, and avg60,
-//          the last minute's. A sandbox paging hard flickers around any avg10 threshold (19, 11, 15, 4, 18% in five
-//          minutes of the reading above, never 20), so a lower bar on the minute catches what the spikes miss.
-//   disk   io PSI `full` the same way, for work nobody is waiting on only: swap paged in from disk and a build's writes
-//          stall everything on the disk, the daemon's own event loop included, before memory PSI says much. Measured
-//          2026-10-10..13: of 29 daemon freezes of 5 s or more, 20 had disk `full` avg10 at 30% or past it, 18 had
-//          memory's at 20%, and the one that failed a turn's setup on 2026-10-13 had disk 42% and memory 7%. Disk
-//          reached 30% in 1.5% of the minute samples of those days, so holding background work then costs little. A
-//          person's turn is never refused for it: a busy disk slows a turn, it does not kill one.
+// Shared admission formula for ResourceBudget and scripts without a daemon; dependency-free for pre-install use.
+// Limit is memory.high, else memory.max, else host RAM, capped at host RAM; free resident room is also capped at MemAvailable.
+// Exclude reclaimable inactive cache; count swapped pages only near full swap. Memory full PSI avg10/avg60 catches paging pressure.
+// I/O full PSI holds background work only: a busy disk may slow a person's turn but must not refuse it.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";

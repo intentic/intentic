@@ -7,25 +7,10 @@ import { useProgress } from "../../components/progress/useProgress";
 import { beginHubWork, injectHubSection } from "../hub/hubWork";
 import { useNotifications } from "../notifications/notifications";
 
-// WORK THAT OUTLIVES THE VIEW THAT STARTED IT. A press that starts something taking longer than a glance (a container
-// built on a laptop, a clone, a land, a migration) hands the server work that runs on whether or not anybody watches.
-// Kept in the component, its progress, its log and its outcome die the moment the reader opens another view, and the
-// view they come back to says nothing is happening and offers the button again. So the state of that work lives here,
-// keyed by WHAT it is about rather than by who drew it, and any view naming the same key reads the same run:
-//
-//   const runner = useOperation<string, RunnerFailure>(() => `devices/${host}/runner`);
-//   runner.run({ what: t(`…adding`, { name }), failed: (error, lines) => runnerFailure(…), task: (op) => createRunner(host, name, op.line) });
-//
-// The run is stamped with the sandbox it began on, so another sandbox's view never shows it and coming back does;
-// work on the account itself goes under `account/` (ACCOUNT_SCOPE), which every sandbox reads alike.
-// An outcome is kept until somebody has had it on screen and left: a run that ends while its view is open is read
-// there and goes when the view does, as it always did; one that ends while nobody watches raises a receipt with a way
-// back, and waits in its view until it has been seen. A view mounted in a hub also marks that hub's row while it runs.
-//
-// A run also says how long it should take and when it gives up (`expectedMs`, `giveUpMs`), declared once where it starts,
-// so every surface drawing it reads the same promise through the one progress model (`useOperationProgress`,
-// components/progress). The give-up is the ledger's to keep, not a sentence: at that moment the task's signal aborts and
-// the run ends as failed with the starter's own failure, whatever the task does afterwards.
+// Keep long-running work by subject key outside views, sharing progress/logs/results across navigation within its originating sandbox.
+// account/ keys use ACCOUNT_SCOPE across sandboxes. Retain outcomes until seen and left; unseen completions raise receipts linking back.
+// Mounted hub views badge their rows while running. expectedMs/giveUpMs feed the shared progress model.
+// At giveUpMs abort the task signal and settle failed with the starter's failure, regardless of later task activity.
 
 export type OperationState = `running` | `done` | `failed`;
 

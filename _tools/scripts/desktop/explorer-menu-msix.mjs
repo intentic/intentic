@@ -1,25 +1,8 @@
 #!/usr/bin/env node
-// THE EXPLORER MENU'S IDENTITY PACKAGE, PACKED ON LINUX for a release to sign (_editor/desktop-app/explorer-menu).
-//
-//   explorer-menu-msix.mjs --publisher "<signing certificate's subject>" --version <x.y.z> --out <file.msix>
-//
-// Windows 11 lists "Open with Intentic" in its own context menu only when a signed package declares it. A release
-// whose build holds Intentic's code-signing certificate ships that package already signed, and the installer
-// registers it with no prompt; this writes it, unsigned, for sign-windows.sh to sign (jsign and osslsigncode both sign
-// .msix). The DLL's own packer (explorer-menu/src/register.rs) writes the same thing on a PC, with Windows' packaging
-// API; here there is no Windows, so the three parts an .msix adds to a ZIP are spelled out by hand:
-//
-//   - the payload: the manifest (AppxManifest.xml, its publisher and version filled in) and the logos it names;
-//   - AppxBlockMap.xml: every payload file's size, local-header size and SHA-256 per 64 KiB block, which Windows checks
-//     every byte of the package against, and which the signature covers;
-//   - [Content_Types].xml: the OPC content type of every part.
-//
-// Laid out byte for byte the way makeappx lays out a package (compared against VS Code's and Zed's, 2026-10-07), and
-// that is not taste: osslsigncode signs a ZIP32 archive into one Windows cannot open (0x80073CF0), and the same
-// signer's output over a makeappx-shaped archive opens fine. So, like makeappx: every part deflated, the payload in
-// independent 64 KiB blocks whose compressed sizes the block map records; a data descriptor after each payload
-// part and the block map; [Content_Types].xml with its sizes in its own header; a ZIP64 end of central directory, its
-// locator, and a classic end record whose counts point at them.
+// Usage: explorer-menu-msix.mjs --publisher "<certificate subject>" --version <x.y.z> --out <file.msix>; sign-windows.sh signs the unsigned output.
+// Build a makeappx-compatible identity package with manifest/logos, AppxBlockMap.xml and [Content_Types].xml for Windows 11's context menu.
+// Deflate payloads in independent 64-KiB blocks; record hashes/sizes, use payload/block-map data descriptors and inline content-types sizes.
+// Preserve ZIP64 end records and locator: osslsigncode-signed ZIP32 archives fail Windows registration (0x80073CF0).
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

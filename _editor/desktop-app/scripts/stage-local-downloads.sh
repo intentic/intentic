@@ -1,34 +1,8 @@
 #!/usr/bin/env bash
-# Build the desktop installers from this checkout and stage them into _site/site/public/desktop/
-# (gitignored) — so the LOCAL site serves them and the web app's dev "Get it" links
-# (http://localhost:4321/desktop/…) download your local build instead of a release. The deployed worker
-# prefers these same asset paths too, so nothing forks between envs.
-#
-# These keep the plain names while a RELEASE artifact is Intentic-<version>-x64-setup.exe
-# (_tools/scripts/lib/desktop-artifacts.sh). Not an oversight and not a second scheme: a working-tree build has no
-# version to put in a name — it carries the 0.0.0 "not a release" sentinel that version-check.ts and
-# upgrade.ts already read as "built from source" — and a name claiming 0.0.0 would be a version statement that
-# is false rather than absent. A fixed name is also what the dev server needs, having no worker to resolve one.
-#
-#   pnpm --filter @intentic/desktop-app stage:downloads                   # Linux bundles (deb/rpm/AppImage)
-#   pnpm --filter @intentic/desktop-app stage:downloads -- --windows      # + Windows NSIS via cargo-xwin
-#   pnpm --filter @intentic/desktop-app stage:downloads -- --windows-only # only the Windows NSIS installer
-#   pnpm --filter @intentic/desktop-app stage:downloads -- --stage-only   # just copy what's already built
-#
-# `ic-windows-amd64.exe` is staged beside them when `_sandbox/ic/dist-bin` holds one
-# (`bash _tools/scripts/build/build-ic.sh windows-x64`), because the setup the installed app runs DOWNLOADS
-# that binary (with a SHA256SUMS listing it): connect.ps1 fetches `$IC_URL/ic-windows-amd64.exe`, defaulting to the
-# latest GitHub release, and checks it against `$IC_URL/SHA256SUMS`. A
-# working-tree installer carries the 0.0.0 sentinel and so names no release of its own, which means a local
-# install tests this branch's app driving the last release's CLI unless IC_URL points back here
-# (try-onboarding.mjs sets it to http://localhost:4321/desktop). The installers carry an ic of their own beside the
-# app as well, but a shim copies that one only when the run is pinned to a release (IC_VERSION), which a 0.0.0
-# build never is.
-#
-# Each bundle is built independently and failures don't abort the rest — whatever succeeded is
-# staged, so a missing AppImage prerequisite never blocks the .deb/.rpm downloads.
-# Linux bundles need the system webkit2gtk/gtk dev packages (see README) + xdg-utils for AppImage;
-# the Windows cross-build needs rustup target x86_64-pc-windows-msvc + cargo-xwin + clang/lld/llvm + nsis.
+# Build/stage local desktop downloads in the gitignored site public/desktop directory; dev links use fixed names for 0.0.0 source builds.
+# --windows/--windows-only add or select NSIS; --stage-only copies existing artifacts. Stage successful bundles even when another fails.
+# Stage ic-windows-amd64.exe plus SHA256SUMS when available; point IC_URL here to test this checkout's CLI rather than the latest release.
+# Unstamped builds do not copy a bundled ic as a pinned release. Linux needs GUI dev packages; Windows cross-build needs xwin/LLVM/NSIS.
 set -uo pipefail
 
 LINUX=1

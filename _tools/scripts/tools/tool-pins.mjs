@@ -1,23 +1,7 @@
-// WHERE EACH PINNED TOOL IN THE SANDBOX IMAGE IS WRITTEN, once: the binaries and CLIs the core Dockerfile, its packs,
-// the CI base image and an extension's image fragment fetch at a fixed version. The bumper writes through this table
-// and the `tool-pins` check reads it, so a site listed here cannot be moved by one and forgotten by the other
-// (engine-pins.mjs is the same idea for the agent engines, and owns the reading and writing both use).
-//
-// A pin is more than its version where the download is checked: ripgrep, jq and gh carry a sha256 per architecture,
-// cloudflared's and Bun's container images a digest. Those are DERIVED from the version (`derive`), fetched by the
-// bumper and written in the same pass, because a version moved without its checksum fails the image build, and a
-// checksum moved by hand is a number nobody checked.
-//
-// What is deliberately NOT here, and why each stays a person's bump:
-//   - Debian packages (git, curl, python3, ffmpeg…): trixie's, floating within the release on purpose. Their security
-//     fixes arrive as `+deb13uN` revisions with the version number unchanged; leaving trixie for a newer upstream
-//     number is a different decision from a bump.
-//   - node-gyp: tracks the headers of the Node it compiles against, so it moves with the node base image.
-//   - @posthog/cli: its pin decides which tool names the posthog skill's commands resolve to, which no test here reads.
-//   - the agent engines: engines.json and _tools/scripts/engines own those. Pi is an agent too but is listed below: a
-//     sandbox installs an engine at the version engines.json blesses, while Pi is baked into the overlay by the
-//     pi-agent extension's fragment, so its pin is a Dockerfile line like the rest of this table.
-// Everything here is plain file reading until `derive`, which is the only part that needs the network.
+// Shared tool-pin sites for the bumper and check; derive checksums/image digests with each version update, never independently.
+// Read local files until derive needs the network. Engine pins belong to engines.json, except Pi baked into an extension Dockerfile.
+// Leave Debian packages floating within trixie for security revisions; node-gyp moves with Node headers.
+// Keep @posthog/cli manual because skill command names depend on it and tests do not cover that interface.
 
 import { createHash } from "node:crypto";
 import { readPin, rewrite, writePin } from "../engines/engine-pins.mjs";

@@ -13,21 +13,9 @@
 # catalog entry's by the tool bump; the `tool-pins` check refuses a hand edit that moves only some of them.
 FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
-# pg_dump and pg_restore for the pre-migration backup (src/migration-backup.ts), the one thing in this image not COPYed.
-# Same major as the server: pg_dump refuses a server newer than itself, and the platform's Postgres is postgres:18
-# (_tools/selfhost/platform/docker-compose.yml, and CI's `migrations` job). Moving that image to a new major moves this
-# ARG with it, or the next migration stops at its backup. Debian trixie carries only 17, so the client comes from the
-# PostgreSQL project's own apt repository (PGDG); its signing key is fetched once and held to a checksum, the key
-# B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8 that https://www.postgresql.org/download/linux/debian/ publishes.
-#
-# The two binaries are taken out of the package rather than the package installed: postgresql-client-NN depends on
-# postgresql-client-common, whose pg_wrapper is Perl, and that dependency is 60 MB of a 66 MB layer. libpq5 (from the
-# same repository, so the same major) is installed properly; `apt-get download` checks the .deb against the signed
-# index like an install would.
-#
-# --chmod because ADD writes a URL's file 0600 and apt reads keyrings as its own unprivileged user; into a directory
-# that already exists, because ADD gives the same mode to any directory it creates on the way. The base image
-# carries ca-certificates already (Bun's fetch needs it), which is what lets the first apt-get update use https.
+# Match PostgreSQL clients to the server major: pg_dump refuses newer servers, so bump this ARG with the platform database image.
+# Extract client binaries to avoid Perl pg_wrapper's dependency cost; install libpq from the same signed PGDG repository.
+# Keep the downloaded key and its existing directory readable by apt: URL ADD defaults to 0600 unless --chmod overrides it.
 ARG POSTGRES_MAJOR=18
 ADD --chmod=644 --checksum=sha256:0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76 \
     https://www.postgresql.org/media/keys/ACCC4CF8.asc /etc/apt/keyrings/postgresql.asc
@@ -49,33 +37,10 @@ COPY . /app
 # (a sibling container) reaches it. TLS is terminated at the edge.
 ENV NODE_ENV=production API_HOST=0.0.0.0 API_PORT=6480
 EXPOSE 6480
-# Back the database up when migrations are pending, apply them, PROVE THE RESULT IS THE SCHEMA THIS BUILD WAS
-# COMPILED AGAINST, then exec the daemon as PID 1.
-#
-# THE BACKUP COMES FIRST AND A FAILED ONE STOPS THE BOOT. The migration history has no down migrations and several
-# that drop or rename, and the old image cannot be run over a migrated database (its own diff below refuses it), so a
-# dump taken just before is the only way back from a migration that went wrong. src/migration-backup.ts asks
-# `migrate status`; with something pending it pg_dumps into MIGRATION_BACKUP_DIR (the compose file's
-# migration-backups volume) and exits non-zero if that fails, unless MIGRATE_WITHOUT_BACKUP=1. With nothing pending
-# it does nothing. Restoring: README.md, "Restoring from a pre-migration backup".
-#
-# migrate deploy is idempotent and safe to race across replicas (Prisma takes an advisory lock). The CLI is the tree's own prisma (a prod dep, so the prune carries it and @prisma/engines — run
-# through bun, the image ships no node); --config resolves the schema + migrations relative to the prisma
-# package, and DATABASE_URL comes from the environment.
-#
-# THE MIDDLE STEP IS NOT BELT AND BRACES. `migrate deploy` reports success on the strength of the migration
-# NAMES recorded in _prisma_migrations and nothing else — it does not read the columns, and it does not notice
-# that a migration's file changed after it ran. When `challenge` was added by editing a migration this database
-# had already applied, deploy printed "No pending migrations to apply" and the API started against a table
-# missing a column the client believed in; every desktop sign-in threw an unhandled 500 for a week, and the
-# only place that fact existed was a postgres log line. Comparing the live database to the datamodel is the
-# question deploy is not asking. --exit-code makes an actual difference exit 2, so `&&` stops here.
-#
-# It stops the container, deliberately. An API whose database does not match the schema it was built against is
-# not a degraded API, it is one that answers some fraction of its routes with a 500 and cannot say which — and
-# a container that refuses to start is visible in minutes, which is the entire difference from what happened.
-# CI holds the other end (the `migrations` job in ci.yml): a build whose migrations do not replay into
-# schema.prisma never becomes an image, so anything this finds is drift in the DATABASE, not in the release.
+# Before boot: back up pending migrations, deploy them, verify live schema against this build, then exec the daemon as PID 1.
+# Backup failure stops boot unless MIGRATE_WITHOUT_BACKUP=1; README.md documents restoring the pre-migration dump.
+# Prisma's advisory lock permits replica races, but migration-name bookkeeping alone misses changed applied SQL and database drift.
+# Keep the --exit-code schema diff in the && chain so mismatches stop boot; use the production Prisma CLI through Bun.
 CMD bun src/migration-backup.ts \
     && bun node_modules/prisma/build/index.js migrate deploy --config node_modules/@intentic/prisma/prisma.config.ts \
     && bun node_modules/prisma/build/index.js migrate diff --from-config-datasource \

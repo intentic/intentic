@@ -7,31 +7,10 @@ import type { Config } from "../../../config.js";
 import { MINUTE_MS } from "../../../durations.js";
 import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly.js";
 
-/* A NEW VERSION IS KEPT ONCE ITS DAEMON SAYS IT CAME UP, not once Fly says the machine started.
- *
- * The hosted half of ic's readiness wait (_sandbox/ic/src/health.rs), asked the same way, `curl -sf` on the daemon's own
- * `/health` from inside the machine, through Fly's exec: nothing outside the machine reaches its daemon but the tunnel.
- * The wait ends well when the daemon reads ready with its state journal not open (the journal is open from the start
- * of a boot that changed stored files until that boot has converged) and the sandbox has checked in with the platform
- * since the start. It ends badly, and the gate puts the version before back, when:
- * - nothing answers within READY_BUDGET_MS of the start;
- * - the journal reads `failed` (this version could not convert the files, and put them back as they were);
- * - the journal, once seen open, is not seen committed within JOURNAL_BUDGET_MS, silence included, since silence
- *   after an open journal is netd restarting a daemon that fell over mid-conversion;
- * - the machine exits with an error, whether Fly restarts it (on-failure, three times, then stopped) or not, or reads
- *   stopped with no exit to explain it;
- * - netd, asked while `/health` is silent (on its address, else in the vitals file it keeps for a daemon that died
- *   before naming netd's ports), says it has restarted a crashed daemon three times in ten minutes and the daemon is
- *   down again: netd is the machine's PID 1, so a daemon crashing on every start never exits the machine;
- * - the sandbox does not check in with the platform within the budget.
- * A stop someone asked Fly for (a suspension, an operator, the abuse watch) or a clean exit (the daemon's idle-stop)
- * says nothing about the version: when the machine stays down after one, the wait reports it interrupted, and the gate
- * leaves the version on trial for its next start. The hour meter's own stop never lands here (../hosted-meter.ts).
- *
- * Read the way ic reads it: an answer with no `boot` and no `ready` is a daemon too old to report a boot, and reads as
- * ready; one with no `state` is older than the conversion engine, and reads as closed. A daemon that answers, checked
- * in, and is still booting when the ready budget ends with its journal never open is a slow boot rather than a broken
- * one, and is kept, as ic keeps it. */
+/* Poll /health via Fly exec; success needs ready, a closed/committed state journal and a fresh platform check-in.
+ * Fail on readiness/journal deadlines, failed journals, machine errors or netd's repeated daemon crashes; the gate rolls back.
+ * Intentional stops interrupt the wait and leave the image on trial. Legacy missing boot/state fields read ready/closed.
+ * Keep a responsive, checked-in slow boot at the deadline only if its journal never opened. */
 
 // The same probe ic runs in the container: the daemon's own health route, on the port it always listens on. Named by
 // its path, like the planner's node, so nothing rests on how Fly's exec resolves a bare name.

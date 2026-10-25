@@ -1,28 +1,8 @@
 #!/usr/bin/env node
-// Submits a release's Windows installer to the Microsoft Store, from msstore-publish.yml at the release tag —
-// publish-webstore.mjs's shape for the other store this project ships to.
-//
-// THE STORE HOSTS NOTHING HERE. An EXE/MSI listing is a pointer: Partner Center keeps a package URL, downloads
-// the binary from it to certify, and hands the same URL to every customer who installs. So a release publishes
-// by pointing the listing's single package at the versioned GitHub Release asset the release already attached.
-// Nothing is built and nothing is uploaded; the bytes Windows smoke-tested are the bytes the Store certifies.
-//
-// THE URL MUST BE THE VERSIONED ONE. Microsoft requires a versioned, immutable package URL and re-certifies
-// (or pulls) a listing whose binary changes underneath it, so the site's /desktop/windows vanity path — which
-// always resolves to the newest release — is the one URL that must never be submitted.
-//
-// MICROSOFT DOES NOT SIGN AN EXE/MSI SUBMISSION. An MSIX gets the Store's own certificate; an installer does
-// not, and one without an Authenticode signature fails certification days later by email. That is checked here,
-// against the downloaded asset, before anything is submitted.
-//
-// ONE SUBMISSION AT A TIME. Certification takes up to three business days and the API refuses to touch the
-// draft while a submission is in flight, so a release cut during one leaves the Store where it is and says so:
-// the next release carries it, or this workflow is dispatched again at that tag. Re-running is recovery — a run
-// that staged the package but died before submitting finishes the job on the next attempt.
-//
-// Configuration, all five of which must be present or this skips loudly (secrets first, then repository
-// variables): MSSTORE_TENANT_ID, MSSTORE_CLIENT_ID, MSSTORE_CLIENT_SECRET, MSSTORE_SELLER_ID,
-// MSSTORE_PRODUCT_ID. docs/ops/microsoft-store.md is the one-time setup behind them.
+// Submits the release's immutable, versioned GitHub installer URL to the Microsoft Store; never use the moving download vanity URL.
+// Verify Authenticode first: Microsoft does not sign EXE/MSI submissions. Skip while certification is in flight; reruns resume staged drafts.
+// Requires MSSTORE_TENANT_ID, MSSTORE_CLIENT_ID, MSSTORE_CLIENT_SECRET, MSSTORE_SELLER_ID and MSSTORE_PRODUCT_ID, else skips loudly.
+// docs/ops/microsoft-store.md covers setup. Nothing is built or uploaded here; the Store certifies and serves the existing asset URL.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";

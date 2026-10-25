@@ -8,24 +8,9 @@ import { escapeHtml, linkEmail, type Mail, sendMail } from "../mail.js";
 import { hostedEnabled } from "./hosted/hosted.js";
 import { setupLink } from "./setup-email.js";
 
-/* TELLING SOMEBODY THAT THEIR SETUP STOPPED AFTER THEY LEFT (2026-10-12). A setup run on the owner's own computer
- * reports each stage, and any failure with its fix, to /setup/report, and the setup page shows it, but only to somebody
- * still looking at it. A run can outlive its audience: an install orphaned by an app restart posted its failure twenty
- * minutes after its owner had quit, and nobody ever told him. So a short sweep mails the owner once, with the one
- * thing to do, when a sandbox:
- * - holds a setup report whose `failed` is not empty, and that report is still the newest (a later stage or a later
- *   failure replaces it, and a claim or a fresh code clears it);
- * - has never connected (no announce: `lastSeenAt` and `daemonUrl` both empty);
- * - has heard nothing for SETUP_FAILURE_QUIET_MS since the failure, and the failure is under SETUP_FAILURE_MAX_AGE_MS
- *   old, so a first deploy or a sweep that was down mails nothing stale;
- * - has not been mailed about this same failure (`setupFailureEmailedFor`);
- * - belongs to an owner who has not evidently come back: no sign-in since the failure (a new session lands them on the
- *   page that shows it), and no other sandbox of theirs made or first brought up since (they moved on, to our servers
- *   or another machine). Both are one count each on columns the platform already keeps; a page left open is not
- *   presence, so its polling is not read.
- * Runs every SWEEP_EVERY_MS under an advisory lock (jobs-lock.ts) rather than from the report's arrival: everything it
- * decides on lives in the row, so a restart or a second replica loses and repeats nothing. The platform keeps no
- * mail preference to respect; this is one mail about the owner's own setup, never a series. */
+/* Mail one setup failure/fix only when the newest report failed, the sandbox never connected, and the failure is quiet, recent and unmailed.
+ * Suppress if the owner signed in or made/first-started another sandbox afterward; open-page polling is not evidence of presence.
+ * Sweep under jobs-lock.ts's advisory lock and persist setupFailureEmailedFor, so restarts/replicas neither duplicate nor lose the decision. */
 
 export const SETUP_FAILURE_QUIET_MS = 10 * MINUTE_MS;
 export const SETUP_FAILURE_MAX_AGE_MS = DAY_MS;

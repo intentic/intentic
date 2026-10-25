@@ -1,102 +1,12 @@
 <#
 .SYNOPSIS
-  Make the Linux CI fleet come back on its own. Companion to docs/ops/ci-runner.md, which describes the six runner
-  processes; this script is the one thing about them that is a WINDOWS fact, because on this host the fleet
-  lives inside a WSL2 distribution.
-
-  THE GAP THIS CLOSES. The six runners are systemd units and they are `enabled`, so they start when the distro
-  boots. Nothing boots the distro. WSL2 has no "start at logon" of its own: a distribution runs because
-  something invoked `wsl.exe`, and stops when the host reboots or when anything issues `wsl --shutdown` --
-  which Docker Desktop does to the whole utility VM on its own restarts and updates. So the fleet's uptime was
-  a side effect of somebody happening to open a shell.
-
-  AND THE VM SHUTS ITSELF DOWN AFTER SIXTY SECONDS. `vmIdleTimeout` defaults to 60000 ms, so even once the
-  distro has been started, WSL powers the VM off a minute after the last client goes away, taking systemd and
-  all six listeners with it. Measured here: six runners online, all six offline 30 seconds later, back after
-  the next watchdog pass. This script sets `vmIdleTimeout=-1`, because a watchdog against a 60-second timeout
-  would leave the fleet down most of the time rather than fix it.
-
-  Measured, on the machine this was written for: the host rebooted at 04:29 on 26 August and signed itself
-  back in a minute later, so the Windows runner's logon task brought that runner straight back. The distro was
-  not started again until a person went looking on the 29th. Six runners offline for three and a half days,
-  eight pipelines queued against `[self-hosted, intentic]`, and nothing anywhere reporting an error: a label
-  no machine is answering looks exactly like a slow queue.
-
-  DOCKER FIRST, AND THAT ORDER IS THE POINT. The jobs run in containers on the host daemon, which on this
-  machine is Docker Desktop reaching into the distro through its WSL integration. Two things follow. A fleet
-  that comes up without it fails every job it takes with `docker: command not found` -- which is what the first
-  pipeline after the recovery above did, in 90 seconds, on a commit that was fine. And Docker Desktop STARTS
-  BY RESTARTING THE WSL VM, so bringing it up second kills the runners mid-job and leaves their sessions
-  stranded on GitHub's side ("A session for this runner already exists"). The reconciler waits for the engine
-  to answer before it touches the distro, every time, for both reasons. Necessary and not sufficient: an engine
-  that answers on WINDOWS is not a `docker` the runners can reach, which is the fifth way below.
-
-  AND THE DISK IS THE THIRD WAY, the one the two above cannot see. On 30 August the host volume reached 2.04 GB
-  free of 1 TB -- Docker Desktop's docker_data.vhdx at 456 GB and the distro's ext4.vhdx at 188 GB, neither
-  bounded by anything. Docker's data disk could not extend, so the engine stopped ANSWERING rather than
-  returning an error: `docker version` blocked instead of failing. Every job then hung on "Initialize
-  containers" and was killed at its own timeout-minutes, which Actions records as `cancelled` -- six pipelines
-  in a row, while the six listeners stayed online and GitHub showed a healthy fleet.
-
-  The reconciler was running throughout and did not save it, for two reasons this script now fixes. Its probe
-  was an unbounded `docker version`, so every pass parked on the call: the 3-minute repetitions behind it were
-  refused by IgnoreNew, the 15-minute ExecutionTimeLimit killed each pass before it reached a single log line,
-  and Task Scheduler ended the pass without ending the `docker.exe` it was blocked on -- 46 of those piled up in
-  twelve hours. And nothing measured the disk. Nothing inside the distro could have: WSL's vhdx is sparse, so
-  the distro's `df` read 680 GB free while Windows had 2.04. That number is only true on the host, which is
-  where this script runs.
-
-  AND THE FOURTH WAY WAS THIS SCRIPT. On 4 September two CI jobs pushed multi-GB images to ghcr.io at once and
-  the engine stopped answering `docker version` inside the reconciler's 20-second bound -- saturated, not dead.
-  A pass waited its 90 seconds, called it dead, and killed Docker Desktop, which restarts the WSL VM the six
-  runners live in: both pushes died in the same second (21:27:19), every step after them read "Cannot connect
-  to the Docker daemon", and neither job's log named this machine. -Restart has always refused to take the VM
-  down while a job is executing; the reconciler was doing exactly that every three minutes without asking. It
-  asks now -- and defers rather than vetoes, because a job wedged on a genuinely dead engine would otherwise
-  hold the repair off for the length of its own timeout.
-
-  AND THE FIFTH WAY WAS THE PROBE THIS FILE DID NOT HAVE. Every docker question above is asked on WINDOWS, and
-  Windows is not where the jobs run: `docker.exe version` answering says the engine is alive and says nothing
-  about whether the six runner processes, inside the distro, can find a `docker` to talk to it with. That binary
-  and the socket beside it are Docker Desktop's WSL integration, present exactly while it is applied to this
-  distro. On 7 September the engine answered on Windows all day, every pass logged a healthy machine, and three
-  pipelines failed in FIVE SECONDS each -- both DAG roots dying in "Set up job" on `docker: command not found`,
-  eighteen jobs skipped behind them, four of the six workers, five and a half hours, no failed assertion
-  anywhere. The pass now asks the question the runner asks: a non-login `sh` in the distro, because these are
-  systemd services and a login shell's PATH is not theirs. The repair costs nothing -- the integration's CLI and
-  the engine's socket sit under /mnt/wsl, the utility VM's shared mount, which every distro in that VM can see
-  whether or not Docker Desktop was told to integrate with it, so a symlink into /usr/local/bin restores what a
-  dropped integration took away, with nothing restarted and no job lost.
-
-  WHAT IT REGISTERS. A logon task with a repeating trigger, the same shape setup-windows-runner.ps1 uses for
-  the Windows runner and for the same reasons: at logon for the reboot, every few minutes for everything that
-  takes the fleet down without anybody logging out. The action is a reconciler, not a supervisor -- it looks
-  at the machine, fixes what is not the way it should be, and exits.
-
-  Unelevated. Registering a task for the CURRENT user needs no administrator, unlike the named-principal
-  registration setup-windows-runner.ps1 performs, so this can be run from an ordinary shell on the CI box.
-
-  ASCII ONLY, DELIBERATELY. Windows PowerShell 5.1 -- still what an elevated "PowerShell" window is on a stock
-  Windows 11 -- reads a BOM-less file as ANSI, which turns a non-ASCII character in a string into a byte it may
-  take for a closing quote. setup-windows-runner.ps1 solves that by carrying a UTF-8 BOM it must never lose.
-  This file solves it by having nothing to encode.
-
+  Reconcile WSL CI startup, Docker integration and disk health; see docs/ops/ci-runner.md. Keep this file ASCII for PowerShell 5.1.
+  Start Docker before the distro, bound probes, and defer disruptive repair during jobs. Disable VM idle shutdown to retain listeners.
 .EXAMPLE
-  # On the CI host, from an ordinary PowerShell. Idempotent: this is also how you repair it.
-  ./setup-wsl-fleet.ps1
-
-.EXAMPLE
-  # First run on a host that has never had vmIdleTimeout set: WSL reads .wslconfig only when the VM starts, so
-  # the setting is inert until one does. Refuses while a job is executing.
-  ./setup-wsl-fleet.ps1 -Restart
-
-.EXAMPLE
-  # A host whose distribution is named something else.
-  ./setup-wsl-fleet.ps1 -Distro ubuntu
-
-.EXAMPLE
-  # Report what the machine looks like and change nothing.
   ./setup-wsl-fleet.ps1 -Check
+.EXAMPLE
+  ./setup-wsl-fleet.ps1 -Restart
+  Apply .wslconfig changes now; refuses while a job is executing. Without -Restart, changes wait for the next VM start.
 #>
 param(
     # The WSL2 distribution the six runner units live in.
@@ -700,37 +610,9 @@ if (`$running -notcontains `$Distro) {
     Start-Sleep -Seconds 10
 }
 
-# -- 3b. the docker CLI INSIDE the distro, which is what a job actually reaches for -------------------------------
-# EVERY PROBE ABOVE THIS ONE ASKED WINDOWS, and Windows is not where the jobs run. docker.exe answering on the
-# host proves the engine is alive; it says nothing about whether the six runner processes -- Linux processes,
-# inside this distro -- can find a docker to talk to it with. That binary is not the distro's own: Docker
-# Desktop injects it, and the socket beside it, through its WSL INTEGRATION, so both are present exactly while
-# that integration is applied to THIS distro and gone the moment it is not -- after its docker-desktop distro is
-# terminated, after an update or a reset drops this distro from the integration list, or on a fleet started into
-# a VM where the integration was never re-established.
-#
-# WHAT THAT COSTS, and it is the whole reason this section exists: on 7 September the engine answered on Windows
-# all day, every pass logged a healthy machine, and every job the fleet took died in FIVE SECONDS in Set up job
-# on
-#
-#     ##[error]docker: command not found
-#
-# Three pipelines went that way -- runs 34108789062, 34116132200 and 34138843648, across four of the six workers
-# -- and each took eighteen skipped jobs down with its two failed DAG roots, because both roots run in a
-# container. The runner resolves docker off its own PATH BEFORE it creates that container, so this is not a step
-# failing: it is the job never starting, with no failed assertion anywhere and nothing on the machine reporting
-# a fault. Ordering the engine ahead of the fleet (section 1) does not cover it: the engine was up.
-#
-# THE PROBE RUNS IN A NON-LOGIN SHELL, deliberately. The runners are systemd services, so nothing sources
-# /etc/profile.d for them: a docker that exists only on an interactive PATH is a docker the fleet cannot use,
-# and sh -lc would read that machine as healthy. The repair links into /usr/local/bin for the same reason -- on
-# the service's PATH, not on a profile's.
-#
-# AND THE REPAIR NEEDS NOTHING RESTARTED, which is what makes it safe to run every pass. The integration's
-# binaries and the engine's socket live under /mnt/wsl, the shared mount of the utility VM, which EVERY distro
-# in that VM can see whether or not Docker Desktop has been told to integrate with it. So a symlink is the whole
-# fix for the case where they are there and this distro's PATH is not, and it cannot take the VM out from under
-# a running job the way section 1's last resort can.
+# Probe Docker inside the runner distro: a working Windows engine does not prove the Linux CLI or integration is available.
+# Use a non-login shell to match systemd's PATH; profile-only installs would give a false healthy result.
+# Link shared /mnt/wsl binaries into /usr/local/bin when available; this repairs the CLI without restarting the VM or running jobs.
 function DistroSh(`$script) { return RunBounded 'wsl.exe' "-d `$Distro -e /bin/sh -c ""`$script""" $EngineProbeSeconds }
 function DistroShRoot(`$script) { return RunBounded 'wsl.exe' "-d `$Distro -u root -e /bin/sh -c ""`$script""" $EngineProbeSeconds }
 # STDERR IS REDIRECTED AND NEVER READ (see RunBounded), so a command noisy on it fills a pipe nobody drains and
@@ -758,32 +640,10 @@ if (`$cliAnswered -and -not `$cliOk) {
     }
 }
 
-# THE SOCKET IS THE OTHER HALF, and it is the half that does not survive a boot: /var/run is a tmpfs, so the
-# socket the integration puts there is gone on every distro start and re-made only by an integration that is
-# applied. Re-checked every pass for that reason. A CLI that runs with no socket under it is "failed to connect
-# to the docker API at unix:///var/run/docker.sock" in Initialize containers -- a different line in the log and
-# the same dead pipeline.
-#
-# ASKED AS THE FLEET'S OWN USER, AND ANSWERED BY THE DAEMON, not by "test -S". A socket that exists and that
-# user cannot connect to is the same dead pipeline with a healthy-looking probe.
-#
-# THE REPAIR IS DOCKER DESKTOP'S OWN, NOT A SYMLINK. This section used to link a docker.sock found under /mnt/wsl
-# into /var/run. Docker Desktop 4.91 has no file of that name there: the engine sits behind
-# guest-services/docker.proxy.sock, root:root 0755, so a link to it is a socket the runners' user cannot
-# connect to, placed where the integration writes its own. What works is re-applying the integration.
-#
-# WHY IT NEEDS DOING AT ALL, measured on 27 September: a Docker Desktop restart applied the integration to a
-# distro that had just booted, `wsl.exe -d archlinux -e whoami` timed out (Wsl/Service/0x8007274c), the agent
-# exited on "setup groups", and Docker Desktop raised a dialog offering "Restart the WSL integration" and waited
-# on it. It does not retry. The engine answered on Windows throughout, so section 1 saw a healthy machine and
-# every pass logged 6/6 runners active through a two-and-a-half-hour outage. `docker desktop restart`
-# re-applied it in 16 seconds, and the distro and its runners stayed up.
-#
-# ONLY WHILE NO JOB IS WORKING, the rule every restart in this file keeps. A job parked in the job-started hook
-# this script installs waiting for this very socket is not working, so it is not counted: counting it would have the
-# hook and this pass wait on each other until the hook gives up. And AT MOST ONCE PER $IntegrationRestartMinutes
-# MINUTES, stamped in a file because every pass is a new process, so an integration that will not come back
-# gets a person's attention rather than a restart every three minutes forever.
+# Probe Docker as the fleet user against the daemon; a socket's existence does not prove connectivity or permission.
+# /var/run is volatile. Repair by reapplying Docker Desktop integration, not linking its root-only proxy socket.
+# Restart only while no job is working; exclude jobs waiting in the socket hook to avoid a circular wait.
+# Persist the IntegrationRestartMinutes throttle across passes so failed repair does not restart Desktop continuously.
 function FleetDockerAnswers {
     `$r = DistroSh 'test -S /var/run/docker.sock && docker version --format {{.Server.Version}}'
     if (`$null -eq `$r) { return `$null }
@@ -949,21 +809,9 @@ if (-not $NoDockerAutoStart -and (Test-Path $DockerSettings)) {
     }
 }
 
-# -- the VM's idle shutdown, which is the deeper half of this -----------------------------------------------------
-# `vmIdleTimeout` DEFAULTS TO 60000 MILLISECONDS, and the WSL documentation says exactly what that means: "the
-# number of milliseconds that a VM is idle, before it is shut down". So on a stock host the fleet's uptime was
-# never a property of the machine at all -- the VM powers itself off a minute after the last `wsl.exe` client
-# goes away, taking systemd and all six listeners with it, and GitHub shows six runners going offline for a
-# reason that is in neither the runner's log nor the journal, because from inside the distro nothing went wrong.
-#
-# Measured here: every unit stopping at the same second, then coming back the moment anything ran `wsl.exe`
-# again. It is what makes "the fleet is up" a statement about whether somebody happens to have a shell open.
-#
-# The watchdog alone would paper over this at a cost that is not worth paying: a three-minute reconcile against
-# a sixty-second timeout leaves the fleet down most of the time. This is the setting that removes the cause.
-#
-# TAKES EFFECT AT THE NEXT VM START, not now: WSL reads .wslconfig when the VM boots. -Restart is the switch
-# that does that here, and the block below is why it is a switch rather than a default.
+# Prevent WSL's default idle shutdown from taking systemd listeners offline when the last wsl.exe client exits.
+# A watchdog slower than that timeout leaves the fleet mostly down; change vmIdleTimeout instead.
+# .wslconfig is read on VM startup, so this takes effect next boot unless -Restart is explicitly requested.
 if (-not $NoIdleTimeout) {
     $lines = if (Test-Path $WslConfig) { @(Get-Content $WslConfig) } else { @() }
     # Hand-parsed rather than round-tripped through some INI library: this file is the operator's, it holds

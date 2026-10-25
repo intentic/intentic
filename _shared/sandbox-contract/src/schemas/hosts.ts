@@ -107,33 +107,10 @@ export const DeviceFactsSchema = z.object({
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
-// The optional device ops, by what enables them:
-// - `reshape-later`: the old `reshape` op with `later`, saving the change for the next restart. An agent from before it
-//   strips `later` and reshapes NOW, which is why a later-reshape is never sent to one. Redundant with `set-shape`'s
-//   `when` for every current page; kept only for pages and daemons from before `set-shape` (v1.312.0 and older),
-//   which check it. REMOVE IN v1.314.0, with the old `reshape` op it gates.
-// - `set-shape`: the `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape, all through an `ic`
-//   whose `ic sandbox shape` takes the contract's own shape (`--set`); advertised only when the agent's `ic` does.
-//   Both features ride that verb, so an agent advertises both or neither.
-// - `rollback-to`: the `rollback` op's `to`, going back to an older version kept on the machine rather than the
-//   previous one; advertised only when the agent's `ic sandbox rollback` takes `--to`.
-// - `loopback-catch`: the `catchLoopback` procedure, a sign-in's loopback redirect caught on this machine
-//   (loopback-catch.ts); an agent without it rejects the call as an unknown procedure.
-// - `background-prepare`: the `prepare-background` op, the next update downloaded under the unattended rules of the
-//   agent's own timer (`ic sandbox prepare --auto`), which the update card sends when it opens; advertised only when
-//   the agent's `ic sandbox prepare` takes `--auto`.
-// - `programs`: the `stageArtifact` procedure and the app_* tools, a program this sandbox built pushed to the machine and
-//   run under the agent's supervision (device-artifacts.ts); an agent without it is told to update rather than sent one.
-// - `project-delivery`: the `deliverProject` procedure, landed work written into a folder attached to this computer's
-//   sandbox (project-delivery.ts); an agent without it is never sent one, and the land waits for Bring back.
-// - `keyring`: the keyring* procedures, intentic-keyring on this computer reached through the machine (keyring.ts);
-//   advertised only while a keyring is installed, so a sandbox never offers a computer without one as a place to keep or
-//   type a secret.
-// - `sleep`: the `sleep` op, a sandbox put to sleep now (`ic sandbox sleep <slug>`): stopped, and started again by
-//   itself when somebody opens it; advertised only when the agent's `ic` has `sandbox sleep`.
-// - `reachable-ways-back`: not an op but what a listing means: a sandbox's `rollbackTargets` are only the ways back a
-//   rollback can reach (ic 2026-10-19 on). Said by ic itself (`ic features`, golden/ic-features.json); without it the
-//   rows are an older ic's, which also listed pruned dev builds no download can bring back (state/ways-back.ts).
+// Optional device capabilities gate calls to older agents: never send an operation unless its advertised feature permits it.
+// set-shape, rollback-to, background-prepare and sleep depend on ic support; keyring also requires a local installation.
+// reshape-later protects legacy deferred reshapes from becoming immediate; project-delivery otherwise waits for Bring back.
+// reachable-ways-back means rollbackTargets excludes unrecoverable builds. Other features gate the procedures named below.
 export const DeviceFeatureSchema = z.enum([
     "reshape-later",
     "set-shape",

@@ -1,18 +1,6 @@
-/* THE DIALOG — <Modal> (components/overlays/Modal.vue) and everything built on it. PrimeVue draws the box; theme.ts
-   hands it the app's colours, radius, shadow and margins, and this file draws the rest of its anatomy.
-
-   A dialog stops the page to ask one thing, so every part of it is ranked by what the reader needs, in order:
-   - THE SCRIM says the page is paused, not gone. It dims a little and blurs a little (semantic-colors.css,
-     `--ui-scrim-blur`): the blur takes the page's words out of competition with the dialog's, so the dim no longer has
-     to black it out, and the reader keeps their place.
-   - THE BOX is the nearest plane: lighter than anything it covers in the dark, the plate's own paper in the light.
-   - THE HEADER is the question: a title, and under it a description (`<Modal description>`) saying what the action
-     will do. Close (×) is a small quiet button at the title's first line, never a target that steals the eye.
-   - THE BODY scrolls on its own; a rule appears under the header once it has scrolled, and over the footer while there
-     is more below it, so a cut-off form never looks finished (Modal.vue sets `data-scrolled` and `data-more`).
-   - THE FOOTER holds the answers, right-aligned, the commit last; anything that is not an answer (a link, a
-     "don't ask again") goes first with `mr-auto`.
-   On a phone the box becomes a sheet on the bottom edge, where the thumb already is (`.ui-dialog-sheet`). */
+/* Modal/PrimeVue anatomy: a dimmed/blurred scrim preserves page context, and theme.ts supplies the nearest-plane box styling.
+   Header asks the question with description and a quiet close; body scrolls independently, using data-scrolled/data-more for edge rules.
+   Footer answers align right with commit last; ancillary controls use mr-auto. Phones use the bottom .ui-dialog-sheet. */
 
 @layer components {
     /* THE SCRIM. Its colour is the theme token (theme.ts `mask`); its blur fades in with it, from `@starting-style`, and

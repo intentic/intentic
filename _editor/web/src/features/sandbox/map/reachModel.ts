@@ -10,22 +10,10 @@ import { type Member, memberAccess, REACHABLE_CREDENTIAL_KINDS } from "@intentic
 import { type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 
-// THE SANDBOX'S WHOLE REACH AS ONE GRAPH, BUILT FROM WHAT THE DAEMON ENFORCES. Two halves meet at the box: the
-// principals that can get in (people, control tokens, other sandboxes handing it tasks) and what the box reaches once
-// they are in (its areas and personas inside it, the connections, machines, sandboxes and models outside). Each
-// principal carries the part of the graph it reaches, worked out with the rules the daemon refuses on, so a map that
-// lights a node for someone is saying something the daemon would let them do:
-//
-// - areas a person sees and edits: their grant's `areas` and `edit` (sandbox-contract `memberAccess`);
-// - personas: the cards their fence holds (`fenceHoldsPersona`, the daemon's persona-reach.ts);
-// - connections: their credential reach (secrets/credential-reach.ts), and for someone who only chats, only what the
-//   personas they reach let a turn act through (`personaAllowsCapability`, the daemon's turnPersona);
-// - a control token: unfenced and unlimited, as a request it admits carries no identity (app.ts), at its scope's rung;
-// - another sandbox's link: its tasks run unattended as the link's persona, or with no signed-in account when it names
-//   none (links/link-tasks.ts, personas.ts `unattended-unpinned`).
-//
-// Pure and language-free: the composable beside it gathers the reads, the view puts words on the ids, and
-// reachLighting.ts works out what a focus on the map lights.
+// Pure, language-free reach graph joins incoming principals to the box's areas, personas, credentials and external connections.
+// Derive people from memberAccess/fenceHoldsPersona/credential reach; chat-only access is further limited by reachable personas.
+// Control tokens are unfenced at their scope tier; sandbox links run unattended as their persona or without an account when unpinned.
+// The composable gathers data, views translate ids and reachLighting computes focus; lit reach must match daemon authorization.
 
 /** How a principal reaches a node: changes it by hand, reads it, acts through it, or acts through it only as a persona. */
 export type ReachHow = `edit` | `see` | `use` | `through`;

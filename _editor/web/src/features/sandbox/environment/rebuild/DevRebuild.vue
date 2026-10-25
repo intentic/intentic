@@ -11,23 +11,10 @@ import { useHostHolding } from "../../../../models/sandbox/devices/useDevices";
 import { rebuildRunning, useDevRebuild } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
-// Rebuilding a sandbox whose base was compiled from a checkout, from that checkout. Not HostRecreate's flow: that one
-// swaps between images that already exist, and the image this asks for — the working tree as it is now — is not one of
-// them until something builds it. A button where the machine is reachable, the command to paste where it isn't; the
-// checkout's path is the sandbox's own record of where it came from, never a guess.
-//
-// It rides the named-command door (`dev-rebuild`, beside `dev-restart`) rather than a machine-side sandbox op, and that
-// is the load-bearing choice: the closed set of commands lives in the DAEMON and what crosses to the machine is a line
-// for `run_command`, a tool every released agent already has. A new op would instead have to reach a machine whose
-// agent is usually older than the sandbox asking — which is every dogfooding machine, and is what made the first
-// attempt answer "Input validation failed".
-//
-// Nothing streams back from the build itself, for the same reason: it is detached out there, and the swap at the end
-// replaces the daemon that would have carried a stream. So progress is READ rather than received — useDevRebuild polls
-// the machine's own log — and the run it draws lives outside this component, because the build outlives it.
-//
-// The offer and the run are never on screen at once: while one is going, the card below IS the state of this button,
-// and a disabled button spinning beside a progress card is the same wait drawn twice.
+// Build a checkout-derived sandbox from its recorded source path: offer a button when reachable, otherwise the command to paste.
+// Use the daemon's named dev-rebuild command over existing run_command, keeping compatibility with older machine agents.
+// Poll the machine log through useDevRebuild: a detached build replaces its own daemon, so it cannot sustain a return stream.
+// Keep run state outside this component and show either the offer or its progress card, never both.
 
 const t = useT();
 

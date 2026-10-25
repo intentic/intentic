@@ -1,44 +1,14 @@
 #!/bin/sh
-# intentic uninstall: a bootstrap shim. It finds the ic CLI this device already has (installed, or carried by the
-# desktop app), downloads it only when there is none, and hands over to `ic uninstall`, which takes Intentic itself off
-# this device. ic shows what it found and asks before it removes anything: remove everything, the sandboxes and their
-# data included (confirmed by typing how many sandboxes there are), or keep the sandboxes running. The flow, its
-# questions and its output are ic's (_sandbox/ic/src/uninstall/), and this file only finds ic. Running it again is
-# safe: ic finds what is left and removes only that.
-#
-# Usage:
-#   curl -fsSL https://intentic.dev/uninstall | sh                     # see what is here, then choose
-#   curl -fsSL https://intentic.dev/uninstall | sh -s -- --dry-run     # only say what would be removed
-#   ./_site/site/public/scripts/uninstall.sh [FLAGS...]
-#
-# Every argument goes to `ic uninstall` unchanged, and ic checks it: --dry-run, --keep-sandboxes, --yes,
-# --delete-data --confirm <n>, --help. A run nobody answers (--yes, or no terminal) never deletes a sandbox or a saved
-# password unless --delete-data says so.
-#
-# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL, with no `pipefail`). Piped, stdin is this script, so
-# ic asks its questions on the controlling terminal (/dev/tty), and the handover makes that terminal its stdin as well.
+# POSIX bootstrap for ic uninstall: prefer installed/bundled ic, download only if absent, then forward arguments unchanged.
+# ic discovers remaining components and confirms removal; --yes or a missing terminal never implies deleting sandbox data or passwords.
+# --delete-data --confirm <n> explicitly authorizes data removal; --dry-run previews and --keep-sandboxes preserves running sandboxes.
+# Piped stdin is the script; hand /dev/tty to ic for prompts and input. Repeated runs remove only what remains.
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
-# is dash on Debian, Ubuntu and WSL.
-#
-#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   kit_say <sentence>                       narration under the running step
-#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
-#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
-#   kit_settle                               the running step is done
-#   kit_finished <verdict>                   a flow's past-tense verdict
-#   kit_stop <headline> [problem] [fix] [code]
-#                                            stop: the running step settles as failed, the stop block goes to stderr,
-#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix> [names]
-#                                            run again through sudo when not root, keeping the named settings (see below)
-#   kit_confirm <question> <consequence> <flag>
-#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
-#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+# POSIX-sh output helpers for bootstrap scripts; see docs/ops/cli-output-protocol.md for the shared protocol.
+# ic or intentic-machine owns the display after handover; suspend/resume around commands that print their own output.
+# kit_stop exits (default 1, usage 2). kit_confirm exits 0 on refusal and stops without a terminal unless a flag answers it.
 
 case "${INTENTIC_UI:-}" in
     rich | plain | nested) kit_mode="$INTENTIC_UI" ;;

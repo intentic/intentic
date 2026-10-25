@@ -67,27 +67,9 @@ env:
   CI_HOST_JOBS: "6"
 
 jobs:
-  # `pnpm e2e` fans out to three tiers, and each declares what it needs (`@intentic/testing/e2e`) instead of
-  # assuming this job holds it:
-  #
-  #   sandbox-daemon  sandbox.e2e   no credentials — a Docker daemon is the whole requirement, so this is the
-  #                                 tier that always has something to say.
-  #   cloudflare      cli.e2e       CLOUDFLARE_API_TOKEN, scoped DNS-edit + tunnel-edit on a zone you own.
-  #   discord         discord.e2e   DISCORD_E2E_BOT_TOKEN + _SENDER_TOKEN + _CHANNEL_ID. ANTHROPIC_API_KEY
-  #                                 additionally unlocks the one spec that spends a real agent turn.
-  #   stripe          hosted-plan-stripe.e2e   HOSTED_PLAN_E2E_STRIPE_SECRET_KEY (a TEST-mode key) +
-  #                                 HOSTED_PLAN_E2E_STRIPE_PRICE_ID (the hosted plan's test-mode price): the
-  #                                 platform's own Stripe client against Stripe, the one tier that sees an
-  #                                 API version move a field under it.
-  #
-  # A tier this job has no credentials for stands down and names the variable it wanted, in the suite title
-  # the runner prints beside its skip marker. So a pass here means the UNLOCKED tiers passed and the log says which those
-  # were — and widening the run is a matter of adding the secret, never of editing this file. What a missing
-  # credential must not do is fail the job.
-  #
-  # `pnpm e2e` is the WHOLE scope on purpose — the turbo task name is what decides which tiers run, not a
-  # filter list here that would drift the first time a suite is added. The browser tier (@intentic/e2e) is
-  # `e2e:browser` for exactly that reason: it addresses its stack on localhost, which is nobody's postgres here.
+  # Run all e2e tasks; suites declare their own Docker/Cloudflare/Discord/Stripe test-key requirements and name missing inputs when skipping.
+  # Passing covers only unlocked tiers; absent credentials must not fail the job. Add secrets to unlock coverage without editing this list.
+  # Browser-stack tests use e2e:browser separately because their localhost services are not this job's stack.
   e2e:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'e2e' }}
     runs-on: [self-hosted, intentic]
@@ -136,46 +118,13 @@ jobs:
             .image-out/iq-models
             .image-out/.iq-models-complete
           key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
-      # THE DAEMON UNDER TEST IS THE ONE THIS CHECKOUT BUILDS, and the tier means nothing otherwise.
-      #
-      # This job used to pass `SANDBOX_E2E_IMAGE=ghcr.io/intentic/sandbox:latest` on the strength of the word
-      # "freshly". That tag moves in ONE place — ci.yml's `images` job, gated on `verify-core` passing on a push
-      # to main — so a failing main FREEZES it, and this suite then asserts today's contract against whatever daemon
-      # last passed. On the night this was written that daemon was 19 hours old: the two automation specs failed
-      # on a `webhookToken` the published image had never heard of, because door tokens landed at 11:04 and the
-      # last passing main was 00:12 (run 34053040446; `grep -r webhookToken /opt/sandbox` in that image finds
-      # nothing). The suite was right, the image was old, and no commit could have made the job pass.
-      #
-      # Building it here is the harness's own default when the variable is empty (e2e-harness.ts), the path every
-      # developer already runs, and the same trees the images job publishes — the artifact, one build earlier. It
-      # costs a `docker build` of pure COPYs on top of the turbo cache this fleet keeps warm.
-      #
-      # Whether the PUBLISHED image boots is a different question, and ci.yml answers it where it is asked:
-      # smoke-image.sh runs against both halves before any moving tag points at them.
-      #
-      # IN A STEP, not inside the suite, because the suite's budget is the wrong one to spend it from: the
-      # harness builds in `beforeAll`, which allows 20 minutes, and a build with no warm layers spends longer
-      # than that on chromium and ffmpeg alone — measured here, and it fails as 43 skipped tests and a timeout
-      # that names nothing. `build:sandbox` is the same trees, the same composed Dockerfile and the same layers
-      # (a tag of its own, which is all that differs), so the harness's own build behind it is a cache replay.
+      # Build this checkout's sandbox before the suite: published latest can freeze behind failed main gates and describe older contracts.
+      # Build in a workflow step because cold browser layers can exceed beforeAll's budget; the harness then replays the same cached layers.
+      # ci.yml's smoke-image.sh separately proves the published architecture images boot before moving tags.
       - run: pnpm build:sandbox
       - run: pnpm e2e
-      # Tonight's build displaces last night's layers under the same tag, and a dangling layer on a runner that
-      # outlives the job is nobody's to evict. Same rule, filter and `always()` as the onboarding job's prune.
-      #
-      # THE WINDOW HAS TO BE SHORTER THAN THE CADENCE, and `until=336h` was not. `until` filters on when an
-      # image was CREATED, so a fourteen-day window exempts every layer this pipeline has ever displaced —
-      # last night's are twenty-four hours old when this step runs, and the bound evicted nothing for two
-      # weeks at a time. That is the standing occupancy behind both host-disk incidents in
-      # setup-wsl-fleet.ps1: 2.04 GB free of 1 TB on 30 August, and run 34096964073, where docker's data
-      # disk could not extend while update-survival was mid-extraction and the ext4 inside it went read-only
-      # under a job that had done nothing wrong.
-      #
-      # 12h is half the 24h cadence: it always catches the generation this run displaced, and never touches
-      # anything a job on this box created today. It is not a retention policy — there is nothing here worth
-      # retaining. Two sandbox images built from two different commits share ZERO of their 106 layers (checked
-      # against ghcr for :latest and :stable), so each build is a full 1.58 GB compressed and the generation
-      # it displaces is 1.58 GB that will never be read again.
+      # Always prune dangling images displaced by nightly builds; bound age below the 24h cadence so old generations actually qualify.
+      # 12h retains images created by today's jobs while evicting last night's displaced layers; a 14-day window allowed disks to fill.
       - if: always()
         run: docker image prune -f --filter until=12h || true
 
@@ -227,32 +176,9 @@ jobs:
             _tools/e2e/.cache/signin/api.log
           retention-days: 7
 
-  # THE ONBOARDING JOURNEY (@intentic/onboarding), once per way of getting a sandbox.
-  #
-  # It stands the whole platform up from the branch's own images and walks a new account through the wizard to
-  # a connected sandbox, twice: through the compose file that wizard renders, and through `ic sandbox connect`,
-  # which is where the desktop app and the terminal one-liner both end up. Nothing else in this pipeline goes
-  # THROUGH provisioning into a daemon the wizard's own instructions started, and until this ran, nothing did:
-  # the tier was written, documented as a release gate, and called by no workflow at all. What lived in that
-  # gap is worth naming — reachability moved to intentic's own edge, ic stopped passing the two values a daemon
-  # dials with, every layer's own tests kept passing, and four days of installs came up healthy, registered,
-  # and reachable by nobody.
-  #
-  # Nightly rather than per-push: it builds the api and web images, pulls a sandbox image and boots a real box.
-  # On the DESKTOP runner in ci-desktop, which is the image that bakes the Rust toolchain — the CLI lane drives
-  # the ic this commit builds, for the reason the world builds the api rather than pulling `:latest`.
-  #
-  # THE ONE JOB ON THIS FLEET THAT DOES NOT DRIVE THE HOST'S DAEMON, and the only tier that cannot. It serves
-  # its whole world on LOOPBACK ports and bind-mounts a per-run TLS pair into the containers it starts
-  # (_tools/onboarding/src/docker.ts and certs.ts each say why in full), and the host's daemon breaks both: a
-  # port it publishes is on the HOST's loopback, and a bind mount names a path in the HOST's filesystem —
-  # neither of which is this process's. So the daemon comes to the process instead. That was not a near miss:
-  # the tier's own check refused to go further and the job died on `postgres published a port that this process
-  # cannot reach` (run 34030369992), which is the sentence that check exists to print.
-  #
-  # Removing the socket from `volumes:` below did NOT remove it from the container — the runner mounts it into
-  # every container job regardless — so the daemon this job starts also needs a LISTEN PATH of its own. The
-  # step below has the account; without it the arrangement looks correct and behaves exactly as it did before.
+  # Nightly onboarding builds this checkout's platform/ic and provisions through both wizard compose output and ic sandbox connect.
+  # Use job-local Docker: published loopback ports and per-run TLS bind mounts must address this process's network/filesystem.
+  # Give dockerd a separate socket path; removing volumes does not prevent the runner injecting its host socket.
   onboarding:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'onboarding' }}
     runs-on: [self-hosted, intentic, desktop]
@@ -286,22 +212,9 @@ jobs:
       # Not $HOME — ci.yml's platform deploy job carries the full account of why a browser left in a job
       # container's home directory makes unrelated suites fail on the same runner hours later.
       PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
-      # WHERE THIS JOB'S DAEMON LISTENS, AND DELIBERATELY NOT SPELLED `DOCKER_HOST`. The name is the fix: the
-      # runner drives this container with the HOST's docker client (`docker exec <container> …`, once per step,
-      # to run the step inside it), and that client reads DOCKER_HOST out of the job's environment. Point it at
-      # a socket that only exists INSIDE the container and the runner can no longer reach its own job — every
-      # step after the one that set it dies on `failed to connect to the docker API at
-      # unix:///run/onboarding-docker.sock`, including the cleanup steps, before any of them run a line.
-      #
-      # That is run 34063131038, and it reads as the daemon having died: the step before it says the daemon is
-      # up, and 140ms later the socket "does not exist". The daemon was fine. The daemon was never asked. The
-      # host's docker client was, and it was asked on the host, where that path is nothing. The tell is in the
-      # same log — the post-job `docker rm --force` SUCCEEDS, against the host daemon, because cleanup does not
-      # carry the step environment.
-      #
-      # So the path is carried under a name nothing else reads, and the steps that want it export DOCKER_HOST
-      # into their own shell and nowhere else. Not `$GITHUB_ENV` (that IS the job environment) and not a
-      # step-level `env:` (the runner composes that into the same exec).
+      # Carry the job-local socket under a private name, not DOCKER_HOST: the runner's host client reads the job environment too.
+      # Export DOCKER_HOST only inside shells using this daemon; a job/step env or GITHUB_ENV value would break the runner's docker exec.
+      # The host cannot reach a socket existing only inside the container, including for subsequent cleanup steps.
       JOB_DOCKER_HOST: unix:///run/onboarding-docker.sock
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -321,29 +234,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # CGROUP v2 NESTING BEFORE THE DAEMON, because without it this daemon starts containers that cannot
-          # hold a memory limit — and the box this tier exists to start asks for one (`docker run --memory 22g`).
-          #
-          # This container's own cgroup is the ROOT of its cgroup namespace, and every process the job runs sits
-          # directly in it: the runner execs one shell per step straight into it. A cgroup that holds tasks may
-          # not delegate DOMAIN controllers (memory, io, hugetlb) to its children — the kernel's
-          # no-internal-process rule — so runc's attempt to enable them there fails, and only the thread-aware
-          # ones (cpu, pids) stick. A cgroup with tasks AND thread-aware controllers enabled is by definition a
-          # thread root, which makes every child under it `domain invalid`, and runc's answer to a domain-invalid
-          # cgroup it just created is to write `threaded` into it. So the FIRST container of the run turns
-          # /sys/fs/cgroup/docker threaded for good, and it is always a container that asks for no limits — the
-          # world's own postgres, api and web, which come up perfectly. The first one that does ask dies on
-          #   cannot enter cgroupv2 "/sys/fs/cgroup/docker" with domain controllers -- it is in threaded mode
-          # That is runs 34575319384 and 34645853155, and it reads as an `ic sandbox connect` bug: nine specs
-          # passing, the whole [compose] lane passing, and the [ic] lane failing on the single container in this journey
-          # that carries `--memory`. Nothing in the message points at this step.
-          #
-          # The fix is the official dind entrypoint's (moby's hack/dind): move the tasks into a child cgroup so
-          # this one holds none, then delegate every controller this container was given. The loop is not
-          # superstition — the runner execs a new process into this cgroup for each step, so the move races them,
-          # and the write to subtree_control is what fails when it loses. LATER STEPS STILL RUN: their exec hits
-          # the same EBUSY on this cgroup and runc then joins the cgroup of the container's init process, which
-          # the move put in `init` (libcontainer/process_linux.go, "On cgroup v2 + nesting + domain controllers").
+          # Before dockerd, move tasks to a child cgroup and delegate controllers: v2 domain controllers require an empty parent.
+          # Otherwise the first unlimited container turns the hierarchy threaded and later memory-limited sandbox creation fails.
+          # Retry the move/delegation race with runner execs; later steps fall back to the init process's child cgroup.
           if [ -f /sys/fs/cgroup/cgroup.controllers ] && [ "$(cat /proc/self/cgroup)" = "0::/" ]; then
             mkdir -p /sys/fs/cgroup/init
             for _ in $(seq 1 20); do
@@ -593,26 +486,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Windows desktop verification for main, every night: tier 1 (the installer installs, opens a link and
-  # uninstalls), tiers 2 and 3 below (the two that need a real Docker daemon and a connected account), and tier 4 (the
-  # engine). ci.yml runs tier 1 and 4 only on a windows_smoke dispatch; a releasing push's release.yml windows-verify
-  # runs tier 1 at the real version.
-  #
-  #   setup   runs the connect.ps1 the INSTALLER put on this machine, with the direct-token path that needs no
-  #           Cloudflare and no platform, and waits for the sandbox daemon to answer. It pulls the sandbox
-  #           image, so it is nightly for the same reason the Linux setup tier is.
-  #   agents  reaches that sandbox from the HOST, at the loopback address a browser on this machine derives,
-  #           proves the gate is real, drives it with the credential a program is meant to hold, and runs one
-  #           turn.
-  #
-  # The turn is the one step CI cannot fake: connecting an AI account is a subscription OAuth flow through a
-  # browser. INTENTIC_AGENT_AUTH_VOLUME names a Docker volume on this machine holding an account connected ONCE
-  # by hand — the product's own answer to "several sandboxes, one set of credentials". Absent it, the tier
-  # stands down NAMING it and everything up to the turn still runs, which is the same contract every other
-  # gated tier in this file has: a tier that cannot reach its credential has nothing to say, and must not fail.
-  # The DEEP call: tiers 1, 2 and 3. Two and three are the ones that need a real Docker daemon and a connected
-  # account, which is what puts them here rather than in ci.yml beside tier 1. The 120-minute budget is for
-  # them — tier 2 pulls a full sandbox image before it can wait on the daemon.
+  # Nightly Windows coverage runs installer/deep-link/uninstall, bundled-script setup, host-authenticated agent turns and engine tiers.
+  # Setup uses direct tokens without platform/Cloudflare; agent turns need the once-connected INTENTIC_AGENT_AUTH_VOLUME.
+  # Missing auth names the requirement and skips only the turn. The 120-minute deep budget includes pulling the full sandbox image.
+  # ci.yml runs dispatch smoke; release.yml verifies the real-version installer before publishing.
   desktop-windows:
     needs: [desktop-windows-build]
     if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && ((inputs.only || 'all') == 'all' || inputs.only == 'desktop-windows' || inputs.only == 'desktop-engine' || inputs.only == 'desktop-engine-move') }}
@@ -827,48 +704,9 @@ jobs:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'mobile' }}
     uses: ./.github/workflows/mobile.yml
 
-  # THE TIDY GATE: WHAT IS LEFT ONCE EVERY PROBLEM WITH AN AUTHOR HAS BEEN CAUGHT EARLIER.
-  #
-  # _tools/checks/manifest.mjs splits the checks by what a failure MEANS. A `code` failure fails everywhere the list
-  # is read (CI's preflight, its push check, `pnpm verify`) because the tree does not work. A `tidy` failure (a
-  # directory of 35 files, a dead link in a README, a hand-spelled root, a subsystem with no invariant) is a real
-  # cost, and it is nobody's push to stop: on the day the split was made, 9 of the 11 pushes the gate refused were
-  # refused by tidy checks in under five seconds, for state no single actor had produced and that the agent then sent
-  # after it could not see from its worktree.
-  #
-  # So the refusal lives HERE, where it costs nobody anything: one commit, read on a GitHub-hosted runner, with
-  # no `needs` in either direction. Nothing in this file waits on it, no push waits on it, and a failure here is a
-  # message about the tree on main rather than a refusal of whoever pushed last. `--gate=tidy` runs exactly the
-  # checks the other runs downgrade to warnings, so the pair cannot drift: one manifest, two exit codes.
-  #
-  # THAT USED TO BE THE ONLY PLACE A TIDY RULE REFUSED, and it made this job fail on 7 of its first 10 scheduled
-  # runs. Every anchor it printed traced to one feature commit a day or two old — a `/work` spelled in a test
-  # (a533ac08d), a `bg-[#4c4c58]` in a new component (58458710b), a bare `<button>` (821d0951b) — one line, in
-  # one file, written by one turn that was never told. What that turn saw of it was a single line naming the
-  # check ids and saying they were "not what holds a turn", and the push said the same. A gate that only refuses
-  # where nobody can act teaches everyone reading it that a failure means nothing, which is this repository's own
-  # finding about a different gate.
-  #
-  # TWO moments upstream now answer for the part that HAS an author, so what reaches this job is the part that does
-  # not: the edit moment runs every scoped check on the one file just written and tells the model that wrote it
-  # (.intentic/checks.json), and CI's push check (ci.yml's `quick` job, _tools/scripts/verify/verify-push.mjs) fails
-  # on the lines a pushed range added, measured against the commit the range is built on, where main's one fix agent
-  # picks them up (_sandbox/sandbox/src/ci/main-fixer.ts).
-  #
-  # The second was the missing one, and its absence is most of this job's history. A worktree measured against its
-  # own HEAD is a tree that never becomes main, so a rule that COUNTS composes wrongly across conversations: two turns
-  # that each add one file to a directory of thirty both pass on their own and are over the limit once they land
-  # together, and neither could have seen it. That is 13 of this job's 14 failures. The pushed range is the first
-  # tree that becomes main, which is why the failure sits there.
-  #
-  # A failure here should now mean a standing cost nobody caused — a directory the tree grew into, a link a rename
-  # broke, a package that went private — which is what this job was always for and could not be while it was also
-  # the only net under every new line.
-  #
-  # A FRESH CHECKOUT IS THE POINT. Half of what these rules measure is invisible on a persistent workspace (the
-  # layout check's ghost directories are build output a rename left on a runner that never cleans) and half is
-  # invisible in an agent's worktree (where the isolation layer mounts those same paths back in). A
-  # GitHub-hosted runner clones the commit and nothing else, which is the only tree where all of it can be read.
+  # Nightly tidy checks measure standing costs on main; edit/push checks already report violations introduced by an author's delta.
+  # --gate=tidy uses the shared manifest and fails independently, without blocking other jobs.
+  # Use a fresh hosted checkout: retained build directories and worktree isolation can hide layout/link problems.
   tidy:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'tidy' }}
     runs-on: ubuntu-latest
@@ -896,35 +734,9 @@ jobs:
       # nothing from it.
       - run: node _tools/checks/run.mjs --gate=tidy
 
-  # THE SUITES THAT MEASURE TIME, RUN SOMEWHERE THAT IS NOT UTC.
-  #
-  # Every job in ci.yml runs in a UTC container, which is the same clock the daemon ships on. That makes
-  # a whole class of defect structurally invisible: a cron evaluated in the process's own zone, a day bucket that is
-  # the reader's only by coincidence, a date test that passes because the author and the runner happen to agree.
-  # An automation set for 20:43 fired at 22:43 for its owner for as long as the feature existed, and the suite
-  # passed throughout — it could not have been anything else.
-  #
-  # Two zones, chosen as the extremes rather than as realistic ones: Kiritimati is UTC+14 and Niue is UTC−11, so
-  # between them every "is it the same calendar day" question is answered both ways on the same instant, and a
-  # 25-hour spread means no off-by-one can hide. Neither observes summer time, so a failure here is a zone bug and
-  # never a changeover flake.
-  #
-  # THE FILES THAT CAN SEE A CLOCK, NOT WHOLE PACKAGES. This job used to run the four packages' entire suites, the web's
-  # 875 files among them, once per zone as a two-leg matrix: 47 runner-minutes a push, the largest single cost in the
-  # pipeline (2026-10-07), nearly all of it suites whose answer cannot depend on the zone. clock-suites.mjs selects the
-  # test files whose own text touches dates, zones, crons or a fake clock (about a fifth of them) and runs those in
-  # both zones, one after the other, every zone and package whatever the one before it did; its log groups each
-  # `zone: package` run, so an east-only or west-only failure still says which. Its header says what a selection by
-  # text can miss and how a suite opts in. Widen the package list when another one starts bucketing days or
-  # evaluating crons: `_tools/checks/time-zones.mjs` is what notices the code, this is what notices the behaviour.
-  #
-  # No TURBO_FORCE any more: the suites run outside turbo, so there is no UTC result for turbo to replay in their place,
-  # and the build below is the same build every other job replays.
-  #
-  # NIGHTLY, NOT PER PUSH. It ran in ci.yml on every push for 11 to 13 runner-minutes, about 8,000 tests that verify-core
-  # and verify-platform had just run in UTC, and it gated nothing. A zone bug now surfaces the next morning with the
-  # day's commits as its range instead of on its own push; `_tools/checks/time-zones.mjs`, which reads the code, still
-  # runs on every push in preflight.
+  # Run clock-sensitive test files in Kiritimati (UTC+14) and Niue (UTC-11); UTC-only jobs cannot expose local-zone/calendar-day bugs.
+  # clock-suites.mjs selects files and runs both zones outside turbo, avoiding cached UTC results; neither zone observes DST.
+  # Widen its package list when new code uses clocks; time-zones.mjs checks source on every push, while this behavioral drill is nightly.
   verify-clocks:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'verify-clocks' }}
     runs-on: [self-hosted, intentic]

@@ -1,23 +1,7 @@
-/* WHAT AN UNINSTALL DOES, decided before anything is touched, from what this device holds (`Facts`) and what the person
-asked for (`Asked`). Everything here is pure: the inventory gathers the facts (inventory.rs), mod.rs asks and runs, and
-this file is the part a test holds to — which question is asked, which flag answers it, which steps run and what every
-sentence says.
-
-Two outcomes, and only two, because a third is a sandbox nobody can use:
-- EVERYTHING: the sandboxes and runners with their data, the saved passwords, the intentic engine, the machine agent,
-  folder sync, ic, the desktop app, caches and logs. Nothing of Intentic stays.
-- KEEP SANDBOXES: the sandboxes stay and keep running, so whatever keeps them up stays with them: the engine they run
-  on, the machine agent that starts them at sign-in and keeps them connected, ic, which the engine's sign-in start runs,
-  and the keyring their agents ask. Only the app, folder sync and the caches go.
-A "keep the data but remove what runs it" outcome was left out on purpose: a removed sandbox's volumes are recoverable
-only through ic, a removal's trash is swept only by ic, and its at-rest key lives in ic's home, so the data kept that
-way is a leftover nobody can read.
-
-Data — a sandbox's files, the saved passwords — is never deleted by an unattended run: `--yes` keeps it, and only
-`--delete-data` (with `--confirm <n>` when there are sandboxes, or the count typed) deletes it. On a terminal the pick
-offers EVERYTHING first, because that is what someone uninstalling a product asked for, and the typed count is what
-stands between Enter and a deletion — so the protocol's "the safe answer is the default" still holds: nothing is
-deleted by a default. */
+/* Pure uninstall plan from Facts and Asked; inventory.rs gathers facts and mod.rs prompts/executes.
+ * Remove everything, or keep sandboxes with their required engine, agent, ic and keyring while removing app, folder sync and caches.
+ * Never leave encrypted data without the runtime/key tools needed to recover it. --yes keeps data.
+ * Deletion requires --delete-data and sandbox-count confirmation (--confirm <n> or typed count); accepting defaults never deletes data. */
 
 use crate::util::plural;
 

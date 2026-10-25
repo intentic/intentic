@@ -1,29 +1,7 @@
-// The Pi extension the daemon hands every Pi turn (`-e`, pi-rpc.ts), as the text Pi loads. Kept apart from the code
-// that writes it because this is source another process runs, not code this one does: plain JavaScript, valid as the
-// TypeScript Pi's loader expects, importing only Node's own modules, so it loads on whichever Pi the owner installed
-// without reaching for Pi's packages (renamed across releases) or `typebox` (the tool's parameters are a plain JSON
-// schema, which Pi validates as such).
-//
-// It does four things:
-// - registers `ask_user`, a tool that asks the person through Pi's own dialogs (`ctx.ui.select` with choices,
-//   `ctx.ui.input` without), which pi-extension-ui.ts parks on the question card every runtime shares;
-// - mounts the turn's remote MCP servers through `pi.registerMcpServer`, session-scoped, on a Pi with built-in MCP
-//   (0.99 and later; pi-rpc.ts hands them over only then), each declared to the model (`exposure: "direct"`) as the
-//   other runtimes declare them. Older Pi has no such method, and the servers are skipped;
-// - puts every tool call to the turn's hook socket before it runs (`tool_call`), and does what the daemon answers:
-//   refuse it, run it with its input changed (a shell line through the terminal panel, its secrets resolved), or run it
-//   as it is. A call it cannot ask about is refused, which is also what Pi does with a handler that throws. MCP calls,
-//   codemode's included, pass the same handler (Pi's mcp.md). Being loaded first (`-e` before discovery), it sees every
-//   call before any other extension does;
-// - puts every tool result to the same socket after it runs (`tool_result`), and hands Pi the result the daemon
-//   answers: secrets masked, outside content sealed, the owner's per-edit checks said. A result it cannot ask about is
-//   withheld.
-// It also declines trust in the project (`project_trust`), which Pi's RPC mode already does unless a saved decision or
-// the owner's settings say otherwise: an extension the agent wrote into the workspace would otherwise load into a later
-// turn's Pi after this one and could change a call the rules had already allowed. Once its handlers are in place it
-// says so on the socket (`/ready`), and the daemon starts no prompt on a Pi that never did.
-// The servers, bearers included, and the socket's path come from a per-turn file the daemon names in PI_TURN_ENV; the
-// extension reads it once and removes it, so the bearers sit on disk only until Pi has loaded them.
+// Pi-loaded JavaScript using Node modules and plain JSON Schema; registers ask_user dialogs and direct MCP on supported Pi versions.
+// Load before discovery, reject project trust, and fail closed on hook-socket errors for every tool call and result, including MCP.
+// Hooks enforce policy/input rewrites and mask/seal results; /ready must arrive before any prompt starts.
+// Read PI_TURN_ENV's per-turn file once and unlink it so MCP bearers remain on disk only until loading finishes.
 
 // Names the per-turn file to the extension.
 export const PI_TURN_ENV = "INTENTIC_PI_TURN";

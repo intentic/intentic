@@ -1,22 +1,7 @@
 #!/usr/bin/env node
-// THE SANDBOX'S SIDE OF THE SHARED CACHE: as an isolated turn ends, make sure the fleet's cache holds a typecheck
-// result for each package the turn changed, so the push that carries the change finds CI's typecheck already done.
-// `turn` in .intentic/checks.json runs it; by hand it is `node _tools/turbo-cache/warm.mjs [--budget <seconds>]`.
-//
-// It needs the `turbo-cache` connector card (whose variables the turn's own shell has, credential-gateway addresses
-// and all) and stays out of the way without it. It never reports a finding: it exits 0 whatever happens, so it never
-// adds noise to the turn, and says on stderr what it did. A type error is CI's to report, as it is today.
-//
-// In order, until the budget is spent:
-//   1. Only when this checkout's install matches its lockfile: a stale node_modules would vouch for a hash that names a
-//      newer lockfile than the one it typechecked against.
-//   2. Send the results this worktree already has: an agent that ran `pnpm typecheck` left them in .turbo/cache.
-//   3. Typecheck what is still missing, through turbo with the cache as its remote, which uploads each pass itself.
-//   4. File each pass under the `--only` hash as well. reach-typecheck.mjs asks with `--only`, which hashes the same
-//      package differently (it leaves out the dependencies' hashes), so one run serves both it and the verify groups.
-//      The claim is the same one: this command passed on this package's inputs, in this tree.
-// The server keeps log-only entries alone, and CI takes them only for hashes it attributes to output-less tasks
-// (import.mjs), so nothing here can put a file into a build.
+// node _tools/turbo-cache/warm.mjs [--budget <seconds>] warms changed packages' typechecks at turn end when turbo-cache is connected.
+// Require an install matching the lockfile; upload existing results, typecheck missing ones, then also file passes under --only hashes.
+// Entries are log-only and imported only for output-less tasks. Always exit 0, reporting work on stderr; CI owns type-error reporting.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";

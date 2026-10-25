@@ -1,29 +1,8 @@
 import { dropClaim, resetBudgetPlanner } from "../run/spend/budget-planner.js";
 
-/* THE FAN-OUT GOVERNOR: how many children go onto one provider at once, decided at spawn.
-
-   2026-10-17: a parent started seven children in a minute across five providers. Three went onto Cursor, which nothing
-   had proven that day: the first was refused for a spent plan, the next two for an account Cursor refuses outright, and
-   the parent heard of the first refusal only after all seven were out. Three Codex children at high effort emptied a
-   team credit in about 25 minutes. Every one of those refusals was knowable from the first.
-
-   Two rules, the first per provider and model as the records file refusals, the second per provider's accounts:
-   - A provider and model no turn was answered on lately (a child's, the parent's own, any other) gets one child first,
-     the canary. Its siblings wait as pending
-     until it is answered (the provider took the turn: start them) or refused before answering (re-check each against
-     the records, which now hold the refusal: one still askable becomes the next canary, one the records call spent is
-     handed back unstarted, having spent nothing). A canary slow to answer (waiting for memory, a long first thought)
-     does not hold its siblings for good: past CANARY_PATIENCE_MS they all go.
-   - A child goes only where an account can carry it through its windows, and is placed on that account: the fan-out
-     planner's claim (agent/run/spend/budget-planner.ts), which each held start makes for itself as it is released, answering
-     `wait` when the accounts still cannot carry it. The lane then waits too, until a sibling ends, any turn on the
-     provider ends, a reading lands (`reconsider`) or the window that decided it reopens (`retryAt`). This replaced a cap
-     that read only a percentage below 30% left, and so let ten Opus children onto one account reading 84% (2026-10-20).
-   And the spawn result says what siblings on the provider just ran into, so a parent reading it learns of a refusal it
-   would otherwise hear of only after its whole fan-out is out.
-
-   State is the daemon's own and in memory: a restart forgets which providers were proven, and the next fan-out probes
-   again, which costs one child's wait. */
+/* An unproven provider/model gets one canary child; siblings wait for acceptance/refusal or CANARY_PATIENCE_MS, then recheck records.
+ * Each released child claims an account through budget-planner; insufficient room waits for completion, readings or retryAt.
+ * Spawn results expose sibling refusals promptly. Proof is in memory only, so a daemon restart requires a fresh canary. */
 
 // How long one answered child proves a provider and model: past this, conditions may have changed (a window ran out, an
 // account was switched off), and the next fan-out probes again.

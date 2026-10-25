@@ -1,45 +1,8 @@
 #!/usr/bin/env bash
-# Does the app actually REPLACE ITSELF with the release that was published — and still start afterwards?
-#
-#   update.sh          # /artifacts holds: from.AppImage, to.AppImage, latest.json
-#
-# The thing no unit test can tell you, and the thing this app got wrong for its whole life so far: every
-# release up to and including v1.213.0 shipped an app that checked once at startup, drew a notice reading "it
-# installs the next time you quit", and then installed nothing, on any path, ever. Nothing failed, and nothing
-# said so. The mechanism was simply absent, and the sentence on screen is the reason nobody went looking.
-#
-# So this asserts OUTCOMES, in the order they matter:
-#
-#   1. the bytes arrive with nobody pressing anything — the schedule fires, the manifest is fetched, the
-#      minisign signature is verified against the pubkey compiled into this build, the download is staged;
-#   2. the app OFFERS it to the page, which is the banner's only input and the one state the link is honoured in;
-#   3. the banner's button applies it — a page in the workspace webview navigating to `intentic://update`,
-#      which is the whole channel from the SPA into the app and the only direction that link is honoured from;
-#   4. the file the app runs from is now, byte for byte, the newer release;
-#   5. it starts again — an updater that swaps the bytes and cannot boot is strictly WORSE than one that never
-#      ran, because the machine is left with no working app instead of an old one;
-#   6. and it now considers itself current, which is the only assertion that proves the app really MOVED
-#      rather than rewriting itself with something that merely differs.
-#
-# WHICH CALLER THIS EXERCISES, and which it does not. `install()` has two callers: this one, and the exit
-# handler that applies a staged update on quit (update.rs `install_on_exit`) — the silent path, and the one
-# that makes a launch always be the newest version. They are the same call with `restart` flipped. The quit
-# path is not driven here because ending a GTK app CLEANLY needs a window manager to deliver WM_DELETE_WINDOW,
-# and this container deliberately has none: `xdotool windowclose` destroys the X window out from under GTK,
-# which aborts the process on a BadDrawable before any exit handler runs. That is a fact about the test host,
-# and faking a quit that a user never performs would prove nothing about the one they do.
-#
-# WHAT IS REAL AND WHAT IS THE HARNESS'S. The whole chain is real: a scheduled check, an HTTP fetch, a
-# signature verification, a staged download, an in-place rewrite, a relaunch. Two things are staged, and both
-# are BUILD-TIME config set by verify-desktop-update.sh rather than a runtime override: the signing KEY (a
-# throwaway pair — the release key is not on this machine and must not be) and the ENDPOINT (a local server —
-# the real one serves the real releases). Deliberately not an environment variable: a test hook that ships is a
-# test hook something else can reach.
-#
-# The AppImage runs through the runtime's own self-extract (`APPIMAGE_EXTRACT_AND_RUN`), because a container
-# has no FUSE. The runtime still exports `APPIMAGE`, which is what the updater plugin reads to find the bundle
-# file — so the rewrite targets the .AppImage rather than the binary extracted out of it. If that ever stops
-# being true, assertion 4 is where it shows up.
+# Verify automatic download/signature validation, banner offer/apply, exact replacement bytes, relaunch and current-version status.
+# Exercise install-with-restart; clean quit needs a window manager, so xdotool windowclose cannot test install_on_exit here.
+# Signing key and loopback endpoint are build-time test inputs; do not introduce runtime overrides into shipped apps.
+# APPIMAGE_EXTRACT_AND_RUN avoids FUSE while preserving APPIMAGE, so the updater must replace the bundle rather than its extracted binary.
 set -euo pipefail
 
 DISPLAY_NUM=99

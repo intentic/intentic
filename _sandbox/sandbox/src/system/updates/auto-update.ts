@@ -9,22 +9,9 @@ import { opt } from "../../opt.js";
 import type { UpdatePolicyFile } from "./update-policy.js";
 import { errorMessage } from "@intentic/base/errors";
 
-// TAKING AN UPDATE BY ITSELF, AT A MOMENT NOBODY FEELS. Everything an update costs nobody already happens unasked: the
-// machine that runs this sandbox downloads and builds the next release in the background (`ic sandbox prepare --auto`,
-// the machine agent's round) and pre-flights its state conversions against this sandbox's files. What is left is a
-// restart of about half a minute, and this decides its moment, because only this daemon can see who it would interrupt:
-// agents mid-turn, people at the editor, a terminal still printing, an automation about to fire.
-//
-// - Only a STAGED update is taken. One that still has to download is minutes of downtime, which stays a person's call.
-// - It waits until nothing it can see is going on, then counts down: long enough to be seen by anyone still connected,
-//   who can stop it, and long enough that the turn queued behind the one that just ended has started and holds it again.
-// - It hands the machine exactly what the Update button sends, asking the next boot to pick up any turn the restart cuts
-//   (restart-resume.ts), and writes down that it did, so the version that comes up can say it happened by itself.
-// - A release that changes what developers build on (breaking notes) is never taken unasked. Neither is a version the
-//   owner skipped, one whose pre-flight refused this sandbox's files, one the machine tried and went back from (its
-//   outcome: restored or rolled back), nor one a newer release overtook (the swap would pull the moved tag and download
-//   after all).
-// - The wait is kept in memory; a restart for any other reason starts it over, which is what the restart was anyway.
+// Apply only an already-staged update after visible work is idle and a cancellable countdown has allowed queued turns to start.
+// Use the normal Update action with restart-resume and record the automatic swap; reset the in-memory wait on other restarts.
+// Exclude breaking, skipped, preflight-refused, rolled-back/restored or superseded releases: automation must not download during downtime.
 
 // How often the moment is looked for while an update waits. Turns end at their own pace; a few seconds more cost nothing.
 const POLL_MS = 15_000;

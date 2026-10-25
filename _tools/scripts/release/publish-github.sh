@@ -1,25 +1,7 @@
 #!/usr/bin/env bash
-# One GitHub Release, with the installers and the machine-agent binaries attached: the download surface behind
-# `curl https://intentic.dev/sync | sh` and `.../computer | sh`. semantic-release's publishCmd, so the `v*` tag
-# it hangs off is already on the remote — pushed by semantic-release itself the moment prepare returned.
-#
-# That tag does NOT start the registry publishes, however much it looks like it should. GitHub starts no
-# workflow off an event the built-in token created, so npm-publish.yml and action-publish.yml are dispatched
-# explicitly at this tag once semantic-release returns (dispatch-publish.sh, release.yml).
-#
-# There is ONE repository. An earlier arrangement exported a public subset to a separate mirror repo, and when
-# development moved onto that same repo the export published straight over main — the v1.0.0 snapshot took
-# .github/workflows and _platform/api with it. The tag names the commit CI already checked out, so there is no
-# second tree to keep in step and nothing to force-push.
-#
-# CI setup: GITHUB_TOKEN, the run's own built-in token, with `contents: write` from release.yml's publish job.
-# It was described here for a long time as a fine-grained PAT, which it never was — and that sentence is worth
-# keeping the correction of, because a PAT is the one thing that would have made `on: push: tags` work and the
-# note read as if it had been supplied. Locally, without a token, this SKIPS so a release dry-run stays
-# runnable — but IN CI a missing token is fatal. It has to be: a quiet skip on a real release leaves a tagged
-# version whose installers nobody can download and still reports a pass, which is the shape of how
-# v1.177.0-v1.179.0 were tagged with no packages behind them.
-#   bash _tools/scripts/release/publish-github.sh 1.177.0
+# Publish the GitHub Release and assets for the tag semantic-release already pushed; use the checked-out tree, without a mirror.
+# Built-in GITHUB_TOKEN needs contents:write. Its tag push does not trigger workflows; dispatch-publish.sh starts registry publishes.
+# Missing credentials skip local dry runs but fail in CI, where a silent skip would leave installers unavailable.
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
 . "$(dirname "$0")/../lib/repo-root.sh"

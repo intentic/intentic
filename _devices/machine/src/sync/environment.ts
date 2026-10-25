@@ -4,22 +4,9 @@ import { hostname } from "node:os";
 import { readTextIfExistsSync } from "@intentic/base/fs";
 import { machineId } from "../machine-id.js";
 
-// WHICH ENVIRONMENT OF THIS COMPUTER the sync half runs in: "windows", the WSL distro's name, "macos" or "linux". A
-// Windows PC runs one agent on its Windows side and one in each WSL distro, and every one of them used to describe
-// itself by the hostname alone, which WSL hands every distro unchanged. So both sides' ssh keys carried the same comment
-// (the sandbox files a sync enrollment, and the report it takes, under that comment), both derived the same loopback
-// port for one sandbox's transport (which WSL's mirrored networking makes one port), and nothing either side made in
-// Mutagen said which side made it. Three things now carry this name: the comment of a newly made key (`keyComment`), the
-// transport's port band (tunnel.ts `syncSshPort`), and the owner label on every Mutagen session (`sessionOwner`).
-//
-// SYNCHRONOUS AND STABLE, on purpose: the port and the owner label are derived from it on every pass, and a value that
-// changed between two passes would move a listener or disown a session. So it reads two things that do not change
-// while a distro runs: the distro name WSL puts in every process it starts (`WSL_DISTRO_NAME`, set for the agent the
-// Windows side starts with `wsl.exe -d` and for every shell a person opens), else the kernel's own word that this is
-// WSL together with what WSL mounts in every distro (`/run/WSL`, `/mnt/wsl`). The kernel alone is not enough: a
-// container on Docker Desktop runs on that same kernel and is no distro. Where WSL left the name unset (a service
-// manager's environment), os-release's name stands in: not the registration name, but the same string on every pass
-// of this agent, which is the property that matters here.
+// Stable environment id (windows, WSL distro, macos, linux) separates SSH key comments, transport port bands and Mutagen owner labels.
+// Prefer WSL_DISTRO_NAME; otherwise require both WSL kernel and mounts so Docker Desktop containers are not mistaken for distros.
+// Fall back to os-release's stable name when services omit WSL_DISTRO_NAME. Keep detection synchronous and unchanged across reconcile passes.
 
 const WSL_KERNEL = /microsoft/i;
 

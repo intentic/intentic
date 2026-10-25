@@ -1,52 +1,8 @@
 #!/usr/bin/env bash
-# Roll the EDGE after images-platform pushes it, and then prove the roll landed.
-#
-# THE GAP THIS CLOSES, because it cost a customer an evening and nobody noticed for ten days. The
-# images-platform job builds and pushes three images — api, web, ingress — and then runs deploy-platform.sh,
-# which rolls the KOMODO STACK. The api and the web are in that stack. The ingress is not: it runs on Fly
-# (_platform/ingress/fly.toml), and nothing in this repository ever deployed it. `intentic-ingress` appeared
-# in exactly one file, the fly.toml describing it. So `ingress:latest` moved on every push to main and the
-# machines serving production kept the build they were started with; the pipeline passed each time,
-# because pushing an image is what it checked.
-#
-# What that cost: hosted sandboxes had moved off tunnels onto `fly-replay` (at the time the daemon on a hosted
-# machine dialled nothing). The edge that carried that decision was ten days older than the sandbox image and had no
-# replay in it, so every hosted sandbox answered 502 at its own public name, probed itself for five minutes, and told
-# its owner to start it over — which could never help, because nothing about the sandbox was wrong. (Replay is gone
-# since: every sandbox dials its tunnel, reach-posture.ts, and the edge terminates TLS with no Fly proxy to replay.)
-#
-# So this script's contract is deploy AND VERIFY, in deploy-platform.sh's words: "a guard whose failure
-# nobody is told about is the same silence it was written to end". A deploy that does not change the running
-# build fails the job.
-#
-#   FLY_API_TOKEN     a Fly deploy token for the org the edge runs in. EMPTY MEANS SKIP, so a fork, a local
-#                     run and a branch that is not production are all inert rather than broken.
-#   INGRESS_IMAGE     the exact image to deploy; defaults to the `latest` this push just wrote.
-#   INGRESS_APP       the Fly app, default from fly.toml's own name.
-#   INGRESS_FLY_CONFIG, or the first argument
-#                     which Fly config to deploy, relative to the repository root or absolute; default
-#                     _platform/ingress/fly.toml, the one CI deploys on every push, where the edge terminates TLS.
-#                     _platform/ingress/fly.edge-proxy.toml is the emergency fallback behind Fly's HTTP proxy, deployed
-#                     only by hand and only after its prerequisites (ingress/README.md, "Rolling back").
-#   INGRESS_EDGE_MODE `tls` (the default) or `proxy`: the shape this deploy is EXPECTED to roll. The shape is read off
-#                     the config (one with an [http_service] sits behind Fly's proxy), and a config that disagrees fails
-#                     before anything is deployed, so a fly.toml that somehow went back to the proxy shape cannot put
-#                     production behind a proxy holding no certificate. Only a hand-run fallback says `proxy`.
-#   INGRESS_FORCE_ROLL set to 1 to roll the machines even when they already serve this build (see below).
-#
-# AN EDGE ALREADY SERVING THIS BUILD IS NOT ROLLED. The edge holds every tunnel in memory and production runs one
-# machine, so a roll drops every sandbox's tunnel at once and each workspace goes dark until its netd redials. The
-# build is content-addressed over the ingress package (fly.toml included) and the crates it compiles, so an unchanged
-# build is an unchanged edge, and rolling it anyway is an outage bought for nothing. That is what this did on every
-# platform push: turbo-406abe0921f407ab was rolled four times on 2026-10-21, the last at 21:12:58, and a new user on
-# a hosted sandbox lost his workspace three minutes into his first session and left while it was still coming back.
-# The read-back and the door and transport checks below still run, so an edge that drifted fails the job as before.
-#
-# TLS MODE, the default: the edge holds the certificate and serves UDP beside it, and it must also DECLARE that on
-# /health (`"transports":["quic","h3","webtransport"]`), since netd instances and editors reach for QUIC and WebTransport only
-# where it is declared; an edge that answers without it is one whose INGRESS_QUIC_PORT is not set, and the deploy
-# fails. Success ends in one line CI's log can be checked for: `edge-mode: tls — <app> declares quic, h3 and
-# webtransport`.
+# Deploy the Fly edge and verify the running build, door and transports; pushing an image alone does not deploy it.
+# Skip without FLY_API_TOKEN. INGRESS_IMAGE/APP/FLY_CONFIG select the target; EDGE_MODE defaults to tls and must match the config.
+# Skip unchanged builds to preserve in-memory tunnels, unless INGRESS_FORCE_ROLL=1; verification still runs.
+# TLS mode must advertise quic, h3 and webtransport on /health. Use proxy mode only with the fallback's README prerequisites.
 set -euo pipefail
 
 if [ -z "${FLY_API_TOKEN:-}" ]; then

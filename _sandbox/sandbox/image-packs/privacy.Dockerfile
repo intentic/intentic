@@ -1,30 +1,7 @@
-# WHAT THE PRIVACY SHIELD READS WITH, beyond the text it masks on its own (src/privacy/):
-#   PaddleOCR PP-OCRv6          the text reader (src/ocr/): PaddleOCR 3.7's medium detector and recognizer, in the
-#                               ONNX form PaddlePaddle publishes them, run in the daemon's own process by
-#                               onnxruntime-node, which the image already carries. It reads the words off an image
-#                               bound for an untrusted provider so the stretches holding personal data can be painted
-#                               over with their tokens before it is sent (`images: "mask"`), and reads a scanned PDF's
-#                               pages. One recognizer covers 50 languages, Polish among them (ą, ę, ł, ż are in its
-#                               dictionary). Apache-2.0. Det ~59 MB, rec ~73 MB. The same reader is the `ocr` command.
-#   poppler-utils               pdftoppm draws a scanned PDF's pages for the reader; pdftotext, its text layer, is
-#                               already in the base image.
-#   the HerBERT name model      a Polish named-entity model fine-tuned for personal data (PERSON, and ADDRESS kept
-#                               only where it carries a house number), int8-quantized ONNX, ~125 MB, run offline by
-#                               transformers.js behind `names: "model"` (src/privacy/ner.ts). CC-BY-4.0, from
-#                               ArkadiuszPawlak/pczarnik-herbert-ner-polish-pii, itself pczarnik/herbert-base-ner
-#                               trained on clarin-pl/kpwr-ner.
-#
-# Every model is pinned to a repository revision and its digest checked: a model that changed under the same name
-# would change what is masked without anybody deciding to. Tesseract was the reader until 2026-10; PP-OCRv6 replaced it
-# because it reads screenshots, photos and Polish diacritics far better and says where on the image each character is,
-# which painting over a value needs. The PaddleOCR Python package was the other way to run it, rejected: it would bring
-# a second runtime (PaddlePaddle or paddlex with its own onnxruntime) and a Python process per image.
-#
-# A PACK, AND IN NO PROFILE. The shield is off unless the owner turns it on. The daemon composes this pack into the
-# overlay by itself while the shield's policy asks for a reader (on or watching, with images masked or names found by
-# the model: src/environment/privacy-pack.ts), and the owner approves the rebuild on the Environment card. Until then an
-# image bound for an untrusted provider is held back, since it cannot be checked. Fetched over plain HTTPS from the
-# Hugging Face resolve endpoint, the way the base image fetches its other pinned artifacts, never at run time.
+# Offline PP-OCRv6 image/PDF reading (Apache-2.0) and Polish HerBERT NER (CC-BY-4.0), fetched at pinned revisions during image build.
+# HerBERT: ArkadiuszPawlak/pczarnik-herbert-ner-polish-pii, from pczarnik/herbert-base-ner and clarin-pl/kpwr-ner.
+# Share the daemon's ONNX runtime and OCR CLI; avoid a second Python/Paddle runtime. poppler supplies scanned PDF pages.
+# No profile bakes this pack; shield policy requests an approved overlay rebuild and holds unchecked outbound images until ready.
 ARG PRIVACY_NER_REVISION=26cc98018d73ae0c815b8274612f42b6002191e7
 ARG PRIVACY_OCR_DET_REVISION=61323801669c338b7891481ec7bac61ce31b576a
 ARG PRIVACY_OCR_REC_REVISION=50c7eacafc52fa7bcf4194e8cd08e46f8558504b

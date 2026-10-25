@@ -1,52 +1,8 @@
 #!/usr/bin/env bash
-# Retry an npm publish that the transparency log — or the registry — dropped on its own side, and nothing else.
-#
-#   . "$(dirname "$0")/../lib/npm-publish-retry.sh"
-#   npm_publish_retry @intentic/scaffold 1.243.0 "$out/intentic-scaffold-1.243.0.tgz" --access public --provenance
-#
-# EVERY TARBALL THIS REPO SHIPS IS SIGNED INTO A PUBLIC TRANSPARENCY LOG BEFORE THE REGISTRY SEES IT. That is
-# what `--provenance` buys (npm-publish.yml says why it is non-negotiable): npm asks Fulcio for a short-lived
-# certificate, signs the attestation with an ephemeral key, POSTs the entry to Rekor, and only then PUTs the
-# tarball. Twenty-eight packages go through that in series, in one job, against public services shared with
-# everyone else publishing that minute.
-#
-# REKOR REFUSES A REQUEST IT HAS ALREADY ANSWERED, AND @sigstore/sign IS THE ONE THAT ASKS TWICE. Its HTTP
-# layer retries on 408, 429 and every 5xx of its own accord (external/fetch.js, DEFAULT_RETRY = two attempts),
-# so an entry Rekor accepted but answered slowly, or 5xx'd after writing, is submitted again — and the second
-# submission hits Rekor's duplicate guard:
-#
-#   npm error code TLOG_CREATE_ENTRY_ERROR
-#   npm error error creating tlog entry - (409) an equivalent entry already exists in the transparency log
-#     with UUID 108e9186e8c5677aa8f66c5a014567a7305f17347995aca633bcb65693ae9b2eeae21dcadefd7fa8
-#
-# That is what killed 1.243.0 (run 33875422034), on @intentic/scaffold — the TWENTIETH of the twenty-eight, 41
-# seconds into a signing step the three packages before it had finished in about 20. Nineteen published, eight
-# never attempted, a release half on npm and repairable only by hand. Nothing was wrong with the tarball, the
-# token or this repository: the entry Rekor complained about was OUR OWN, from a request it had already taken.
-#
-# A SECOND PUBLISH IS A DIFFERENT SIGNATURE, which is why retrying fixes this rather than merely being worth a
-# try. The signing key is minted per publish, so the next attempt offers Rekor an entry it has never seen and
-# the duplicate guard has nothing to catch. The tarball is not re-packed and not re-built — the same bytes are
-# signed again — so a retry costs one signature and one upload.
-#
-# A FAILED PUBLISH MAY STILL HAVE LANDED, so every failure asks the registry what it actually holds before
-# deciding anything. The tarball PUT is the last thing npm does; when it is the ANSWER that is lost rather than
-# the write, the version is on npm and a second attempt would read `EPUBLISHCONFLICT` — a fatal-looking error
-# for a publish that succeeded. A version that is up is a version publish-npm.sh already treats as done (it
-# skips versions already on npm), whatever exit status npm handed back, so that probe settles it either way and
-# runs before the transient test rather than after it.
-#
-# ONLY THE FAR SIDE'S OWN STATE EARNS A SECOND ATTEMPT. A package whose trusted publisher was never registered,
-# a tarball the registry rejects, the 422 a self-hosted runner earns for its builder id (publish-npm.sh asserts
-# that one before the first pack) — every one of those must fail on the FIRST attempt, because three silent
-# backoffs before the same error is how a failed release becomes a slow failed release that reads like a flake. So
-# the decision is made on the command's own output, never on its exit status, which is 1 for all of them alike.
-#
-# BOTH DIRECTIONS ARE ASSERTED, against the text 1.243.0 actually printed, by the `publish-retry` check
-# (_tools/checks/publish-retry.mjs, shared with registry-retry.sh) — which reads the pattern list below back
-# out of this file rather than keeping a second copy, exercises all three loop properties (a dropped signature
-# lands on the retry, a 4xx about us fails at once, a publish whose ANSWER was lost is reported as published),
-# and refuses a caller that sources this without `set -o pipefail`.
+# Retry output-confirmed npm/attestation transients; genuine publisher, tarball and provenance refusals fail immediately.
+# A fresh publish signs the same tarball with a new key, avoiding Rekor's duplicate-entry guard.
+# Probe the registry after every failure: a lost response can hide a successful publish, which must not be published again.
+# Callers need pipefail; _tools/checks/publish-retry.mjs tests transient, fatal and already-published outcomes.
 
 # Attempts and the base gap, in seconds. The gap grows per attempt (15s, 30s) because a duplicate entry is
 # usually Rekor under load rather than Rekor broken, and the load is what the next attempt wants to miss.

@@ -12,21 +12,9 @@ import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
 import { compareViewerForExtension } from "../../../workbench/views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
-// Bar above a diff: which file, and how it's read. Shared by every diff surface (workspace tab, agent review,
-// environment card).
-//
-// The bar itself carries only what changes with the file — mark, path, badges, its ± — because that is what a reader
-// scanning a review looks at. Everything about HOW a diff reads (comments, split/unified, a document's reading) is a
-// sticky global habit, not a property of the file, so it sits behind one control at the end of the row instead of
-// spending the row's width on settings that change a few times a year. That control's glyph still states the one
-// setting that silently withholds lines (comments), since a default that removes them has to keep saying so.
-//
-// Never the file's place in a review (viewed tick, next-file arrows) — that arrives through slots, in render order:
-// lead → before the path (the phone's back arrow out of a full-screen diff).
-// badges → after the path (a blocked/not-landed mark, a property of the file).
-// actions → after the reading controls (the host's own file-scoped buttons).
-// settings → rows inside the reading popover, for a host action that is rare enough to belong there (`item` is the
-//   row class, passed down so one definition dresses every row in the panel).
+// Shared diff bar shows file mark/path/badges/±; persistent reading habits live in the end popover, with comment visibility always signaled.
+// Host slots own review placement/actions: lead before path, badges after path, actions after reading controls.
+// settings adds rare popover rows using the supplied item class; viewed ticks and next-file navigation stay host-owned.
 
 const t = useT();
 

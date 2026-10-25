@@ -6,21 +6,9 @@ import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../claude/claude-seat-check.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 
-// A turn that runs on the account its conversation remembers, when that account can no longer serve: an organisation
-// took the seat away, or the provider refused the account's entitlement. The unnamed pick never lands there (the one
-// serviceability rule ranks it last), but every later turn of a conversation names its account through routingFor, and
-// a named account is never filtered where the credential is minted. So the check is made here, where the turn is
-// planned, for every turn that did not name its account itself: a person's next message, a wake, a queued batch, a
-// held turn pressed with no account.
-//
-// Before a turn is moved or held, the mark is re-tested (claudeSeatCheck, rationed per account): once turns are kept off
-// the account, no turn runs there to clear it. A probe that gets an answer lifts the mark and the turn stays on the account.
-//
-// A turn that names its account runs on it whatever its state, and a refusal then says why; an answer lifts the mark
-// (providerAnswered). Such a turn is the composer's pick for this turn (a person picking the marked account again is an
-// attempt, turnRequest.ts accountIntent), an automation's configured account, a press naming one, or a booked limit move.
-// A spent account is the limit move's (bookLimitMove), a revoked sign-in is fixed in place by reconnecting (its refusal
-// holds the turn for that), and a bench that lifts by itself is waited out; none of those moves a conversation here.
+// Before moving/holding an implicitly remembered unserviceable account, ration a Claude seat recheck; an answer clears the mark.
+// Explicit account intent still attempts it (picker, automation, named press or booked move), allowing the real refusal or recovery to speak.
+// Check during planning because named credential routing is unfiltered. Spent, reconnect-required and temporary benches use their own wait/fix paths.
 
 // The seat's re-test is Claude's alone (agent/providers/claude/claude-seat-check.ts); every provider's accounts are judged
 // by the one rule, which reads a Cursor account refused outright (`[role_forbidden]`) off the refusal ledger.

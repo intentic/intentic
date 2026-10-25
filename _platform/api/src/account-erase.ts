@@ -8,23 +8,9 @@ import { eraseStripeCustomer, queueStripeErasure } from "./sandbox/hosted/plan/h
 import type { StripeGateway } from "./sandbox/hosted/plan/hosted-plan-stripe.js";
 import { accountHoursOf, usageMonth } from "./sandbox/hosted/hosted-usage.js";
 
-/* THE ONE WAY AN ACCOUNT IS ERASED, before its user row goes: the owner's own deletion (Better Auth's `beforeDelete`,
- * auth.ts) and an operator's (admin-actions.ts) both call this, and the caller deletes the user row after it.
- *
- * Everything the cascade would lose track of is written down first, in one transaction:
- *   - every hosted Fly app the account owns (live machines, trashed sandboxes still inside their undo window, a
- *     release's held volume, a provision in flight) goes to the HostedCleanup queue due now, which the cleanup sweep
- *     works through every minute and which the orphan reaper's safety caps never hold back;
- *   - the Stripe customer and subscription go to `stripe_erasure`;
- *   - the hosted standing (suspension, strike count, this month's free minutes) is MOVED onto the record keyed by the
- *     Google subject's keyed hash (carried-standing.ts), so signing in again does not start clean;
- *   - the sandboxes and trash rows are deleted, so a provision still in flight finds its sandbox gone and cleans up
- *     after itself instead of handing a machine to an account being erased.
- * Then, best-effort, the apps are destroyed and the Stripe customer deleted at once, which is what makes "immediately"
- * true in the normal case; whatever fails stays queued for its sweep.
- *
- * Safe to run again after a failure anywhere: the queues are upserts, and the standing is moved rather than copied,
- * so a second run finds only what the first one carried and writes it back unchanged. */
+/* Before deleting the user row, atomically queue all owned hosted resources and Stripe erasure, move standing to the Google-subject hash,
+ * and delete sandbox/trash rows so in-flight provisions clean themselves up. Owner and operator deletions share this path.
+ * Attempt immediate cleanup best-effort; queued failures remain for sweeps. Upsert queues and moved standing make retries idempotent. */
 
 export interface AccountErasure {
     // Every app queued for teardown, and those confirmed destroyed by the time the call returned.

@@ -1,32 +1,8 @@
 #!/usr/bin/env node
-// Rehearse the onboarding a Windows user gets from app.intentic.dev, on this PC, from THIS branch: build the
-// installer, serve it from the local site, point the machine at the local platform, and hand the flow over to
-// a person with the click-path written out. One command, from the checkout, in WSL.
-//
-//   pnpm try:onboarding                      # build, stage, prepare this PC, open the door, then watch
-//   pnpm try:onboarding -- --check           # say what is ready and what this would do, and change nothing
-//   pnpm try:onboarding -- --skip-build      # reuse what is already staged (the usual second run)
-//   pnpm try:onboarding -- --sandbox-image intentic-sandbox:dev   # test the branch's daemon too
-//   pnpm try:onboarding -- --teardown        # put the PC back
-//
-// WHAT IS SUBSTITUTED, AND NOTHING ELSE IS. The installer, the scheme registration, the app's own screens,
-// the bundled connect.ps1, the image pull, the sandbox and the workspace are the shipped path, byte for byte.
-// Four things cannot be, and each is a consequence of the platform being local rather than hosted:
-//
-//   • the app's settings file names the local api and the local SPA. The installed app resolves both from its
-//     settings, then its environment, then the hosted defaults (state.rs) — and a setup link arriving from an
-//     EXTERNAL browser carries no `platform` of its own, since setup_link.rs drops that parameter unless the
-//     link came from the app's own window. A rehearsal that skipped this would mint a code on the local
-//     platform and redeem it against the real one.
-//   • IC_URL names the local site. connect.ps1 downloads `$IC_URL/ic-windows-amd64.exe` and defaults to the
-//     latest GitHub release; a working-tree build carries the 0.0.0 sentinel, so it pins no release of its
-//     own (commands.rs `ic_url`) and would otherwise drive the last release's CLI.
-//   • the update check is off, so a 0.0.0 build is not offered the last release halfway through.
-//   • the installer is downloaded from http://localhost:4321 rather than intentic.dev, which is what the dev
-//     SPA's own download links already point at (desktopDownloads.ts).
-//
-// Everything this does to the PC is recorded and reversed by `--teardown`, including the app that was
-// installed before it ran.
+// Rehearses shipped Windows onboarding from this WSL checkout: build/stage the installer, prepare the PC, open the flow and watch.
+// pnpm try:onboarding supports --check, --skip-build, --sandbox-image <image> and --teardown (passed after --).
+// Substitute local API/SPA settings, IC_URL and installer URL, and disable updates so a 0.0.0 build stays on this branch.
+// Record every PC change for --teardown, including restoration of the previously installed app.
 
 import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";

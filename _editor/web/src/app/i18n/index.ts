@@ -3,25 +3,10 @@ import base from "./locales/en.json";
 
 type AppMessages = typeof base;
 
-// `en` is the schema as well as the fallback: this is the shape every other language is reshaped to, and the tree
-// `t` resolves a key against. @intentic/ui augments the same interface with its own `ui` slice; TypeScript merges
-// the two. What it does NOT do is refuse a key that is not in here — vue-i18n's `t` takes any string, whatever the
-// schema says — so the gate on a typo is `_tools/checks/i18n-keys.mjs`, not the compiler.
-//
-// The whole of en.json, by `extends`: a section added there is typed the moment it exists. It used to be one line per
-// section, and a test failing on a section added to en.json and not to that list.
-// A section is one feature area: `src/features/<area>` keys under `<area>`, core-views under `views`, `src/shell`
-// under `shell`, `src/components` under `common`.
-//
-// Where a word lives:
-// - `ui.action.*` (the kit's): a verb any surface's control can carry (Cancel, Restore, Show less); `ui.status.*` the
-//   progress words (Loading…, Working…).
-// - `shared.*`: a NOUN (or a state a thing is in) that means the same in every feature that says it: the sections'
-//   own names, Agent, Model, Running. English alone is not a reason to share: "Access" the sandbox section and
-//   "Access" a capability's grant are two keys. `_tools/checks/i18n-shared.mjs` refuses what is never a noun phrase.
-// - `<area>.words.*`: a word several of one feature's components say; a phrase another feature borrows stays with the
-//   feature it belongs to.
-// - `<area>.<component>.*`: everything else.
+// en.json defines fallback and the full message schema, merged with the kit's ui slice; i18n-keys.mjs catches typos because t accepts strings.
+// Feature keys live under <area>, core views under views, shell under shell, and common components under common.
+// ui.action/status owns shared verbs/progress; shared.* holds cross-feature nouns/states only, enforced by i18n-shared.mjs.
+// Keep feature vocabulary in <area>.words and component copy in <area>.<component>; identical English alone does not justify sharing.
 declare module "vue-i18n" {
     // oxlint-disable-next-line typescript/no-empty-object-type -- module augmentation merges only into an interface, so en.json's whole tree enters by `extends`
     interface DefineLocaleMessage extends AppMessages {}

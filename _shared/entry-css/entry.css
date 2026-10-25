@@ -550,24 +550,9 @@ html[data-frameless] .entry {
     }
 }
 
-/* ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   THE SAME SCREENS IN DAYLIGHT.
-
-   A reader who came from intentic.dev/guest has been reading a light page, and an entry screen is the first thing
-   they meet on this side — so they wear the site's light skin exactly as they already wear its dark one.
-
-   KEYED ON THE SCHEME, NOT ON THE PROFILE, and that distinction is the whole of it. A profile decides the scheme once,
-   on arrival; after that the scheme is what is true, and someone who came in on /guest and then picked Sanctum is a dark
-   reader whatever brought them. Keying on `data-profile` dressed that person's sign-in screen in daylight metals on a
-   near-black ground. It also means anyone who simply chose Light in Settings gets these screens too, which they should
-   have all along: light is light, however it was asked for. `data-mode` is present only when dark (useTheme spells
-   light by removing it), so the negation is the light scheme exactly.
-
-   Almost nothing here is a new colour. The entry screens run INSIDE the app, whose own light scheme is already live
-   under them (no `data-mode`, so semantic-colors.css's `:root` roles resolve light); the block above replaced those
-   roles with the site's dark ones, and most of this block is simply handing them back. What is left over is the site's
-   own vocabulary — the two metals, the plate's washes and the cast-bronze plaque — and every one of those values is
-   _site/site/src/styles/guest.css's, name for name. scripts/check-guest-palette.mjs fails the build if the two part. */
+/* Entry screens follow the active scheme, not arrival profile: absence of data-mode means light, even after a profile switch.
+   Restore the app's light semantic roles overridden by the dark block above; keep only the site's metals, washes and bronze vocabulary.
+   Match _site/site/src/styles/guest.css; scripts/check-guest-palette.mjs checks the shared palette. */
 html:not([data-mode="dark"]) .entry {
     /* GOLD DOES NOT SURVIVE DAYLIGHT — #c9a05c on paper is 2.2:1, unreadable as the label type it carries. Both metals
        become burnt orange and keep their order, and the ember lands a step off them. Fixed brand rather than the picked

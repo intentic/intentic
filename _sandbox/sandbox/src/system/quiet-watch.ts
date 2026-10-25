@@ -1,23 +1,9 @@
 import type { Logger } from "pino";
 
-// SINCE WHEN NOBODY HAS NEEDED THIS SANDBOX, for the host that may put it to sleep. A sandbox on somebody's own computer
-// cannot stop itself the way a hosted machine does (sleep/idle-stop.ts): Docker starts a container whose daemon exited again
-// at once, and only the computer's own keeper can stop it so it stays down (ic: `sandbox sleep`). So the daemon says
-// what it knows, through the work signal (workload/work-signal.ts), and the keeper decides:
-// - quietSince: when the present quiet streak began; absent while anything needs the sandbox now. Quiet is nobody
-//   connected to the editor, nothing in flight that only this daemon's clock moves (bootstrap/working-now.ts, purpose
-//   "idle-stop"), no person typing in a terminal, and nobody connected to a workspace app. The last terminal keystroke
-//   moves the streak's start forward rather than breaking it, as idle-stop reads it.
-// - nextWakeAt: the soonest moment the sandbox promised somebody (an automation, a booked send, an approved action), which a sleep
-//   would silently miss; absent when none.
-// - personAt: the last moment a person was here since this boot (connected to the editor, typing in a terminal, or with
-//   a workspace app open), 0 for none; said whatever else is true. What tells the keeper a sandbox it woke only for a
-//   schedule may sleep again soon after the scheduled work is done (ic: the alarm's short grace).
-// - keepAwake: the owner switched sleep off, or an enabled event/listener automation needs continuous reception. No streak is
-//   kept and no `quietSince` is said whatever else is true, so no keeper's verdict can come out as sleep; the flag says
-//   why to a keeper that reads it (ic names it), where one that does not reads a sandbox that never went quiet.
-// Checked once a minute, and freshly through sleep/sleep-socket.ts just before the host stops it: work.json is a
-// heartbeat, so a booking saved since the last pass reaches the keeper through that fresh check, not this file.
+// Tell the host keeper when sleep is safe: quietSince requires no editor, clock-driven work, terminal activity or workspace-app users.
+// Terminal input advances the quiet start. nextWakeAt is the earliest promised job; personAt is last presence this boot (0 if none).
+// keepAwake (owner setting or continuous event/listener reception) suppresses quietSince entirely.
+// Refresh the work signal each minute and via sleep-socket.ts just before stopping, so newly booked work cannot be missed.
 
 export interface QuietProbes {
     readonly connected: () => number;

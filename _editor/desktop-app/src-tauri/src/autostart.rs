@@ -1,19 +1,6 @@
-/* STARTING AT SIGN-IN, IN THE TRAY (2026-10-13) — opt-in, from the tray's "Start Intentic at login".
- *
- * An app that lives in the tray is only useful while it runs: the wake word (wake.rs), the notifications, the mark on the
- * icon. Nothing started it but the reader, so after every restart it was gone until somebody thought to open it. Ticked,
- * the system starts it at the reader's sign-in with `--background` ([`ARG`]): no window at all, only the tray, and the
- * workspace loaded hidden when its page was listening (lib.rs). Unticked, nothing is left behind.
- *
- * - Windows: the value `Intentic` under `HKCU\…\CurrentVersion\Run`, the key the setup's resume entry already uses
- *   (resume.rs), written and read with the same `reg.exe`. The uninstaller takes it away (installer-hooks.nsh); an update
- *   keeps it, since it names the same program.
- * - Linux: an XDG autostart entry, `$XDG_CONFIG_HOME/autostart/dev.intentic.desktop.desktop` (`~/.config` without the
- *   variable), naming this program, or the AppImage it runs from (`$APPIMAGE`, since the program itself is unpacked
- *   somewhere new at each start). Removing the package leaves it, as any per-user file; the desktop skips an entry whose
- *   program is gone.
- *
- * The row's tick is what the registry or the file says, read again after every press, never what the press meant. */
+/* Opt-in sign-in launch uses --background: tray only, plus a hidden workspace if listening was wanted.
+ * Windows stores Intentic in HKCU Run (kept on update, removed on uninstall); Linux uses an XDG autostart entry naming the app or APPIMAGE.
+ * Linux per-user entries may outlive uninstall; missing executables are skipped. Always reread the actual registry/file state after toggling. */
 
 use std::path::{Path, PathBuf};
 

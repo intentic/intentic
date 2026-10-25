@@ -1,18 +1,6 @@
-//! THE KEYRING ON THIS COMPUTER (2026-10-16): the Passwords view (src/passwords), through `intentic-machine keyring`.
-//!
-//! The vault itself is `intentic-keyring`, a process of its own beside the machine agent (_devices/keyring); this app
-//! never opens it. Every verb here runs the machine agent's `keyring` command with `--json`, the same producer the
-//! terminal uses, and hands its one line of JSON to the webview, which has the schema; restating it in Rust would be one
-//! more thing to keep in lockstep (the same reason `machine_report` passes the agent's status through raw).
-//!
-//! A SECRET NEVER GOES ON A COMMAND LINE. Everything the Passwords app sends for `keyring app <op>` (a value being saved,
-//! a row of an import, a value typed once for an agent's request) is one JSON object written to the child's standard
-//! input and the pipe closed, never put in argv, where any process of this user could read it, never in an error, never
-//! in a log. The argument builders below are pure and tested to prove it: they are not handed the input at all. What
-//! reaches stdin is held in a [`Secret`], which zeroes its bytes when it is dropped.
-//!
-//! Every change on the vault makes the keyring ask the person at this computer (Windows Hello, or polkit on Linux), so a
-//! call can wait on a person for as long as the keyring gives them: two minutes, and a little more here.
+//! Proxy intentic-machine keyring --json to Passwords; never open the vault or duplicate its JSON schema in Rust.
+//! Secrets go only as JSON on child stdin, never argv/errors/logs; pure argument builders never receive them.
+//! Hold input in Secret for zeroing on drop, close stdin after writing, and allow over two minutes for Hello/polkit approval.
 
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};

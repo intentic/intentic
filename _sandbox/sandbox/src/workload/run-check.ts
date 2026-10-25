@@ -3,21 +3,10 @@ import { type DetachedKind, detachedStamp } from "../seams/workload-stamp.js";
 import { spawnAs, type Workload } from "./workload-class.js";
 import { killGroup, TERM_GRACE_MS } from "./process-group.js";
 
-// THE ONE WAY THE DAEMON RUNS A COMMAND TO COMPLETION UNDER A DEADLINE (2026-10-05): an automation's guard, a loop's
-// stop check, a chore probe, a watch check, a file.edited rule, a turn's JS run, a post-edit Python check. Each had its
-// own copy, and most killed only the shell at the deadline: its children kept running and holding the output pipe, so
-// the answer waited on them anyway, and none but one was in a workload class, so its work kept the daemon's own OOM
-// rank and outlived a turn under the OOM killer. Here the command is a session and process group of its own (spawnAs
-// with `detached`), in the caller's class, stamped with its deadline for the reaper; the deadline, an abort or an
-// overflow the caller wants killed ends the whole group, SIGTERM then SIGKILL after a grace. What a result means (exit
-// 0 is a pass, a done, a wake) stays the caller's: this answers only what happened.
-//
-// It does not set the workspace-root scope variable (WORKSPACE_ROOT_EXCLUDE_ENV) on every command. That variable is a
-// statement about WHERE a scanner runs, the /work pseudo-repo whose refs/ is reference material, and the same
-// directory inside a real repository is project content a scan must see. Only the commands written to read it (the
-// chore probes and the chore automations' guards, through WORKSPACE_ROOT_*_EXCLUDE_ARG) do anything with it, and only
-// their two callers know they stand at the workspace root, so they set it in the `env` they pass. A stop check, a
-// watch check or an edit rule runs in a conversation's own tree, where the variable would be a lie.
+// Run commands in their caller's workload class and a detached process group, stamped with a deadline for the reaper.
+// Deadline/abort/selected overflows end the whole group (SIGTERM then grace/SIGKILL), preventing descendants from holding output open.
+// Return execution facts; callers interpret exit status. Do not globally set WORKSPACE_ROOT_EXCLUDE_ENV:
+// only workspace-root scanner callers supply it, since refs/ inside a real repo is ordinary content.
 
 // The shells a command line can be handed to. `platform` is what `child_process.exec` uses on the POSIX systems the
 // daemon runs on.

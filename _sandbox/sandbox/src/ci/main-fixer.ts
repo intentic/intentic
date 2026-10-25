@@ -24,26 +24,10 @@ import { type FailedJob, findingOf, fixerOf, fleetFailed, heardOf, mainFailureOf
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
-/* MAIN'S CI HAS ONE FIX AGENT, AND IT HEARS EACH RUN ONCE, WHOLE. A run's failed jobs on a repository's main line (its
-   default branch, main-line.ts) are parked as they fail, and handed over together when the run finishes, or when it is
-   still going RUN_SETTLE_CAP_MS after its first failure (anything failing after that follows at the run's end). The
-   first run to fail starts the agent with every job it failed; each later run's failures are said to the same
-   conversation as one message: into its live turn, as a turn of its own when it is idle, queued otherwise. So it never
-   watches a run itself, nobody decides who broke what, and one cause failing six jobs costs one turn rather than six.
-   The streak ends when a later run of every workflow that failed on it passes.
-
-   (2026-10-02: per run rather than per job. Started at the first failed job, the agent was handed preflight's two
-   minutes of checks while the verify groups were still building, ended its turn, and was then woken once per job that
-   failed after: since 2026-09-30 it spent its three turns that way five times. Waiting costs ~7 minutes at the median,
-   the time between a run's first failed job and its last. This is not the retired 09-23 repair gate's quiet window,
-   which waited for pushes to stop and so could hold the agent back for as long as main kept moving: this waits for one
-   run, and never past the cap.)
-
-   It gets a few turns, and hands the failure to the owner when they are spent, or when its turn ends without it having
-   changed anything (a failure that is not in the code: the runner's environment, a tool's version, a secret) or ends
-   failed, stopped or archived. A failed job the CI fleet died in is never its work: a run whose every failure is the
-   fleet's is re-run once, which the CI store keeps too. The streak is kept in the CI store (ci-store.ts), so a restart neither forgets it nor starts a
-   second agent on it; the Agent tab's Repair switch (`autoRepair`) off, a failing main is only reported. */
+/* One persisted fix conversation per default-branch failure streak; batch failed jobs when a run settles or reaches RUN_SETTLE_CAP_MS.
+ * Send later failures once per run to the same conversation; end the streak after every affected workflow has a later passing run.
+ * Limited turns, no change, failure, stop or archive hand control to the owner. Exclude fleet failures and retry an all-fleet-failure run once.
+ * Persist in ci-store across restarts. With autoRepair off, report failures without starting repairs. */
 
 // Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none. One run's failures
 // are one message, so this is three runs' worth.

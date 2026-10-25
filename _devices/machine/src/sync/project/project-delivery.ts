@@ -20,22 +20,10 @@ import { mutagenSession, realProjectRunner } from "./project-remote.js";
 import { clearStaging, exclusively, type FolderContext, folderStateDir, type ProjectPairing, transferHold, whileHeld } from "./project-transfer.js";
 import { backUp, createPointDir, pruneRestorePoints, type RestoreEntry, sealPoint, writeManifest } from "../restore-points.js";
 
-// LANDED WORK WRITTEN INTO THE OWNER'S FOLDER (`deliverProject` on the device link, the contract's
-// schemas/project-delivery.ts). A folder with a sandbox of its own is copied one way into its `/work/<name>`; when a
-// conversation's work lands there, the daemon hands the same change here, and this agent decides, file by file, what the
-// folder takes. The rules are a bring-back's (project-transfer.ts), and so is everything that keeps them:
-// - Only a folder that opted in (`deliver: "auto"`, which `sync setup --project` records), of the sandbox on the other end
-//   of the link that asks. Nothing an agent runs can ask: this is a procedure of the link, not one of its tools.
-// - Under the folder's lock, with its session flushed and held still, as a bring-back is.
-// - A restore point before the first write, in the bring-back's own shape, so `sync restore --point <id>` undoes a
-//   delivery unchanged. None when nothing is written.
-// - NEVER OVER THE OWNER'S OWN EDIT. A file is written as landed only where the folder still holds what the land started
-//   from (`base`); one the owner changed too is merged three ways by git when all three are text and the merge is clean,
-//   and is otherwise left as the owner has it, named in `conflicts`.
-//
-// WHY THE SESSION AGREES AFTERWARDS: the sandbox's copy already holds what landed, so a file written here as landed has
-// moved on both sides to the same bytes, which Mutagen records as agreement. A merged one differs from the sandbox's
-// until the daemon writes the merge there too, which is why its content goes back in the answer.
+// Link-only delivery to this sandbox's opted-in deliver:auto project pairing; tools cannot invoke it. Flush/hold sync under the folder lock.
+// Make a bring-back-compatible restore point before the first write, never for a no-op; preserve every owner edit.
+// Apply unchanged-base files, clean text three-way merges, or leave conflicts untouched. Return merged content so the daemon updates its copy too.
+// Matching both sides after delivery lets Mutagen record agreement rather than treating the merge as another conflict.
 
 // A delivery the agent turns away whole, with the sentence the land's card shows and the oRPC code it travels as.
 export class DeliveryRefused extends Error {

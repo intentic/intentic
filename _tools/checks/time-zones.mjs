@@ -1,24 +1,7 @@
 #!/usr/bin/env node
-// TIME VALUES THAT CROSS A MACHINE. This repo runs its daemon in a UTC container and its editor on whatever clock the
-// reader's laptop is on, so a value that carries no zone means two different things on the two sides — silently, since
-// both render a plausible number. That is not a theoretical risk: a "Daily 20:43" automation fired at 22:43 for its
-// owner for as long as the feature existed, because the cron was evaluated by whichever process happened to hold it.
-//
-// Four rules, each the shape of a shipped defect rather than a style preference:
-//
-//   1. `new Cron(expr)` with no `timezone` silently means "in whatever zone this process is". Pass one.
-//   2. `toLocaleDateString`/`toLocaleString`/`toLocaleTimeString` outside the kit builds an `Intl` formatter frozen at
-//      module load, so its dates stay in the previous language after a language change, and it bypasses the house
-//      24-hour style. The kit's formatters are reactive; use them.
-//   3. Local-component reads (`getHours`, `getDate`, `setHours`, …) in DAEMON code read the container's UTC clock as
-//      if it were somebody's. In browser code they are correct — that IS the reader's clock — so this is scoped.
-//   4. `.toISOString().slice(0, 10)` is a UTC day bucket. Bucketing in UTC is usually RIGHT — a money log whose days
-//      move when somebody changes a setting is not a log — so the rule is not "don't", it is "say so": the binding
-//      it lands in, or a comment on it, has to contain the word UTC. `dateOf`/`dayOf`/`date` reads as "the day",
-//      and the reader supplies their own midnight.
-//
-// CARVE-OUTS, which are a real part of this check rather than an apology: the browser-fingerprint files set a FAKE
-// timezone on purpose, to dress a browser profile as a place it is not. A later sweep must not "fix" them.
+// Require an explicit cron timezone; use reactive kit locale formatters and forbid daemon-local date component reads.
+// UTC day buckets are valid but their binding or nearby comment must say UTC to distinguish them from the reader's local day.
+// Browser-local component reads are valid. Exempt browser-fingerprint files: they deliberately set a fake timezone.
 import { readFileSync } from "node:fs";
 import { finish } from "./lib/report.mjs";
 import { subjectFiles } from "./lib/repo.mjs";

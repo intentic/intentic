@@ -1,24 +1,9 @@
 import { EDGE_VERDICT_HEADER, edgeVerdictIsFinal, edgeVerdictOf } from "@intentic/sandbox-contract/protocol/edge-verdict";
 import type { Pairing } from "./config.js";
 
-// A SANDBOX THAT NO LONGER EXISTS, AS POSITIVE EVIDENCE SAYS IT (2026-10-05). A pairing used to be dropped only on three
-// 401/403 answers in a row, an uninstall or a setup again; a sandbox deleted elsewhere answered 502 forever, which is
-// what a sandbox restarting answers too, so its pairing stayed forever. One PC held 13 pairings, 10 of them for gone
-// sandboxes, and per dead sandbox polled every ten minutes, logged a failed reconcile each time and posted 5,760
-// unlogged reports a day, while 14 Mutagen sessions sat paused for good.
-//
-// Two witnesses can say "gone", and only these two; absence alone never proves deletion:
-// - THE EDGE: a request through the platform's edge to a sandbox the platform has tombstoned answers with
-//   `x-intentic-edge: unknown-sandbox`, the verdict the contract reads as final (`edgeVerdictIsFinal`). The edge reads it
-//   off the platform's record and fails open on any doubt, so it is positive evidence.
-// - THIS MACHINE'S ic, for a sandbox kept here: ic listed it once (the pairing records the slug, `icSlug`) or the
-//   pairing reaches its container through Docker, and now ic's listing answers without it and its trash does not hold
-//   it either (`localVerdict`).
-//
-// What follows a verdict is the same whoever gave it: the pairing is marked `goneSince` (config.ts), its sessions are
-// paused, its forwards come off localhost, its tunnel closes and no report is posted to it. The sandbox is asked again
-// at most hourly, and an answer clears the mark. Past GONE_RETIRE_MS the pairing is retired (retire.ts), its folder and
-// restore points kept.
+// Only positive evidence marks a pairing gone: the edge's final unknown-sandbox verdict, or ic missing a previously local sandbox and its trash.
+// Set goneSince, pause sync, remove forwards, close the tunnel and stop reports; retry at most hourly and clear the mark on an answer.
+// After GONE_RETIRE_MS retire the pairing while keeping its folder/restore points. Absence or a transient 502 alone never proves deletion.
 
 // The trash window: what ic keeps a removed sandbox's volumes for before purging them, and so how long a sandbox said to
 // be gone may still come back. A pairing is retired only once that has passed.

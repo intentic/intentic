@@ -1,40 +1,8 @@
 #!/usr/bin/env bash
-# Prove the update promises on a real sandbox, nightly: YOUR FILES SURVIVE EVERY SWAP, and THE WORST OUTCOME
-# OF AN UPDATE IS THE SANDBOX YOU ALREADY HAD.
-#
-#   verify-update-survival.sh
-#
-# Both promises are load-bearing product claims — the update card says "your files (in /work) are kept" and
-# offers a one-command rollback, and the recreate engine (_sandbox/ic/src/sandbox/recreate.rs) parks the old
-# container, restores it when the new one fails health, and keeps it parked through a probation in which
-# `ic sandbox watch` goes back to it by itself. Nothing per-push exercises any of that against real
-# published images, which is exactly the kind of property that regresses in silence: a mount dropped from one
-# run shape wiped the hosted fleet's /history once already (sandbox-run/index.test.ts tells that story).
-#
-# The drill, on the same clean dind host verify-desktop-setup.sh uses:
-#
-#   0. resolve the two images, and make sure they are two: when :latest and :stable name one image there is
-#      nothing to move onto, so the target becomes those bytes under a marker layer (step 0 below says why).
-#      Then derive two builds from the target that fail on purpose: its own bytes with the daemon's test-only
-#      fault hook switched on (INTENTIC_FAULT, _sandbox/sandbox/src/system/boot/fault.ts)
-#   1. connect a sandbox on the PUBLISHED stable image — the machine a real user has today
-#   2. write sentinels into /work and /history
-#   3. `ic sandbox update` onto the freshly built image (:latest, what main last published)
-#        → daemon healthy, sentinels intact, image actually changed
-#   4. `ic sandbox rollback`
-#        → daemon healthy, sentinels intact, image back where it started
-#   5. `ic sandbox update` onto the build whose daemon dies at boot (crash-at-boot)
-#        → ic fails, AND the original sandbox is back up healthy with its sentinels, and update-outcome.json says
-#          `restored` — the parked-container restore, which is the "never worse off" half of the promise
-#   6. `ic sandbox update` onto the build that passes that health check and then keeps crashing
-#      (crash-after-ready), with the probation cut from a day to minutes, then `ic sandbox watch` until it acts
-#        → back on the image it ran before, sentinels intact, and update-outcome.json says `rolled-back` — the
-#          same promise, kept for a bad release that gets past the first health check
-#
-# Hermetic like its sibling: direct-token connect, no edge, no platform. connect.sh is read from the
-# site tree rather than an installer — verify-desktop-setup.sh owns "the shipped bytes work"; this tier owns
-# "the update engine keeps its promises", and building a .deb to test the update engine would couple the two
-# for nothing. ic is built from this checkout via IC_BIN, the shim's own override.
+# Nightly update drill: on a clean dind host, verify /work and /history sentinels survive update and explicit rollback.
+# Inject boot failure and post-ready crashes to assert parked-container restore and probation rollback, including recorded outcomes.
+# Use distinct image IDs even when stable/latest coincide; the target's daemon bytes stay unchanged except for explicit fault settings.
+# Direct-token setup is hermetic; connect.sh comes from the site tree and IC_BIN from this checkout. Installer bytes have a separate drill.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/dind-host.sh"
@@ -87,25 +55,9 @@ docker cp "$ROOT/_sandbox/ic/dist-bin/ic-linux-amd64" "$HOST_CONTAINER:/root/ic"
 in_host chmod +x /root/ic
 docker cp "$ROOT/_site/site/public/scripts/connect.sh" "$HOST_CONTAINER:/root/connect.sh"
 
-# 0. TWO DIFFERENT IMAGES TO MOVE BETWEEN
-# `:stable` and `:latest` are the SAME image whenever main has published nothing since the last release
-# promoted one onto the other. That is a normal registry state, not a broken one, and `ic` reports it
-# correctly ("no newer sandbox image is available yet — your sandbox is already on the latest :stable it can
-# pull"). The drill used to read that correct no-op as a broken update engine: step 3's "the container
-# actually moved" failed, and then step 4's rollback had no record to roll back to and took the whole script
-# down with it under `set -e`, so steps 4 and 5 — including the parked-container restore, the most valuable
-# assertion here — never ran at all. The 2026-09-09 nightly failed exactly that way.
-#
-# So the pair is resolved before anything is connected, and when the two tags name one image the target
-# becomes a derivative of it: the same published bytes under a marker layer, which is a different image id for
-# the engine to move onto while running exactly the daemon `:latest` ships.
-#
-# Every derivative here is the target's bytes with one Dockerfile instruction laid over them, as `FROM <target>` plus
-# that line would make it. Made with `docker commit` rather than a one-line Dockerfile because the dind host carries
-# the docker CLI and compose, not buildx, and a `docker build` there would be a second thing that can fail for
-# reasons the update engine knows nothing about. No command argument: the created container inherits the image's
-# own entrypoint and cmd, and `commit` carries them into the derivative — a `docker create IMAGE true` here would
-# bake `true` in as the CMD and hand the update engine an image whose daemon never starts.
+# If stable/latest resolve to one image, add a marker layer so update and rollback still exercise a real image change.
+# Use docker commit because this dind host has no buildx; preserve the target's entrypoint and CMD in every derivative.
+# Do not pass a command to docker create: even `true` would be committed as CMD and prevent the daemon from starting.
 derive_image() { # <from> <tag> <instruction>
     local created
     created="$(in_host docker create "$1")"

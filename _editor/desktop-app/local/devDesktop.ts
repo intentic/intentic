@@ -28,30 +28,10 @@ import { followCopy } from "./devCopy";
 import { keyringVerb } from "./devKeyring";
 import { CHECK_CANT_RUN, CHECK_NEEDS_SETUP, CHECK_READY, CHECK_UNKNOWN } from "./devOnboarding";
 
-// THE APP, STOOD IN FOR ON A DEV SERVER. The local face in a plain browser (`pnpm dev:local`) has no Tauri behind it, so
-// every command the shell and This device call would throw. This answers them from a few fixed machines, through Tauri's
-// own IPC mock, so the real host (src/host.ts) and the real store (src/device/useDevice.ts) run as they do in the app.
-// Loaded only by a dev server outside the app (local/main.ts); a build never contains it.
-//
-// Which machine is chosen by `?machine=` on the dev address, kept for the tab's reloads:
-// - `fresh` (the default): a first launch. No account, no sandbox, no agent, no Docker.
-// - `host`: signed in, sandboxes here (one running with a folder synced, one stopped, one a WSL distro keeps, one nobody
-//   named), the machine agent up.
-// - `setup`: signed in, a setup handed over from the workspace, running its steps.
-//
-// A folder's own sandbox (src-tauri/src/folder_setup.rs), made on the press of "Work on this with an agent", goes as
-// `?sandbox=` says, kept with the machine: `creating` (the default) runs its setup and first copy through to the folder
-// in, in about half a minute; `docker` stops on Docker not running, `waiting` on a yes to what this PC needs, `failed`
-// on a refused setup code, and `behind` waits behind another folder's setup first. Nobody signed in signs in first.
-//
-// "Work on this with an agent" answers as `?project=` says, kept with the machine: `new` (the default) a folder that can
-// have one, `cautions` one that a sync service already holds and that is large, `refused` one inside a folder that has
-// one, `fail` one whose folder never starts syncing.
-//
-// This PC's own setup (src-tauri/src/onboarding.rs, the card on This computer) is as `?pc=` says, kept with the machine:
-// `ready` (the default), `checking`, `unknown`, `needsSetup`, `metered`, `prefetchFailed`, `settingUp`, `needsYou`,
-// `quiet`, `restart`, `restartScheduled`, `admin`, `signOut`, `failed`, `cantRun`, or `taskFailed` (a ready PC whose
-// first task did not start). Until it is ready, a folder's sandbox waits for it, as the app's does.
+// Dev-server-only Tauri IPC fixtures let the real host/store run in a plain browser; production builds exclude this module.
+// ?machine=fresh|host|setup chooses the PC; ?sandbox=creating|docker|waiting|failed|behind drives folder setup and first copy.
+// ?project=new|cautions|refused|fail drives the folder action; ?pc=<state> drives this computer's setup, which blocks folders until ready.
+// Choices persist across tab reloads. A signed-out fixture signs in before starting a folder's sandbox.
 
 type Machine = `fresh` | `host` | `setup`;
 const MACHINES: readonly Machine[] = [`fresh`, `host`, `setup`];

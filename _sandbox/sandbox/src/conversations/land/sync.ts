@@ -11,24 +11,10 @@ import type { Upstream } from "./land-target.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { assertLinked } from "../worktrees/checkout-link.js";
 
-// Rebases a conversation's branch onto main's HEAD before each turn and again before land; a refused rebase retries
-// with `--onto main landedTip`, replaying only commits main does not already hold. Touches only this conversation's own
-// worktree, never the main checkout; no repo lock is taken. A spawned child cut from its parent's checkout follows that
-// checkout instead (land-target.ts `upstreamOf`): what the parent has written is committed there first, as a checkpoint
-// is, and only the child's own commits are replayed onto it.
-//
-// LETTING COMMITS GO IS ONE DECISION, MADE ON CONTENT (2026-10-20). Replaying only what follows a land's tip drops every
-// commit up to it, so both lines take it through one door, `replaySinceLanded`, and only once the tree the work landed
-// in is read to still hold what the dropped commits carry (`upstreamAccountsForPrefix`): the rung records that a land
-// happened, never that it is still there. Until then the parent's line trusted the rung outright, and a parent `merge`
-// that wrote nothing yet moved it (land.ts, now proven) had its child's next catch-up rebase every commit away. The tip
-// before a drop is pinned on `refs/intentic/dropped/<id>` (agent-refs.ts `droppedRef`) whatever the rebase then does.
-//
-// `standsElsewhere`: a repo whose copy the conversation moved to a branch of its own (a pull request it was asked to
-// work on, a CI branch it pushes) is not synced at all. A rebase runs on whatever the copy stands on, so it used to
-// rewrite that branch onto the owner's HEAD, unpushed commits included, and commit the dirty remainder onto it, while
-// `agent/<id>`, the branch land reads, never moved. What the turn commits there reaches `agent/<id>` by the turn's carry
-// instead (conversations/worktrees/stray-work.ts), and a land measures it from there as from any branch.
+// Rebase only this worktree onto main (or the parent's checkpointed checkout) before turns/land, without a repo lock.
+// Retry via replaySinceLanded only after upstreamAccountsForPrefix proves upstream still contains the dropped commits' content.
+// Pin the pre-drop tip at refs/intentic/dropped/<id>. A recorded land alone never proves its content survived.
+// Skip standsElsewhere branches; stray-work.ts carries their commits to agent/<id> without rewriting the user's chosen branch.
 
 // A repo whose branch was not on main's tip; `commits` are the main-line commits between the two, gained if rebased,
 // still missing if `blocked`.

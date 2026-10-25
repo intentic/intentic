@@ -1,51 +1,8 @@
 #!/usr/bin/env bash
-# BOOT THE IMAGE THAT IS ABOUT TO SHIP AND MAKE IT PROVE IT IS ALIVE.
-#
-#   bash _tools/scripts/image/smoke-image.sh ghcr.io/intentic/sandbox:sha-abc1234-amd64 [more refs...]
-#
-# WHY THIS EXISTS. Everything upstream of the image jobs runs in the DEVELOPMENT install: the root node_modules,
-# every devDependency present, every workspace package linked. The image runs a tree that
-# prepare-image-trees.sh pruned with `pnpm deploy --prod`. Those two graphs are not the same graph, and the
-# difference is invisible to `build`, `typecheck` and every test suite — all four of which keep passing while
-# the daemon the image actually starts dies on its first import.
-#
-# That is not a hypothetical failure mode. On 2026-08-18 a host-side module imported the extension API's root
-# barrel for one constant; the barrel re-exports a browser module that imports `vue` as a value, `vue` is a dev
-# dependency and an unmet peer, so it is absent from the pruned tree — and the daemon crashed on boot. The
-# pipeline passed, `sandbox:latest` was published, and the first thing that noticed was an update on a real
-# machine timing out at "the sandbox did not become healthy within 30s".
-#
-# Nothing per-push booted the artifact. The nightly tiers do (`sandbox.e2e.test.ts`,
-# verify-update-survival.sh), but they run against ALREADY PUBLISHED images up to a day later — which makes
-# them the report, not the gate. This script is the gate: it runs on the arch that just built the half, before
-# any moving tag (`latest`, `stable`) is stitched onto it.
-#
-# WHAT "ALIVE" MEANS HERE, and why it is more than a 200. /health answers as soon as the HTTP server is
-# listening, which is well before the daemon has converged — so a box that opens the port and then fails every
-# boot step would sail through a plain liveness probe. The probe below asserts the whole contract the launch
-# scripts and ic's postflight read:
-#
-#   * the container is still RUNNING          — a container whose entrypoint dies exits, and exiting is checked
-#                                               every pass so the failure is reported in seconds, not at the timeout
-#   * netd has not restarted a crashed daemon — netd is PID 1 and restarts a daemon that crashed without the
-#     three times over                         container ever exiting. Its vitals (/system/vitals) count that once the
-#                                               daemon reached it; one that dies on import never does, and netd then
-#                                               listens on nothing, so its log line is counted instead. NOT retried
-#   * /health returns 200 with ok: true       — the app is assembled and serving
-#   * boot.ready is true                      — every step in main.ts's BOOT_STEPS converged
-#   * no boot step is in state "failed"       — checked separately, and NOT retried: a failed step is terminal,
-#                                               so waiting out the timeout would only delay the same verdict
-#   * the starter site is baked AND seeded     — the first screen of a new sandbox, which fails silently on both
-#                                               sides (see the probe); this container has a new box's exact
-#                                               shape, so it is the cheapest place in the pipeline to read it
-#
-# The probe runs INSIDE the container via the image's own node — no curl, no jq, no assumption about what the
-# runner has. Node is the daemon's runtime, so it is the one interpreter the image is guaranteed to carry.
-#
-# Hermetic by construction: no CONNECT_TOKEN and no SANDBOX_PUBLIC_URL, so main.ts's `requireAuthWhenReachable`
-# reads this as a loopback daemon and asks for no Google client id, exactly as the e2e harness's loopback mode
-# does. No volumes, no ports published, unprivileged — the baked Docker Engine stays dormant. A Docker daemon
-# is the whole requirement.
+# Boot each freshly pushed architecture before moving tags: production dependencies differ from the development install.
+# Assert running state, health, converged boot and baked/seeded starter; fail immediately on failed boot steps or repeated daemon crashes.
+# Probe with the image's Node, without host curl/jq. netd can restart the daemon without stopping the container, so inspect both.
+# Loopback mode uses no auth/public URL, volumes, published ports or privileges; only a Docker daemon is required.
 set -euo pipefail
 
 [ "$#" -gt 0 ] || { echo "usage: smoke-image.sh <image-ref> [<image-ref>...]" >&2; exit 2; }

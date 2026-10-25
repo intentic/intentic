@@ -1,21 +1,7 @@
-// Makes the baked starter site the same bytes every time it is built from the same template and lockfile, so its image
-// layer keeps its digest and an update does not download it again (starter.Dockerfile). Usage, inside that build:
-//   node normalize-starter.mjs <layer root> <msgpackr module dir>
-//
-// Two cold builds of the starter differed in 8 of 42,880 files, and every difference was a clock, a pid or a temp path,
-// never content (measured 2026-10-19 with pnpm 12.13.0 installing the template's pnpm 11.9.0):
-//   - the store indexes (store/v11/index.db, package-manager-store/v11/index.db): SQLite, one msgpack blob per package
-//     whose only moving part is each file's `checkedAt`;
-//   - node_modules/.modules.yaml `prunedAt` and node_modules/.pnpm-workspace-state-v1.json `lastValidatedTimestamp`;
-//   - pnpm 11's own bin shims, whose NODE_PATH names the temp dir its engine was installed through
-//     (`tmp/pnpm-engine-11.9.0-<pid>-<nanoseconds>`), and the projects/ link pnpm leaves pointing at that dir.
-// Each is set to one fixed instant here; prepare-image-trees.sh then sets every file's mtime to the same instant. A new
-// moving part in a later pnpm costs only the layer's reuse, never correctness: this rewrites values, it never drops one.
-//
-// THE FIXED INSTANT is 1980-01-01T00:00:01Z, one second after the mtime every file gets, and that order is what keeps
-// pnpm from re-checking anything: it re-hashes a store file whose mtime is newer than its `checkedAt`, and revalidates
-// a workspace whose manifests are newer than `lastValidatedTimestamp`. The daemon seeds /work with `cp -a`, which keeps
-// both mtimes (src/scaffold/starter-site.ts).
+// Usage: node normalize-starter.mjs <layer root> <msgpackr module dir>; normalize pnpm timestamps/temp paths for reproducible starter layers.
+// Rewrite SQLite/msgpack checkedAt, prunedAt, lastValidatedTimestamp and engine shim/project paths without dropping values.
+// Use 1980-01-01T00:00:01Z, one second after file mtimes, so pnpm does not rehash/revalidate newer files; cp -a preserves that ordering.
+// Later pnpm metadata changes may cost cache reuse, but must not affect correctness.
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";

@@ -1,46 +1,8 @@
 #!/usr/bin/env bash
-# Publish the first-party npm packages at <version>, idempotently — versions already on npm are SKIPPED.
-# This makes the release safe to re-run: a failed run just re-publishes whatever didn't land yet.
-#
-#   bash _tools/scripts/release/publish-npm.sh 1.15.1                 the release lane, from CI
-#   bash _tools/scripts/release/publish-npm.sh 2.0.0 --interactive    the recovery lane, from a maintainer PC
-#
-# TWO LANES, ONE PUBLISH PATH. Both walk PUB (packages.sh) in the same topological order, ask npm the same
-# "is this version already up?" question, pack the same tarball and publish it through the same retry
-# (npm-publish-retry.sh). What differs is who is allowed to publish, and what has to be true first:
-#
-#   the release lane   Runs in GitHub Actions (.github/workflows/npm-publish.yml), at the `v*` tag
-#                      semantic-release pushes to this repository once prepare has built and verified the
-#                      artifacts — that workflow is dispatched against the tag rather than triggered by it
-#                      (dispatch-publish.sh says why), so `GITHUB_REF_NAME` is the tag either way. Auth is
-#                      TOKENLESS: npm exchanges the workflow's OIDC id-token for a short-lived credential, so
-#                      there is no NPM_TOKEN to rotate, and every tarball carries a provenance attestation
-#                      linking it to the commit and workflow run that built it. Each package must have this
-#                      repository and this workflow registered as its trusted publisher on npmjs.com — one
-#                      that hasn't been fails in the token exchange, which is the correct outcome: a package
-#                      nobody can attest is not published. Versions are expected to be STAMPED already
-#                      (set-versions.sh, right after checkout) and a mismatch is fatal.
-#   --interactive      A guided manual publish from an authenticated developer PC (`pnpm login` as a
-#                      maintainer). Use it when the release lane left a release half-published, or to
-#                      BOOTSTRAP a package name nobody has ever published — which the release lane cannot do
-#                      at all (see the trusted-publisher refusal below). It stamps the versions itself,
-#                      builds, and confirms every publish individually. No provenance: the attestation's
-#                      builder id is a GitHub-hosted-runner property and the registry rejects one built
-#                      anywhere else. Nothing is pushed to git; it prints the tag command for you to run if
-#                      you want semantic-release to continue from here.
-#
-# WHY A FRESH VERSION MATTERS FOR --interactive: an earlier release timeline published these packages all the
-# way up to 1.125.1 before the repo's version numbering was reset to ~1.14. Every version in 1.18.0-1.125.1
-# therefore already exists on npm for the long-lived packages (graph/engine/cli/sdk/...) with STALE content,
-# and both lanes skip what is already up. To publish a clean, internally consistent set of ALL packages, pass
-# a version no package has ever published (above 1.125.1, e.g. 2.0.0) — which is what the audit table's
-# publish dates are there to let you check.
-#
-# pnpm packs, npm publishes. pnpm is the only one of the two that rewrites `workspace:*` and `catalog:` specs
-# into real versions while building the tarball; npm is the only one that speaks OIDC and --provenance.
-# Splitting the step in two is what lets a pnpm workspace publish attested tarballs at all — and it is why
-# both lanes can share one publish, rather than the recovery one reaching for `pnpm publish` and quietly
-# shipping a different tarball through a different code path than the release it is repairing.
+# Publish packages at <version> in dependency order, skipping versions already on npm so interrupted releases can resume.
+# CI requires stamped versions, registered trusted publishers and OIDC provenance. --interactive stamps/builds and confirms each publish.
+# Recovery needs a version no package has published: historical versions through 1.125.1 may contain stale content.
+# pnpm packs to resolve workspace/catalog specs; npm publishes for OIDC/provenance. Both lanes share tarballs and retry handling.
 set -euo pipefail
 
 INTERACTIVE=0

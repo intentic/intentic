@@ -1,22 +1,6 @@
-# THE AGENT ENGINES, KEPT CURRENT BY THE CLOCK RATHER THAN BY MEMORY.
-#
-# engines.json is read by every sandbox on the `blessed` channel, hourly, so the version named there is the one the
-# whole fleet runs. The check in _tools/checks/engines-blessed.mjs ties each blessed version to a pin in this
-# repository, which is what makes "blessed" mean "this repo's suite ran against it" — and is also what left the fleet
-# months behind upstream, because moving a pin was a chore nobody was assigned. This workflow is the assignee.
-#
-# It runs no engine and no test, and that is the design. It rewrites the pins, resolves the lockfile, checks that what
-# it wrote clears the two checkout gates its own output can fail, and opens ONE pull request; ci.yml runs on that pull
-# request exactly as it does on anyone else's, and auto-merge lands it when the suite passes. The invariant is
-# untouched — CI is still what blesses a version — while the remembering is gone.
-#
-# NEEDS `ENGINE_BUMP_TOKEN`, a fine-grained PAT or App installation token with `contents: write` and
-# `pull requests: write`. Without it the pull request is authored by github-actions[bot] and its runs never start, so
-# there is nothing to bless against; this job fails rather than leaving that looking fine.
-#
-# ONE LONG-LIVED BRANCH, force-pushed. A bump that CI refuses stays open and failing, and tomorrow's run rewrites it to
-# whatever upstream published since, so a broken release upstream fixes itself rather than accumulating a PR a day. To
-# stop one engine without stopping the rest, put a `hold` on it in engines.json.
+# Update engine pins/lockfile and open one long-lived PR; CI, rather than this workflow, tests and blesses each version.
+# Require ENGINE_BUMP_TOKEN with contents/pull-requests write: GITHUB_TOKEN-authored PRs would not start CI.
+# Refresh the same force-pushed branch after failed bumps; a hold in engines.json pauses an individual engine.
 name: Engines
 
 on:

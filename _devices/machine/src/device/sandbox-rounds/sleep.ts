@@ -5,36 +5,10 @@ import { z } from "zod";
 import type { MachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
 
-/* UNUSED SANDBOXES SLEEP, AND COME BACK WHEN SOMEBODY ASKS (2026-10-10). A PC holding a dozen sandboxes, of which one or
-   two are in use, held every one of them up: about 1.4 GB each, measured on rog. A sandbox cannot put itself to sleep
-   here (Docker starts a container whose daemon exited again at once), so the keeper does, right after its sweep:
-   `ic sandbox sleep --idle <minutes>` stops, through Docker, every sandbox whose daemon has said for that long that
-   nobody needs it (its work signal's `quietSince`, workload/work-signal.ts in the sandbox), and ic records it asleep.
-   Waking is the other half, and the platform cannot do it: it never calls a machine. A browser that finds a sleeping
-   sandbox asks the platform to wake it, and this agent asks the platform for such requests while anything of its
-   sleeps (`ic sandbox wakes`), starting what was asked for. While nothing is known to sleep it still asks every five
-   minutes, for a sandbox somebody put to sleep by hand.
-   THE ASK IS HELD (2026-10-19). Asked every fifteen seconds, a wake waited 7.5 s on average for the next ask, the largest
-   part of a wake nothing required. So the ask is `--wait 25`: the platform holds it until somebody asks for a wake or
-   the 25 s are up, ic prints each `{"slug","woke"}` line as that start finishes, and its last line says `"held":true`
-   when the platform did hold. After a held ask the next follows at once (HELD_REPOLL_MS, never closer than
-   HELD_SPACING_MS to the last one's start, so a platform that says held without holding cannot make a loop of ic runs);
-   after one that was not (a platform from before the held ask answers at once) the pace stays fifteen seconds. An ic
-   from before `--wait` refuses the flag through clap, which exits 2 having printed no JSON (ic itself never exits 2):
-   that run is asked again at once without the flag, never read as an ic that cannot wake, and if the plain ask answers,
-   ic is asked plainly for an hour (WAIT_REFUSED_MS) before the flag is tried again, since ic is brought up to date under
-   a running agent (ic-binary.ts). Matching clap's sentence instead was rejected: its wording moves between clap
-   releases, and the exit code says the same thing (docs/architecture/conventions.md, "Reading another program's
-   output").
-   A WOKEN SANDBOX'S LINK IS DIALLED AT ONCE (2026-10-19). The sleep left this agent's link to it on the dial loop's
-   ladder, which past twenty failures rests a quarter of an hour between tries: on rog a sandbox woken at 16:48 had its
-   device tools back at 17:12. Each start is acted on the moment ic prints its line, not when ic exits, and `poke` has
-   the resident redial every link naming that slug (peer-dial's `retryNow`); so does a sandbox somebody else woke (a
-   person's `ic sandbox start`, the desktop app's own `ic sandbox wakes`), once ic counts nothing asleep or the keeper's
-   listing shows it running (keeper.ts, relist).
-   An ALARM wakes it too (2026-10-18): ic records, as it puts a sandbox to sleep, the soonest moment its daemon promised
-   (a cron, a one-time automation), and the same `ic sandbox wakes` starts it a little ahead of that moment, off this
-   machine's clock alone, so what it scheduled runs on time. Nothing here changes for it but what the log says. */
+/* The keeper sleeps idle sandboxes through ic; this loop wakes them on platform requests or ic's local schedule alarms.
+ * Use --wait 25 with bounded immediate repolls after held asks; otherwise poll every 15s, or 5m when no sleeper is known.
+ * Exit 2 without JSON means old ic rejected --wait: retry plainly and suppress that flag for an hour.
+ * Poke links as each wake JSON line arrives, before ic exits; also redial sleepers started elsewhere to bypass retry backoff. */
 
 // How long a sandbox goes unneeded before it sleeps, unless machine.json says otherwise; 0 there is never.
 export const DEFAULT_SLEEP_MINUTES = 30;

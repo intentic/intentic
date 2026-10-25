@@ -1,26 +1,8 @@
 #!/usr/bin/env bash
-# fleet-janitor.sh -- keeps what the WSL CI fleet leaves behind on disk within fixed limits.
-#
-# setup-wsl-fleet.ps1 installs this into the runner distro as /usr/local/lib/intentic-ci/fleet-janitor.sh and
-# runs it as root from the systemd timer intentic-ci-janitor.timer. Everything it removes is a cache: a job
-# that finds it gone downloads again or builds cold. It never touches a tagged image, a docker volume, a
-# checkout or node_modules.
-#
-# Measured on omen, 1 October 2026, with the distro's disk at 350 GB used and C: at 58 GB free:
-#   six runners' _temp            75 GB  _temp/_github_home is the job container's $HOME. The runner (radarsu)
-#                                        empties _temp before each job but cannot delete what a root job
-#                                        container wrote, so npm/bun/pnpm caches piled up in every home.
-#   /ci-cache/onboarding-docker   80 GB  the nightly onboarding job's own dockerd image store, which nothing pruned
-#   /ci-cache/*-target            60 GB  nine cargo target dirs, each growing with every build
-#   actions-work-N/.pnpm-store    28 GB  pnpm's default store for jobs that do not pass --store-dir
-#   intentic-cache buildkit       93 GB  docker volume, in docker_data.vhdx, swept by age only while publishing
-#
-# Safe against running jobs: per-runner state is removed only while THAT runner has no Runner.Worker, and
-# shared /ci-cache directories only while no runner has one. Anything removed is first renamed into a trash
-# directory, so a job that starts mid-run never sees a half-deleted tree. Buildkit prunes only records no
-# build is using, so it runs every pass.
-#
-# Settings come from the environment; the unit file sets none. JANITOR_DRY_RUN=1 reports and removes nothing.
+# Root systemd timer prunes WSL CI caches; never remove tagged images, volumes, checkouts or node_modules.
+# Clean a runner only when it has no Runner.Worker, and shared caches only when all runners are idle.
+# Rename trees to trash before deletion so new jobs cannot see partial removal; BuildKit prunes only unused records.
+# Environment configures limits; JANITOR_DRY_RUN=1 reports without removing anything.
 set -uo pipefail
 
 CACHE_ROOT=${JANITOR_CACHE_ROOT:-/ci-cache}

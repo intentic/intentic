@@ -1,22 +1,7 @@
 #!/usr/bin/env bash
-# Build an Intentic OS image (a bootc container image) with docker or podman.
-#
-#   bash _os/os-image/build.sh [--edition server|desktop] [--version V] [--channel stable|beta]
-#                           [--ic PATH] [--app-rpm PATH] [--tag REF] [--base REF] [--previous PREFIX] [--push]
-#
-# --ic       the ic binary to bake. Default: _sandbox/ic/dist-bin/ic-linux-<arch> (what build-ic.sh makes for a
-#            release), else one built here from source with cargo.
-# --app-rpm  desktop edition only: the Intentic desktop app's .rpm. Default: the newest under
-#            _editor/desktop-app/dist-bin/, else the newest release's from GitHub.
-# --tag      the image reference to tag. Default: ghcr.io/intentic/os[-desktop]:<channel>.
-# --previous where the images live whose layer layout a rechunked build keeps: PREFIX/os[-desktop]:<channel>.
-#            Default: docker://ghcr.io/intentic, the published ones; `none` lays the layers out afresh.
-# The desktop edition is built FROM the server edition of the same version and channel, so it builds that first
-# unless the server tag already exists locally (pass --base to name another one).
-# OS_ENGINE=podman (or "sudo podman") uses podman instead of docker.
-#
-# With a rootful podman (CI's "sudo podman") each edition is then rechunked (rechunk below): the tag holds the
-# rechunked image, and out/oci/<os|os-desktop> the same image as rpm-ostree wrote it, which is what gets pushed.
+# Build server/desktop bootc images with Docker or OS_ENGINE=podman; desktop builds on the matching server version/channel.
+# Use release ic binaries and desktop RPMs when available, otherwise build ic/fetch the RPM; flags can override both.
+# Rootful podman rechunks against published layers (--previous none resets layout); push the rpm-ostree image kept in out/oci/.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"

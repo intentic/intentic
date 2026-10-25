@@ -1,27 +1,7 @@
-//! A FOLDER'S OWN SANDBOX, MADE ON ITS PRESS (2026-10-21): "Work on this with an agent" in a folder's window
-//! (project.rs `project_create`) makes a new sandbox for that folder alone, with the folder copied into its
-//! `/work/<name>` and kept up to date from here.
-//!
-//! The app makes it, not the window: one supervisor thread started at launch (lib.rs) runs every folder's setup, one at
-//! a time on this docker, and follows each first copy until Mutagen watches for changes. Each folder's record is a line
-//! of `folder-setups.json`, written on every change and sent whole to every window (`desktop://folder-setups`), which
-//! draws its own folder's: so a window opened late, a window closed mid-setup and an app quit mid-setup all find the
-//! same truth. A setup the last quit cut short is found on launch (a `creating` record whose run is gone) and run again
-//! on the same row, its code minted afresh. Docker is never installed or started from here: a machine whose engine does
-//! not answer says so on the folder's card, with Start Docker, and the next round notices.
-//!
-//! The run is the connect script with the folder as its project (`SYNC_DIR`, `SYNC_REMOTE_DIR=/work/<name>`,
-//! `SYNC_PROJECT=1`, commands.rs `setup_script`), its `intentic: [phase]` lines read into a step and a percent
-//! (setup_progress.rs). Once it exits, which folder is in which sandbox is the machine agent's pairing of it
-//! (bindings.rs); the record only follows the first copy and is forgotten on the next launch.
-//!
-//! _(2026-10-21) This replaced the one sandbox the app used to make for the whole computer ("Local", machine_sandbox.rs),
-//! into which every folder was attached. One sandbox per computer was a failure: a folder's agents shared a house with
-//! every other folder's, a stuck or removed "Local" stood between every folder and an agent, and Devices led with a card
-//! about it. A folder now becomes its own sandbox, and the work goes into making that fast._
-//!
-//! Every decision is a plain function of a record and what was found ([`decide`], [`copy_seen`], [`news`]…), so the
-//! state machine is tested without a window, a platform or a docker.
+//! Makes one sandbox per folder via the connect script (SYNC_DIR, SYNC_REMOTE_DIR=/work/<name>, SYNC_PROJECT=1).
+//! One app supervisor serializes setups, persists folder-setups.json and broadcasts progress; interrupted creating runs retry with fresh codes.
+//! Require an already-running Docker engine. After setup, follow the first copy until Mutagen watches; bindings then come from agent pairings.
+//! Transient completed records are forgotten on relaunch. Pure decision functions let tests cover the state machine without external services.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};

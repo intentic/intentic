@@ -1,47 +1,7 @@
 #Requires -Version 5.1
-<#
-    wsl-maintenance.ps1 - keeps WSL's virtual disks from eating the Windows system drive on a
-    machine that hosts the WSL CI fleet (omen).
-
-    Installed as C:\ProgramData\wsl-maintenance\wsl-maintenance.ps1 (an admin-only folder, because
-    the tasks run it elevated) and run, elevated, as the interactive user that owns the distros
-    (WSL registrations live in that user's HKCU hive) by two scheduled tasks:
-      "WSL Docker Space Guard"   hourly at :20   -Mode guard
-      "WSL Docker Maintenance"   daily at 05:30  -Mode routine
-    docs/ops/ci-runner.md ("Keeping the WSL disks small") says how to install a new version.
-
-    How space gets back to Windows. A VHDX grows when the guest writes and does not shrink when
-    it deletes. Two things give the space back:
-      - sparse: the VHDX is an NTFS sparse file, and a TRIM from the guest punches a hole in it,
-        so the file's allocation follows what the guest really uses, with no downtime. The CI
-        distro mounts its root with `discard` and trims as it deletes. Docker Desktop's data
-        disk is mounted without it, so every pass here runs fstrim in both. WSL 3.0.2 made
-        sparse VHDs available again (experimental; 2.5.6 to 3.0.1 hid them behind
-        --allow-unsafe after ext4 corruption reports). A disk that is not sparse is converted
-        in its next compaction window, and needs no compaction after that.
-      - compaction: Docker Desktop stopped, `wsl --shutdown`, diskpart `compact vdisk`. That
-        is about 10 minutes with WSL down, and every CI job in flight fails, so it runs only
-        for a disk that is not sparse, holds -CompactSlackGB of freed space and is not in a
-        CI job, in -QuietHours, and at most once per -CompactBackoffHours. A system drive
-        below -CompactFreeGB lifts the hours rule, and -Mode panic lifts every rule.
-
-    Modes:
-      guard   - hourly: fstrim; prune docker when its disk passes -DockerBudgetGB; prune
-                everything when C: drops below -PanicFreeGB; compact when a disk qualifies.
-      routine - daily: prune stale docker artefacts, clear old Windows temp, fstrim, report
-                each disk, compact when a disk qualifies.
-      panic   - remove everything reclaimable and compact regardless of jobs and hours.
-
-    Never removed: a container carrying the dev.intentic.kind label (an Intentic sandbox or runner,
-    even a stopped one), its image and its volumes, or any other volume named intentic-* outside
-    -Mode panic. That covers the trashed sandboxes `ic sandbox restore` brings back.
-
-    History: 2026-09-27 CI-safe (no compaction during a job; docker integration restored
-    afterwards); 2026-10-01 compaction on request of the fleet janitor; 2026-10-16 sparse disks,
-    hourly fstrim, compaction decided by freed space instead of free space on C:, images
-    pruned after 48h instead of 7 days; 2026-10-18 superseded ghcr.io/intentic release images go by count, not
-    age, and the guard over budget also takes unused volumes. The previous version is kept beside the installed copy
-    as wsl-maintenance.ps1.bak-<date>.
+<# Trim/prune WSL CI disks as their owning interactive user, elevated from an admin-only install; see docs/ops/ci-runner.md.
+Sparse TRIM avoids downtime; compaction observes idle/quiet-hour/backoff guards. Panic overrides them and can remove unused intentic-* volumes.
+Always preserve dev.intentic.kind containers and their referenced images/volumes, including stopped sandboxes and runners.
 #>
 [CmdletBinding()]
 param(

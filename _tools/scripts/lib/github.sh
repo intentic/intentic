@@ -1,27 +1,7 @@
 #!/usr/bin/env bash
-# THE GITHUB API, SPELLED ONCE — for the six release scripts that all talk to it.
-#
-#   . "$(dirname "$0")/../lib/github.sh"
-#   GH_API_TOKEN="$GITHUB_TOKEN"
-#   gh_require_token "this tag is what every publish workflow is dispatched against"
-#   id="$(gh_release_id "$REPO" "$TAG")"
-#
-# WHAT THIS REPLACES. Seven scripts each carried their own `api()` — the same four curl headers, differing only
-# in whitespace — and five of them re-spelled `node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).id'`
-# eleven times between them to read ONE field back. Three looked a release up by tag, two flipped `make_latest`,
-# two force-pushed the same `stable` tag, two walked the asset list to skip an upload GitHub would 422. Every
-# one of those is a decision this repository makes once; having it written seven times means six of them are
-# out of date the day the seventh changes, and nothing anywhere would say so.
-#
-# THE TOKEN IS NAMED, NOT ASSUMED. `GH_API_TOKEN` rather than `$GITHUB_TOKEN` directly, because publish-action
-# talks to a DIFFERENT repository with a different credential (GATE_ACTION_TOKEN) and the difference has to be
-# visible at the call site rather than buried in here. Unset is a programming error and fails loudly.
-#
-# EVERY FUNCTION THAT ASKS A QUESTION ANSWERS WITH TEXT OR NOTHING, never a curl error: a release that does not
-# exist, an asset list that could not be read and a token that cannot see the repo are all "no answer", and the
-# caller decides which of those is fatal. The ones that CHANGE something (upload, make_latest, the tag move)
-# fail loudly instead, because a write that silently did not happen is the half-published release this whole
-# directory exists to prevent. gh_latest_tag is the one question that also fails, and says why below.
+# Shared release API helpers; callers explicitly set GH_API_TOKEN because Action publishing uses a different repository/credential.
+# Queries return text or nothing so callers decide whether missing state is fatal; gh_latest_tag is the documented exception.
+# Mutations fail loudly: an upload, latest flag or tag move must never silently leave a half-published release.
 
 # One authenticated call. Extra curl arguments pass straight through, which is what lets an upload point at
 # uploads.github.com and a PATCH carry a body without a second wrapper.
@@ -134,34 +114,9 @@ gh_delete_asset() {
     gh_api --request DELETE --output /dev/null "https://api.github.com/repos/$1/releases/assets/$2"
 }
 
-# --- attaching a file, and the upload endpoint dropping it ---------------------------------------------------
-# THE RELEASE'S HEAVIEST BYTES GO TO A DIFFERENT HOST THAN THE REST OF THE API. uploads.github.com takes the
-# installers and the cross-compiled binaries — nineteen assets, a few hundred megabytes, all in flight at once
-# because publish-github.sh sends them in parallel — and under that burst it answers some of them with its own
-# 5xx:
-#
-#   curl: (22) The requested URL returned error: 500
-#   curl: (22) The requested URL returned error: 504
-#   one or more release assets failed to upload
-#
-# That is what killed v1.289.0 (run 35244797817): thirteen assets attached, six refused — three 500s and three
-# 504s — and the publish died after the tag was already pushed, taking the container images and the `stable`
-# pointer with it. Nothing was wrong with the files, the token or the release; the same bytes go up fine on the
-# re-run, which is the whole argument for trying again rather than failing a version nobody can take back.
-#
-# A REFUSED UPLOAD MAY STILL HAVE LANDED, and may equally have left a half-written row holding the name, so
-# every failure asks the release what it now holds under that name before deciding anything. Attached and
-# `uploaded` is a write whose ANSWER was lost — the asset is up, and a second attempt would earn a 422 for a
-# success. Attached in any other state is this attempt's wreckage: it is deleted, which frees the name and is
-# itself reason enough for another attempt whatever the refusal said, because a name held by half an upload is
-# state on GitHub's side rather than anything this repo can get wrong.
-#
-# ONLY THAT CLASS OF FAILURE RETRIES. A 401, 403, 404 or an unreadable file must fail on the FIRST attempt:
-# four silent backoffs before the same error turns a failed release into a slow failed release that reads like a
-# flake. So the decision is made on curl's own message, not on its exit status, which is 22 for every HTTP
-# verdict alike. BOTH DIRECTIONS ARE ASSERTED, against the text v1.289.0 actually printed, by the
-# `publish-retry` check (_tools/checks/publish-retry.mjs, shared with the registry and npm retries) — which
-# reads the pattern list below back out of this file rather than keeping a second copy, and exercises the loop.
+# Upload retries classify curl output, not exit 22: transient server faults retry; auth, missing files and real 4xx refusals fail.
+# After failure, inspect the named asset: uploaded means success despite a lost response; incomplete rows must be deleted before retry.
+# _tools/checks/publish-retry.mjs exercises transient/fatal cases and recovery from lost or incomplete uploads.
 
 # Attempts and the base gap, in seconds. Jittered, because these uploads run in parallel and are refused
 # TOGETHER: a fixed gap brings the whole burst back at the same instant, which is the burst that was refused.

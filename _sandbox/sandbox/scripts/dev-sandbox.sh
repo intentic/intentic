@@ -1,20 +1,7 @@
 #!/bin/sh
-# intentic dev-sandbox recreate — swap the running sandbox container over to a freshly built
-# `intentic-sandbox:dev` image, WITHOUT re-running connect.sh's tunnel/auth wizard. Called by the watch loop
-# (the sibling dev-sandbox.mjs) after each `pnpm build:sandbox`, and usable by hand:
-#
-#   sh dev-sandbox.sh            # the one sandbox on this machine
-#   sh dev-sandbox.sh <slug>     # THAT sandbox, when this machine runs several
-#
-# The image (`pnpm build:sandbox`) is shared by every dev sandbox here; only the container swap is per-sandbox,
-# which is what the slug names.
-#
-# A thin wrapper: the recreate itself — env replay, overlay re-base, the run command the image emits — is
-# recreate.sh's dev mode (one flow with rebuild/update, which is exactly what this script used to duplicate;
-# its hand-copied run block was the LAST of six to gain --cap-add=SYS_ADMIN, and being the dogfood rebuild,
-# that meant two "recreate to restore isolation" rebuilds went through the one door still missing the flag).
-# The only dev-specific ingredient prepared here is the compiled-tree bind mounts, because they need the
-# checkout this script lives in (dev-mounts.mjs) — a served script has no checkout to read.
+# Recreate the selected dev sandbox on the shared intentic-sandbox:dev image after pnpm build:sandbox; optional argument is its slug.
+# Delegate env replay, overlay rebase and container creation to recreate.sh's dev mode so production and dev share the same run shape.
+# Only prepare checkout-specific compiled-tree bind mounts here via dev-mounts.mjs; served scripts have no checkout to read.
 set -eu
 
 SCRIPT_DIR="$(dirname "$0")"

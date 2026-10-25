@@ -1,23 +1,7 @@
-// THE PACKAGES A CHANGE REACHES, TYPECHECKED: verify-turn.mjs's second half. The checks in _tools/checks read files, and
-// what they cannot see is a break a change makes in a package it never opened: a procedure added to the contract that
-// the demo's exhaustive table does not list (TS1360 in _site/demo/src/unserved.ts, main failing for eleven hours on
-// 2026-10-11), a provider added to the daemon that a list in the editor does not name. The change's own packages are its
-// author's to typecheck, and warm.mjs typechecks them as the same turn ends; this typechecks the packages that DEPEND on
-// them, which nobody working on the change has a reason to open.
-//
-// CHARGED ONLY AGAINST A RECORD OF A CLEAN TYPECHECK BEFORE THE CHANGE. Turbo files a pass and never a failure, so an
-// entry under a task's hash is a clean run on that hash's inputs. An untouched package's `--only` hash covers its own
-// inputs alone, so the hash it has now is the hash it had at the base; the base's full-graph hash (a dry run in a
-// snapshot of the base, check-snapshot.mjs) is the one CI's verify groups file for every package on every push to main.
-// Both are asked of the fleet's cache, through the turbo-cache card (_tools/turbo-cache/README.md), and of this
-// machine's: CI's records live only in the fleet's (on 2026-10-12 this sandbox's own cache held none of the 211 task
-// hashes CI's verify-core run at 3eb6c6a2 gave), so without the card nothing is planned and the turn says why. A package
-// with no record is not typechecked here at all: what it says could be main's own failure, and charging a change with
-// main's breakage sends every conversation running at that moment after the same thing. So a failing main never reaches
-// a turn through here; a package CI has not typechecked since it last changed is left to CI, which is the cost.
-//
-// BOUNDED, since a turn's Stop waits on it and the machine is shared: a deadline, the typecheck concurrency the root
-// `typecheck` script sizes to free memory, and the nearest dependents first, the fast compilers before vue-tsc.
+// Typecheck packages depending on edited packages; the author and warm.mjs cover the edited packages themselves.
+// Charge failures only with a cached clean baseline: current --only hashes or base full-graph hashes, checked locally and in the fleet cache.
+// Require the turbo-cache card and skip packages without proof of a prior pass, so existing main failures never reach a turn.
+// Bound work by deadline and memory-sized concurrency; check nearest dependents first and fast compilers before vue-tsc.
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { affectedBy, GLOBAL, readWorkspaceGraph } from "../../checks/lib/workspace-graph.mjs";

@@ -1,45 +1,8 @@
 #!/usr/bin/env bash
-# Put the `ic` CLI where the desktop app's bundlers look for it: src-tauri/binaries/intentic-ic-<triple>[.exe], the
-# name tauri.conf.json's second `externalBin` resolves to, and which every installer puts beside the app as
-# intentic-ic / intentic-ic.exe.
-#
-# NEVER AS `ic`. The deb and the rpm put every `externalBin` in /usr/bin, so a sidecar called `ic` would be on every
-# PATH, ahead of the newer ic the machine agent keeps in ~/.intentic/ic/bin (and a file another package may own). Under
-# its own name nothing finds it but the app; the shims copy it to ~/.intentic/ic/bin/ic[.exe], where it is `ic` again.
-# Its --version still answers `ic <version>`: clap prints the command's name (main.rs), not the file's.
-#
-#   stage-desktop-ic.sh [<triple>...]                      # cargo checks and `tauri dev` (this host's triple by default)
-#   stage-desktop-ic.sh --bundle [<triple>...]             # an installer: a real ic or nothing
-#   stage-desktop-ic.sh --release <version> [<triple>...]  # a release's installer: exactly that release's ic
-#
-# WHY THE INSTALLER CARRIES IT. Every flow the app runs is a shim (connect, recreate, fix, connect-host) whose first
-# act was downloading this same release's `ic` from GitHub, so a first setup could not start on a network that
-# blocks or throttles github.com, and failed there before anything else had worked. The app now names the copy beside
-# its own executable to every script it runs (commands.rs `app_env`, INTENTIC_IC_PATH), and a shim pinned to the
-# app's release copies that file into ~/.intentic/ic/bin instead of downloading it, when it answers --version with
-# exactly that release. The download stays the fallback, and the only path for the public one-liners.
-#
-# WHERE EACH MODE TAKES IT FROM, by how much rides on the answer:
-#
-#   --release   _sandbox/ic/dist-bin/ic-<os>-<arch>[.exe] and nothing else: what `build-ic.sh --version <version>`
-#               wrote, which in release.yml is the ic-build job's artifact downloaded into that directory. The
-#               installer has to carry the bytes the release attaches for the shims to download, so this never builds
-#               one of its own, and it refuses a binary that is not <version>: asked with --version where this host
-#               can run it, and looked for in its bytes where it cannot (the stamp is a string literal, main.rs
-#               `VERSION`).
-#   --bundle    the same file when it is newer than every source of the crate, else build-ic.sh builds it now: the
-#               shipping toolchain (static musl on Linux, which the glibc floor has nothing to say about; cargo-xwin
-#               for Windows), so a CI or local installer carries the binary a release would. Unstamped, so it says
-#               0.0.0 like the rest of a working-tree build. If that fails, this fails: an installer missing the
-#               binary every one of its scripts reaches for is not one to hand anybody.
-#   (neither)   a cargo build of the crate for this host, the debug build connect.sh's checkout path runs too (cargo
-#               rebuilds only what changed, so an existing one costs nothing), or a dist-bin binary for another
-#               triple. Where neither can be had, a PLACEHOLDER, said out loud: tauri-build only checks that the file
-#               exists (`cargo clippy`, `cargo test`), and no shim ever copies a placeholder, because it copies only an
-#               ic whose --version is the run's IC_VERSION.
-#
-# Every cargo command against the app needs this staged, as it needs stage-local-files.sh and stage-desktop-scripts.sh,
-# so the app's Rust scripts and every bundle build run it first.
+# Stage namespaced intentic-ic-<triple>[.exe] sidecars; a bare ic would install into /usr/bin and shadow the user's CLI.
+# --release <version> accepts only that release's dist-bin bytes; --bundle reuses fresh output or builds with the shipping toolchain.
+# Development may use cargo output or explicit placeholders; bundle/release modes must fail rather than ship missing or wrong binaries.
+# App shims use INTENTIC_IC_PATH to copy matching bundled bytes without GitHub downloads. Stage before every app cargo/bundle command.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 

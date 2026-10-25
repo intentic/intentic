@@ -50,23 +50,9 @@ root="$(repo_root)"
 # otherwise grows for the life of the runner host, not a tuning knob — see setup_builder.
 BUILDKIT_CACHE_MAX_AGE="${BUILDKIT_CACHE_MAX_AGE:-72h}"
 
-# A docker-container buildx builder. The default `docker` driver exports no cache beyond inline and pushes
-# over an untested path here, so this stays — but it is best-effort: a build must NEVER fail over builder setup.
-#
-# AND ITS CACHE IS THE ONE STORE ON THESE RUNNERS THAT NOTHING EVICTED. Every other shared directory has an
-# owner in docs/ops/ci-runner.md's "Keeping it bounded": turbo gets a 14-day sweep in the pnpm-setup action, pnpm
-# and cargo grow only when a version is added, xwin and playwright are fixed-size downloads. This one is a
-# `docker-container` driver, so its BuildKit state is a docker VOLUME on the host daemon rather than anything
-# under /ci-cache — outside every sweep that file describes, and outside a `docker system prune` that spares
-# volumes. It grew until the host ran out: on 30 August the runner box had 2.04 GB free of 1 TB with
-# docker_data.vhdx at 456 GB, and a docker whose data disk cannot extend stops ANSWERING rather than erroring.
-# Six pipelines in a row then hung in "Initialize containers" and were killed at their own timeout-minutes,
-# which Actions reports as `cancelled` — with all six listeners still online, so nothing looked down.
-#
-# SWEPT BY AGE, like the turbo cache it sits beside, and cheap here in a way it would not be elsewhere: this
-# builder's local state is not the cache of record. `--cache-to type=inline` writes the layer cache into the
-# image being pushed and the next build reads it back over `--cache-from type=registry` (see publish() below),
-# so a swept builder costs a registry read, not a cold build.
+# Prefer docker-container buildx for cache export; builder setup is best-effort and must not fail the build.
+# Age-prune its volume-backed state, which lives outside /ci-cache and ordinary volume-preserving Docker sweeps.
+# Inline cache in published images is authoritative, so pruning local builder state costs a registry read rather than a cold build.
 setup_builder() {
     command -v docker >/dev/null || return 0
     if ! docker buildx inspect intentic-cache >/dev/null 2>&1; then
@@ -89,27 +75,9 @@ setup_builder() {
 }
 setup_builder
 
-# Build + push one image under every requested tag. The Dockerfile + build context differ per image: the
-# sandbox builds from the monorepo root plus the pre-built `trees` context; the dind-host from its
-# self-contained _tools/dind-host package. Extra args after the context pass through to buildx.
-#
-# The layer cache rides on the image being pushed anyway: `--cache-to type=inline` records the layer cache keys
-# in the image config, and the next build reads them back through `--cache-from` on the published tags. Both
-# Dockerfiles here are SINGLE-stage — the monorepo is compiled OUTSIDE Docker by prepare-image-trees.sh and
-# enters as the `trees` context — so the pushed image already contains every layer worth caching, and inline
-# covers the identical layer set a separate mode=max ref would.
-#
-# It covers that set far more reliably. A separate `type=registry,ref=…:buildcache` meant a SECOND ~1.5 GB
-# upload, and a registry that answers the finalizing PUT of its largest blob with a 400 makes buildkit
-# cancel the image push running alongside it, so a fully-pushed image got thrown away — that is how 1.159.0
-# and 1.160.0 reached npm with no sandbox image behind them. ignore-error=true stopped that from failing the
-# build, and thereby made it SILENT: sandbox:buildcache froze at 2026-07-23 and nothing said so for eight days,
-# during which every sandbox build ran fully cold (~20 min, in both the images and release jobs, every
-# pipeline). Inline has no second upload to fail — if the image pushed, the cache is fresh.
-# TAG_PREFIX distinguishes the sandbox PROFILES on one GHCR package: the standard image owns the plain tags
-# (`latest`, `stable`, versions — everything that referenced sandbox:stable keeps meaning the batteries-included
-# image), the core image the `core-` prefixed ones. Cache reads cover both prefixes: the core layer set is a
-# strict prefix of the standard one, so whichever profile pushed last is a warm parent for either build.
+# Build/push requested tags: sandbox uses the prepared trees context; dind-host has its own context. Forward extra args to buildx.
+# Inline cache covers these single-stage images without a separate large upload that can fail or silently leave a stale cache.
+# Standard owns plain tags; core owns core- tags. Read cache from both profiles because core layers are a prefix of standard.
 publish() {
     local image="$1" dockerfile="$2" context="$3"
     shift 3

@@ -4,23 +4,10 @@
 import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
-// The intents, in the order they claim the press.
-//
-//  - `place`, the agent's voice is armed: words go into the transcript as the agent's own, no turn.
-//  - `edit`, a message is being replaced: the send rewinds to it and asks again.
-//  - `plan`, a plan is waiting on an answer: typing revises it rather than starting anything.
-//  - `later`, the reader picked when the message goes (sendLater.ts): a time, or once another agent's work has landed.
-//    The send is booked whatever this chat is doing, a turn running here included: the words wait in its queue, drawn as
-//    scheduled, and go when that comes. The reader chose the moment, so nothing below it decides it instead.
-//  - `scheduled`, nothing is running but the account the turn would run on is spent: the send is booked, not tried. The
-//    words wait in the conversation's queue, drawn as scheduled, and the sandbox lets them go when the allowance
-//    reopens; nothing reaches the provider before, so there is no refusal to show for a wait the reader chose knowingly.
-//  - `idle`, nothing is running: the ordinary send.
-//  - `parked`, a turn is live but stopped on a card: the message waits for the card to be answered. Also a chat the
-//    agents list says waits on a person while this window has not drawn the card yet: the composer must not read as
-//    idle over an agent that has been waiting for an answer.
-//  - `steer`, a live turn takes mid-turn input: the message reaches the turn already running.
-//  - `queue`, a live turn that doesn't: the message waits for it to end.
+// Press precedence: place (agent voice, no turn), edit (rewind), plan (revise), later (explicit booking), scheduled (wait for allowance).
+// Then idle sends; parked queues behind a live question/card, including one known to the roster before this window draws it.
+// Finally steer sends mid-turn input when supported, otherwise queue waits for the turn to end.
+// Explicit later bookings win even during a running turn; spent-account scheduled sends never contact the provider before reopening.
 export type SendIntent = `place` | `edit` | `plan` | `later` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
 
 // A stopped turn's instants, already resolved to booleans by the pane (which owns the clock), since a

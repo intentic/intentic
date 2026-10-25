@@ -1,19 +1,7 @@
 #!/bin/sh
-# intentic dev-sandbox FAST restart — recompile the daemon and restart it in place, without rebuilding the image.
-#
-# NEVER CALLED A RELOAD, HERE OR ON SCREEN: a reader who has a browser open reads "reload" as F5, and this one
-# restarts their whole sandbox. The word is reserved for the page.
-#
-# This is the inner loop dev-sandbox.sh's bind-mounts make possible: the running container reads /opt/sandbox/dist
-# (and each baked workspace package's dist) straight from the working tree, so a source edit needs a TypeScript
-# build and a process restart, not `pnpm build:sandbox` + `docker run`. Seconds instead of minutes.
-#
-# Restart, not signal: the daemon is the container's main process (docker-entrypoint.sh execs it), so restarting
-# the container IS restarting the daemon — and it re-runs the entrypoint, which is what the boot path expects.
-# Volumes, network, tunnel and env all survive, because the container itself is never recreated.
-#
-# Falls back with a clear message when the container has no dev mounts (created before they existed): that
-# container can only see new code through dev-sandbox.sh, and silently restarting it would look like a no-op.
+# Rebuild and restart the daemon in place through dev bind mounts; no image rebuild or container recreation is needed.
+# Say restart in code/UI: reload means the browser page. Container restart reruns the entrypoint and preserves mounts/network/env.
+# Without dev mounts, report the need for dev-sandbox.sh rather than restarting stale code as though the edit had applied.
 set -eu
 
 # Siblings only ($SCRIPT_DIR/dev-manifest-drift.mjs), so same-directory-relative like dev-sandbox.sh: no path

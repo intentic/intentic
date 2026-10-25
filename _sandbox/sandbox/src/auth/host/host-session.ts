@@ -10,27 +10,10 @@ import { fileOwnerStore, OwnerUnreadableError, ownerDocument } from "../auth.js"
 import { fileBrowserAccess } from "../browser-access.js";
 import { createSessions, type MintedSession } from "../session.js";
 
-/* A SESSION FROM THE MACHINE THAT RUNS THE SANDBOX (`ic sandbox session <slug>`).
-
-The desktop app and Intentic OS reach this machine's own sandboxes over the loopback port with no network at all, which
-none of the other proofs survive: Google's keys, the platform's ticket and its identity assertion are all fetched, and a
-passkey answers only on the editor origin it was registered on. What such a machine still has is the machine: whoever
-can `docker exec` into this container is root over it already (they can read every file, the session secret included),
-so a session minted for them adds no power they lack.
-
-TRUST MODEL, spelled out because this is the one proof the daemon takes without a third party:
-- It is reachable only from inside the container, as root: `host-session-cli.js` reads the 0600 session secret and the
-  owner file directly. There is NO HTTP route that mints one, and an agent turn in the unprivileged execution domain
-  (workload/domain) runs as another user and cannot read either file.
-- It mints for the BOUND owner only, and refuses while nobody is bound: the first binding still takes a real sign-in
-  with the connect token, so possession of the machine never decides who owns a sandbox it holds.
-- The session is a daemon session (session.ts), proven by `host`: every request is still authorized per request against
-  the owner file and the roster (auth.ts), so moving the owner or signing out everywhere (which re-keys the secret) ends
-  it like any other. Two things set it apart, since its token sits on the machine's disk (ic's and the app's caches):
-  it is accepted only on a request netd marked as arriving on the loopback port, never over the tunnel
-  (../proofs/proof-methods.ts `BOUND_TO_LISTENER`), and it lasts a week rather than a month.
-- Each mint is recorded in the audit trail as a sign-in by `host`. The trail has one writer, the daemon, so this leaves
-  a note in `audit/inbox/` that the daemon's audit tick records (`drainAuditInbox`) and deletes. */
+/* ic sandbox session mints offline sessions for the bound owner only: container-root CLI reads 0600 secrets, never an HTTP mint route.
+ * Docker-exec access already grants root; unprivileged turns cannot read the minting files, and first binding still requires real sign-in.
+ * Accept only netd-marked loopback requests, never tunnels; expire in a week and reauthorize every request against owner/roster/rekeyed secret.
+ * Each mint writes audit/inbox for the daemon's sole audit writer to drain as a host sign-in. */
 
 // Where events written outside the daemon wait for its audit tick. Root-only, like the trail itself.
 export const AUDIT_INBOX_DIR = "audit/inbox";

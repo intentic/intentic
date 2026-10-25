@@ -11,26 +11,9 @@ import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { runCheck } from "../../workload/run-check.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
-// DERIVED FILES ARE WRITTEN AGAIN WHERE THE WORK LANDED, AFTER THE LAND. A repository marks each file it derives from
-// its own sources `merge=derived` in its .gitattributes (intentic: the contract lock, the stored shapes, the daemon's
-// generated indexes). Such a file is a function of the whole tree, so no branch's copy of it is right for the tree it
-// lands in: a land never carries one (UNDERIVED ends every delta it reads), and once its patch is in, the repository's
-// own derived writers write them again THERE, from what landed. Two conversations that both moved the contract land one
-// after the other with no conflict, and the lock in the tree they land in is the one its sources make. A rebase keeps
-// the side it lands on, through the merge driver of that name the repository configures for itself.
-//
-// NEVER PART OF THE LAND ITSELF (2026-10-21). A land is a git operation: its patch written and read back. From 10-20 the
-// whole of fixers.mjs ran inside it, under the repo locks and the land lease: rustfmt, every ratchet's `--tighten` and
-// the derived writers, 36 s on an idle machine (dead-code's tighten alone 15 s), all of it with the card on "Landing…"
-// and the review's rescan parked, and every later land into the repo queued behind it. Now the land only names what it
-// wrote (LandOutcome.rederive) and the door it went through hands that here once the lease is released: the derived
-// writers alone (`--only derived`, about 2 s), one run per tree at a time, a burst of lands folded into one run, each
-// run under the repo lock so no land writes the tree while they do. rustfmt and tightening are a person's or CI's.
-//
-// Never in the conversation's worktree, where the fixers ran until 2026-10-20: the daemon reads a worktree without the
-// dependencies a turn's namespace mounts over it, so every fixer that imports anything failed there, silently. The tree
-// a land writes into is the owner's, which has them. Never fails anything: what a writer could not write stays as the
-// tree had it, and CI's own checks say so.
+// Exclude merge=derived files from land/rebase deltas; regenerate them from landed sources in the destination tree with its dependencies.
+// After the land lease releases, run only derived writers under the repo lock, serializing per tree and coalescing bursts of lands.
+// Keep rustfmt and ratchet tightening out of land. Writer failures leave existing files for CI to report rather than failing the land.
 
 export const REPO_FIXERS = "_tools/scripts/verify/fixers.mjs";
 

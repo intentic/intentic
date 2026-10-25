@@ -533,21 +533,9 @@ jobs:
           clean: false
       - uses: ./.github/actions/prepare-workspace
       - uses: ./.github/actions/pnpm-setup
-      # The staging directories are already empty when the downloads land, because prepare-workspace above
-      # removed them — `dist-bin` is deliberately outside its allowlist, and that is the rule this job used to
-      # carry as a hand-written `rm -rf` of five named paths.
-      #
-      # Why it matters here more than anywhere: `clean: false` keeps this runner's checkout between jobs
-      # (docs/ops/ci-runner.md — it is what keeps node_modules warm), so those directories held whatever the last
-      # desktop job on this runner put there, and ci.yml's desktop-verify builds a complete set of `0.0.0`
-      # Linux bundles on this same label. While this job BUILT the release set, build-desktop.sh's
-      # `rm -rf "$OUT"` cleared them as a side effect; assembling stages already-verified bytes into the
-      # directory instead, so it must not — and the leftovers became this job's problem.
-      #
-      # They were never cosmetic. publish-github.sh attaches `dist-bin/*` by glob and the attestation signs the
-      # same four directories, so a stale bundle would be published as part of this release, over the name of
-      # a version it is not; and the assemble step refuses to guess between two artifacts of one kind, which
-      # is what failed run 31697229807 (`2 'deb' artifacts … expected one`).
+      # prepare-workspace empties staging before downloads: dist-bin is outside its cache allowlist.
+      # Assembly must preserve downloaded artifacts, so it cannot clean them as a build formerly did.
+      # Stale retained-checkout bundles would enter publish/attestation globs; verify only this release's already-tested bytes.
       - uses: ./.github/actions/download-artifact-retry
         with:
           name: windows-release-candidate

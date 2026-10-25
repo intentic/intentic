@@ -1,23 +1,7 @@
-//! THE ENGINE ON A NAMED PIPE (2026-10-10): `ic engine relay`, and how `ic engine start` keeps one running.
-//!
-//! Every docker CLI on Windows reads TCP slowly, whichever engine is behind it (docker-host/src/engine_pipe.rs has the
-//! measurements: 36–40 MB/s over TCP, 284–286 MB/s over a pipe, Docker Desktop's own 140). Docker Desktop's CLI talks to
-//! a named pipe; ours talked to the engine's TLS endpoint. This relay gives our engine a pipe too:
-//!
-//! - one pipe per distro and Windows account (`\\.\pipe\<distro>.<user>`), message mode as Docker's own pipes are (a
-//!   client's half-close is a zero-length message), remote clients refused, and only this account and SYSTEM let in;
-//! - each connection is carried to the engine's TLS endpoint with the account's client certificate, so the engine's own
-//!   API stays TLS-only and the pipe adds no way in that the certificate did not already give;
-//! - a connection is opened to the engine only once its client says something, so a probe that opens and closes the
-//!   pipe costs nothing;
-//! - it runs from a copy of ic named by its hash (`~/.intentic/engine/relay/ic-<hash>.exe`), never from the ic that the
-//!   machine agent and the setup scripts replace, and a newer ic's start hands over to a newer copy: the copy named in
-//!   `relay/current` is the one that serves, and one that finds another named there stops taking connections and ends
-//!   when its own are done;
-//! - `ic engine stop`, `hold` and `remove` end it by emptying that file.
-//!
-//! The pipe is a speed-up, never a dependency: `engine.json` names it (`pipe`), and every client uses it only while it
-//! is there (`intentic_docker_host::engine_pipe::choose`), the TLS endpoint otherwise.
+//! Optional message-mode pipe speeds Windows Docker I/O: one per distro/account, remote clients denied, only that account and SYSTEM allowed.
+//! Forward to the TLS endpoint with the account certificate only after client data; zero-length messages represent half-close.
+//! Run hashed ic copies so upgrades cannot replace a live relay; relay/current selects the serving copy and old copies drain connections.
+//! Stop/hold/remove clear that file. Clients use engine.json's pipe when present and fall back to TLS otherwise.
 
 use std::ffi::c_void;
 use std::io::{self, Read, Write};

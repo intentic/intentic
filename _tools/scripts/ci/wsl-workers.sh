@@ -1,32 +1,8 @@
 #!/usr/bin/env bash
-# wsl-workers.sh -- takes the WSL fleet's worker runners off this machine for the length of a Windows smoke job,
-# and always gives them back.
-#
-#   wsl-workers.sh pause <failsafe-minutes>    run as root inside the fleet's distro
-#   wsl-workers.sh resume
-#
-# WHY. The Windows runner and the six worker runners share one machine, and the workers share one WSL2 VM with
-# Docker Desktop and with the engine tier's own distro. On 2026-10-20 the nightly's engine move ran while all six
-# workers ran typechecks of their own: the VM could no longer allocate a vsock channel ("hvs_probe ... page
-# allocation failure", then the relay's "UtilAcceptVsock: accept4 failed 110"), so every docker call from Windows
-# to the engine's named pipe hung, and `docker stop` of the second sandbox timed out mid-move. A smoke tier that
-# depends on what the fleet happens to be running that minute measures the fleet, not the product.
-#
-# PAUSE stops each worker unit only once it is idle: a busy one is watched, and stopped the moment its job ends,
-# so no job is cut. The workers are kept down by a runtime drop-in (`ConditionPathExists=!<flag>`), because the
-# fleet's watchdog (setup-wsl-fleet.ps1, section 4) starts every inactive runner unit every few minutes, and a
-# runtime mask does not hold against a unit file in /etc. While the flag exists a start is a no-op that succeeds,
-# so the watchdog's pass neither fails nor brings a worker back.
-#
-# GIVEN BACK THREE WAYS, so a paused fleet never outlives the job that paused it:
-#   1. the job's own `if: always()` step runs `resume`, whatever the tiers did;
-#   2. a transient systemd timer armed BEFORE anything is stopped runs the same resume after <failsafe-minutes>,
-#      for a job that was cancelled, timed out, or lost its runner before step 1 could run;
-#   3. every piece of the pause lives under /run, which a restart of the WSL VM empties: the units are `enabled`,
-#      so a VM that comes back starts them as on any boot.
-#
-# Settings come from the environment: WORKERS_UNITS (the units to pause, as systemctl matches them) and
-# WORKERS_WAIT_MINUTES (how long a busy worker may take to finish its job before the pause goes on without it).
+# Pause idle WSL worker units during Windows smoke jobs to avoid shared-VM resource contention; busy jobs finish first.
+# A runtime ConditionPathExists drop-in holds them down against the watchdog; a runtime mask cannot override /etc unit files.
+# Arm a failsafe resume timer before stopping units; the job also resumes in always(), and reboot clears all pause state under /run.
+# WORKERS_UNITS selects units; WORKERS_WAIT_MINUTES bounds the wait for busy workers. Run pause <failsafe-minutes> or resume as root.
 set -uo pipefail
 
 UNITS_GLOB=${WORKERS_UNITS:-actions.runner.*-worker-*.service}

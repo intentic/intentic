@@ -1,26 +1,7 @@
 #!/usr/bin/env bash
-# Start the publish workflows that hang off a release, at the tag semantic-release just pushed.
-#
-# WHY THIS FILE EXISTS AT ALL. npm-publish.yml used to say `on: push: tags` and read as if the tag started it.
-# It never did, not once in 200 releases: semantic-release pushes its tag with the built-in GITHUB_TOKEN, and
-# GitHub deliberately starts no workflow from an event that token created — the loop guard that stops a
-# workflow from triggering itself forever. The failure was silent in the worst way, because a trigger that
-# never fires looks exactly like a pipeline with nothing to do: every release passed while npm stopped at
-# 1.176.3 and the tags ran on to 1.206.1.
-#
-# workflow_dispatch is the ONE exception the loop guard makes (with repository_dispatch), so it is the only
-# trigger the release job's own token can pull — hence an explicit dispatch rather than an implicit trigger.
-#
-# THE REF IS THE TAG, not main. Each workflow then checks out the version-stamped tree it is publishing and
-# reads its own version off `GITHUB_REF_NAME`, which is what a tag push would have given it — so nothing
-# downstream had to change. It also keeps npm's provenance honest: the OIDC claim and the attestation name the
-# tagged commit, and a dispatch on main would have signed main's SHA over the tag's contents.
-#
-# Fatal in CI when the dispatch fails, for the same reason publish-github.sh is: a quiet skip here leaves a
-# tagged, released version that reaches no registry and still reports a pass, which is the exact shape of the
-# silence this file was written to end.
-#
-#   bash _tools/scripts/release/dispatch-publish.sh 1.206.1
+# Dispatch registry publish workflows at semantic-release's tag: tag pushes made with GITHUB_TOKEN do not trigger workflows.
+# Use the tag rather than main so checkout, version, OIDC claims and provenance all identify the released commit.
+# Dispatch failure is fatal in CI; a successful Release must not silently miss its registry publishes.
 set -euo pipefail
 VERSION="${1:?usage: dispatch-publish.sh <version>}"
 

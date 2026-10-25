@@ -1,32 +1,7 @@
-/* GIVING THE MENU ENTRY A PACKAGE IDENTITY (README.md has the why, and what was measured).
- *
- * Windows 11 shows an app in its new context menu only through an IExplorerCommand declared by a PACKAGE, and
- * registers a package only when its signer chains to a root the PC trusts. Measured on Windows 11 25H2 (2026-10-07), as
- * a standard user:
- *   - an unsigned package is refused: "an unsigned package cannot include Executable activations" (0x80073D2B);
- *   - a self-signed one is refused even with its certificate in the user's own Trusted People store, whatever
- *     Microsoft's page on identity packages says: "terminated in a root certificate which is not trusted" (0x800B0109);
- *   - the user's Root store takes a certificate only through Windows' "Security Warning" dialog, which tells the reader
- *     that installing it is a security risk.
- * So there are two ways in, tried in this order:
- *
- *   SIGNED. A release whose build holds Intentic's code-signing certificate packs and signs the package itself
- *   (_tools/scripts/desktop/explorer-menu-msix.mjs) and ships it beside this DLL as `SIGNED_PACKAGE`. It registers
- *   with no prompt at all, on every install and update.
- *
- *   SIGNED HERE. Otherwise this DLL makes a certificate on the PC: a fresh RSA key and a self-signed code-signing
- *   certificate for `env!("EXPLORER_MENU_PUBLISHER")`; the package (build.rs's manifest plus three logos) written by
- *   Windows' own packaging API and signed with that key by the same call signtool makes; the certificate's PUBLIC half
- *   added to the PC's Trusted People store by an elevated copy of this DLL (`trust_signer`, one UAC prompt); the
- *   package registered; the private key deleted. Nothing can be signed with that certificate again, so trusting it
- *   admits this one package and nothing else. Its version is the manifest's fingerprint (build.rs), so an update that
- *   did not change the manifest finds the package already in place and asks nothing; a quiet install (an update the
- *   app runs in the background, a passive or silent one) never prompts, and keeps whatever registration is there.
- *
- * Every outcome lands in ~/.intentic/logs/explorer-menu.log, since regsvr32 /s says nothing. A failure leaves the
- * classic entry (installer-hooks.nsh writes it whenever regsvr32 does not exit 0), so the worst case is the menu as it
- * was before. Removing the package needs no prompt; the certificate stays in Trusted People, where without its key it
- * can vouch for nothing new, because taking it out would cost another UAC prompt on the way out. */
+/* Register a shipped signed identity package first; otherwise create and sign one locally (README.md documents Windows constraints).
+ * Local signing trusts its public certificate via one UAC prompt, then deletes the private key; unchanged manifests need no prompt.
+ * Quiet installs never prompt. Log outcomes to explorer-menu.log and leave the classic entry on failure.
+ * Unregister without elevation; retain the now-keyless certificate to avoid another UAC prompt. */
 use std::ffi::c_void;
 use std::io::Write;
 use std::mem::ManuallyDrop;

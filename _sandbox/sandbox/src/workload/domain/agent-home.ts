@@ -8,22 +8,10 @@ import { statePath } from "../../state-paths.js";
 import { AGENT_HOME } from "./agent-domain.js";
 import { SESSION_STATE } from "../worktree-paths.js";
 
-// THE AGENT'S HOME, made ready by the daemon before each domain starts. It lives on the history volume (agent-home), so
-// what the agent keeps there outlives a recreate, and the domain sees it at AGENT_HOME through its idmapped view. What
-// the daemon puts there is what the daemon's own HOME gives a root-mode turn, less every credential:
-//   - `.claude`: the session store's links, the same targets /root's have (sessions/session-store.ts), so a transcript
-//     the CLI writes in the domain is the file the daemon reads; and the retention setting;
-//   - `.gitconfig`: the daemon's global git config without its credential helper, includes or ssh command, and with
-//     every directory safe, since the view shows a repository's metadata as nobody's (agent-domain-view.ts);
-//   - `.ssh`: an Include of `intentic-hosts`, and in it the PUBLIC half of each connected machine (its `.conf` and `.pub`,
-//     never a `.pass` or `.key`), the paths in it moved to this HOME; the conversation's ssh agent socket signs;
-//   - the mount points the view restores read-only from /root: the product's skills and the image's browsers.
-//
-// The agent owns this tree, and can leave a link anywhere in it pointing at a file root keeps. So the daemon never
-// follows one here: every directory is opened without following a link and reached through its descriptor, every file
-// is written beside its name and renamed over it (a rename replaces a link, it never writes through one), and whatever
-// stands where the daemon needs a directory or a link and is something else is taken away first. A process an earlier
-// domain left running cannot swap a directory under it mid-way, for the same reason.
+// Persist a credential-free AGENT_HOME on history: Claude session links, sanitized git config, public SSH config/keys and read-only skills/browsers.
+// Use the conversation's SSH agent socket for signing; never copy private credentials or git credential/include/SSH commands.
+// The agent owns this tree: traverse directories via no-follow descriptors and write by temporary-file rename, replacing links rather than following.
+// Remove wrong-type entries first so symlink or directory swaps by surviving processes cannot redirect daemon writes.
 
 // The directories under the agent's HOME the view binds read-only from the daemon's (agent-domain-view.ts HOME_RESTORES).
 export const RESTORE_MOUNT_POINTS = [".claude/skills", ".cache/ms-playwright"] as const;

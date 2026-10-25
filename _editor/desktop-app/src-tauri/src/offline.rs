@@ -1,22 +1,7 @@
 /* THE WORKSPACE THAT CANNOT BE REACHED — our own screen, not the browser's. */
-//
-// The workspace window is remote content (app.intentic.dev) in a frameless window whose title bar the page draws.
-// When the page cannot be reached at all (no network in the first minutes after a restart, a DNS failure, a
-// captive portal) WebView2 shows its own error page instead: "Hmmm... can't reach this page", a Refresh button,
-// no title bar until the frame fallback (windows.rs `arm_frame_fallback`) gives one back, and nothing that ever
-// tries again by itself. A user whose PC had just restarted for the Docker setup met it and read Intentic as broken.
-//
-// So a navigation of a page window that fails for a NETWORK reason is answered with `offline.html`, a page in the
-// app's own bundle (public/offline.html): it says what happened in our words, keeps trying on its own, and goes
-// back to the workspace the moment it answers. The window wears the platform's frame while it is there (the page
-// draws no bar of its own: it is local content in a window whose capabilities are the remote page's, which are
-// none), and the workspace's page takes the frame off again as it always does (`chrome_is_up`).
-//
-// Tauri says on no platform whether a navigation failed, so each is asked through its own webview: WebView2's
-// NavigationCompleted on Windows, WebKitGTK's `load-failed` on Linux (2026-10-16). On Linux, and so on Intentic OS,
-// whose whole screen this window is, the internet being out is not the end of the road either: the sandboxes on this
-// computer still run, and the app's own copy of the editor opens them (machine_face.rs). There a window that cannot
-// reach its page goes to that face, or to this page (which offers it) on a computer that hosts none.
+// On network navigation failure, show bundled offline.html with retries and a native frame; chrome_is_up removes it when the workspace returns.
+// Detect failure through WebView2 NavigationCompleted or WebKitGTK load-failed because Tauri provides no shared hook.
+// On Linux prefer machine_face.rs when local sandboxes exist, preserving offline access; otherwise the fallback page offers it.
 
 /// The page, as a page window loads it. Tauri serves the app's bundle on `http://tauri.localhost` on Windows
 /// (`useHttpsScheme` is not set in tauri.conf.json, which a test pins) and on `tauri://localhost` elsewhere.

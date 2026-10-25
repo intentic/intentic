@@ -43,25 +43,10 @@ import RemoveSandboxDialog from "./removal/RemoveSandboxDialog.vue";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
 
-// Rail control to switch between the user's sandboxes or add another; selecting one re-points every sandbox-backed
-// view and the liveness probe at the chosen daemon. Settings, access and everything else about the active sandbox
-// live on the tabbed /sandbox hub, opened from here.
-//
-// RESTING ON THE LOGO OPENS IT, as a press does. Switching is the errand this corner is visited for, and it should
-// not cost a press first. A pointer passing over raises nothing (the hover clock's dwell), the way across the rail
-// to a lower row keeps it up (useHoverMenu's corridor), and a press pins it. The sandboxes come first and always stand
-// in the same place, so the Nth one is the same reach every time.
-//
-// ONE SWITCHER FOR BOTH WINDOWS. The desktop app's window on a folder of this computer draws this same control at the
-// top of its rail (local/LocalShell.vue), standing on that folder rather than on a sandbox (switcherPlace.ts): the
-// account's sandboxes reach it through the app (its local/platform.ts), so picking, removing, leaving and rolling one
-// back are the same rows, chords and dialogs as here. What it leaves out is what a folder's window cannot read: other
-// sandboxes' daemons refuse its page (attention counts, "not answering"), and the sandbox hub is the workspace's.
-// Until 2026-10-21 it had a switcher of its own, a local place switcher that could list sandboxes and nothing else.
-//
-// PLACES ONLY. What the sandbox in use needs, what is worth knowing and setups never finished used to hang under the
-// list as three headed sections, with the badge for them on the logo; they turned a menu for picking a place into a
-// to-do list. They live on the getting-started ring now (gettingStarted/SandboxErrands.vue), badge and all.
+// Shared workspace/local-window place switcher: a pick retargets sandbox views/probes; the active sandbox hub is opened from here.
+// Hover dwell opens, the pointer corridor preserves it, and a press pins it; keep sandbox rows in stable positions.
+// Local windows use the app's platform proxy and omit daemon attention/reachability and the workspace-only hub.
+// Setup/news/action badges belong to gettingStarted/SandboxErrands.vue, leaving this menu focused on choosing a place.
 
 const t = useT();
 

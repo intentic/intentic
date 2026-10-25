@@ -1,35 +1,8 @@
 #!/usr/bin/env bash
-# Prove the desktop app keeps its own update promise: IT MOVES ITSELF ONTO THE RELEASE THAT WAS PUBLISHED, AND
-# THE WORST OUTCOME IS THE APP YOU ALREADY HAD.
-#
-#   verify-desktop-update.sh
-#
-# The sibling of verify-update-survival.sh, which does exactly this for a sandbox. That one exists because the
-# update card's claims — your files survive, one command rolls it back — are load-bearing product promises that
-# nothing per-push exercised. This one exists for a sharper reason: the desktop app's equivalent claim was
-# false. Every release up to and including v1.213.0 drew "Intentic X is available: it installs the next time
-# you quit" over a crate containing no install path at all, and no tier anywhere could have noticed, because
-# the whole mechanism was one `check()` and an event.
-#
-# THE DRILL, hermetic, on the bare Debian the other desktop tiers use:
-#
-#   1. mint a throwaway minisign pair — the release key is not on this machine and must not be
-#   2. build TWO AppImages, 9.9.9 and 9.9.10, both carrying that pubkey and an endpoint on loopback
-#   3. write the manifest 9.9.10 as a release would, signed with the throwaway key
-#   4. run 9.9.9 in the container and let it alone
-#        → it checks, downloads, and verifies the signature with nobody pressing anything
-#        → pressing the workspace banner installs it
-#        → the file on disk is now 9.9.10, byte for byte
-#        → it starts again, and reports itself current against the same manifest
-#
-# WHY IT BUILDS ITS OWN APP RATHER THAN TESTING THE SHIPPED ARTIFACT. Two of this chain's inputs are compiled
-# in — the pubkey and the endpoint — and the alternative to overriding them at BUILD time is an environment
-# variable that overrides them at RUN time, in every copy that ships. This app's whole design is about not
-# having doors like that (see setup_link.rs on why even `intentic://update` is refused from outside), and a
-# test hook is a door. What the released artifact does on a real machine is verify-desktop-install.sh's job and
-# @intentic/desktop-smoke-windows'; what this owns is the mechanism.
-#
-# Costs two release-profile Tauri builds. Nightly, not per-push.
+# Nightly hermetic updater drill: build two AppImages with a throwaway signing key and loopback endpoint, then serve a signed update.
+# Assert automatic download/verification, banner-triggered install, exact replacement bytes, relaunch and current-version status.
+# Override key/endpoint only at build time; runtime overrides would expose test hooks in shipped apps. Never use the release key here.
+# Costs two release-profile Tauri builds; released-artifact installation is covered by the separate install smoke tests.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/appimage-env.sh"

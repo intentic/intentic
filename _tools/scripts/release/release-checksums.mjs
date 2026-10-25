@@ -1,20 +1,7 @@
 #!/usr/bin/env node
-// SHA256SUMS OVER EVERYTHING THE RELEASE ATTACHES, AND THE RELEASE KEY'S SIGNATURE OVER IT. release-prepare.sh runs this
-// once every artifact is staged; publish-github.sh then uploads both files with the rest of `_editor/desktop-app/dist-bin`.
-//
-//   node _tools/scripts/release/release-checksums.mjs <version>
-//
-// build-desktop.sh's own SHA256SUMS covered its directory alone, the installers. The binaries the install one-liners and
-// the machine agent download (ic-*, intentic-machine-*, intentic-keyring-*, the Windows launcher) were in no checksum at
-// all, so nothing could tell a substituted or truncated one from the real thing. This file is the release's: one line per
-// asset across the directories publish-github.sh attaches, by the name the Release shows.
-//
-// SIGNED WITH THE UPDATER KEY, by the same signer that signs the installers (`tauri signer sign`), with the version bound
-// into the trusted comment. Agents check SHA256SUMS.sig against the public half built into them
-// (_devices/machine/src/release/release-verify.ts) and refuse a release from SIGNED_SUMS_FROM on that lacks it, so a release
-// without the key set fails here in CI rather than stranding every agent's upgrade. The signature is checked straight
-// after it is made, by the agents' own code, against tauri.conf.json's public key: a key that does not match, or a
-// signer whose output the agents cannot read, stops the release before anything is published.
+// node _tools/scripts/release/release-checksums.mjs <version> covers every staged release asset before publish-github.sh uploads it.
+// Sign SHA256SUMS with the updater key, binding version in the trusted comment; SIGNED_SUMS_FROM clients require this signature.
+// Verify immediately with the agents' release-verify code and tauri.conf.json public key, stopping before publish on missing/mismatched keys.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";

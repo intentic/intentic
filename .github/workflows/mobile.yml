@@ -1,25 +1,6 @@
-# Mobile apps — validation only. Proves both store apps still BUILD; shipping is mobile-release.yml.
-#
-# Cheap and fork-safe by construction: everything runs on GitHub-hosted runners (free on a public
-# repository — and the only place a macOS builder exists at all; the self-hosted fleet is Linux), no job
-# touches a secret, and the Android release build signs with the debug key AGP mints on the runner and
-# throws away with it. The path filter is the budget.
-#
-# AND THE PATH FILTER IS WHY nightly.yml CALLS THIS TOO. The iOS shell is a GENERATED project, and what
-# generates it is a pinned external tool reading a checked-in config: that pair drifts on its own, as
-# Capacitor did when it moved its dependency wiring to a Swift package and the App.xcworkspace this workflow
-# opened stopped being written at all. The Android app drifts a second way: its colours and strings are
-# generated from the web editor's CSS and catalogs, and a catalog changes on most web pull requests, which
-# the filter leaves out rather than start a Rust and Gradle build for each of them. The nightly call is
-# where a reworded message the app shows turns this job red, with the one command that regenerates it.
-#
-# What each job proves:
-#   android  the native app (_editor/android-app) over its Rust core (_editor/mobile-core): the core's
-#            fmt, clippy and tests; Messages.kt, colors.xml and strings.xml regenerated with no diff; the
-#            generators' own tests; the app's unit tests; and a minified, shrunk release APK.
-#   ios      the Capacitor config still generates a project that compiles, and prepare-native.mjs can still
-#            finish it — that script WRITES the push wiring the Capacitor template leaves out, and stops on a
-#            template whose shape moved, which is the one product invariant a successful compile would hide.
+# Validate Android/iOS builds without publishing or secrets; hosted runners provide macOS and disposable Android debug signing.
+# Nightly also runs this path to catch drift in generated native projects, CSS/catalog resources and pinned external templates.
+# Android verifies Rust/generators/resources/tests plus a shrunk release APK; iOS verifies Capacitor generation and push wiring.
 name: Mobile
 
 on:

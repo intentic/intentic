@@ -23,27 +23,10 @@ export interface Catalog {
     readonly load: (locale: Exclude<Locale, typeof BASE_LOCALE>) => Promise<{ readonly default: MessageTree }>;
 }
 
-// NOT `legacy`, and NOT a per-component scope. One global instance, one language, ONE WAY TO REACH IT: `useT()` in a
-// component's script, `t` in a plain module. Both read this module directly rather than an injected instance, which
-// is the property that matters — a component that translates still renders under a bare `createApp`, so no component
-// test has to install a plugin to mount the thing it is testing.
-//
-// `globalInjection` is off for the same reason: `$t` in a template would work in the app and fail in exactly those
-// tests, which is a worse failure than not having it. `installI18n` is still worth calling, but only for `<i18n-t>`,
-// the component that wraps a slot inside a translated sentence.
-//
-// Component-local `useI18n({ messages })` is unavailable on purpose — it inlines every language into the component's
-// own chunk, which is exactly the bundle growth this layer exists to avoid.
-//
-// The message compiler is kept (no `@intlify/unplugin-vue-i18n` precompile step). It has to be: extensions installed
-// from a repository ship plain JSON this app has never seen at build time, and without the compiler their strings
-// cannot render at all. Given it is bundled anyway, precompiling our own would only trade sub-millisecond parse time
-// for a larger AST payload and a plugin in four Vite configs.
-//
-// No `messages` here, and it cannot be one: vue-i18n types that option against the augmented `DefineLocaleMessage`,
-// so every slice a package declares — `ui`, and each extension's — would have to be present in this literal. The tree
-// is assembled the other way round, by `registerCatalog` calling `mergeLocaleMessage` as each package imports, which
-// is also the only shape that works for a catalog arriving at runtime.
+// One global composition-mode instance: useT() in components and t in modules access it directly, so bare createApp tests need no plugin.
+// Disable globalInjection and component-local messages; installI18n only registers i18n-t.
+// Keep the runtime message compiler: installed extensions bring JSON catalogs unknown at build time.
+// registerCatalog assembles slices with mergeLocaleMessage; an initial messages literal would require every augmented package slice.
 
 // A `|` message is chosen by INDEX, and the index a count maps to is the language's own grammar. vue-i18n's default
 // rule is English's — one form for 1, another for everything else — which is right for German and Spanish and wrong

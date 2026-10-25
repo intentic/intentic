@@ -15,22 +15,9 @@ use crate::util::{bail, Fail, Result};
 
 mod wayland;
 
-/* SANDBOX WINDOWS ON THIS COMPUTER'S SCREEN (desktop edition).
-
-`ic os screen serve` runs inside the sway session and gives a running sandbox a Wayland socket of its own through
-security-context-v1, so every window it opens is tagged by sway with the sandbox's slug and denied the protocols that
-would let it read or drive anything else (wayland.rs). Three rules hold it, all here, in the one process that hands the
-sockets out:
-
-- OFF UNTIL THE OWNER SAYS. A sandbox draws only once the owner allows it (This computer, or `ic os screen allow`);
-  the list is `/var/lib/intentic-os/screen-allowed.json`, empty on a new machine. Every sandbox gets the (empty,
-  read-only) socket folder mounted when it is made (policy.rs), so allowing or denying one takes effect within a few
-  seconds, with no recreate, and the sandbox can never write into the session's runtime folder.
-- NEVER THE WHOLE SCREEN. A sandbox window wears an amber frame and its sandbox's name (the sway config's
-  50-sandbox-windows.conf); fullscreen would hide both, and the bar, and let it pass for the system. sway grants any
-  client's fullscreen request, so this service watches sway's window events and takes it back at once.
-- NOTHING SERVED UNWATCHED. While that watch is down (sway restarting, its IPC refusing) every socket is closed, and a
-  window from a sandbox that may no longer draw is closed too. The sockets are never available without the rules. */
+/* ic os screen serve grants per-sandbox security-context-v1 Wayland sockets only after owner opt-in in screen-allowed.json.
+ * Read-only socket-folder mounts let allow/deny take effect without recreate; contexts block protocols for reading/driving other windows.
+ * Reject fullscreen to preserve the amber sandbox frame/name. If the sway watch fails, close sockets and no-longer-allowed windows. */
 
 /// The security context's engine: what sway tags every window from a sandbox's socket with (`sandbox_engine`).
 pub const ENGINE: &str = "dev.intentic.sandbox";

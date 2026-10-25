@@ -6,24 +6,9 @@ use tauri::{AppHandle, Manager};
 
 use crate::setup_link::NoticeArgs;
 
-/* THE SYSTEM'S NOTIFICATIONS, PUT UP FOR THE WORKSPACE WHILE THE READER IS ELSEWHERE — a toast on Windows, a
-notification of the desktop's on Linux.
-
-The workspace page decides everything about one (the web's desktopNotices.ts): that the reader is away, that the news
-is worth it (something needs them, a turn somebody started has finished), its words, the route a press opens and
-whether it makes a sound. A push notification cannot reach this window (the webview takes no web push), so without
-this an agent that stopped to ask something waited, unheard, behind a tray icon. The app only puts them up, takes one
-down when the page says it is settled (an ask answered from the phone), clears them all when the reader is back
-(`clear`) and when the app ends, and brings a pressed one's route up in the workspace.
-
-A notification makes the system's own sound, so Do Not Disturb and Focus assist silence it as they silence every other
-app, and a page that rings its own chime for it asks for none (`silent`).
-
-On Windows a press comes back as a link through the OS (`intentic://notice?do=open&token=…`, the toast's protocol
-activation), which reaches this app whether the toast was pressed as it appeared or later in the notification centre,
-and a running app gets it through the second launch's hand-over like any other link. That needs no COM activator and no
-handler kept alive per toast. The token is minted here for each notification and means nothing outside this run. On
-Linux the press is the server's `ActionInvoked` signal for the notification's `default` action. */
+/* The page chooses notification timing/content/routes/sound; the app displays, removes settled asks, clears on return/exit and opens clicked routes.
+ * Use system sounds for Do Not Disturb/Focus Assist; silent prevents duplication when the page plays its own chime.
+ * Windows presses use intentic://notice protocol activation with per-run tokens; Linux uses ActionInvoked's default action. */
 
 /// The most notifications the app keeps track of: what a notification centre keeps for one app, with room to spare.
 /// The oldest beyond it is taken down.

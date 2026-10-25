@@ -91,28 +91,10 @@ jobs:
       # has. Invoked directly rather than through `pnpm typecheck`, because the root script cannot take a filter.
       - id: declarations
         run: node _tools/scripts/build/emit-declarations.mjs
-      # ONE turbo graph for `typecheck build test`. Two invocations are a hard barrier: the typecheck used to finish
-      # before any build or test started, so the web's vue-tsc (5 minutes under load, 2026-10-07) sat in front of the
-      # web's tests (20) instead of beside them. Nothing in a test reads a typecheck, so in one graph each package's
-      # tests start the moment its own deps are built while the typechecks run beside them.
-      #
-      # `--continue=dependencies-successful`: turbo otherwise stops at the first failing task, so a failed pipeline
-      # reported one broken package and the next push found the next one. Continuing into everything whose own
-      # dependencies still pass makes one run say everything that is wrong, and a type error no longer hides the tests
-      # behind it: it used to fail a step of its own and skip this one.
-      #
-      # THROUGH THE ENVIRONMENT, not interpolated into the script. `${{ }}` inside a `run:` block is textual substitution
-      # BEFORE the shell sees the line, so the value becomes script rather than an argument to it: the shape zizmor calls
-      # template-injection. The inputs here come from literals in ci.yml and are not attacker-reachable today, but the fix
-      # costs a line and the shape is what gets copied into the next workflow. UNQUOTED ON PURPOSE: this is a list of
-      # turbo flags, and the word splitting is the point; `"$X"` would hand turbo one argument spelled `--filter=a --filter=b`.
-      #
-      # NO TEST_WORKERS: each `suites` run sizes itself from the host's pool (TEST_SLOTS_DIR above), which knows what the
-      # other jobs on the box hold right now. A fixed count computed here could only divide the box by six.
-      # WHAT A SANDBOX ALREADY RAN ON THIS TREE: its typecheck passes, copied in as cache hits for the run below, and only
-      # for the hashes that run's own dry run gives to output-less tasks (ci.yml's `quick` job says why that is the whole
-      # safety argument, and _tools/turbo-cache/README.md how the entries get here). The same arguments as the run below,
-      # minus the flags that do not move a hash, and unquoted for the same reason. Never fails the job.
+      # Run typecheck/build/test in one turbo graph so independent checks overlap; continue tasks whose own dependencies succeeded.
+      # Pass flags through env to avoid template injection. Deliberate word splitting supplies multiple turbo flags, not one combined argument.
+      # suites uses the shared TEST_SLOTS_DIR pool; do not impose a fixed TEST_WORKERS count that ignores other jobs.
+      # Warm only output-less typecheck tasks whose current dry-run hashes match sandbox proofs; cache warming must not fail the job.
       - name: Import sandbox results
         if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
         env:

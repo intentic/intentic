@@ -12,22 +12,10 @@ import { z } from "zod";
 import { onPath } from "../image/on-path.js";
 import { defaultExec, FILEQ_MAX_BUFFER, isMissingBinary, runFailure, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
 
-// The shadow keeper: every document in the main workspace (pdf, docx, xlsx, pptx, odt, ods, odp, rtf, epub, as fileq's
-// formats.ts names them) has a current text shadow under .intentic/local/cache/derived, so ripgrep (through fileq's
-// preprocessor) and iq can search what documents say without anyone having opened them first.
-// - On boot, a sweep walks the tree once, derives every document whose shadow is missing or stale, and removes shadows
-//   whose document is gone. Stale here is the hash-free test: the shadow's recorded size and mtime are not the file's,
-//   its deriver stamp is not the one fileq would write now (`fileq stamps`), or its OCR stopped short of this keeper's
-//   page cap. fileq itself still hashes before it derives, so a touched-but-unchanged file costs a read, not a render.
-// - Then the workspace watcher's batches: a created or changed document is queued, a deleted or renamed one loses its
-//   shadow, after a short debounce so a burst of saves renders once.
-// Low priority throughout: one fileq child at a time, under `nice` where it exists, in the slot budget it shares with
-// interactive renders, which go first (fileq.ts). A file fileq refused (corrupt, encrypted) is not asked again until it
-// changes. Skipped: IGNORED_DIRS, `.intentic`, `refs/`, agent worktrees, browser profiles, files over MAX_BYTES; and a
-// workspace holding more than MAX_DOCUMENTS documents is reported rather than ground through.
-// Background OCR goes deeper than an interactive read (KEEPER_OCR_PAGES, against fileq's 20). Where OCR is not
-// available fileq's shadow says so under the `pdf` stamp, and nothing re-derives it until the stamp changes, which is
-// what installing the OCR pack does.
+// Maintain searchable document shadows at boot and on debounced file changes; stale means size/mtime, deriver stamp or OCR page cap differs.
+// One low-priority fileq child shares slots behind interactive renders; fileq hashes before rendering and retries refused files only after changes.
+// Skip ignored/internal/ref/worktree/profile paths, oversized files, and report workspaces above MAX_DOCUMENTS rather than grinding through them.
+// KEEPER_OCR_PAGES exceeds interactive depth; missing-OCR shadows remain valid until the pack changes their stamp.
 
 export const KEEPER_OCR_PAGES = 500;
 export const MAX_DOCUMENTS = 20_000;

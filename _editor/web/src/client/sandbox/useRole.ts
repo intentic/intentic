@@ -4,22 +4,10 @@ import { computed, type ComputedRef } from "vue";
 import { selfAgents, selfLands } from "./useMembers";
 import { useSandbox } from "./useSandbox";
 
-// The signed-in user's trust tier on the active sandbox, and the two affordance flags derived from it.
-//
-// Client-side gating only: every route is independently floored server-side (auth/role-floor.ts), so a wrong
-// reading here changes what renders, never what is allowed. Defaults to `owner` until the summary loads, corrected on
-// the first call.
-//
-//   isGuest   , the tier below viewer: talks to the persona cards it holds, and is shown nothing else of the box.
-//   homeOnly  , a guest whose only way in is its own home conversation (the master view), not a card.
-//   canLandHome, whether the person may land their home conversation's held work: a maintainer and up, or a home-only
-//              guest granted `lands`, the same answer that lets that home land by itself (sandbox-contract `landsHere`).
-//   canDrive , a guest (its own chats) or collaborator and up: start/steer agents. A viewer watches, and so does a
-//              writer whose grant has agents off (useMembers.ts `selfAgents`), which its tier alone does not say.
-//   canReview, collaborator and up, agents on: review work and ask for a landing. A guest drives but never reviews.
-//   canWrite , writer and up: change files in the tree. WHERE is the fence's answer, which only the daemon holds, so
-//              a writer is offered the verbs and meets a refusal outside its areas.
-//   canShip  , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
+// Client affordances only; server role floors authorize every route. Default owner until summary loads, then derive the active sandbox's tier.
+// Guests see assigned personas/home and may drive their chats; home-only guests land only with lands permission.
+// Drive/review also check agents access (guests never review); write needs writer+, ship needs maintainer+.
+// Writer area fences remain server-owned: exposing a file verb does not grant access outside permitted areas.
 export function useRole(): {
     role: ComputedRef<MemberRole>;
     isGuest: ComputedRef<boolean>;

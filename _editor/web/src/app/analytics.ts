@@ -9,28 +9,10 @@ import { environment } from "./environments/environment";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
 import { replayPrivacy } from "./replayPrivacy";
 
-// PostHog instrumentation: autocapture, session replay, SPA pageviews, plus funnel milestones via `track()`.
-// `api_host` proxies through this origin's /wire (nginx.conf) since privacy blockers match PostHog's own hostnames.
-// `sessionStorage` scopes the ids to the tab so a reload doesn't fragment one visit into unrelated recordings, and it is
-// what the privacy policy promises: the identifier ends with the tab and does not recognise the reader coming back. The
-// desktop app's window keeps that promise too, so each relaunch starts afresh; the account joins its runs once signed in
-// (`identify`), and `desktop_launch_id` (below) ties a run to the app's own events about the same launch.
-//
-// What this captures is what the privacy policy and sub-processor list (_site/site-content/src/legal.ts) say it
-// captures; a change here that alters what leaves the browser must move LEGAL_VERSION and both documents together.
-//
-// Neither the replay nor an event carries the workspace: replayPrivacy.ts (with replayText.ts) masks every piece of text
-// that is not the interface's own wording, a number or a setup's own diagnostics, and blocks the editor, terminals and
-// media, and eventPrivacy.ts gives the same treatment to the addresses and clicked text of the events. Widen either
-// there, not here, and only together with the policy.
-//
-// LOADED AT THE PAGE'S FIRST IDLE MOMENT, not with the app: posthog-js is ~290 KB of JS that a phone downloaded and ran
-// before its first screen, and its recorder then started serialising a page still being built. Milestones raised
-// before the SDK is there wait in `early` and go out only while capture is allowed.
-//
-// A browser in the EEA, the UK or Switzerland is asked first and sends nothing until it allows it; elsewhere analytics is
-// on unless this browser was switched off under Settings, Data (analyticsConsent.ts). A sandbox's own switch can
-// withhold it for everyone in that sandbox (the gate below).
+// PostHog capture/replay/pageviews/track load at first idle via /wire; queue early milestones only while capture is allowed.
+// Tab-scoped ids end with the tab/relaunch; identify joins account runs and desktop_launch_id joins native launch events.
+// Consent is opt-in in EEA/UK/Switzerland, opt-out elsewhere; browser and sandbox switches can withhold capture.
+// replayPrivacy/replayText/eventPrivacy strip workspace data. Capture changes must update LEGAL_VERSION, policy and sub-processors in legal.ts.
 let enabled = false;
 let allowed = false;
 let client: PostHog | undefined;

@@ -1,38 +1,8 @@
 #!/usr/bin/env bash
-# Authenticode-sign one Windows binary — the thing that makes SmartScreen stop calling our installer
-# dangerous, and the one piece of this repo's release that was never wired up at all.
-#
-#   sign-windows.sh <path-to-exe-or-dll>
-#
-# Called per-binary by `tauri build` (bundle.windows.signCommand in tauri.conf.json), which hands it the app
-# executable, the NSIS installer and the uninstaller in turn, and directly by build-ic.sh and
-# build-agent-binaries.sh for the helpers those produce. One script, so "what does signed mean here" has one
-# answer.
-#
-# WHY THERE IS A WARNING AT ALL. Windows shows "Windows protected your PC / More info / Run anyway" for a
-# program it cannot attribute to anybody. That is not a virus verdict and no amount of testing makes it go
-# away: SmartScreen wants a publisher identity, which means an Authenticode signature from a certificate
-# issued to a verified legal entity. Nothing this repo ships has ever carried one — `TAURI_SIGNING_PRIVATE_KEY`
-# is the UPDATER's minisign key, which proves an update came from us to the app itself and which SmartScreen
-# neither reads nor cares about.
-#
-# WHY THE SIGNER IS A LINUX TOOL. The Windows installer is cross-built on a Linux runner by cargo-xwin
-# (build-desktop.sh), so `signtool.exe` is not available and never will be. Both tools below run on Linux and
-# both produce ordinary Authenticode signatures:
-#
-#   jsign          — the flexible one. Talks to a key that lives in a service rather than in a file: Azure
-#                    Trusted Signing, Azure Key Vault, AWS/Google KMS, DigiCert ONE, SSL.com eSigner, or any
-#                    PKCS#11 token. This is the shape every certificate sold since June 2023 has, because
-#                    CA/B rules now require the private key to stay on certified hardware.
-#   osslsigncode   — the simple one. Signs from a PKCS#12 (.pfx) file and a password. Only usable with a
-#                    certificate you are allowed to hold as a file, which in practice means a legacy cert or
-#                    a test one.
-#
-# HOW TO TURN IT ON. Set WINDOWS_SIGN_TOOL and the variables its branch reads (below) as masked CI secrets.
-# Unset, this script does nothing and says so, which is what keeps `build-desktop.sh <version>` a command any
-# developer can run — the same trade the updater key already makes.
-#
-# WHAT TO BUY is a decision with real trade-offs; docs/ops/windows-code-signing.md lays them out.
+# Authenticode-sign one exe/DLL for desktop and helper builds; the updater's minisign key serves a separate purpose.
+# Linux builds use jsign for service/hardware-held keys or osslsigncode for permitted file-held/test certificates.
+# Set WINDOWS_SIGN_TOOL and its branch's masked secrets; unset means an explicit unsigned skip for developer builds.
+# docs/ops/windows-code-signing.md describes provider setup and tradeoffs.
 set -euo pipefail
 
 # DOES THIS BINARY ALREADY CARRY A SIGNATURE — read off the file itself, with no Windows tool and no

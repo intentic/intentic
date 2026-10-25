@@ -1,49 +1,14 @@
 #!/bin/sh
-# intentic device: connect THIS Linux device to your sandbox, so the agent can work on it: run commands, read and write
-# files inside the folders you allow, and see the screen. Runs as YOU (no sudo): it installs the one device agent into
-# ~/.intentic/machine (shared with desktop sync, if you enable that too) and registers a per-user login entry so the
-# device reconnects after a reboot. `intentic-machine device uninstall` removes it. Nothing is opened on your network:
-# the connection is outbound only.
-#
-# What the agent may actually do here is decided on the sandbox's capability card, not by this script, and is enforced
-# by the agent installed on this device. Revoking it there cuts this device off immediately.
-#
-# THIS IS A BOOTSTRAP SHIM: its whole job is to put an agent that understands `device setup` on a device that has none,
-# then hand over to it, and that agent decides everything else, including moving itself onto the current release, so
-# re-running this command still upgrades a device. The decisions live once, in the agent
-# (_devices/machine/src/install.ts), where they are compiled and tested.
-#
-# Usage (the device's capability card hands you this):
-#   curl -fsSL https://intentic.dev/device/<SANDBOX_HOST>/<CODE> | sh
-# where CODE is a single-use code the sandbox minted: this script spends it at https://<SANDBOX_HOST>/system/redeem/
-# for SANDBOX_URL and PAIR_TOKEN, so no token rides the command. The older env-var shape still works:
-#   curl -fsSL https://intentic.dev/device | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' sh
-#
-# Optional env:
-#   AGENT_BIN    run THIS agent command instead of the installed one: for local dev / dogfooding an unreleased build,
-#                e.g. AGENT_BIN="node /path/to/intentic/_devices/machine/dist/cli.js".
+# User-level Linux bootstrap for intentic-machine device setup; the agent owns installation, self-update and per-user startup.
+# Pair through /device/<SANDBOX_HOST>/<CODE> or legacy SANDBOX_URL/PAIR_TOKEN; AGENT_BIN selects a development command.
+# Connection is outbound only; the capability card defines allowed files/commands/screen access and revocation disconnects immediately.
+# Share ~/.intentic/machine with sync; intentic-machine device uninstall removes this connection.
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
-# is dash on Debian, Ubuntu and WSL.
-#
-#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   kit_say <sentence>                       narration under the running step
-#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
-#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
-#   kit_settle                               the running step is done
-#   kit_finished <verdict>                   a flow's past-tense verdict
-#   kit_stop <headline> [problem] [fix] [code]
-#                                            stop: the running step settles as failed, the stop block goes to stderr,
-#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix> [names]
-#                                            run again through sudo when not root, keeping the named settings (see below)
-#   kit_confirm <question> <consequence> <flag>
-#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
-#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+# POSIX-sh output helpers for bootstrap scripts; see docs/ops/cli-output-protocol.md for the shared protocol.
+# ic or intentic-machine owns the display after handover; suspend/resume around commands that print their own output.
+# kit_stop exits (default 1, usage 2). kit_confirm exits 0 on refusal and stops without a terminal unless a flag answers it.
 
 case "${INTENTIC_UI:-}" in
     rich | plain | nested) kit_mode="$INTENTIC_UI" ;;
@@ -386,22 +351,9 @@ KIT_ANSWER
 # <<< end of generated redeem.sh
 
 # >>> generated from _site/site/scripts-kit/agent-fetch.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# ---- bootstrap the agent binary (identical in device.sh and sync.sh: generated from one source) ----
-#
-# Only when this device has no agent that can take the handover: one that can skips straight to `setup`, which asks
-# the release channel itself and self-updates first. "Can" is asked by RUNNING the handover's own help, never by
-# comparing versions: an agent that answers `version` can still be older than the words this script speaks to it, and
-# then it is the `setup` that would have updated it that it cannot understand. That is what renaming the `computer`
-# route to `device` did: every device paired before the rename answered the card's own command with "No command
-# registered for `device`", with no route back to the self-update.
-#
-# The download is pinned to the tag `releases/latest` resolves to right now (one HEAD, no body, no API rate limit), so
-# an interrupted transfer resumes against the exact release it started from, never a splice of two. What lands is
-# probed by running it (`version` answering is the only proof the file is a working agent rather than 95 MB of
-# captive-portal login page) and only a probed binary is moved into place.
-#
-# Inputs from the embedding script: $ROUTE (device or sync), $SPEAKS (the handover's flags newer than the route, or
-# empty), $os and $arch. Output: $BIN.
+# Bootstrap only if the installed agent cannot run the handover's help; version alone does not prove route/flag compatibility.
+# Pin downloads to the tag resolved by releases/latest so interrupted transfers cannot splice releases.
+# Run version before installing the binary to reject broken downloads. Inputs: ROUTE, SPEAKS, os, arch; output: BIN.
 
 agent_version() {
     # The subshell keeps the SHELL's own "Bus error" for a truncated binary off the screen.

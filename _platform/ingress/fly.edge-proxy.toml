@@ -1,19 +1,7 @@
-# THE EDGE BEHIND FLY'S HTTP PROXY: the shape it ran until 2026-09-26, kept as the documented EMERGENCY FALLBACK and
-# deployed by nobody. CI deploys fly.toml, where the edge terminates TLS itself; tests/fly_configs.rs holds the two
-# equal outside their services (the app, the image, the machine), so a fallback changes who holds the certificate and
-# nothing else.
-#
-# IT IS NO LONGER A ONE-COMMAND ROLLBACK. Under this file Fly's proxy terminates TLS, so it needs a certificate of Fly's
-# own for the wildcard, and that was removed in phase 3b: first `flyctl certs add '*.sbx.intentic.dev' -a
-# intentic-ingress` plus the `_acme-challenge.sbx.intentic.dev` CNAME to `sbx.intentic.dev.qe8e12d.flydns.net` in
-# Cloudflare, and wait for `flyctl certs show` to say it is issued. And hosted sandboxes lose QUIC and WebTransport
-# here but keep their tunnels, so they stay reachable while they dial; the replay lane that used to carry one dialling
-# nothing (`fly-replay`, HOSTED_APP_PREFIX, the hosted machines' own front door) was removed from the edge and the api
-# in the same change, and would have to come back with a revert of that commit before a stopped hosted sandbox answered
-# anything but `no-tunnel` under this file. README.md ("Rolling back") is the ordered runbook.
-#
-# Regions are NOT expressible in this file (Fly removed the key); `fly scale count` places them. This file is the
-# shape of a machine, not where they are.
+# Emergency Fly HTTP-proxy fallback; normal CI deploys fly.toml. Keep both configs equal outside their services.
+# Restore Fly's wildcard certificate/DNS validation and wait for issuance before deployment; README.md gives the ordered rollback runbook.
+# QUIC/WebTransport are unavailable here. Hosted sandboxes still need outbound tunnels; this config cannot restore the removed replay lane.
+# Place regions with fly scale count, not this machine-shape file.
 
 app = "intentic-ingress"
 primary_region = "iad"

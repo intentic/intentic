@@ -1,57 +1,12 @@
 ﻿<#
 .SYNOPSIS
-  Provision this PC as the Windows CI runner, and bring an existing one back to the shape the desktop tiers
-  need. Companion to docs/ops/ci-runner-windows.md, which explains why the shape is what it is.
-
-  THE ONE THING THE PIPELINE CANNOT DO FOR ITSELF. Everything else the Windows tiers want of a machine, they
-  reconcile on their own: every tier now tears down before it asserts, so a leftover install, a stray sandbox
-  container or a half-finished previous run heals without anybody logging in. The exception is the runner's own
-  SESSION. A job runs inside the runner process, so it cannot move that process onto a desktop it does not have
-  — and a runner installed the ordinary way, as a Windows service, has no desktop at all. Session 0 maps no
-  windows, and every assertion in tier 1 reads a window title. That is a property of how the runner was
-  REGISTERED, which is this script, run once per machine.
-
-  Idempotent, and a reconciler rather than an installer: run it on a machine somebody already registered as a
-  service and it takes the service out and puts the logon task in.
-
-  A LOGON TASK, BUT NOT A CONSOLE SOMEBODY IS MINDING. "Not a service" is a statement about the SESSION, and it
-  is often read as a statement about attendance — so the runner ends up being whatever `run.cmd` somebody
-  double-clicked, in a console window on somebody's desktop, which dies with the window, dies with the machine,
-  and comes back when a person remembers. Nothing about the desktop requirement asks for that. The task this
-  registers is unattended in every way a service is except the one that matters to the tiers:
-
-    • no window — the listener is started through intentic-launch.exe, so there is nothing on the desktop to
-      close by accident and nothing to keep open on purpose;
-    • self-healing — a repeating trigger re-runs the task every few minutes, and `IgnoreNew` makes that a no-op
-      while the listener is alive. So a crash, a network drop, a failed self-update or an operator who killed it
-      is repaired within minutes, by the machine, with nobody signed in. Task Scheduler's own restart-on-failure
-      only fires for what it CALLS a failure, and a listener that exited 0 is not one;
-    • it comes back by itself after a reboot, given -AutoLogon, and neither sleeps nor locks its session, given
-      -KeepAwake (a locked session passes every check that reads window titles and fails every one that needs
-      the keyboard, which is the desktop tiers' whole vocabulary).
-
-  The last two are switches rather than defaults because each one trades something real away (a stored password,
-  a machine-wide power policy) and only a dedicated CI box should make that trade.
-
-  SAVED WITH A UTF-8 BOM, AND IT HAS TO STAY. Windows PowerShell 5.1 — still what an elevated "PowerShell"
-  window is on a stock Windows 11, and so what somebody following the docs above will use — reads a BOM-less
-  file as ANSI, which turns each em dash in the strings below into a byte it takes for a closing quote. That is
-  not a display problem: it ends those strings early and the script dies as five parse errors having done
-  nothing. pwsh reads UTF-8 with or without the mark, which is exactly how a file that had never run under 5.1
-  passed every test it was given.
-
+  Provision or repair an interactive Windows CI runner; session 0 cannot drive desktop tests. See docs/ops/ci-runner-windows.md.
+  Retain the UTF-8 BOM for PowerShell 5.1. The windowless logon task/watchdog runs unattended; AutoLogon/KeepAwake are explicit opt-ins.
 .EXAMPLE
-  # From an ELEVATED PowerShell. Token from Settings > Actions > Runners > New self-hosted runner (Windows x64).
   ./setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
-
 .EXAMPLE
-  # On a box that exists to be this runner and nothing else: signs itself in after a reboot, never sleeps or locks.
-  ./setup-windows-runner.ps1 -Url https://github.com/intentic -Token <token> -AutoLogon -KeepAwake
-
-.EXAMPLE
-  # Re-run against an already-registered machine to repair its session, no token needed. Also what turns a
-  # runner somebody had started by hand, in a console window, into the unattended task described above.
   ./setup-windows-runner.ps1 -Repair
+  Replace an existing service or manually started listener with the desktop-session task; no token needed.
 #>
 param(
     # The scope the token came from — an organisation token pairs with https://github.com/<org>, a repository
@@ -112,29 +67,9 @@ if (-not $Repair -and (-not $Url -or -not $Token)) {
     Die 'need -Url and -Token to register a new runner, or -Repair to fix an existing one.'
 }
 
-# where the runner actually is
-# $RunnerRoot's default is THIS SCRIPT'S convention, and the machine -Repair exists for — one somebody
-# registered the ordinary way, as a service — is exactly the machine that never followed it. The Windows runner
-# was configured at C:\runner, so the bare `-Repair` that `doctor` prints on finding session 0 died on "no
-# runner to repair" while the runner it meant ran beside it: the one failure a person has to fix by hand, and
-# the instruction for fixing it did not work on the machine it was printed about.
-#
-# So an unpassed -RunnerRoot is DISCOVERED from what is already installed — the service's own image path first,
-# since on the failing machine the service IS the thing being removed, then a listener already running, for a
-# root someone registered as a task under a different convention. Both name <root>\bin\<exe>, hence two parents.
-#
-# AND THEN THE TASK, which is the only one of the three that answers about a runner that is NOT RUNNING. That is
-# not a corner: it is the machine this repair is most often aimed at. A runner started in a console window and
-# then closed leaves no service and no listener, so the two sources above both come back empty and the bare
-# `-Repair` the doctor prints falls back to this script's default root and dies on "no runner to repair" —
-# pointing at C:\actions-runner on a machine whose runner is at C:\runner, which is the same failure the comment
-# above describes, reached by the other road. The task holds the path in its action, and the task survives the
-# listener dying, which is exactly the state worth reading it in.
-#
-# One parent, not two: this action names <root>\run.cmd rather than <root>\bin\<exe>, and it names it either
-# bare (as `Execute`, the shape registered before the hidden host) or inside the -Command of a PowerShell host.
-# Matched by pattern for that reason, and quotes are excluded from the path so the quoted form yields the path
-# rather than everything up to the end of the argument.
+# Discover an unspecified RunnerRoot from the service, a live listener, then the scheduled task (which survives a stopped runner).
+# Service/listener paths name <root>/bin/<exe>; task actions name <root>/run.cmd, directly or inside a PowerShell command.
+# Exclude quotes when extracting task paths so quoted commands do not become part of the root.
 if (-not $PSBoundParameters.ContainsKey('RunnerRoot')) {
     $image = (Get-CimInstance Win32_Service -Filter "Name LIKE 'actions.runner.%'" -ErrorAction SilentlyContinue |
         Select-Object -First 1).PathName
@@ -252,54 +187,16 @@ try {
 # the session
 Step "registering a logon task that runs the listener in $Account's own desktop session..."
 
-# NO WINDOW ON THE DESKTOP. `run.cmd` is a console program, so a task that executes it directly puts a cmd
-# Keep the runner console visible because closing it stops CI.
-#
-# THIS USED TO BE A HIDDEN POWERSHELL HOST, and the claim written here was that "the console is never mapped".
-# It is not true on a current Windows 11, where Windows Terminal is the default console host: `-WindowStyle
-# Hidden` hides the console the PowerShell host owns, while the window on the desktop belongs to
-# WindowsTerminal.exe, a different process that never gets the hint. Measured on such a machine by enumerating
-# top-level windows every 25 ms — a task running `powershell -WindowStyle Hidden` mapped a Terminal window and
-# kept it for as long as its child ran, which for this task is the runner's entire life. The one thing this
-# comment promised was the one thing it did not do.
-#
-# intentic-launch.exe (_devices/win-launcher) is what actually holds it: a GUI-subsystem program, so the
-# loader creates no console for it at all, starting `run.cmd` with CREATE_NO_WINDOW. Its own header carries the
-# full measurement table, including the Task Scheduler variants.
-#
-# `--wait`, so this process lives exactly as long as the listener does. A task is "running" only while its
-# action process is, and that is what makes `-MultipleInstances IgnoreNew` swallow the watchdog repetitions
-# below rather than starting a second listener every $WatchdogMinutes.
-#
-# `cmd.exe /c run.cmd` rather than run.cmd itself: CreateProcess cannot execute a batch file, only an image, so
-# the shell is named explicitly rather than left to a runtime's own guess about it.
-#
-# `run.cmd` and not `Runner.Listener.exe`: run.cmd is the loop that handles the runner's own self-update, which
-# exits with a distinguished code expecting to be restarted. Bypassing it works right up to the first update.
+# Use the GUI-subsystem launcher with CREATE_NO_WINDOW; PowerShell -WindowStyle Hidden can still leave a Windows Terminal window.
+# --wait keeps the task running for the listener's lifetime so MultipleInstances IgnoreNew suppresses watchdog duplicates.
+# Invoke cmd.exe /c explicitly: CreateProcess cannot execute run.cmd, and run.cmd owns the runner's self-update restart loop.
 $action = New-ScheduledTaskAction -Execute $LauncherStub `
     -Argument "--log `"$RunnerRoot\_diag\intentic-launch.log`" --wait -- cmd.exe /c `"$RunnerRoot\run.cmd`"" `
     -WorkingDirectory $RunnerRoot
 
-# TWO TRIGGERS, AND THE SECOND ONE IS WHY THIS IS UNATTENDED. At logon for the obvious reason. Then a repeating
-# trigger for everything that stops a listener without anybody logging out: a crash, a dropped network the
-# listener gave up on, a self-update that failed halfway, an operator's Ctrl-C, a job that took the process down
-# with it. `-MultipleInstances IgnoreNew` is what makes that safe rather than a fork bomb — while the task is
-# running, every repetition is dropped, so this fires into the void every few minutes and costs nothing, and the
-# one time it matters the runner is back within $WatchdogMinutes with nobody present.
-#
-# `-RestartCount` below stays as the FAST path: Task Scheduler restarts a failed task within a minute. It is not
-# a substitute, because it only fires for what the scheduler calls a failure, and a listener that exited zero —
-# which is what a graceful stop and most self-update handoffs look like — is not one. That is the gap the
-# repetition closes, and it is the gap that had this machine needing a person.
-#
-# NO -RepetitionDuration, AND THAT IS THE SPELLING OF "FOREVER". An empty duration is how the Task Scheduler
-# schema says indefinite, and omitting the parameter is what produces it.
-#
-# The obvious-looking alternative is wrong and fails LATE, which is why it is written down here. Docs point at
-# [TimeSpan]::MaxValue for an indefinite duration; PowerShell accepts it, silently clamps it to the largest
-# duration it can render (P99999999DT23H59M59S), hands back a trigger object that inspects perfectly — and then
-# Register-ScheduledTask rejects that value as out of range. `New-ScheduledTask` does NOT validate against the
-# schema, so every check short of a real registration passes it. The failure is at the one step that matters.
+# Start at logon and repeat as a watchdog: RestartCount catches failures, but not successful exits or self-update handoffs.
+# MultipleInstances IgnoreNew prevents duplicate listeners while the task is running.
+# Omit RepetitionDuration for indefinite repeats; TimeSpan::MaxValue constructs a trigger but fails at task registration.
 $atLogon = New-ScheduledTaskTrigger -AtLogOn -User $Account
 $watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes $WatchdogMinutes)
 
@@ -383,31 +280,10 @@ if ($KeepAwake) {
     }
 }
 
-# one listener, and it is the task's
-# The machine this repairs is usually one where somebody started the runner BY HAND — `run.cmd` in a console
-# window, which is what makes "is CI working?" a question about whether a window is still open somewhere. That
-# listener holds the registration, and GitHub allows one session per registered runner: leave it alive and the
-# task starts, is refused as already in use, and exits — a repair that reports success and changed nothing.
-#
-# So whatever started the old one, it goes first — and the hosts go before the listener, because run.cmd is a
-# loop and killing the listener under a live loop only gets it restarted.
-#
-# FOUND BY ANCESTRY, NOT BY STRING MATCH, and the difference is somebody else's process. "A shell whose command
-# line mentions the runner root" reads plausible and over-matches badly: it hits any terminal, editor or script
-# that happens to name that path, including — measured on the machine this was written for — the very command
-# doing the matching, whose own text contained it. Excluding this process does not save it, because the next
-# shell along belongs to a person.
-#
-# A live listener's PARENT CHAIN is the exact answer instead: the cmd.exe that is run.cmd, and the host that
-# launched it. Walked up from each listener and stopped at the first non-shell, so the chain ends at Task
-# Scheduler's svchost, or at explorer.exe for one somebody double-clicked, rather than climbing to the root of
-# the process tree. Nothing that is not hosting a listener is touched.
-#
-# A runner whose listener is already dead needs none of this: what the new task collides with is the GitHub-side
-# session, and that is held by the listener, not by a console left open above it.
-#
-# It can take a running job down with it. That is the right trade for a command somebody ran deliberately to
-# repair this machine, and the job is retried against the runner that comes back.
+# Stop existing listeners before starting the task: GitHub allows one session per registered runner.
+# Stop their shell ancestors first so run.cmd cannot restart them; walk ancestry only to the first non-shell.
+# Command-line path matching can kill unrelated user shells. A dead listener needs no cleanup of orphaned consoles.
+# Deliberate repair may interrupt a running job; it can retry on the repaired runner.
 Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
 # `intentic-launch.exe` is in this list because with --wait it IS one of these hosts: the task's action process,
 # sitting above the `cmd.exe` that is run.cmd, alive for as long as the listener is.

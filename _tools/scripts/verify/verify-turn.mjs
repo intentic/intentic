@@ -1,28 +1,8 @@
 #!/usr/bin/env node
-// THE TURN CHECK: what a change ADDED to the findings of the checks CI runs on every push, read while the conversation
-// that made it can still act on it. The sandbox runs it once when an isolated turn is about to stop (`turn` in
-// .intentic/checks.json; _sandbox/sandbox/src/agent/run/turn-checks.ts) and says what it printed back to the model,
-// which may fix it or say why not. Nothing waits on it: it holds no turn, land, commit or push. By hand it is
-// `node _tools/scripts/verify/verify-turn.mjs [--base <sha>] [--no-reach]`.
-//
-// Then, within what is left of the Stop's time, the packages that DEPEND on what the change edits are typechecked, and a
-// failure is the change's only where that package typechecked clean before it (reach-typecheck.mjs): the break a change
-// makes in a package nobody working on it opens, such as a table in the demo that must name every contract procedure.
-//
-// The tree is judged as it stands, committed and uncommitted work together, files nobody has added to git yet included,
-// against the commit the work is built on: `--base`, else the commit the sandbox names in INTENTIC_TURN_BASE (a
-// subagent's, where its branch was cut from its parent's work), else where HEAD left the main line. Measured from main, a
-// subagent was charged with every sibling's work its parent had taken in: six children were each handed the same ~42
-// findings, none of them theirs (2026-10-17). Only what the change added is
-// reported, `code` checks included, where CI's push check fails one outright (verify-push.mjs): many conversations run
-// at once, and a failure main already carries would send every one of them after the same breakage. The judging is the
-// push check's own (check-snapshot.mjs, turn-findings.mjs, measure-change.mjs), so the two cannot disagree about what a
-// change added.
-//
-// Exits 1 with one line per added finding on stdout. Exits 0 when the change added nothing, and when it cannot judge
-// (no base, a sparse checkout, checks that did not answer, a base it could not check out, a fault of its own such as a full
-// disk), saying why on stderr: a run
-// that could not look is no finding about the change.
+// Reports added findings once at an isolated turn's end, without blocking land/commit/push; optionally typechecks reached dependents.
+// Usage: node _tools/scripts/verify/verify-turn.mjs [--base <sha>] [--no-reach]. Base: flag, INTENTIC_TURN_BASE, then main divergence.
+// Compare committed, uncommitted and untracked files with that base using the push check's attribution; existing failures are not charged.
+// Exit 1 with added findings on stdout; exit 0 when clean or unable to judge (reason on stderr). Reach failures need a clean baseline.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

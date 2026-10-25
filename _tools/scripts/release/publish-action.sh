@@ -1,24 +1,8 @@
 #!/usr/bin/env bash
-# Sync the built GitHub Action to the public intentic/gate-action repository — the Marketplace artifact.
-#
-# A Marketplace listing requires a public repository with action.yml at its ROOT, one action per repo, so the
-# action cannot be served from the monorepo the way every npm package is. This script ships a snapshot instead:
-# the tree it pushes is action.yml, the self-contained bundle, the marketplace README and the license — nothing
-# else, assembled fresh every release and committed OVER whatever is there. That repo is a build artifact and
-# says so in its README; unlike the mirror that once burned this repo (see publish-github.sh's header), nobody
-# develops in it, so replacing the tree whole is the correctness guarantee rather than the accident.
-#
-# Runs from .github/workflows/action-publish.yml on the `v*` tag semantic-release pushes, after the bundle is
-# built. Idempotent like publish-npm.sh: a version already tagged on the action repo is SKIPPED, so a re-run
-# only completes whatever didn't land (the floating major tag, the Release).
-#
-# CI setup: GATE_ACTION_TOKEN, a fine-grained PAT with Contents: read+write on intentic/gate-action. Missing —
-# or present but unable to write, which reads identically from here — this SKIPS — loudly, even in CI: the sync
-# is meant to stay inert until the public repo and a usable secret exist, and a failed release train over an
-# optional artifact would teach everyone to ignore failures. The write check is the probe below. The first Marketplace
-# listing itself is a one-time manual step on the repo's first release (the developer agreement and categories
-# can only be accepted in the UI); every release after that shows up on the listing by itself.
-#   bash _tools/scripts/release/publish-action.sh 1.187.0
+# Publish the built Action snapshot to intentic/gate-action, whose root action.yml is required by the Marketplace.
+# Replace only this artifact repository's tree; skip existing version tags while completing missing major tags/releases on reruns.
+# GATE_ACTION_TOKEN needs Contents:write; absent or unusable credentials warn and skip this optional artifact, even in CI.
+# The first Marketplace listing requires manual agreement/category setup; later releases update it automatically.
 set -euo pipefail
 VERSION="${1:?usage: publish-action.sh <version>}"
 . "$(dirname "$0")/../lib/repo-root.sh"
@@ -43,22 +27,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 git clone --quiet --depth 1 "https://x-access-token:${GH_API_TOKEN}@github.com/${ACTION_REPO}.git" "$work/repo"
 
-# A TOKEN THAT CANNOT WRITE IS THE SAME SITUATION AS NO TOKEN, and until this probe existed it was not treated
-# like one: the sync ran to the first push and died there with exit 128, failing the release train over the
-# one artifact this file's header calls optional. The clone above proves nothing, because the action repo is
-# PUBLIC — git sends no credential for a read that is not challenged, so a token that is expired, scoped to the
-# wrong account, or simply missing Contents: write clones perfectly and is refused three commands later
-# ("Permission to ${ACTION_REPO} denied to <user>", 403). Worse than a failure: the refusal can land BETWEEN pushes,
-# leaving the public repo with a commit whose version tag never arrived.
-#
-# `push --dry-run` is that check and there is no lighter one. It negotiates git-receive-pack — the write
-# service, so the 403 comes back exactly as it would for the real push — while HEAD is still the ref we cloned,
-# so there is nothing to send and nothing that can be written by the probe itself. An API permission read would
-# be a weaker answer: it reports what the ACCOUNT may do, not what THIS token may do.
-#
-# Refusal skips loudly, with a `::warning::` so the run carries the reason on its summary rather than in a log
-# nobody opens — the release still passes, and the fix is one setting on the PAT, not a revert. Anything else
-# (network, DNS, the repo gone) is not a permission answer and still fails.
+# Public clone success proves no write access. push --dry-run negotiates receive-pack without changing the cloned HEAD.
+# Permission refusal warns and skips this optional publish; network, DNS and missing-repository failures remain fatal.
+# Probe before any real push to avoid publishing a commit whose version tag cannot follow.
 if ! probe="$(git -C "$work/repo" push --dry-run --quiet origin "HEAD:refs/heads/main" 2>&1)"; then
   case "$probe" in
     *"denied to"*|*"Permission to"*|*"Authentication failed"*|*"Invalid username or token"*|*"403"*|*"Repository not found"*)

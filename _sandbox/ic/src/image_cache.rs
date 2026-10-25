@@ -1,24 +1,8 @@
 /* THE SANDBOX IMAGE, FETCHED BEFORE DOCKER EXISTS — so a fresh device's longest download overlaps its slowest waits. */
 
-// On a device with no Docker yet, setup used to download nothing of the sandbox image until Docker Desktop was installed,
-// Windows had restarted and the engine had come up: then `docker pull` started on 1.8 GB (116 layers), and the whole
-// of it was waited out in front of the person. None of that download needs Docker. A registry is plain HTTPS, so
-// `ic image prefetch` fetches the image's blobs into a cache of its own while WSL2 is turned on, while Windows waits for
-// its restart, while Docker Desktop installs and starts; and `ic sandbox connect`, when it reaches the pull, loads that
-// cache into Docker instead (`load_if_cached`), fetching only what is still missing. Anything unusual (an image this
-// cannot resolve anonymously, a load Docker refuses) falls back to `docker pull`, which is where every setup was before.
-//
-// Where Docker's engine already answers, there is nothing to stand in for: `ic image prefetch` pulls the image into Docker
-// itself, ahead of the first setup (2026-10-21), and says how far it is in the same markers, its bytes read off docker's
-// own layer lines against the sizes the registry lists ([`pull_ahead`]). Before, it skipped such a device on the
-// grounds that Docker would pull the image itself, which it did only once a setup had started: the median first setup
-// waited 96 s on that pull (199 s at p90). A copy Docker already holds is pulled again too, which is a no-op when it is
-// current and brings down only the new layers when it is not (2026-10-25): it used to answer `ready` on sight, and an
-// earlier install's copy, releases behind, then started the newest app's first sandbox.
-//
-// The cache is `~/.intentic/image-cache/<image>/`: `blobs/sha256/<hex>` (an OCI layout's own blob paths), `state.json`
-// (what a watcher reads: the manifest being fetched, bytes done and due), and `lock`, held by whichever process is
-// fetching, so a prefetch the app started and the connect run that needs its result never write the same blob twice.
+// Prefetch OCI blobs without Docker into ~/.intentic/image-cache/<image> while device setup proceeds; connect loads them, then pulls missing data.
+// Anonymous-resolution or load failures fall back to docker pull. When Docker answers, pull directly, even for an existing image to refresh layers.
+// state.json exposes manifest/byte progress; blobs/sha256 holds content and lock serializes prefetch with connect.
 
 use std::fs::File;
 use std::io::{Read, Write};

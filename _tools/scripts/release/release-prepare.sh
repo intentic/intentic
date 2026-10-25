@@ -1,23 +1,7 @@
 #!/usr/bin/env bash
-# semantic-release prepareCmd: assert that every release artifact this run is about to publish EXISTS and is
-# the one that was verified, then assemble the release set (updater manifest, archive verification, the signed
-# SHA256SUMS over every asset).
-#
-# NOTHING IS BUILT HERE ANY MORE. The artifacts arrive from the release workflow's parallel jobs, every one of
-# them built from this same commit with the same set-versions stamp, and every one of them a hard `needs` edge
-# of the publish job — so a failure in any of them means this command never runs:
-#   windows-build   the NSIS installer (executed on a real Windows machine by windows-verify before publish)
-#   linux-build     the Linux bundles (installed + launched on a bare Debian there, before they were uploaded),
-#                   plus the cross-compiled machine agent + host CLI (intentic-machine, and ic as ic-build made it:
-#                   the same bytes both installers carry beside the app)
-#   sandbox-arm64 / images-amd64   the container images, under version tags release-images.sh later stitches
-# Building serially here is what this replaces: ~11 minutes of installers + binaries inside the one job that
-# holds the release lock, after everything was already verified. Staging the SAME bytes the verifiers approved
-# is also the stronger claim — a rebuild, however identical its inputs, is a different file than the one that
-# was tested (the reasoning windows-build's candidate established; this extends it to every artifact).
-#
-# A failure here aborts semantic-release before it tags, so there is no tag, no Release, and no npm publish.
-#   bash _tools/scripts/release/release-prepare.sh 1.135.0
+# semantic-release prepareCmd: require the exact artifacts already built and verified by this commit's workflow jobs.
+# Assemble updater metadata, verify archives and sign SHA256SUMS; do not rebuild tested artifacts here.
+# Failure aborts before tagging, creating a Release or publishing npm packages.
 set -euo pipefail
 VERSION="${1:?usage: release-prepare.sh <version>}"
 . "$(dirname "$0")/../lib/repo-root.sh"

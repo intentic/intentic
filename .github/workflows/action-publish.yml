@@ -1,31 +1,7 @@
-# Sync the Marketplace GitHub Action to its public repo (intentic/gate-action), at the tag semantic-release
-# pushes — the same trigger and shape as npm-publish.yml: a pushed `v*` tag is a complete, version-stamped
-# tree, so there is nothing to bump and nothing to check out beyond the tag itself.
-#
-# DISPATCHED, NOT TAG-TRIGGERED, and this file spent its whole life on the wrong side of that. It said
-# `on: push: tags: ["v*"]` and read as if the tag started it. It never did, not once: semantic-release pushes
-# its tag with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created — the
-# loop guard. npm-publish.yml was moved off that trigger for exactly this reason and this file was written
-# afterwards, in its shape, claiming its trigger, and keeping the broken one — so the action was built by a
-# workflow that could not run, and the Marketplace listing never saw a version. Repeat occurrence of one bug;
-# the workflow-policy check (_tools/checks/) is what makes it the last.
-#
-# workflow_dispatch is the ONE exception the loop guard makes, so it is the only trigger the release job's own
-# token can pull (dispatch-publish.sh, which names this file alongside the other one). The dispatch names THE
-# TAG as its ref, so the checkout is the released commit and `GITHUB_REF_NAME` is the version — exactly what a
-# tag push would have given it, which is why nothing below had to change.
-#
-# The action cannot ship from this repository: a Marketplace listing requires a public repo with action.yml at
-# its root, one action per repo. So this builds the self-contained bundle here — where its tests and the
-# contract it is held to live — and publish-action.sh pushes the snapshot, tags the version, moves the floating
-# major, and creates the Release the listing surfaces.
-#
-# Inert until GATE_ACTION_TOKEN exists AND can write (a fine-grained PAT, Contents: read+write on
-# intentic/gate-action): the script probes the write before it pushes anything and skips loudly — a warning
-# annotation on this run — rather than failing the release train over an optional artifact. A token that only
-# reads is the same to it as no token: the action repo is public, so a useless credential clones just fine and
-# is refused at the first push, which is how v1.209.1 made this job fail. The first Marketplace listing is a
-# one-time manual step in the UI; releases after that surface on it by themselves.
+# Dispatch at the release tag because GITHUB_TOKEN tag pushes cannot trigger workflows; build the self-contained Action bundle here.
+# publish-action.sh replaces the artifact tree in intentic/gate-action, whose root action.yml is required for the Marketplace.
+# Missing/unwritable GATE_ACTION_TOKEN warns and skips this optional publish; probe write access before any push.
+# First listing requires manual UI setup; later versions update through releases and the floating major tag.
 name: action publish
 
 # Run it by hand from a tag the same way the release job does: Actions ▸ action publish ▸ Run workflow, with

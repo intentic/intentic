@@ -1,19 +1,6 @@
-// The one way the agent's asking commands (capabilities, secrets, grants, environment, needs) reach the needs door
-// (docs/architecture/needs.md), so every ask answers the same way whichever command raised it:
-//
-//   exit 0  met: usable now (or already was); the sentence says how
-//   exit 1  refused: nothing was raised, or a person declined; the sentence says what to do instead
-//   exit 2  error: misuse, transport failure or unreadable answer; no verdict was reached
-//   exit 3  open: asked, still waiting; the answer reaches the conversation by itself, so neither poll nor ask again
-//
-// A raise holds its call up to 90 seconds by default (--wait sets it, 0..100), always under the agent shell's 110-second
-// cutoff, so the answer comes back on the call rather than being cut loose into a background window. The daemon, not
-// this file, decides everything a card says; the command only carries the agent's words (`--why`, `--where`) and the
-// facts it can know (a site, a setting, a tool's steps).
-//
-// node:http rather than fetch: a held raise keeps its connection for as long as the daemon holds it, and undici's
-// default header timeout would drop it first. Auth is the per-boot agent token; auth/grants.ts admits it to the
-// agent-facing needs routes, none of which ever returns a credential.
+// Shared needs CLI verdicts: exit 0 met, 1 refused/declined, 2 error/no verdict, 3 open (answer arrives automatically; never poll or re-ask).
+// Hold raises 90s by default (--wait 0..100), below the shell's 110s cutoff; the daemon owns card wording, this CLI carries words/facts.
+// Use node:http to avoid undici header timeouts. Per-boot agent auth admits only needs routes, none returning credentials.
 
 import { readFileSync } from "node:fs";
 import { request } from "node:http";

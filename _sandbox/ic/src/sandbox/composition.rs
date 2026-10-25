@@ -10,22 +10,9 @@ use crate::sandbox::target_probe::{self, error_line, last_line, Probe, DOCKER_CO
 use crate::ui;
 use crate::util::sha256_hex;
 
-/* THE OVERLAY A SWAP BUILDS IS THE TARGET'S COMPOSITION, NOT THE RUNNING DAEMON'S (2026-10-20).
-
-A sandbox's environment overlay is composed by its daemon: every capability's fragment, the owner's custom section, and
-the feature packs a connected provider or the privacy shield wants, each left out where the base image already bakes it
-(the base's /opt/packs stamps). The composition is the daemon's code reading the base's facts, so it belongs to a
-version. A swap used to copy the overlay the RUNNING daemon composed for its own base and only rewrite its FROM: on an
-update or a dev rebuild that changed the daemon's pack steps (a pack baked into the new base, a pack's steps edited, a
-fragment changed), the new daemon recomposed on its first boot, got a different hash than the one the container was
-stamped with, and the Environment card said one more rebuild was pending right after the swap.
-
-So the target image is asked. Its own composer (`compose-overlay.js`, the daemon's `composedOverlay`, one function with
-what the daemon composes at boot) runs over read-only mounts of the sandbox's data with the container's runner-set
-environment replayed, and prints the overlay its daemon will compose; ic builds exactly that and stamps its hash, so the
-first boot agrees by construction. An image from before the composer, or one whose composer fails, gets what it always
-got: the running daemon's overlay rebased onto it, said out loud. The contract's ComposedOverlayLineSchema is the line;
-golden/compose-overlay.json holds examples this reader is held to. */
+/* Ask the target image's compose-overlay.js over read-only data with runner-set env, then build and stamp its returned composition/hash.
+ * Composing with target code and target pack stamps makes first boot agree, avoiding a redundant rebuild after every changed composer.
+ * Older/failing composers fall back visibly to rebasing the running daemon's overlay; validate ComposedOverlayLineSchema against golden examples. */
 
 /// The image's own composer. An image built before it has no such file.
 const SCRIPT: &str = "/opt/sandbox/dist/environment/compose-overlay.js";

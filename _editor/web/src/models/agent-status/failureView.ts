@@ -5,31 +5,9 @@ import { t } from "@intentic/ui/i18n";
 import { type FailureKind, kindOfCode } from "./agentStatus-failure";
 import { memoryShare } from "./memoryTip";
 
-/*
- * A FAILURE AS A PERSON READS IT, IN THE CHAT AND ON THE BOARD, for every failure whatever path it came by: one line in the reader's
- * language, and what the provider or the harness said one press away. Where the sandbox worded the failure itself (the
- * row's `own`), its sentence is the line; where a code names the failure and the words are the provider's or the
- * harness's (a six-paragraph safeguard flag, a JSON body, a stack trace, a vendor's "Click Continue"), the line is this
- * build's own for the failure's kind (agentStatus-failure.ts, the same kinds the board names), and those words are the
- * details. The board card's line is this same line (agentStatus-chips.ts cardFailure), so the two surfaces cannot word
- * one failure two ways.
- *
- * Two failures have no kind to lead them, and say what their own words say instead. A warning the runtime went on past
- * is a note, in its own words, while the turn goes on: the kind's line said the agent had finished, over a turn still
- * working, and hid the note behind the press (2026-10-21). A failure nothing coded (a row stored before failures were,
- * a runtime's sentence it left uncoded, Cursor's "Connect your Cursor account again") is a safeguard flag by the CLI's
- * words for one, else the whole of a short sentence that is no provider's dump, else the first thing the provider said
- * after the wrappers in front of it, its words whole behind the press; only words that say nothing (a bare status, a
- * body with no sentence in it) are the unclassified kind. Drawn as that kind whatever they said, a spent allowance, a
- * revoked sign-in, a safeguard flag and the sandbox's own instruction all read "an error this app does not recognize"
- * (2026-10-21).
- *
- * Authorship is recorded, never inferred: a row or an ending from before `own` was kept (2026-10-20) reads as the
- * provider's, its kind's line leading and its words behind the press, the sandbox's sentence included. Inferring it from
- * the code was rejected: the same code is the sandbox's sentence on one path and a provider's on another (`agent-busy`
- * from Cursor's SDK, `privacy-unshielded` from a masking failure), and promoting a provider's words to the line is the
- * one failure this rule exists to make impossible.
- */
+/* Shared chat/board failure summary: use sandbox-authored (`own`) wording, otherwise localize the kind and keep provider text in details.
+ * Continuing warnings keep their own words. Uncoded failures use safeguard detection or a short/provider sentence before falling back to unknown.
+ * Authorship must be recorded, never inferred from a code: older rows without `own` count as provider-authored. */
 
 export interface FailureView {
     /** The failure's own line, ahead of the clause its notice adds (what happens next). */

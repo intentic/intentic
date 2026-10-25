@@ -1,18 +1,6 @@
-// WHAT A SANDBOX MAY PUT IN THE CI FLEET'S TURBO CACHE: logs, and nothing that becomes a file in a build.
-//
-// A turbo cache entry is a zstd-compressed tar of a task's outputs plus its log (`<pkg>/.turbo/turbo-<task>.log`). For a
-// task whose turbo.json `outputs` is empty (typecheck, test) the log is all there is, so an entry vouches for a result and
-// carries no bytes anything else consumes. That is the only kind a sandbox may write: a sandbox runs an agent's code, and
-// an entry holding a `dist` would be a way into a published image (ci.yml's fork-boundary comment names the same edge).
-//
-// So every sandbox upload goes through canonicalArtifact twice: in the cache server as it arrives, and again in CI's
-// import step before it reaches the fleet's own cache directory. It does not pass the bytes it was given along. It reads
-// them, keeps only regular files at a `.turbo/turbo-*.log` path, and writes a fresh tar of those, so whatever else a
-// crafted tar holds (a link, a PAX override, a header our reader and turbo's would disagree about) never reaches turbo's
-// reader at all. A log is also refused when a line opens a GitHub workflow command, since CI prints a replayed log to the
-// job's stdout, where `::add-mask::` and the like are instructions to the runner.
-//
-// Node builtins only: CI's import runs this before or without an install.
+// Accept only log-only sandbox cache entries: build outputs could inject agent-controlled files into CI/published images.
+// canonicalArtifact reconstructs a fresh tar of regular .turbo/turbo-*.log files at upload and import, discarding links/PAX/other headers.
+// Reject logs containing GitHub workflow commands, which CI would execute when replayed to stdout. Node builtins only, before any install.
 import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
 const BLOCK = 512;

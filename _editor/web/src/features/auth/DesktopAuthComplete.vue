@@ -12,22 +12,10 @@ import { openAgentOnThisComputer } from "../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 import { takeBrowserHandoffDestination } from "./browserHandoff";
 
-// This page runs inside the desktop app's webview, which starts with no session.
-// 1. Redeem the row the browser parked (single use).
-// 2. Verify the Better Auth one-time token at /api/auth/one-time-token/verify; its Set-Cookie gives this webview a
-//    session over an ordinary HTTP round trip, nothing injected from Rust.
-// 3. Adopt the Google ID token into the shared cache, so the first daemon call gets a session that renews silently.
-//    An account with no Google sign-in carries none: its daemon sessions come from the platform's identity assertions,
-//    which this webview asks for with the session step 2 gave it.
-// 4. `back=agent` (auth.rs `complete_path`): the sign-in began on a folder of this computer, not here. The reader is
-//    handed back to that folder's own window first, and the workspace then mounts behind it — it is what tells the app
-//    who signed in and which sandboxes the account has (`announceDesktopRoster`), which is what this computer's
-//    sandbox is made for. Without this step a reader who pressed "Work on this with an agent" ended up on the account's
-//    sandbox list, with nothing on screen about the folder they asked about and no sign that anything had been started
-//    for it. `back` is read before the workspace is opened: `useRoute()` follows the router, so after the replace the
-//    query was the workspace's, the link was never sent, and the reader stayed on whichever sandbox the workspace
-//    opened on, the account's first, while this computer's was still being made (2026-10-17).
-// A failure is terminal for this link; retry means signing in again, not reloading the link.
+// Redeem the browser's single-use row, verify the Better Auth token for a Set-Cookie session, then adopt any Google ID token.
+// Accounts without Google use platform identity assertions from that new session instead.
+// Read back=agent before replacing the route; return to the requesting folder first, then mount the workspace to announce the account roster.
+// This link cannot be retried after failure: sign in again rather than reload.
 
 const t = useT();
 

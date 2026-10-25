@@ -1,18 +1,6 @@
-/* A FLY MACHINES API THAT REMEMBERS WHAT IT WAS TOLD, installed over `globalThis.fetch`.
- *
- * One fake for the seam, not one per suite. The platform's hosted lane talks to Fly through apps, machines, volumes
- * and snapshots whose states depend on each other — a volume cannot be forked smaller than its source, a machine that
- * was stopped does not answer `started`, a snapshot has to finish before it can be restored from — and a stub that
- * answers each request in isolation cannot express any of that. Six suites had grown their own, each true about a
- * different third of the provider, and none of them noticed when the client learned to extend a volume.
- *
- * What it models is exactly what `_platform/api/src/sandbox/hosted/fly/fly.ts` calls, and nothing else: an unrouted
- * request is a loud 404 rather than a cheerful `{ ok: true }`, because a fake that answers everything is a fake that
- * hides the call you got wrong.
- *
- * FAULTS are asked for by name (`faults`), never simulated by luck: a capacity refusal, a snapshot that never
- * finishes, a machine that will not start. Each is a real failure the engine has a branch for.
- */
+/* Shared stateful Fly Machines API fake installed over globalThis.fetch; model exactly the hosted fly.ts client's routes.
+ * Keep machine/volume/snapshot state coherent (including fork sizes and readiness); unknown requests fail loudly with 404.
+ * Named faults deterministically exercise capacity, snapshot and startup failures instead of relying on timing/luck. */
 
 /** A machine as this fake holds it; `exit` is what a probe or a killed process left behind. */
 export interface FakeFlyMachine {

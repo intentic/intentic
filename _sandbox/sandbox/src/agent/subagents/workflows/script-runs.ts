@@ -19,27 +19,10 @@ import { ScriptMetaSchema, splitScript } from "./script-source.js";
 import { readLiteral, runScript } from "./script-vm.js";
 import { defineInFlight } from "../../../seams/restart/in-flight.js";
 
-/* WORKFLOW RUNS: A SCRIPT AN AGENT WRITES TO COORDINATE OTHER AGENTS, ON ANY PROVIDER, THAT OUTLIVES A RESTART.
-
-   A parent fanning work out by hand spends its own turn and context on bookkeeping: spawn ten, wait on ten, read ten
-   reports, spawn the verifiers. A workflow says that once, as a script (script-source.ts), and the daemon runs it in a
-   sandbox of its own (script-vm.ts) while the parent carries on or ends its turn. Each agent() call is a spawned child
-   like any other (children.ts): a conversation in its own worktree cut from the parent's work, on the provider and model
-   the call names, landing its work into the parent's checkout, visible on the board under the parent. A call that asks
-   for a schema gets the child's `result` tool (child-result.ts) and is sent back to fix a value that does not match, at
-   most twice. Its ending goes to the run, never to the parent as a report of its own; the run's own ending wakes the
-   parent once, with what the script returned.
-
-   Every call is written down as it starts and ends. A call is known by what it asks (its prompt and every option that
-   changes the work: provider, model, loop, effort, schema) and how many times this run asked the same: so a run the
-   daemon restarted, or one the parent resumes after editing its script, hands back every finished call it asks again,
-   whatever order its calls come back in, and pays only for what changed. A call whose child was mid-turn when the
-   daemon went down is waited on again rather than started twice, since its child survives the restart.
-
-   Claude Code's own Workflow tool is the model for the script, and bb's workflow plugin the model for the run; this one
-   differs from bb's on purpose in three places: its workers work in worktrees of their own rather than all in the
-   parent's, its cache is keyed by what a call asks rather than by a chain of the calls before it (so a pipeline whose
-   stages finish out of order still replays), and a restart waits for its workers rather than stopping them. */
+/* Run coordination scripts independently of the parent; each agent() works in its own child worktree and lands into the parent's checkout.
+ * Schema results may retry twice; only the workflow's final result wakes the parent, not each child's ending.
+ * Persist calls by prompt, work-changing options and occurrence count, replaying completed results regardless of completion order.
+ * Resume existing in-flight children after restart; edited scripts reuse unchanged calls rather than spawning or paying twice. */
 
 // How many of a run's workers may run at once unless it asks for fewer, and at most.
 export const DEFAULT_CONCURRENCY = 8;

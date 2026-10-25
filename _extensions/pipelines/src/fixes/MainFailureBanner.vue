@@ -24,21 +24,9 @@ import { host } from "../host";
 import { failingWorkflowsOf, handBackOf, jobsAtAGlance, type MainFailureStory, type MainFailureView, offersFix, storyOf } from "./mainFailures";
 import { t } from "../i18n.js";
 
-// A FAILING MAIN LINE AS ONE INCIDENT: a header that says what broke and what happens next, and under it, joined to it by
-// a drawn lane, the very runs it speaks for (coveredRuns), so a reader sees which rows the fix is about instead of
-// inferring it from a strip above a list in time order. It is also the ONE place the fix is pressed: the rows inside
-// offer none (leadsRows), since every press on main goes to the same agent anyway.
-//
-// It is a card of its own above the repository's run list (RowGroup's `lead`), not the list's first row: a rim, a bar
-// down its edge, a square plate where rows have round status glyphs, and a filled header. Drawn as a row it read as one
-// more run, and on a board of green rows that is how "main is failing" got lost.
-//
-// The header says three things. What fails: the branch and since when, then each failing workflow by name with its jobs
-// and a link to its failing run (failingWorkflowsOf), since a nightly that fails while every CI run passes is otherwise a
-// banner over a board with nothing red on it. Who has it: a pill that opens the agent, and the one press. And one
-// sentence (storyOf) on where the fix stands and the reader's move, read off the agent's live stance, so "Fix landed"
-// comes with "commit and push it" rather than an agent "on it". Never the daemon's sentence, never a turn's error: those
-// live in the fix agent's conversation, one click away.
+// One incident card above the run list connects coveredRuns and owns the only fix action; nested run rows suppress duplicate actions.
+// Show branch/since, every failing workflow/jobs/run link, the fix agent and its live storyOf next step (including commit/push after land).
+// Use a distinct filled card/header so main's failure cannot read as another run; raw daemon/turn errors stay in the agent conversation.
 
 const props = defineProps<{
     view: MainFailureView;

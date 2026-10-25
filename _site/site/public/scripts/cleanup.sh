@@ -1,47 +1,14 @@
 #!/bin/sh
-# intentic remove: a bootstrap shim. It finds or downloads the ic CLI and hands over to `ic sandbox remove`, which
-# takes sandboxes off this device: their containers, networks and named /work volumes, with /work and /history kept
-# recoverable for 7 days (`ic sandbox restore <slug>` brings one back). The flow, its questions and its output are ic's
-# (_sandbox/ic/src/sandbox/remove.rs); this file only maps the flags every older command handed out onto it.
-#
-# Usage:
-#   curl -fsSL https://intentic.dev/remove/<SLUG> | sh            # remove one sandbox (the card's command)
-#   curl -fsSL https://intentic.dev/remove | sh                   # pick which sandboxes to remove
-#   curl -fsSL https://intentic.dev/cleanup | sh -s -- --all       # the older shape, still served
-#   ./_site/site/public/scripts/cleanup.sh [SLUG...] [--all] [-y] [--agent-auth] [--purge]
-#
-# Flags, mapped onto ic's:
-#   SLUG...                 the sandboxes to remove (none: ic asks which)
-#   -a, --all               every sandbox on this device
-#   -y, --yes, --force      answer the recoverable remove's question (--yes); never a permanent delete's
-#   --agent-auth            also remove the shared dev agent-auth volume (the AI logins of every dev sandbox)
-#   --purge, --now          delete the data now instead of keeping it recoverable (--now); ic asks for the name
-#   -h, --help              ic's own help for the command
-#
-# POSIX sh (piped into `sh`, which is dash on Debian/Ubuntu/WSL; no `pipefail`). Piped, stdin is this script, so ic asks
-# its questions on the controlling terminal (/dev/tty), never on stdin.
+# POSIX bootstrap for ic sandbox remove; translate legacy flags and let ic own prompts, output and removal.
+# Removed /work and /history remain recoverable for seven days via ic sandbox restore; --purge/--now permanently deletes after name confirmation.
+# --yes/--force answers only recoverable removal. --agent-auth also removes shared dev logins; --all selects every sandbox here.
+# Piped stdin contains the script, so ic prompts on /dev/tty. Use --help for current arguments.
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
-# The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
-# hands over to ic or intentic-machine, which draw everything after that themselves. POSIX sh: piped into `sh`, which
-# is dash on Debian, Ubuntu and WSL.
-#
-#   kit_begin <what this does> [scope]       the header; rich only, and only in a script that draws a whole flow
-#   kit_step <phase> <sentence> <label>      a step; plain prints `intentic: [<phase>] <sentence>` (no phase: narration)
-#   kit_say <sentence>                       narration under the running step
-#   kit_warn <sentence>                      a caution: degraded, not broken (stderr in plain)
-#   kit_suspend / kit_resume                 hand the screen to a command that prints its own lines, and take it back
-#   kit_settle                               the running step is done
-#   kit_finished <verdict>                   a flow's past-tense verdict
-#   kit_stop <headline> [problem] [fix] [code]
-#                                            stop: the running step settles as failed, the stop block goes to stderr,
-#                                            and the script exits with code (1 unless given; 2 for a wrong command line)
-#   kit_need_root <why> <headline> <fix> [names]
-#                                            run again through sudo when not root, keeping the named settings (see below)
-#   kit_confirm <question> <consequence> <flag>
-#                                            [y/N] on the controlling terminal: returns on yes, exits 0 on no, stops when
-#                                            nobody is there (INTENTIC_NO_PROMPT=1, no terminal) naming the flag that answers
+# POSIX-sh output helpers for bootstrap scripts; see docs/ops/cli-output-protocol.md for the shared protocol.
+# ic or intentic-machine owns the display after handover; suspend/resume around commands that print their own output.
+# kit_stop exits (default 1, usage 2). kit_confirm exits 0 on refusal and stops without a terminal unless a flag answers it.
 
 case "${INTENTIC_UI:-}" in
     rich | plain | nested) kit_mode="$INTENTIC_UI" ;;

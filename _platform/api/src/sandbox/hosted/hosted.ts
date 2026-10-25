@@ -330,23 +330,9 @@ const startTrialHosted = async (
     }
 };
 
-/* A WAKE ALSO HEALS THE TUNNEL. A machine configured before hosted machines dialled the edge (71dbfb7145) carries
- * neither SANDBOX_GRANT nor INGRESS_URL, and a stop/start never changes a config, so it would never dial, and with the
- * edge terminating TLS itself nothing else reaches it. So the wake reads the machine's environment first and,
- * when the tunnel's pair is missing or no longer what this platform would write (a moved edge, a rotated key),
- * re-applies the whole config the way a restart does, with the machine's own overlay and guest, then starts it and
- * confirms. A stock machine moves onto today's stock digest, as a restart moves it: one that old most likely runs an
- * image from before netd that dials (aa02061469 landed hours before 71dbfb7145), and a grant it cannot present
- * would heal nothing. That move is an image change, so it goes through the state gate (gate/state-gate.ts): a target
- * that cannot convert this sandbox's state heals the tunnel on the image the machine already runs instead, and a
- * target that does not start is put back, so the wake is never the thing that leaves a machine unable to boot. A
- * config a dead gate left mid-probe (its marker in the environment) is re-applied the same way. An overlay machine
- * keeps its overlay, whose base is the owner's rebuild to move. `heal` is lazy because only this case needs the
- * sandbox's identity. A read that fails is not a verdict: the plain start runs and the next wake asks again. A probe
- * caught mid-transition is a gate at work, never a machine to start: HostedMachineBusy, as when the heal meets the
- * app's lock held. A machine whose image is ON TRIAL (a rebuild applied while it slept) has that start judged like any
- * image change's (gate/state-gate.ts), and goes back to the image before it when it does not come up. Answers whether
- * it healed. */
+/* Wake heals missing/stale tunnel config and abandoned probe markers, preserving overlay/guest; stock images may advance through the state gate.
+ * If conversion refuses, heal on the current image; if startup fails, restore it. On-trial starts use the same readiness/rollback checks.
+ * Busy locks/live probes return HostedMachineBusy. Failed config reads fall back to plain start, leaving healing for the next wake. */
 export const wakeHosted = async (
     config: Config,
     hosted: HostedWakeTarget,

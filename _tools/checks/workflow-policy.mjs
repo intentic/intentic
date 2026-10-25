@@ -1,20 +1,8 @@
 #!/usr/bin/env node
-// Repository-specific workflow policy no external linter encodes (actionlint checks validity, zizmor checks safety);
-// read by shape, not a list, so a new job is held to it for free.
-// 1. the fork boundary: self-hosted, non-ephemeral runners share a cache and the host docker socket, so a job reachable
-//    from a fork's pull request must gate on `head.repo.full_name == github.repository` (or a safe parent) — see
-//    docs/ops/ci-runner.md
-// 2. a called reusable workflow can never hold a permission its caller doesn't grant; Actions fails this before any job
-//    starts
-// 3. a job publishing with npm provenance must run on a GitHub-hosted runner, since npm's registry accepts only that
-//    builder id
-// 4. no workflow triggers on `push: tags`, since semantic-release pushes tags with GITHUB_TOKEN and GitHub starts
-//    nothing from that token's events; dispatch it instead (delete this rule if the release ever tags with a different
-//    token)
-// 5. no job bootstraps pnpm with corepack: ci-base installs pnpm natively and pnpm 12 honours `packageManager` itself,
-//    so corepack only adds one unretried registry fetch that the whole job's success then hangs on
-// 6. a test whose `requires(…, { lane })` names a CI lane is run by a job that sets that lane: it stands down in every
-//    other CI job, so without one it runs nowhere and nothing says so
+// Repository workflow policy supplements actionlint/zizmor: fork-reachable self-hosted jobs must gate same-repo PRs or a safe parent.
+// Reusable-workflow permissions cannot exceed callers'; npm provenance needs GitHub-hosted runners.
+// Dispatch releases instead of push-tag triggers while GITHUB_TOKEN creates tags; use native pnpm, not corepack bootstrap fetches.
+// Every requires(..., { lane }) test must have a job enabling that lane, or it would silently run nowhere.
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { CI_LANE } from "../constants/src/test-suites.mjs";

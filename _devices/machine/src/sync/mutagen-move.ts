@@ -26,26 +26,10 @@ import {
 import { ownMutagenPath, resolveOnPath } from "./binary/mutagen-binary.js";
 import { movedAlready, mutagenDataDir, recordMove } from "./mutagen-env.js";
 
-/* OFF MUTAGEN'S SHARED DATA DIRECTORY, once (2026-10-18). Builds before mutagen-env.ts kept this agent's sessions and
-   forwards in the user's own `~/.mutagen` (or wherever their MUTAGEN_DATA_DIRECTORY pointed), under a daemon they share
-   with any Mutagen of their own. A sync session is CARRIED, not made again: paused there, its state files (Mutagen's
-   `sessions/<id>`, and `archives/<id>`, the last state both sides agreed on) copied into this agent's own directory,
-   ended there, and loaded by this agent's daemon, where the watcher resumes what was running (holds.ts), the pauses it
-   carried declared as the owner's first. Made again from nothing instead,
-   a two-way-safe session has no record of what both sides last agreed on: a file deleted on one side while the session
-   could not sync came back from the other, and a file changed on one side only read as a conflict. That was every
-   session of a sandbox not answering at the move, and nothing could be flushed first: the move runs as the agent starts,
-   before the transport its sessions ride (tunnel.ts) is up. What cannot be carried (a session with no state file, one
-   this agent's daemon already holds under that name) is ended and made again by the watcher, as any missing session is
-   (mutagen.ts convergeSession), paused if it was (its pause declared the same way). Forwards hold no state and are ended
-   and made again.
-   What is this agent's is said strictly as every sweep here says it: a name under its prefix that no other owner's
-   label claims (mutagen.ts ownershipOf). The old daemon is stopped only when nothing else is left in it, or when this
-   move is what started it; a daemon still holding the user's own sessions keeps running. One of another Mutagen version
-   refuses this agent's client outright, so it is stopped (`daemon stop` skips the version check) and started with this
-   agent's copy for the move, as the watcher always answered a mismatched daemon, and afterwards started again with the
-   owner's own Mutagen where one is on PATH. Mutagen's own sign-in registration goes only where it starts this agent's
-   copy, which only this agent's older builds wrote. */
+/* Move only sessions under this agent's prefix without another owner's label; forwards can be recreated, sync state must be carried.
+ * Pause and carry sessions/archives before ending originals; preserve agreed state and owner pauses to avoid resurrected files or false conflicts.
+ * Missing/already-present state falls back to watcher recreation. Keep an old daemon serving unrelated sessions unless this move started it.
+ * For version mismatch, temporarily run our Mutagen then restore the owner's PATH binary; migrate sign-in only when starting our copy. */
 
 // What `sync list` and `forward list` print of one session under `{{json .}}`, as far as the move reads it.
 export interface StoredSession {

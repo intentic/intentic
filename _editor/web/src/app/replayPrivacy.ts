@@ -1,25 +1,10 @@
 import type { CapturedNetworkRequest, PostHogConfig } from "posthog-js";
 import { maskText } from "./replayText";
 
-// What a session replay may keep of the screen: layout, clicks, scrolling, the interface's own wording, numbers, and what
-// a machine reported about a failed setup, and nothing else that a person, an agent or the workspace put there. Every
-// rule is default-deny, so a view added later is masked before anyone has heard of it.
-//
-// Text: `maskTextSelector: "*"` sends every text node through `maskText` (replayText.ts, which has the rules) with the
-// element it sits in. What no rule recognises turns into asterisks.
-//
-// Attributes: words in attributes (`title`, `aria-label`, `placeholder`) pass the same test. Addresses and paths are
-// always masked. Identifiers and `data-*` values survive only as a bare lowercase word or a number, which is what the
-// styling hooks are (`data-icon="folder"`), so icons and colours still replay.
-//
-// Regions: what a mask cannot empty is blocked, so the recording holds a box of the same size. That covers the code
-// editor and its diff (Monaco), terminals (xterm) and every element that draws pixels or another page.
-//
-// The recorder follows the PostHog project's own settings for canvas frames, console output, request and response
-// bodies and headers, network timing (a request URL carries a file path) and web vitals attribution (a CSS selector and a
-// resource URL). Nothing here pins those settings, so each is switched off by name.
-//
-// The privacy policy says what a replay holds (_site/site-content/src/legal.ts). Change one, change the other.
+// Default-deny replays keep layout/interactions, UI copy, quantities and scrubbed setup diagnostics; replayText.ts masks other text/attributes.
+// Always mask addresses/paths; keep identifiers/data-* only as bare lowercase words or numbers. Block editors, terminals, pixels and frames.
+// Explicitly disable canvas, console, network/body/header and vitals-attribution recording rather than inheriting PostHog project settings.
+// Capture changes must also update the privacy policy in legal.ts.
 
 // Elements blocked whole. `.monaco-editor` covers the editor and both sides of its diff, `.xterm` a terminal in either
 // renderer. The rest draw pixels or another document, which no text mask reaches.

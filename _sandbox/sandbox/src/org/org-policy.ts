@@ -8,28 +8,10 @@ import { z } from "zod";
 import { writeJsonFile } from "../store/json-file.js";
 import { parseJsonWith } from "@intentic/base/json";
 
-/* THE ORGANISATION POLICY THIS SANDBOX ENFORCES (docs/architecture/organisations.md). A personal sandbox holds none,
- * and then nothing here changes anything: orgLockRefusal (sandbox-contract policy/org-locks.ts) lets every request
- * through for an undefined policy. A bound sandbox is handed its organisation's policy by the platform it is registered
- * with, over its connect token (the ingress `orgPolicy`), at boot and every few minutes after.
- *
- * Kept on disk beside the sandbox's other trust files (the auth root, outside the workspace the agent edits), so a
- * restart while the platform is unreachable still enforces the last edition: losing the platform must never loosen a
- * bound sandbox. For the same reason only the platform's explicit `null` unbinds; a refusal, an unreadable answer or
- * silence keeps what is held.
- *
- * The platform's answer is the policy, whatever is held: it replaces the held one whenever the two differ, an edition
- * numbered BELOW the held one included. Taking only a newer edition (as phase 1 did) let a held file edited to a huge
- * `version` outlive every later answer, and a platform restored from a backup never reach its sandboxes again.
- * Refreshes run one at a time, so an older answer can never land after a newer one.
- *
- * The file is read once, at construction; the policy in force is the one in memory, which nothing in the workspace or
- * the auth root can reach while the daemon runs. A held file that exists but does not read is a bound sandbox whose
- * record broke, so it is enforced as PROVISIONAL until the platform answers: every section held read-only, never open.
- * A held file that is gone cannot be told from a personal sandbox: the first change a covered route is asked for waits
- * a bounded moment for the platform's first answer (`settled`), so a deleted file opens nothing while the platform is
- * reachable. With the platform unreachable too it does open, which is the limit of anything kept inside a container
- * whose agents run as root (docs/architecture/organisations.md, "What the protection does not cover"). */
+/* Persist bound sandboxes' platform policy outside the workspace; failures retain it and only explicit null unbinds.
+ * Serialized refreshes accept the platform's edition even when lower; enforce the in-memory copy, not subsequent file edits.
+ * Unreadable held files enforce PROVISIONAL read-only; missing files briefly await the first platform answer before covered writes.
+ * Missing file plus unreachable platform cannot be distinguished from personal use; see docs/architecture/organisations.md for limits. */
 
 export const ORG_POLICY_FILE = "org-policy.json";
 // How often a bound or personal sandbox asks again: a lock an admin sets reaches every sandbox within this.

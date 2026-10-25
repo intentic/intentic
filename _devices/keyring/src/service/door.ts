@@ -12,21 +12,10 @@ import {
     type ChosenSchema,
 } from "./wire.js";
 
-// THE DOOR: how this user's programs and the session helper reach the protected service. On Windows a named pipe the
-// service (LOCAL SERVICE) created would refuse the user's writes, and Node cannot give it another access list, so the
-// service listens on loopback instead and writes where (`port`) and a random token (`token`) to a door file only this
-// user can read. On Linux it is a unix socket (`socket`) in a folder only the service and this uid may enter
-// (service-run-linux.ts), with the same token beside it. Every connection opens with one line naming the token and what it is:
-// - `request`: one keyring request line follows (protocol.ts), one answer line comes back. The session helper forwards
-//   the user's pipe this way, so intentic-machine and intentic-askpass reach the service exactly as they reached the
-//   per-user keyring before it.
-// - `helper`: the session helper's own long-lived connection. The service challenges it, and it must prove a person is
-//   at this session (a Windows Hello signature, a polkit yes, or the recovery key) before it is sent a prompt to show or
-//   a value to type; after that the service sends it calls, one at a time, each answered on its own line. Before setup
-//   there is no vault to protect and nothing to prove with, so the challenge is `unset` and the helper is let in to
-//   enrol Windows Hello.
-// The token keeps other users of the computer out; it does not keep out this user's own programs, which is why every
-// value still needs a sandbox's grant or a person's yes.
+// Authenticate each service connection with the per-user door token: Windows uses loopback, Linux a restricted Unix socket.
+// request exchanges one line/answer; helper proves presence via Hello, polkit or recovery before receiving secrets on a long-lived connection.
+// Before vault setup, an unset challenge permits Hello enrollment. Helpers answer serialized calls one line at a time.
+// The token excludes other users, not this user's programs; every value still requires a sandbox grant or a person's approval.
 
 const DOOR_TOKEN = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
 export const DoorFileSchema = z.union([

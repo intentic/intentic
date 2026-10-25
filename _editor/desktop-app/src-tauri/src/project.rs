@@ -1,22 +1,7 @@
-//! A FOLDER BECOMING A SANDBOX'S PROJECT: "Work on this with an agent" in a local window (local.rs).
-//!
-//! The folder is not the sandbox's `/work` (the daemon keeps its own state, a public `public/` and its starter at that
-//! root), but a project inside it, `/work/<name>`. COPY-FIRST: the folder is copied into the sandbox and the copy is
-//! kept up to date from here by the machine agent (`_devices/machine/src/sync`); agents change the copy, and nothing in
-//! the folder changes until the window's "Bring back changes" brings what they did back, keeping a restore point first
-//! ([`work`]).
-//!
-//! A folder BECOMES ITS OWN SANDBOX (folder_setup.rs, 2026-10-21): [`project_preview`] says what the window's dialog
-//! draws (the folder's size, what to beware of, why it cannot have one, whether a sign-in comes first), and
-//! [`project_create`] puts the folder in line for a sandbox of its own and answers at once. The app makes it, whichever
-//! window is open, and follows its first copy; the window's card and button draw both. A folder that already has a
-//! sandbox keeps opening that one, including one attached to the one-per-computer sandbox earlier versions made (an
-//! ordinary sandbox now): nothing is moved. Which folder is in which sandbox is the machine agent's pairings alone
-//! (bindings.rs). A hosted sandbox's project is
-//! enrolled as `intentic://sync?…&project=<name>` ([`sync_project`]), and the workspace's own `/setup` page can still
-//! hand a project's setup back as `intentic://setup?…&project=<name>` ([`bind`]). The path never rides a link or a
-//! command, so no page can point a sandbox at a folder the user did not pick: it is always the folder of the window
-//! that asked.
+//! Copy the picked folder into /work/<name>, never /work; sync local changes in, and Bring back changes applies agent work after a restore point.
+//! project_preview describes cautions/refusals/sign-in; project_create queues app-supervised setup and returns immediately. Reuse existing pairings.
+//! Agent pairings are authoritative (bindings.rs). Hosted sync/setup links carry project=<name>, never a filesystem path.
+//! Always use the requesting window's folder so a page cannot select a folder the user did not pick.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

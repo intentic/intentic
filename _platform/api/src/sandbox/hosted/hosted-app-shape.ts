@@ -5,23 +5,9 @@ import { destroyMachine, FLY_META_PLATFORM, listMachines, listVolumes } from "./
 import { withHostedAppLock } from "./hosted-app-lock.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
-/* EVERY PERSON'S APP HOLDS ITS ONE MACHINE AND ITS ONE DISK, checked daily (2026-10-05). `enforceAppShape`
- * (build/hosted-build.ts) holds an app to "its sandbox machine and this build's builder", but only while a build's
- * app-scoped token is alive. Outside a build nothing looked, so a machine that a failed move, a crashed adoption or a
- * leftover builder left in a sandbox's app ran, or sat stopped and billed, for good. This pass reads every app a
- * HostedMachine row names and holds it to the row:
- * - a machine other than the row's, stamped by this platform and past the grace window, is destroyed. A machine is
- *   cattle: the disk is the volume, which destroying a machine leaves where it is. A second machine of ours on one
- *   sandbox's token is a second copy of that sandbox, which is the very thing the announce's copy check looks for.
- * - a machine another deployment or nobody stamped is reported and never touched (the self-healing audit's rule 6: on
- *   doubt, skip and report). During a build it is destroyed, since only the build's own leaked token could have made
- *   it then; with no token alive that inference is not there to make.
- * - a volume other than the row's is reported and never touched. It is somebody's disk until proven otherwise: a
- *   move's source a failure kept, an older disk of the same sandbox.
- * An app mid-change (a build or a migration on its row, or its lock held) waits for the next pass, so a move's new
- * machine is never read as a stray, and an app whose row names a machine the listing lacks is only reported: the row
- * may be the stale half, and the health sweep's machine read settles that first (hosted-health.ts). At most
- * APP_SHAPE_DESTROYS_PER_PASS machines go per pass, and the rest wait for the next. */
+/* Daily, reconcile each HostedMachine app with its row: remove platform-stamped stray machines past grace, capped per pass.
+ * Report unknown/foreign machines and all extra volumes without deleting them; a disk remains someone's data until proven otherwise.
+ * Skip builds, migrations and held locks; a missing row-named machine is reported for hosted-health to resolve before any cleanup. */
 
 // A machine this young may be one a provision or an adoption is making right now, under its own lock.
 const SHAPE_GRACE_MS = 30 * 60 * 1000;

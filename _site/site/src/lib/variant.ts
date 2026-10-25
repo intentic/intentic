@@ -1,23 +1,9 @@
 import { DEFAULT_PROFILE, PROFILE_COOKIE, PROFILE_PARAM, type Profile, sharedCookieDomain } from "@intentic/constants";
 import { APP_URL, DESK_PATH as DESK_PAGE, SITE_URL } from "@intentic/site-content/site";
 
-// Two products share one site. The developer's pages are the dark carved-stone design; intentic desk, the product
-// for readers who do not write code, has its own page at /desk/ (DeskLanding.astro) and wears the light skin. What
-// the skin decides is the LOOK of the shared pages (docs, pricing, features) for a reader who came in through the
-// desk; the words of the two product pages are each page's own, by URL, never switched here. Which skin a visitor
-// gets is decided in the browser before first paint (BaseLayout's inline script), never at the edge — one HTML
-// document per URL stays cacheable, and only the `data-variant` attribute on <html> differs.
-//
-// A reader who has chosen neither gets the one their system asks for: `prefers-color-scheme: light` paints the desk
-// skin. That is a preference, not a choice — it is never written to the cookie, so it is re-read on every page and
-// follows the system when the system changes, and it hands the app nothing.
-//
-// The same script hands the choice on to the app twice over. Once on every link into it, since the reader crosses to
-// another origin; and once through the cookie itself, which is set on the domain both origins share so the app reads
-// it on any arrival the links could not have carried — the desktop app's sign-in page opening in this browser after
-// an installer taken from here. A variant is which design THIS site wears; a profile is who is arriving, which the app
-// answers in more than paint (@intentic/constants profile.ts). They share their names, and this is the only place
-// that maps one to the other.
+// Select the site's developer/desk skin before first paint via data-variant, keeping one cacheable HTML document per URL.
+// Product-page wording follows its URL. With no explicit choice, follow prefers-color-scheme without writing a cookie or app profile.
+// Explicit choices cross into the app through links and a shared-domain cookie; this module alone maps site variants to app profiles.
 
 /** Written by the pre-paint script, read by it on every later page, and by the app's on the same domain. */
 export const VARIANT_COOKIE = PROFILE_COOKIE;

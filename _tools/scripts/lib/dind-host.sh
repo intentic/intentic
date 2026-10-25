@@ -1,20 +1,7 @@
 #!/usr/bin/env bash
-# A CLEAN DOCKER HOST TO RUN A USER'S SETUP ON — the twenty-five lines both nightly drills opened with.
-#
-#   . "$(dirname "$0")/../lib/repo-root.sh"        # required: the build context is found from the repo root
-#   . "$(dirname "$0")/../lib/dind-host.sh"
-#   start_dind_host intentic-desktop-setup-smoke
-#   in_host docker ps
-#
-# WHY A CONTAINER AND NOT THE RUNNER'S OWN DAEMON. Both tiers that use this are about what happens on a machine
-# that has never seen intentic: connect.sh pulling an image, standing a container up, wiring a network, waiting
-# on /health. Run against the runner's daemon that is a test of a machine with six other jobs' containers on
-# it, and it leaves them behind. _tools/dind-host is the same Docker-in-Docker + sshd recipe the deployment e2e
-# uses, so this stays in lockstep with it rather than carrying a second copy.
-#
-# WHAT THE CALLER STILL OWNS: the trap. The two callers clean up differently (one has a work directory, one has
-# a sandbox container inside the host as well), and a cleanup written in here would either be wrong for one of
-# them or would have to grow a registry of things to remove.
+# Shared clean Docker-in-Docker host for setup/update drills; using the runner daemon would couple them to other jobs' containers.
+# Source repo-root.sh first, then call start_dind_host <name> and in_host <command> against _tools/dind-host.
+# Callers own cleanup traps because their work directories and nested sandbox cleanup differ.
 
 # Start one and wait for its daemon. `$1` is the container name — chosen by the caller, because two tiers
 # running at once on the same runner must not claim each other's.

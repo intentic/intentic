@@ -8,27 +8,10 @@ use tauri::{AppHandle, LogicalPosition, Manager, Webview, Window, WindowEvent, W
 use crate::state::AppState;
 use crate::windows::{HOME, WORKSPACE};
 
-/* THE ONE WINDOW (2026-10-21). The app's two faces, the hosted workspace and the main local window, are two webviews in
-ONE native window, the frame, and a switch between them shows one and hides the other inside it.
-
-Each face used to be a window of its own, and a switch swapped two windows in one place: the face coming up took the
-place, size and maximised state of the one going, was shown, and the other hidden. The first switch after a launch built
-the second window on the spot and put it up before its page had drawn anything, so the reader saw their window close and
-an empty one open where it had been. Every switch after it swapped two windows too: two taskbar buttons made and
-dropped, Windows' open and close animations, and a frame handed over that could be wrong (a minimised face handed over
-Windows' parking place for it, off every screen, 2026-10-12). Now there is one frame, one taskbar button and one place,
-size and maximised state, and a face is added to the frame the first time it is wanted.
-
-How a face steps aside is per platform. On Windows its webview's own child window is hidden, exactly as a face's
-top-level window used to be, and WebView2's controller is left visible: a controller told it is not visible reports a
-viewport of about 70×39 to its page (WebView2Feedback#5689, webview_sync.rs), which the page answers by switching to its
-mobile shell. On Linux the faces are packed in the frame's box, and a hidden one leaves the other its whole height,
-WebKitGTK telling its page it is hidden as it did for a hidden window; each is kept out of the `show_all` a shown GTK
-window does to everything in it.
-
-Tauri attaches the resize borders of a frameless window only to a window's own content webview, never to one added as a
-child, so the frame attaches them itself: on Windows by asking for resizability once it is built and keeping the border
-window above each face added after it, on Linux by giving each face the handler Tauri's content webview has. */
+/* Hosted and local faces share one native frame, taskbar button and geometry; create each webview lazily and switch visibility.
+ * Windows hides the child HWND while leaving WebView2's controller visible to avoid its tiny-viewport bug (webview_sync.rs).
+ * Linux packs both in the frame but excludes hidden faces from GTK show_all.
+ * Added child webviews lack Tauri's resize borders, so attach/raise them explicitly on Windows and install the handler on Linux. */
 
 /// The native window both faces are drawn in. Never a page's label: capabilities name webviews (capabilities/*.json),
 /// so nothing is granted to the frame as such.

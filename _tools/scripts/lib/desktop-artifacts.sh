@@ -1,34 +1,8 @@
 #!/bin/sh
-# What a desktop artifact is CALLED — the one place that decides, for every script that builds, verifies,
-# stages or publishes one.
-#
-# The names carry the version and the architecture: Intentic-1.15.1-x64-setup.exe, not Intentic-setup.exe. A
-# file that states what it is survives being copied to a colleague, sitting in a Downloads folder next to
-# three of its own predecessors, or arriving in a bug report with nothing else attached — and a fixed name
-# survives none of that. It is also what lets someone answer "which build did you install?" without opening
-# anything.
-#
-# The architecture is spelled the way each platform's OWN tooling spells 64-bit Intel/AMD, because these names
-# are read by that tooling's users: `x64` is Microsoft's, `amd64` is Debian's, `x86_64` is RPM's and
-# AppImage's. One repo-wide spelling would be tidier here and wrong everywhere it is read. Adding a second
-# architecture later means adding a case, not renaming what already ships.
-#
-# Nothing downstream may hardcode these. Source this file and ask:
-#
-#   . "$(dirname "$0")/../lib/desktop-artifacts.sh"
-#   name="$(desktop_artifact_name nsis "$VERSION")"   # building: the exact name to write
-#   file="$(desktop_artifact "$DIST" deb)"            # consuming: whichever version is in that directory
-#
-# PLAIN POSIX sh, AND IT HAS TO STAY THAT WAY — hence the shebang, though nothing executes this file. Its
-# callers are bash scripts AND workflow steps, and a workflow step's default shell inside these container jobs
-# is `sh`, i.e. dash. A bash array in here is not a portability nicety anyone can defer: it is a syntax error
-# raised while dash PARSES the file, so the whole step dies at the `. desktop-artifacts.sh` line, before any
-# question has been asked. That is how the Windows build broke — the one place that decides the names took the
-# staging step down with it.
-#
-# The one name NOT here is latest.json. The updater fetches it from `releases/latest/download/latest.json`,
-# which resolves only for a name that never changes — so the manifest is fixed and the installers it points at
-# are versioned, which is the right way round: the pointer is stable, the things it points at are identifiable.
+# Shared desktop artifact names include version and platform-native architecture spellings: x64, amd64 or x86_64.
+# Use desktop_artifact_name to produce a name and desktop_artifact to locate one; callers must not hardcode installer names.
+# Keep this library POSIX sh: workflow container steps source it under dash as well as Bash.
+# latest.json stays fixed because releases/latest/download resolves that URL; only the installers it points at are versioned.
 
 # The four kinds, as the bundlers produce them and as the release attaches them.
 DESKTOP_ARTIFACT_KINDS="nsis appimage deb rpm"

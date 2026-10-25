@@ -1,23 +1,8 @@
 #!/usr/bin/env node
-// Every list and section draws from one tier table (_editor/ui/src/components/rows/row.ts) through the kit's own
-// primitives: rows through <RowGroup>, a header through <SectionHeader> (which <RowGroup>, <Section> and <NavRail> draw).
-// A group is a list and a list is `compact`, with no call site stating otherwise; a header carries no count, no caption
-// and no fill, and whether a group draws a card is decided by what it lies on (overlays/surfaceGround.ts), never by it.
-// Refuses:
-// 1 a <RowGroup> child that sets its own padding — use <RowNote> instead
-// 2 a row inside a <RowGroup> that declares its own `density` (flush rows excepted)
-// 3 a <RowGroup> that restates the default `density="compact"`
-// 4 a header decision taken at the call site: `count`, `caption` or `flat` on a <RowGroup>, `sticky-headings` on a
-//   <NavRail> (each was a prop once, and each was removed view by view before it left the component)
-// 5 a literal `:size` on a mark inside `#lead`, where the tier already hands one out
-// 6 a row component (relying on its group for density) mounted outside any <RowGroup>
-// 7 (moved) a section header drawn by hand is the `substitutes` check's (kit-substitutes.mjs), on every element
-// 8 a group among another group's rows, which nests one card in another: groups side by side are a stack
-// 9 sections side by side with nothing spacing them: a parent holding two or more <RowGroup>/<Section>s states the gap
-//   between them (`gap-*`, `space-y-*`), and a component whose template is several of them at its root is wrapped
-// 10 a height on a row: a row is as tall as its tier makes it, and a settings group's one floor is `equal-rows`
-// Rules 4 and 7–10 are the kit's own `sectionFindings` (_shared/extension-ui/check/kit-decisions.mjs), which its published
-// checker runs over extensions built outside this repository; their tests are kit-decisions.test.mjs.
+// Enforce row.ts tiers through RowGroup/SectionHeader: group-owned density, mark size and row height; RowNote owns padded notes.
+// Reject redundant compact density, retired header props, ungrouped rows, nested groups, missing section gaps and per-row heights.
+// Ground decides card fill; equal-rows is the settings floor. Hand-drawn headers belong to kit-substitutes.mjs.
+// Shared sectionFindings in extension-ui/check/kit-decisions.mjs also enforces section rules in published extension checks.
 import { sectionFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 

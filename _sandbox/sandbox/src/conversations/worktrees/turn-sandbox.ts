@@ -14,28 +14,10 @@ import { registerSandboxEntry } from "../../workload/namespace-entry.js";
 import { namespaceHolderLifetime, namespaceHolderReady } from "../../workload/namespace-holder.js";
 import type { FencedPlacement, IsolationAnchor, IsolationPlan } from "./isolation.js";
 
-// A fenced turn's sandbox. The turn was started by a person who holds areas, and what its checkout was cut to is only
-// a fence if nothing inside the turn can widen its view again. So instead of a mount namespace the turn's root process
-// could rearrange, it runs under bubblewrap: its own user (unprivileged, no capabilities, no further user namespaces),
-// its own pid namespace with its own /proc, and a filesystem built up from nothing out of what is listed below.
-// Anything not listed is not there.
-// What it is given:
-//   - the system, read-only: /usr and its links, /etc (with the password hashes and ssh host keys masked), /opt, and
-//     the runtime engines the daemon installs;
-//   - the conversation's own checkout at /work, read-write, with every repository's `.git` pointer masked: git
-//     history holds the whole tree, so the daemon keeps committing for the turn and the turn sees files only; and any
-//     directory in it the fence does not reach covered by an empty layer, whatever the sparse checkout left there;
-//   - dependency and build mirrors from the main checkout, as overlays, where the fence admits them (isolation.ts
-//     mirrorAdmitted);
-//   - the conversation's own session store, the reference shelf read-only and only as far as the fence names folders
-//     in it, the pnpm store behind a layer of the conversation's own (the turn runs as the files' owner, and the
-//     store's files are hard links into every checkout's dependencies), and the heavy-command queue's lock directory,
-//     so its builds still take turns with everyone else's;
-//   - a home of its own, with the shell and tool dotfiles read-only and the Claude config behind a throwaway overlay;
-//   - one directory of its own (`dir`), at the same path inside and out, holding its TMPDIR, its tmux socket and its
-//     terminal logs. Same path on purpose: the daemon writes the Bash tool's command files there and the turn reads
-//     them, and neither has to translate a path for the other.
-// The network is the container's own for now, loopback included.
+// Fence turns with unprivileged bubblewrap (no capabilities/user namespaces), private PID/proc and an allowlisted filesystem.
+// System paths are read-only with sensitive files masked; /work is writable but .git and excluded areas are hidden.
+// Admit only fenced dependency/build mirrors and refs; isolate home/config and pnpm hard links while sharing heavy-command locks.
+// Keep TMPDIR, tmux and logs at identical paths inside/outside for daemon command files. The container's network, including loopback, is shared.
 
 // The user every fenced turn runs as inside its sandbox. One fixed id rather than one per turn: two sandboxes never
 // share a pid or mount namespace, so the id separates nothing between them, and a fixed one keeps file ownership in the

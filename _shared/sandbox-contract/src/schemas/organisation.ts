@@ -30,22 +30,10 @@ export type OrgSection = z.infer<typeof OrgSectionSchema>;
 export const OrgSectionModeSchema = z.enum(["open", "locked", "hidden"]);
 export type OrgSectionMode = z.infer<typeof OrgSectionModeSchema>;
 
-// What an organisation admin edits. A section left out is open, so a policy written before a section existed opens it
-// rather than guessing.
-//
-// `preset` PINS settings rather than locking a page: each named group of the public-office preset (compliance.ts
-// PRESET_GROUPS; which settings a group holds is the daemon's compliance/preset.ts) is applied to what the sandbox READS,
-// whatever its files say, and a change that would undo it is refused. Strings on the wire, not the enum: a group a newer
-// platform names and this daemon does not know is skipped and reported (`unenforced`), never a reason to refuse the
-// whole policy, which would stop every later edition reaching an older daemon. The platform validates the names an
-// admin saves.
-//
-// `membersOnly` makes the organisation's member list the outer fence of every bound sandbox's roster: a person the
-// organisation removes is taken off each sandbox's roster by its daemon at the next fetch, and a grant to someone who
-// is not a member is refused. The sandbox's owner is not on a roster, so this never reaches them.
-//
-// Both are optional rather than defaulted, so every policy written before them (a stored row, a held file, a literal)
-// still reads as the same type: absent is no pin and an open roster.
+// Omitted policy sections stay open. preset pins effective settings and refuses undoing writes, regardless of underlying files.
+// Unknown preset groups are skipped/reported as unenforced so newer policies still reach older daemons; the platform validates saved names.
+// membersOnly fences roster grants/removals by organisation membership, excluding the owner who is not a roster entry.
+// Both fields remain optional for stored-policy compatibility: absence means no pins and an open roster.
 export const OrgPolicyRulesSchema = z.object({
     sections: z
         .partialRecord(OrgSectionSchema, OrgSectionModeSchema)

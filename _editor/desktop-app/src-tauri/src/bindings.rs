@@ -1,23 +1,6 @@
-//! WHICH FOLDER OF THIS COMPUTER IS IN WHICH SANDBOX: the machine agent's pairings, and nothing else (2026-10-20).
-//!
-//! The agent keeps one pairing per synced folder (`intentic-machine sync setup`), and that pairing is what syncs the
-//! folder: it is the binding. This app reads it through the agent (`intentic-machine status --json`, scripts.rs
-//! [`crate::scripts::sync_report`]) and writes it only through the agent's own verbs (a folder's setup, uninstall,
-//! forget), then reads again. What it last read is held in memory alone ([`crate::state::AppState`]
-//! `bindings`), never written to a file of its own.
-//!
-//! Before, the same fact lived in three places: `projects.json` (written by this app after an attach or a project's
-//! setup), the folders of the one-per-computer sandbox's record, and the agent's pairings. Each could be lost or outlive the others: a
-//! reinstall took the app's two files and left the agent syncing, so a folder that had a sandbox was offered "Start a
-//! sandbox" again (quick-lantern, 2026-10-19); a pairing the agent retired by itself stayed in `projects.json`, whose
-//! folder's button opened a sandbox that no longer had it. Rejected: keeping `projects.json` as a cache refreshed from the
-//! agent, which is the same second copy with a better excuse; reading the agent's `sync.json` directly, which holds its
-//! sync tokens and may sit inside a WSL distro the agent alone resolves.
-//!
-//! A pairing names its sandbox the agent's way ([`agent_id_of`] its address), and a binding the platform's way, by the
-//! row the roster, the records and the workspace's address name ([`platform_id`], 2026-10-21). The rows this app knows
-//! beside a slug or an address are every folder's own sandbox it made (folder_setup.rs) and what `ic sandbox list` last
-//! said of each sandbox here (its `platformId`, as the sandbox's last announce had it, [`listed_rows`]).
+//! Machine-agent pairings are the sole folder/sandbox bindings: read status --json, mutate through agent verbs, then read again.
+//! Keep only an in-memory snapshot in AppState; never duplicate pairings in an app file or read sync.json and its tokens directly.
+//! agent_id_of resolves a pairing's address; platform_id resolves the roster row using folder setup records and listed_rows from ic.
 
 use std::path::Path;
 use std::sync::Mutex;

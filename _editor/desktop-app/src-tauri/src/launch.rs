@@ -1,21 +1,7 @@
 /* A LAUNCH THAT NEVER REACHES THE READER, MADE VISIBLE — and a stuck copy that no longer swallows every later one. */
-//
-// A user's Windows PC restarted for the Docker setup (2026-10-08) and Intentic did not come back: the desktop
-// shortcut and the Start menu entry did nothing, and a reinstall was the only way out. Two things made that both
-// possible and invisible.
-//
-// THE HANDOFF WAITS FOREVER. A second launch hands itself to the running copy (tauri-plugin-single-instance) with
-// a `SendMessageW`, which has no timeout: a running copy that is stuck makes every launch after it wait, windowless,
-// for an answer that never comes. A reinstall "fixed" it because the installer kills every running copy first
-// (installer-hooks.nsh). [`begin`] does that one kill itself, before the plugin's handoff, and only to a copy
-// of this same program that has been running for a while and does not answer a message that costs nothing.
-//
-// NOTHING SAID SO. The app's events are sent by its windows' script; a launch that dies or hangs before a window
-// has loaded sends nothing, and a crash in Rust leaves no trace a reader of the telemetry can find. Each launch
-// now writes down how far it got ([`Stage`]); the next one reads what the last one left and reports a launch that
-// never put a window in front of anyone, and a panic hook writes the panic down for the next launch to report.
-// Reports wait on disk until they are sent, so a launch that has no network (the first minutes after a restart)
-// loses nothing.
+// Before single-instance handoff, kill only an old, unresponsive copy of this executable; SendMessageW otherwise can hang new launches forever.
+// Persist launch Stage and panics so the next launch can report failures before any window/telemetry script loaded.
+// Queue reports on disk until sent, retaining evidence through offline restarts.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

@@ -17,23 +17,10 @@ import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-sess
 import { sweepAgedState } from "../workspace/watch/state-janitor.js";
 import type { BootPhase } from "./boot-phase.js";
 
-// THE SANDBOX'S HOUSEKEEPING (2026-10-05), on one clock that remembers across restarts when each chore last ran
-// (system/chore-clock.ts): what /history and the agents' Docker engine gather and nothing else ever removes. Each chore
-// logs what it did; the heavy ones wait for a moment with no turn running.
-// - git: maintenance hourly (it was a timer reset by every restart), stale locks hourly while idle, `gc` with two weeks'
-//   grace daily while idle, and the parked branches of conversations archived over 90 days ago daily;
-// - storage: /history/trash entries past 14 days hourly, checkouts and dependency overlays no conversation owns daily,
-//   and (2026-10-21) the build output (cargo `target/`, gradle and flutter `build/`) of checkouts quiet for 6 hours,
-//   hourly while no turn runs (conversations/worktrees/build-outputs.ts);
-// - the agents' dockerd, when it already runs: stopped containers and dangling images daily;
-// - retention passes (2026-10-12), hourly: agents archived once finished past the retention window, the aged browser
-//   captures and the file view's trash, the log files over their keeping, and finished terminal sessions. None must also
-//   run at every boot (each ages things out by the hour), so the clock needs no run-at-boot option for them; the scratch
-//   emptied at boot is a boot step, not a chore (boot-sweeps.ts).
-// - data retention (2026-10-13), settings.retention: everything but restore points hourly, restore points daily (each
-//   cut repacks the history repos), and all of it within a tick of the settings changing; nothing while every value is
-//   0, the default (retention/retention-sweep.ts).
-// `keep`: a job still queued has only dead panes but isn't finished. agent-* sessions belong to the reaper.
+// Persist housekeeping cadence in chore-clock.ts across restarts: git maintenance, storage/trash, dockerd and retention sweeps.
+// Log results; heavy cleanup waits for no running turn and dockerd cleanup never starts an idle engine.
+// Retention runs hourly (restore points daily) and after settings changes; all-zero settings disable data retention.
+// Scratch belongs to boot-sweeps, agent-* sessions to the reaper; keep unfinished queued jobs even if all panes are dead.
 const reapPolicyOf = ({ services }: BootPhase): ReapPolicy => ({
     keep: (session: string): boolean => services.terminalRun.running(session),
     finishedRunAt: (session: string): number | undefined => {

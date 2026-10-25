@@ -21,21 +21,9 @@ export type ExtensionT = (key: string, values?: Record<string, unknown>, plural?
 
 const namespaceOf = (extensionId: string): string => `ext.${extensionId}`;
 
-/**
- * One extension's translator, bound to the slice of the message tree the host mounted its catalog under. Keys are its
- * own — `t("panel.title")` for what lives at `ext.<id>.panel.title` — so nothing it writes can collide with the app's
- * keys or another extension's.
- *
- * Bind it once per extension rather than per component:
- *
- * ```ts
- * // src/i18n.ts
- * export const t = extensionT(extensionIdOf(manifest));
- * ```
- *
- * The messages themselves are declared on the extension's module (`export const messages`), which the host loads for
- * the reader's language before it calls `activate`.
- */
+/** Bind once per extension: const t = extensionT(extensionIdOf(manifest)); t("panel.title") resolves ext.<id>.panel.title.
+ * Local keys cannot collide with app/other-extension catalogs. Export messages on the extension module;
+ * the host loads the reader's language before activate. */
 export const extensionT = (extensionId: string): ExtensionT => useT(namespaceOf(extensionId));
 
 /**

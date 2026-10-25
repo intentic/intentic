@@ -1,21 +1,9 @@
 import { tv } from "tailwind-variants";
 
-/* THE ACTION BUTTON'S VOCABULARY, DOM-free so a caller can name a tier without pulling in the SFC.
-
-   Four tiers, ranked, and the tone is a colour laid on a tier rather than a fifth one:
-   - `loud`: solid accent fill, the paid-relationship action. At most one per page. `gilded` casts it in the house
-     gold, for the one action that moves the workspace up a version (the update card's), and nowhere else: gold spent
-     on everything stops meaning anything.
-   - `accent` (the default): tinted accent, the commit action (New, Create, Land).
-   - `boring`: neutral fill, accent's silhouette, the app's one spelling of a non-primary action.
-   - `quiet`: no chrome (Cancel, Dismiss). Neutral ink unless a tone says otherwise.
-   Size follows the surface, not importance: `size="small"` (26px) on any dense surface, no `size` (38px) standing
-   alone on a page or dialog.
-
-   PrimeVue draws the button and primeng.css styles it by PrimeVue's own classes (`p-button-secondary`, `p-button-text`)
-   and the kit's (`ui-button-loud`). This file is the only place that knows which of those a tier is, so a call site
-   says what the button IS, and `_tools/checks/button-tiers.mjs` refuses `severity`, `text` and `ui-button-*` written
-   on a <Button> in this repository. Installed extensions still pass them, and Button.vue still honours them. */
+/* DOM-free button tiers: loud is the single primary paid action; gilded is reserved for workspace updates.
+ * accent (default) commits, boring is neutral-filled secondary, quiet is chromeless. Size follows density: small 26px, default 38px.
+ * Centralize PrimeVue/kit class mapping here; button-tiers.mjs rejects severity/text/ui-button-* at repository call sites.
+ * Button.vue still honors those legacy forms for installed extensions. */
 
 export type ButtonTier = `loud` | `accent` | `boring` | `quiet`;
 

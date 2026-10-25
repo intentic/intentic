@@ -1,23 +1,7 @@
-// The one list of checks that read the checkout. CI (its preflight and its push check), `pnpm verify`, the per-edit run
-// and `pnpm checks` all read it, so a check exists once and runs everywhere. Each check is its own process
-// (lib/report.mjs): problems to stderr and exit 1, else what it vouched for to stdout and exit 0.
-// `needs`:
-// checkout tracked files only, no install, no network
-// git checkout plus history (a merge-base, a range), still no install
-// node_modules optional: the check attempts what needs an install, vouches for less without it
-// `gate`:
-// code the tree is broken or unbuildable; a failure wherever this list is read
-// tidy a cost to readers, not a break; a failure only for the lines a pushed range adds, a warning otherwise, and a
-// failure in the nightly tidy job
-// A new check enters as tidy and is promoted to code once a run record shows only true failures.
-// `scoped`: the check takes `--paths a,b,c` and judges only those files, with the same verdict on them it would reach
-// reading the whole tree. That is what lets it run on ONE file the instant it is written (.intentic/checks.json's
-// `edit` moment), which is the only moment at which the model that wrote the line is still holding it. A check whose
-// finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between
-// subsystems — is not scopable and omits the flag; those are read whole or not at all.
-// `ratchet`: the check keeps a standing backlog in baselines/ (lib/ratchet.mjs) that it reads and never writes. Before a
-// conversation's work lands, the fixers in its worktree (fixers.mjs) run the check with `--tighten <the change's
-// paths>`, which lowers only the entries that change beat, so the lower count is written for the change that earned it.
+// Shared check list for CI, verify, per-edit and checks: exit 1/stderr for findings, exit 0/stdout for the measured coverage.
+// needs declares checkout, git history or optional dependencies. code failures always fail; tidy findings are attributed to added lines/nightly.
+// New checks start tidy. scoped checks judge --paths files identically to a whole-tree run; graph-wide findings cannot be scoped.
+// ratchet checks read standing baselines; --tighten lowers only the entries improved by the named change paths.
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", scoped: true, about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },

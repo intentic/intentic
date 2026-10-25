@@ -14,22 +14,9 @@ docker_config_without_missing_helpers
 
 out=.image-out
 
-# EVERYTHING THE PAYLOAD IS MADE OF, WRITTEN DOWN ONCE. Two kinds, and the difference is only what the image
-# takes from them: a TREE is pruned to production and copied whole, a BUNDLE is a self-contained dist/ the
-# image copies on its own (no node_modules to deploy, so no tree). Both have to be COMPILED first, and the
-# turbo filter below is derived from these two lists rather than kept as a third one beside them.
-#
-# It was a third list, and both times an extension joined the payload the filter was the line that was missed.
-# It stayed invisible because the fleet's runners check out with `clean: false`: a dist left behind by the
-# previous pipeline sat in the tree, and the build that never ran was never missed. A FRESH checkout is where
-# it surfaces — the arm64 halves run on hosted runners, and that is where knowledge's bundle came up absent.
-# For a tree it does not even fail: the deploy quietly ships a package with no dist and the image is broken
-# where nothing looks.
-#
-# @intentic/lsp, @intentic/iq and @intentic/ocr are NOT here: all are dependencies of @intentic/sandbox, so turbo
-# builds them under its filter (build dependsOn ^build) and the sandbox's deploy carries them — the image symlinks
-# `lsp`, `iq` and `ocr` straight out of /opt/sandbox rather than shipping second copies of the same packages (a
-# deployed iq tree duplicated ~450 MiB of the daemon's node_modules for a CLI whose own code is <1 MiB).
+# Derive build filters from these payload lists: TREE deploys production dependencies; BUNDLE copies self-contained dist output.
+# Both must compile first; stale dist directories on retained runners can hide a missing build until a fresh checkout.
+# lsp/iq/ocr arrive through the sandbox dependency tree and are symlinked there, avoiding duplicate deployments.
 TREES="
 @intentic/sandbox:$out/sandbox
 @intentic/cli:$out/cli
@@ -92,24 +79,10 @@ for ext in $BUNDLES; do
     cp -R "$src" "$out/extensions/$ext/dist"
 done
 
-# onnxruntime-web is @huggingface/transformers' BROWSER backend (WebAssembly/WebGPU) — ~129 MiB that can never
-# load in the image: the node dist the daemon and iq resolve (dist/transformers.node.{mjs,cjs}) requires only
-# onnxruntime-node + onnxruntime-common, and nothing else in dist/ resolves the web package. pnpm deploy has no
-# per-dependency exclude, so it is pruned from the tree after the fact.
-# @openai/codex is the ~350 MiB platform binary @openai/codex-sdk exact-pins. The codex feature pack
-# global-installs the same pinned version onto PATH (image-packs/codex.Dockerfile; packs.integration.test.ts holds the
-# pins in step), and the adapter directly spawns that binary's app-server surface. Shipping it in the tree too
-# would put the one copy the pack owns back into every image, core included.
-# The -xtype l pass clears the symlinks both prunes leave dangling in dependents' node_modules (never
-# followed, but no reason to ship them).
-# @cursor/sdk is the daemon's Cursor runtime, and the one dependency here pruned for a LICENCE reason rather
-# than a size one: "all rights reserved, use subject to Cursor's Terms of Service" grants no redistribution, and
-# a published image containing it would redistribute it to everyone who pulls that image, Cursor account or not.
-# It is a repo dependency so the daemon type-checks against it and a dev run works; image-packs/cursor.Dockerfile
-# installs the same pin into /opt/cursor-sdk on the OWNER's own machine. The explicit Connect action bootstraps
-# that install for login; the resulting credential then keeps it in the durable overlay. cursor/cursor-sdk.ts
-# loads it dynamically so a tree without it still boots. Its ~15 MiB per-platform packages go with it — nothing
-# left behind can resolve them.
+# Prune browser-only onnxruntime-web and the Codex binary; the Codex pack owns its pinned install, including in composed overlays.
+# Remove dangling dependency symlinks after pruning.
+# Also remove @cursor/sdk and platform packages: its licence does not grant redistribution in published images.
+# The Cursor pack installs the matching pin on the owner's machine; the daemon loads it dynamically so core images still boot.
 rm -rf "$out"/sandbox/node_modules/.pnpm/onnxruntime-web@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@openai+codex@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk@*

@@ -1,28 +1,7 @@
 #!/usr/bin/env bash
-# Put the launcher scripts the desktop app spawns where the bundlers can see them — copied FROM THE COMMIT,
-# not read from `_site/site/public/scripts/` as it happens to sit on disk.
-#
-#   stage-desktop-scripts.sh          # → _editor/desktop-app/src-tauri/staged-scripts/
-#
-# WHY A STAGING STEP AT ALL. `tauri.conf.json` used to glob the site directory directly, which made the
-# bundled set whatever the WORKING TREE held at the moment each bundler ran. The runners keep their checkout
-# between jobs (`clean: false`, docs/ops/ci-runner.md), so that directory can hold a file the commit does not
-# carry — and every one of them shipped, inside an installer, as a script the app spawns by basename and
-# nobody can review at its source path. That is not hypothetical: release 1.206.0's windows-build died at
-# verify-desktop-bundle.sh with `stale connect-host.ps1 is bundled but is not committed`, on a checkout that
-# had built three passing jobs an hour earlier. The tree also MOVES mid-build — job 92707727494 packed a .deb
-# and a .rpm two seconds apart from two different versions of cleanup.sh.
-#
-# So the glob now points here, and this directory is rebuilt from `git archive HEAD` on the way in. What ships
-# is what the commit says, for every bundler in the run, and verify-desktop-bundle.sh — which has always
-# asserted against the commit — is checking a property the build now guarantees rather than hoping for.
-#
-# Emptied and refilled rather than synced: a rename or a deletion has to disappear from the bundle, and a
-# staging directory that only ever gains files is the same stale-tree bug one level in.
-#
-# The cost, stated plainly: an UNCOMMITTED edit to a script does not reach a locally built installer or
-# `tauri dev`. Commit it — that is the same bar verify-desktop-bundle.sh has always held builds to, now
-# enforced early instead of at the end of a six-minute bundle.
+# Recreate staged-scripts/ from git archive HEAD before bundling, so every installer gets the same committed script bytes.
+# Empty it first: retained runner checkouts can contain stale, renamed or untracked scripts that must never ship.
+# Uncommitted script edits do not reach local installers or tauri dev; verify-desktop-bundle.sh also compares against HEAD.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
 

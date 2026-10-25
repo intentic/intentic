@@ -100,24 +100,9 @@ const unmatchedLines = (live, held) => {
         .map(({ line }) => line);
 };
 
-/**
- * The caller's share of what the checks found: for each failing verdict, which of its lines the work under test is
- * answerable for.
- *
- * Three answers, because there are three facts and only two of them accuse. A line the snapshot printed too was already
- * standing, and a gate measures the tree it leaves behind, not the tree it found. A line the snapshot did not print is
- * new, and new is refused whatever the check's gate. And a line the snapshot was in no position to have printed —
- * because the check was blind there — is neither: it is reported and charged to nobody, the same distinction run.mjs
- * already draws for a live check that could not measure. Collapsing that third case into "new" is how a gate meant to
- * spare an actor other people's problems comes to guarantee it is blamed for every one of them.
- *
- * `before` is `undefined` when no snapshot could be taken at all; then everything is the caller's, which is the safe
- * direction to be wrong in — one actor is asked about lines it may not have written, rather than everything from here on
- * going unchecked.
- *
- * `renames` (optional) names the files the change moved, new path to the base's: a finding that only followed its file is
- * the same finding.
- */
+/** Attribute failing lines as existing, added (refused for either gate), or unmeasurable at the base (reported without blame).
+ * If before is undefined, no snapshot was possible: conservatively charge every finding to the caller.
+ * renames maps new paths to base paths so moved files retain their existing findings. */
 export const judgeAgainstBase = (failed, before, root, renames) =>
     failed.map((verdict) => {
         const standing = before?.get(verdict.id);

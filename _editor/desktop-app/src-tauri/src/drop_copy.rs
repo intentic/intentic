@@ -1,44 +1,7 @@
 /* A BIG DROP ON THE WORKSPACE, COPIED INTO A SANDBOX ON THIS COMPUTER BY THE APP RATHER THAN THROUGH THE PAGE. */
-//
-// A folder dropped on the workspace's explorer normally goes the browser's way: the page walks it, reads every file
-// and uploads it over HTTP to the sandbox's daemon. For a sandbox on this same computer that is the long way round,
-// and for a big folder a costly one: a 30 GB folder of 66,000 films and stills froze the page for minutes and then
-// never got going (2026-10-09). The app can do better, because it can see what the page cannot: where the dropped
-// folder is on disk, and the Docker engine the sandbox runs in.
-//
-// So, on Windows, where WebView2 hands the app a dropped file's place: the page posts the drop's `File`s to the app
-// (`chrome.webview.postMessageWithAdditionalObjects`), naming the folder they go into and the loopback port it reaches
-// its sandbox on. The message is a JSON string: wry's handler, which carries Tauri's IPC, hears every message first and
-// reads it as a string; an object makes it return an error, and WebView2 then calls no handler registered after it,
-// this one included (seen on omen, 2026-10-09). Tauri, finding the string is none of its calls, logs a console.error
-// in the page and does nothing else. The app finds the container publishing that port and walks the dropped folders
-// itself. A drop big enough to be worth it is then copied by the routes each kind of file is fastest on (measured on
-// Docker Desktop for Windows, 2026-10-09; see the desktop app's README):
-//
-// - staged: folders and files under MOUNTED_FROM are read by the app, READERS at once, into tar archives on this
-//   computer's own disk, and a helper container that mounts those archives unpacks each into the workspace volume as
-//   it is completed. Opening a file on Windows costs milliseconds (3.6 ms each under load on omen), so one at a time
-//   20,000 stills took over a minute just to read; and every byte sent through Docker's API (`docker exec -i`) crawls
-//   when the engine is busy. A local archive is neither: 20,000 stills staged in under a second, unpacked in four.
-// - mounted: files from MOUNTED_FROM up are read by a helper container that bind-mounts the dropped folder read-only
-//   beside the workspace volume and tars across: ~190 MB/s, but a few milliseconds per file over Docker Desktop's
-//   file sharing, which a big file repays and a small one does not.
-// - streamed: one archive into the sandbox's own `tar -x` through `docker exec -i`, for what the other two cannot
-//   take: a big file on a place that will not mount (a network share), a file a helper had trouble with, and
-//   everything when no helper will run.
-//
-// A file counts done only once the tar writing it into the workspace has shown it got past it: named the next file
-// with no complaint between, or exited 0 at the archive's end. What went into a pipe is not yet in the workspace, and a
-// full disk fails the write after the app has long moved on. A file written but not whole (a failed read, which tar
-// pads out; a write that failed; an unpack cancelled partway) is removed from the workspace at the end, so a failed
-// file is missing rather than there and wrong. A file no tar started on is left alone, older copy and all.
-//
-// The page hears how far it has got through `intentic:drop-copy` events and draws the same card it draws for an
-// upload. Anything the app will not take (no Docker, no container on that port, a drop too small to bother, a file
-// with no place on disk) is said back as `declined`, and the page uploads the drop the way it always has.
-//
-// The page can only name files the user dropped: a `File` with a place on disk exists only for something a person
-// dragged in or picked. What it names freely, the folder they go into, is held to a plain relative path below /work.
+// Copies large Windows drops through staged or mounted helper-container archives, falling back to streamed tar or browser upload.
+// Count files only after tar confirms extraction; remove partial writes, leave untouched files alone, and report intentic:drop-copy progress.
+// WebView2 requires a JSON-string message for wry compatibility; accept only user-dropped Files and destinations relative to /work.
 #![cfg_attr(not(windows), allow(dead_code))]
 
 use crate::scripts::Binds;
