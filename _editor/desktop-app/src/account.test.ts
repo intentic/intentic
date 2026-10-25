@@ -1,5 +1,5 @@
 import type { User } from "@intentic/api-contract";
-import { readAccount, signOutAccount, updateAccount } from "./account";
+import { readAccount, sessionHolds, signOutAccount, updateAccount } from "./account";
 import type { AccountAnswer, AccountAsk } from "./desktop";
 
 // The app's carrying of the call is account.rs's (and its tests'); this is the page's half: what it asks, and how it
@@ -50,6 +50,21 @@ describe(`readAccount`, () => {
     it(`rejects with the platform's sentence, or its own when the answer has none`, async () => {
         await expect(readAccount(answering(500, JSON.stringify({ message: `Database is waking up.` })))).rejects.toThrow(`Database is waking up.`);
         await expect(readAccount(answering(502, `<html>Bad gateway</html>`))).rejects.toThrow(`desktop.account.sessionCheckFailed`);
+    });
+});
+
+describe(`sessionHolds`, () => {
+    it(`holds for a session with a user, and not for nobody or a refused one`, async () => {
+        expect(await sessionHolds(answering(200, JSON.stringify(SESSION)))).toBe(true);
+        expect(await sessionHolds(answering(200, `null`))).toBe(false);
+        expect(await sessionHolds(answering(401, `{"message":"Not signed in."}`))).toBe(false);
+    });
+
+    it(`has nothing to go by when the platform is down, unreachable, or answers out of shape`, async () => {
+        expect(await sessionHolds(answering(502, `<html>Bad gateway</html>`))).toBeUndefined();
+        expect(await sessionHolds(answering(200, JSON.stringify({ user: { id: `u1` } })))).toBeUndefined();
+        jest.spyOn(console, `warn`).mockImplementation(() => undefined);
+        expect(await sessionHolds(() => Promise.reject(new Error(`offline`)))).toBeUndefined();
     });
 });
 

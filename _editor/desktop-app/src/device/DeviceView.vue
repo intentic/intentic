@@ -23,7 +23,8 @@ import EngineCard from "../components/EngineCard.vue";
 import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
-import { openUrl, signIn, workspaceOpen } from "../desktop";
+import { intoWorkspace } from "../account";
+import { openUrl } from "../desktop";
 import { folderSetups } from "./folderSetups";
 import SystemCard from "./intenticOs/SystemCard.vue";
 import { showOsLog } from "./intenticOs/system";
@@ -34,6 +35,7 @@ import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import PasswordsOffer from "../passwords/PasswordsOffer.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
+import { followRoster, signedIn as rosterSignedIn } from "./roster";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 import { engineBackShown, engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine";
 import { moveTargetOf } from "./engineMove";
@@ -46,9 +48,8 @@ import { moveTargetOf } from "./engineMove";
 // the workspace's. Between the masthead and the list sits what only the app on this computer can do: the recovery
 // panel's fix and a setup handed over from the workspace, which lead for as long as they are here, this PC's own setup
 // (pcSetup/PcSetupCard.vue), and the Docker engine the sandboxes run in. A folder's own sandbox being made is said in
-// that folder's window, not here. A computer that runs no
-// sandbox is told what one is for and offered the way to one, and nothing about Docker: somebody here for their files
-// has no business with it. Until 2026-10-20 this page was "This computer", headed and laid out on its own, and had
+// that folder's window, not here. A computer that runs no sandbox is told what one is for and offered the way to one,
+// and nothing about Docker: somebody here for their files has no business with it. Until 2026-10-20 this page was "This computer", headed and laid out on its own, and had
 // drifted from the workspace's page about the very same machine.
 
 const t = useT();
@@ -187,11 +188,10 @@ const engineDownWithSandboxes = computed(() => engineListening.value === false &
 // A sandbox by the name this app knows it by, else its slug: what a move says it is moving.
 const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => sandbox.slug === slug)?.name ?? slug;
 
-// The way to a sandbox, from a computer that has none: the workspace's setup once there is an account, a sign-in before.
-const signedIn = computed(() => facts.value?.accountSeen === true);
-const toSetup = async (): Promise<void> => {
-    await (signedIn.value ? workspaceOpen(`/setup`) : signIn());
-};
+// Signed in now, as the roster says (roster.ts), else whether this install ever was: that alone is never unwritten.
+const accountSeen = computed(() => facts.value?.accountSeen === true);
+const signedIn = computed(() => rosterSignedIn.value ?? accountSeen.value);
+const toSetup = (): Promise<void> => intoWorkspace(`/setup`);
 
 // The masthead's errands, on its own spine as the workspace's page hangs them: what the agent wants, the answer to the
 // last Restart, an agent that did not answer, and the other sides of this computer that keep sandboxes of their own.
@@ -229,6 +229,7 @@ const reading = usePoll({
     },
 });
 onMounted(() => {
+    void followRoster();
     // The engine on opening, not on the timer: `ic engine status` asks WSL and docker, and changes only by a move.
     void loadEngine();
     // This system on opening, and on the timer only now and then (system.ts `followOs`).
@@ -241,17 +242,16 @@ onMounted(() => {
     <Page>
         <div class="flex flex-col gap-6">
             <div class="flex flex-col gap-3">
-                <!-- Where the workspace's page has its way back to the board: every machine of this account is there, one
-                     window away. The arrow says it leaves this window, which a back chevron would not. -->
+                <!-- The way to the board, one window away (the arrow says it leaves this one); signed out, it says it signs in. -->
                 <button
-                    v-if="signedIn"
+                    v-if="accountSeen"
                     type="button"
                     :class="ui.textButton({ size: `xs` }, `inline-flex w-fit items-center`)"
-                    v-tooltip.right="t(`desktop.app.openWorkspace`)"
-                    @click="workspaceOpen(DEVICES_PATH)"
+                    v-tooltip.right="signedIn ? t(`desktop.app.openWorkspace`) : undefined"
+                    @click="intoWorkspace(DEVICES_PATH)"
                 >
-                    {{ t(`ui.devicePage.allDevices`) }}
-                    <Icon name="arrow-up-right" class="text-2xs" aria-hidden="true" />
+                    {{ signedIn ? t(`ui.devicePage.allDevices`) : t(`desktop.device.signInForAllDevices`) }}
+                    <Icon :name="signedIn ? `arrow-up-right` : `sign-in`" class="text-2xs" aria-hidden="true" />
                 </button>
 
                 <!-- THIS COMPUTER'S MASTHEAD, the workspace's own for a machine of one environment: its name, its OS, its
