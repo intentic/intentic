@@ -51,7 +51,6 @@ import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-sear
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { sessionKind, sessionModule } from "../../../../models/agent-status/sessionKind";
 import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
-import SessionTopic from "../../../../parts/capabilities/SessionTopic.vue";
 import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
 import SessionMetrics from "../../metrics/SessionMetrics.vue";
@@ -604,49 +603,46 @@ const grab = (event: PointerEvent): void => {
              letter or two beside a long chip and the press seats. -->
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <!-- The session's kind as a glyph, tinted by the package it works in (sessionKind.ts); a dot for the everyday single agent. -->
-            <span v-tooltip.top="tileHint" class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+            <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
+            <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full">
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
-                <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="28" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
-                <IdentityTile :session="agent" class="h-5.5 w-5.5 text-xs" />
+                <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
+                <IdentityTile :session="agent" class="h-4 w-4 text-2xs" />
                 <UnsentMark v-if="agent.unsent && !draftCorner" badge :preview="unsentWords" :at="agent.draftAt" />
             </span>
-            <!-- The topic over the title (SessionTopic): what the work is about and the package it is in, in the tile's hue. -->
-            <span class="flex min-w-0 grow basis-28 flex-col gap-0.5">
-                <SessionTopic :session="agent" />
-                <input
-                    v-if="edit.editing"
-                    v-model="edit.draft"
-                    type="text"
-                    maxlength="80"
-                    :aria-label="t(`agents.words.agentTitle`)"
-                    class="ui-field-box ui-field-inline min-w-0 select-text px-1 font-semibold"
-                    :class="live ? 'text-sm' : 'text-xs'"
-                    @click.stop
-                    @keydown.enter.stop.prevent="edit.commit()"
-                    @keydown.esc.stop.prevent="edit.cancel()"
-                    @blur="edit.blurCommit()"
-                    @vue:mounted="edit.focusInput"
-                />
-                <template v-else>
-                    <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
-                    <!-- Its whole text in a hover, only while it is cut short. -->
-                    <button
-                        type="button"
-                        v-tooltip.top.overflow="displayTitle"
-                        :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-                        class="min-w-0 rounded-sm text-left font-semibold text-content"
-                        :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
-                        @click.stop="openCard"
-                        @dblclick.stop="reviewCard"
-                    >
-                        <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
-                            run.text
-                        }}</span>
-                        <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
-                        <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
-                    </button>
-                </template>
-            </span>
+            <input
+                v-if="edit.editing"
+                v-model="edit.draft"
+                type="text"
+                maxlength="80"
+                :aria-label="t(`agents.words.agentTitle`)"
+                class="ui-field-box ui-field-inline min-w-0 grow basis-28 select-text px-1 font-semibold"
+                :class="live ? 'text-sm' : 'text-xs'"
+                @click.stop
+                @keydown.enter.stop.prevent="edit.commit()"
+                @keydown.esc.stop.prevent="edit.cancel()"
+                @blur="edit.blurCommit()"
+                @vue:mounted="edit.focusInput"
+            />
+            <template v-else>
+                <!-- A LIVE CARD'S TITLE WRAPS, a receipt's clips. -->
+                <!-- Its whole text in a hover, only while it is cut short. -->
+                <button
+                    type="button"
+                    v-tooltip.top.overflow="displayTitle"
+                    :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
+                    class="min-w-0 grow basis-28 rounded-sm text-left font-semibold text-content"
+                    :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
+                    @click.stop="openCard"
+                    @dblclick.stop="reviewCard"
+                >
+                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                        run.text
+                    }}</span>
+                    <!-- The peek state rides along as text for a screen reader, not an aria-label with no role. -->
+                    <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
+                </button>
+            </template>
             <span class="ml-auto flex shrink-0 items-center gap-2.5">
                 <!-- The card's own presses (headerActions), revealed on hover where there is a pointer and folded behind one ⋯ on a
                      phone. Clustered tight where a pointer is fine; a touch target is 44px, so a coarse one keeps the gap. -->

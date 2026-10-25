@@ -249,12 +249,6 @@ export const AgentSummarySchema = z.object({
         .describe(
             "One word for the kind of work the naming pass read in it (fix, audit, redesign). Never part of the displayed name. Absent for a title nothing named an action for.",
         ),
-    titleTopic: z
-        .string()
-        .optional()
-        .describe(
-            "A few words for the part of the product the work is about (Devices view, Sandbox API), as the naming pass read it. Never part of the displayed name: a board shows it as a label above the title. A rename keeps it. Absent for a conversation no naming pass has read.",
-        ),
     status: AgentStatusSchema.describe(
         "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn; landing means its work is being carried into the workspace right now, and nothing may act on its branch until that settles.",
     ),

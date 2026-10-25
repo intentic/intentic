@@ -15,7 +15,7 @@ import { originMeta } from "./agentStatus-meta";
 
 // The facts the tile reads, all of them on a summary already; a row with no agent behind it passes none.
 export type SessionFacts = Pick<AgentSummary, "id"> &
-    Partial<Pick<AgentSummary, "home" | "origin" | "startedBy" | "fresh" | "forkedFrom" | "subagents" | "modules" | "titleTopic">>;
+    Partial<Pick<AgentSummary, "home" | "origin" | "startedBy" | "fresh" | "forkedFrom" | "subagents" | "modules">>;
 
 export type SessionKindName = `home` | `automation` | `fixer` | `review` | `test` | `ask` | `fork` | `orchestrator` | `child` | `solo`;
 
@@ -65,19 +65,13 @@ export const sessionKind = (session: SessionFacts | undefined): SessionKind => {
     return { name: `solo`, icon: undefined, label: t(`agents.sessionKind.solo`) };
 };
 
-// The package a session is coloured by and named after, and how many more its changes span. A package's declared name
-// keeps its scope in the hover; the card shows what follows it, since every package of one workspace tends to share it.
+// The package a session's tile is coloured by, its most-changed one, named whole in the tile's hover.
 export interface SessionModule {
     readonly name: string;
-    readonly label: string;
     readonly hue: number;
-    readonly more: number;
 }
 
 export const sessionModule = (session: SessionFacts | undefined): SessionModule | undefined => {
-    const [name, ...rest] = session?.modules ?? [];
-    if (name === undefined) {
-        return undefined;
-    }
-    return { name, label: name.slice(name.lastIndexOf(`/`) + 1), hue: moduleHue(name), more: rest.length };
+    const name = session?.modules?.[0];
+    return name === undefined ? undefined : { name, hue: moduleHue(name) };
 };

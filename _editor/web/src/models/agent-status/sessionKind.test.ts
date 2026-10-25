@@ -32,14 +32,8 @@ describe(`sessionKind`, () => {
 });
 
 describe(`sessionModule`, () => {
-    it(`colours by the most-changed package, labels it without its scope, and counts the rest`, () => {
-        expect(sessionModule({ id: `c1`, modules: [`@intentic/web`, `@intentic/ui`] })).toEqual({
-            name: `@intentic/web`,
-            label: `web`,
-            hue: moduleHue(`@intentic/web`),
-            more: 1,
-        });
-        expect(sessionModule({ id: `c1`, modules: [`docs-site`] })?.label).toBe(`docs-site`);
+    it(`colours by the most-changed package`, () => {
+        expect(sessionModule({ id: `c1`, modules: [`@intentic/web`, `@intentic/ui`] })).toEqual({ name: `@intentic/web`, hue: moduleHue(`@intentic/web`) });
     });
 
     it(`is nothing for a session that has changed nothing`, () => {

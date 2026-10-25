@@ -179,11 +179,11 @@ const LandingSchema = z.object({
 });
 export type Landing = z.infer<typeof LandingSchema>;
 
-// What people left on it rather than anything it did: its name (with the source that ranks it, the naming pass's one
-// work word, never displayed, and its topic, the label shown above the name), who answers for it, a standing ask to land, every mark in press order, and when it was
+// What people left on it rather than anything it did: its name (with the source that ranks it, and the naming pass's one
+// work word, never displayed), who answers for it, a standing ask to land, every mark in press order, and when it was
 // last opened, the unread badge's reference point, kept here so it holds across devices.
 const SocialSchema = z.object({
-    title: z.object({ text: z.string(), source: AgentTitleSourceSchema, action: z.string().optional(), topic: z.string().optional() }).optional(),
+    title: z.object({ text: z.string(), source: AgentTitleSourceSchema, action: z.string().optional() }).optional(),
     owner: SessionOwnerSchema.optional(),
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
     reactions: z.array(z.object({ emoji: z.string(), email: z.string(), name: z.string().optional(), at: z.number() })),

@@ -12,7 +12,6 @@ import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { markSegments } from "../../../lib/markSegments";
 import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
 import IdentityTile from "../../../parts/capabilities/IdentityTile.vue";
-import SessionTopic from "../../../parts/capabilities/SessionTopic.vue";
 import type { SessionFacts } from "../../../models/agent-status/sessionKind";
 import MatchLine from "../../../components/MatchLine.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -25,8 +24,8 @@ const props = defineProps<{
     needle?: string;
     matchCase?: boolean;
     provider?: AgentProvider;
-    // The agent behind a session row, what its identity tile and the topic over its title are read from
-    // (sessionKind.ts); absent for a chat no agent stands behind yet, which draws the plain everyday tile.
+    // The agent behind a session row, what its identity tile is read from (sessionKind.ts); absent for a chat no agent
+    // stands behind yet, which draws the plain everyday tile.
     session?: SessionFacts;
     // Icon for a row that isn't a session and so has no identity tile.
     icon?: IconName;
@@ -116,20 +115,16 @@ const chipHint = computed((): Tip | undefined =>
                     <!-- A mark pinned to the disc (UnsentMark's badge). -->
                     <slot name="tile" />
                 </span>
-                <!-- The topic over the title, as on the board's card (SessionTopic). -->
-                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <SessionTopic :session="session" />
-                    <!-- Clamped to two lines; most titles fit whole at this width. -->
-                    <span
-                        class="line-clamp-2 min-w-0 text-xs font-semibold leading-4"
-                        :class="quiet ? 'text-muted' : 'text-content'"
-                    >
-                        <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
-                            run.text
-                        }}</span>
-                        <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
-                        <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
-                    </span>
+                <!-- Clamped to two lines; most titles fit whole at this width. -->
+                <span
+                    class="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-4"
+                    :class="quiet ? 'text-muted' : 'text-content'"
+                >
+                    <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                        run.text
+                    }}</span>
+                    <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
+                    <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
                 </span>
                 <slot name="trailing" />
                 <!-- The corner's marks left of the standing, as on the board's card (its stamps). -->

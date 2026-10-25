@@ -998,22 +998,6 @@ describe("agents registry", () => {
         expect(renamed?.titleAction).toBeUndefined();
     });
 
-    it("keeps the topic over a later title that names none, and takes the one a later title names", async () => {
-        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
-        await registry.init();
-        await beginTurn(conversations, turn(), 1_000);
-
-        expect(await registry.setTitle("c1", "Fleet board broadcast", "model", "wire", "Fleet board")).toMatchObject({
-            title: "Fleet board broadcast",
-            titleTopic: "Fleet board",
-        });
-        // A plan's heading and a person's rename reword the work; the board's label over it stays.
-        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" } });
-        expect(registry.get("c1")).toMatchObject({ title: "Fix the fleet broadcast fan-out", titleTopic: "Fleet board" });
-        expect(await registry.setTitle("c1", "Broadcast fan-out", "user")).toMatchObject({ title: "Broadcast fan-out", titleTopic: "Fleet board" });
-        expect((await registry.setTitle("c1", "Broadcast fan-out", "user", undefined, "Fleet sync"))?.titleTopic).toBe("Fleet sync");
-    });
-
     // The two failure sentences (agent/failure-sentences.ts); guarding only one is how the other got through.
     const FAILURE_SENTENCES = [
         "You've hit your session limit · resets 11:50pm (UTC)",

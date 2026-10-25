@@ -265,8 +265,8 @@ export interface AgentsRegistry {
     // Sets the title per the source ranking (AgentTitleSource): a rename always lands, an automatic source only moves
     // it up, or adds the action its own words lacked. A rejected promotion still returns the entry's current summary,
     // not `undefined`. `action` is the naming pass's one work word, stored beside the title and never shown; any other
-    // source clears it. `topic` is the label the board shows above the title; a title that names none keeps the old one.
-    readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string, topic?: string) => Promise<AgentSummary | undefined>;
+    // source clears it.
+    readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string) => Promise<AgentSummary | undefined>;
     // Records what the landed work did, as a commit subject; no ranking, the newest land simply describes the most
     // current claim. Broadcast so the Changes panel picks it up immediately.
     readonly setLandedSubject: (
@@ -517,7 +517,7 @@ export const createFleet = (
 
     // The one place the title-rank comparison is applied, so every caller agrees on who may rename what. A rename
     // always lands, even a second one; anything else must strictly outrank what's there, or only add its action.
-    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource, action?: string, topic?: string): boolean => {
+    const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource, action?: string): boolean => {
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
         if (entry === undefined || clean === undefined) {
@@ -530,14 +530,11 @@ export const createFleet = (
         if (source !== "user" && !automaticMayWrite(held, clean, source, action)) {
             return false;
         }
-        // A new title rewords the work far more often than it moves it (a rename, a plan's heading), so one that names no
-        // topic keeps the one it had.
-        const label = topic ?? held?.topic;
-        if (held?.text === clean && held.source === source && held.action === action && held.topic === label) {
+        if (held?.text === clean && held.source === source && held.action === action) {
             return false;
         }
         // A title from a source that names no action loses the previous one's category.
-        replace({ ...entry, social: { ...entry.social, title: { text: clean, source, ...opt("action", action), ...opt("topic", label) } } });
+        replace({ ...entry, social: { ...entry.social, title: { text: clean, source, ...opt("action", action) } } });
         return true;
     };
 
@@ -931,11 +928,11 @@ export const createFleet = (
             broadcast();
             return touched.map((entry) => entry.id);
         },
-        setTitle: async (id, title, source, action, topic) => {
+        setTitle: async (id, title, source, action) => {
             if (entryOf(id) === undefined || sanitizeTitle(title) === undefined) {
                 return undefined;
             }
-            if (promoteTitle(id, title, source, action, topic)) {
+            if (promoteTitle(id, title, source, action)) {
                 await persist();
                 broadcast();
             }

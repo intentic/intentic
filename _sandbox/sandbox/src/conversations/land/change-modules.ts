@@ -1,12 +1,12 @@
 import type { GitChange, WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
 import { moduleOf } from "@intentic/sandbox-contract/models/module-of";
 
-// WHICH PACKAGES A CONVERSATION'S CHANGES FALL IN, for the card: the board colours a session by the package it works in
-// and names it above the title, so two sessions on the same view read as kin at a glance. Read off the very changes the
+// WHICH PACKAGES A CONVERSATION'S CHANGES FALL IN, for the card: the board colours a session's tile by the package it
+// works in, so two sessions in the same package read as kin at a glance. Read off the very changes the
 // diff stat counts, bucketed by the rule the review panel groups the same files by (moduleOf), so the card's count,
 // its package and the review's headings can't disagree.
 
-// How many the card is given. One colours it, the rest only say "and more".
+// How many the card is given, most-changed first; the first colours it.
 const MODULES_SHOWN = 3;
 
 export interface DiffStat {
