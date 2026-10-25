@@ -39,6 +39,7 @@ on:
           - install-urls
           - demo-live
           - provider-canary
+          - verify-providers
           - update-survival
           - mobile
           - tidy
@@ -738,7 +739,9 @@ jobs:
   # It is deliberately NOT a gate on anything. Nothing in this repository ships `@latest`, so a failing canary must
   # never be able to stop a release that is pinned to a version still passing in CI.
   provider-canary:
-    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'provider-canary' }}
+    # On demand, the same image and steps can replay CI's pinned gate alone.
+    name: ${{ inputs.only == 'verify-providers' && 'verify-providers' || 'provider-canary' }}
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'provider-canary' || inputs.only == 'verify-providers' }}
     runs-on: [self-hosted, intentic]
     container:
       image: ghcr.io/intentic/ci-base:latest
@@ -749,19 +752,26 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 30
     # Reports; it does not gate — see above. The nightly's own summary is where a failing canary is read.
-    continue-on-error: true
+    continue-on-error: ${{ inputs.only != 'verify-providers' }}
     env:
       # Not the shared /ci-cache prefix the pinned gate uses: installing @latest there would leave the next
       # verify-providers run resolving a module the packs never pinned, and the gate would quietly stop
       # testing the shipped article.
-      INTENTIC_CURSOR_SDK_DIR: /ci-cache/cursor-sdk-latest
+      INTENTIC_CURSOR_SDK_DIR: ${{ inputs.only == 'verify-providers' && '/ci-cache/cursor-sdk' || '/ci-cache/cursor-sdk-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           clean: false
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/ci/install-provider-clis.sh --latest
+      - run: |
+          if [ "$PINNED" = "true" ]; then
+            bash _tools/scripts/ci/install-provider-clis.sh
+          else
+            bash _tools/scripts/ci/install-provider-clis.sh --latest
+          fi
+        env:
+          PINNED: ${{ inputs.only == 'verify-providers' }}
       # The versions that were actually tested, printed into the log: a failing canary is only actionable if the
       # run says which release it failed against.
       - run: pnpm e2e:providers
