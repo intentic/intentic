@@ -137,7 +137,7 @@ const signInThroughTheApp = async (
     await window.goto(`${web}/`);
     await expect(window).toHaveURL(/\/home$/u);
     expect(await signedInAs(webview)).toBeUndefined();
-    await window.getByRole(`link`, { name: LABELS.signIn, exact: true }).click();
+    await window.locator(`[data-home-no-sandbox]`).getByRole(`link`, { name: LABELS.signIn, exact: true }).click();
     await expect(window).toHaveURL(/\/login/u);
     await window.getByRole(`button`, { name: LABELS.continueInBrowser }).click();
     await appHears.next(`intentic://signin`);
