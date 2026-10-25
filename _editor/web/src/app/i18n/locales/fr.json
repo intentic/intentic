@@ -13060,7 +13060,6 @@
             "landed": "Intégré",
             "waiting": "En attente"
         },
-        "offline": "Ce sandbox n’est pas connecté.",
         "retry": "Réessayer",
         "open": "Tous les sandboxes",
         "noSandboxTitle": "Commencez par un sandbox",
@@ -13072,8 +13071,6 @@
         "heldConflict": "Son travail entre en conflit avec l’espace de travail : demandez-lui de le résoudre, puis il sera intégré.",
         "heldForYou": "Son travail est en attente que vous l’intégriez.",
         "heldForMaintainer": "Son travail est en attente qu’un mainteneur l’intègre.",
-        "starting": "Démarrage de {name}…",
-        "offlineHint": "Ouvrez-le pour voir ce qui ne va pas, ou choisissez un autre sandbox.",
         "firstRun": {
             "create": "Créer un sandbox",
             "finish": "Terminer la configuration de {name}",

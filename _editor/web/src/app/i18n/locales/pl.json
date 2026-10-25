@@ -13060,7 +13060,6 @@
             "landed": "Wprowadzone",
             "waiting": "Oczekuje"
         },
-        "offline": "Ten sandboks nie jest połączony.",
         "retry": "Spróbuj ponownie",
         "open": "Wszystkie sandboksy",
         "noSandboxTitle": "Zacznij od sandboksa",
@@ -13072,8 +13071,6 @@
         "heldConflict": "Jej praca koliduje z obszarem roboczym: poproś ją o rozwiązanie konfliktu, a potem zostanie scalona.",
         "heldForYou": "Jej praca czeka, aż ją scalisz.",
         "heldForMaintainer": "Jej praca czeka, aż scali ją opiekun.",
-        "starting": "Uruchamianie {name}…",
-        "offlineHint": "Otwórz go, aby zobaczyć, co jest nie tak, albo wybierz inny sandboks.",
         "firstRun": {
             "create": "Utwórz sandboks",
             "finish": "Dokończ konfigurację {name}",

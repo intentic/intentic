@@ -18,6 +18,8 @@ import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import { useWorkspaceTree } from "../../models/workspace/tree/useWorkspaceTree";
 import { useSandboxAvailability } from "../sandbox/overview/useSandboxAvailability";
+import SandboxConnecting from "../sandbox/gates/SandboxConnecting.vue";
+import SandboxWarming from "../sandbox/gates/SandboxWarming.vue";
 
 const t = useT();
 const sandbox = useSandbox();
@@ -41,11 +43,12 @@ onUnmounted(() => {
     homeConversation.value = undefined;
     homeShownFor.value = undefined;
 });
-// While the sandbox is not answering: on its way up (a machine waking, a container starting) or not, which opening the
-// sandbox explains in full (the sandbox's own gate) rather than this line.
+// Until the home conversation opens, the home stands the sandbox's own gate pages in front of it (SandboxGate.vue): the
+// boot chain with its steps while the daemon answers but is still converging, and the wait with its progress, diagnosis
+// and ways back while it does not answer at all (a machine waking, a container starting, or something wrong).
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
-const comingUp = computed(() => [`starting`, `warming`, `busy`].includes(availability.value));
+const warming = computed(() => sandbox.reachable.value && availability.value === `warming`);
 const ledger = computed(() => (conversation.value === undefined ? [] : workLedger(registry.value, conversation.value.conversationId, now.value)));
 // What the home holds back: its work, when a landing rule kept it or its person may not land (`ready`), or a clash with
 // the workspace (`conflict`). Who may press Land is who the home lands for (useRole `canLandHome`), the same answer the
@@ -148,16 +151,12 @@ watch(
                 :closable="false"
             />
         </div>
+        <div v-else-if="!sandbox.reachable.value || warming" class="flex min-h-0 flex-1 overflow-auto">
+            <SandboxWarming v-if="warming" />
+            <SandboxConnecting v-else />
+        </div>
         <div v-else class="flex flex-1 items-start justify-center p-6">
-            <p v-if="!sandbox.reachable.value && comingUp" class="flex items-center gap-2 text-sm text-muted" role="status">
-                <Icon name="spinner" spin class="text-xs text-info" aria-hidden="true" />
-                {{ t(`home.starting`, { name: sandbox.active.value?.name ?? `` }) }}
-            </p>
-            <div v-else-if="!sandbox.reachable.value" class="flex max-w-md flex-col gap-1 text-sm" role="status">
-                <p class="text-content">{{ t(`home.offline`) }}</p>
-                <p class="text-muted">{{ t(`home.offlineHint`) }}</p>
-            </div>
-            <p v-else class="text-sm text-muted" role="status">
+            <p class="text-sm text-muted" role="status">
                 {{ failure ? t(`home.failed`) : t(`home.loading`) }}
                 <button v-if="failure" type="button" class="ml-3 underline" @click="retry++">{{ t(`home.retry`) }}</button>
             </p>
