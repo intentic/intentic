@@ -10,7 +10,13 @@ import { IconStub } from "@intentic/ui/testing";
 // Settings already loaded and sandbox reachable, so the blocked notice never renders.
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
 jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
-    useSandboxSettings: () => ({ settings: ref({}), error: ref(undefined), dropped: ref(undefined), patch: async () => undefined }),
+    useSandboxSettings: () => ({
+        settings: ref({}),
+        loaded: ref({ state: `ready`, data: {} }),
+        error: ref(undefined),
+        dropped: ref(undefined),
+        patch: async () => undefined,
+    }),
 }));
 
 // A mock.module specifier must be a literal string, so the group list cannot be looped over.
@@ -20,6 +26,11 @@ jest.mock(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instruct
 jest.mock(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
 jest.mock(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
 jest.mock(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
+jest.mock(`../agent-settings/behaviour/AgentChatPages.vue`, () => stub(`Chat pages`));
+jest.mock(`../agent-settings/behaviour/AgentVoice.vue`, () => stub(`Voice`));
+jest.mock(`../agent-settings/behaviour/AgentDocumentSearch.vue`, () => stub(`Document search`));
+jest.mock(`../agent-settings/behaviour/AgentToolLoading.vue`, () => stub(`Tool loading`));
+jest.mock(`../agent-settings/behaviour/AgentClock.vue`, () => stub(`Clock`));
 jest.mock(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
 jest.mock(`../agent-settings/behaviour/AgentRepoChecks.vue`, () => stub(`Checks after edits`));
 jest.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
@@ -40,7 +51,11 @@ const EVERY_GROUP = [
     `Skills`,
     `Memory`,
     `Memory import`,
+    `Chat pages`,
+    `Voice`,
+    `Document search`,
     `Code search`,
+    `Tool loading`,
     `Checks after edits`,
     `Command output`,
     `Subagents`,
@@ -49,6 +64,7 @@ const EVERY_GROUP = [
     `After work lands`,
     `Finished work`,
     `Changelog`,
+    `Clock`,
 ];
 
 const { default: SandboxAgent } = await import("./SandboxAgent.vue");
@@ -140,7 +156,17 @@ it(`sends an old Safety link to Guardrails`, async () => {
 
 it(`holds delegation under tools`, async () => {
     const { el } = await mount({ section: `tools` });
-    expect(shown(el)).toEqual([`Code search`, `Command output`, `Checks after edits`, `Subagents`, `Where heavy work runs`]);
+    expect(shown(el)).toEqual([
+        `Chat pages`,
+        `Voice`,
+        `Document search`,
+        `Code search`,
+        `Command output`,
+        `Tool loading`,
+        `Checks after edits`,
+        `Subagents`,
+        `Where heavy work runs`,
+    ]);
 });
 
 it(`says under finished work that deleting is Retention's`, async () => {
@@ -164,7 +190,7 @@ it(`writes the picked category to the address, and the default writes no param`,
     const { el, router } = await mount();
     pill(el, `Finishing`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
-    expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Changelog`, `When a turn breaks`]);
+    expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Changelog`, `When a turn breaks`, `Clock`]);
 
     pill(el, `Jobs`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());

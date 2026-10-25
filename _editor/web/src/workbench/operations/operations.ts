@@ -249,7 +249,7 @@ const announce = <T, F extends OperationFailure, P>(entry: Entry, options: RunOp
 };
 
 // A view comes onto the screen over `address`: what already ended there is now seen.
-const watch_ = (address: string): void => {
+const watchAddress = (address: string): void => {
     watching.set(address, (watching.get(address) ?? 0) + 1);
     for (const [at, entry] of entries) {
         if (within(address, at) && entry.state !== `running` && !entry.seen) {
@@ -312,7 +312,7 @@ export const useOperations = <T = void, F extends OperationFailure = NoticeModel
             if (previous !== undefined) {
                 unwatch(previous);
             }
-            watch_(next);
+            watchAddress(next);
         },
         { immediate: true },
     );
