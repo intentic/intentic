@@ -65,6 +65,11 @@ _site/demo/vendor/extensions
 # Benchmark output — every iq-bench run writes a timestamped dir here; the datasets are the input worth keeping.
 _search/iq-bench/results
 
+# Per-run navigation snapshots; the tracked baseline/head pair remains available for comparison.
+_tools/nav/baselines/
+# Generated verbatim by scripts/preview-setup.mjs before starting the desktop preview.
+_editor/desktop-app/.preview-setup/
+
 # env / secrets
 **/.env
 **/.env.local

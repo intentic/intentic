@@ -107,8 +107,7 @@
                 "scripts/*.sh",
                 "scripts/*.mjs",
                 "src/**/*.test.{ts,mts,mjs}",
-                "local/**/*.test.ts",
-                ".preview-setup/main.ts"
+                "local/**/*.test.ts"
             ],
             // Orders the local-files build before the app's, which bundles its binary.
             "ignoreDependencies": ["@intentic/local-files"]
