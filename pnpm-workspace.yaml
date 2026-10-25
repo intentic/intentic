@@ -129,23 +129,23 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.308'
-  - '@anthropic-ai/claude-agent-sdk@0.3.308'
+  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.310'
+  - '@anthropic-ai/claude-agent-sdk@0.3.310'
   - image-size@2.0.4
-  - "@opencode/client@2.1.3"
-  - "@opencode/protocol@2.1.3"
-  - "@opencode/schema@2.1.3"
+  - "@opencode/client@2.1.4"
+  - "@opencode/protocol@2.1.4"
+  - "@opencode/schema@2.1.4"
   - undici@6.29.0
   - monaco-editor-core@0.57.0
   - "@posthog/core@1.56.0"
-  - "@muse-code/sdk@1.4.11"
+  - "@muse-code/sdk@1.4.13"
   - marked@18.1.0
   - posthog-js@1.436.1
   - "@oven/bun-darwin-aarch64@1.4.4"
@@ -212,7 +212,7 @@ catalogPrune: true
 # what lets the overrides above dedupe rather than add.
 catalog:
   "@agentclientprotocol/sdk": 2.0.2
-  "@anthropic-ai/claude-agent-sdk": 0.3.308
+  "@anthropic-ai/claude-agent-sdk": 0.3.310
   "@astrojs/check": 0.9.10
   "@astrojs/sitemap": 3.7.4
   "@commitlint/cli": 21.2.3
@@ -236,9 +236,9 @@ catalog:
   # Meta's MSP client for Muse Code (runtimes/muse in the daemon). MIT, zero runtime deps, and versioned in lockstep
   # with the Muse Code release it speaks to: engines.json blesses the matching CLI build (1.4.6-R…), and
   # _tools/scripts/engines/engine-pins.mjs reads this line as the version it tracks.
-  "@muse-code/sdk": 1.4.11
-  "@openai/codex-sdk": 0.163.0
-  "@opencode/client": 2.1.3
+  "@muse-code/sdk": 1.4.13
+  "@openai/codex-sdk": 0.164.0
+  "@opencode/client": 2.1.4
   "@opentelemetry/api": 1.10.0
   "@opentelemetry/context-async-hooks": 3.0.0
   "@opentelemetry/core": 3.0.0
