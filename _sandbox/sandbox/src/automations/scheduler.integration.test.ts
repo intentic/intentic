@@ -1153,6 +1153,8 @@ test("a schedule fire carries the automation's allowedTools into the turn, read 
     await scheduler.tick(pastDue());
     await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
     expect(turns[0]?.allowedTools).toEqual(["Read"]);
+    // Seeing the input only means the detached schedule fire started; finish it before the next fire can be admitted.
+    await automationIdle("narrowed", services);
 
     // A record captured before the owner narrowed it further still fires on the narrower list.
     const stale = await saved(services, "narrowed");
