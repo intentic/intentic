@@ -225,7 +225,7 @@
     "devDependencies": {
         "@intentic/constants": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vue-tsc": "catalog:"
     }
 }

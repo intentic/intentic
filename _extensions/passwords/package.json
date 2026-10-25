@@ -32,7 +32,7 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "primevue": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vue": "catalog:",
         "vue-tsc": "catalog:"
     },

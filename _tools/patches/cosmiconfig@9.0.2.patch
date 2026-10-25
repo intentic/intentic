@@ -1,0 +1,22 @@
+diff --git a/dist/loaders.js b/dist/loaders.js
+index f0f6d8794284dca02d808430d44b406cb215617c..94c7d23a9a69cc45db02841c4f5261cea6b6ac87 100644
+--- a/dist/loaders.js
++++ b/dist/loaders.js
+@@ -73,7 +73,7 @@ let typescript;
+ const loadTsSync = function loadTsSync(filepath, content) {
+     /* istanbul ignore next -- @preserve */
+     if (typescript === undefined) {
+-        typescript = require('typescript');
++        typescript = require('@typescript/typescript6');
+     }
+     const compiledFilepath = `${filepath}.${(0, crypto_1.randomUUID)()}.cjs`;
+     try {
+@@ -102,7 +102,7 @@ const loadTsSync = function loadTsSync(filepath, content) {
+ exports.loadTsSync = loadTsSync;
+ const loadTs = async function loadTs(filepath, content) {
+     if (typescript === undefined) {
+-        typescript = (await import('typescript')).default;
++        typescript = (await import('@typescript/typescript6')).default;
+     }
+     const compiledFilepath = `${filepath}.${(0, crypto_1.randomUUID)()}.mjs`;
+     let transpiledContent;

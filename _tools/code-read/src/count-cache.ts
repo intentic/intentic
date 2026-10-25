@@ -67,7 +67,7 @@ let reading: string | undefined;
 /**
  * What a count depends on besides its two texts, as one digest: the content of the code-read build this process runs
  * (every file, any depth) and the installed version of each of its dependencies (shiki and its grammars). Hashed at
- * load rather than written by `pnpm build`, since `tsgo -b` (the declarations emit every check runs first) rebuilds
+ * load rather than written by `pnpm build`, since `tsc -b` (the declarations emit every check runs first) rebuilds
  * dist without that script, and an id file left beside newer output would key it as the old build.
  */
 export const readingId = (): string => (reading ??= readingIdOf(here, join(here, "..", "package.json")));

@@ -137,7 +137,7 @@ export const programOf = (command: string): string | undefined => {
     return PROGRAM_PATTERNS.find(([, pattern]) => pattern.test(value))?.[0];
 };
 
-// A turn's build, test or typecheck and the package manager driving it; `tsgo --lsp` is a language server instead.
+// A turn's build, test or typecheck and the package manager driving it; native TypeScript's --lsp serves the editor.
 const TOOLCHAIN = [
     "vue-tsc",
     "vitest",
@@ -155,8 +155,13 @@ const TOOLCHAIN = [
     "yarn",
     "bun",
 ].map(programPattern);
-const TSGO = /(^|[ /])tsgo([ .]|$)/u;
-const isToolchain = (value: string): boolean => TOOLCHAIN.some((pattern) => pattern.test(value)) || (TSGO.test(value) && !/--lsp\b/u.test(value));
+const NATIVE_COMPILER = /(^|[ /])(?:tsgo|tsc)([ .]|$)/u;
+const isToolchain = (value: string): boolean => {
+    if (NATIVE_COMPILER.test(value) && /(?:^| )--lsp(?: |$)/u.test(value)) {
+        return false;
+    }
+    return TOOLCHAIN.some((pattern) => pattern.test(value)) || NATIVE_COMPILER.test(value);
+};
 
 // A nested container's process, by the cgroup it sits in, or the engine that runs it, by name.
 const CONTAINER_CGROUP = /[/]docker[/]/u;
@@ -168,7 +173,7 @@ const LOCAL_MODEL = /(^|[ /-])(llama-server|llama-cli|llamafile|ollama|speech-wo
 const BROWSER = /chrom(e|ium)|firefox|webkit|playwright|browser-mcp|browser_server/u;
 const LANGUAGE_SERVER =
     /typescript-language-server|tsserver|rust-analyzer|pyright|pylsp|gopls|clangd|jdtls|solargraph|intelephense|language-server|lsp-daemon/u;
-const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])tsgo([ .]|$)/u;
+const OWN_LANGUAGE_SERVER = /@intentic[/]lsp|_search[/]lsp|[/]lsp[/]dist[/]cli|(^|[ /])lsp([ /]|$)|(^|[ /])(?:tsgo|tsc)([ .]|$)/u;
 // Its own role, not `other`: a long-lived index host with a heap cap of its own, whose growth `other` would hide.
 const SEARCH_ENGINE = /iq-engine|(^|[ /])iq([ /]|$)/u;
 const TRANSLATOR = /cli-proxy-api|endpoint-translator|translator-proxy/u;
@@ -177,7 +182,7 @@ const GIT = /git.*fork.*broker|(^|[ /])git([ /]|$)/u;
 const AGENT_RUNTIME = /(^|[ /])(claude|codex|opencode|gemini|kimi|devin)([ /]|$)|agent-runtime/u;
 const TERMINAL = /(^|[ /])(tmux|bash|zsh|fish|sshd)([ :/]|$)/u;
 
-// Order matters: an engine before what it runs, a one-shot tsgo before the language server it can also be.
+// Order matters: an engine before what it runs, a one-shot compiler before the language server it can also be.
 const ROLE_RULES: readonly (readonly [ProcessRole, (value: string) => boolean])[] = [
     ["container", (value) => CONTAINER.test(value)],
     ["browser", (value) => BROWSER.test(value)],

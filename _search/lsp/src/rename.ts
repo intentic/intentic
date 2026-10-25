@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { escapeRegExp } from "@intentic/base/escape";
 import { findTsconfig } from "./checker.js";
 import { LspSession } from "./lsp-rpc.js";
-import { tsgoExePath } from "./tsgo.js";
+import { compilerExePath } from "./compiler.js";
 
 // Project-wide rename via the native compiler's language server, the same edit VS Code runs.
 // The CLI names a symbol, not a position: the outline's first matching declaration anchors it, or else a lexical scan
@@ -137,7 +137,7 @@ export const rename = async (file: string, symbol: string, newName: string): Pro
     const text = readFileSync(file, "utf8");
     const uri = pathToFileURL(file).href;
     const rootDir = dirname(findTsconfig(file) ?? file);
-    const session = new LspSession(tsgoExePath(), ["--lsp", "--stdio"], rootDir);
+    const session = new LspSession(compilerExePath(), ["--lsp", "--stdio"], rootDir);
     try {
         await session.request(
             "initialize",

@@ -6,9 +6,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "tsgo",
+        "build": "tsc",
         "typecheck": "bun check -p tsconfig.test.json",
-        "watch": "tsgo --build --watch",
+        "watch": "tsc --build --watch",
         "test": "suites",
         "test:watch": "suites --watch",
         "bench:retrieval": "node dist/cli.js retrieval",
@@ -26,6 +26,6 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:"
+        "typescript": "catalog:"
     }
 }

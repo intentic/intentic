@@ -44,7 +44,7 @@ flowchart LR
 ## Commands
 
 ```sh
-pnpm --filter @intentic/ext-prawo build   # tsgo to dist/, which bin/prawo runs
+pnpm --filter @intentic/ext-prawo build   # tsc to dist/, which bin/prawo runs
 pnpm --filter @intentic/ext-prawo test    # no network: every request is answered from src/fixtures
 prawo search "o dowodach osobistych" --type Ustawa
 prawo show DU/1960/168

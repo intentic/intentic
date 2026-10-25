@@ -35,6 +35,6 @@ flowchart LR
 ## Commands
 
 ```sh
-pnpm --filter @intentic/gate-action build   # tsgo, then the bundle at dist/index.mjs
+pnpm --filter @intentic/gate-action build   # tsc, then the bundle at dist/index.mjs
 pnpm --filter @intentic/gate-action test
 ```

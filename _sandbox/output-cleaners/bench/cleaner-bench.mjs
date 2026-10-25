@@ -116,7 +116,7 @@ const FIXTURES = [
     },
     {
         name: "tsc failure",
-        command: "cd /work/intentic && ./node_modules/.bin/tsgo --noEmit",
+        command: "cd /work/intentic && ./node_modules/.bin/tsc --noEmit",
         exitCode: "1",
         raw: `${[...Array.from({ length: 20 }, (_, i) => `src/ok-${i}.ts building`), "src/broken.ts(12,3): error TS2322: Type 'string' is not assignable to type 'number'.", "src/broken.ts(19,7): error TS2551: Property 'x' does not exist.", "Found 2 errors."].join("\n")}\n`,
     },

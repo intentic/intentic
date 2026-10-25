@@ -36,7 +36,7 @@
         "@intentic/testing": "workspace:*",
         "@types/bun": "catalog:",
         "playwright": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vite": "catalog:",
         "wrangler": "catalog:"
     }

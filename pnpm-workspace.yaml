@@ -59,7 +59,17 @@ audit:
   level: moderate
   ignorePrune: true
 
+# Its .ts config loader calls the JavaScript compiler API. The patch imports the official legacy wrapper
+# explicitly: pnpm binds the optional TypeScript peer to root 7 even when a legacy dependency is added beside it.
+packageExtensions:
+  cosmiconfig@9.0.2:
+    dependencies:
+      "@typescript/typescript6": 6.0.2
+
 overrides:
+  # The official legacy API wrapper uses an alias with a ^6 range. Keep its implementation aligned with
+  # the Vue/Astro compatibility catalog rather than letting it resolve a separate compiler patch.
+  "@typescript/typescript6>@typescript/old": "npm:typescript@6.0.3"
   # The versioned UI patches route control icons to Icon and render diagram SVGs natively.
   "primevue>@primevue/icons": "-"
   "mermaid>@iconify/utils": "-"
@@ -292,7 +302,7 @@ catalog:
   "@types/ssh2": 1.15.6
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.2
-  "@typescript/native-preview": 7.0.0-dev.20260707.2
+  "@typescript/typescript6": 6.0.2
   "@vitejs/plugin-vue": 6.0.10
   "@vue-flow/core": 1.48.2
   # The e-urzad extension's signature verifier (XAdES, PAdES, CAdES): CMS, timestamps and certificate chains through
@@ -414,9 +424,9 @@ catalog:
   testcontainers: 12.2.1
   tsx: 4.23.15
   turbo: 2.11.7
-  # v7's root exports only version metadata; nav/contract scripts still use the compiler API, and vue-tsc patches
-  # the legacy tsc shim. Keep this paired with the native-preview compiler until those consumers can migrate together.
-  typescript: 6.0.3
+  # The released native compiler replaces tsgo. Compiler-API scripts use @typescript/typescript6 explicitly;
+  # Vue and Astro keep the typescript6 catalog below until their checkers support the native compiler.
+  typescript: 7.0.2
   # fileq's pdf deriver: a serverless pdf.js build that extracts text layers in plain Node — no worker, no
   # canvas, no DOM shims — at a fraction of pdfjs-dist's install.
   unpdf: 1.9.1
@@ -441,7 +451,13 @@ catalog:
   '@axe-core/playwright': 4.13.0
   playwright-core: 1.64.1
 
+# These checkers require the JavaScript compiler API and cannot consume TypeScript 7's native launcher yet.
+catalogs:
+  typescript6:
+    typescript: 6.0.3
+
 patchedDependencies:
   primevue@4.5.5: _editor/ui/patches/primevue@4.5.5.patch
   mermaid@12.2.0: _editor/ui/patches/mermaid@12.2.0.patch
   monaco-editor-core@0.57.0: _editor/ui/patches/monaco-editor-core@0.57.0.patch
+  cosmiconfig@9.0.2: _tools/patches/cosmiconfig@9.0.2.patch

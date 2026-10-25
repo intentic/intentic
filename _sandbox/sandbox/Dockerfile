@@ -420,7 +420,7 @@ COPY --from=trees netd /opt/sandbox/netd
 #
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
-# bundled @typescript/native-preview binary) over whatever tsconfig project the agent points it at in /work.
+# bundled TypeScript 7 native binary) over whatever tsconfig project the agent points it at in /work.
 # Every question — `lsp diag`, `lsp rename`, and the sandbox's post-edit hook — is a fresh compiler run that
 # answers and exits; nothing stays resident, so a workspace pays memory only while a check is actually running.
 #

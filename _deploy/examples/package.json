@@ -4,8 +4,8 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "tsgo",
-        "watch": "tsgo --build --watch"
+        "build": "tsc",
+        "watch": "tsc --build --watch"
     },
     "dependencies": {
         "@intentic/graph": "workspace:*",
@@ -13,6 +13,6 @@
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
-        "@typescript/native-preview": "catalog:"
+        "typescript": "catalog:"
     }
 }

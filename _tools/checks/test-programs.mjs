@@ -7,7 +7,7 @@
 //    (`.integration.`/`.e2e.`), even through an imported fixture module
 // 2. every package running `suites` preloads the shared budget through its bunfig.toml, and every preload it names
 //    exists
-// 3. an emitted package's tsconfig references every emitted package it depends on, so `tsgo -b` builds them in order
+// 3. an emitted package's tsconfig references every emitted package it depends on, so `tsc -b` builds them in order
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { INTEGRATION_NAME } from "../constants/src/test-suites.mjs";
@@ -162,7 +162,7 @@ const unreferenced = [];
             .map((dependency) => `${dependency} (${emitted.get(dependency)})`);
         if (missing.length > 0) {
             unreferenced.push(
-                `${name}: depends on ${missing.join(", ")} but its tsconfig.json references no such project, so \`tsgo -b\` may build it against a stale dist`,
+                `${name}: depends on ${missing.join(", ")} but its tsconfig.json references no such project, so \`tsc -b\` may build it against a stale dist`,
             );
         }
     }
@@ -177,6 +177,6 @@ finish(
     [
         "typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one",
         "test budgets: every package running suites preloads the shared budget, and every preload it names exists",
-        "references: every emitted package names the emitted packages it depends on, so tsgo -b builds them first",
+        "references: every emitted package names the emitted packages it depends on, so tsc -b builds them first",
     ],
 );

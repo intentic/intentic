@@ -16,7 +16,7 @@ flowchart LR
 - `deploy.config.ts` is the canonical example: Forgejo and Komodo on your own host, with users, teams and an app
   shipped to two environments. `deploy.github.config.ts` and `deploy.gitlab.config.ts` hand source, CI and the
   registry to GitHub or GitLab while Komodo still rolls out on the host.
-- `pnpm build` type-checks them with `tsgo`, so an SDK change that breaks an example breaks the build. The deploy
+- `pnpm build` type-checks them with `tsc`, so an SDK change that breaks an example breaks the build. The deploy
   packages' test fixtures mirror `deploy.config.ts`.
 - Nothing imports these files: they are for reading and copying.
 

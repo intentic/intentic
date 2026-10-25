@@ -6,15 +6,15 @@ import { dirname, join } from "node:path";
 
 let cached: string | undefined;
 
-export const tsgoExePath = (): string => {
+export const compilerExePath = (): string => {
     if (cached !== undefined) {
         return cached;
     }
     const here = createRequire(import.meta.url);
-    const preview = here.resolve("@typescript/native-preview/package.json");
-    const platform = `@typescript/native-preview-${process.platform}-${process.arch}`;
-    const platformPkg = createRequire(preview).resolve(`${platform}/package.json`);
-    const exe = join(dirname(platformPkg), "lib", process.platform === "win32" ? "tsgo.exe" : "tsgo");
+    const compiler = here.resolve("typescript/package.json");
+    const platform = `@typescript/typescript-${process.platform}-${process.arch}`;
+    const platformPkg = createRequire(compiler).resolve(`${platform}/package.json`);
+    const exe = join(dirname(platformPkg), "lib", process.platform === "win32" ? "tsc.exe" : "tsc");
     if (!existsSync(exe)) {
         throw new Error(`the native TypeScript compiler is not installed for this platform (${exe} does not exist)`);
     }

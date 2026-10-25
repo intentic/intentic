@@ -43,10 +43,10 @@
         }
     },
     "scripts": {
-        "build": "tsgo",
+        "build": "tsc",
         "typecheck": "bun check -p tsconfig.test.json",
-        "watch": "tsgo --build --watch",
-        "schema": "tsgo && node scripts/write-schema.mjs",
+        "watch": "tsc --build --watch",
+        "schema": "tsc && node scripts/write-schema.mjs",
         "test": "suites",
         "test:watch": "suites --watch"
     },
@@ -59,6 +59,6 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:"
+        "typescript": "catalog:"
     }
 }

@@ -28,7 +28,7 @@
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vue": "catalog:",
         "vue-tsc": "catalog:"
     },

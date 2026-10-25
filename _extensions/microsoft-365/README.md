@@ -95,7 +95,7 @@ token from its own authorization-code sign-in in **Sign-in**; `m365 auth login` 
 ## Commands
 
 ```sh
-pnpm --filter @intentic/ext-microsoft-365 build      # tsgo to dist/, which bin/m365 and the watcher run
+pnpm --filter @intentic/ext-microsoft-365 build      # tsc to dist/, which bin/m365 and the watcher run
 pnpm --filter @intentic/ext-microsoft-365 test       # Graph and Microsoft's sign-in are mocked; nothing goes out
 pnpm --filter @intentic/ext-microsoft-365 typecheck
 ```

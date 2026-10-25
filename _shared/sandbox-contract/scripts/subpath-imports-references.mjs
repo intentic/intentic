@@ -1,7 +1,7 @@
 // The half of subpath-imports.mjs that reads the barrel where it is named outside an import or export declaration: a
 // dynamic `import(…)`, a mock factory, a generator's template of an import line, an `import(…)` type, and a namespace
 // import read off across the file. Each moves to the one module its names come from or is listed for a person.
-import ts from "typescript";
+import ts from "@typescript/typescript6";
 
 // A string holding an import line of the barrel, as a generator writes one.
 const WRITTEN_IMPORT = /^\s*(?:import|export)\b[^\n]*\bfrom\s*["'`]@intentic\/sandbox-contract["'`];?\s*$/;

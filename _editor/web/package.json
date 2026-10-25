@@ -83,7 +83,7 @@
         "mermaid": "catalog:",
         "sharp": "catalog:",
         "tailwindcss": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vite": "catalog:",
         "vue-tsc": "catalog:"
     }

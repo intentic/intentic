@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 
-// Minimal LSP-over-stdio client, enough protocol to hold one short conversation with `tsgo --lsp` and hang up.
+// Minimal LSP-over-stdio client, enough protocol to hold one short conversation with `tsc --lsp` and hang up.
 // Not a language-server host: nothing stays running or watches files; server-initiated requests get null answers.
 
 interface Pending {

@@ -34,9 +34,9 @@
         }
     },
     "scripts": {
-        "build": "tsgo",
+        "build": "tsc",
         "typecheck": "bun check -p tsconfig.test.json",
-        "watch": "tsgo --build --watch",
+        "watch": "tsc --build --watch",
         "test": "suites",
         "test:watch": "suites --watch",
         "e2e": "INTENTIC_E2E=1 suites cli.e2e",
@@ -65,7 +65,7 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
-        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
         "ssh2": "catalog:",
         "testcontainers": "catalog:",
         "tsx": "catalog:",

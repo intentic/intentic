@@ -65,8 +65,8 @@
         "./surface.json": "./src/surface.json"
     },
     "scripts": {
-        "build": "tsgo",
-        "watch": "tsgo --build --watch",
+        "build": "tsc",
+        "watch": "tsc --build --watch",
         "typecheck": "bun check -p tsconfig.test.json",
         "test": "suites"
     },
@@ -91,7 +91,7 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
         "vue": "catalog:",
         "zod": "catalog:"
     }

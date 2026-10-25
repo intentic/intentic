@@ -21,7 +21,7 @@ import { root, subjectScope } from "./lib/repo.mjs";
 // Ignored on purpose and written before anything imports them, each with what writes it. A path ending in `/` is the
 // whole directory a generator owns. Name a file here only with the script that writes it before its first import.
 const GENERATED = new Map([
-    ["_platform/prisma/generated/", "`prisma generate`, which @intentic/prisma's build and generate scripts run before tsgo compiles client.ts"],
+    ["_platform/prisma/generated/", "`prisma generate`, which @intentic/prisma's build and generate scripts run before tsc compiles client.ts"],
 ]);
 
 // A `dist/` directory is what a build writes and holds no source, so an import reaching into one runs after the build

@@ -27,7 +27,7 @@ ROOT="$(cd "$SCRIPT_DIR" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/pnpm-workspace.yaml" ]; do ROOT="$(dirname "$ROOT")"; done
 
 # Bind the compiled JS from the working tree over the copies baked into the image, so a later daemon edit
-# needs only `tsgo` + `docker restart` (dev-restart.sh, seconds) instead of a full image rebuild (minutes).
+# needs only `tsc` + `docker restart` (dev-restart.sh, seconds) instead of a full image rebuild (minutes).
 # Skipped silently when node isn't on PATH or nothing is compiled yet — the container then runs the baked
 # copies, which is exactly the old behaviour. See dev-mounts.mjs for what is mounted and why node_modules
 # never is.

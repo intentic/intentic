@@ -34,7 +34,7 @@
         "@vitejs/plugin-vue": "catalog:",
         "shiki": "catalog:",
         "tailwindcss": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vite": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"

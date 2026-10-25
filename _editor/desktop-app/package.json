@@ -56,7 +56,7 @@
         "sharp": "catalog:",
         "shiki": "catalog:",
         "tailwindcss": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vite": "catalog:",
         "vue-tsc": "catalog:"
     }

@@ -19,15 +19,15 @@
         "./client": "./dist/client.js"
     },
     "scripts": {
-        "build": "tsgo",
+        "build": "tsc",
         "typecheck": "bun check -p tsconfig.test.json",
-        "watch": "tsgo --build --watch",
+        "watch": "tsc --build --watch",
         "test": "suites",
         "test:watch": "suites --watch"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
-        "@typescript/native-preview": "catalog:"
+        "typescript": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

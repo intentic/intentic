@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Compiles every package a check or test imports before either runs, via `tsgo -b` directly rather than through pnpm's
+// Compiles every package a check or test imports before either runs, via `tsc -b` directly rather than through pnpm's
 // build (which hardlinks into `node_modules` and dies EXDEV in an agent worktree, a separate filesystem). Lets `pnpm
 // test` skip the `^build` turbo edge and still import a current dist.
 import { spawnSync } from "node:child_process";
@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { emitsDist, packages, root } from "../../checks/lib/repo.mjs";
 
 // Needs declarations only if `exports` hand a dependent a `dist/` module a compiler reads, not `./src/...`.
-// `_shared/extension-ui` re-exports `@intentic/ui`, which `tsgo -b` can't walk; its own `build` emits its declarations.
+// `_shared/extension-ui` re-exports `@intentic/ui`, which `tsc -b` can't walk; its own `build` emits its declarations.
 const BUILT_BY_VUE_TSC = new Set(["_shared/extension-ui"]);
 const needsDeclarations = packages.filter(({ name, pkg }) => !BUILT_BY_VUE_TSC.has(name) && emitsDist(pkg));
 
-// A package with a `generate` script has nothing for `tsgo -b` to read until it runs, via a shell with its own `.bin`
+// A package with a `generate` script has nothing for `tsc -b` to read until it runs, via a shell with its own `.bin`
 // on PATH, not pnpm. `--clean` first, or incremental build reuses `.tsbuildinfo`'s stale root list.
 const generated = needsDeclarations.filter(({ pkg }) => pkg.scripts?.generate !== undefined);
 for (const { name, dir, pkg } of generated) {
@@ -24,16 +24,16 @@ for (const { name, dir, pkg } of generated) {
     }
 }
 
-const tsgo = join(root, "node_modules/.bin/tsgo");
+const tsc = join(root, "node_modules/.bin/tsc");
 if (generated.length > 0) {
-    const clean = spawnSync(tsgo, ["-b", "--clean", ...generated.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
+    const clean = spawnSync(tsc, ["-b", "--clean", ...generated.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
     if (clean.status !== 0) {
         process.exit(clean.status ?? 1);
     }
 }
 
 console.log(`declarations: building ${needsDeclarations.length} packages that dependents read from dist`);
-const build = spawnSync(tsgo, ["-b", ...needsDeclarations.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
+const build = spawnSync(tsc, ["-b", ...needsDeclarations.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
 if (build.status !== 0) {
     process.exit(build.status ?? 1);
 }

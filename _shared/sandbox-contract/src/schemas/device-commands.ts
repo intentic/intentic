@@ -55,7 +55,7 @@ export const DeviceLocalDirSchema = z
     .string()
     .min(1)
     .max(4096)
-    // The curly quotes as escapes: bun's transpiler rewrites a literal one in a regex to its escape and tsgo keeps it,
+    // The curly quotes as escapes: bun's transpiler rewrites a literal one in a regex to its escape and tsc keeps it,
     // so spelled literally the pattern reads differently from source and from dist, and contract.lock.json can match
     // only one of them.
     .regex(/^(?:~|\/|[A-Za-z]:[\\/])[^"'`$;|&\n\r\u201C\u201D\u201E\u2018\u2019\u201A\u201B]*$/);

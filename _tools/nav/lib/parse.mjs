@@ -1,6 +1,6 @@
 // Parses one file syntactically (`ts.createSourceFile`), not a full `ts.Program`, so it runs in milliseconds on a tree
 // that does not currently build; `resolve.mjs` follows re-exports across files instead.
-import ts from "typescript";
+import ts from "@typescript/typescript6";
 import { vueScript } from "./files.mjs";
 
 const SCRIPT_KIND = {

@@ -39,7 +39,7 @@
         "asn1js": "catalog:",
         "jose": "catalog:",
         "pkijs": "catalog:",
-        "typescript": "catalog:",
+        "typescript": "catalog:typescript6",
         "vite": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:",

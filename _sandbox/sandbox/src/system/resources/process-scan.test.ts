@@ -13,6 +13,10 @@ describe("what a process is", () => {
         // Serving the protocol it is a language server; the same binary run once over a project is a typecheck.
         ["/opt/node_modules/@typescript/native-preview-linux-x64/lib/tsgo --lsp --stdio", "languageServer"],
         ["/opt/node_modules/@typescript/native-preview-linux-x64/lib/tsgo --noEmit -p tsconfig.json", "toolchain"],
+        ["/opt/node_modules/@typescript/typescript-linux-x64/lib/tsc --lsp --stdio", "languageServer"],
+        ["/opt/node_modules/@typescript/typescript-linux-x64/lib/tsc --noEmit -p tsconfig.json", "toolchain"],
+        ["MainThread node ./node_modules/typescript/lib/tsc.js --lsp --stdio", "languageServer"],
+        ["MainThread node ./node_modules/typescript/lib/tsc.js --build", "toolchain"],
         // The fan-out, as its members read from /proc: pnpm's `+`/`@` path encoding, a vitest fork, a heap-sized vue-tsc.
         [
             "MainThread /usr/local/bin/node /work/intentic/node_modules/.pnpm/vitest@4.0.9_@types+node@24.1.0/node_modules/vitest/dist/workers/forks.js",

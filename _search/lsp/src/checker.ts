@@ -4,7 +4,7 @@ import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { type Diagnostic, type DiagReport, parseCompilerOutput } from "./report.js";
-import { tsgoExePath } from "./tsgo.js";
+import { compilerExePath } from "./compiler.js";
 
 // One check is one run of the native compiler over one tsconfig project; nothing stays resident between checks.
 // Refuses rather than reporting diagnostics from a half-loaded program; .vue imports go unchecked, not falsely broken.
@@ -71,7 +71,7 @@ const runCompiler = (args: readonly string[], cwd: string, placement: CheckPlace
     new Promise((settle) => {
         let exe: string;
         try {
-            exe = tsgoExePath();
+            exe = compilerExePath();
         } catch (error) {
             settle({ failure: errorMessage(error) });
             return;
