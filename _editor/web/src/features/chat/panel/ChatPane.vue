@@ -279,7 +279,7 @@ const chipRow = computed(() => attachments.value.length > 0 || editorChip.value)
 
 // What the daemon reads the sent message as opening this chat on, asked once on a turnless chat (chatRoute.ts).
 const chatRoute = useChatRoute(() => props.conversation);
-const { personas, pickedPersona, personaName, personaNotice, pickPersona } = usePanePersona({
+const { personas, pickedPersona, personaName, personaIcon, personaNotice, pickPersona } = usePanePersona({
     conversation: () => props.conversation,
     route: chatRoute,
     isGuest,
@@ -744,7 +744,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                             >
                                                 <!-- The persona control shows its face when a persona is selected, at the pill size: it clears the row's `h-8`. -->
                                                 <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="FACE_SIZES.pill" />
-                                                <Icon v-else name="users" class="text-2xs text-link" />
+                                                <Icon v-else :name="personaIcon" class="text-2xs text-link" />
                                                 <span class="max-w-32 truncate @max-md:hidden">{{ personaName }}</span>
                                                 <Icon name="chevron-down" class="text-2xs text-subtle @max-md:hidden" />
                                             </button>

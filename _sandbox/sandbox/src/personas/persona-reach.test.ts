@@ -1,5 +1,5 @@
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { FULL_ACCESS_PERSONA, NO_ACCOUNTS_PERSONA, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { ProvenCaller } from "../auth/auth.js";
 import { memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { reachablePersonas, refuseUnlessReachable } from "./persona-reach.js";
@@ -66,6 +66,18 @@ describe("refuseUnlessReachable", () => {
             /a guest speaks through one of its assistants: yours are: helper/,
         );
         await expect(refuseUnlessReachable(services(), caller("guest", ["empty"]), undefined)).rejects.toThrow(/no assistant lives in the part/);
+    });
+
+    // A built-in lives nowhere, so no fence could hold it; a fenced collaborator wears it as they wear no persona at all,
+    // inside their own folders. A guest is handed neither: Full access is every account, No accounts the whole toolbox.
+    test("anyone but a guest may wear a built-in, fenced or not", async () => {
+        for (const builtIn of [FULL_ACCESS_PERSONA, NO_ACCOUNTS_PERSONA]) {
+            await expect(refuseUnlessReachable(services(), caller("collaborator", ["support"]), builtIn)).resolves.toBeUndefined();
+            await expect(refuseUnlessReachable(services(), caller("owner"), builtIn)).resolves.toBeUndefined();
+            await expect(refuseUnlessReachable(services(), caller("guest", ["support"]), builtIn)).rejects.toThrow(
+                /a guest speaks through one of its assistants: yours are: helper/,
+            );
+        }
     });
 
     test("an unfenced caller, and one naming no persona at all, are asked nothing", async () => {

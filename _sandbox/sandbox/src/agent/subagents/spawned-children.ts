@@ -38,6 +38,8 @@ const ChildSpecSchema = z.object({
     result: z.object({ schema: z.record(z.string(), z.json()) }).optional(),
     // The workflow run it works for (script-runs.ts), whose endings it reads.
     run: z.object({ id: z.string() }).optional(),
+    // Its parent's persona, which every later turn of it wears too (child-spec.ts wearingParent).
+    actsAs: z.string().optional(),
 });
 type ChildSpecOnFile = z.infer<typeof ChildSpecSchema>;
 
@@ -93,6 +95,7 @@ export const specOnFile = (spec: ChildSpawnSpec): ChildSpecOnFile => {
         opt("on", spec.on),
         opt("result", spec.result),
         opt("run", spec.run),
+        opt("actsAs", spec.actsAs),
         opt("fallbacks", spec.fallbacks?.map((fallback) => ({ ...fallback }))),
     );
     return onFile;
@@ -112,6 +115,7 @@ export const specFromFile = (onFile: ChildSpecOnFile): ChildSpawnSpec => ({
     ...opt("on", onFile.on),
     ...opt("result", onFile.result === undefined ? undefined : { schema: onFile.result.schema }),
     ...opt("run", onFile.run),
+    ...opt("actsAs", onFile.actsAs),
     ...opt(
         "fallbacks",
         onFile.fallbacks?.map((fallback) => ({

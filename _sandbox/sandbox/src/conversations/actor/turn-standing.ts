@@ -13,7 +13,7 @@ export interface TurnStanding {
     readonly at: number;
     // Nobody at a composer: no card is answered while the turn runs, so an ask must not hold it.
     readonly unattended: boolean;
-    // The persona the turn wears, when it wears one.
+    // Who the turn acts as: its card, or the built-in it wears (Full access, No accounts). Absent for an unknown name.
     readonly persona: { readonly id: string; readonly name: string } | undefined;
     // Capability ids this turn mounted: after the persona's shelves and the owner's gates.
     readonly granted: readonly string[];

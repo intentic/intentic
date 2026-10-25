@@ -8,7 +8,7 @@ import {
     type NeedAsk,
     type NeedSubject,
 } from "@intentic/sandbox-contract/schemas/needs";
-import { type Persona, type PersonaPowers, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { isBuiltInPersona, type Persona, type PersonaPowers, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { ConversationGrants } from "../../personas/conversation-grants.js";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 
@@ -124,14 +124,20 @@ const capabilityGrant = (
     return { kind: "raise", subject, title: `Let this conversation use "${capability.id}"` };
 };
 
+// The card a grant could be written onto, by its name. A built-in (Full access, No accounts) is no card, so a turn wearing
+// one is offered the conversation alone.
+const cardOf = (standing: AskContext["standing"]): { readonly persona?: string } => {
+    const persona = standing?.persona;
+    return persona === undefined || isBuiltInPersona(persona.id) ? {} : { persona: persona.name };
+};
+
 export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
     const resolve = async (ask: NeedAsk, context: AskContext): Promise<Resolved> => {
         if (ask.kind !== "grant") {
             return { kind: "refused", code: "invalid", message: "Not a grant ask." };
         }
         const { standing } = context;
-        const persona = standing?.persona;
-        const withPersona = persona === undefined ? {} : { persona: persona.name };
+        const withPersona = cardOf(standing);
         if (ask.subject === "capability") {
             return capabilityGrant(await deps.capabilities(), ask.what, standing, withPersona);
         }

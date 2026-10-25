@@ -12,7 +12,7 @@ import type {
 } from "@intentic/sandbox-contract/schemas/automations";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
-import { VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
+import { unwatchedPick, VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
 import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time";
 import { Cron } from "croner";
 import { computed, type ComputedRef, reactive, watch } from "vue";
@@ -70,7 +70,7 @@ const ruleDraftOf = (rule: SenderRule): SenderRuleDraft => ({
     label: rule.label ?? ``,
     ids: (rule.ids ?? []).join(`, `),
     groups: (rule.groups ?? []).join(`, `),
-    actsAs: rule.actsAs ?? ``,
+    actsAs: unwatchedPick(rule.actsAs) ?? ``,
     requireApproval: rule.requireApproval === true,
 });
 
@@ -642,7 +642,7 @@ export function useAutomationForm(
         // Copied, not aliased: the picker edits in place, and a cancelled edit must not touch the stored record.
         form.models = (automation.models ?? []).map((pin) => ({ ...pin }));
         form.account = automation.account ?? ``;
-        form.actsAs = automation.actsAs ?? ``;
+        form.actsAs = unwatchedPick(automation.actsAs) ?? ``;
         form.allowedTools = (automation.allowedTools ?? []).join(`, `);
         form.requireApproval = automation.requireApproval === true;
         loadSenders(automation.senders);

@@ -8,17 +8,30 @@ import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryPersonasStore } from "../harness/route-stores.testing.js";
+import { memoryAutomationsStore } from "../automations/automations-slice.testing.js";
+import type { AutomationRecord } from "../automations/automations-store.js";
 
 // Persona kit routes over the real HTTP surface and a real temp workspace: files a loader we don't own reads, so what
 // matters is that a save lands where it looks, and no kit can be created for a persona that doesn't exist.
 
 const studio: Persona = { id: "studio", label: "Studio", capabilities: [] };
 
-const withStore = (personas: Persona[] = [studio]) => {
+const withStore = (personas: Persona[] = [studio], automations: AutomationRecord[] = []) => {
     const workspace = tempWorkspace([]);
-    const app = createApp(services({ workspace, personas: memoryPersonasStore(personas) }));
+    const app = createApp(services({ workspace, personas: memoryPersonasStore(personas), automations: memoryAutomationsStore(automations) }));
     return { client: clientFor(app), root: workspace.root };
 };
+
+const MODELS = [{ provider: "claude" as const, model: "claude-sonnet-5" }];
+const nightly = (extra: Partial<AutomationRecord>): AutomationRecord => ({
+    id: "nightly",
+    trigger: { kind: "schedule", cron: "0 3 * * *" },
+    prompt: "sweep",
+    enabled: true,
+    models: MODELS,
+    runs: [],
+    ...extra,
+});
 
 const kitFile = (root: string, ...tail: string[]): Promise<string | undefined> =>
     readFile(join(root, STATE_DIR, "config", "personas", ...tail), "utf8").catch(() => undefined);
@@ -84,6 +97,28 @@ test("removing a persona takes its kit with it", async () => {
     await client.personas.remove({ id: "studio" });
 
     expect(await kitFile(root, "studio", "PROMPT.md")).toBeUndefined();
+});
+
+// An automation naming a card that is gone runs with nothing on every fire, silently; the remove is where to say so.
+test("a persona an automation still wears is not removed, and the refusal names the automation", async () => {
+    const { client } = withStore([studio], [nightly({ actsAs: "studio" })]);
+
+    await expect(client.personas.remove({ id: "studio" })).rejects.toThrow(/still worn by the automation nightly/);
+    expect((await client.personas.list()).personas.map((persona) => persona.id)).toEqual(["studio"]);
+});
+
+test("a sender rule wearing a persona keeps it too", async () => {
+    const senders = { rules: [{ ids: ["u1"], actsAs: "studio" }], others: "ignore" as const };
+    const { client } = withStore([studio], [nightly({ senders })]);
+
+    expect(await errorCode(client.personas.remove({ id: "studio" }))).toBe("CONFLICT");
+});
+
+test("the built-ins can be neither removed nor taken by a card", async () => {
+    const { client } = withStore();
+
+    expect(await errorCode(client.personas.remove({ id: "full-access" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.personas.save({ id: "no-accounts", capabilities: [] }))).toBe("BAD_REQUEST");
 });
 
 // The page's writes are committed as they land: left uncommitted they read as the owner's own edits, and a land touching

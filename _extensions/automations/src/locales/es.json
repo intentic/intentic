@@ -50,7 +50,6 @@
         "fri": "Vie",
         "moveUp": "Subir",
         "visitorChat": "Recepción",
-        "fullToolboxNoAccounts": "caja de herramientas completa, sin cuentas",
         "googleClientId": "ID de cliente de Google",
         "googleSignIn": "Inicio de sesión con Google",
         "greetingOptional": "Saludo (opcional)",
@@ -81,10 +80,7 @@
         "newSessionsRequiredSince": "Sesiones nuevas necesarias desde el último despertar antes de que dispare una ejecución debida",
         "newSessionsRunSince": "sesiones nuevas se han ejecutado desde que despertó por última vez",
         "nextRuns": "Próximas ejecuciones: {runs}",
-        "noAccounts": "sin cuentas",
         "noLongerExists": "ya no existe",
-        "noPersona": "Sin persona",
-        "nobody": "Nadie",
         "off": "Desactivado",
         "onDay": "El día",
         "once": "Una vez",
@@ -233,7 +229,6 @@
         "aiDisclosure": "Informar a los visitantes de que responde una IA",
         "aiDisclosureText": "Aviso personalizado (opcional)",
         "aiDisclosureDefault": "Las respuestas las escribe un asistente de IA y pueden contener errores.",
-        "noPersonaHint": "Sin persona tiene todas las herramientas, pero ninguna de tus cuentas con sesión iniciada. Elige una si tiene que publicar o navegar como tú.",
         "personaGoneHint": "Esa persona ya no existe, así que sus ejecuciones no tendrían herramientas ni cuentas. Elige otra."
     },
     "automationRow": {
@@ -318,10 +313,8 @@
         "checkedAt": "Comprobado {at}",
         "personaMissing": "Persona eliminada",
         "personaMissingNote": "{ids} ya no existe, así que sus ejecuciones no tienen herramientas ni cuentas. Elige otra persona.",
-        "noAccounts": "Sin persona",
-        "noAccountsNote": "Sus ejecuciones tienen todas las herramientas, pero ninguna de tus cuentas con sesión iniciada. Dale una persona si tiene que publicar o navegar como tú.",
-        "runsAsMissing": "{id} (ya no existe)",
-        "runsAsNobody": "Nadie: sin cuentas con sesión iniciada"
+        "noAccounts": "Sin cuentas",
+        "noAccountsNote": "Sus ejecuciones tienen todas las herramientas, pero ninguna de tus cuentas con sesión iniciada. Elige Acceso completo o una persona si tiene que publicar o navegar como tú."
     },
     "automationsView": {
         "addAutomation": "Añadir una automatización",
@@ -502,8 +495,6 @@
         "lastRunFailed": "La última ejecución falló",
         "model": "Modelo",
         "nextAt": "Próxima {in} · {at}",
-        "noSignedInAccounts": "Sin cuentas con sesión iniciada",
-        "nobody": "Nadie",
         "offNothingScheduled": "Desactivada, no hay nada programado",
         "onceItsCheckPasses": "Cuando su comprobación pasa",
         "onlyWhenItChanges": "Solo cuando cambia lo que comprueba",
@@ -531,5 +522,11 @@
         "groupHint": "Las automatizaciones de un mismo grupo se listan juntas. En blanco, se ordena por su persona.",
         "groupOptional": "Grupo (opcional)",
         "groupPlaceholder": "Marketing"
+    },
+    "builtInPersonas": {
+        "fullAccess": "Acceso completo",
+        "fullAccessNote": "todas las herramientas y todas las cuentas con sesión iniciada",
+        "noAccounts": "Sin cuentas",
+        "noAccountsNote": "todas las herramientas, ninguna cuenta con sesión iniciada"
     }
 }

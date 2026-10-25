@@ -7,6 +7,7 @@ import type { AutomationTemplate } from "@intentic/sandbox-contract/schemas/auto
 import { availableTemplates, type AvailableSource, glyph } from "./catalog";
 import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "./useAutomations";
 import { triggerKey, useAutomationForm } from "./useAutomationForm";
+import { usePersonaDefault } from "./persona/usePersonaDefault";
 import { localInputOf } from "./cronSchedule";
 import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
 import { t } from "./i18n.js";
@@ -32,6 +33,9 @@ const state = useAutomationForm(
     sandboxZone,
 );
 const { form, valid, touchAll, build, loadTemplate } = state;
+// Who a new automation acts as follows its trigger until the picker is touched: Full access for a plain schedule, No
+// accounts for anything that brings outside words in.
+usePersonaDefault(form, state.touched);
 // Set once, at open. The schedule's own time and weekday follow the slot too, so switching the trigger to repeat keeps
 // the moment that was clicked rather than snapping back to the form's 09:00. And the clock it was clicked on: the
 // calendar is drawn on the reader's, so a reader whose sandbox keeps another zone gets a schedule on their own, or the

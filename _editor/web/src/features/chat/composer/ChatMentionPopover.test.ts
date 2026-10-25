@@ -90,7 +90,7 @@ afterEach(() => {
 it(`opens on an empty token with one summary row per setting, the files still to come`, () => {
     const element = mount(SOURCES);
     expect(header(element)).toBe(`Mention a file or change a setting`);
-    expect(rowTexts(element)).toEqual([`Acts as Anyone`, `Where this runs Here`, `Model Claude Opus 5`, `Effort High`]);
+    expect(rowTexts(element)).toEqual([`Acts as Full access`, `Where this runs Here`, `Model Claude Opus 5`, `Effort High`]);
     expect(element.textContent).toContain(`Keep typing to search files…`);
     expect(seen.active.value).toBe(true);
     expect(seen.query.value).toBe(``);

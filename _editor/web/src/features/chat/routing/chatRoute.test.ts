@@ -235,7 +235,7 @@ test("a half that named nothing is still reported: the call was paid for either 
     expect(wearModel).not.toHaveBeenCalled();
     expect(chat.selection.autoPicked.value).toBe(false);
     expect(verdict()).toBe(
-        `No persona matched, so this chat acts as everyone. No persona fits this message. Couldn't choose a model for this chat, so it keeps the one it had. Read by ${JUDGE_LABEL}.`,
+        `No persona matched, so this chat acts as Full access. No persona fits this message. Couldn't choose a model for this chat, so it keeps the one it had. Read by ${JUDGE_LABEL}.`,
     );
 });
 

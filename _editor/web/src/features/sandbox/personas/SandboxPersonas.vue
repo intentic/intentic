@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { isBuiltInPersona, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import {
     Avatar,
     Await,
@@ -23,6 +23,7 @@ import { useRoute, useRouter } from "vue-router";
 import PersonaSelector from "./PersonaSelector.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import PersonasExplainer from "./PersonasExplainer.vue";
+import BuiltInPersonas from "./BuiltInPersonas.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
@@ -71,6 +72,7 @@ const ready = (persona: Persona): boolean => persona.capabilities.some((id) => i
 // One selected persona, edited below the grid. Changes save as they are made; selecting a tile is never an edit.
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
+const removeError = ref<NoticeModel | undefined>(undefined);
 const detailsId = useId();
 const selected = computed(() => personas.value.find((persona) => persona.id === draft.value?.original));
 
@@ -179,12 +181,17 @@ const cancelAdd = (): void => {
 };
 
 const newId = computed(() => personaSlug(newName.value ?? ``));
-// A new persona can't land on a name already taken; saving would silently edit the other one.
-const taken = computed(() => personas.value.some((persona) => persona.id === newId.value));
+// A new persona can't land on a name already taken; saving would silently edit the other one. A built-in's id is
+// always taken: the daemon refuses a card wearing one.
+const reserved = computed(() => isBuiltInPersona(newId.value));
+const taken = computed(() => reserved.value || personas.value.some((persona) => persona.id === newId.value));
 const newValid = computed(() => newId.value !== `` && !taken.value);
 const nameHint = computed(() => {
     if (newName.value === undefined || newName.value === `` || newValid.value) {
         return undefined;
+    }
+    if (reserved.value) {
+        return t(`sandbox.builtInPersonas.reserved`, { name: newName.value });
     }
     return taken.value ? t(`sandbox.sandboxPersonas.personaNameTaken`, { name: newId.value }) : t(`sandbox.sandboxPersonas.useLettersOrDigits`);
 });
@@ -316,7 +323,13 @@ const confirmRemove = async (): Promise<void> => {
         clearTimeout(pending);
         pending = undefined;
     }
-    await remove.mutateAsync(id);
+    // A persona an automation still wears is refused by the daemon, which names the automations: said here, not lost.
+    try {
+        await remove.mutateAsync(id);
+    } catch (error) {
+        removeError.value = noticeFrom(error, t(`sandbox.sandboxPersonas.couldntRemovePersona`));
+        return;
+    }
     if (draft.value?.original === id) {
         draft.value = undefined;
     }
@@ -345,6 +358,8 @@ const confirmRemove = async (): Promise<void> => {
                 </template>
             </Row>
         </RowGroup>
+
+        <BuiltInPersonas />
 
         <Notice v-if="listNotice" :of="listNotice" />
         <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
@@ -474,8 +489,13 @@ const confirmRemove = async (): Promise<void> => {
             :confirm-label="t(`sandbox.sandboxPersonas.removePersona2`)"
             confirm-icon="trash"
             :loading="remove.isPending.value"
-            @cancel="removing = undefined"
+            @cancel="
+                removing = undefined;
+                removeError = undefined;
+            "
             @confirm="confirmRemove"
-        />
+        >
+            <Notice v-if="removeError !== undefined" :of="removeError" />
+        </ConfirmDialog>
     </div>
 </template>

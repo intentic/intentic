@@ -79,3 +79,11 @@ test(`the gist is the note without the shelf it already sits on, else the prompt
     expect(gistOf({ note: `Releases:v2 notes`, prompt: `…` }, `Releases`)).toBe(`Releases:v2 notes`);
     expect(gistOf({ prompt: `\n\n  First line.\nSecond line.` }, undefined)).toBe(`First line.`);
 });
+
+// No accounts named outright is the same choice as naming nobody, so it files with the rest; Full access is a persona
+// like any other and gets its own shelf, by the name the page gives it.
+test(`files No accounts with the unnamed, and Full access on a shelf of its own`, () => {
+    const named = { ...words, personaLabel: (id: string) => (id === `full-access` ? `Full access` : words.personaLabel(id)) };
+    expect(shelfOf(automation(`a`, { actsAs: `no-accounts` }), named).kind).toBe(`other`);
+    expect(shelfOf(automation(`b`, { actsAs: `full-access` }), named)).toMatchObject({ label: `Full access`, kind: `persona` });
+});

@@ -1,6 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type CatalogOption, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { FULL_ACCESS_PERSONA, NO_ACCOUNTS_PERSONA, type Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { builtInPersonaView, personaLabel } from "../../../models/sandbox/personas/builtInPersonas";
 import type { IconName } from "@intentic/ui";
 import { filterEntries, normalize, type PickerEntry } from "../../../models/conversations/accounts/modelPickerState";
 import type { SendLater, TimeChoice } from "../../../models/conversations/drafts/sendLater";
@@ -95,14 +96,23 @@ const matches = (query: string, ...texts: (string | undefined)[]): boolean => {
 };
 
 const personaRows = (source: NonNullable<QuickPickSources[`persona`]>, query: string): PersonaRow[] => {
+    // The built-ins first, as in the persona menu: Full access is what no pick means, so it sends none.
     const rows: PersonaRow[] = [
         {
             kind: `persona`,
             key: `persona:`,
             id: undefined,
-            label: t(`chat.words.anyone`),
+            label: builtInPersonaView(FULL_ACCESS_PERSONA).label,
             detail: t(`chat.composerQuickPick.everyConnectedAccount`),
-            current: source.picked === undefined,
+            current: source.picked === undefined || source.picked === FULL_ACCESS_PERSONA,
+        },
+        {
+            kind: `persona`,
+            key: `persona:${NO_ACCOUNTS_PERSONA}`,
+            id: NO_ACCOUNTS_PERSONA,
+            label: builtInPersonaView(NO_ACCOUNTS_PERSONA).label,
+            detail: builtInPersonaView(NO_ACCOUNTS_PERSONA).note,
+            current: source.picked === NO_ACCOUNTS_PERSONA,
         },
         ...source.personas.map((persona): PersonaRow => ({
             kind: `persona`,
@@ -245,10 +255,7 @@ const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): Quic
 
 // What each kind is set to now, as the summary row's second word; a pick no list names (a deleted persona) shows its
 // raw id rather than nothing.
-const personaValue = (source: NonNullable<QuickPickSources[`persona`]>): string => {
-    const persona = source.personas.find((candidate) => candidate.id === source.picked);
-    return persona === undefined ? (source.picked ?? t(`chat.words.anyone`)) : (persona.label ?? persona.id);
-};
+const personaValue = (source: NonNullable<QuickPickSources[`persona`]>): string => personaLabel(source.picked, source.personas);
 const sandboxValue = (source: NonNullable<QuickPickSources[`sandbox`]>): string => {
     if (source.box !== undefined) {
         return source.boxes.find((box) => box.id === source.box)?.name ?? t(`chat.composerQuickPick.anotherSandbox`);

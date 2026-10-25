@@ -92,6 +92,24 @@ test("upsert refuses sender rules on a trigger nobody sends: a schedule", async 
     expect(await services.automations.get("nightly")).toBeUndefined();
 });
 
+// A name nobody carries would run every fire with no tools and no accounts, silently: refused while it can still be
+// changed. A built-in is always there, and a card that exists is taken.
+test("upsert refuses a persona nobody carries, and takes a built-in or a card that exists", async () => {
+    const root = mkdtempSync(join(tmpdir(), "routes-"));
+    const services = unstubbed<Services>("services", {
+        ...catalogServices(root),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [{ id: "marketing", capabilities: [] }] }),
+    });
+    const routes = createAutomationsRoutes(services);
+    const nightly = automation("nightly", { kind: "schedule", cron: "0 3 * * *" });
+    await expect(call(routes.upsert, { ...nightly, actsAs: "reddit-writer" }, { context })).rejects.toThrow(/no persona is called "reddit-writer"/);
+    expect(await services.automations.get("nightly")).toBeUndefined();
+    for (const actsAs of ["full-access", "no-accounts", "marketing"]) {
+        await call(routes.upsert, { ...nightly, actsAs }, { context });
+        expect((await services.automations.get("nightly"))?.actsAs).toBe(actsAs);
+    }
+});
+
 // A moment already gone is not a schedule. The tick fires an overdue one-time wake rather than dropping it, so an
 // automation arming one would go off on the spot, which is nobody's idea of "at 3pm".
 test("upsert refuses a one-time wake whose moment has passed, and takes a future one", async () => {

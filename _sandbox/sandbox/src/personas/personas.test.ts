@@ -1,5 +1,12 @@
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import { type Persona, type PersonaPowers, VISITOR_CHAT_PERSONA, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import {
+    FULL_ACCESS_PERSONA,
+    NO_ACCOUNTS_PERSONA,
+    type Persona,
+    type PersonaPowers,
+    VISITOR_CHAT_PERSONA,
+    PersonaPowersSchema,
+} from "@intentic/sandbox-contract/schemas/personas";
 import {
     personaCapabilities,
     personaCliEnv,
@@ -47,20 +54,53 @@ const suffix = (id: string): string => id.toUpperCase().replaceAll("-", "_");
 
 // Accounts: the half that predates the shelves
 
-test("an attended turn that names no persona keeps every account", () => {
+test("an attended turn that names no persona wears Full access: every account", () => {
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: false });
-    expect(persona.reason).toBe("attended-open");
+    expect(persona.reason).toBe("full-access");
+    expect(persona.builtIn).toBe(FULL_ACCESS_PERSONA);
+    expect(persona.persona).toBeUndefined();
     expect(persona.allows(browser("reddit-work"))).toBe(true);
     expect(persona.allows(browser("reddit-personal"))).toBe(true);
     // "Everything" means the whole manifest, even an account no persona names.
     expect(persona.allows(browser("npmjs"))).toBe(true);
 });
 
-test("an unattended wake that names no persona reaches no account at all", () => {
+test("an unattended wake that names no persona wears No accounts: it reaches no account at all", () => {
     const persona = turnPersona({ personas: CAST, actsAs: undefined, unattended: true });
-    expect(persona.reason).toBe("unattended-unpinned");
+    expect(persona.reason).toBe("no-accounts");
+    expect(persona.builtIn).toBe(NO_ACCOUNTS_PERSONA);
     expect(persona.allows(browser("reddit-work"))).toBe(false);
     expect(persona.allows(browser("reddit-personal"))).toBe(false);
+});
+
+// The built-ins are personas like any other: naming one wears it whoever is watching, so an automation can act as Full
+// access, and a person can pick No accounts for a chat that must not post as anyone.
+test("naming a built-in wears it whether or not anyone is watching", () => {
+    for (const unattended of [false, true]) {
+        const full = turnPersona({ personas: CAST, actsAs: FULL_ACCESS_PERSONA, unattended });
+        expect(full.reason).toBe("full-access");
+        expect(full.allows(browser("npmjs"))).toBe(true);
+        expect(full.powers.shell).toBe(true);
+        const none = turnPersona({ personas: CAST, actsAs: NO_ACCOUNTS_PERSONA, unattended });
+        expect(none.reason).toBe("no-accounts");
+        expect(none.allows(browser("reddit-work"))).toBe(false);
+        expect(none.allows(connector("github"))).toBe(true);
+        expect(none.powers.shell).toBe(true);
+    }
+});
+
+// A built-in id is reserved: a card carrying one (written by hand before the reservation) never shadows the built-in,
+// or a card named "full-access" could quietly narrow every automation that picked Full access.
+test("a card carrying a built-in's id never shadows the built-in", () => {
+    const squatter = [personaOf(FULL_ACCESS_PERSONA, []), personaOf(NO_ACCOUNTS_PERSONA, ["reddit-work"])];
+    expect(turnPersona({ personas: squatter, actsAs: FULL_ACCESS_PERSONA, unattended: true }).allows(browser("npmjs"))).toBe(true);
+    expect(turnPersona({ personas: squatter, actsAs: NO_ACCOUNTS_PERSONA, unattended: false }).allows(browser("reddit-work"))).toBe(false);
+});
+
+// The fence the conversation was born with still holds: a built-in widens accounts, never folders.
+test("a built-in keeps the conversation's own fence", () => {
+    expect(turnPersona({ personas: CAST, actsAs: FULL_ACCESS_PERSONA, unattended: false, fence: ["web"] }).fence).toEqual(["web"]);
+    expect(turnPersona({ personas: CAST, actsAs: undefined, unattended: true, fence: ["web"] }).fence).toEqual(["web"]);
 });
 
 test("a named persona is narrowed to exactly its own accounts, attended or not", () => {
@@ -386,6 +426,13 @@ test("an unattended wake is told which accounts it lost, and that they are not b
     // And the note says so outright: a turn that reads only the loss concludes its whole environment was emptied, and
     // stops reaching for credentials it still holds.
     expect(note?.text).toContain("connector credential");
+});
+
+test("a person who picks No accounts is told the same, since the accounts are just as absent", () => {
+    const persona = turnPersona({ personas: CAST, actsAs: NO_ACCOUNTS_PERSONA, unattended: false });
+    const note = unattendedAccountsNote(persona, personaWithheldAccounts([browser("npmjs")], persona));
+    expect(note?.title).toBe(UNATTENDED_ACCOUNTS_TITLE);
+    expect(note?.text).toContain("No accounts");
 });
 
 test("no note when nothing was withheld, and none for a turn wearing a persona", () => {

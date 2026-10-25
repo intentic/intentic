@@ -48,7 +48,6 @@
         "fires": "Uruchamia się",
         "firesIn": "Uruchamia się {when}.",
         "fri": "pt",
-        "fullToolboxNoAccounts": "pełna skrzynka narzędzi, żadnych kont",
         "googleClientId": "Identyfikator klienta Google",
         "googleSignIn": "Logowanie Google",
         "greetingOptional": "Powitanie (opcjonalnie)",
@@ -89,10 +88,7 @@
         "newSessionsRequiredSince": "Nowe sesje wymagane od ostatniej pobudki, zanim należny przebieg odpali",
         "newSessionsRunSince": "nowych sesji przebiegło od jej ostatniej pobudki",
         "nextRuns": "Następne przebiegi: {runs}",
-        "noAccounts": "brak kont",
         "noLongerExists": "już nie istnieje",
-        "noPersona": "Brak persony",
-        "nobody": "Nikt",
         "off": "Wyłączone",
         "onDay": "W dniu",
         "once": "Raz",
@@ -233,7 +229,6 @@
         "aiDisclosure": "Informuj odwiedzających, że odpowiada AI",
         "aiDisclosureText": "Własna informacja (opcjonalnie)",
         "aiDisclosureDefault": "Odpowiedzi pisze asystent AI. Mogą zawierać błędy.",
-        "noPersonaHint": "Bez persony ma wszystkie narzędzia, ale żadnego z Twoich zalogowanych kont. Wybierz ją, jeśli ma publikować lub przeglądać jako Ty.",
         "personaGoneHint": "Ta persona już nie istnieje, więc uruchomienia nie miałyby narzędzi ani kont. Wybierz inną."
     },
     "automationRow": {
@@ -318,10 +313,8 @@
         "checkedAt": "Sprawdzono {at}",
         "personaMissing": "Persona usunięta",
         "personaMissingNote": "{ids} już nie istnieje, więc jej uruchomienia nie mają żadnych narzędzi ani kont. Wybierz inną personę.",
-        "noAccounts": "Bez persony",
-        "noAccountsNote": "Jej uruchomienia mają wszystkie narzędzia, ale żadnego z Twoich zalogowanych kont. Nadaj jej personę, jeśli ma publikować lub przeglądać jako Ty.",
-        "runsAsMissing": "{id} (już nie istnieje)",
-        "runsAsNobody": "Nikt: bez zalogowanych kont"
+        "noAccounts": "Bez kont",
+        "noAccountsNote": "Jej uruchomienia mają wszystkie narzędzia, ale żadnego z Twoich zalogowanych kont. Wybierz Pełny dostęp albo personę, jeśli ma publikować lub przeglądać jako Ty."
     },
     "automationsView": {
         "addAutomation": "Dodaj automatyzację",
@@ -502,8 +495,6 @@
         "lastRunFailed": "Ostatnie uruchomienie nie powiodło się",
         "model": "Model",
         "nextAt": "Następne {in} · {at}",
-        "noSignedInAccounts": "Bez zalogowanych kont",
-        "nobody": "Nikt",
         "offNothingScheduled": "Wyłączona, więc nic nie jest zaplanowane",
         "onceItsCheckPasses": "Gdy jej sprawdzenie przejdzie",
         "onlyWhenItChanges": "Tylko gdy sprawdzane się zmieni",
@@ -531,5 +522,11 @@
         "groupHint": "Automatyzacje z jednej grupy stoją razem. Puste układa ją według persony.",
         "groupOptional": "Grupa (opcjonalnie)",
         "groupPlaceholder": "Marketing"
+    },
+    "builtInPersonas": {
+        "fullAccess": "Pełny dostęp",
+        "fullAccessNote": "każde narzędzie i każde zalogowane konto",
+        "noAccounts": "Bez kont",
+        "noAccountsNote": "każde narzędzie, żadnego zalogowanego konta"
     }
 }

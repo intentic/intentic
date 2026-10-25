@@ -50,7 +50,6 @@
         "fri": "Fr",
         "moveUp": "Nach oben",
         "visitorChat": "Empfang",
-        "fullToolboxNoAccounts": "voller Werkzeugkasten, keine Konten",
         "googleClientId": "Google-Client-ID",
         "googleSignIn": "Google-Anmeldung",
         "greetingOptional": "Begrüßung (optional)",
@@ -81,10 +80,7 @@
         "newSessionsRequiredSince": "Neue Sessions, die seit dem letzten Wecken nötig sind, bevor ein fälliger Lauf auslöst",
         "newSessionsRunSince": "neue Sessions sind gelaufen, seit sie zuletzt geweckt wurde",
         "nextRuns": "Nächste Läufe: {runs}",
-        "noAccounts": "keine Konten",
         "noLongerExists": "gibt es nicht mehr",
-        "noPersona": "Keine Persona",
-        "nobody": "Niemand",
         "off": "Aus",
         "onDay": "Am Tag",
         "once": "Einmal",
@@ -233,7 +229,6 @@
         "aiDisclosure": "Besucher über KI-Antworten informieren",
         "aiDisclosureText": "Eigener Hinweis (optional)",
         "aiDisclosureDefault": "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten.",
-        "noPersonaHint": "Ohne Persona hat sie jedes Werkzeug, aber keines deiner angemeldeten Konten. Wähle eine, wenn sie als du posten oder surfen soll.",
         "personaGoneHint": "Diese Persona existiert nicht mehr, daher liefen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere."
     },
     "automationRow": {
@@ -318,10 +313,8 @@
         "checkedAt": "Geprüft {at}",
         "personaMissing": "Persona fehlt",
         "personaMissingNote": "{ids} existiert nicht mehr, daher laufen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere Persona.",
-        "noAccounts": "Keine Persona",
-        "noAccountsNote": "Die Weckrufe haben jedes Werkzeug, aber keines deiner angemeldeten Konten. Gib ihr eine Persona, wenn sie als du posten oder surfen soll.",
-        "runsAsMissing": "{id} (existiert nicht mehr)",
-        "runsAsNobody": "Niemand: keine angemeldeten Konten"
+        "noAccounts": "Keine Konten",
+        "noAccountsNote": "Die Weckrufe haben jedes Werkzeug, aber keines Ihrer angemeldeten Konten. Wählen Sie Vollzugriff oder eine Persona, wenn sie als Sie posten oder surfen soll."
     },
     "automationsView": {
         "addAutomation": "Eine Automation hinzufügen",
@@ -502,8 +495,6 @@
         "lastRunFailed": "Letzter Lauf fehlgeschlagen",
         "model": "Modell",
         "nextAt": "Nächste {in} · {at}",
-        "noSignedInAccounts": "Keine angemeldeten Konten",
-        "nobody": "Niemand",
         "offNothingScheduled": "Aus, daher nichts geplant",
         "onceItsCheckPasses": "Sobald ihre Prüfung besteht",
         "onlyWhenItChanges": "Nur wenn sich das Geprüfte ändert",
@@ -531,5 +522,11 @@
         "groupHint": "Automationen einer Gruppe stehen zusammen. Leer ordnet sie nach ihrer Persona ein.",
         "groupOptional": "Gruppe (optional)",
         "groupPlaceholder": "Marketing"
+    },
+    "builtInPersonas": {
+        "fullAccess": "Vollzugriff",
+        "fullAccessNote": "jedes Werkzeug und jedes angemeldete Konto",
+        "noAccounts": "Keine Konten",
+        "noAccountsNote": "jedes Werkzeug, kein angemeldetes Konto"
     }
 }

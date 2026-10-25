@@ -1,5 +1,5 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
+import { builtInPersona, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { UsageTurn } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
@@ -64,6 +64,15 @@ export type TurnPlan =
           readonly door?: true;
       });
 
+// Who the turn acts as, named for whoever reads its standing: its card, or the built-in it wears (a child inherits this).
+// Absent only for a name no card carries, and for a turn planned with no persona at all.
+const standingPersona = (persona: TurnDecision["context"]["persona"]): TurnStanding["persona"] => {
+    if (persona?.persona !== undefined) {
+        return { id: persona.persona.id, name: persona.persona.label ?? persona.persona.id };
+    }
+    return persona?.builtIn === undefined ? undefined : { id: persona.builtIn, name: builtInPersona(persona.builtIn).label };
+};
+
 // The turn's standing as its decision settled it: what it mounted, what its persona and the gates withheld, and how its
 // runtime treats a secret reference.
 const standingOf = (decision: TurnDecision, input: TurnInput): TurnStanding => {
@@ -72,7 +81,7 @@ const standingOf = (decision: TurnDecision, input: TurnInput): TurnStanding => {
     return {
         at: Date.now(),
         unattended: input.unattended === true,
-        persona: persona?.persona === undefined ? undefined : { id: persona.persona.id, name: persona.persona.label ?? persona.persona.id },
+        persona: standingPersona(persona),
         granted: decision.granted.map((capability) => capability.id),
         withheldByPersona: decision.withheldByPersona,
         withheldByGate: decision.withheldByGate,

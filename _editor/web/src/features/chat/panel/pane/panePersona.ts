@@ -1,7 +1,8 @@
-import { personaModels } from "@intentic/sandbox-contract/schemas/personas";
+import { FULL_ACCESS_PERSONA, personaModels } from "@intentic/sandbox-contract/schemas/personas";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, watch } from "vue";
 import { usePersonas } from "../../../../models/sandbox/personas/usePersonas";
+import { builtInOf, builtInPersonaView, personaLabel } from "../../../../models/sandbox/personas/builtInPersonas";
 import { roleSources } from "../../../../models/providers/roleModel";
 import type { ChatRouting } from "../../routing/chatRoute";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
@@ -22,7 +23,10 @@ export const usePanePersona = (host: PanePersonaHost) => {
     const { conversation } = host;
     const { personas, isConnected: personaSignedIn } = usePersonas();
     const pickedPersona = computed(() => personas.value.find((persona) => persona.id === conversation().selection.actsAs.value));
-    const personaName = computed(() => pickedPersona.value?.label ?? pickedPersona.value?.id ?? conversation().selection.actsAs.value);
+    // Never blank: no pick is Full access, a built-in is named, and a card that is gone shows its id.
+    const personaName = computed(() => personaLabel(conversation().selection.actsAs.value, personas.value));
+    // The pill's mark when no card's face stands in: the built-in's own.
+    const personaIcon = computed(() => builtInPersonaView(builtInOf(conversation().selection.actsAs.value) ?? FULL_ACCESS_PERSONA).icon);
 
     // Picking no longer moves the chat between trees: a card says where it starts and what it may touch, and the
     // persona's own model goes on with it, when it has one (the `wearModel` pick).
@@ -54,12 +58,14 @@ export const usePanePersona = (host: PanePersonaHost) => {
         personas,
         pickedPersona,
         personaName,
+        personaIcon,
         pickPersona,
         // A missing card fails closed daemon-side (no accounts, no tools); a card with no accounts is a chosen state the
         // pill shows. What remains is a card whose accounts are not signed in.
         personaNotice: computed<string | undefined>(() => {
             const pinned = conversation().selection.actsAs.value;
-            if (pinned === undefined) {
+            // A built-in is always there and names its own reach in the menu; nothing to interrupt the composer for.
+            if (builtInOf(pinned) !== undefined) {
                 return undefined;
             }
             if (pickedPersona.value === undefined) {

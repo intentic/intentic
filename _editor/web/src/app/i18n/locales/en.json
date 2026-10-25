@@ -2518,7 +2518,7 @@
             "which": "Sandbox",
             "pickOne": "Pick a sandbox",
             "persona": "Its tasks wear",
-            "noPersona": "No persona",
+            "noPersona": "No accounts",
             "noPersonaHint": "No signed-in account over there, and the full toolbox, as any unattended wake.",
             "askFirst": "Ask me there before each task",
             "turnsAnHour": "turns an hour",
@@ -3406,7 +3406,6 @@
             "runDiagram": "Run diagram"
         },
         "chatPersonaMenu": {
-            "everyAccountYouveConnected": "Every account you've connected is in reach, and the full toolbox.",
             "noGuestYet": "No assistant has been assigned to you yet. Ask the sandbox owner for one.",
             "noPersonasYetChat": "No personas yet, so this chat speaks through every account you've connected. Set one up to send a message as one person: with only that person's accounts in reach.",
             "notSignedInYet": ", not signed in yet"
@@ -4071,7 +4070,6 @@
             "closePane": "Close Pane",
             "latest": "Latest",
             "setUpPersona": "Set up a persona",
-            "anyone": "Anyone",
             "managePersonas": "Manage personas",
             "gone": "No longer available",
             "autoLabel": "Auto",
@@ -4252,7 +4250,7 @@
         "chatRoute": {
             "actingAs": "Acting as {name}.",
             "matchedButHeld": "{name} matched, but this chat was pointed somewhere by hand first, so nothing moved.",
-            "noPersonaMatched": "No persona matched, so this chat acts as everyone.",
+            "noPersonaMatched": "No persona matched, so this chat acts as Full access.",
             "personaBringsModel": "{name} brings its own model, so this chat runs on that instead.",
             "readBy": "Read by {model}.",
             "readingBoth": "Reading what this chat opens on: one call that picks both its persona and its model.",
@@ -7870,7 +7868,7 @@
             "scopeLand": "Drives and lands work",
             "scopeEditor": "One conversation",
             "asPersona": "As {persona}",
-            "noPersona": "No persona",
+            "noPersona": "No accounts",
             "waiting": "{count} task waits for your yes | {count} tasks wait for your yes",
             "inertExpired": "Expired",
             "inertMinter": "Whoever minted it no longer manages",
@@ -8020,7 +8018,7 @@
             "newChats": "New chats",
             "noPersonasYet": "No personas yet",
             "notSignedIn": "Not signed in",
-            "nothingReadChatActs": "Nothing is read: a chat acts as the persona you pick, or as everyone.",
+            "nothingReadChatActs": "Nothing is read: a chat acts as the persona you pick, or as Full access.",
             "personaName": "Persona name",
             "personaNameTaken": "You already have a persona called {name}.",
             "personas": "Your personas",
@@ -8031,7 +8029,8 @@
             "renamePersona": "Rename persona",
             "startsFullToolboxWhole": "It starts with the full toolbox, the whole workspace and the sandbox's own prompt. Change any of that once it opens.",
             "untilOneAutomationSchedule": "Until there is one, an automation you schedule can't post anywhere, and a chat reaches every account you've connected.",
-            "useLettersOrDigits": "Use letters or digits."
+            "useLettersOrDigits": "Use letters or digits.",
+            "couldntRemovePersona": "Could not remove this persona."
         },
         "sandboxSecrets": {
             "addSecret": "Add a secret",
@@ -9997,7 +9996,7 @@
         },
         "linkedSandboxes": {
             "title": "Linked sandboxes",
-            "noPersona": "No persona",
+            "noPersona": "No accounts",
             "noPersonaHint": "No signed-in account, and the full toolbox, as any unattended wake.",
             "wearsNothing": "no persona",
             "wears": "wears {persona}",
@@ -10298,6 +10297,16 @@
                 "offline": "Runner offline or busy",
                 "runsHere": "runs here instead, as before"
             }
+        },
+        "builtInPersonas": {
+            "fullAccess": "Full access",
+            "fullAccessNote": "Every account you've connected, and the full toolbox.",
+            "fullAccessWhen": "Worn by a chat you start without picking a persona.",
+            "noAccounts": "No accounts",
+            "noAccountsNote": "The full toolbox, but none of your signed-in accounts: it can't post or browse as you.",
+            "noAccountsWhen": "Worn by anything that runs while nobody watches (an automation, a queue, a subagent of such a run) and names no persona.",
+            "title": "Built in",
+            "reserved": "\"{name}\" is a built-in persona. Pick another name."
         }
     },
     "settings": {

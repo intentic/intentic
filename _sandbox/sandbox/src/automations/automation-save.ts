@@ -1,6 +1,6 @@
 import type { Automation, AutomationCatalog } from "@intentic/sandbox-contract/schemas/automations";
 import { cronOptions } from "@intentic/sandbox-contract/time/zone";
-import { VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
+import { isBuiltInPersona, VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
 import { ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { type DoorKind, doorChange } from "../auth/tokens/door-tokens.js";
@@ -91,6 +91,21 @@ const refuseMisplacedSenders = (automation: Automation, catalog: AutomationCatal
 const namesVisitorChat = (automation: Automation): boolean =>
     automation.actsAs === VISITOR_CHAT_PERSONA || (automation.senders?.rules.some((rule) => rule.actsAs === VISITOR_CHAT_PERSONA) ?? false);
 
+// Every persona it names, its own and each sender rule's, must be one a wake can wear: a card, a built-in, or the
+// Visitor chat's, which saving brings into being. A name nobody carries would run every fire with no tools and no
+// accounts, silently, so it is refused here, where the person choosing it can still pick another.
+const refuseUnknownPersona = async (services: Services, automation: Automation): Promise<void> => {
+    const named = [automation.actsAs, ...(automation.senders?.rules ?? []).map((rule) => rule.actsAs)].filter(
+        (id): id is string => id !== undefined && !isBuiltInPersona(id) && id !== VISITOR_CHAT_PERSONA,
+    );
+    // Read only when a card is named at all: most automations name none, or a built-in.
+    const cards = named.length === 0 ? new Set<string>() : new Set((await services.personas.list()).map((card) => card.id));
+    const unknown = named.find((id) => !cards.has(id));
+    if (unknown !== undefined) {
+        throw new ORPCError("BAD_REQUEST", { message: `no persona is called "${unknown}": pick one that exists, Full access, or No accounts` });
+    }
+};
+
 // Everything saving an automation refuses, each refusal a BAD_REQUEST naming what to change: shared by the upsert route
 // and an approved automation need (needs/kinds/automation-need.ts), so an agent's proposal is held to exactly what the
 // Automations page is. `upsert` validates the cron with the scheduler's own parser, so what's accepted is what will fire.
@@ -98,6 +113,7 @@ export const refuseInvalidAutomation = async (services: Services, automation: Au
     refusePastMoment(automation.trigger, Date.now());
     refusePastEnd(automation, Date.now());
     refuseMisshapenWatch(services, automation);
+    await refuseUnknownPersona(services, automation);
     if (automation.trigger.kind === "schedule") {
         // Both halves matter: a pattern that won't parse, and one that parses into a moment that can never
         // come (a fixed date in the past, the 30th of February). The second used to be accepted and then sit

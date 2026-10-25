@@ -6,6 +6,7 @@ import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break"
 import { canonicalHarness, loopLabel, loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
+import { turnStandingOf } from "../../conversations/actor/turn-standing.js";
 import type { ChildParent, ChildRecord, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
 
 /** Another provider and model for a child's next turn, in the same worktree (sendToChild, a spawn's fallbacks). */
@@ -91,12 +92,20 @@ export const canonicalSpawn = (spec: ChildSpawnSpec): ChildSpawnSpec => ({
     ...opt("fallbacks", spec.fallbacks?.map(canonicalRehome)),
 });
 
-// Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, and
-// nobody at a composer, which also floors the persona so it speaks for no outside account. No `runRole`: the parent's
-// own provider and model pick decides, not a settings-row default.
+// A child wears its parent's persona: the card or built-in the parent's own turn wore, as its standing recorded it
+// (turn-plan.ts). Before, every child was unwatched with no persona, so No accounts: a child of a chat acting as Full
+// access or as a card lost the accounts its parent was handed. Whatever the ask named is dropped, never trusted.
+export const wearingParent = (actors: Parameters<typeof turnStandingOf>[0], parent: ChildParent, ask: ChildSpawnSpec): ChildSpawnSpec => {
+    const { actsAs: _asked, ...rest } = ask;
+    return { ...rest, ...opt("actsAs", turnStandingOf(actors, parent.conversationId)?.persona?.id) };
+};
+
+// Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, nobody at
+// a composer, and its parent's persona (wearingParent). With none recorded it names none, and being unwatched wears No
+// accounts. No `runRole`: the parent's own provider and model pick decides, not a settings-row default.
 const childProfile = (spec: ChildSpawnSpec): TurnProfile => {
     const { provider, harness, model } = childRouting(spec);
-    const profile: TurnProfile = { agent: provider, harness, model, isolated: true, unattended: true };
+    const profile: TurnProfile = { agent: provider, harness, model, isolated: true, unattended: true, ...opt("actsAs", spec.actsAs) };
     // Each knob only where one was named: an absent one is the model's own default.
     if (spec.effort !== undefined) {
         profile.effort = spec.effort;

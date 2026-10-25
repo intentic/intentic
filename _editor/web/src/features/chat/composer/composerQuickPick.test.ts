@@ -155,15 +155,16 @@ it(`drills into one kind alone, caps its list at the boundary, and leads with th
     expect(labels(sources, { kind: `model`, query: `m1` })).toEqual([`Claude M1`, `Claude M10`, `Claude M11`, `Claude M12`]);
 });
 
-it(`drills the other three kinds to their whole lists, Anyone and This sandbox first`, () => {
-    expect(labels(ALL, { kind: `persona`, query: `` })).toEqual([`Anyone`, `Intentic`, `radarsu`]);
+it(`drills the other three kinds to their whole lists, the built-in personas and This sandbox first`, () => {
+    expect(labels(ALL, { kind: `persona`, query: `` })).toEqual([`Full access`, `No accounts`, `Intentic`, `radarsu`]);
     expect(labels(ALL, { kind: `sandbox`, query: `` })).toEqual([`This sandbox`, `omen`, `Paperwork`]);
     expect(labels(ALL, { kind: `effort`, query: `` })).toEqual([`Low`, `High`, `Max`]);
     expect(labels(ALL, { kind: `effort`, query: `ma` })).toEqual([`Max`]);
 });
 
 it(`carries what a pick needs: the persona id, both placement axes, the model entry, the effort value`, () => {
-    expect(quickRows(ALL, { kind: `persona`, query: `` })).toMatchObject([{ id: undefined }, { id: `intentic` }, { id: `radarsu` }]);
+    // Full access is what no pick means, so it carries none; No accounts is a pick like a card.
+    expect(quickRows(ALL, { kind: `persona`, query: `` })).toMatchObject([{ id: undefined }, { id: `no-accounts` }, { id: `intentic` }, { id: `radarsu` }]);
     expect(quickRows(ALL, { kind: `sandbox`, query: `` })).toMatchObject([
         { box: undefined, runner: undefined, current: true },
         { box: undefined, runner: `omen`, current: false },

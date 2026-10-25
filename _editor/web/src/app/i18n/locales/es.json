@@ -2518,7 +2518,7 @@
             "which": "Sandbox",
             "pickOne": "Elige un sandbox",
             "persona": "Sus tareas usan",
-            "noPersona": "Sin persona",
+            "noPersona": "Sin cuentas",
             "noPersonaHint": "Sin cuenta con sesión iniciada allí y con todas las herramientas, como cualquier activación desatendida.",
             "askFirst": "Preguntarme allí antes de cada tarea",
             "turnsAnHour": "turnos por hora",
@@ -3406,7 +3406,6 @@
             "runDiagram": "Diagrama de ejecución"
         },
         "chatPersonaMenu": {
-            "everyAccountYouveConnected": "Todas las cuentas que has conectado están a mano, y la caja de herramientas completa.",
             "noGuestYet": "Todavía no se te ha asignado ningún asistente. Pídele uno al propietario del sandbox.",
             "noPersonasYetChat": "Todavía no hay personas, así que este chat habla a través de todas las cuentas que has conectado. Crea una para enviar un mensaje como una sola persona: solo con sus cuentas a mano.",
             "notSignedInYet": ", sin sesión iniciada todavía"
@@ -4071,7 +4070,6 @@
             "closePane": "Cerrar el panel",
             "latest": "Más reciente",
             "setUpPersona": "Crear una persona",
-            "anyone": "Cualquiera",
             "managePersonas": "Gestionar personas",
             "gone": "Ya no está disponible",
             "autoLabel": "Auto",
@@ -4252,7 +4250,7 @@
         "chatRoute": {
             "actingAs": "Actuando como {name}.",
             "matchedButHeld": "{name} coincidió, pero este chat ya se había dirigido a mano a otro sitio, así que no se movió nada.",
-            "noPersonaMatched": "Ninguna persona coincidió, así que este chat actúa como todas.",
+            "noPersonaMatched": "Ninguna persona coincidió, así que este chat actúa con Acceso completo.",
             "personaBringsModel": "{name} trae su propio modelo, así que este chat se ejecuta con ese.",
             "readBy": "Leído por {model}.",
             "readingBoth": "Leyendo con qué empieza este chat: una sola llamada que elige su persona y su modelo.",
@@ -7870,7 +7868,7 @@
             "scopeLand": "Dirige e integra trabajo",
             "scopeEditor": "Una conversación",
             "asPersona": "Como {persona}",
-            "noPersona": "Sin persona",
+            "noPersona": "Sin cuentas",
             "waiting": "{count} tarea espera tu sí | {count} tareas esperan tu sí",
             "inertExpired": "Caducado",
             "inertMinter": "Quien lo creó ya no gestiona el sandbox",
@@ -8020,7 +8018,7 @@
             "newChats": "Chats nuevos",
             "noPersonasYet": "Todavía no hay personas",
             "notSignedIn": "Sin sesión iniciada",
-            "nothingReadChatActs": "No se lee nada: un chat actúa como la persona que elijas, o como todos.",
+            "nothingReadChatActs": "No se lee nada: un chat actúa como la persona que elijas, o con Acceso completo.",
             "personaName": "Nombre de la persona",
             "personaNameTaken": "Ya tienes una persona llamada {name}.",
             "personas": "Tus personas",
@@ -8031,7 +8029,8 @@
             "renamePersona": "Renombrar la persona",
             "startsFullToolboxWhole": "Empieza con la caja de herramientas completa, todo el espacio de trabajo y la indicación propia del sandbox. Cambia cualquiera de esas cosas en cuanto se abra.",
             "untilOneAutomationSchedule": "Hasta que haya una, una automatización que programes no puede publicar en ninguna parte, y un chat llega a todas las cuentas que has conectado.",
-            "useLettersOrDigits": "Usa letras o dígitos."
+            "useLettersOrDigits": "Usa letras o dígitos.",
+            "couldntRemovePersona": "No se pudo eliminar esta persona."
         },
         "sandboxSecrets": {
             "addSecret": "Añadir un secreto",
@@ -9997,7 +9996,7 @@
         },
         "linkedSandboxes": {
             "title": "Sandboxes vinculados",
-            "noPersona": "Sin persona",
+            "noPersona": "Sin cuentas",
             "noPersonaHint": "Sin cuenta iniciada y con todas las herramientas, como cualquier activación desatendida.",
             "wearsNothing": "sin persona",
             "wears": "usa {persona}",
@@ -10298,6 +10297,16 @@
                 "offline": "Runner desconectado u ocupado",
                 "runsHere": "se ejecuta aquí, como antes"
             }
+        },
+        "builtInPersonas": {
+            "fullAccess": "Acceso completo",
+            "fullAccessNote": "Todas las cuentas que has conectado y la caja de herramientas completa.",
+            "fullAccessWhen": "La lleva un chat que empiezas sin elegir una persona.",
+            "noAccounts": "Sin cuentas",
+            "noAccountsNote": "La caja de herramientas completa, pero ninguna de tus cuentas con sesión iniciada: no puede publicar ni navegar como tú.",
+            "noAccountsWhen": "La lleva todo lo que se ejecuta sin que nadie mire (una automatización, una cola, un subagente de una ejecución así) y no nombra ninguna persona.",
+            "title": "Integradas",
+            "reserved": "«{name}» es una persona integrada. Elige otro nombre."
         }
     },
     "settings": {

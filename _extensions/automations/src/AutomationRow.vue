@@ -21,7 +21,7 @@ import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
 import { useConversations, useSandboxZone } from "./useAutomations";
 import { isWatch, sourceLabel, watchLine } from "./watch";
-import { usePersonaReach } from "./usePersonaReach";
+import { usePersonaReach } from "./persona/usePersonaReach";
 import { answersCard } from "./senderSummary";
 import { visitorChatOf } from "./detail/visitorChat";
 import { t } from "./i18n.js";
@@ -171,10 +171,7 @@ const startEdit = (): void => {
 const visitorChat = computed(() => visitorChatOf(props.automation));
 
 // Whether its wakes get less than the owner likely expects: one quiet mark on the row, the reason in the drawer.
-const { reach, reachTip } = usePersonaReach(
-    computed(() => props.automation),
-    computed(() => targetPhrase.value === undefined),
-);
+const { reach, reachTip } = usePersonaReach(computed(() => props.automation));
 
 // Who it answers (senderSummary.ts), as a hover card on the row's glyph; the drawer says it in words.
 const answersTip = computed(() => answersCard(props.automation.senders));

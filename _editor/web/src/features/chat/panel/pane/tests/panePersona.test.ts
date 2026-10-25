@@ -69,7 +69,7 @@ describe(`a pick`, () => {
         expect(persona.personaName.value).toBe(`Backend`);
     });
 
-    it(`leaves the chat's model alone for a persona that brings none, and "Anyone" un-pins`, () => {
+    it(`leaves the chat's model alone for a persona that brings none, and Full access un-pins`, () => {
         const { chat, route, persona } = personaOf();
         const model = chat.selection.model.value;
 
@@ -81,6 +81,18 @@ describe(`a pick`, () => {
         persona.pickPersona(undefined);
         expect(chat.selection.actsAs.value).toBeUndefined();
         expect(route.byHand).toHaveBeenCalledTimes(2);
+        // No pick is the Full access built-in, named and marked as such rather than left blank.
+        expect(persona.personaName.value).toBe(`Full access`);
+        expect(persona.personaIcon.value).toBe(`users`);
+    });
+
+    it(`names No accounts, gives it its own mark, and never calls a built-in gone`, () => {
+        const { persona } = personaOf();
+
+        persona.pickPersona(`no-accounts`);
+        expect(persona.personaName.value).toBe(`No accounts`);
+        expect(persona.personaIcon.value).toBe(`lock`);
+        expect(persona.personaNotice.value).toBeUndefined();
     });
 });
 

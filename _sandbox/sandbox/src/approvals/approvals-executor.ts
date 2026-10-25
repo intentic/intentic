@@ -8,6 +8,7 @@ import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type ApprovalStanding, approvalStandings, type SpentApproval, spendApprovals } from "./approval-decisions.js";
 import { type PerformedAction, performApprovedAction } from "./approval-performers.js";
 import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
+import { BUILT_IN_PERSONAS, NO_ACCOUNTS_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
 // agent write the queue.
@@ -76,6 +77,11 @@ const performedError = (outcome: { readonly outcome: `refused` | `uncertain`; re
     outcome.outcome === `refused`
         ? `Nothing was done: ${outcome.error}`
         : `This may already have happened: ${outcome.error}. Check the system it was sent to before approving it again; it is never retried by itself.`;
+
+// Every persona an approved item may name: the cards, and the built-ins, which are always there, so naming one is never
+// a ghost.
+const wearable = async (services: Services): Promise<ReadonlySet<string>> =>
+    new Set([...(await services.personas.list()).map((card) => card.id), ...BUILT_IN_PERSONAS.map((builtIn) => builtIn.id)]);
 
 export const createApprovalsExecutor = (services: Services): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
@@ -172,8 +178,8 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         void services.turns.start(turn).catch((error: unknown) => services.logger.error({ err: error }, `approval turn failed to start`));
     };
 
-    // A name that resolves to nobody fails every kind: turnPersona denies an unknown card entirely, same as an unpinned
-    // turn.
+    // A name that resolves to nobody fails every kind: turnPersona denies an unknown card every account and every tool.
+    //
     // Said here in the queue rather than left to be rediscovered from inside a turn; returns the items that can go.
     const settleGhosts = async <T extends ApprovalSummary>(items: readonly T[], cast: ReadonlySet<string>): Promise<T[]> => {
         const ghosts = items.filter((item) => item.actsAs !== undefined && !cast.has(item.actsAs));
@@ -186,18 +192,18 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         return items.filter((item) => !ghosts.includes(item));
     };
 
-    // A post that needs a turn and names nobody is failed, not sent: an unattended turn with no persona is denied every
-    // logged-in account.
+    // A post that needs a turn and names nobody is failed, not sent: an unattended turn with no persona wears No accounts,
+    // which is denied every logged-in account. Naming No accounts outright is the same post.
     // An action without a persona is not the same case: it runs with no accounts, which is right for work that needs
     // none.
     const settleUnnamed = async (posts: readonly PostApprovalSummary[]): Promise<PostApprovalSummary[]> => {
-        for (const post of posts.filter((entry) => entry.actsAs === undefined)) {
+        for (const post of posts.filter((entry) => entry.actsAs === undefined || entry.actsAs === NO_ACCOUNTS_PERSONA)) {
             await fail(
                 post,
                 `Nobody is named to post this. ${post.platform} publishes through a logged-in browser, and this post does not say which persona's account to use, so nothing was sent. Set "actsAs" to a persona that holds the right ${post.platform} account, then approve it again.`,
             );
         }
-        return posts.filter((entry) => entry.actsAs !== undefined);
+        return posts.filter((entry) => entry.actsAs !== undefined && entry.actsAs !== NO_ACCOUNTS_PERSONA);
     };
 
     const runDue = async (now = Date.now()): Promise<void> => {
@@ -227,7 +233,7 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
                 }
             }
 
-            const cast = new Set((await services.personas.list()).map((card) => card.id));
+            const cast = await wearable(services);
             const posts = await settleUnnamed(await settleGhosts(forTurn, cast));
             const actions = await settleGhosts(
                 due.filter(isAction).filter((item) => item.performer === undefined),

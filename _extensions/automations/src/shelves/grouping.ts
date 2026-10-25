@@ -1,4 +1,5 @@
 import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
+import { unwatchedPick } from "@intentic/sandbox-contract/schemas/personas";
 
 // Which shelf an automation is filed on, so a page of fifty reads as a handful of named groups rather than two buckets.
 // In order: the group it names itself, then the code chores, then the persona it runs as (a set of jobs one role runs is
@@ -40,9 +41,10 @@ export const shelfOf = (automation: Pick<AutomationSummary, `group` | `chore` | 
         return { key: keyOf(words.chores), label: words.chores, kind: `chores` };
     }
     // A persona that is gone still names the shelf, by its id: the row already says the persona is missing, and filing it
-    // under "Other" would hide which jobs went with it.
-    if (automation.actsAs !== undefined) {
-        const label = words.personaLabel(automation.actsAs) ?? automation.actsAs;
+    // under "Other" would hide which jobs went with it. No accounts named outright is the same as naming none.
+    const actsAs = unwatchedPick(automation.actsAs);
+    if (actsAs !== undefined) {
+        const label = words.personaLabel(actsAs) ?? actsAs;
         return { key: keyOf(label), label, kind: `persona` };
     }
     return { key: OTHER_KEY, label: words.other, kind: `other` };

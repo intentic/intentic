@@ -1,5 +1,5 @@
 import { fenceHoldsPersona } from "@intentic/sandbox-contract/policy/persona-home";
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { isBuiltInPersona, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { Caller } from "../auth/auth.js";
@@ -36,8 +36,10 @@ const insteadTry = (personas: readonly Persona[]): string =>
         : `yours are: ${personas.map(nameOf).join(", ")}`;
 
 /**
- * The refusal a caller meets on a persona their areas do not reach, and the one a guest meets on naming none at all:
- * an unpinned attended chat reaches every account, which is exactly what the narrowest role is not handed.
+ * The refusal a caller meets on a persona their areas do not reach, and the one a guest meets on naming none at all or
+ * a built-in: an attended chat naming no card wears Full access, every account, which is exactly what the narrowest role
+ * is not handed, and No accounts still holds the whole toolbox. Anyone else may wear either built-in, fenced or not:
+ * they live nowhere, and the conversation's own fence still holds under them.
  * Costs nothing for an unfenced caller naming a persona, which is every owner-driven turn.
  */
 export const refuseUnlessReachable = async (services: PersonaReachDeps, caller: Caller | undefined, actsAs: string | undefined): Promise<void> => {
@@ -46,11 +48,11 @@ export const refuseUnlessReachable = async (services: PersonaReachDeps, caller: 
     }
     // A home-only guest speaks to its own home conversation, which is no card (conversations/home/home-conversation.ts).
     const guest = caller.role === "guest" && caller.agents !== "home";
-    if (!guest && (actsAs === undefined || caller.areas === undefined)) {
+    if (!guest && (actsAs === undefined || isBuiltInPersona(actsAs) || caller.areas === undefined)) {
         return;
     }
     const personas = await reachablePersonas(services, caller.areas);
-    if (actsAs === undefined) {
+    if (actsAs === undefined || isBuiltInPersona(actsAs)) {
         throw new ORPCError("FORBIDDEN", { message: `a guest speaks through one of its assistants: ${insteadTry(personas)}` });
     }
     if (!personas.some((persona) => persona.id === actsAs)) {

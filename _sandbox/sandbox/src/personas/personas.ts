@@ -4,6 +4,10 @@ import type { ConversationGrant } from "@intentic/sandbox-contract/schemas/needs
 import { type Fence, fenceIntersection } from "@intentic/sandbox-contract/policy/fence-paths";
 import { isSignedInAccount, personaAllowsCapability } from "@intentic/sandbox-contract/policy/persona-capability";
 import {
+    type BuiltInPersonaId,
+    defaultPersona,
+    isBuiltInPersona,
+    NO_ACCOUNTS_PERSONA,
     type Persona,
     type PersonaPowers,
     type PersonaWorkspace,
@@ -14,24 +18,27 @@ import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settin
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { VISITOR_CHAT_GUIDANCE } from "./visitor-chat.js";
 
-// A persona answers four questions together: accounts, tool shelves, workspace, and prompt. Accounts default to
-// nothing for an unpinned unattended turn; powers default to everything regardless, since owners opt into bounds one
-// persona at a time. An unknown persona denies both, rather than assuming a safe default.
+// A persona answers four questions together: accounts, tool shelves, workspace, and prompt. Every turn wears one: a
+// card, or one of the two built-ins (schemas/personas.ts) — Full access, or No accounts — which a turn naming no card
+// wears by whether a person is watching. Naming a built-in wears it whoever is watching. An unknown card denies both
+// accounts and tools, rather than assuming a safe default.
 
 // Why a turn got the accounts and powers it did; feeds the log line and surfaces explaining a blocked tool.
 export type PersonaReason =
-    // No persona named, someone watching: every connected account.
-    | "attended-open"
-    // A persona was named and found: exactly what it says.
+    // The Full access built-in: every connected account and the full toolbox. What a watched turn naming no card wears.
+    | "full-access"
+    // The No accounts built-in: the full toolbox, no signed-in account. What an unwatched turn naming no card wears.
+    | "no-accounts"
+    // A card was named and found: exactly what it says.
     | "persona"
-    // Nobody watching and no persona named: no logged-in account, but the full toolbox.
-    | "unattended-unpinned"
-    // A persona was named and none carries that id: nothing at all, of either kind.
+    // A card was named and none carries that id: nothing at all, of either kind.
     | "unknown-persona";
 
 export interface TurnPersona {
-    // The persona that was named and found, for the turn's own note. Absent in every other case.
+    // The card that was named and found, for the turn's own note and kit. Absent for a built-in and an unknown name.
     readonly persona: Persona | undefined;
+    // The built-in this turn wears, named or by default; absent when it wears a card or an unknown name.
+    readonly builtIn?: BuiltInPersonaId;
     // Whether this turn may act through a capability; takes the whole entry, since the rule differs per kind.
     readonly allows: (capability: Capability) => boolean;
     // The shelves, fully resolved, no undefined fields, so no caller re-implements a default.
@@ -49,14 +56,14 @@ export interface TurnPersonaInput {
     readonly personas: readonly Persona[];
     // AgentTurn.actsAs, the persona the turn asked to wear.
     readonly actsAs: string | undefined;
-    // AgentTurn.unattended, whether anyone is at a composer. The hinge the account rule turns on.
+    // AgentTurn.unattended, whether anyone is at a composer: which built-in a turn naming no card wears.
     readonly unattended: boolean;
     // The fence the conversation carries, fixed when it was started from whoever started it. Undefined means its
     // starter was unfenced, which is every conversation an owner or a maintainer opens.
     readonly fence?: Fence;
 }
 
-// Every shelf open, what an unpinned turn gets, and the shape every caller can read without a fallback.
+// Every shelf open, what both built-ins get, and the shape every caller can read without a fallback.
 const FULL: PersonaPowers = PersonaPowersSchema.parse({});
 // Every shelf shut; only a named-but-missing persona gets this.
 const NONE_POWERS: PersonaPowers = {
@@ -73,17 +80,22 @@ const NONE_POWERS: PersonaPowers = {
     extensions: [],
 };
 
-// Per-kind verdicts, not one blanket one: an unpinned wake denies accounts only, keeping the rest.
+// Per-kind verdicts, not one blanket one: No accounts denies accounts only, keeping the rest.
 const EVERYTHING = (): boolean => true;
 const NOTHING = (): boolean => false;
 // Identities count as accounts: an identity's browser holds every account born from it.
 const ACCOUNTS_ONLY_DENIED = (capability: Capability): boolean => !isSignedInAccount(capability.kind);
 
+// A built-in, worn: the whole toolbox and the conversation's own fence, with every account or none.
+const wearBuiltIn = (id: BuiltInPersonaId, fence: Fence): TurnPersona =>
+    id === NO_ACCOUNTS_PERSONA
+        ? { persona: undefined, builtIn: id, allows: ACCOUNTS_ONLY_DENIED, powers: FULL, workspace: undefined, fence, reason: "no-accounts" }
+        : { persona: undefined, builtIn: id, allows: EVERYTHING, powers: FULL, workspace: undefined, fence, reason: "full-access" };
+
 export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersonaInput): TurnPersona => {
-    if (actsAs === undefined) {
-        return unattended
-            ? { persona: undefined, allows: ACCOUNTS_ONLY_DENIED, powers: FULL, workspace: undefined, fence, reason: "unattended-unpinned" }
-            : { persona: undefined, allows: EVERYTHING, powers: FULL, workspace: undefined, fence, reason: "attended-open" };
+    // Checked before the cards: a built-in id is reserved, so a card that somehow carries one never shadows it.
+    if (actsAs === undefined || isBuiltInPersona(actsAs)) {
+        return wearBuiltIn(actsAs ?? defaultPersona(unattended), fence);
     }
     const persona = personas.find((entry) => entry.id === actsAs);
     if (persona === undefined) {
@@ -153,7 +165,8 @@ export const personaWithheldAccounts = (capabilities: readonly Capability[], per
 
 export const UNATTENDED_ACCOUNTS_TITLE = "This turn reaches no signed-in account";
 
-// What an unattended wake owes itself when the rule above takes its accounts away.
+// What a turn wearing No accounts owes itself when the built-in takes its accounts away: usually an unwatched one that
+// named no card, sometimes a person who picked it on purpose.
 //
 // Absence teaches nothing here, and three silences compound: the skill files stay on disk still advertising the
 // account, `Skill(<id>)` refuses with the SDK's generic permission sentence, and `secrets gates` — the one diagnostic
@@ -163,21 +176,22 @@ export const UNATTENDED_ACCOUNTS_TITLE = "This turn reaches no signed-in account
 // It names the boundary as well as the loss: this rule takes signed-in browsers only, so a turn reading it must not
 // conclude that the connector credentials still in its environment are gone too.
 //
-// Only for the unpinned case: a turn wearing a persona is told what it is wearing by personaNote, which is the same
-// sentence from the other end.
+// Only for No accounts: a turn wearing a card is told what it is wearing by personaNote, which is the same sentence
+// from the other end.
 export const unattendedAccountsNote = (persona: TurnPersona, withheld: readonly Capability[]): TurnNote | undefined => {
-    if (persona.reason !== "unattended-unpinned" || withheld.length === 0) {
+    if (persona.reason !== "no-accounts" || withheld.length === 0) {
         return undefined;
     }
     return {
         title: UNATTENDED_ACCOUNTS_TITLE,
         text:
-            `Nobody is watching this turn — a schedule, a queue or another agent started it — so it acts as no one, and the ` +
-            `sandbox's signed-in accounts are not loaded into it: ${withheld.map((capability) => `\`${capability.id}\``).join(", ")}.\n\n` +
+            `This turn acts as the built-in persona No accounts — usually because nobody is watching it (a schedule, a queue ` +
+            `or another agent started it) and it named no persona — so the sandbox's signed-in accounts are not loaded into ` +
+            `it: ${withheld.map((capability) => `\`${capability.id}\``).join(", ")}.\n\n` +
             `They are connected and working. Their tools are absent and their skills refuse, and that is THIS RULE, not a broken ` +
-            `login: do not reconnect them, do not sign in by hand, and do not reach for a token to work around them. A turn a ` +
-            `person starts gets them, so if the work needs one, do everything else first and say plainly in your summary which ` +
-            `account it was waiting on.\n\n` +
+            `login: do not reconnect them, do not sign in by hand, and do not reach for a token to work around them. A turn ` +
+            `acting as Full access, or as a persona that holds the account, gets them, so if the work needs one, do everything ` +
+            `else first and say plainly in your summary which account it was waiting on.\n\n` +
             `That list is the whole of what this rule takes, and it is signed-in browsers only. Every connector credential in ` +
             `your environment and every skill built on one is untouched and yours to use.`,
     };

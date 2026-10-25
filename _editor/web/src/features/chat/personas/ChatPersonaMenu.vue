@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { FULL_ACCESS_PERSONA, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
 import { browserOwnsClick, FACE_SIZES, PersonaFace, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
+import { builtInPersonaViews } from "../../../models/sandbox/personas/builtInPersonas";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useT } from "@intentic/ui/i18n";
 
-// The composer's persona picker: who this chat speaks as to the outside world. "Anyone" is a real row, not the absence
-// of one, since an empty persona means opposite things attended vs. unattended. A persona whose accounts are all signed
-// out is still offered, marked rather than hidden: it's still meaningful, just unable to post yet.
+// The composer's persona picker: who this chat speaks as to the outside world. The two built-ins come first and are always
+// there: Full access (what no pick means, so picking it sends none) and No accounts. A persona whose accounts are all
+// signed out is still offered, marked rather than hidden: it's still meaningful, just unable to post yet.
 
 const t = useT();
 
@@ -18,8 +19,8 @@ const { picked } = defineProps<{ picked?: string }>();
 const emit = defineEmits<{ picked: [persona: string | undefined] }>();
 
 const { personas, isConnected } = usePersonas();
-// A guest picks among the personas it holds and nothing wider: "Anyone" would reach every account, which is exactly what a
-// guest is not handed, and the personas are the owner's to manage.
+// A guest picks among the personas it holds and nothing wider: Full access would reach every account, which is exactly
+// what a guest is not handed, No accounts the whole toolbox, and the personas are the owner's to manage.
 const { isGuest } = useRole();
 
 // True once any one of a persona's accounts is connected; only a persona that reaches nothing is marked.
@@ -29,6 +30,14 @@ const ready = (persona: Persona): boolean => persona.capabilities.some((id) => i
 const accountsOf = (persona: Persona): string => persona.capabilities.join(` · `);
 
 const empty = computed(() => personas.value.length === 0);
+
+// The built-ins as rows: Full access is what no pick means, so it is ticked for none and picking it sends none.
+const builtIns = computed(() =>
+    builtInPersonaViews().map((view) => {
+        const sends = view.id === FULL_ACCESS_PERSONA ? undefined : view.id;
+        return { ...view, sends, on: picked === sends || (sends === undefined && picked === FULL_ACCESS_PERSONA) };
+    }),
+);
 
 // Closes the menu only on a plain click; a click the browser owns (Ctrl/Cmd, opening a new tab) must leave this menu
 // open.
@@ -42,6 +51,26 @@ const closeMenu = (event: MouseEvent): void => {
 <template>
     <!-- Hairline between rows, so a picked row and a hovered neighbor read as two highlights, not one block. -->
     <div class="flex flex-col gap-0.5 p-1">
+        <!-- The tick marks the current pick, built-ins included: with none ticked, an unset persona would read as a broken menu. -->
+        <template v-if="!isGuest">
+            <button
+                v-for="row in builtIns"
+                :key="row.id"
+                type="button"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
+                :class="{ 'ui-row-select-on': row.on }"
+                :aria-selected="row.on"
+                @click="emit(`picked`, row.sends)"
+            >
+                <Icon :name="row.icon" class="shrink-0 text-xs text-subtle" />
+                <span class="flex min-w-0 flex-col">
+                    <span class="text-sm text-content md:text-xs">{{ row.label }}</span>
+                    <span class="text-2xs text-subtle">{{ row.note }}</span>
+                </span>
+                <Icon v-if="row.on" name="check" class="ml-auto shrink-0 text-2xs text-accent" aria-hidden="true" />
+            </button>
+        </template>
+
         <!-- Not an error: the copy explains what an empty list means and where to fix it. -->
         <template v-if="empty">
             <p class="px-2.5 py-3 text-2xs text-subtle">
@@ -59,23 +88,6 @@ const closeMenu = (event: MouseEvent): void => {
         </template>
 
         <template v-else>
-            <!-- The tick marks the current pick, including Anyone: with none ticked, an unset persona would read as a broken menu. -->
-            <button
-                v-if="!isGuest"
-                type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
-                :class="{ 'ui-row-select-on': picked === undefined }"
-                :aria-selected="picked === undefined"
-                @click="emit(`picked`, undefined)"
-            >
-                <Icon name="users" class="shrink-0 text-xs text-subtle" />
-                <span class="flex min-w-0 flex-col">
-                    <span class="text-sm text-content md:text-xs">{{ t(`chat.words.anyone`) }}</span>
-                    <span class="text-2xs text-subtle">{{ t(`chat.chatPersonaMenu.everyAccountYouveConnected`) }}</span>
-                </span>
-                <Icon v-if="picked === undefined" name="check" class="ml-auto shrink-0 text-2xs text-accent" aria-hidden="true" />
-            </button>
-
             <button
                 v-for="persona in personas"
                 :key="persona.id"

@@ -2518,7 +2518,7 @@
             "which": "Sandbox",
             "pickOne": "Choisissez un sandbox",
             "persona": "Ses tâches portent",
-            "noPersona": "Aucune persona",
+            "noPersona": "Aucun compte",
             "noPersonaHint": "Aucun compte connecté là-bas, et la boîte à outils complète, comme tout réveil sans surveillance.",
             "askFirst": "Me demander là-bas avant chaque tâche",
             "turnsAnHour": "tours par heure",
@@ -3406,7 +3406,6 @@
             "runDiagram": "Diagramme d'exécution"
         },
         "chatPersonaMenu": {
-            "everyAccountYouveConnected": "Tous les comptes que vous avez connectés sont à portée, ainsi que la boîte à outils complète.",
             "noGuestYet": "Aucun assistant ne vous a encore été attribué. Demandez-en un au propriétaire du sandbox.",
             "noPersonasYetChat": "Pas encore de persona : ce chat parle donc à travers tous les comptes que vous avez connectés. Créez-en un pour envoyer un message en tant qu'une seule personne, avec seulement ses comptes à portée.",
             "notSignedInYet": ", pas encore connecté"
@@ -4071,7 +4070,6 @@
             "closePane": "Fermer le panneau",
             "latest": "Le plus récent",
             "setUpPersona": "Créer un persona",
-            "anyone": "N'importe qui",
             "managePersonas": "Gérer les personas",
             "gone": "N'est plus disponible",
             "autoLabel": "Auto",
@@ -4252,7 +4250,7 @@
         "chatRoute": {
             "actingAs": "Agit en tant que {name}.",
             "matchedButHeld": "{name} correspond, mais ce chat avait d'abord été orienté manuellement : rien n'a été déplacé.",
-            "noPersonaMatched": "Aucun persona ne correspond : ce chat agit donc au nom de tous.",
+            "noPersonaMatched": "Aucun persona ne correspond : ce chat agit donc en Accès complet.",
             "personaBringsModel": "{name} fournit son propre modèle, que ce chat utilise donc.",
             "readBy": "Lu par {model}.",
             "readingBoth": "Détermination du point de départ de ce chat : un appel choisit à la fois son persona et son modèle.",
@@ -7870,7 +7868,7 @@
             "scopeLand": "Pilote et intègre le travail",
             "scopeEditor": "Une conversation",
             "asPersona": "En tant que {persona}",
-            "noPersona": "Aucun persona",
+            "noPersona": "Aucun compte",
             "waiting": "{count} tâche attend votre accord | {count} tâches attendent votre accord",
             "inertExpired": "Expiré",
             "inertMinter": "La personne qui l'a créé ne gère plus le sandbox",
@@ -8020,7 +8018,7 @@
             "newChats": "Nouveaux chats",
             "noPersonasYet": "Pas encore de personas",
             "notSignedIn": "Non connecté",
-            "nothingReadChatActs": "Rien n'est lu : un chat agit en tant que le persona que vous choisissez, ou en tant que tout le monde.",
+            "nothingReadChatActs": "Rien n'est lu : un chat agit en tant que le persona que vous choisissez, ou en Accès complet.",
             "personaName": "Nom du persona",
             "personaNameTaken": "Vous avez déjà un persona nommé {name}.",
             "personas": "Vos personas",
@@ -8031,7 +8029,8 @@
             "renamePersona": "Renommer le persona",
             "startsFullToolboxWhole": "Il démarre avec la boîte à outils complète, tout l'espace de travail et la consigne propre du sandbox. Changez ce que vous voulez une fois qu'il est ouvert.",
             "untilOneAutomationSchedule": "Tant qu'il n'y en a pas, une automatisation que vous programmez ne peut rien publier nulle part, et un chat atteint tous les comptes que vous avez connectés.",
-            "useLettersOrDigits": "Utilisez des lettres ou des chiffres."
+            "useLettersOrDigits": "Utilisez des lettres ou des chiffres.",
+            "couldntRemovePersona": "Impossible de supprimer ce persona."
         },
         "sandboxSecrets": {
             "addSecret": "Ajouter un secret",
@@ -9997,7 +9996,7 @@
         },
         "linkedSandboxes": {
             "title": "Sandboxes liés",
-            "noPersona": "Aucun persona",
+            "noPersona": "Aucun compte",
             "noPersonaHint": "Aucun compte connecté et tous les outils, comme tout réveil sans surveillance.",
             "wearsNothing": "aucun persona",
             "wears": "agit en tant que {persona}",
@@ -10298,6 +10297,16 @@
                 "offline": "Exécuteur hors ligne ou occupé",
                 "runsHere": "s'exécute ici à la place, comme avant"
             }
+        },
+        "builtInPersonas": {
+            "fullAccess": "Accès complet",
+            "fullAccessNote": "Tous les comptes que vous avez connectés, et la boîte à outils complète.",
+            "fullAccessWhen": "Porté par un chat que vous lancez sans choisir de persona.",
+            "noAccounts": "Aucun compte",
+            "noAccountsNote": "La boîte à outils complète, mais aucun de vos comptes connectés : il ne peut ni publier ni naviguer en votre nom.",
+            "noAccountsWhen": "Porté par tout ce qui tourne sans que personne ne regarde (une automatisation, une file, un sous-agent d'une telle exécution) et ne nomme aucun persona.",
+            "title": "Intégrés",
+            "reserved": "« {name} » est un persona intégré. Choisissez un autre nom."
         }
     },
     "settings": {

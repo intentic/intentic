@@ -50,7 +50,6 @@
         "fri": "Fri",
         "moveUp": "Move up",
         "visitorChat": "Visitor chat",
-        "fullToolboxNoAccounts": "full toolbox, no accounts",
         "googleClientId": "Google client ID",
         "googleSignIn": "Google sign-in",
         "greetingOptional": "Greeting (optional)",
@@ -81,10 +80,7 @@
         "newSessionsRequiredSince": "New sessions required since the last wake before a due run fires",
         "newSessionsRunSince": "new sessions have run since it last woke",
         "nextRuns": "Next runs: {runs}",
-        "noAccounts": "no accounts",
         "noLongerExists": "no longer exists",
-        "noPersona": "No persona",
-        "nobody": "Nobody",
         "off": "Off",
         "onDay": "On day",
         "once": "Once",
@@ -233,7 +229,6 @@
         "aiDisclosure": "Tell visitors replies come from AI",
         "aiDisclosureText": "Custom disclosure (optional)",
         "aiDisclosureDefault": "Replies are written by an AI assistant and may contain mistakes.",
-        "noPersonaHint": "Without a persona it has every tool but none of your signed-in accounts. Pick one if it has to post or browse as you.",
         "personaGoneHint": "That persona no longer exists, so its wakes would run with no tools and no accounts. Pick another."
     },
     "automationRow": {
@@ -318,10 +313,8 @@
         "checkedAt": "Checked {at}",
         "personaMissing": "Persona gone",
         "personaMissingNote": "{ids} no longer exists, so its wakes run with no tools and no accounts. Pick another persona.",
-        "noAccounts": "No persona",
-        "noAccountsNote": "Its wakes have every tool but none of your signed-in accounts. Give it a persona if it has to post or browse as you.",
-        "runsAsMissing": "{id} (no longer exists)",
-        "runsAsNobody": "Nobody: no signed-in accounts"
+        "noAccounts": "No accounts",
+        "noAccountsNote": "Its wakes have every tool but none of your signed-in accounts. Pick Full access or a persona if it has to post or browse as you."
     },
     "automationsView": {
         "addAutomation": "Add an automation",
@@ -502,8 +495,6 @@
         "lastRunFailed": "Last run failed",
         "model": "Model",
         "nextAt": "Next {in} · {at}",
-        "noSignedInAccounts": "No signed-in accounts",
-        "nobody": "Nobody",
         "offNothingScheduled": "Off, so nothing is scheduled",
         "onceItsCheckPasses": "Once its check passes",
         "onlyWhenItChanges": "Only when what it checks changes",
@@ -531,5 +522,11 @@
         "groupHint": "Automations in one group share a shelf. Blank files it by its persona.",
         "groupOptional": "Group (optional)",
         "groupPlaceholder": "Marketing"
+    },
+    "builtInPersonas": {
+        "fullAccess": "Full access",
+        "fullAccessNote": "every tool and every signed-in account",
+        "noAccounts": "No accounts",
+        "noAccountsNote": "every tool, no signed-in account"
     }
 }

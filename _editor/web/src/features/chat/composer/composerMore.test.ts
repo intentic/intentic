@@ -107,7 +107,7 @@ it(`drops the controls this chat is not offered`, () => {
 it(`carries the current value and a sentence on every overflow row`, () => {
     const rows = overflowRows(PLAIN);
     expect(rows.map((row) => row.label)).toEqual([`Agent mode`, `Where this runs`, `Acts as`, `Run through`, `Write as agent`, `Land when done`]);
-    expect(rows.map((row) => row.value)).toEqual([`Auto`, `This sandbox`, `Anyone`, `Just this chat`, `Off`, `Off`]);
+    expect(rows.map((row) => row.value)).toEqual([`Auto`, `This sandbox`, `Full access`, `Just this chat`, `Off`, `Off`]);
     expect(rows.every((row) => row.description.length > 0)).toBe(true);
     // The mode row names the posture this chat is actually in, so a main-tree chat's menu doesn't say "Auto".
     expect(overflowRows(chat({ mode: `plan`, startingMode: `plan` }))[0]?.value).toBe(`Plan`);

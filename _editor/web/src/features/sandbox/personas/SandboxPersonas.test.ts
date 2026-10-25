@@ -144,6 +144,9 @@ const tileFor = (el: HTMLElement, id: string): HTMLButtonElement => {
 };
 const removeControl = (el: HTMLElement, id: string): HTMLButtonElement =>
     tileFor(el, id).parentElement!.querySelector<HTMLButtonElement>(`button[aria-label="Remove this persona"]`)!;
+// A built-in's row carries no remove control: it is always there.
+const removeControlFor = (el: HTMLElement, label: string): HTMLElement | undefined =>
+    [...el.querySelectorAll<HTMLElement>(`button[aria-label="Remove this persona"]`)].find((button) => (button.closest(`li, [role="listitem"], div`)?.textContent ?? ``).includes(label));
 const openPersona = async (el: HTMLElement, id: string): Promise<void> => {
     const tile = tileFor(el, id);
     if (tile.getAttribute(`aria-pressed`) !== `true`) {
@@ -295,9 +298,21 @@ it(`says nothing about a persona that holds no accounts`, async () => {
     personas.value = [{ id: `docs`, capabilities: [] }];
     const el = mount();
     await openPersona(el, `docs`);
-    const rendered = text(el);
+    // The open persona's own panel: the built-ins above the list name No accounts, which is theirs to say.
+    const panel = el.querySelector<HTMLElement>(`#${tileFor(el, `docs`).getAttribute(`aria-controls`)}`)!;
+    const rendered = text(panel);
     expect(rendered).not.toContain(`No accounts`);
     expect(rendered).not.toContain(`can't post`);
+});
+
+// Every turn wears somebody, so the page names the two personas every sandbox has, read-only, above the given ones.
+it(`shows the built-in personas, read-only`, async () => {
+    personas.value = [];
+    const el = mount();
+    await nextTick();
+    expect(text(el)).toContain(`Full access`);
+    expect(text(el)).toContain(`No accounts`);
+    expect(removeControlFor(el, `Full access`)).toBeUndefined();
 });
 
 it(`does not list account names under a closed persona`, async () => {
@@ -750,6 +765,18 @@ it(`describes how bounded a persona is on its selector`, async () => {
     const el = mount();
     const description = document.getElementById(tileFor(el, `visitor`).getAttribute(`aria-describedby`)!);
     expect(text(description!)).toContain(`Read-only`);
+});
+
+it(`refuses a new persona named after a built-in`, async () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
+    const el = mount();
+    buttonLabelled(el, `Add a persona`)!.click();
+    await nextTick();
+    await type(nameField(el), `Full access`);
+    expect(text(el)).toContain(`"Full access" is a built-in persona`);
+    buttonLabelled(el, `Create`)!.click();
+    await nextTick();
+    expect(save).not.toHaveBeenCalled();
 });
 
 it(`refuses a new persona whose name is already taken`, async () => {

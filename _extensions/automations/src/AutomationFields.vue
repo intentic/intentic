@@ -27,7 +27,7 @@ import { useCiDelivery } from "./useCiDelivery";
 import { useConversations, useSenders, useWatchCheck } from "./useAutomations";
 import { type AutomationFormState, type ConditionKind, type SenderRuleDraft, splitIds, type TargetKind, type TriggerKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
-import { usePersonaReach } from "./usePersonaReach";
+import { usePersonaOptions } from "./persona/personaOptions";
 
 // Shared create/edit fields use useAutomationForm, with content-sized When, Then and Runs as steps in a label rail.
 
@@ -76,41 +76,9 @@ const {
     conversationError,
 } = props.state;
 
-// Personas this sandbox can wear, for the picker below (names only; a card's connection status is the Personas page's),
-// and the one sentence under it when the choice costs something: no signed-in accounts, or a card that is gone.
-const { personaList, hint: personaHint } = usePersonaReach(computed(() => (form.actsAs === `` ? {} : { actsAs: form.actsAs })));
-const personas = computed<readonly PickerOption[]>(() =>
-    (personaList.data.value?.personas ?? [])
-        // `face` draws the same derived character used on the Personas page and in chat, so picking who an automation
-        // speaks as is the same act of recognition everywhere.
-        .map((persona) => ({ value: persona.id, label: persona.label ?? persona.id, face: persona }))
-        // Ordered, because a picker whose rows arrive in the file's order is a list you have to read twice.
-        .toSorted((a, b) => a.label.localeCompare(b.label)),
-);
-
-// Blank means different things: a Visitor chat fills it in as read-only at save, elsewhere it's nobody. A pinned persona
-// whose card is gone still gets a face, greyed, not a glyph, so it reads as gone, not unpinned.
-const personaOptions = computed<readonly PickerOption[]>(() => [
-    isVisitorChat.value
-        ? { value: ``, label: t(`automationFields.visitorChat`), description: `read-only`, icon: `globe` as const }
-        : { value: ``, label: t(`automationFields.nobody`), description: t(`automationFields.noAccounts`), icon: `circle` as const },
-    ...personas.value,
-    ...(form.actsAs !== `` && !personas.value.some((persona) => persona.value === form.actsAs)
-        ? [{ value: form.actsAs, label: form.actsAs, description: t(`automationFields.noLongerExists`), face: { id: form.actsAs }, disabled: true }]
-        : []),
-]);
-
-// A rule's blank row is a different sentence from the automation's: not "nobody", but the whole agent an owner talks to
-// themselves. A rule pinned to a card since deleted keeps its face, greyed, like the main picker.
-const rulePersonaOptions = computed<readonly PickerOption[]>(() => {
-    const known = new Set(personas.value.map((persona) => persona.value));
-    const orphans = [...new Set(form.senderRules.map((rule) => rule.actsAs).filter((id) => id !== `` && !known.has(id)))];
-    return [
-        { value: ``, label: t(`automationFields.noPersona`), description: t(`automationFields.fullToolboxNoAccounts`), icon: `circle` as const },
-        ...personas.value,
-        ...orphans.map((id) => ({ value: id, label: id, description: t(`automationFields.noLongerExists`), face: { id }, disabled: true })),
-    ];
-});
+// Who its wakes act as: the built-ins and the cards, for the automation and for each sender rule, and the one sentence
+// under the picker when a card it names is gone (personaOptions.ts).
+const { personaOptions, rulePersonaOptions, personaHint } = usePersonaOptions(form, isVisitorChat);
 
 // Who has written to this source, by name, so a rule is filled by a click rather than a copied id; read only while the
 // block is open.
@@ -1229,9 +1197,11 @@ const setProvider = (provider: string): void => {
                     </div>
                     <div class="ui-field min-w-0">
                         <span class="ui-field-label">{{ t(`automationFields.persona`) }}</span>
+                        <!-- A pick by hand ends the trigger's default for a new automation (usePersonaDefault.ts). -->
                         <Picker
                             v-model="form.actsAs"
                             :options="personaOptions"
+                            @update:model-value="markTouched(`actsAs`)"
                             :aria-label="t(`automationFields.personaAutomationRuns`)"
                             class="w-full"
                         />

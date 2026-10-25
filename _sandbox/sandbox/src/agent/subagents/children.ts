@@ -51,7 +51,7 @@ import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
-import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
+import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, wearingParent, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { elsewhereFor, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
@@ -110,6 +110,8 @@ export interface ChildSpawnSpec {
     readonly run?: { readonly id: string };
     // A review or test session on the work of a subagent this parent spawned (child-gates.ts freshGate), reporting to it.
     readonly freshOf?: FreshOf;
+    // Its parent's persona, set by spawnChild over whatever was asked (child-spec.ts wearingParent).
+    readonly actsAs?: string;
 }
 
 export interface ChildParent {
@@ -1225,7 +1227,8 @@ const startAllowedWithSeat = async (services: Services, parent: ChildParent, sta
  * surfaces later as the child's own failure. A start the owner must allow comes back at once as well, `held`, its row
  * waiting until they answer.
  */
-export const spawnChild = async (services: Services, parent: ChildParent, asked: ChildSpawnSpec): Promise<ChildSpawnResult> => {
+export const spawnChild = async (services: Services, parent: ChildParent, ask: ChildSpawnSpec): Promise<ChildSpawnResult> => {
+    const asked = wearingParent(services.conversations, parent, ask);
     const settings = await services.sandboxSettings.get();
     const depth = spawnDepthOf(services.conversations, parent.conversationId) + 1;
     const verdict = await admit("spawn", { services, parent: parent.conversationId, spec: asked, depth: { at: depth, most: settings.subagentDepth } });

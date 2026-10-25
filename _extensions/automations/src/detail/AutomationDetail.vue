@@ -22,7 +22,8 @@ import AutomationHooks from "./AutomationHooks.vue";
 import RunHistory from "./RunHistory.vue";
 import { failureStreak, runTally } from "./runHistory";
 import { answersPhrase } from "../senderSummary";
-import { usePersonaReach } from "../usePersonaReach";
+import { builtInLabel, usePersonaReach } from "../persona/usePersonaReach";
+import { FULL_ACCESS_PERSONA, unwatchedPick } from "@intentic/sandbox-contract/schemas/personas";
 import { sourceLabel, watchLine } from "../watch";
 import { t } from "../i18n.js";
 
@@ -60,10 +61,7 @@ interface Fact {
     readonly danger?: boolean;
 }
 
-const { personaList, reach } = usePersonaReach(
-    automation,
-    computed(() => props.targetPhrase === undefined),
-);
+const { personaList, reach } = usePersonaReach(automation);
 
 const whenNote = computed<string | undefined>(() => {
     if (props.spent) {
@@ -77,28 +75,21 @@ const whenNote = computed<string | undefined>(() => {
     return clock && !automation.value.enabled ? t(`automationDetail.offNothingScheduled`) : undefined;
 });
 
-// Who a new agent runs as, by the persona's own name; nobody is a choice with a cost, so it says the cost.
+// Who a new agent runs as, by the persona's own name. Naming none, or No accounts outright, is the built-in No accounts:
+// a choice with a cost, so it says the cost where the sandbox holds accounts to miss. Full access says what it reaches.
 const actor = computed<Fact>(() => {
-    const id = automation.value.actsAs;
+    const id = unwatchedPick(automation.value.actsAs);
+    const fact = { key: `actor`, icon: `user` as const, label: t(`automationDetail.runsAs`) };
     if (id === undefined) {
-        return {
-            key: `actor`,
-            icon: `user`,
-            label: t(`automationDetail.runsAs`),
-            value: t(`automationDetail.nobody`),
-            note: reach.value?.kind === `no-accounts` ? t(`automationDetail.noSignedInAccounts`) : undefined,
-        };
+        const note = reach.value?.kind === `no-accounts` ? t(`builtInPersonas.noAccountsNote`) : undefined;
+        return { ...fact, value: t(`builtInPersonas.noAccounts`), note };
+    }
+    if (id === FULL_ACCESS_PERSONA) {
+        return { ...fact, value: t(`builtInPersonas.fullAccess`), note: t(`builtInPersonas.fullAccessNote`) };
     }
     const gone = reach.value?.kind === `missing` && reach.value.ids.includes(id);
-    const label = personaList.data.value?.personas.find((persona) => persona.id === id)?.label ?? id;
-    return {
-        key: `actor`,
-        icon: `user`,
-        label: t(`automationDetail.runsAs`),
-        value: label,
-        note: gone ? t(`automationRow.personaMissing`) : undefined,
-        danger: gone,
-    };
+    const label = personaList.data.value?.personas.find((persona) => persona.id === id)?.label ?? builtInLabel(id) ?? id;
+    return { ...fact, value: label, note: gone ? t(`automationRow.personaMissing`) : undefined, danger: gone };
 });
 
 // The model it wants, then what else it may fall back to: the full ladder is one click away in the editor.

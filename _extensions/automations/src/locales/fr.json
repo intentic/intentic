@@ -50,7 +50,6 @@
         "fri": "Ven",
         "moveUp": "Monter",
         "visitorChat": "Accueil",
-        "fullToolboxNoAccounts": "boîte à outils complète, aucun compte",
         "googleClientId": "Identifiant client Google",
         "googleSignIn": "Connexion Google",
         "greetingOptional": "Message d'accueil (facultatif)",
@@ -81,10 +80,7 @@
         "newSessionsRequiredSince": "Nouvelles sessions requises depuis le dernier réveil avant qu'une exécution due ne se déclenche",
         "newSessionsRunSince": "nouvelles sessions ont tourné depuis son dernier réveil",
         "nextRuns": "Prochaines exécutions : {runs}",
-        "noAccounts": "aucun compte",
         "noLongerExists": "n'existe plus",
-        "noPersona": "Aucun persona",
-        "nobody": "Personne",
         "off": "Désactivé",
         "onDay": "Le jour",
         "once": "Une fois",
@@ -233,7 +229,6 @@
         "aiDisclosure": "Informer les visiteurs que l’IA répond",
         "aiDisclosureText": "Mention personnalisée (facultative)",
         "aiDisclosureDefault": "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs.",
-        "noPersonaHint": "Sans persona, il a tous les outils mais aucun de vos comptes connectés. Choisissez-en un s'il doit publier ou naviguer en votre nom.",
         "personaGoneHint": "Ce persona n'existe plus, donc ses réveils tourneraient sans outils ni comptes. Choisissez-en un autre."
     },
     "automationRow": {
@@ -318,10 +313,8 @@
         "checkedAt": "Vérifiée {at}",
         "personaMissing": "Persona disparu",
         "personaMissingNote": "{ids} n'existe plus, donc ses réveils tournent sans outils ni comptes. Choisissez un autre persona.",
-        "noAccounts": "Aucun persona",
-        "noAccountsNote": "Ses réveils ont tous les outils, mais aucun de vos comptes connectés. Donnez-lui un persona s'il doit publier ou naviguer en votre nom.",
-        "runsAsMissing": "{id} (n'existe plus)",
-        "runsAsNobody": "Personne : aucun compte connecté"
+        "noAccounts": "Aucun compte",
+        "noAccountsNote": "Ses réveils ont tous les outils, mais aucun de vos comptes connectés. Choisissez Accès complet ou un persona s'il doit publier ou naviguer en votre nom."
     },
     "automationsView": {
         "addAutomation": "Ajouter une automatisation",
@@ -502,8 +495,6 @@
         "lastRunFailed": "La dernière exécution a échoué",
         "model": "Modèle",
         "nextAt": "Prochaine {in} · {at}",
-        "noSignedInAccounts": "Aucun compte connecté",
-        "nobody": "Personne",
         "offNothingScheduled": "Désactivée, rien n'est planifié",
         "onceItsCheckPasses": "Une fois sa vérification réussie",
         "onlyWhenItChanges": "Seulement quand ce qu'elle vérifie change",
@@ -531,5 +522,11 @@
         "groupHint": "Les automatisations d'un même groupe sont listées ensemble. Vide, elle est classée selon sa persona.",
         "groupOptional": "Groupe (facultatif)",
         "groupPlaceholder": "Marketing"
+    },
+    "builtInPersonas": {
+        "fullAccess": "Accès complet",
+        "fullAccessNote": "tous les outils et tous les comptes connectés",
+        "noAccounts": "Aucun compte",
+        "noAccountsNote": "tous les outils, aucun compte connecté"
     }
 }

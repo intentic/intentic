@@ -47,6 +47,8 @@ import {
 } from "../children.js";
 import { mergeChild, settleHeldChild } from "../child-held.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
+import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
+import { PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import type { Fleet } from "../../../conversations/registry/agents-registry.js";
 import { conversationProfile, type Postures } from "../../../conversations/registry/agents-store.js";
@@ -132,6 +134,46 @@ describe("what a child is", () => {
             harness: "native",
             model: "composer-2.5",
         });
+    });
+
+    // Every turn wears a persona, and a child is its parent's turn continuing by other means: the card or built-in its
+    // parent's own turn wore, as the parent's standing recorded it. What the ask names is never trusted: an agent cannot
+    // hand its child a wider persona than its own.
+    it("wears its parent's persona, whatever the ask named", async () => {
+        const standing = (persona: TurnStanding["persona"]): TurnStanding => ({
+            at: Date.now(),
+            unattended: false,
+            persona,
+            granted: [],
+            withheldByPersona: [],
+            withheldByGate: [],
+            withheldByReach: [],
+            fence: undefined,
+            powers: PersonaPowersSchema.parse({}),
+            runtime: "claude-code",
+            secrets: "shell",
+        });
+        const spawnUnder = async (from: { conversationId: string; cwd: string }): Promise<AgentTurn | undefined> => {
+            const turns: AgentTurn[] = [];
+            const result = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn(turns)), from, {
+                prompt: "Post the release notes",
+                provider: "cursor",
+                model: "composer-2.5",
+                actsAs: "something-wider",
+            });
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            await waitForSubagent(actors, from.conversationId, { target: result.id, until: ["finished"], timeoutMs: 5_000 });
+            return turns[0];
+        };
+        for (const persona of [{ id: "full-access", name: "Full access" }, { id: "marketing", name: "Marketing" }]) {
+            const from = { conversationId: `conv-wearing-${persona.id}`, cwd: parent.cwd };
+            recordTurnStanding(actors, from.conversationId, standing(persona));
+            expect(await spawnUnder(from)).toMatchObject({ unattended: true, actsAs: persona.id });
+        }
+        // A parent with no standing recorded names nothing, and an unwatched child naming nothing wears No accounts.
+        expect((await spawnUnder({ conversationId: "conv-unplanned", cwd: parent.cwd }))?.actsAs).toBeUndefined();
     });
 
     it("files the record under the parent, wearing the provider's label and the model", async () => {

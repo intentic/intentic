@@ -46,18 +46,39 @@ credentials stripped from the turn's environment, and an account it does not spe
 card itself is a tracked file an agent can read and edit like any other, so it guards against mistakes (the wrong
 account, the wrong folder), not against a determined agent with a shell.
 
+## The two built-in personas
+
+Every turn acts as a persona. Besides the cards on Sandbox ▸ Personas, every sandbox has two built-in ones, listed
+read-only at the top of that page. They can't be edited or removed, and no card may take their ids:
+
+- **Full access** (`full-access`): every connected account and the full toolbox. A chat a person starts without
+  picking a persona wears it.
+- **No accounts** (`no-accounts`): the full toolbox, but no signed-in account (site accounts, identities, the
+  owner's own browser). Connector credentials stay. Anything that runs while nobody watches and names no persona wears
+  it: an automation, a queue, an approved action.
+
+Both keep the conversation's own folder fence. A guest wears neither: a guest always speaks through one of its own
+cards.
+
 ## How a persona gets onto a conversation
 
 - **By hand**: the composer's **Persona** pill (it reads **Acts as: <name>**), or `@persona:` typed in the
-  composer. **Anyone** is the row for no persona: every connected account and the full toolbox. The pick travels
-  with each message. The chat list does not offer personas: **New agent** starts as no one in particular, and the
-  posture is picked in the chat or by routing.
+  composer. The menu lists **Full access** and **No accounts** first, then the cards. Picking Full access sends no
+  persona at all, since that is what no pick means. The pick travels with each message. The chat list does not offer
+  personas: **New agent** starts on Full access, and the posture is picked in the chat or by routing.
 - **By routing**: with **Match new chats to a persona** on (Sandbox ▸ Personas; `personaRouting` in settings,
   on by default) AND a model set for **New chat routing** (Sandbox ▸ Agent ▸ Jobs), a new chat's first message
   is read against each card's one line when it is sent, and the chat says in its transcript which persona it
   landed on. A pick by hand wins. Never for a guest, and never for an unattended run.
-- **Automations** name their own persona. An unattended turn that names none reaches no signed-in account and
-  keeps the full toolbox; a turn naming a persona that no longer exists gets nothing at all.
+- **Automations** name their own persona, and the picker offers the built-ins too. One that names none wears No
+  accounts. A new automation starts on **Full access** when nothing from outside reaches its prompt (a schedule, a
+  one-time wake or a workspace moment with no check), and on **No accounts** otherwise (a listener, a webhook, a
+  watched page, release or package, a guard command), until a person picks one. Existing automations keep what they
+  name. Saving one that names a card that doesn't exist is refused, and a card an automation or a sender rule still
+  wears can't be removed until they are pointed elsewhere.
+- **Subagents** wear their parent's persona: the card or built-in the parent's own turn wore. Whatever the spawn
+  asked for is ignored, so an agent can't hand its child a wider persona than its own.
+- A turn naming a card that no longer exists gets nothing at all: no accounts and no tools.
 
 The persona, its fence and its shelves are resolved again on every turn, so an edit applies from each
 conversation's next turn.

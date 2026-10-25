@@ -11,6 +11,7 @@ import { modelLabelFor } from "../../models/providers/providerCatalog";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "../../models/needs/useNeeds";
+import { personaLabel } from "../../models/sandbox/personas/builtInPersonas";
 
 const t = useT();
 
@@ -94,6 +95,13 @@ const thenWords = computed<string>(() => {
     return target?.kind === `notify` ? t(`needs.automation.notify`) : t(`needs.automation.agent`);
 });
 
+// Who its wakes act as, by name: the persona cards live in the sandbox feature, which this one may not reach
+// (editor-boundaries), so a card is its id. Said for every wake that starts an agent, since naming none is a choice too:
+// an unwatched wake wears No accounts, and Full access is every account the sandbox holds, which is what the person
+// approving this most needs to see. Nothing for a wake that continues a conversation or only notifies.
+const runsAs = (it: Automation): string | undefined =>
+    it.target === undefined || it.target.kind === `agent` ? personaLabel(it.actsAs, [], true) : undefined;
+
 // Labelled facts, one per question a person asks before letting something run unattended; a fact with nothing to say is
 // left out rather than drawn as "none".
 const facts = computed<readonly { key: string; label: string; value: string; mono?: boolean }[]>(() => {
@@ -107,8 +115,7 @@ const facts = computed<readonly { key: string; label: string; value: string; mon
               : it.expiresAt === undefined
                 ? undefined
                 : t(`needs.automation.at`, { date: formatDateTime(it.expiresAt) });
-    // By its id: the persona cards live in the sandbox feature, which this one may not reach (editor-boundaries).
-    const persona = it.actsAs;
+    const persona = runsAs(it);
     const models = (it.target === undefined || it.target.kind === `agent`) && it.models !== undefined ? it.models : [];
     return [
         { key: `name`, label: t(`needs.automation.name`), value: it.id, mono: true },

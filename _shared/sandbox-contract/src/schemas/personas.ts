@@ -253,6 +253,33 @@ export const personaModels = (card: Pick<Persona, "models">, sources: readonly M
 // The one stock persona id; lives here because the daemon and the automations form are separate packages that must
 // agree on it exactly, or a Visitor chat pins to a card nobody creates.
 export const VISITOR_CHAT_PERSONA = "visitor-chat";
+// THE TWO BUILT-IN PERSONAS. Every turn acts as somebody: a turn naming no card wears one of these, picked by whether a
+// person is watching (personas.ts `turnPersona` in the daemon). They are constants rather than cards in personas.json:
+// that file is tracked in git, and "every account" is not something a card's account list can say, since the list is
+// written once and accounts are connected later. Neither can be edited or removed, and no card may take either id.
+// Full access: every tool and every signed-in account, what a chat a person starts without picking anyone acts as.
+export const FULL_ACCESS_PERSONA = "full-access";
+// No accounts: every tool but no signed-in account, what a run nobody watches acts as when it names no one, since
+// whatever woke it may have put somebody else's words in its prompt.
+export const NO_ACCOUNTS_PERSONA = "no-accounts";
+export type BuiltInPersonaId = typeof FULL_ACCESS_PERSONA | typeof NO_ACCOUNTS_PERSONA;
+export interface BuiltInPersona {
+    readonly id: BuiltInPersonaId;
+    // English, for the daemon's own words (a turn's standing, its notes); every screen says it through its own catalog.
+    readonly label: string;
+    // Whether its turns reach the sandbox's signed-in accounts: all of them, or none.
+    readonly accounts: "all" | "none";
+}
+const FULL_ACCESS: BuiltInPersona = { id: FULL_ACCESS_PERSONA, label: "Full access", accounts: "all" };
+const NO_ACCOUNTS: BuiltInPersona = { id: NO_ACCOUNTS_PERSONA, label: "No accounts", accounts: "none" };
+export const BUILT_IN_PERSONAS: readonly BuiltInPersona[] = [FULL_ACCESS, NO_ACCOUNTS];
+export const isBuiltInPersona = (id: string | undefined): id is BuiltInPersonaId => id === FULL_ACCESS_PERSONA || id === NO_ACCOUNTS_PERSONA;
+export const builtInPersona = (id: BuiltInPersonaId): BuiltInPersona => (id === FULL_ACCESS_PERSONA ? FULL_ACCESS : NO_ACCOUNTS);
+// Who a turn naming no card acts as: Full access with a person watching, No accounts without.
+export const defaultPersona = (unattended: boolean): BuiltInPersonaId => (unattended ? NO_ACCOUNTS_PERSONA : FULL_ACCESS_PERSONA);
+// An unwatched run's persona pick with No accounts read as no pick: an unwatched turn naming none wears No accounts
+// anyway, so the two are one choice, and a form shows them as one row.
+export const unwatchedPick = (actsAs: string | undefined): string | undefined => (actsAs === NO_ACCOUNTS_PERSONA ? undefined : actsAs);
 // One phrase describing how bounded a card is, shared so the Personas page and the automation picker can't grow
 // different vocabularies for the same card. "Read-only"/"no shell" are named; everything else collapses to a count.
 export const personaBounds = (persona: Persona): string => {

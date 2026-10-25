@@ -2518,7 +2518,7 @@
             "which": "Sandbox",
             "pickOne": "Sandbox wählen",
             "persona": "Ihre Aufgaben tragen",
-            "noPersona": "Keine Persona",
+            "noPersona": "Keine Konten",
             "noPersonaHint": "Dort drüben kein angemeldetes Konto, dafür der volle Werkzeugkasten, wie bei jedem unbeaufsichtigten Wecken.",
             "askFirst": "Mich dort vor jeder Aufgabe fragen",
             "turnsAnHour": "Züge pro Stunde",
@@ -3406,7 +3406,6 @@
             "runDiagram": "Laufdiagramm"
         },
         "chatPersonaMenu": {
-            "everyAccountYouveConnected": "Jedes Konto, das Sie verbunden haben, ist in Reichweite, und der volle Werkzeugkasten.",
             "noGuestYet": "Ihnen wurde noch kein Assistent zugewiesen. Bitten Sie den Sandbox-Besitzer um einen.",
             "noPersonasYetChat": "Noch keine Personas, deshalb spricht dieser Chat durch jedes Konto, das Sie verbunden haben. Richten Sie eine ein, um eine Nachricht als eine Person zu senden — mit nur deren Konten in Reichweite.",
             "notSignedInYet": ", noch nicht angemeldet"
@@ -4071,7 +4070,6 @@
             "closePane": "Bereich schließen",
             "latest": "Neueste",
             "setUpPersona": "Eine Persona einrichten",
-            "anyone": "Jeder",
             "managePersonas": "Personas verwalten",
             "gone": "Nicht mehr verfügbar",
             "autoLabel": "Auto",
@@ -4252,7 +4250,7 @@
         "chatRoute": {
             "actingAs": "Handelt als {name}.",
             "matchedButHeld": "{name} passte, aber dieser Chat wurde zuvor von Hand zugewiesen, daher hat sich nichts geändert.",
-            "noPersonaMatched": "Keine Persona passte, daher handelt dieser Chat für alle.",
+            "noPersonaMatched": "Keine Persona passte, daher handelt dieser Chat mit Vollzugriff.",
             "personaBringsModel": "{name} bringt ein eigenes Modell mit, daher läuft dieser Chat stattdessen darauf.",
             "readBy": "Gelesen von {model}.",
             "readingBoth": "Es wird gelesen, worauf dieser Chat startet: ein Aufruf, der Persona und Modell zugleich wählt.",
@@ -7870,7 +7868,7 @@
             "scopeLand": "Steuert und landet Arbeit",
             "scopeEditor": "Eine Unterhaltung",
             "asPersona": "Als {persona}",
-            "noPersona": "Keine Persona",
+            "noPersona": "Keine Konten",
             "waiting": "{count} Aufgabe wartet auf Ihr Ja | {count} Aufgaben warten auf Ihr Ja",
             "inertExpired": "Abgelaufen",
             "inertMinter": "Wer es erstellt hat, verwaltet nicht mehr",
@@ -8020,7 +8018,7 @@
             "newChats": "Neue Chats",
             "noPersonasYet": "Noch keine Personas",
             "notSignedIn": "Nicht angemeldet",
-            "nothingReadChatActs": "Es wird nichts gelesen: ein Chat handelt als die Persona, die Sie wählen, oder als alle.",
+            "nothingReadChatActs": "Es wird nichts gelesen: ein Chat handelt als die Persona, die Sie wählen, oder mit Vollzugriff.",
             "personaName": "Persona-Name",
             "personaNameTaken": "Sie haben bereits eine Persona namens {name}.",
             "personas": "Ihre Personas",
@@ -8031,7 +8029,8 @@
             "renamePersona": "Persona umbenennen",
             "startsFullToolboxWhole": "Sie startet mit dem vollen Werkzeugkasten, dem ganzen Workspace und dem eigenen Prompt der Sandbox. Ändern Sie davon, was Sie wollen, sobald sie offen ist.",
             "untilOneAutomationSchedule": "Solange es keine gibt, kann eine Automation, die Sie planen, nirgendwo posten, und ein Chat erreicht jedes Konto, das Sie verbunden haben.",
-            "useLettersOrDigits": "Verwenden Sie Buchstaben oder Ziffern."
+            "useLettersOrDigits": "Verwenden Sie Buchstaben oder Ziffern.",
+            "couldntRemovePersona": "Diese Persona konnte nicht entfernt werden."
         },
         "sandboxSecrets": {
             "addSecret": "Ein Geheimnis hinzufügen",
@@ -9997,7 +9996,7 @@
         },
         "linkedSandboxes": {
             "title": "Verknüpfte Sandboxes",
-            "noPersona": "Keine Persona",
+            "noPersona": "Keine Konten",
             "noPersonaHint": "Kein angemeldetes Konto und der volle Werkzeugkasten, wie bei jedem unbeaufsichtigten Start.",
             "wearsNothing": "keine Persona",
             "wears": "nutzt {persona}",
@@ -10298,6 +10297,16 @@
                 "offline": "Runner offline oder beschäftigt",
                 "runsHere": "läuft stattdessen hier, wie zuvor"
             }
+        },
+        "builtInPersonas": {
+            "fullAccess": "Vollzugriff",
+            "fullAccessNote": "Jedes Konto, das Sie verbunden haben, und der volle Werkzeugkasten.",
+            "fullAccessWhen": "Gilt für einen Chat, den Sie starten, ohne eine Persona zu wählen.",
+            "noAccounts": "Keine Konten",
+            "noAccountsNote": "Der volle Werkzeugkasten, aber keines Ihrer angemeldeten Konten: Er kann nicht als Sie posten oder surfen.",
+            "noAccountsWhen": "Gilt für alles, was läuft, während niemand zusieht (eine Automatisierung, eine Warteschlange, ein Subagent eines solchen Laufs), und keine Persona nennt.",
+            "title": "Eingebaut",
+            "reserved": "„{name}“ ist eine eingebaute Persona. Wählen Sie einen anderen Namen."
         }
     },
     "settings": {

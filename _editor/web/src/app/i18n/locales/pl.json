@@ -2518,7 +2518,7 @@
             "which": "Sandbox",
             "pickOne": "Wybierz sandbox",
             "persona": "Jego zadania noszą",
-            "noPersona": "Bez persony",
+            "noPersona": "Bez kont",
             "noPersonaHint": "Bez zalogowanego konta tam, z pełnym zestawem narzędzi, jak każde nienadzorowane wybudzenie.",
             "askFirst": "Pytaj mnie tam przed każdym zadaniem",
             "turnsAnHour": "tur na godzinę",
@@ -3406,7 +3406,6 @@
             "runDiagram": "Diagram przebiegu"
         },
         "chatPersonaMenu": {
-            "everyAccountYouveConnected": "Każde konto, które podłączyłeś, jest w zasięgu — i pełna skrzynka narzędzi.",
             "noGuestYet": "Nie przypisano Ci jeszcze żadnego asystenta. Poproś o niego właściciela sandboxa.",
             "noPersonasYetChat": "Nie ma jeszcze person, więc ten czat mówi przez każde konto, które podłączyłeś. Utwórz jedną, żeby wysłać wiadomość jako jedna osoba — z tylko jej kontami w zasięgu.",
             "notSignedInYet": ", jeszcze niezalogowana"
@@ -4023,7 +4022,6 @@
             "closePane": "Zamknij panel",
             "latest": "Najnowsze",
             "setUpPersona": "Utwórz personę",
-            "anyone": "Ktokolwiek",
             "managePersonas": "Zarządzaj personami",
             "gone": "Już niedostępny",
             "autoLabel": "Auto",
@@ -4252,7 +4250,7 @@
         "chatRoute": {
             "actingAs": "Działa jako {name}.",
             "matchedButHeld": "Pasowała persona {name}, ale ten czat został wcześniej ręcznie skierowany gdzie indziej, więc nic się nie zmieniło.",
-            "noPersonaMatched": "Żadna persona nie pasowała, więc ten czat działa jako wszyscy.",
+            "noPersonaMatched": "Żadna persona nie pasowała, więc ten czat działa z Pełnym dostępem.",
             "personaBringsModel": "{name} ma własny model, więc ten czat działa na nim.",
             "readBy": "Przeczytał {model}.",
             "readingBoth": "Ustalam, od czego zaczyna ten czat: jedno wywołanie, które wybiera zarówno personę, jak i model.",
@@ -7326,7 +7324,7 @@
             "scopeLand": "Kieruje i przyjmuje pracę",
             "scopeEditor": "Jedna rozmowa",
             "asPersona": "Jako {persona}",
-            "noPersona": "Bez persony",
+            "noPersona": "Bez kont",
             "waiting": "{count} zadanie czeka na twoją zgodę | {count} zadania czekają na twoją zgodę | {count} zadań czeka na twoją zgodę",
             "inertExpired": "Wygasł",
             "inertMinter": "Osoba, która go utworzyła, już nie zarządza",
@@ -7493,7 +7491,7 @@
             "newChats": "Nowe czaty",
             "noPersonasYet": "Nie ma jeszcze person",
             "notSignedIn": "Niezalogowana",
-            "nothingReadChatActs": "Nic nie jest czytane: czat działa jako persona, którą wybierzesz, albo jako wszyscy.",
+            "nothingReadChatActs": "Nic nie jest czytane: czat działa jako persona, którą wybierzesz, albo z Pełnym dostępem.",
             "personaName": "Nazwa persony",
             "personaNameTaken": "Masz już personę o nazwie {name}.",
             "personas": "Twoje persony",
@@ -7504,7 +7502,8 @@
             "renamePersona": "Zmień nazwę persony",
             "startsFullToolboxWhole": "Startuje z pełną skrzynką narzędzi, całą przestrzenią roboczą i własnym promptem sandboxa. Zmień cokolwiek z tego, gdy tylko się otworzy.",
             "untilOneAutomationSchedule": "Dopóki żadnej nie ma, zaplanowana automatyzacja nie może nigdzie publikować, a czat sięga do każdego konta, które podłączyłeś.",
-            "useLettersOrDigits": "Użyj liter albo cyfr."
+            "useLettersOrDigits": "Użyj liter albo cyfr.",
+            "couldntRemovePersona": "Nie udało się usunąć tej persony."
         },
         "sandboxSecrets": {
             "addSecret": "Dodaj sekret",
@@ -9406,7 +9405,7 @@
         },
         "linkedSandboxes": {
             "title": "Połączone sandboxy",
-            "noPersona": "Bez persony",
+            "noPersona": "Bez kont",
             "noPersonaHint": "Bez zalogowanego konta, z pełnym zestawem narzędzi, jak każde nienadzorowane wybudzenie.",
             "wearsNothing": "bez persony",
             "wears": "nosi personę {persona}",
@@ -9707,6 +9706,16 @@
                 "offline": "Runner offline lub zajęty",
                 "runsHere": "działa tutaj, jak wcześniej"
             }
+        },
+        "builtInPersonas": {
+            "fullAccess": "Pełny dostęp",
+            "fullAccessNote": "Każde konto, które podłączyłeś, i pełna skrzynka narzędzi.",
+            "fullAccessWhen": "Używa jej czat, który zaczynasz bez wybierania persony.",
+            "noAccounts": "Bez kont",
+            "noAccountsNote": "Pełna skrzynka narzędzi, ale żadne z Twoich zalogowanych kont: nie opublikuje ani nie przegląda niczego jako Ty.",
+            "noAccountsWhen": "Używa jej wszystko, co działa, gdy nikt nie patrzy (automatyzacja, kolejka, subagent takiego uruchomienia), i nie wskazuje persony.",
+            "title": "Wbudowane",
+            "reserved": "„{name}” to wbudowana persona. Wybierz inną nazwę."
         }
     },
     "settings": {

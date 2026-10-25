@@ -3,6 +3,8 @@ import type { IconName } from "@intentic/ui";
 import { modeMeta } from "../models/catalog";
 import type { RunThroughState } from "../models/run-settings/useRunThrough";
 import { t } from "@intentic/ui/i18n";
+import { FULL_ACCESS_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
+import { builtInPersonaView } from "../../../models/sandbox/personas/builtInPersonas";
 
 // One rule for the composer row vs overflow: a control at its default is a named row in the overflow
 // menu; set to anything else, it becomes a chip on the row. A pure, testable table; model and effort
@@ -136,7 +138,8 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 key: control,
                 icon: `users`,
                 label: t(`chat.words.acts`),
-                value: t(`chat.words.anyone`),
+                // Offered here only while unset, which is Full access.
+                value: builtInPersonaView(FULL_ACCESS_PERSONA).label,
                 description: t(`chat.composerMore.onePersonasAccountsOnly`),
             };
         case `runThrough`:

@@ -8,6 +8,7 @@ import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { stateRelPath } from "../state-paths.js";
 import { reachablePersonas } from "./persona-reach.js";
 import { personasDocument } from "./personas-store.js";
+import { refuseBuiltInId, refuseUnlessRemovable } from "./persona-wearers.js";
 import {
     listPersonaSkills,
     readPersonaPrompt,
@@ -65,11 +66,13 @@ export const createPersonasRoutes = (services: Services) => {
             return { personas, connected };
         }),
         save: i.save.handler(async ({ input }) => {
+            refuseBuiltInId(input.id);
             noteAudit({ target: input.id });
             await versioned([personasDocument.path], `persona ${input.label ?? input.id}`, () => services.personas.upsert(input));
             return { ok: true as const };
         }),
         remove: i.remove.handler(async ({ input }) => {
+            await refuseUnlessRemovable(services, input.id);
             const removed = await services.personas.get(input.id);
             await versioned([personasDocument.path, kitPath(input.id)], `removed persona ${removed?.label ?? input.id}`, async () => {
                 await services.personas.remove(input.id);
