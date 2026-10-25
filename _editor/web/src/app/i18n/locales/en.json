@@ -13043,12 +13043,8 @@
         "heldConflict": "Its work clashes with the workspace: ask it to resolve that, then it lands.",
         "heldForYou": "Its work is held, waiting for you to land it.",
         "heldForMaintainer": "Its work is held until a maintainer lands it.",
-        "openSandbox": "Open sandbox",
-        "openSandboxShort": "Open",
-        "openSandboxNamed": "Open {name}",
         "starting": "Starting {name}…",
         "offlineHint": "Open it to see what is wrong, or pick another sandbox.",
-        "tileNote": "All your sandboxes",
         "firstRun": {
             "create": "Create a sandbox",
             "finish": "Finish setting up {name}",

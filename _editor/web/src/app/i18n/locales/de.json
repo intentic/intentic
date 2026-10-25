@@ -13043,12 +13043,8 @@
         "heldConflict": "Seine Arbeit kollidiert mit dem Arbeitsbereich: Bitte es, das zu lösen, dann wird sie übernommen.",
         "heldForYou": "Seine Arbeit wartet darauf, dass du sie übernimmst.",
         "heldForMaintainer": "Seine Arbeit wartet, bis ein Maintainer sie übernimmt.",
-        "openSandbox": "Sandbox öffnen",
-        "openSandboxShort": "Öffnen",
-        "openSandboxNamed": "{name} öffnen",
         "starting": "{name} startet…",
         "offlineHint": "Öffne sie, um zu sehen, was nicht stimmt, oder wähle eine andere Sandbox.",
-        "tileNote": "Alle deine Sandboxes",
         "firstRun": {
             "create": "Sandbox erstellen",
             "finish": "Einrichtung von {name} abschließen",

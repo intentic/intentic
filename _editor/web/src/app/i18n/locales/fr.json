@@ -13043,12 +13043,8 @@
         "heldConflict": "Son travail entre en conflit avec l’espace de travail : demandez-lui de le résoudre, puis il sera intégré.",
         "heldForYou": "Son travail est en attente que vous l’intégriez.",
         "heldForMaintainer": "Son travail est en attente qu’un mainteneur l’intègre.",
-        "openSandbox": "Ouvrir le sandbox",
-        "openSandboxShort": "Ouvrir",
-        "openSandboxNamed": "Ouvrir {name}",
         "starting": "Démarrage de {name}…",
         "offlineHint": "Ouvrez-le pour voir ce qui ne va pas, ou choisissez un autre sandbox.",
-        "tileNote": "Tous vos sandboxes",
         "firstRun": {
             "create": "Créer un sandbox",
             "finish": "Terminer la configuration de {name}",

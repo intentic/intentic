@@ -16,7 +16,6 @@ import { useRole } from "../../client/sandbox/useRole";
 import { invalidateAgentAction, landAgent, nothingLanded } from "../../models/fleet/agentActions";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
-import HomeSandboxBar from "./HomeSandboxBar.vue";
 import { useWorkspaceTree } from "../../models/workspace/tree/useWorkspaceTree";
 import { useSandboxAvailability } from "../sandbox/overview/useSandboxAvailability";
 
@@ -42,8 +41,8 @@ onUnmounted(() => {
     homeConversation.value = undefined;
     homeShownFor.value = undefined;
 });
-// While the sandbox is not answering: on its way up (a machine waking, a container starting) or not, which the bar's
-// Open explains in full (the sandbox's own gate) rather than this line.
+// While the sandbox is not answering: on its way up (a machine waking, a container starting) or not, which opening the
+// sandbox explains in full (the sandbox's own gate) rather than this line.
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
 const comingUp = computed(() => [`starting`, `warming`, `busy`].includes(availability.value));
@@ -110,7 +109,8 @@ watch(
 <template>
     <HomeNoSandbox v-if="noSandbox" />
     <section v-else class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <HomeSandboxBar :phone="mobile" />
+        <!-- No top bar over the chat (a sandbox name, status, Open button), by the owner's decision (it came back once already): the
+             rail's tile already names the sandbox, and double-click or Enter on it goes inside. -->
         <details v-if="ledger.length" class="shrink-0 border-b border-line px-4 py-2 text-xs" open>
             <summary class="cursor-pointer text-muted">{{ t(`home.work`) }} · {{ ledger.length }}</summary>
             <div class="max-h-40 overflow-auto py-1">

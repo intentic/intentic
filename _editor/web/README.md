@@ -329,8 +329,8 @@ flowchart LR
   routes are kept in the hash (`files/local#/device`), since the app serves that page at one address only.
 - **On a phone.** `ShellMobile.vue` shows one screen at a time, and has no tab bar. The first screen is Home's list of
   sandboxes; a sandbox's own first screen is its agents board, with the desktop's rail down its left
-  (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`): Home on top, then the sandbox's
-  logo, which opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
+  (`shell/MobileRail.vue`, its tiles and badges from `shell/rail/sectionTiles.ts`): the sandbox's
+  logo on top, which opens the Menu page (what the sandbox needs, switching sandboxes, who is here), then every
   section, the terminal, the Sandbox hub and the + that adds a capability, at a finger's size (`phoneRailFrame` in
   `shell/rail/railFrame.ts`), and at the foot the desktop's own avatar control (`shell/AccountPanel.vue`: Settings,
   Discord, sign out). The board there draws only the lanes with something in them
@@ -555,12 +555,12 @@ pnpm --filter @intentic/web typecheck
 `/home` is the first screen (since 2026-10-25): every sandbox at once, where sandboxes are made and from which each is
 entered. It keeps the shared shell and shows one home conversation for the selected sandbox. The desktop rail lists
 connected sandboxes with personal attention counts; on phones the list opens each sandbox’s chat at `/home/:sandbox`.
-A bar over the chat names the selected sandbox, whether it answers and where it runs, and its **Open sandbox** press
-goes inside, to the screen that sandbox was last left on or its agents board (`HomeSandboxBar.vue`,
-`models/sandbox/sandboxScreen.ts` `sandboxEntryPath`); on a phone the bar also leads back to the list. Single clicks
-on a tile switch sandboxes; double clicks and Enter open the sandbox as the bar does. Inside a sandbox, Home heads the
-rail on both desktop and phone (`shell/rail/HomeRailTile.vue`, `Mod+Alt+H`), so going in and coming back out are one
-press each; the master view's own rail is `shell/rail/MasterRail.vue`. Going in is never `/`: that is Home itself
+Home draws **no top bar** over the chat, by decision: the chat is the page. Single clicks on a tile switch
+sandboxes; double clicks and Enter go inside, to the screen that sandbox was last left on or its agents board
+(`models/sandbox/sandboxScreen.ts` `sandboxEntryPath`); on a phone an edge swipe leads from a sandbox's chat back to
+the list. Inside a sandbox, Home has **no rail tile** either, also by decision: the way back out is the quiet mark on
+the sandbox switcher's Sandboxes header (on a phone, the Menu page's), and `Mod+Alt+H`. The master view's own rail is
+`shell/rail/MasterRail.vue`. Going in is never `/`: that is Home itself
 (`lib/routes/firstScreens.ts`). `features/home/` draws the surface; `models/home/` holds attention polling, the pure work
 ledger projection and which sandbox's home is on screen (`homeShownFor`, which the Add sandbox dialog waits on when
 it was opened here).

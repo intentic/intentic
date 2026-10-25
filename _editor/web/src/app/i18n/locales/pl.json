@@ -13043,12 +13043,8 @@
         "heldConflict": "Jej praca koliduje z obszarem roboczym: poproś ją o rozwiązanie konfliktu, a potem zostanie scalona.",
         "heldForYou": "Jej praca czeka, aż ją scalisz.",
         "heldForMaintainer": "Jej praca czeka, aż scali ją opiekun.",
-        "openSandbox": "Otwórz sandboks",
-        "openSandboxShort": "Otwórz",
-        "openSandboxNamed": "Otwórz {name}",
         "starting": "Uruchamianie {name}…",
         "offlineHint": "Otwórz go, aby zobaczyć, co jest nie tak, albo wybierz inny sandboks.",
-        "tileNote": "Wszystkie twoje sandboksy",
         "firstRun": {
             "create": "Utwórz sandboks",
             "finish": "Dokończ konfigurację {name}",
