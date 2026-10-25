@@ -6,31 +6,33 @@ import {
     Icon,
     Notice,
     noticeOf,
-    Page,
     PageAction,
-    PageHeader,
     RowGroup,
     SearchBar,
     Section,
     SegmentedControl,
     SkeletonRows,
+    SplitView,
     ui,
-    vAction,
 } from "@intentic/extension-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import AutomationCalendar from "./AutomationCalendar.vue";
+import AutomationCalendar from "./calendar/AutomationCalendar.vue";
 import AutomationComposer from "./AutomationComposer.vue";
 import AutomationEditor from "./AutomationEditor.vue";
+import AutomationRail, { type RailShelf } from "./shelves/AutomationRail.vue";
 import AutomationRow from "./AutomationRow.vue";
 import VisitorChatInstallDialog from "./VisitorChatInstallDialog.vue";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
 import { useAutomations } from "./useAutomations";
+import { gistOf, isFailing } from "./shelves/grouping";
+import { useShelves } from "./shelves/useShelves";
 import { t } from "./i18n.js";
 
 // Automations: trigger, then optional guard, then the prompt the agent wakes with; the daemon fires them and records
-// history. The page lists what's standing (two shelves of rows) and what else could be (the offers below). Creating
-// and editing happen inline, never in a dialog.
+// history. The page lists what's standing, filed on shelves by what the jobs are for (grouping.ts), and what else could
+// be (the offers below). A rail names the shelves once there are two, so fifty automations are a handful of places to
+// go rather than one long scroll. Creating and editing happen inline, never in a dialog.
 //
 // Two lenses on the one list. The List is home: every trigger kind, its state, its controls. The Calendar answers what
 // the list cannot, across rows: what wakes when this week, what piles onto the same night, what ran and failed. Only
@@ -100,17 +102,44 @@ const revealTop = (): void => void nextTick(() => topCard.value?.scrollIntoView(
 
 const topError = computed(() => actionError.value ?? listError.value ?? catalogError.value);
 
-const failing = (automation: AutomationSummary): boolean => automation.enabled && automation.runs[0]?.outcome === `error`;
+// The shelves, and the one the page stands on: `?shelf=` in the URL, so a shelf is linkable and Back works. The rail
+// earns its column only once there are two shelves to choose between; with one, the page is that shelf.
+const { shelves, shelfLabelOf } = useShelves(automations);
+const railed = computed(() => shelves.value.length > 1);
+const shelfParam = computed<string>({
+    get: () => host().route.query()[`shelf`] ?? ``,
+    set: (value) => host().route.setQuery({ shelf: value === `` ? undefined : value }),
+});
+// A linked shelf that is gone (its last automation deleted or refiled) falls back to everything.
+const activeShelf = computed(() => (railed.value ? shelves.value.find((shelf) => shelf.key === shelfParam.value) : undefined));
+const railShelf = computed<string>({ get: () => activeShelf.value?.key ?? ``, set: (value) => (shelfParam.value = value) });
+const railShelves = computed<RailShelf[]>(() =>
+    shelves.value.map((shelf) => ({ key: shelf.key, label: shelf.label, kind: shelf.kind, total: shelf.automations.length, on: shelf.on, failing: shelf.failing })),
+);
+const allShelf = computed<RailShelf>(() => ({
+    key: ``,
+    label: t(`automationRail.all`),
+    kind: `all`,
+    total: automations.value.length,
+    on: automations.value.filter((automation) => automation.enabled).length,
+    failing: automations.value.filter(isFailing).length,
+}));
+// What the page stands on, for the list and the calendar alike: one shelf's automations, or every one.
+const inShelf = computed(() => activeShelf.value?.automations ?? automations.value);
+
 const matchesSearch = (automation: AutomationSummary): boolean => {
     const needle = search.value.trim().toLowerCase();
-    return needle === `` || automation.id.toLowerCase().includes(needle) || automation.prompt.toLowerCase().includes(needle);
+    return (
+        needle === `` ||
+        [automation.id, automation.note ?? ``, automation.prompt].some((text) => text.toLowerCase().includes(needle))
+    );
 };
-const searched = computed(() => automations.value.filter(matchesSearch));
+const searched = computed(() => inShelf.value.filter(matchesSearch));
 const counts = computed(() => ({
     all: searched.value.length,
     on: searched.value.filter((automation) => automation.enabled).length,
     off: searched.value.filter((automation) => !automation.enabled).length,
-    failing: searched.value.filter(failing).length,
+    failing: searched.value.filter(isFailing).length,
 }));
 // The Errors tab appears only once something fails, so its presence is itself the alert; it stays while active so a
 // fixed run can't strand the filter.
@@ -128,14 +157,23 @@ const viewOptions = computed<{ label: string; value: View; badge: number }[]>(()
 const shown = computed(() =>
     searched.value
         .filter((automation) =>
-            view.value === `all` ? true : view.value === `failing` ? failing(automation) : automation.enabled === (view.value === `on`),
+            view.value === `all` ? true : view.value === `failing` ? isFailing(automation) : automation.enabled === (view.value === `on`),
         )
         .toSorted((a, b) => Number(b.enabled) - Number(a.enabled) || a.id.localeCompare(b.id)),
 );
 
-// Split by the stored `chore` flag, not the trigger: two nightly schedules need not both concern this codebase.
-const chores = computed(() => shown.value.filter((automation) => automation.chore === true));
-const integrations = computed(() => shown.value.filter((automation) => automation.chore !== true));
+// The rows as the page lays them out: one group per shelf, in the shelves' own order, each keeping the fixed row order
+// above. A heading only where there is more than one shelf on the page; a picked shelf is named by the rail beside it.
+const groups = computed(() => {
+    const picked = activeShelf.value;
+    return shelves.value
+        .filter((shelf) => picked === undefined || shelf.key === picked.key)
+        .map((shelf) => {
+            const ids = new Set(shelf.automations.map((automation) => automation.id));
+            return { key: shelf.key, label: picked === undefined && railed.value ? shelf.label : undefined, rows: shown.value.filter((automation) => ids.has(automation.id)) };
+        })
+        .filter((group) => group.rows.length > 0);
+});
 // A chore recipe with no automation of that id yet. Matching on id, not trigger, so a user's own second review chore
 // doesn't hide the stock one.
 const availableChores = computed(() =>
@@ -237,222 +275,194 @@ const toggleDetail = (id: string): void => {
 </script>
 
 <template>
-    <Page width="wide">
-        <PageHeader :title="t(`automationsView.automations`)">
-            <template #actions>
-                <SegmentedControl v-model="lens" :options="lensOptions" />
-                <PageAction icon="plus" :label="t(`automationsView.newAutomation`)" primary @click="openNew" />
-            </template>
-        </PageHeader>
+    <SplitView :title="t(`automationsView.automations`)" scroll="page" :scroll-key="railShelf">
+        <template #actions>
+            <SegmentedControl v-model="lens" :options="lensOptions" />
+            <PageAction icon="plus" :label="t(`automationsView.newAutomation`)" primary @click="openNew" />
+        </template>
 
-        <Notice v-if="topError" :of="noticeOf(topError)" class="mb-4" />
+        <template v-if="topError" #strips>
+            <Notice :of="noticeOf(topError)" />
+        </template>
 
-        <div class="flex flex-col gap-6">
-            <!-- Keyed on the prefill and the slot, so picking a different suggestion or moment while open remounts fresh
-                 instead of keeping stale fields. -->
-            <div v-if="createOpen" ref="topCard">
-                <AutomationComposer
-                    :templates="offered"
-                    :key="`${createPrefill?.id ?? `blank`}@${createAt ?? ``}`"
-                    :prefill="createPrefill"
-                    :at="createAt"
-                    :listener-sources="listenerSources"
-                    @created="expanded.add($event)"
-                    @close="closeComposer"
-                />
-            </div>
+        <!-- The rail narrows rather than selects, so on a phone it folds above the list instead of covering it. -->
+        <template v-if="railed" #rail>
+            <AutomationRail v-model="railShelf" :all="allShelf" :shelves="railShelves" />
+        </template>
 
-            <!-- The calendar's edit form, shaped like the composer: the same card, the same place, for the other verb. -->
-            <section
-                v-if="lens === `calendar` && editingAutomation"
-                ref="topCard"
-                :key="editingAutomation.id"
-                class="flex flex-col gap-3 rounded-lg bg-card p-4 shadow-sm"
-            >
-                <div class="flex items-center gap-2">
-                    <Icon name="pencil" class="shrink-0 text-2xs text-subtle" />
-                    <h2 class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ editingAutomation.id }}</h2>
-                    <button type="button" :class="ui.iconButton()" :aria-label="t(`automationComposer.close`)" @click="editingId = undefined">
-                        <Icon name="times" class="text-xs" />
-                    </button>
+        <template #detail>
+            <div class="flex flex-col gap-6">
+                <!-- Keyed on the prefill and the slot, so picking a different suggestion or moment while open remounts fresh
+                     instead of keeping stale fields. -->
+                <div v-if="createOpen" ref="topCard">
+                    <AutomationComposer
+                        :templates="offered"
+                        :key="`${createPrefill?.id ?? `blank`}@${createAt ?? ``}`"
+                        :prefill="createPrefill"
+                        :at="createAt"
+                        :listener-sources="listenerSources"
+                        @created="expanded.add($event)"
+                        @close="closeComposer"
+                    />
                 </div>
-                <AutomationEditor
-                    :automation="editingAutomation"
-                    :listener-sources="listenerSources"
-                    :templates="offered"
-                    @done="editingId = undefined"
-                />
-            </section>
 
-            <!-- Skeletons distinguish the pending list from a true empty state. -->
-            <Await :of="loaded" imprint="automations.list" :label="t(`automationsView.readingAutomations`)">
-                <template #fallback>
-                    <RowGroup role="status" aria-busy="true">
-                        <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
-                        <span class="sr-only">{{ t(`automationsView.readingAutomations`) }}</span>
-                        <SkeletonRows :rows="3" description control />
-                    </RowGroup>
-                </template>
-
-                <AutomationCalendar
-                    v-if="lens === `calendar`"
-                    :automations="automations"
-                    :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
-                    :draft="createOpen ? createAt : undefined"
-                    @create="createAtSlot"
-                    @edit="editFromCalendar"
-                    @run="runById"
-                    @toggle="toggleById"
-                    @list="lens = `list`"
-                />
-
-                <!-- The header names both navigation destinations without adding another button. The second sentence points at the
-                     offers section below, which is itself conditional: with nothing on offer here (a workspace whose capabilities
-                     match no template) it sent the reader to look for a list that is not on the page. -->
-                <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
-                    <span class="text-sm text-content">{{ t(`automationsView.nothingRunsOnOwn`) }}</span>
-                    <span v-if="availableChores.length > 0 || availableSuggestions.length > 0">
-                        {{ t(`automationsView.takeOneOffersBelow`) }} <b class="font-medium text-muted">{{ t(`automationsView.newAutomation`) }}</b
-                        >.
-                    </span>
-                    <span v-else
-                        >{{ t(`automationsView.buildOne`) }} <b class="font-medium text-muted">{{ t(`automationsView.newAutomation`) }}</b
-                        >.</span
-                    >
-                </div>
-                <!-- Spaced as the column it sits in. -->
-                <div v-else class="flex flex-col gap-6">
-                    <!-- The summary reports total, active, and failing automations before the list. -->
-                    <div v-if="automations.length >= FILTER_FROM" class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <SearchBar
-                            v-model="search"
-                            variant="field"
-                            clearable
-                            :aria-label="t(`automationsView.filterAutomations`)"
-                            :placeholder="t(`automationsView.filterByNamePrompt`)"
-                            class="min-w-56 max-w-sm flex-1"
-                        />
-                        <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
-                    </div>
-
-                    <div v-if="shown.length === 0" :class="ui.emptyState('py-5')">
-                        {{ t(`automationsView.nothingMatchesFilter`) }}
-                        <button
-                            type="button"
-                            class="cursor-pointer text-link hover:underline"
-                            @click="
-                                search = '';
-                                view = 'all';
-                            "
-                        >
-                            {{ t(`automationsView.showAll`, { count: automations.length }) }}
+                <!-- The calendar's edit form, shaped like the composer: the same card, the same place, for the other verb. -->
+                <section
+                    v-if="lens === `calendar` && editingAutomation"
+                    ref="topCard"
+                    :key="editingAutomation.id"
+                    class="flex flex-col gap-3 rounded-lg bg-card p-4 shadow-sm"
+                >
+                    <div class="flex items-center gap-2">
+                        <Icon name="pencil" class="shrink-0 text-2xs text-subtle" />
+                        <h2 class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ editingAutomation.id }}</h2>
+                        <button type="button" :class="ui.iconButton()" :aria-label="t(`automationComposer.close`)" @click="editingId = undefined">
+                            <Icon name="times" class="text-xs" />
                         </button>
                     </div>
+                    <AutomationEditor
+                        :automation="editingAutomation"
+                        :listener-sources="listenerSources"
+                        :templates="offered"
+                        @done="editingId = undefined"
+                    />
+                </section>
 
-                    <RowGroup v-if="chores.length > 0" :label="t(`automationsView.codeChores`)">
-                        <AutomationRow
-                            v-for="chore in chores"
-                            :key="chore.id"
-                            :automation="chore"
-                            :listener-sources="listenerSources"
-                            :templates="offered"
-                            :expanded="expanded.has(chore.id)"
-                            :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
-                            @toggle="toggle(chore, $event)"
-                            @expand="toggleDetail(chore.id)"
-                            @remove="confirmRemoveId = chore.id"
-                            @run="runNow(chore)"
-                            @install="installId = chore.id"
-                        />
-                    </RowGroup>
+                <!-- Skeletons distinguish the pending list from a true empty state. -->
+                <Await :of="loaded" imprint="automations.list" :label="t(`automationsView.readingAutomations`)">
+                    <template #fallback>
+                        <RowGroup role="status" aria-busy="true">
+                            <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
+                            <span class="sr-only">{{ t(`automationsView.readingAutomations`) }}</span>
+                            <SkeletonRows :rows="3" description control />
+                        </RowGroup>
+                    </template>
 
-                    <RowGroup v-if="integrations.length > 0" :label="t(`automationsView.integrations`)">
-                        <AutomationRow
-                            v-for="automation in integrations"
-                            :key="automation.id"
-                            :automation="automation"
-                            :listener-sources="listenerSources"
-                            :templates="offered"
-                            :expanded="expanded.has(automation.id)"
-                            :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
-                            @toggle="toggle(automation, $event)"
-                            @expand="toggleDetail(automation.id)"
-                            @remove="confirmRemoveId = automation.id"
-                            @run="runNow(automation)"
-                            @install="installId = automation.id"
-                        />
-                    </RowGroup>
-                </div>
-            </Await>
+                    <!-- The week of whatever the rail stands on: one shelf's wakes, or every one. -->
+                    <AutomationCalendar
+                        v-if="lens === `calendar`"
+                        :automations="inShelf"
+                        :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
+                        :draft="createOpen ? createAt : undefined"
+                        @create="createAtSlot"
+                        @edit="editFromCalendar"
+                        @run="runById"
+                        @toggle="toggleById"
+                        @list="lens = `list`"
+                    />
 
-            <!-- Automation sections use one equal-width grid. -->
-            <section v-if="lens === `list` && (availableChores.length > 0 || availableSuggestions.length > 0)" class="@container">
-                <Section class="mb-2.5 px-1" :label="t(`automationsView.addAutomation`)">
-                </Section>
-                <div class="flex flex-col gap-3">
-                    <div v-if="availableChores.length > 0" class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
-                            <button
-                                v-for="recipe in availableChores"
-                                :key="recipe.id"
-                                type="button"
-                                :class="ui.addTile(`w-full items-start justify-start gap-2 px-3 py-2 text-left`)"
-                                v-tooltip.top="recipe.description"
-                                @click="openFromSuggestion(recipe)"
-                            >
-                                <Icon :name="glyph(recipe.icon) ?? `bolt`" class="shrink-0 text-2xs" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate font-medium">{{ recipe.title }}</span>
-                                    <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
-                                </span>
-                                <!-- The chevron opens the recipe details; it does not create a run. -->
-                                <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                            </button>
+                    <!-- The header names both navigation destinations without adding another button. The second sentence points at the
+                         offers section below, which is itself conditional: with nothing on offer here (a workspace whose capabilities
+                         match no template) it sent the reader to look for a list that is not on the page. -->
+                    <div v-else-if="automations.length === 0" :class="ui.emptyState('flex flex-col items-center gap-1 py-6')">
+                        <span class="text-sm text-content">{{ t(`automationsView.nothingRunsOnOwn`) }}</span>
+                        <span v-if="availableChores.length > 0 || availableSuggestions.length > 0">
+                            {{ t(`automationsView.takeOneOffersBelow`) }} <b class="font-medium text-muted">{{ t(`automationsView.newAutomation`) }}</b
+                            >.
+                        </span>
+                        <span v-else
+                            >{{ t(`automationsView.buildOne`) }} <b class="font-medium text-muted">{{ t(`automationsView.newAutomation`) }}</b
+                            >.</span
+                        >
                     </div>
+                    <div v-else class="flex flex-col gap-6">
+                        <!-- Filter by words and by state, within the shelf the rail stands on. -->
+                        <div v-if="automations.length >= FILTER_FROM" class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <SearchBar
+                                v-model="search"
+                                variant="field"
+                                clearable
+                                :aria-label="t(`automationsView.filterAutomations`)"
+                                :placeholder="t(`automationsView.filterByNamePrompt`)"
+                                class="min-w-56 max-w-sm flex-1"
+                            />
+                            <SegmentedControl v-model="view" :options="viewOptions" class="ml-auto" />
+                        </div>
 
-                    <div v-if="availableSuggestions.length > 0" class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+                        <div v-if="shown.length === 0" :class="ui.emptyState('py-5')">
+                            {{ t(`automationsView.nothingMatchesFilter`) }}
                             <button
-                                v-for="recipe in availableSuggestions"
-                                :key="recipe.id"
                                 type="button"
-                                :class="ui.addTile(`w-full items-start justify-start gap-2 px-3 py-2 text-left`)"
-                                v-tooltip.top="recipe.description"
-                                @click="openFromSuggestion(recipe)"
+                                class="cursor-pointer text-link hover:underline"
+                                @click="
+                                    search = '';
+                                    view = 'all';
+                                "
                             >
-                                <Icon :name="glyph(recipe.icon) ?? `bolt`" class="shrink-0 text-2xs" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate font-medium">{{ recipe.title }}</span>
-                                    <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
-                                </span>
-                                <!-- A chevron, not a plus: this also opens the composer prefilled, not a one-click create. -->
-                                <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                                {{ t(`automationsView.showAll`, { count: inShelf.length }) }}
                             </button>
+                        </div>
+
+                        <RowGroup v-for="group in groups" :key="group.key" :label="group.label">
+                            <AutomationRow
+                                v-for="automation in group.rows"
+                                :key="automation.id"
+                                :automation="automation"
+                                :gist="gistOf(automation, shelfLabelOf(automation))"
+                                :listener-sources="listenerSources"
+                                :templates="offered"
+                                :expanded="expanded.has(automation.id)"
+                                :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
+                                @toggle="toggle(automation, $event)"
+                                @expand="toggleDetail(automation.id)"
+                                @remove="confirmRemoveId = automation.id"
+                                @run="runNow(automation)"
+                                @install="installId = automation.id"
+                            />
+                        </RowGroup>
                     </div>
-                </div>
-            </section>
-        </div>
+                </Await>
 
-        <!-- Keyed on the row, so opening a different Visitor chat remounts instead of showing the previous one's probes mid-flight. -->
-        <VisitorChatInstallDialog
-            v-if="installing"
-            :key="installing.id"
-            :automation="installing"
-            :visible="true"
-            @update:visible="installId = undefined"
-        />
+                <!-- What else could run here, offered on the everything shelf only: a picked shelf is a place to work, not to browse. -->
+                <section
+                    v-if="lens === `list` && activeShelf === undefined && (availableChores.length > 0 || availableSuggestions.length > 0)"
+                    class="@container"
+                >
+                    <Section class="mb-2.5 px-1" :label="t(`automationsView.addAutomation`)" />
+                    <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+                        <!-- A chevron, not a plus: each opens the composer prefilled, never a one-click create. -->
+                        <button
+                            v-for="recipe in [...availableChores, ...availableSuggestions]"
+                            :key="recipe.id"
+                            type="button"
+                            :class="ui.addTile(`w-full items-start justify-start gap-2 px-3 py-2 text-left`)"
+                            v-tooltip.top="recipe.description"
+                            @click="openFromSuggestion(recipe)"
+                        >
+                            <Icon :name="glyph(recipe.icon) ?? `bolt`" class="shrink-0 text-2xs" />
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate font-medium">{{ recipe.title }}</span>
+                                <span class="mt-0.5 block truncate text-2xs text-subtle">{{ recipe.note ?? recipe.description }}</span>
+                            </span>
+                            <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                        </button>
+                    </div>
+                </section>
 
-        <!-- Deleting takes the run history with it and the daemon keeps no copy: the one action here with no undo. -->
-        <ConfirmDialog
-            :open="confirmRemoveId !== undefined"
-            :header="t(`automationsView.deleteAutomation`)"
-            :confirm-label="t(`automationsView.delete`)"
-            confirm-icon="trash"
-            :loading="remove.isPending.value"
-            @cancel="confirmRemoveId = undefined"
-            @confirm="removeAutomation"
-        >
-            <template #description>
-                {{ t(`automationsView.delete`) }} <b>{{ confirmRemoveId }}</b> {{ t(`automationsView.runHistoryCantUndone`) }}
-            </template>
-        </ConfirmDialog>
-    </Page>
+                <!-- Keyed on the row, so opening a different Visitor chat remounts instead of showing the previous one's probes mid-flight. -->
+                <VisitorChatInstallDialog
+                    v-if="installing"
+                    :key="installing.id"
+                    :automation="installing"
+                    :visible="true"
+                    @update:visible="installId = undefined"
+                />
+
+                <!-- Deleting takes the run history with it and the daemon keeps no copy: the one action here with no undo. -->
+                <ConfirmDialog
+                    :open="confirmRemoveId !== undefined"
+                    :header="t(`automationsView.deleteAutomation`)"
+                    :confirm-label="t(`automationsView.delete`)"
+                    confirm-icon="trash"
+                    :loading="remove.isPending.value"
+                    @cancel="confirmRemoveId = undefined"
+                    @confirm="removeAutomation"
+                >
+                    <template #description>
+                        {{ t(`automationsView.delete`) }} <b>{{ confirmRemoveId }}</b> {{ t(`automationsView.runHistoryCantUndone`) }}
+                    </template>
+                </ConfirmDialog>
+            </div>
+        </template>
+    </SplitView>
 </template>

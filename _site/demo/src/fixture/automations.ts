@@ -72,6 +72,7 @@ const seed = (now: number): AutomationSummary[] => [
         // Twice every weekday: the shape that shows two wakes a day stacking up on the calendar, and one of them failing.
         id: `triage-issues`,
         trigger: { kind: `schedule`, cron: `0 9,14 * * 1-5` },
+        actsAs: `maya-support`,
         prompt: `Read the issues opened since the last triage. Label each, close the duplicates with a link to the original, and open one conversation listing anything that needs a person.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         enabled: true,
@@ -111,6 +112,7 @@ const seed = (now: number): AutomationSummary[] => [
     {
         id: `release-notes`,
         trigger: { kind: `schedule`, cron: `0 16 * * 5` },
+        group: `Releases`,
         prompt: `Draft this week's release notes from what landed on main since last Friday, grouped by area, for an approver to read before they go out.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         // Off: the shape the calendar keeps out of the way until asked for.
@@ -122,6 +124,7 @@ const seed = (now: number): AutomationSummary[] => [
         // be waited for, and then they are gone.
         id: `renewal-reminder`,
         trigger: { kind: `once`, at: now + hours(20) },
+        actsAs: `priya-ops`,
         prompt: `The TLS certificate for acme.example expires in a week. Check whether the renewal already went through, and if it did not, say exactly what is left to do.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         enabled: true,
@@ -131,6 +134,7 @@ const seed = (now: number): AutomationSummary[] => [
     {
         id: `discord-oncall`,
         trigger: { kind: `listener`, provider: `discord`, channelId: `1180-eng-alerts`, eventType: `message`, mentioned: true },
+        actsAs: `priya-ops`,
         prompt: `You were mentioned in #eng-alerts. Read the thread, check the sandbox for what it refers to, and reply in the channel. If it is a code question, answer with the file and line.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         allowedTools: [`Read`, `Grep`, `Bash(git log:*)`],
@@ -143,6 +147,7 @@ const seed = (now: number): AutomationSummary[] => [
     {
         id: `visitor-chat`,
         trigger: { kind: `listener`, provider: `webchat`, allowedOrigins: [`https://acme.example`] },
+        actsAs: `maya-support`,
         prompt: `A visitor is asking on the marketing site. Answer from the docs in this workspace only; if the answer isn't there, say so and offer to pass it on.`,
         models: [{ provider: `claude`, model: `claude-sonnet-5` }],
         webchat: {
@@ -174,6 +179,7 @@ const seed = (now: number): AutomationSummary[] => [
         // planned the upgrade picks it back up and the watch switches itself off.
         id: `pg-17-ships`,
         trigger: { kind: `schedule`, cron: `23 */6 * * *` },
+        group: `Watches`,
         source: { kind: `npm`, package: `pg`, range: `>=9.0.0` },
         until: `first-fire`,
         expiresAt: now + hours(24 * 60),
@@ -189,6 +195,7 @@ const seed = (now: number): AutomationSummary[] => [
         // A watch with no model at all: the page's text is compared each hour, and only a change reaches the phone.
         id: `stripe-status`,
         trigger: { kind: `schedule`, cron: `7 * * * *` },
+        group: `Watches`,
         source: { kind: `url`, url: `https://status.stripe.com`, select: `<h2[^>]*>([^<]+)</h2>` },
         fireOn: `change`,
         target: { kind: `notify` },
@@ -208,11 +215,78 @@ const seed = (now: number): AutomationSummary[] => [
     {
         id: `pipeline-failed`,
         trigger: { kind: `event` },
+        group: `Releases`,
         webhookToken: `demo-ci-webhook-token`,
         prompt: `A pipeline failed. Read the failed job's log, reproduce the failure in the sandbox, and either fix it or explain in one paragraph why it is not a code problem.`,
         models: [{ provider: `codex`, model: `gpt-5.3-codex`, harness: `native` }],
         enabled: false,
         runs: [{ at: now - hours(26), outcome: `error`, detail: `the turn ended without reaching a verdict` }],
+    },
+    // Growth's jobs, filed on its shelf by the persona they run as rather than by a group anybody typed. Their notes open
+    // with "Growth:", which the row drops under a heading that already says it.
+    {
+        id: `weekly-newsletter`,
+        trigger: { kind: `schedule`, cron: `0 8 * * 2` },
+        actsAs: `owen-growth`,
+        note: `Growth: Tuesday's customer newsletter, drafted for approval`,
+        prompt: [
+            `Draft this week's customer newsletter.`,
+            ``,
+            `1. Read what landed on \`main\` since last Tuesday (\`git log --since="last tuesday"\`) and pick the **two or three changes a customer would notice**.`,
+            `2. For each, write one short paragraph: what changed, who it helps, and where to find it.`,
+            `3. Match the tone of the last three issues in \`web/site/newsletter/\`.`,
+            ``,
+            `Save the draft as \`web/site/newsletter/drafts/<date>.md\` and stop there: Owen approves every issue before it goes out. Never send it yourself, and never mention a customer by name.`,
+            ``,
+            `If nothing customer-facing landed, save a one-line draft saying so, so the week is not silently skipped.`,
+        ].join(`\n`),
+        models: [
+            { provider: `claude`, model: `claude-sonnet-5`, effort: `medium` },
+            { provider: `codex`, model: `gpt-5.3-codex` },
+        ],
+        requireApproval: true,
+        enabled: true,
+        nextRun: nextAt(now, 8, 0, [2]),
+        runs: firesBefore(now, 8, 0, 3, [2]).map((at, index) => ({
+            at: at + 34_000,
+            outcome: `completed` as const,
+            detail: index === 0 ? `draft saved, 3 changes` : `draft saved, 2 changes`,
+            conversationId: `cnv_newsletter_${index}`,
+        })),
+    },
+    {
+        // Failing the same way three evenings running: the opened row says so once, in full, instead of three times.
+        id: `post-changelog`,
+        trigger: { kind: `schedule`, cron: `30 17 * * 1-5` },
+        actsAs: `owen-growth`,
+        note: `Growth: one post on X when something customer-facing shipped`,
+        guard: `git -C web log --since=yesterday --grep='^feat' --format=%s | grep .`,
+        prompt: `Something customer-facing shipped today; the guard printed the commit subjects above. Write one post for @acme on X about the most useful of them: plain words, no hashtags, a link to the changelog entry. Post it, then reply here with the link.`,
+        models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
+        enabled: true,
+        nextRun: nextAt(now, 17, 30, WEEKDAYS),
+        runs: firesBefore(now, 17, 30, 6, WEEKDAYS).map((at, index) =>
+            index < 3
+                ? {
+                      at: at + 21_000,
+                      outcome: `error` as const,
+                      detail: `X refused the post: 403 Forbidden, the app's write access was revoked. Reconnect the x-brand account under Capabilities, then run this again.`,
+                      conversationId: `cnv_changelog_fail_${index}`,
+                  }
+                : index === 3
+                  ? { at: at + 25_000, outcome: `completed` as const, detail: `posted about saved carts`, conversationId: `cnv_changelog_ok` }
+                  : { at: at + 4_000, outcome: `skipped` as const, detail: `guard exited 1, nothing customer-facing landed` },
+        ),
+    },
+    {
+        id: `reply-to-mentions`,
+        trigger: { kind: `schedule`, cron: `*/30 9-18 * * 1-5` },
+        actsAs: `owen-growth`,
+        note: `Growth: answers people who mention acme`,
+        prompt: `Read new mentions of acme on X since the last run. Answer the questions you can answer from the docs, thank people for kind words, and leave complaints for a person.`,
+        models: [{ provider: `claude`, model: `claude-haiku-4-5` }],
+        enabled: false,
+        runs: [],
     },
 ];
 

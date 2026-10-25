@@ -3,15 +3,11 @@ import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } fr
 import { localZone } from "@intentic/sandbox-contract/time";
 import {
     type ActionItem,
-    Button,
-    Code,
-    CopyButton,
     DisclosureRow,
     formatDateTime,
     Icon,
     type IconName,
     OverflowActions,
-    Section,
     ToggleSwitch,
     toneWash,
     ui,
@@ -19,22 +15,25 @@ import {
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleTriggerLabel, since } from "./cronSchedule";
-import { host } from "./host";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
+import AutomationDetail from "./detail/AutomationDetail.vue";
 import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
-import { embedSnippet, useAutomations, useConversations, useSandboxZone, webhookUrl } from "./useAutomations";
+import { useConversations, useSandboxZone } from "./useAutomations";
 import { isWatch, sourceLabel, watchLine } from "./watch";
 import { usePersonaReach } from "./usePersonaReach";
-import { answersCard, answersPhrase } from "./senderSummary";
+import { answersCard } from "./senderSummary";
+import { visitorChatOf } from "./detail/visitorChat";
 import { t } from "./i18n.js";
 
 // Two lines only: what it's called, and what it does when; everything else (prompt, URL, wake settings, run ledger,
-// edit form) sits behind the disclosure, so a page of thirty reads as states, not paragraphs. The trigger glyph doubles
-// as the health light. Shared by chores and integrations, since an enabled chore is an ordinary automation.
+// edit form) sits behind the disclosure (AutomationDetail), so a page of thirty reads as states, not paragraphs. The
+// trigger glyph doubles as the health light. Shared by every shelf, since an enabled chore is an ordinary automation.
 
 const props = defineProps<{
     automation: AutomationSummary;
+    // What it does, in one line: its note without the shelf it sits on, else its prompt's first line (grouping.ts).
+    gist: string;
     listenerSources: readonly AvailableSource[];
     templates: readonly AutomationTemplate[];
     expanded: boolean;
@@ -134,13 +133,6 @@ const OUTCOME_CLASS: Record<AutomationRun[`outcome`], string> = {
 };
 const runTooltip = (run: AutomationRun): string => `${formatDateTime(run.at)}${run.detail !== undefined ? `, ${run.detail}` : ``}`;
 
-// Opens the run's transcript; a guard-skip has no conversation to open.
-const openRun = (run: AutomationRun): void => {
-    if (run.conversationId !== undefined) {
-        host().chat.openSession(run.conversationId);
-    }
-};
-
 const nextLabel = computed<string | undefined>(() => (props.automation.nextRun !== undefined ? nextIn(props.automation.nextRun) : undefined));
 
 // WHERE A WATCH STANDS: what its check saw last and when, what retires it. A quiet check (nothing moved) is not a run,
@@ -166,13 +158,6 @@ const TARGET_ICON = { conversation: `comments`, notify: `mobile` } as const;
 // The form itself is AutomationEditor's, mounted only while editing, so it loads fresh on every Edit.
 const editing = ref(false);
 const sandboxZone = useSandboxZone();
-const { rotateToken } = useAutomations();
-// Two presses, like every undoable action here: the old URL dies the moment the daemon answers.
-const confirmingRotate = ref(false);
-const rotate = async (): Promise<void> => {
-    confirmingRotate.value = false;
-    await rotateToken.mutateAsync(props.automation.id);
-};
 
 const startEdit = (): void => {
     editing.value = true;
@@ -182,63 +167,17 @@ const startEdit = (): void => {
     }
 };
 
-// The Visitor chat summary the row shows: the snippet, and the two settings deciding whether it works. Undefined for any
-// other automation, and until the sandbox's own origin is known, so Install never opens on nothing.
-const visitorChat = computed(() => {
-    const fires = props.automation.trigger;
-    if (fires.kind !== `listener` || fires.provider !== `webchat` || embedSnippet(props.automation) === undefined) {
-        return undefined;
-    }
-    const config = props.automation.webchat ?? {};
-    // Mirrors the daemon's resolution (webchat-config.ts): missing keys report as off, matching what's enforced.
-    const turnstileReady = config.turnstileSiteKey !== undefined && config.turnstileSecret !== undefined;
-    return {
-        origins: fires.allowedOrigins ?? [],
-        access: config.access === `google` ? t(`automationRow.googleSignInRequired`) : t(`automationRow.openToAnyone`),
-        botCheck:
-            config.antiBot === `turnstile` && turnstileReady
-                ? `Turnstile`
-                : config.antiBot === `turnstile`
-                  ? t(`automationRow.turnstileUnfinished`)
-                  : config.antiBot === `pow`
-                    ? t(`automationRow.builtInBotCheck`)
-                    : t(`automationRow.noBotCheck`),
-    };
-});
+// Set only for a Visitor chat whose snippet can be built: its embed code is the deliverable, so its glyph stays on the row.
+const visitorChat = computed(() => visitorChatOf(props.automation));
 
 // Whether its wakes get less than the owner likely expects: one quiet mark on the row, the reason in the drawer.
-const { reach, reachTip, runsAs } = usePersonaReach(
+const { reach, reachTip } = usePersonaReach(
     computed(() => props.automation),
     computed(() => targetPhrase.value === undefined),
 );
 
-// Labelled facts, not one run-on sentence: four settings read at a glance instead of parsed out of prose.
-// The model wanted, then a count of fallbacks, not a full list: scanning asks "which model", not "what are all four";
-// the full ladder is one click away in the editor.
-const runsOn = computed<string>(() => {
-    const [head, ...rest] = props.automation.models ?? [];
-    if (head === undefined) {
-        return t(`automationRow.noModel`);
-    }
-    const named = `${head.provider} · ${head.model}`;
-    return rest.length === 0 ? named : `${named} +${rest.length}`;
-});
-// Who it answers (senderSummary.ts): a phrase for the drawer, and the same counts as a hover card on the row's glyph.
-const answers = computed(() => answersPhrase(props.automation.senders));
+// Who it answers (senderSummary.ts), as a hover card on the row's glyph; the drawer says it in words.
 const answersTip = computed(() => answersCard(props.automation.senders));
-const settings = computed<readonly { label: string; value: string }[]>(() => [
-    // A conversation runs on its own model and a notification on none, so only a new agent names one.
-    ...(targetPhrase.value === undefined
-        ? [{ label: t(`automationRow.runsOn`), value: runsOn.value }]
-        : [{ label: t(`automationRow.then`), value: targetPhrase.value }]),
-    ...(props.automation.fireOn === `change` ? [{ label: t(`automationRow.fires`), value: t(`automationRow.onlyOnChange`) }] : []),
-    ...(runsAs.value !== undefined ? [{ label: t(`automationRow.runs2`), value: runsAs.value }] : []),
-    ...(answers.value !== undefined ? [{ label: t(`automationRow.answers`), value: answers.value }] : []),
-    ...(props.automation.requireApproval === true ? [{ label: t(`automationRow.approval`), value: t(`automationRow.heldForYou`) }] : []),
-    ...(props.automation.holdForSeconds !== undefined && props.automation.holdForSeconds > 0
-        ? [{ label: t(`automationRow.hold`), value: t(`automationRow.holdBeforeRun`, { seconds: props.automation.holdForSeconds }) }]
-        : []),
-]);
 
 // One recipe (kit's icon button plus reveal) for all three verbs; hand-written before, it had no touch hit-area growth
 // or disabled tone.
@@ -333,7 +272,7 @@ const verbs = computed((): ActionItem[] => [
                 <!-- A watch's line says where it stands, which is what its row is scanned for; the prompt is in the drawer. -->
                 <span class="hidden min-w-0 flex-1 items-center gap-2 truncate text-subtle @xl:flex" aria-hidden="true">
                     <span class="h-2.5 w-px shrink-0 bg-line-strong"></span>
-                    <span class="min-w-0 truncate">{{ leadsWithWatch ? watched : automation.prompt }}</span>
+                    <span class="min-w-0 truncate">{{ leadsWithWatch ? watched : gist }}</span>
                 </span>
             </span>
         </template>
@@ -452,132 +391,19 @@ const verbs = computed((): ActionItem[] => [
                 @done="editing = false"
             />
 
-            <!-- Two columns for two questions: what this is, and what it's done. -->
-            <div v-else class="grid gap-x-6 gap-y-4 pr-3 @3xl:grid-cols-3">
-                <div class="flex min-w-0 flex-col gap-3 @3xl:col-span-2">
-                    <Section :label="t(`automationRow.prompt`)">
-                        <p class="max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
-                            {{ automation.prompt }}
-                        </p>
-                    </Section>
-
-                    <!-- What decides whether a fire goes ahead, and what it saw last time it looked. -->
-                    <Section v-if="automation.guard || automation.source || watched" class="min-w-0" :label="t(`automationRow.check`)">
-                        <div class="flex flex-col gap-1">
-                            <Code v-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />
-                            <span v-else-if="automation.source" class="truncate text-2xs text-muted" v-tooltip.top.overflow="sourceLabel(automation.source)">{{
-                                sourceLabel(automation.source)
-                            }}</span>
-                            <span v-if="watched" class="text-2xs text-subtle">{{ watched }}</span>
-                            <template v-if="automation.watch?.value">
-                                <span class="mt-1 text-2xs text-subtle">{{
-                                    automation.watch.changedAt === undefined
-                                        ? t(`automationRow.lastSaw`)
-                                        : t(`automationRow.lastSawSince`, { when: formatDateTime(automation.watch.changedAt) })
-                                }}</span>
-                                <pre class="max-h-32 overflow-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-2xs break-words whitespace-pre-wrap text-muted">{{
-                                    automation.watch.value
-                                }}</pre>
-                            </template>
-                        </div>
-                    </Section>
-
-                    <Section v-if="trigger.kind === `event`" :label="t(`automationRow.webhook`)">
-                        <div class="flex flex-col gap-1">
-                            <!-- The URL carries the door's token; the daemon hands it to a maintainer or owner only, never a viewer. -->
-                            <div v-if="webhookUrl(automation) !== undefined" class="flex items-center gap-1.5">
-                                <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
-                                <CopyButton
-                                    :text="webhookUrl(automation) ?? ``"
-                                    :aria-label="t(`automationRow.copyWebhookUrl`, { id: automation.id })"
-                                    v-tooltip.top="t(`automationRow.copyUrl`)"
-                                />
-                                <Button
-                                    v-if="!confirmingRotate"
-                                    :label="t(`automationRow.rotate`)"
-                                    size="small"
-                                    tier="quiet"
-                                    :disabled="rotateToken.isPending.value"
-                                    v-tooltip.top="{ title: t(`automationRow.newToken`), note: t(`automationRow.oldUrlStops`) }"
-                                    @click="confirmingRotate = true"
-                                />
-                            </div>
-                            <p v-else class="text-2xs text-subtle">{{ t(`automationRow.urlShownToMaintainers`) }}</p>
-                            <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
-                                <span class="mr-auto text-2xs text-subtle">{{ t(`automationRow.sureEverySenderWired`) }}</span>
-                                <Button
-                                    :label="t(`automationRow.cancel`)"
-                                    size="small"
-                                    tier="quiet"
-                                    @click="confirmingRotate = false"
-                                />
-                                <Button
-                                    :label="t(`automationRow.rotateToken`)"
-                                    size="small"
-                                    tone="danger"
-                                    :loading="rotateToken.isPending.value"
-                                    @click="rotate"
-                                />
-                            </div>
-                        </div>
-                    </Section>
-
-                    <!-- The two settings deciding whether the widget works at all. -->
-                    <Section v-if="visitorChat" :label="t(`automationRow.visitorChat`)">
-                        <div class="flex flex-col gap-1.5">
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                                <span v-if="visitorChat.origins.length > 0">{{
-                                    t(`automationRow.onOrigins`, { origins: visitorChat.origins.join(`, `) })
-                                }}</span>
-                                <span v-else class="text-danger">{{ t(`automationRow.noSitesAllowedNobody`) }}</span>
-                                <span>{{ visitorChat.access }}</span>
-                                <span>{{ visitorChat.botCheck }}</span>
-                            </div>
-                            <!-- Use a glyph in the row and words after the reader opens it. -->
-                            <Button
-                                size="small"
-                                tier="boring"
-                                class="self-start"
-                                :label="t(`automationRow.getEmbedCode`)"
-                                :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
-                                @click="emit(`install`)"
-                            >
-                                <template #icon><Icon name="globe" /></template>
-                            </Button>
-                        </div>
-                    </Section>
-
-                    <!-- Labelled pairs expose the two facts most checked during diagnosis. -->
-                    <dl class="flex flex-wrap gap-x-5 gap-y-1.5">
-                        <div v-for="setting in settings" :key="setting.label" class="flex min-w-0 flex-col">
-                            <dt class="text-2xs text-subtle">{{ setting.label }}</dt>
-                            <dd class="truncate text-2xs text-muted">{{ setting.value }}</dd>
-                        </div>
-                    </dl>
-                </div>
-
-                <!-- Run history links to transcripts for runs that reached a turn. -->
-                <Section class="min-w-0" :label="t(`automationRow.runs`)">
-                    <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">{{ t(`automationRow.nothingYetRunNow`) }}</p>
-                    <div v-else class="-mx-1 flex max-h-40 flex-col overflow-y-auto">
-                        <component
-                            :is="run.conversationId ? `button` : `div`"
-                            v-for="run in automation.runs"
-                            :key="run.at"
-                            :type="run.conversationId ? `button` : undefined"
-                            class="flex items-baseline gap-2 rounded px-1 py-0.5 text-left text-2xs"
-                            :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
-                            :aria-label="run.conversationId ? t(`automationRow.openTranscriptRun`, { at: formatDateTime(run.at) }) : undefined"
-                            @click="openRun(run)"
-                        >
-                            <span class="w-16 shrink-0 text-subtle" v-tooltip.top="formatDateTime(run.at)">{{ since(run.at) }}</span>
-                            <span class="w-12 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ outcomeVerb(run.outcome) }}</span>
-                            <span v-if="run.detail" class="min-w-0 flex-1 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
-                            <Icon v-if="run.conversationId" name="chevron-right" class="ml-auto shrink-0 text-2xs text-subtle" />
-                        </component>
-                    </div>
-                </Section>
-            </div>
+            <AutomationDetail
+                v-else
+                :automation="automation"
+                :trigger-icon="TRIGGER_ICON[trigger.kind]"
+                :trigger-label="triggerLabel"
+                :target-phrase="targetPhrase"
+                :target-icon="automation.target && automation.target.kind !== `agent` ? TARGET_ICON[automation.target.kind] : undefined"
+                :spent="spent"
+                :busy="busy"
+                @edit="startEdit"
+                @run="emit(`run`)"
+                @install="emit(`install`)"
+            />
         </template>
     </DisclosureRow>
 </template>

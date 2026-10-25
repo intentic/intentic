@@ -18,10 +18,10 @@ import {
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { addDays, calendarWeek, type CalendarEntry, type EntryState, instantAt, type LaneBar, layoutDay, minuteOfDay, weekStartOf } from "./calendarModel";
 import CalendarPeek from "./CalendarPeek.vue";
-import { scheduleTriggerLabel } from "./cronSchedule";
-import RunStrip from "./RunStrip.vue";
-import { useSandboxZone } from "./useAutomations";
-import { t } from "./i18n.js";
+import { scheduleTriggerLabel } from "../cronSchedule";
+import RunStrip from "../RunStrip.vue";
+import { useSandboxZone } from "../useAutomations";
+import { t } from "../i18n.js";
 
 // The time lens over the same automations the list shows: one week, Monday first, on the reader's own clock. A slot is a
 // wake that happened (from the run ledger) or one that will (from the rule); a rule firing many times a day is a bar

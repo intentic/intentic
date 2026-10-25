@@ -97,6 +97,18 @@ export const triggerKey = (trigger: { readonly kind: TriggerKind; readonly provi
 // `sandboxZone` is the clock a schedule with no override of its own runs on. Passed in rather than read from
 // `Intl.DateTimeFormat()` here: the browser's zone is the reader's, and the reader is not necessarily where the
 // sandbox's chores are meant to happen.
+// The optional one-line texts the form holds as a box: absent reads as blank, and blank saves as absent, trimmed. `group`
+// is the panel shelf it is filed on, and blank files it by persona instead (grouping.ts).
+const boxOf = (text: string | undefined): string => text ?? ``;
+const putLine = (automation: Automation, key: `note` | `group`, box: string): void => {
+    const line = box.trim();
+    if (line === ``) {
+        delete automation[key];
+    } else {
+        automation[key] = line;
+    }
+};
+
 export function useAutomationForm(
     sources: ComputedRef<readonly AvailableSource[]>,
     templates: ComputedRef<readonly AutomationTemplate[]>,
@@ -131,6 +143,7 @@ export function useAutomationForm(
         conversationId: ``,
         // One line on what it watches for; a notification's title and what a woken conversation reads it as.
         note: ``,
+        group: ``,
         prompt: ``,
         // Replaces provider/harness/model; each rung is a full ModelPin, and the list must never be empty.
         models: [] as ModelPin[],
@@ -487,6 +500,7 @@ export function useAutomationForm(
             target: `agent`,
             conversationId: ``,
             note: ``,
+            group: ``,
             prompt: ``,
             // Empty: a template can't know which providers this sandbox has connected, so it never fills this.
             models: [],
@@ -622,7 +636,8 @@ export function useAutomationForm(
         form.stopAfterFirst = automation.until === `first-fire`;
         form.expiresAt = automation.expiresAt === undefined ? `` : localInputOf(automation.expiresAt);
         loadTarget(automation.target);
-        form.note = automation.note ?? ``;
+        form.note = boxOf(automation.note);
+        form.group = boxOf(automation.group);
         form.prompt = automation.prompt;
         // Copied, not aliased: the picker edits in place, and a cancelled edit must not touch the stored record.
         form.models = (automation.models ?? []).map((pin) => ({ ...pin }));
@@ -787,11 +802,8 @@ export function useAutomationForm(
         } else {
             automation.target = target;
         }
-        if (form.note.trim() === ``) {
-            delete automation.note;
-        } else {
-            automation.note = form.note.trim();
-        }
+        putLine(automation, `note`, form.note);
+        putLine(automation, `group`, form.group);
     };
 
     // Record to upsert: keeps every opaque field from the loaded record, overwriting only what the editor exposes.

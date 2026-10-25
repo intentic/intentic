@@ -446,6 +446,16 @@ export const AutomationSchema = z.object({
         .boolean()
         .optional()
         .describe("This automation is a maintenance job, which is what files it under chores rather than among ordinary automations."),
+    // Pure filing, like `chore`: the daemon never reads it. Absent, the panel files it by its persona instead, so a set
+    // of jobs one role runs reads as one shelf without anybody naming it.
+    group: z
+        .string()
+        .min(1)
+        .max(40)
+        .optional()
+        .describe(
+            "Which shelf of the Automations panel it is filed on, like 'Marketing' or 'Releases'. Automations naming the same group are listed together. Absent files it under its persona, or with the code chores.",
+        ),
     enabled: z.boolean().describe("Whether it fires at all."),
 });
 export type Automation = z.infer<typeof AutomationSchema>;

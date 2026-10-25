@@ -4,11 +4,11 @@ import { localZone } from "@intentic/sandbox-contract/time";
 import { Button, formatDateTime, Icon, type IconName, ToggleSwitch } from "@intentic/extension-ui";
 import { computed } from "vue";
 import type { EntryState } from "./calendarModel";
-import { nextIn, scheduleTriggerLabel } from "./cronSchedule";
-import { host } from "./host";
-import RunStrip from "./RunStrip.vue";
-import { useSandboxZone } from "./useAutomations";
-import { t } from "./i18n.js";
+import { nextIn, scheduleTriggerLabel } from "../cronSchedule";
+import { host } from "../host";
+import RunStrip from "../RunStrip.vue";
+import { useSandboxZone } from "../useAutomations";
+import { t } from "../i18n.js";
 
 // What one slot on the calendar is, and the three things worth doing about it from there: run it, edit it, switch it.
 // The moment comes first because it is what was clicked; the automation's standing facts (its rule, its guard, its

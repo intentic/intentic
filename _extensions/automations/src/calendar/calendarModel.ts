@@ -11,7 +11,7 @@ import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time"
 import { Cron } from "croner";
 
 /** More fires than this in any one day and the automation is a cadence, not a set of moments: it goes in the lane. */
-export const MAX_PER_DAY = 6;
+const MAX_PER_DAY = 6;
 
 /** Everything a slot can say: a run's own outcome for the past, `upcoming` or `paused` for the future. */
 export type EntryState = AutomationRun[`outcome`] | `upcoming` | `paused`;
@@ -68,7 +68,7 @@ export const addDays = (start: number, days: number): number => {
     return date.getTime();
 };
 
-export const daysOf = (weekStart: number): number[] => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+const daysOf = (weekStart: number): number[] => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
 
 /** Minutes past local midnight, the column coordinate. */
 export const minuteOfDay = (at: number): number => {

@@ -18,6 +18,7 @@ import {
     vAction,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import AutomationLabels from "./AutomationLabels.vue";
 import { glyph } from "./catalog";
 import { nextIn, since } from "./cronSchedule";
 import { localZone, zoneLabel } from "@intentic/sandbox-contract/time";
@@ -546,18 +547,7 @@ const setProvider = (provider: string): void => {
                         {{ nameError }}
                     </span>
                 </label>
-                <!-- One line on what it is for: a notification's title, and what a conversation it wakes reads it as. -->
-                <label class="ui-field min-w-0 max-w-2xl">
-                    <span v-if="!nameLocked" class="ui-field-label">{{ t(`automationFields.noteOptional`) }}</span>
-                    <input
-                        v-model="form.note"
-                        maxlength="200"
-                        :placeholder="t(`automationFields.notePlaceholder`)"
-                        :aria-label="t(`automationFields.note`)"
-                        :class="ui.input()"
-                    />
-                    <span class="text-2xs text-subtle">{{ t(`automationFields.noteHint`) }}</span>
-                </label>
+                <AutomationLabels v-model:note="form.note" v-model:group="form.group" :name-locked="nameLocked" />
             </div>
         </section>
 
