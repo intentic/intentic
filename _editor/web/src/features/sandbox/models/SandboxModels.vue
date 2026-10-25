@@ -7,12 +7,13 @@ import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/mo
 import type { ProviderKey } from "@intentic/sandbox-contract/state/arrival";
 import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
+import { computed, inject, nextTick, onMounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
+import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
 import { useOperation } from "../../../workbench/operations/operations";
 import { defaultModelFor, endpointProviders } from "../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
@@ -107,7 +108,8 @@ const stopFetching = (): void => {
 };
 
 // THE GRID AND WHICH TILE IS OPEN.
-// The open tile lives in the address (`?open=<tile>`), so a reload or a shared link lands on it again.
+// The open tile lives in the address (`?open=<tile>`), so a reload or a shared link lands on it again. A provider's tile is
+// named by the provider itself, so a chat's "Connect Claude" opens Claude's tile (opened, not signed in: `?provider=` is that).
 const tileNamed = (value: unknown): TileKey | undefined => MODEL_TILES.find((tile) => tile === value);
 const remembered = tileNamed(route.query[`open`]);
 const selected = ref<TileKey | undefined>(remembered);
@@ -315,11 +317,19 @@ const onLocalReady = (provider: string): void => {
 };
 
 // Points the next conversation at what was just connected and goes there: the errand ends in a chat, not on a settings
-// page.
+// page. Shown on Home in its chat's place (lib/routes/homeDetour.ts), that chat is the one it was opened from: back to it,
+// pointed at what just connected if it had nothing to send with, its draft still in the box.
+const homeView = inject(HOME_VIEW_HOST, undefined);
+const chatLabel = computed(() => (homeView === undefined ? undefined : t(`home.view.continueInChat`)));
 const startChatting = (): void => {
     const provider = landed.value;
-    if (provider !== undefined) {
-        rememberPick({ provider, value: defaultModelFor(provider) });
+    const pick = provider === undefined ? undefined : { provider, value: defaultModelFor(provider) };
+    if (pick !== undefined) {
+        rememberPick(pick);
+    }
+    if (homeView !== undefined) {
+        homeView.back(pick);
+        return;
     }
     void router.push(`/chat`);
 };
@@ -487,6 +497,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                     v-if="selected === LOCAL_TILE"
                     :fit="fit"
                     :landed="landedFor(LOCAL_TILE)"
+                    :chat-label="chatLabel"
                     @ready="onLocalReady"
                     @stop-prefetch="stopFetching"
                     @chat="startChatting"
@@ -501,6 +512,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                     :other-live="otherLiveFor(selected)"
                     :busy="starting !== undefined"
                     :landed="landedFor(selected)"
+                    :chat-label="chatLabel"
                     :found="foundRows.some((provider) => provider === selected)"
                     :notice="accountsNotice"
                     @connect="connectSelected"

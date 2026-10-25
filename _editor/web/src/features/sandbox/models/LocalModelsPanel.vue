@@ -21,10 +21,12 @@ import LocalModelLane from "./LocalModelLane.vue";
 
 const t = useT();
 
-const { fit, landed } = defineProps<{
+const { fit, landed, chatLabel } = defineProps<{
     fit: LocalModelFitResponse | undefined;
     // What just started serving here, in a sentence naming the sandbox it went to.
     landed?: string;
+    // The words on the press beside it, which go to a chat: where that chat is depends on where this page is shown.
+    chatLabel?: string;
 }>();
 const emit = defineEmits<{ ready: [provider: string]; stopPrefetch: []; chat: [] }>();
 
@@ -73,7 +75,7 @@ const held = computed(() =>
             <div class="flex flex-wrap items-center gap-3">
                 <Icon name="check" class="shrink-0 text-success" />
                 <span class="min-w-0 flex-1 text-sm text-content">{{ landed }}</span>
-                <Button size="small" :label="t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
+                <Button size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
             </div>
         </RowNote>
 

@@ -2793,7 +2793,9 @@
             "isntConnectedInSandbox": "{providerName} no está conectado en este sandbox.",
             "maintainerConnects": "Un responsable de este sandbox puede conectar uno.",
             "noModelYet": "Todavía no hay ningún modelo conectado en este sandbox.",
-            "signInWaiting": "Tu inicio de sesión en {provider} aún no ha terminado."
+            "signInWaiting": "Tu inicio de sesión en {provider} aún no ha terminado.",
+            "connectProvider": "Conectar {providerName}",
+            "chooseAnother": "Elegir otro modelo"
         },
         "chatArea": {
             "bringBackHere": "Tráelo de vuelta aquí",
@@ -3251,7 +3253,8 @@
             "ranStandard": "El último turno se ejecutó a velocidad estándar.",
             "ranStandardBecause": "El último turno se ejecutó a velocidad estándar ({reason}).",
             "turnKeepsItsModel": "Este turno termina con el modelo con el que empezó. Lo que elijas aquí se aplica desde tu próximo mensaje.",
-            "turnKeepsModel": "Este turno termina con {model}. Lo que elijas aquí se aplica desde tu próximo mensaje."
+            "turnKeepsModel": "Este turno termina con {model}. Lo que elijas aquí se aplica desde tu próximo mensaje.",
+            "autoNeedsModel": "Necesita modelos conectados entre los que elegir"
         },
         "chatNotes": {
             "addedContext": "Contexto añadido",
@@ -3750,8 +3753,8 @@
             "sendNowOnNote": "Cambia este chat a una cuenta con cupo",
             "sendsAt": "Envía",
             "stopTurn": "Detener turno",
-            "unconnectedHint": "Elegir modelo",
-            "unconnectedPlaceholder": "¿Qué debe hacer este agente? Enviar elige primero un modelo…",
+            "unconnectedHint": "Conecta un modelo",
+            "unconnectedPlaceholder": "¿Qué debe hacer este agente?",
             "viewerPlaceholder": "Solo estás mirando: pide al propietario el rol de colaborador para dirigir agentes",
             "placeholderLater": "Escribe el mensaje que quieres programar…",
             "hintLater": "Programar",
@@ -3771,10 +3774,12 @@
                 "hintSteer": "Enviar ahora, mientras trabaja",
                 "hintQueue": "Se envía cuando termine",
                 "viewerPlaceholder": "Puedes leer esta conversación. Pide permiso al propietario si también quieres escribir aquí."
-            }
+            },
+            "unconnectedNote": "Tu mensaje espera aquí.",
+            "otherModelHint": "Modelo sin conectar",
+            "otherModelNote": "Elige uno conectado."
         },
         "composerModelPill": {
-            "chooseModel": "Elegir un modelo",
             "fromNextMessage": "{model} responde desde tu próximo mensaje. Esta respuesta sigue funcionando con {running}.",
             "model": "Modelo: {modelLabelText}",
             "nextMessage": "desde el próximo mensaje",
@@ -3782,7 +3787,9 @@
             "olderNote": "Este chat funciona con {model}, una versión anterior. Elige {newer} en la lista para cambiarlo.",
             "olderTitle": "{newer} es más reciente",
             "trialNote": "Cambia de modelo o conecta el tuyo.",
-            "trialServed": "Última respuesta: {model}."
+            "trialServed": "Última respuesta: {model}.",
+            "noModel": "Sin modelo",
+            "lockedAria": "{model}, sin conectar"
         },
         "composerMore": {
             "howMuchMayDo": "Cuánto puede hacer antes de preguntar.",
@@ -3887,7 +3894,8 @@
             "showOlder": "Mostrar {hidden} más antiguos",
             "showOlderModels": "Mostrar {hidden} modelos de {label} más antiguos",
             "unavailable": "No disponible",
-            "addAnotherProvider": "Añadir otro proveedor"
+            "addAnotherProvider": "Añadir otro proveedor",
+            "nothingConnected": "Aún no hay nada conectado. Conecta un modelo para empezar"
         },
         "modelPickerState": {
             "useCustomModelId": "usar como id de modelo personalizado"
@@ -13107,6 +13115,10 @@
                     "line": "Cada agente, archivo y cambio está a un clic."
                 }
             }
+        },
+        "view": {
+            "back": "Volver al chat",
+            "continueInChat": "Seguir en el chat"
         }
     },
     "hostedStart": {

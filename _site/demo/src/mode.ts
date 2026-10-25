@@ -171,6 +171,31 @@ export const deskEdition = demoMode.id === `desk`;
 /** Whether this page load is a first-day sandbox: every seam that carries the recording's history serves it empty. */
 export const freshEdition = demoMode.id === `fresh`;
 
+// WHETHER ANYTHING IS CONNECTED TO RUN A CHAT ON this page load, from `?models=`, sticky per tab like the mode and the
+// outage: `?models=none` is a sandbox with no account, no subscription, no trial and no endpoint, the first run the
+// chat's account notice, its disabled Send and Home's in-place Models (`@intentic/web` lib/routes/homeDetour.ts) are
+// designed and checked against, which no mode shows (the fresh one has the trial). `?models=any` ends it.
+
+const MODELS_KEY = `intentic.demo.models`;
+
+const resolveModels = (): boolean => {
+    const url = new URL(window.location.href);
+    const asked = url.searchParams.get(`models`);
+    if (asked !== null) {
+        url.searchParams.delete(`models`);
+        window.history.replaceState(window.history.state, ``, url);
+        if (asked === `none`) {
+            window.sessionStorage.setItem(MODELS_KEY, `none`);
+        } else {
+            window.sessionStorage.removeItem(MODELS_KEY);
+        }
+    }
+    return window.sessionStorage.getItem(MODELS_KEY) === `none`;
+};
+
+/** Whether this page load's sandbox has nothing a chat can run on, resolved once before boot. */
+export const noModels = resolveModels();
+
 // The look and the audience the desk recording is read in, the same three keys the desk PROFILE seeds (@intentic/constants
 // profile.ts): light, unskinned, a maker. index.html's pre-paint script writes them for the first frame; this writes
 // them on a switch, and takes them back on the way out so the code recording opens in the reader's own light again.

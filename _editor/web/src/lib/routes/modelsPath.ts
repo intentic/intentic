@@ -7,9 +7,11 @@ import type { RouteLocationRaw } from "vue-router";
 export const MODELS_PATH = `/sandbox/models`;
 
 // What a link may ask of the page: `provider` starts that provider's sign-in where nothing of it is connected yet
-// (linkArrival), `found` is what the desktop app found signed in on this computer (lib/foundOnComputer.ts).
+// (linkArrival), `open` only opens a tile (a provider's own, by its id) for the reader to choose how to connect, and
+// `found` is what the desktop app found signed in on this computer (lib/foundOnComputer.ts).
 export interface ModelsQuery {
     readonly provider?: string;
+    readonly open?: string;
     readonly found?: string;
 }
 

@@ -31,6 +31,7 @@ import type { ChatRouting } from "../../routing/chatRoute";
 import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../../../models/providers/usageStatus";
+import { anyProviderReady } from "../../../../models/providers/access";
 import { planFeedback } from "../../../../models/conversations/session/cardReplies";
 import { track } from "../../../../app/analytics";
 import { invalidateAgentTranscript } from "../../../../models/conversations/transcript/agentTranscript";
@@ -63,8 +64,8 @@ export interface SendHost {
     readonly pin: () => void;
     // Re-measures the emptied box and puts the caret back in it, once the DOM has caught up.
     readonly refocus: () => void;
-    // What a press with nothing to send with does instead: opens the model list.
-    readonly openModels: () => void;
+    // What a press with nothing to send with does instead: points at the account notice's one way on (accountNudge.ts).
+    readonly nudgeConnect: () => void;
     // Sets this conversation's limit answer to resend, unless something already arms it: what sends a scheduled message
     // again when the reopen it was booked for came too early and was refused. Runs beside the send, never ahead of it (a
     // chat's first message is what registers it), which is safe because the daemon asks the answer afresh at the refusal.
@@ -352,7 +353,8 @@ export const useComposerSend = (host: SendHost) => {
     const continueOffer = computed(() => continueOffered(situation.value));
     const reopen = reopenReadings({ situation, intent, continueOffer, spentUntil, now: paneNow });
     const { reopenPress, reopenShown } = reopen;
-    const canSend = computed(() => sendable(situation.value, intent.value, refusal.value));
+    // Nothing to send with is a disabled Send that says why (sendHint), never a press that opens something else.
+    const canSend = computed(() => connected.value && sendable(situation.value, intent.value, refusal.value));
     // Everything a press needs: voice and edit intercept before `canSend`.
     const readyToSend = computed(() => connected.value && staged.value && refusal.value === undefined);
 
@@ -462,9 +464,10 @@ export const useComposerSend = (host: SendHost) => {
         if (host.runThrough.claimSend()) {
             return;
         }
-        // Nothing to send WITH: the draft stays, so the sentence already written is what the chosen model answers.
+        // Nothing to send WITH: the draft stays, so the sentence already written is what the model answers once there is
+        // one, and the press points at the way to one rather than opening anything.
         if (!connected.value) {
-            host.openModels();
+            host.nudgeConnect();
             return;
         }
         // Nothing typed and a turn left hanging means Continue, the strip's own press by keyboard ("Enter to continue"): it
@@ -533,9 +536,9 @@ export const useComposerSend = (host: SendHost) => {
             if (!host.reachable.value) {
                 return { title: t(`chat.chatPane.sandboxBusy`), tone: `warning`, note: t(`chat.chatPane.keepTyping`) };
             }
-            // What the press does with nothing connected: opens the model list, keeping the draft.
+            // Why the press is greyed with nothing to send with, as the one fix; the draft waits.
             if (!connected.value) {
-                return unconnectedHint();
+                return unconnectedHint(anyProviderReady());
             }
             // A refusal's sentence is the status line's; the greyed button names it.
             const refused = sendRefusalTitle(situation.value);

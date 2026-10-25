@@ -564,6 +564,15 @@ the sandbox switcher's Sandboxes header (on a phone, the Menu page's), and `Mod+
 (`lib/routes/firstScreens.ts`). `features/home/` draws the surface; `models/home/` holds attention polling, the pure work
 ledger projection and which sandbox's home is on screen (`homeShownFor`, which the Add sandbox dialog waits on when
 it was opened here).
+**Home shows a sandbox's own view in place** (2026-10-25, `lib/routes/homeDetour.ts`): a navigation from Home to a view
+it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<view>`, drawn where the chat was
+(`HomeDetour.vue`) under a labelled "Back to chat"; Esc and the browser's Back return too. The chat stays mounted,
+hidden, so its draft survives the trip. One router guard covers every door to the view, so no link needs to know it
+was pressed on Home; a tile's double-click and the desktop opener enter the sandbox for real (`goInside`). A dialog was
+the rejected alternative: a sign-in is a trip to another tab and back, which an address survives and a dialog does not.
+With no model connected, the chat's one press is the notice's "Connect a model" (or "Connect Claude" for a provider
+somebody picked), Send is disabled and its Enter shakes that press, and the composer's pill says "No model" rather
+than offering a second door (`features/chat/accounts/ChatAccountPanel.vue`).
 The shared composer offers model selection to non-guest members in either audience mode. Effort appears when the
 selected model and runtime support it, and stays hidden under Auto or on the free trial.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.

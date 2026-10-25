@@ -10,7 +10,7 @@ import { providerDisplayLabel } from "../../../../models/providers/providerCatal
 import { useComposerLanding } from "../../composer/composerLanding";
 import { type ComposerControl, overflowRows, ridesRow } from "../../composer/composerMore";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
-import { composerModelReading } from "../../composer/composerModelLabel";
+import { composerModelName, composerModelReading } from "../../composer/composerModelLabel";
 import { modeMeta } from "../../models/catalog";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import { startingMode } from "../../../../models/conversations/run/turnDefaults";
@@ -198,7 +198,7 @@ export const useComposerControls = (host: ControlsHost) => {
         placementShown,
         placementLabel: computed(() => remoteName.value ?? conversation().runner.value ?? t(`chat.composerQuickPick.here`)),
         modelReading,
-        modelLabelText: computed(() => modelReading.value.label),
+        modelLabelText: computed(() => composerModelName(modelReading.value)),
         // Our own text, always a real model name; `providerDisplayLabel` covers capability-derived providers too.
         providerName: computed(() => providerDisplayLabel(host.provider.value)),
         // The trial has no vendor to name: it's the product's own channel, not somebody's account.

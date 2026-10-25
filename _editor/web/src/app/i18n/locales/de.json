@@ -2793,7 +2793,9 @@
             "isntConnectedInSandbox": "{providerName} ist in dieser Sandbox nicht verbunden.",
             "maintainerConnects": "Ein Maintainer dieser Sandbox kann eines verbinden.",
             "noModelYet": "In dieser Sandbox ist noch kein Modell verbunden.",
-            "signInWaiting": "Ihre Anmeldung bei {provider} ist noch nicht abgeschlossen."
+            "signInWaiting": "Ihre Anmeldung bei {provider} ist noch nicht abgeschlossen.",
+            "connectProvider": "{providerName} verbinden",
+            "chooseAnother": "Anderes Modell wählen"
         },
         "chatArea": {
             "bringBackHere": "Hierher zurückholen",
@@ -3251,7 +3253,8 @@
             "ranStandard": "Der letzte Zug lief mit Standardgeschwindigkeit.",
             "ranStandardBecause": "Der letzte Zug lief mit Standardgeschwindigkeit ({reason}).",
             "turnKeepsItsModel": "Dieser Zug endet auf dem Modell, mit dem er begonnen hat. Was Sie hier wählen, gilt ab Ihrer nächsten Nachricht.",
-            "turnKeepsModel": "Dieser Zug endet auf {model}. Was Sie hier wählen, gilt ab Ihrer nächsten Nachricht."
+            "turnKeepsModel": "Dieser Zug endet auf {model}. Was Sie hier wählen, gilt ab Ihrer nächsten Nachricht.",
+            "autoNeedsModel": "Braucht verbundene Modelle zur Auswahl"
         },
         "chatNotes": {
             "addedContext": "Beigefügter Kontext",
@@ -3750,8 +3753,8 @@
             "sendNowOnNote": "Wechselt diesen Chat zu einem Konto mit Kontingent",
             "sendsAt": "Sendet",
             "stopTurn": "Zug stoppen",
-            "unconnectedHint": "Modell wählen",
-            "unconnectedPlaceholder": "Was soll dieser Agent tun? Senden wählt zuerst ein Modell…",
+            "unconnectedHint": "Modell verbinden",
+            "unconnectedPlaceholder": "Was soll dieser Agent tun?",
             "viewerPlaceholder": "Sie sehen nur zu: bitten Sie den Eigentümer um die Rolle „Mitarbeiter“, um Agenten zu steuern",
             "placeholderLater": "Nachricht zum Planen schreiben…",
             "hintLater": "Planen",
@@ -3771,10 +3774,12 @@
                 "hintSteer": "Jetzt senden, während es arbeitet",
                 "hintQueue": "Geht raus, sobald es fertig ist",
                 "viewerPlaceholder": "Du kannst dieses Gespräch lesen. Frag den Eigentümer, wenn du hier auch schreiben möchtest."
-            }
+            },
+            "unconnectedNote": "Ihre Nachricht wartet hier.",
+            "otherModelHint": "Modell nicht verbunden",
+            "otherModelNote": "Wählen Sie ein verbundenes."
         },
         "composerModelPill": {
-            "chooseModel": "Modell wählen",
             "fromNextMessage": "{model} antwortet ab Ihrer nächsten Nachricht. Diese Antwort läuft weiter auf {running}.",
             "model": "Modell: {modelLabelText}",
             "nextMessage": "ab nächster Nachricht",
@@ -3782,7 +3787,9 @@
             "olderNote": "Dieser Chat läuft auf {model}, einer älteren Version. Wählen Sie {newer} in der Liste, um ihn zu wechseln.",
             "olderTitle": "{newer} ist neuer",
             "trialNote": "Wechseln Sie das Modell oder verbinden Sie Ihr eigenes.",
-            "trialServed": "Letzte Antwort: {model}."
+            "trialServed": "Letzte Antwort: {model}.",
+            "noModel": "Kein Modell",
+            "lockedAria": "{model}, nicht verbunden"
         },
         "composerMore": {
             "howMuchMayDo": "Wie viel er tun darf, bevor er fragt.",
@@ -3887,7 +3894,8 @@
             "showOlder": "{hidden} ältere anzeigen",
             "showOlderModels": "{hidden} ältere {label}-Modelle anzeigen",
             "unavailable": "Nicht verfügbar",
-            "addAnotherProvider": "Weiteren Anbieter hinzufügen"
+            "addAnotherProvider": "Weiteren Anbieter hinzufügen",
+            "nothingConnected": "Noch nichts verbunden. Verbinden Sie ein Modell, um zu starten"
         },
         "modelPickerState": {
             "useCustomModelId": "als eigene Modell-ID verwenden"
@@ -13107,6 +13115,10 @@
                     "line": "Jeder Agent, jede Datei und jede Änderung ist einen Klick entfernt."
                 }
             }
+        },
+        "view": {
+            "back": "Zurück zum Chat",
+            "continueInChat": "Im Chat weitermachen"
         }
     },
     "hostedStart": {

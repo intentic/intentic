@@ -68,6 +68,12 @@ export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness):
 export const firstReadyProvider = (): AgentProvider | undefined =>
     NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
 
+// Whether this sandbox can run anything at all: a connected account, a ready trial, an endpoint or an installed agent. The
+// question a chat with nothing to send on asks first, since its answer decides whether another model is the way on
+// (something else here can run) or connecting one is (nothing can).
+export const anyProviderReady = (): boolean =>
+    NATIVE_PROVIDERS.some(providerReady) || endpointProviders.value.some((endpoint) => providerReady(endpoint.id)) || acpProviders.value.length > 0;
+
 export const accessStateFor = (provider: AgentProvider): ProviderAccessState => ({
     ready: providerReady(provider),
     access: accessFor(provider),

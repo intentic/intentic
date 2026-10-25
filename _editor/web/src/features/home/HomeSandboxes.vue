@@ -14,6 +14,7 @@ import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
+import { goInside } from "../../lib/routes/homeDetour";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
 import { desktopApp, openThisComputer } from "../../app/environments/desktop";
@@ -52,8 +53,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
     last = { id, at: now };
     sandbox.select(id);
     if (action === `enter`) {
-        // Into the sandbox, where it was last left: `/` alone is Home itself (lib/routes/firstScreens.ts).
-        void router.push(sandboxEntryPath(id));
+        // Into the sandbox, where it was last left: `/` alone is Home itself (lib/routes/firstScreens.ts). Inside for real,
+        // even when that was its Models, which a press on Home would otherwise show in place (lib/routes/homeDetour.ts).
+        void goInside(() => router.push(sandboxEntryPath(id)));
     } else if (phone) {
         void router.push(`/home/${encodeURIComponent(id)}`);
     } else {

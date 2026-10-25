@@ -2793,7 +2793,9 @@
             "isntConnectedInSandbox": "{providerName} n'est pas connecté dans ce sandbox.",
             "maintainerConnects": "Un mainteneur de ce sandbox peut en connecter un.",
             "noModelYet": "Aucun modèle n'est encore connecté dans ce sandbox.",
-            "signInWaiting": "Votre connexion à {provider} n'est pas encore terminée."
+            "signInWaiting": "Votre connexion à {provider} n'est pas encore terminée.",
+            "connectProvider": "Connecter {providerName}",
+            "chooseAnother": "Choisir un autre modèle"
         },
         "chatArea": {
             "bringBackHere": "Le ramener ici",
@@ -3251,7 +3253,8 @@
             "ranStandard": "Le dernier tour s'est exécuté en vitesse standard.",
             "ranStandardBecause": "Le dernier tour s'est exécuté en vitesse standard ({reason}).",
             "turnKeepsItsModel": "Ce tour se termine sur le modèle avec lequel il a commencé. Votre choix ici s'applique à partir de votre prochain message.",
-            "turnKeepsModel": "Ce tour se termine sur {model}. Votre choix ici s'applique à partir de votre prochain message."
+            "turnKeepsModel": "Ce tour se termine sur {model}. Votre choix ici s'applique à partir de votre prochain message.",
+            "autoNeedsModel": "Nécessite des modèles connectés parmi lesquels choisir"
         },
         "chatNotes": {
             "addedContext": "Contexte ajouté",
@@ -3750,8 +3753,8 @@
             "sendNowOnNote": "Bascule ce chat sur un compte qui a du quota",
             "sendsAt": "Envoi",
             "stopTurn": "Arrêter le tour",
-            "unconnectedHint": "Choisir un modèle",
-            "unconnectedPlaceholder": "Que doit faire cet agent ? Envoyer choisit d'abord un modèle…",
+            "unconnectedHint": "Connectez un modèle",
+            "unconnectedPlaceholder": "Que doit faire cet agent ?",
             "viewerPlaceholder": "Vous regardez seulement : demandez au propriétaire un rôle de collaborateur pour piloter des agents",
             "placeholderLater": "Rédigez le message à programmer…",
             "hintLater": "Programmer",
@@ -3771,10 +3774,12 @@
                 "hintSteer": "Envoyer maintenant, pendant qu'il travaille",
                 "hintQueue": "Part dès qu'il a fini",
                 "viewerPlaceholder": "Vous pouvez lire cette conversation. Demandez au propriétaire si vous souhaitez aussi y écrire."
-            }
+            },
+            "unconnectedNote": "Votre message attend ici.",
+            "otherModelHint": "Modèle non connecté",
+            "otherModelNote": "Choisissez-en un connecté."
         },
         "composerModelPill": {
-            "chooseModel": "Choisir un modèle",
             "fromNextMessage": "{model} répond à partir de votre prochain message. Cette réponse continue sur {running}.",
             "model": "Modèle : {modelLabelText}",
             "nextMessage": "à partir du prochain message",
@@ -3782,7 +3787,9 @@
             "olderNote": "Ce chat utilise {model}, une ancienne version. Choisissez {newer} dans la liste pour en changer.",
             "olderTitle": "{newer} est plus récent",
             "trialNote": "Changez de modèle ou connectez le vôtre.",
-            "trialServed": "Dernière réponse : {model}."
+            "trialServed": "Dernière réponse : {model}.",
+            "noModel": "Aucun modèle",
+            "lockedAria": "{model}, non connecté"
         },
         "composerMore": {
             "howMuchMayDo": "Ce qu'il peut faire avant de demander.",
@@ -3887,7 +3894,8 @@
             "showOlder": "Afficher {hidden} plus anciens",
             "showOlderModels": "Afficher {hidden} modèles {label} plus anciens",
             "unavailable": "Indisponible",
-            "addAnotherProvider": "Ajouter un autre fournisseur"
+            "addAnotherProvider": "Ajouter un autre fournisseur",
+            "nothingConnected": "Rien n'est encore connecté. Connectez un modèle pour commencer"
         },
         "modelPickerState": {
             "useCustomModelId": "utiliser comme identifiant de modèle personnalisé"
@@ -13107,6 +13115,10 @@
                     "line": "Chaque agent, fichier et modification est à un clic."
                 }
             }
+        },
+        "view": {
+            "back": "Retour au chat",
+            "continueInChat": "Continuer dans le chat"
         }
     },
     "hostedStart": {

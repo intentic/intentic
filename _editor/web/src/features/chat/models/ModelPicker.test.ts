@@ -188,6 +188,30 @@ it(`carries the way out to the connect view, and drops it while searching`, asyn
     expect(element.textContent).not.toContain(`Connect a model`);
 });
 
+// With nothing connected every row is locked, so the way to unlock them leads the list instead of ending it; once
+// anything runs it goes back to the foot, as the door to a second account. Only once both reads have answered.
+it(`leads with connecting a model while nothing here can run, and keeps the door at the foot once something can`, async () => {
+    const { accountsLoaded } = await import("../../../models/providers/providerAccounts");
+    const { endpointsLoaded } = await import("../../../models/providers/providerCatalog");
+    accountsLoaded.value = true;
+    endpointsLoaded.value = true;
+    let element = mount();
+
+    const first = element.querySelector(`[data-picker-connect-first]`);
+    expect(first?.textContent).toContain(`Nothing is connected yet. Connect a model to start`);
+    expect(first?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    expect(element.textContent).not.toContain(`Connect a model, or manage accounts`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
+    element = mount();
+    expect(element.querySelector(`[data-picker-connect-first]`)).toBeNull();
+    expect(element.textContent).toContain(`Connect a model, or manage accounts`);
+    accountsLoaded.value = false;
+    endpointsLoaded.value = false;
+});
+
 // A model that can only write one-shot jobs is listed, so a connected one does not seem to vanish, and refused for a turn
 // with its reason where its description would be; a helper job's list may pick it.
 it(`lists a helper-only model as refused for a turn, and pickable for a helper job`, () => {

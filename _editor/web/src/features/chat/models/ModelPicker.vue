@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf, isTrialProvider, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { accessBadge, accessStateFor, providerReady, trialBadge } from "../../../models/providers/access";
+import { accessBadge, accessKnown, accessStateFor, anyProviderReady, providerReady, trialBadge } from "../../../models/providers/access";
 import { formatReset, spentModels } from "../../../models/providers/usageStatus";
 import { badgeMeta } from "./catalog";
 import { type CatalogLoadState, providerModelsState } from "../../../models/providers/providerCatalog";
@@ -28,6 +28,7 @@ import { refreshConnections } from "../../../models/conversations/accounts/useCh
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import PickerFoldRow from "./PickerFoldRow.vue";
+import PickerConnectFirst from "./PickerConnectFirst.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
@@ -205,6 +206,9 @@ const isDisabled = (entry: PickerEntry): boolean => (unpickable?.(entry) ?? fals
 // A row whose provider has no credential yet; dimmed and lock-marked, never disabled. A lead row has no provider to
 // hold a credential, so asking would lock a mode that is always available and make it read as refused.
 const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider);
+
+// Nothing in this sandbox can run: every row is locked, so the way to unlock them leads the list (PickerConnectFirst).
+const nothingConnected = computed(() => accessKnown.value && !anyProviderReady());
 
 // Deep link to Sandbox ▸ Models, opened on this provider's lane with its sign-in already starting. A real link, not a
 // button click, so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
@@ -441,6 +445,7 @@ onMounted(() => {
                 role="listbox"
                 :aria-label="t(`shared.models`)"
             >
+                <PickerConnectFirst v-if="nothingConnected && !searching" @navigate="closeOnPlainClick" />
                 <template v-for="section in sections" :key="section.key">
                     <!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
                     <SectionHeader v-if="section.label !== undefined" :label="section.label" density="dense" class="px-3 pb-1 pt-2" role="presentation">
@@ -571,7 +576,7 @@ onMounted(() => {
                 </div>
                 <!-- The door to everything this list can only badge: connecting a first model, a second account, dropping one. -->
                 <RouterLink
-                    v-if="!searching"
+                    v-if="!searching && !nothingConnected"
                     :to="MODELS_PATH"
                     class="ui-row-select flex w-full items-center gap-2 border-t border-line px-3 py-2 text-2xs text-subtle hover:text-content max-md:min-h-11"
                     @click="closeOnPlainClick"

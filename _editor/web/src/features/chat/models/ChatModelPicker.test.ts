@@ -39,6 +39,8 @@ const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 const { providerModels } = await import("../../../models/providers/providerCatalog");
 const { effortsFor } = await import("../../../models/providers/effortScale");
 const { advertisedLoops } = await import("../../../models/providers/offeredLoops");
+const providerAccountsModule = await import("../../../models/providers/providerAccounts");
+const providerCatalogModule = await import("../../../models/providers/providerCatalog");
 
 // Grok native, the weakest runtime (something to disclose); Claude Code, the ceiling; both from the contract.
 const ROUTED = { provider: `grok`, harness: `native` } as const satisfies { provider: AgentProvider; harness: AgentHarness };
@@ -320,6 +322,25 @@ it(`gives the list the reason another provider is refused mid-turn`, () => {
 
     expect(refused({ provider: `codex` })).toBe(`Pick another provider once this turn ends`);
     expect(refused({ provider: `claude` })).toBe(false);
+});
+
+// The reported "nothing changes": with nothing connected Auto armed a mode with no model to pick from, and the pill
+// went on saying the same. It is listed, refused with its reason, until anything here can run.
+it(`refuses Auto with its reason while nothing here can run, and offers it once something can`, () => {
+    const { accountsLoaded, providerAccounts } = providerAccountsModule;
+    const { endpointsLoaded } = providerCatalogModule;
+    accountsLoaded.value = true;
+    endpointsLoaded.value = true;
+    mount(CEILING);
+    // SAFETY: the stub keeps the attrs ChatModelPicker bound, and this one is the function its `unpickable` declares.
+    const refused = pickerProps.value[`unpickable`] as (entry: { key: string; provider: AgentProvider }) => string | false;
+    const auto = { key: `auto:`, provider: `claude` as const };
+
+    expect(refused(auto)).toBe(`Needs a connected model to choose from`);
+
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `ada@acme.dev`, connectedAt: 0 }] };
+    expect(refused(auto)).toBe(false);
+    providerAccounts.value = { ...providerAccounts.value, claude: [] };
 });
 
 it(`ticks Auto rather than a model row while it is armed`, () => {

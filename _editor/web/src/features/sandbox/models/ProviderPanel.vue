@@ -52,6 +52,7 @@ const {
     landed,
     found = false,
     notice,
+    chatLabel,
 } = defineProps<{
     provider: AgentProvider;
     // This provider's sign-in, when one is starting, waiting on the reader, or just failed.
@@ -67,6 +68,8 @@ const {
     found?: boolean;
     // Something an account write here was refused for (a disconnect).
     notice?: NoticeModel;
+    // The words on the press after a sign-in lands, which go to a chat: where that chat is depends on where this page is shown.
+    chatLabel?: string;
 }>();
 // The page owns every sign-in, so there is one at a time; this panel only says which kind it wants and, for a provider
 // sold under several plans, which plan.
@@ -390,7 +393,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             <div class="flex flex-wrap items-center gap-3">
                 <Icon name="check" class="shrink-0 text-success" />
                 <span class="min-w-0 flex-1 text-sm text-content">{{ landed }}</span>
-                <Button size="small" :label="t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
+                <Button size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
             </div>
         </RowNote>
 

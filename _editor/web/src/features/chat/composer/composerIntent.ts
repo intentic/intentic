@@ -189,12 +189,20 @@ export const viewerPlaceholder = (): string => t(`chat.composerIntent.viewerPlac
 
 /**
  * A chat with nothing to send with. The box still takes the task — it is what a first-run reader came to write — and
- * neither line names a vendor, since nothing has been chosen for one to be named. Send opens the model list from
- * here, keeping the draft, so the sentence already typed is what the chosen model answers.
+ * neither line names a vendor, since nothing has been chosen for one to be named. Send is disabled there and says why
+ * (unconnectedHint); the draft waits, so the sentence already typed is what the model, once connected, answers.
  */
 export const unconnectedPlaceholder = (): string => t(`chat.composerIntent.unconnectedPlaceholder`);
 
-export const unconnectedHint = (): string => t(`chat.composerIntent.unconnectedHint`);
+/**
+ * The disabled Send's reason, as the one fix: connect a model, or, where something else in the sandbox runs, choose it.
+ * Never a press of its own (2026-10-25): Send used to open the model list here, a fourth door to it beside the notice's
+ * two and the pill, and a Send that does something other than send.
+ */
+export const unconnectedHint = (othersReady: boolean): TooltipValue =>
+    othersReady
+        ? { title: t(`chat.composerIntent.otherModelHint`), note: t(`chat.composerIntent.otherModelNote`) }
+        : { title: t(`chat.composerIntent.unconnectedHint`), note: t(`chat.composerIntent.unconnectedNote`) };
 
 export const placeholderFor = (intent: SendIntent, words: ComposerWords): string => PLACEHOLDER[intent](words);
 

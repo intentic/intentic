@@ -41,7 +41,7 @@ const composerOf = (spentReopensAt?: number) => {
         words: computed(() => ({ provider: `Claude`, onTrial: false, editDropped: 0 })),
         pin: jest.fn(),
         refocus: jest.fn(),
-        openModels: jest.fn(),
+        nudgeConnect: jest.fn(),
         armLimitResend: jest.fn(() => Promise.resolve()),
         limitArmed: ref(false),
         laterOffered: ref(true),
@@ -469,14 +469,18 @@ describe(`what intercepts a press`, () => {
         expect(chat.draft.value).toBe(`ship it`);
     });
 
-    it(`opens the model list when nothing could answer, keeping the words for the model chosen`, () => {
+    // Send sends, or it is disabled and says why: with nothing to send with, it no longer opens the model list (a fourth
+    // door to it) but points at the account notice's one way on, keeping the words for the model once there is one.
+    it(`sends nothing and opens nothing when nothing could answer: the press is disabled, Enter nudges the way on`, () => {
         const { chat, host, say, send } = composerOf();
         providerAccounts.value = { ...providerAccounts.value, claude: [] };
         chat.draft.value = `hello`;
 
+        expect(send.canSend.value).toBe(false);
+        expect(send.sendHint.value).toEqual({ title: `Connect a model`, note: `Your message waits here.` });
         send.submit();
 
-        expect(host.openModels).toHaveBeenCalledTimes(1);
+        expect(host.nudgeConnect).toHaveBeenCalledTimes(1);
         expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`hello`);
     });

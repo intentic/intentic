@@ -2793,7 +2793,9 @@
             "isntConnectedInSandbox": "{providerName} isn't connected in this sandbox.",
             "maintainerConnects": "A maintainer of this sandbox can connect one.",
             "noModelYet": "No model is connected in this sandbox yet.",
-            "signInWaiting": "Your {provider} sign-in isn't finished yet."
+            "signInWaiting": "Your {provider} sign-in isn't finished yet.",
+            "connectProvider": "Connect {providerName}",
+            "chooseAnother": "Choose another model"
         },
         "chatArea": {
             "bringBackHere": "Bring it back here",
@@ -3251,7 +3253,8 @@
             "ranStandard": "The last turn ran at standard speed.",
             "ranStandardBecause": "The last turn ran at standard speed ({reason}).",
             "turnKeepsItsModel": "This turn finishes on the model it started on. What you pick here applies from your next message.",
-            "turnKeepsModel": "This turn finishes on {model}. What you pick here applies from your next message."
+            "turnKeepsModel": "This turn finishes on {model}. What you pick here applies from your next message.",
+            "autoNeedsModel": "Needs a connected model to choose from"
         },
         "chatNotes": {
             "addedContext": "Added context",
@@ -3750,8 +3753,8 @@
             "sendNowOnNote": "Switches this chat to an account with room",
             "sendsAt": "Sends",
             "stopTurn": "Stop turn",
-            "unconnectedHint": "Choose model",
-            "unconnectedPlaceholder": "What should this agent do? Send picks a model first…",
+            "unconnectedHint": "Connect a model",
+            "unconnectedPlaceholder": "What should this agent do?",
             "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents",
             "placeholderLater": "Write the message to schedule…",
             "hintLater": "Schedule",
@@ -3771,10 +3774,12 @@
                 "hintSteer": "Send it now, while it works",
                 "hintQueue": "Goes once it's done",
                 "viewerPlaceholder": "You can read this conversation. Ask the owner if you'd like to write here too."
-            }
+            },
+            "unconnectedNote": "Your message waits here.",
+            "otherModelHint": "Model not connected",
+            "otherModelNote": "Choose a connected one."
         },
         "composerModelPill": {
-            "chooseModel": "Choose a model",
             "fromNextMessage": "{model} answers from your next message. This reply keeps running on {running}.",
             "model": "Model: {modelLabelText}",
             "nextMessage": "from next message",
@@ -3782,7 +3787,9 @@
             "olderNote": "This chat runs on {model}, an older version. Pick {newer} in the list to move it.",
             "olderTitle": "{newer} is newer",
             "trialNote": "Switch models or connect yours.",
-            "trialServed": "Last answer: {model}."
+            "trialServed": "Last answer: {model}.",
+            "noModel": "No model",
+            "lockedAria": "{model}, not connected"
         },
         "composerMore": {
             "howMuchMayDo": "How much it may do before asking.",
@@ -3887,7 +3894,8 @@
             "showOlder": "Show {hidden} older",
             "showOlderModels": "Show {hidden} older {label} models",
             "unavailable": "Unavailable",
-            "addAnotherProvider": "Add another provider"
+            "addAnotherProvider": "Add another provider",
+            "nothingConnected": "Nothing is connected yet. Connect a model to start"
         },
         "modelPickerState": {
             "useCustomModelId": "use as custom model id"
@@ -13107,6 +13115,10 @@
                     "line": "Every agent, file and change is one press away."
                 }
             }
+        },
+        "view": {
+            "back": "Back to chat",
+            "continueInChat": "Continue in chat"
         }
     },
     "hostedStart": {

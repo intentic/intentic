@@ -91,12 +91,16 @@ const { endpointProviders, trialStatus } = await import("../../../models/provide
 // The stored pick itself, unmocked: whether a vendor may be named at all is exactly "did the owner name one".
 const { turnDefaults } = await import("../../../models/conversations/run/turnDefaults");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
+const { ACCOUNT_NUDGE } = await import("./accountNudge");
 
+// The pane's count of presses on a composer with nothing to send with (accountNudge.ts).
+const nudges = ref(0);
 let app: App | undefined;
 const mount = (): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatAccountPanel) });
+    app.provide(ACCOUNT_NUDGE, nudges);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -118,6 +122,7 @@ beforeEach(() => {
     turnDefaults.provider.value = undefined;
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
     endpointProviders.value = [];
+    nudges.value = 0;
     nativeConnectFlow.value = undefined;
     signInFailure.value = undefined;
     canShip.value = true;
@@ -135,30 +140,37 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`names what this chat is pointed at, and pitches nothing`, () => {
+it(`names what this chat is pointed at, and offers connecting exactly that`, () => {
     turnDefaults.provider.value = `claude`;
     const element = mount();
 
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
     expect(element.textContent).not.toContain(`Try free with Google`);
     expect(buttonNamed(element, `Continue with Google`)).toBeUndefined();
-    // What is offered instead: the model list, plus the door to the view that connects one. No sign-in starts here —
-    // a handshake is a trip to another tab and back, which eighty pixels over a composer is the wrong host for.
-    expect(buttonNamed(element, `Choose a model`)).toEqual(expect.any(Object));
-    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    // The one press: Claude's own tile, opened rather than signed in. No sign-in starts here — a handshake is a trip to
+    // another tab and back, which eighty pixels over a composer is the wrong host for.
+    expect(linkNamed(element, `Connect Claude`)?.getAttribute(`href`)).toBe(`/sandbox/models?open=claude`);
+    // Nothing else can run, so there is nothing to choose: no second door to a list of locked rows.
+    expect(buttonNamed(element, `Choose`)).toBeUndefined();
 });
 
 // The reported bug: a brand-new sandbox told its owner that Claude was missing, and offered to connect a Claude
 // subscription — over a chat sitting on the app's own floor provider, which nobody chose. The app is not any one
 // vendor's, so with nothing chosen there is no vendor to name and no sign-in to push.
-it(`names no vendor, and pitches no sign-in, where nobody has chosen one`, () => {
+// And the reported one after it: four doors ("Choose a model" twice, "Connect a model", Send) to one list whose every
+// row was locked. With nothing connected, connecting one is the one press.
+it(`names no vendor where nobody has chosen one, and offers connecting a model as the one press`, () => {
     const element = mount();
 
     expect(element.textContent).toContain(`No model is connected in this sandbox yet.`);
     expect(element.textContent).not.toContain(`Claude`);
     expect(buttonNamed(element, `Connect Claude subscription`)).toBeUndefined();
-    // The one action this strip carries with nothing chosen, and the only one it ever needs.
-    expect(buttonNamed(element, `Choose a model`)).toEqual(expect.any(Object));
+    const connect = linkNamed(element, `Connect a model`);
+    expect(connect?.getAttribute(`href`)).toBe(`/sandbox/models`);
+    // Drawn as the card's press, not as link text nobody reads as one.
+    expect(connect?.className.split(` `)).toEqual(expect.arrayContaining([`p-button`]));
+    expect(buttonNamed(element, `Choose`)).toBeUndefined();
+    expect(element.querySelectorAll(`a, button`)).toHaveLength(1);
 });
 
 // Accounts resolve in one hop; endpoints take a capability read, a catalog fetch, and a round-trip, so a fresh
@@ -182,12 +194,15 @@ it(`draws nothing at all until BOTH halves of the picture have landed`, async ()
     expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
 });
 
-// The composer carries its own model pill, so this button is the second door to the same list; it opens the
-// shell's picker anchored to itself and applies the answer to this pane.
-it(`opens the model list, anchored to its own button`, async () => {
+// Where something else in the sandbox runs (a started chat whose account went away), another model is the way on, and
+// connecting this one follows quietly; the list opens anchored to the press and its answer applies to this pane.
+it(`leads with another model where something else here can run, and opens the list anchored to its own button`, async () => {
+    endpointProviders.value = [{ id: `openrouter`, label: `OpenRouter`, kind: `endpoint` }];
     const element = mount();
 
-    const press = buttonNamed(element, `Choose a model`)!;
+    expect(element.textContent).toContain(`Claude isn't connected in this sandbox`);
+    expect(linkNamed(element, `Connect Claude`)?.getAttribute(`href`)).toBe(`/sandbox/models?open=claude`);
+    const press = buttonNamed(element, `Choose another model`)!;
     press.click();
     await nextTick();
 
@@ -200,6 +215,24 @@ it(`opens the model list, anchored to its own button`, async () => {
     expect(selectModel).toHaveBeenCalledWith({ provider: `gemini`, value: `gemini-3-pro` });
 });
 
+// Enter on a composer with nothing to send with sends nothing and opens nothing: it shakes this press, the one way on,
+// again on every press.
+it(`shakes its one press each time the composer is pressed with nothing to send with`, async () => {
+    const element = mount();
+    expect(linkNamed(element, `Connect a model`)?.className).not.toContain(`ui-shake`);
+
+    nudges.value += 1;
+    await nextTick();
+    const shaken = linkNamed(element, `Connect a model`);
+    expect(shaken?.className).toContain(`ui-shake`);
+
+    nudges.value += 1;
+    await nextTick();
+    // Drawn again, so the animation runs again rather than sitting on its finished frame.
+    expect(linkNamed(element, `Connect a model`)).not.toBe(shaken);
+    expect(linkNamed(element, `Connect a model`)?.className).toContain(`ui-shake`);
+});
+
 // A sign-in is never started from here, whichever mechanism the chat's provider uses: this strip's whole job is to
 // name the standing and point at the one place that holds a handshake.
 it(`starts no handshake of its own, for either credential mechanism`, () => {
@@ -207,7 +240,7 @@ it(`starts no handshake of its own, for either credential mechanism`, () => {
         provider.value = target;
         turnDefaults.provider.value = target;
         const element = mount();
-        expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
+        expect(linkNamed(element, `Connect`)?.getAttribute(`href`)).toBe(`/sandbox/models?open=${target}`);
         app?.unmount();
         element.remove();
     }
@@ -294,6 +327,9 @@ it(`still speaks when the trial is absent rather than spent`, () => {
     const element = mount();
     expect(element.textContent).toContain(`Free trial isn't connected in this sandbox`);
     expect(buttonNamed(element, `Connect`)).toBeUndefined();
+    // An endpoint has no sign-in to name, so the way on is the page's, on the reader's choice.
+    expect(linkNamed(element, `Connect Free trial`)).toBeUndefined();
+    expect(linkNamed(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
 });
 
 it(`goes on its own the moment this chat can send`, async () => {

@@ -39,6 +39,7 @@ import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
+import { goInside, homeViewGuard } from "../lib/routes/homeDetour";
 import { DELETED_ANCHOR, DELETED_PATH, DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
@@ -100,13 +101,14 @@ const openAddressed = async (to: RouteLocationNormalized): Promise<RouteLocation
 // sandbox picked in a local window's switcher. Inside the shell the named sandbox is chosen here, the way a link
 // arriving would choose it, since the shell's entry guard does not run again for a shell already entered; outside it,
 // the guards do as they would for the address.
+// A sandbox picked is a step inside it, so Home's rule for showing a sandbox's view in place stands aside for it.
 export const openInPage = async (path: string): Promise<void> => {
     if (router.currentRoute.value.matched[0]?.path !== `/`) {
         await router.push(path);
         return;
     }
     const settled = await openNamedSandbox(router.resolve(path));
-    await router.push(settled === true ? path : settled);
+    await goInside(() => router.push(settled === true ? path : settled));
 };
 
 // Menu and Terminal are full-screen pages only on the mobile shell, opened from its rail; the desktop shell docks the terminal and puts the
@@ -504,6 +506,9 @@ router.beforeEach((_to, from) => {
 router.beforeEach((to, from) => (coldStartAtRoot(to, from === START_LOCATION) && installedApp() ? (lastRoute(Date.now()) ?? true) : true));
 // Older removal receipts must reach recovery even from an account page with no active sandbox.
 router.beforeEach((to) => (to.path === DEVICES_PATH && to.hash === `#${DELETED_ANCHOR}` ? DELETED_PATH : true));
+// From Home, a sandbox's own view (its Models, today) is shown where Home's chat was, with the way back to it, rather than
+// entered: every door to it is covered at once, so none has to know it was pressed on Home (lib/routes/homeDetour.ts).
+router.beforeEach((to, from) => homeViewGuard(to, from));
 router.afterEach((to, _from, failure) => {
     if (failure === undefined && to.path !== `/` && to.matched.some((match) => match.path === `/`) && installedApp()) {
         rememberRoute(to.fullPath, Date.now());

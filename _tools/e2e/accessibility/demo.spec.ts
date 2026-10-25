@@ -66,7 +66,7 @@ test.describe(`composer model controls`, () => {
             await page.goto(`home?mode=home&as=guest`);
             const composer = page.locator(`.chat-pane form`);
             await expect(composer.getByRole(`textbox`)).toBeVisible();
-            await expect(composer.getByRole(`button`, { name: /^(Provider and model: |Model: |Free trial|Choose a model)/ })).toHaveCount(0);
+            await expect(composer.getByRole(`button`, { name: /^(Provider and model: |Model: |Free trial|Choose a model|No model)/ })).toHaveCount(0);
             await expect(composer.getByRole(`group`, { name: `Reasoning effort`, exact: true })).toHaveCount(0);
         });
     }

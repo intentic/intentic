@@ -52,6 +52,7 @@ import ChatModeMenu from "../models/run-settings/ChatModeMenu.vue";
 import ChatPlacementMenu from "./ChatPlacementMenu.vue";
 import ChatFleetSuggestion from "./fleet/ChatFleetSuggestion.vue";
 import ChatPaneNotices from "./ChatPaneNotices.vue";
+import { provideAccountNudge } from "../accounts/accountNudge";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "../personas/ChatPersonaMenu.vue";
 import ChatSubagentBar from "./subagent/ChatSubagentBar.vue";
@@ -312,9 +313,8 @@ const composerSend = useComposerSend({
         grow();
         input.value?.focus();
     },
-    openModels: () => {
-        modelOpen.value = true;
-    },
+    // Provided to the notices above the composer, whose way on it shakes (accountNudge.ts).
+    nudgeConnect: provideAccountNudge(),
     armLimitResend: limitResend.arm,
     limitArmed: limitResend.armed,
     laterOffered,
@@ -384,7 +384,7 @@ const hasWays = computed(() => ways.value && staged.value);
 const sendCaret = ref<HTMLElement>();
 // A booking replaces only a send that opens or joins a turn: never words placed as the agent's, an edit, or plan notes.
 const laterShown = computed(() => laterOffered.value && intent.value !== `place` && intent.value !== `edit` && intent.value !== `plan`);
-const caretShown = computed(() => sendShown.value && staged.value && (laterShown.value || hasWays.value));
+const caretShown = computed(() => connected.value && sendShown.value && staged.value && (laterShown.value || hasWays.value));
 // A caret that leaves takes its menu with it, so nothing floats over a composer gone back to a plain Send.
 watch(caretShown, (shown) => {
     if (!shown) {
@@ -532,7 +532,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 >
                     <!-- The composer stands whatever this chat can or cannot send with: a box that vanishes reads as the app
                          breaking, and a first-run reader has nowhere to type their task. Having no model is said in a line
-                         above it (ChatPaneNotices) and answered by Send itself, which opens the model list. -->
+                         above it (ChatPaneNotices), whose one press is the way on; Send is disabled meanwhile and says why. -->
                     <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>
                     <Notice v-else-if="blocked" tone="info" icon="clock">{{ t(`chat.chatPane.chatAvailableAfterSandbox`) }}</Notice>
                     <template v-if="!blocked">
@@ -674,7 +674,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         />
 
                                         <ComposerEffort
-                                            v-if="!isGuest"
+                                            v-if="!isGuest && !modelReading.unset"
                                             :conversation="conversation"
                                             :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'effort' }"
                                             :disabled="pickedWorkflow !== undefined"

@@ -33,11 +33,11 @@ test(`the agent board asks for a task rather than for a sign-in`, async ({ page 
     await expect(page.getByRole(`textbox`, { name: `What should the first agent do?` })).toHaveCount(0);
     await expect(page.getByRole(`button`, { name: `Start agent` })).toHaveCount(0);
 
-    // Nothing is connected here and nobody has chosen anything, so no vendor is named: the app is not one vendor's,
-    // and the reader is pointed at the list rather than at somebody's sign-in.
+    // Nothing is connected here and nobody has chosen anything, so no vendor is named: the app is not one vendor's.
+    // The one press is connecting a model; the composer's pill states the chat has none, and is no second door.
     await expect(page.getByText(`No model is connected in this sandbox yet.`)).toBeVisible();
-    // Exact, since the composer's own pill now reads the same words in a longer accessible name.
-    await expect(page.getByRole(`button`, { name: `Choose a model`, exact: true })).toBeVisible();
+    await expect(page.getByRole(`link`, { name: `Connect a model`, exact: true })).toBeVisible();
+    await expect(page.getByRole(`button`, { name: `Choose a model`, exact: true })).toHaveCount(0);
     await expect(page.getByText(`isn't connected in this sandbox`)).toHaveCount(0);
 });
 

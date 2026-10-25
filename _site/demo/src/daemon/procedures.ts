@@ -63,7 +63,7 @@ import {
     workspaceTree,
 } from "../fixture/workspace";
 import { commit, discard, gitChanges, indexRunState, stage, startIndexRun, unstage } from "./gitIndex";
-import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
+import { demoMode, demoQuiet, deskEdition, freshEdition, noModels } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
 import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS, demoRefusals } from "./accounts";
 import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
@@ -90,7 +90,7 @@ const runsOnBoard = (now: number): WorkflowRun[] =>
 
 // A fresh sandbox has signed nothing in: the daemon-provisioned free trial is the one thing a chat can run on, with
 // its whole day ahead of it. Every other recording runs on its connected Claude and has no trial to offer.
-const DEMO_TRIAL: TrialStatusResponse = freshEdition
+const DEMO_TRIAL: TrialStatusResponse = freshEdition && !noModels
     ? { available: true, allowance: 30, used: 0, remaining: 30, health: `healthy` }
     : { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
 // What the visitor said about the getting-started checklist, for this page load: put away, steps passed over. Every
@@ -287,7 +287,7 @@ export const procedures = {
     // long as you left it open — including in the marketing shots.
     accounts: {
         accounts: ({ provider }) => ({
-            accounts: provider === `claude` && !freshEdition ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [],
+            accounts: provider === `claude` && !freshEdition && !noModels ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [],
         }),
         // Starts a provider-account sign-in (Cursor's, Grok's) in its device shape, so the connect view's card can be seen
         // holding one: a page to open, a code to copy, the wait for approval. Like the routed one below it never lands.
@@ -305,7 +305,7 @@ export const procedures = {
     },
     translator: {
         // Codex authenticates only through the translator, not an oauth account.
-        accounts: () => (freshEdition ? NO_TRANSLATOR_ACCOUNTS : DEMO_TRANSLATOR_ACCOUNTS),
+        accounts: () => (freshEdition || noModels ? NO_TRANSLATOR_ACCOUNTS : DEMO_TRANSLATOR_ACCOUNTS),
         // Starts a routed sign-in so ConnectFlow is reachable here: without it the panel a new user meets first
         // could only be seen against a real daemon. `redirect` is the shape Google uses (a loopback dead-end).
         connect: ({ provider }) => ({
@@ -327,8 +327,8 @@ export const procedures = {
         // reader who cannot open /accounts learns that.
         // Every loop the catalog offers, as a daemon of this build would advertise them.
         list: () => ({
-            ...(freshEdition
-                ? { native: [], agents: [], endpoints: [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }] }
+            ...(freshEdition || noModels
+                ? { native: [], agents: [], endpoints: noModels ? [] : [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }] }
                 : { native: [`claude`], agents: [], endpoints: [] }),
             loops: Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, [...loopsOf(provider)]])),
         }),

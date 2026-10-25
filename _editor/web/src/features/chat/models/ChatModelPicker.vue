@@ -10,6 +10,7 @@ import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
 import PickerStatus from "../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../models/providers/offeredLoops";
+import { accessKnown, anyProviderReady } from "../../../models/providers/access";
 import { useT } from "@intentic/ui/i18n";
 
 // Chat's binding of the shared model picker: the list, then a footer every picker draws in the same three parts: one status
@@ -67,8 +68,14 @@ const accountsShown = computed(() => listed.value && accountsHere.value);
 
 // Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session). Refused with its reason,
 // said where the row's description would be: a greyed provider with no reason read as one that was not connected.
-const unpickable = (entry: PickerEntry): string | false =>
-    streaming.value && entry.provider !== provider.value ? t(`chat.chatModelPicker.otherProviderAfterTurn`) : false;
+// Auto, likewise, with nothing connected here: it picks among the models this sandbox can run, and with none of them a
+// press on it armed a mode that changed nothing on screen and could never run (2026-10-25).
+const unpickable = (entry: PickerEntry): string | false => {
+    if (entry.key === AUTO_KEY && accessKnown.value && !anyProviderReady()) {
+        return t(`chat.chatModelPicker.autoNeedsModel`);
+    }
+    return streaming.value && entry.provider !== provider.value ? t(`chat.chatModelPicker.otherProviderAfterTurn`) : false;
+};
 
 // A pick made while a turn is live is for the next one: the sandbox has no way to move a running turn to another model,
 // and a turn parked on a card (a plan's Approve included) carries on where it is. Said before the press, since nothing

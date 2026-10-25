@@ -115,12 +115,15 @@ defineExpose({ el, label: modelLabelText });
         v-tooltip.top="nextHint ?? olderHint ?? trialHint ?? nameHint"
         @pointerenter="measureName"
     >
-        <!-- A vendor's mark over a chat that vendor cannot answer is the same lie as its name; the list's own mark stands there. -->
-        <Icon v-if="reading.unset" name="th-large" class="shrink-0 text-2xs text-link" aria-hidden="true" />
+        <!-- Nothing here could answer, said quietly: the way on is the notice's press, not this one. A vendor's mark over a chat
+             that vendor cannot answer is the same lie as its name, unless somebody picked it, and then it wears the lock. -->
+        <ProviderLogo v-if="reading.locked" :provider="provider" class="shrink-0 text-2xs text-subtle" />
+        <Icon v-else-if="reading.unset" name="th-large" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
         <!-- Auto's own mark, so the armed state is legible with the label hidden on a narrow composer. -->
         <Icon v-else-if="auto" name="sparkles" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         <ProviderLogo v-else :provider="provider" class="shrink-0 text-2xs text-link" />
-        <span ref="nameEl" class="truncate" :class="revealed ? `` : labelClass">{{ modelLabelText }}</span>
+        <span ref="nameEl" class="truncate" :class="[revealed ? `` : labelClass, { 'text-muted': reading.unset }]">{{ modelLabelText }}</span>
+        <Icon v-if="reading.locked" name="lock" class="shrink-0 text-[0.6rem] text-subtle" aria-hidden="true" />
         <!-- Hides with the name: on a pill down to its logo it would be the one word left. -->
         <span v-if="runningOn !== undefined" class="shrink-0 font-normal text-subtle" :class="labelClass">{{ t(`chat.composerModelPill.nextMessage`) }}</span>
         <span v-else-if="newer !== undefined" class="shrink-0 font-normal text-warning" :class="labelClass">{{ t(`chat.composerModelPill.older`) }}</span>

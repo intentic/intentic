@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -11,6 +11,8 @@ import { registry } from "../../models/fleet/useAgents-registry";
 import { workLedger } from "../../models/home/homeFacts";
 import ChatPane from "../chat/panel/ChatPane.vue";
 import HomeChatSlot from "./HomeChatSlot.vue";
+import HomeDetour from "./HomeDetour.vue";
+import { homeViewOf } from "../../lib/routes/homeDetour";
 import { useDevice } from "@intentic/ui";
 import { useRole } from "../../client/sandbox/useRole";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
@@ -22,6 +24,10 @@ import SandboxWarming from "../sandbox/gates/SandboxWarming.vue";
 
 const t = useT();
 const sandbox = useSandbox();
+// A view of this sandbox's own shown where the chat is (lib/routes/homeDetour.ts): the chat stays mounted underneath,
+// hidden, so going back finds its draft, its scroll and its pane as they were.
+const route = useRoute();
+const shownView = computed(() => homeViewOf(route.query));
 const noSandbox = computed(() => switchableSandboxes(sandbox.sandboxes.value).length === 0);
 const { mobile } = useDevice();
 const conversation = shallowRef<Conversation>();
@@ -105,7 +111,8 @@ watch(
     <section v-else class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <!-- No top bar over the chat (a sandbox name, status, Open button), by the owner's decision (it came back once already): the
              rail's tile already names the sandbox, and double-click or Enter on it goes inside. -->
-        <details v-if="ledger.length" class="shrink-0 border-b border-line px-4 py-2 text-xs" open>
+        <HomeDetour v-if="shownView" :view="shownView" />
+        <details v-if="!shownView && ledger.length" class="shrink-0 border-b border-line px-4 py-2 text-xs" open>
             <summary class="cursor-pointer text-muted">{{ t(`home.work`) }} · {{ ledger.length }}</summary>
             <div class="max-h-40 overflow-auto py-1">
                 <div v-for="row in ledger" :key="row.worker.id" class="py-1">
@@ -124,11 +131,15 @@ watch(
                 </div>
             </div>
         </details>
-        <p v-if="heldLine" class="shrink-0 border-b border-line px-4 py-2 text-xs text-muted" role="status">{{ heldLine }}</p>
+        <p v-if="!shownView && heldLine" class="shrink-0 border-b border-line px-4 py-2 text-xs text-muted" role="status">{{ heldLine }}</p>
         <!-- A desktop lends the shell's chat panel this page (HomeChatSlot.vue); a phone, with no panel above its router,
-             draws the pane itself on the chat's own surface. -->
-        <HomeChatSlot v-if="conversation && !mobile" :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`" />
-        <div v-else-if="conversation" class="ground-card flex min-h-0 flex-1 bg-card">
+             draws the pane itself on the chat's own surface. Hidden, never unmounted, while a view stands in its place. -->
+        <HomeChatSlot
+            v-if="conversation && !mobile"
+            v-show="!shownView"
+            :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`"
+        />
+        <div v-else-if="conversation" v-show="!shownView" class="ground-card flex min-h-0 flex-1 bg-card">
             <ChatPane
                 :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`"
                 :conversation="conversation"
@@ -136,11 +147,11 @@ watch(
                 :closable="false"
             />
         </div>
-        <div v-else-if="!sandbox.reachable.value || warming" class="flex min-h-0 flex-1 overflow-auto">
+        <div v-else-if="!shownView && (!sandbox.reachable.value || warming)" class="flex min-h-0 flex-1 overflow-auto">
             <SandboxWarming v-if="warming" />
             <SandboxConnecting v-else />
         </div>
-        <div v-else class="flex flex-1 items-start justify-center p-6">
+        <div v-else-if="!shownView" class="flex flex-1 items-start justify-center p-6">
             <p class="text-sm text-muted" role="status">
                 {{ failure ? t(`home.failed`) : t(`home.loading`) }}
                 <button v-if="failure" type="button" class="ml-3 underline" @click="retry++">{{ t(`home.retry`) }}</button>

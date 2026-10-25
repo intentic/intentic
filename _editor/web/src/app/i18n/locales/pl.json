@@ -2793,7 +2793,9 @@
             "isntConnectedInSandbox": "{providerName} nie jest podłączony w tym sandboxie.",
             "maintainerConnects": "Model może podłączyć opiekun tego sandboxa.",
             "noModelYet": "W tym sandboxie nie podłączono jeszcze żadnego modelu.",
-            "signInWaiting": "Logowanie do {provider} nie zostało jeszcze dokończone."
+            "signInWaiting": "Logowanie do {provider} nie zostało jeszcze dokończone.",
+            "connectProvider": "Podłącz {providerName}",
+            "chooseAnother": "Wybierz inny model"
         },
         "chatArea": {
             "bringBackHere": "Przywróć tutaj",
@@ -3251,7 +3253,8 @@
             "ranStandard": "Ostatnia tura poszła w standardowym tempie.",
             "ranStandardBecause": "Ostatnia tura poszła w standardowym tempie ({reason}).",
             "turnKeepsItsModel": "Ta tura zakończy się na modelu, na którym się zaczęła. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
-            "turnKeepsModel": "Ta tura zakończy się na {model}. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości."
+            "turnKeepsModel": "Ta tura zakończy się na {model}. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
+            "autoNeedsModel": "Potrzebuje podłączonych modeli do wyboru"
         },
         "chatNotes": {
             "addedContext": "Dodany kontekst",
@@ -3750,8 +3753,8 @@
             "sendNowOnNote": "Przełącza czat na konto z wolnym limitem",
             "sendsAt": "Wysyła",
             "stopTurn": "Zatrzymaj turę",
-            "unconnectedHint": "Wybierz model",
-            "unconnectedPlaceholder": "Co ma zrobić ten agent? Wysłanie najpierw wybierze model…",
+            "unconnectedHint": "Podłącz model",
+            "unconnectedPlaceholder": "Co ma zrobić ten agent?",
             "viewerPlaceholder": "Tylko patrzysz: poproś właściciela o rolę współpracownika, żeby sterować agentami",
             "placeholderLater": "Napisz wiadomość do zaplanowania…",
             "hintLater": "Zaplanuj",
@@ -3771,10 +3774,12 @@
                 "hintSteer": "Wyślij teraz, gdy pracuje",
                 "hintQueue": "Pójdzie, gdy skończy",
                 "viewerPlaceholder": "Możesz czytać tę rozmowę. Poproś właściciela, jeśli chcesz też tu pisać."
-            }
+            },
+            "unconnectedNote": "Twoja wiadomość tu poczeka.",
+            "otherModelHint": "Model niepodłączony",
+            "otherModelNote": "Wybierz podłączony."
         },
         "composerModelPill": {
-            "chooseModel": "Wybierz model",
             "fromNextMessage": "{model} odpowie od twojej następnej wiadomości. Ta odpowiedź nadal działa na {running}.",
             "model": "Model: {modelLabelText}",
             "nextMessage": "od następnej wiadomości",
@@ -3782,7 +3787,9 @@
             "olderNote": "Ten czat działa na {model}, starszej wersji. Wybierz {newer} z listy, żeby go przenieść.",
             "olderTitle": "{newer} jest nowszy",
             "trialNote": "Zmień model lub podłącz własny.",
-            "trialServed": "Ostatnia odpowiedź: {model}."
+            "trialServed": "Ostatnia odpowiedź: {model}.",
+            "noModel": "Brak modelu",
+            "lockedAria": "{model}, niepodłączony"
         },
         "composerMore": {
             "howMuchMayDo": "Ile może zrobić, zanim zapyta.",
@@ -3887,7 +3894,8 @@
             "notConnected": "niepodłączony",
             "older": "starsza",
             "olderThan": "starsza wersja, {newer} jest nowszy",
-            "addAnotherProvider": "Dodaj innego dostawcę"
+            "addAnotherProvider": "Dodaj innego dostawcę",
+            "nothingConnected": "Nic nie jest jeszcze podłączone. Podłącz model, by zacząć"
         },
         "modelPickerState": {
             "useCustomModelId": "użyj jako własnego id modelu"
@@ -13107,6 +13115,10 @@
                     "line": "Każdy agent, plik i zmiana są o jedno kliknięcie."
                 }
             }
+        },
+        "view": {
+            "back": "Wróć do czatu",
+            "continueInChat": "Kontynuuj w czacie"
         }
     },
     "hostedStart": {
