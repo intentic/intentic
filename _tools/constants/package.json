@@ -12,6 +12,7 @@
     "types": "./dist/index.d.ts",
     "files": [
         "dist",
+        "src/*.ts",
         "src/node.mjs",
         "src/node.d.mts",
         "src/assertion-measure.mjs",

@@ -20,6 +20,8 @@ flowchart LR
   Crypto, so it does not tie a caller to Node, and `one-line`, `capped-read`, `escape`, `json` and `fetch-json` need nothing but
   the language and fetch; `fs`, `contained`, `json-lines`, `process`, `sqlite`, `worker-calls`, `web-stream`,
   `ws-tcp-pump`, `acme` and `git` are Node's.
+- The package carries `src` alongside `dist`: consumers selecting `@intentic/src`, including pnpm's injected
+  workspace copies, need the source files named by the export map.
 - `when.ts` is a closed grammar with no arithmetic, calls or property access, because its strings arrive from
   installed extensions.
 - `outside-text.ts` wraps chat, pages and tool results in `<untrusted-content>` tags whose close carries a fresh id,
