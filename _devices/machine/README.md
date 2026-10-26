@@ -607,14 +607,14 @@ whose it is.
   beside the update ones (`intentic-machine updates --backups off`, `--tidy off`).
 - **File sync holds still while its sandbox is swapped here** ([`sync/holds.ts`](src/sync/holds.ts) `holdsSync`). A
   pairing's local slug is the first label of its sandbox's public hostname (what ic names a sandbox with one) or the
-  id in it (what ic names one from its connect token), so the mapping is exact. Its sync holds still through the
-  cutover and the first quarter hour after the cutover began, and past that while ic still watches the swap and the
-  sandbox does not answer. The quarter hour is measured from the pairing's own `swapSince`, the cutover's start as ic
-  recorded it, so it lasts after ic lets its record of the swap go. (2026-10-20: a swap with no probation, such as the dev
-  loop, leaves no record seconds after its cutover, and a hold read off the record alone let go after about thirty
-  seconds. Giving ic's record a longer life was rejected: the hold is the agent's fact, and ic's record answers whether a
-  swap is going on.) A later swap of the same sandbox starts the quarter hour again. Only this environment's records
-  count: a distro syncing a sandbox the Windows side swaps is not held.
+  id in it (what ic names one from its connect token), so the mapping is exact. Its sync holds still while ic's record
+  says a cutover is in flight, and after that until the sandbox answers a poll the watcher made once it saw the cutover
+  done; while ic still watches the swap, a sandbox that stops answering holds it again until its next answer. The swap
+  is kept on the pairing (`swapSince`), so the hold outlives ic's record of a swap that leaves none (the dev loop) until
+  that answer. (2026-10-26: the hold used to last a quarter hour from the cutover whatever happened, so a dev-loop
+  rebuild serving again within a minute left the owner's folder fourteen minutes behind. The old and new containers
+  share one volume, so a rollback changes nothing sync could read; the cutover and the first answer are what matter.)
+  Only this environment's records count: a distro syncing a sandbox the Windows side swaps is not held.
 - **File sync runs or holds still by one rule** (2026-10-20, [`sync/holds.ts`](src/sync/holds.ts)). Eight facts on a
   pairing hold its sync still: the owner's `sync pause` (`ownerPausedAt`), the sandbox said to be gone (`goneSince`),
   its container away or in ic's trash (`containerAway`), a swap (`swapSince`), an hour without an answer

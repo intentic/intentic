@@ -144,22 +144,20 @@ export const declareOwnerPauses = async (keys: ReadonlySet<string>, now: number)
     }
 };
 
-// FILE SYNC HOLDS STILL WHILE ITS SANDBOX IS SWAPPED ON THIS MACHINE. Two-way sync against a container that is parked,
-// half started, or a new version that may yet be rolled back reads the sandbox's side as whatever that moment shows, and
-// writes the answer into this machine's folder: the pairing is held (`swapSince`) from the cutover through the
-// first quarter hour after it, and past that for as long as ic still watches the swap and the sandbox is not answering.
-// The decisions are pure; mirror.ts keeps the fact each pass.
+// FILE SYNC HOLDS STILL WHILE ITS SANDBOX IS SWAPPED ON THIS MACHINE, AND NOT A MOMENT LONGER. Two-way sync against a
+// container that is parked or half started reads the sandbox's side as whatever that moment shows, and writes the answer
+// into this machine's folder: the pairing is held (`swapSince`) from the cutover until the new version has answered.
+// The decisions are pure; mirror.ts keeps the facts each pass.
 //
-// THE HOLD OUTLIVES IC'S RECORD OF THE SWAP (2026-10-20). ic keeps a swap on its record only while the swap is in flight
-// or on probation, and a swap with no probation (the dev loop, a probation of 0, the watch going back) leaves no record
-// seconds after its cutover: a hold read off the record alone let go after about thirty seconds, while the new version
-// it was holding for had not proven anything yet. So the quarter hour is measured from the pairing's own fact, the
-// cutover's start as ic recorded it, kept on the pairing when the swap is first seen; the record only begins a hold (or
-// a new one, for a later swap) and keeps it while it is cutting over.
-
-// How long after a swap's cutover began sync stays paused however well the new version looks: the probation watch's
-// first verdicts land inside it.
-export const PROBATION_HOLD_MS = 15 * 60_000;
+// EVENTS, NOT A CLOCK (2026-10-26). Until today the hold lasted a quarter hour from the cutover whatever happened, so a
+// dev-loop rebuild that was serving again in a minute kept the owner's folder fourteen minutes behind (brave-thistle: a
+// landed change "missing" on the owner's machine was sitting behind it). The clock guarded against a rollback, but the
+// old and new containers share one volume (ic recreate.rs keeps /work, /history), so going back changes no file sync
+// could read. What does matter is the cutover itself and a sandbox that is not there yet, and both are events: ic's
+// record says a cutover is in flight, and the watcher's own poll says the sandbox answered. So the hold lasts while ic
+// cuts over, and after that until the first answer from a poll that began once the cutover was seen done. A version on
+// probation that stops answering (the crash loop a rollback answers) holds again while ic still watches it, and lets go
+// at its next answer, whichever container gives it.
 
 // This pairing's sandbox's record, when this machine runs it and ic has one naming a phase.
 export const recordOf = (pairing: Pairing, records: readonly SwapRecord[]): SwapRecord | undefined => {
@@ -172,18 +170,34 @@ export const recordOf = (pairing: Pairing, records: readonly SwapRecord[]): Swap
 export const swapBegan = (record: SwapRecord | undefined, since: number | undefined, now: number): number | undefined =>
     record?.phase === undefined ? since : (record.at ?? since ?? now);
 
-// Whether a swap holds file sync still: the whole cutover, the first quarter hour after it began, and after that while
-// ic still watches it and the sandbox does not answer. A phase this agent does not know is read as probation.
-export const holdsSync = (record: SwapRecord | undefined, since: number | undefined, now: number, answering: boolean): boolean => {
+// What the watcher has seen of one sandbox around a swap: when it first saw the cutover done (`settledFrom`), when its
+// poll last got an answer (`answeredAt`), and whether its polls are failing right now (`silent`).
+export interface SwapSight {
+    readonly settledFrom?: number | undefined;
+    readonly answeredAt?: number | undefined;
+    readonly silent: boolean;
+}
+
+// Whether a swap holds file sync still: the whole cutover, then until the sandbox answers a poll made after the cutover
+// was seen done, and again while ic still watches the swap and the sandbox is silent. A phase this agent does not know is
+// read as probation.
+export const holdsSync = (record: SwapRecord | undefined, since: number | undefined, now: number, sight: SwapSight): boolean => {
     if (record?.phase === "cutover") {
         return true;
     }
-    const began = swapBegan(record, since, now);
-    if (began === undefined) {
+    if (swapBegan(record, since, now) === undefined) {
         return false;
     }
-    return now - began < PROBATION_HOLD_MS || (record?.phase !== undefined && !answering);
+    if (record?.phase !== undefined && sight.silent) {
+        return true;
+    }
+    const { settledFrom, answeredAt } = sight;
+    return settledFrom === undefined || answeredAt === undefined || answeredAt <= settledFrom;
 };
+
+// The moment the cutover is first seen done, kept until the next one begins: an answer counts only after it.
+export const settledFromStep = (record: SwapRecord | undefined, before: number | undefined, now: number): number | undefined =>
+    record?.phase === "cutover" ? undefined : (before ?? now);
 
 // What this pass writes about one pairing's swap: that it began (`began`, the start to keep, also for a later swap that
 // begins while one is held), that it settled, or nothing when the pairing already says what is so. The hold itself is

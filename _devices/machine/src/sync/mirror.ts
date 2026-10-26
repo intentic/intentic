@@ -28,7 +28,7 @@ import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./bridge/git-bridge.js";
-import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapBegan, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
+import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, settledFromStep, shouldReleaseForwards, swapBegan, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
 import { createHeartbeat, stopHeartbeat } from "./heartbeat.js";
 import { guardDisks } from "./low-disk.js";
 import {
@@ -614,6 +614,8 @@ interface PairingTracking {
     readonly sessionsPending: Set<string>;
     // The git bridge run in flight for each sandbox, if any (`startBridge`).
     readonly bridges: Map<string, BridgeRun>;
+    // When each sandbox's poll last got an answer, and each pairing's cutover was first seen done (`holdSyncDuringSwaps`).
+    readonly swaps: SwapWatch;
 }
 
 // One sandbox's git bridge, running beside the passes: what ends it, and when it has.
@@ -801,13 +803,22 @@ const retryPendingSessions = async (
     }
 };
 
+// What the watcher keeps in memory about each sandbox for its swap hold (holds.ts `holdsSync`): when its poll last got
+// an answer, and when its cutover was first seen done. Lost with a restart, which only means one more poll before the
+// hold lets go: the cutover is seen done afresh, and the next answer counts.
+export interface SwapWatch {
+    readonly answeredAt: Map<string, number>;
+    readonly settledFrom: Map<string, number>;
+}
+
 // File sync held still for every pairing whose sandbox ic is swapping on this machine (holds.ts `holdsSync`): the swap's fact
-// written as it begins and cleared once it has held, so a restarted agent, and a pass after ic let the swap's record go,
-// read the swap off the pairing.
+// written as it begins and cleared once the new version has answered, so a restarted agent, and a pass after ic let the
+// swap's record go, read the swap off the pairing.
 // Answers the pairings held this pass, whose git bridge and heal wait too: both would read a sandbox mid-swap.
 export const holdSyncDuringSwaps = async (
     pairings: readonly Pairing[],
     unreachable: ReadonlyMap<string, Unreachable>,
+    watch: SwapWatch,
     say: Log,
     read: () => Promise<readonly SwapRecord[]> = readSwaps,
     record: (key: string, since: number | undefined) => Promise<void> = setSwapSince,
@@ -817,7 +828,21 @@ export const holdSyncDuringSwaps = async (
     const held = new Set<string>();
     for (const pairing of pairings) {
         const swap = recordOf(pairing, records);
-        const holds = holdsSync(swap, pairing.swapSince, now, !unreachable.has(pairing.sandboxId));
+        const key = pairingKey(pairing);
+        // Kept as long as ic's record or the pairing names the swap: dropped at a release while a probation record stands,
+        // the next pass would see the cutover "done" afresh and hold again until another answer, every pass for a day.
+        const swapping = swap?.phase !== undefined || pairing.swapSince !== undefined;
+        const settledFrom = swapping ? settledFromStep(swap, watch.settledFrom.get(key), now) : undefined;
+        if (settledFrom === undefined) {
+            watch.settledFrom.delete(key);
+        } else {
+            watch.settledFrom.set(key, settledFrom);
+        }
+        const holds = holdsSync(swap, pairing.swapSince, now, {
+            settledFrom,
+            answeredAt: watch.answeredAt.get(pairing.sandboxId),
+            silent: unreachable.has(pairing.sandboxId),
+        });
         if (holds) {
             held.add(pairing.sandboxId);
         }
@@ -825,11 +850,11 @@ export const holdSyncDuringSwaps = async (
         const step = swapStep(pairing, holds, began);
         if (step !== undefined) {
             // state is a single file; serial keeps the writes ordered
-            await record(pairingKey(pairing), step === "began" ? began : undefined);
+            await record(key, step === "began" ? began : undefined);
             say(
                 step === "began"
-                    ? `  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync holds still until the new version has held.`
-                    : `  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync carries on.`,
+                    ? `  ${key}: its sandbox is being swapped on this machine; file sync holds still until the new version answers.`
+                    : `  ${key}: its sandbox's swap is done and the new version answered; file sync carries on.`,
             );
         }
     }
@@ -876,6 +901,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         const mirrored = await servePairing(context, pairing, base);
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
+        tracking.swaps.answeredAt.set(pairing.sandboxId, Date.now());
         // It answered: whatever said it was gone is withdrawn, and the outage clock on disk stops. So is a pause the mark
         // left behind because Mutagen did not take its resume the first time.
         if (goneLingers(context.pairings, pairing.sandboxId)) {
@@ -1175,6 +1201,7 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         repos: new Map(),
         sessionsPending: new Set(),
         bridges: new Map(),
+        swaps: { answeredAt: new Map(), settledFrom: new Map() },
     };
     // An abandoned run's bridge fetches end with it: the run that replaces it starts its own.
     generation.signal.addEventListener("abort", () => stopBridges(tracking), { once: true });
@@ -1274,7 +1301,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     }
     let swapHeld: ReadonlySet<string> = new Set();
     await guard(say, "holding file sync still during swaps", async () => {
-        swapHeld = await holdSyncDuringSwaps(state.pairings, tracking.unreachable, say);
+        swapHeld = await holdSyncDuringSwaps(state.pairings, tracking.unreachable, tracking.swaps, say);
     });
     let diskHeld: ReadonlySet<string> = new Set();
     await guard(say, "measuring the drives synced folders are on", async () => {

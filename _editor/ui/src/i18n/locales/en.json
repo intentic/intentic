@@ -212,7 +212,7 @@
             "gone": "Held while this sandbox is said to no longer exist. Its sync carries on by itself if it answers again.",
             "containerMissing": "Held while this sandbox's container is not on this computer's Docker. Its sync carries on by itself once it is back.",
             "containerTrashed": "Held while this sandbox sits in the trash on this computer. Restoring it brings its sync back.",
-            "swap": "Held while this sandbox is updated or rebuilt on this computer. Its sync carries on by itself once the new version has held.",
+            "swap": "Held while this sandbox is updated or rebuilt on this computer. Its sync carries on by itself once the new version answers.",
             "unreachable": "Held because this sandbox has not answered for an hour. Its sync carries on by itself when it does.",
             "other": "Held by this computer's agent. Its sync carries on by itself."
         }

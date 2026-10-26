@@ -17,9 +17,9 @@ const {
     holdSessions,
     holdsSync,
     markOwnerPausesAdopted,
-    PROBATION_HOLD_MS,
     recordOf,
     RELEASE_FORWARDS_MS,
+    settledFromStep,
     shouldReleaseForwards,
     swapBegan,
     swapStep,
@@ -136,22 +136,51 @@ describe("resumeSessions", () => {
 });
 
 describe("a swap", () => {
-    // The record ic keeps while it swaps the sandbox on this machine, by the slug its hostname gives it: a cutover that
-    // began over a quarter hour ago, so the pass after ic lets its record go is the one that settles it.
-    const cutover = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover", at: Date.now() - PROBATION_HOLD_MS - 1000 }]);
+    // The record ic keeps while it swaps the sandbox on this machine, by the slug its hostname gives it.
+    const cutover = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover", at: Date.now() - 1000 }]);
     const settled = async () => await Promise.resolve([]);
+    const watch = () => ({ answeredAt: new Map<string, number>(), settledFrom: new Map<string, number>() });
+    // The watcher's poll of the sandbox getting an answer, as a pass records it (mirror.ts runPairingPass).
+    const answer = async (seen: ReturnType<typeof watch>): Promise<void> => {
+        await new Promise((done) => setTimeout(done, 2));
+        seen.answeredAt.set(SANDBOX, Date.now());
+    };
 
-    // 2026-10-20: a dev-loop swap's record is gone seconds after its cutover; the hold is not.
-    it("keeps holding for the quarter hour after a cutover even once ic's record of it is gone", async () => {
+    // 2026-10-20: a dev-loop swap's record is gone seconds after its cutover; the hold is not, until the sandbox answers.
+    it("keeps holding once ic's record of the cutover is gone, until the new version answers", async () => {
         const mutagen = await statefulMutagen([MAIN, STATE]);
-        const fresh = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover", at: Date.now() - 30_000 }]);
-        await holdSyncDuringSwaps(await pairings(), new Map(), quiet, fresh);
+        const seen = watch();
+        // An answer from before the cutover ended (the old daemon) does not count.
+        seen.answeredAt.set(SANDBOX, Date.now());
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, cutover);
         await holdSessions(mutagen.path, await pairings(), quiet);
-        const held = await holdSyncDuringSwaps(await pairings(), new Map(), quiet, settled);
+        const held = await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, settled);
         expect([...held]).toHaveLength(1);
         expect((await pairingNow())?.swapSince).toBeTypeOf("number");
         await holdSessions(mutagen.path, await pairings(), quiet);
         expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([true, true]);
+
+        // 2026-10-26: the next answer lets it go, with no quarter hour to sit out.
+        await answer(seen);
+        expect([...(await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, settled))]).toEqual([]);
+        expect((await pairingNow())?.swapSince).toBeUndefined();
+    });
+
+    // A day-long probation record must not hold again every pass after the release.
+    it("stays released through ic's probation while the new version keeps answering, and holds again when it goes silent", async () => {
+        const seen = watch();
+        const probation = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "probation", at: Date.now() - 60_000 }]);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, cutover);
+        expect([...(await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, probation))]).toHaveLength(1);
+        await answer(seen);
+        for (let pass = 0; pass < 3; pass++) {
+            expect([...(await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, probation))]).toEqual([]);
+            await answer(seen);
+        }
+        const silent = new Map([[SANDBOX, { since: Date.now(), lastTried: Date.now() }]]);
+        expect([...(await holdSyncDuringSwaps(await pairings(), silent, seen, quiet, probation))]).toHaveLength(1);
+        await answer(seen);
+        expect([...(await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, probation))]).toEqual([]);
     });
 
     // fair-moth (2026-10-19): after a rebuild sync stayed paused, the log saying it had resumed.
@@ -159,13 +188,16 @@ describe("a swap", () => {
         const mutagen = await statefulMutagen([MAIN, STATE]);
         const said: string[] = [];
         const say = (line: string): void => void said.push(line);
+        const seen = watch();
 
-        await holdSyncDuringSwaps(await pairings(), new Map(), say, cutover);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, say, cutover);
         expect((await pairingNow())?.swapSince).toBeTypeOf("number");
         await holdSessions(mutagen.path, await pairings(), say);
         expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([true, true]);
 
-        await holdSyncDuringSwaps(await pairings(), new Map(), say, settled);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, say, settled);
+        await answer(seen);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, say, settled);
         expect((await pairingNow())?.swapSince).toBeUndefined();
         // Mutagen does not take the resume of the workspace session this pass: the next pass tries again.
         await mutagen.set({ untaken: [MAIN] });
@@ -178,12 +210,15 @@ describe("a swap", () => {
         expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([false, false]);
     });
 
-    it("resumes both sessions when the sandbox is not answering yet as the swap settles", async () => {
+    it("resumes both sessions once the new version answered, even when Mutagen cannot connect yet", async () => {
         const mutagen = await statefulMutagen([MAIN, STATE]);
-        await holdSyncDuringSwaps(await pairings(), new Map(), quiet, cutover);
+        const seen = watch();
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, cutover);
         await holdSessions(mutagen.path, await pairings(), quiet);
         await mutagen.set({ unreachable: [MAIN, STATE] });
-        await holdSyncDuringSwaps(await pairings(), new Map(), quiet, settled);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, settled);
+        await answer(seen);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, settled);
         await holdSessions(mutagen.path, await pairings(), quiet);
         expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([false, false]);
     });
@@ -193,9 +228,12 @@ describe("a swap", () => {
         const mutagen = await statefulMutagen([MAIN, STATE]);
         await setOwnerPaused(SANDBOX, 1);
         await holdSessions(mutagen.path, await pairings(), quiet);
-        await holdSyncDuringSwaps(await pairings(), new Map(), quiet, cutover);
+        const seen = watch();
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, cutover);
         await holdSessions(mutagen.path, await pairings(), quiet);
-        await holdSyncDuringSwaps(await pairings(), new Map(), quiet, settled);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, settled);
+        await answer(seen);
+        await holdSyncDuringSwaps(await pairings(), new Map(), seen, quiet, settled);
         await holdSessions(mutagen.path, await pairings(), quiet);
         expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([true, true]);
 
@@ -384,30 +422,35 @@ test("a pairing is known to this machine's ic by its hostname's first label, or 
     expect(recordOf(pairing(), [{ slug: "other", phase: "cutover" }])).toBeUndefined();
 });
 
-test("sync holds through the cutover and the first quarter hour after it, then only while ic watches and the sandbox is silent", () => {
-    expect(holdsSync(undefined, undefined, NOW, true)).toBe(false);
-    expect(holdsSync({ slug: "s" }, undefined, NOW, false)).toBe(false);
-    expect(holdsSync({ slug: "s", phase: "cutover", at: NOW - 2 * PROBATION_HOLD_MS }, undefined, NOW, true)).toBe(true);
-    const proving = (at: number | undefined) => ({ slug: "s", phase: "probation", at });
-    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS + 1), undefined, NOW, true)).toBe(true);
-    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS), undefined, NOW, true)).toBe(false);
-    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS), undefined, NOW, false)).toBe(true);
-    // Nothing to measure from is read as the swap having just begun.
-    expect(holdsSync(proving(undefined), undefined, NOW, true)).toBe(true);
+test("sync holds through the cutover, then until an answer after the cutover was seen done, and while ic watches a silent sandbox", () => {
+    const sight = (settledFrom?: number, answeredAt?: number, silent = false) => ({ settledFrom, answeredAt, silent });
+    expect(holdsSync(undefined, undefined, NOW, sight())).toBe(false);
+    expect(holdsSync({ slug: "s" }, undefined, NOW, sight())).toBe(false);
+    // The cutover holds whatever was answered.
+    expect(holdsSync({ slug: "s", phase: "cutover", at: NOW - 1000 }, undefined, NOW, sight(NOW - 10, NOW))).toBe(true);
+    const proving = { slug: "s", phase: "probation", at: NOW - 60_000 };
+    expect(holdsSync(proving, undefined, NOW, sight(NOW - 10))).toBe(true);
+    // An answer from before the cutover was seen done is the old version's.
+    expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 20))).toBe(true);
+    expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 5))).toBe(false);
+    expect(holdsSync(proving, undefined, NOW, sight(NOW - 10, NOW - 5, true))).toBe(true);
     // A phase a newer ic adds is read as probation.
-    expect(holdsSync({ slug: "s", phase: "verifying", at: NOW - 2 * PROBATION_HOLD_MS }, undefined, NOW, true)).toBe(false);
+    expect(holdsSync({ slug: "s", phase: "verifying", at: NOW - 60_000 }, undefined, NOW, sight(NOW - 10, NOW - 5))).toBe(false);
 });
 
-// 2026-10-20: a swap with no probation (the dev loop) leaves ic's record seconds after its cutover, and the hold read off
-// the record alone let go after about thirty seconds. It is measured from the start the pairing kept.
-test("the hold lasts its quarter hour after ic's record of the swap is gone, and no longer", () => {
+// 2026-10-20: a swap with no probation (the dev loop) leaves ic's record seconds after its cutover; the pairing's own
+// start keeps the hold until the answer. Silence with no record is the outage rule's (an hour), not this one's.
+test("the hold outlives ic's record of the swap until the sandbox answers", () => {
     const began = NOW - 40_000;
-    expect(holdsSync(undefined, began, NOW, true)).toBe(true);
-    expect(holdsSync(undefined, began, began + PROBATION_HOLD_MS - 1, true)).toBe(true);
-    expect(holdsSync(undefined, began, began + PROBATION_HOLD_MS, true)).toBe(false);
-    // Silence past the quarter hour holds only while ic still watches the swap: with its record gone, nothing does.
-    expect(holdsSync(undefined, began, began + PROBATION_HOLD_MS, false)).toBe(false);
-    expect(holdsSync({ slug: "s", phase: "probation", at: began }, began, began + PROBATION_HOLD_MS, false)).toBe(true);
+    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, silent: false })).toBe(true);
+    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, answeredAt: NOW - 5, silent: false })).toBe(false);
+    expect(holdsSync(undefined, began, NOW, { settledFrom: NOW - 10, answeredAt: NOW - 5, silent: true })).toBe(false);
+});
+
+test("the cutover is seen done once, and seen again only after another cutover", () => {
+    expect(settledFromStep({ slug: "s", phase: "cutover" }, NOW - 9, NOW)).toBeUndefined();
+    expect(settledFromStep(undefined, undefined, NOW)).toBe(NOW);
+    expect(settledFromStep({ slug: "s", phase: "probation" }, NOW - 9, NOW)).toBe(NOW - 9);
 });
 
 test("the start a hold measures from is the cutover ic recorded, kept on the pairing once the record goes", () => {
@@ -424,7 +467,7 @@ test("the start a hold measures from is the cutover ic recorded, kept on the pai
 test("a swap's fact is written as it begins, again for a later swap, and cleared once it settles", () => {
     expect(swapStep(pairing(), true, NOW)).toBe("began");
     expect(swapStep(pairing({ swapSince: NOW }), true, NOW)).toBeUndefined();
-    expect(swapStep(pairing({ swapSince: NOW - PROBATION_HOLD_MS }), true, NOW)).toBe("began");
+    expect(swapStep(pairing({ swapSince: NOW - 60_000 }), true, NOW)).toBe("began");
     expect(swapStep(pairing({ swapSince: NOW }), false, NOW)).toBe("settled");
     expect(swapStep(pairing(), false, undefined)).toBeUndefined();
 });
