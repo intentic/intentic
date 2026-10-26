@@ -28,8 +28,8 @@ test("a listener that throws is reported to its own logger, and the listeners af
 // Progress ticks fold under the subagents window; a child ending, the change they led up to, does not wait it out.
 test("a milestone goes out within a quarter second inside the window chatter is folded under", async () => {
     const heard: { readonly at: number; readonly domains: string[] }[] = [];
-    const started = Date.now();
-    const stop = onRuntimeChange((domains) => heard.push({ at: Date.now() - started, domains: [...domains] }));
+    const started = performance.now();
+    const stop = onRuntimeChange((domains) => heard.push({ at: performance.now() - started, domains: [...domains] }));
     try {
         publishRuntimeChange("subagents");
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -46,6 +46,27 @@ test("a milestone goes out within a quarter second inside the window chatter is 
         await new Promise((resolve) => setTimeout(resolve, 100));
         expect(heard).toHaveLength(2);
     } finally {
+        stop();
+    }
+});
+
+// The wall clock stepping back (an NTP or WSL resync) must not hold a frame until it catches up: the windows run on the
+// monotonic clock. setSystemTime outside fake timers pins Date.now a minute in the past while real timers keep running.
+test("a wall clock stepped back inside a window still lets the milestone out", async () => {
+    let heard = 0;
+    const stop = onRuntimeChange(() => {
+        heard += 1;
+    });
+    try {
+        publishRuntimeChange("subagents");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(heard).toBe(1);
+        jest.setSystemTime(Date.now() - 60_000);
+        publishRuntimeMilestone("subagents");
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        expect(heard).toBe(2);
+    } finally {
+        jest.setSystemTime();
         stop();
     }
 });

@@ -47,6 +47,11 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
 // Each subscriber, with where its own failure is reported: the /events connection's logger, or none.
 const subscribers = new Map<(domains: RuntimeDomain[]) => void, Pick<Logger, "warn"> | undefined>();
 
+// The windows are measured on the monotonic clock the timers themselves run on. Stamped with the wall clock, a step
+// back (an NTP or WSL resync) left every window apparently still open, and the flush re-armed itself until the wall
+// clock caught up: a milestone was held for the whole step (CI, 2026-10-26). Fake timers move this clock too.
+const now = (): number => performance.now();
+
 // What has changed and not yet gone out, and the earliest each domain may go out again.
 const pending = new Set<RuntimeDomain>();
 const nextAllowedAt = new Map<RuntimeDomain, number>();
@@ -63,24 +68,24 @@ const arm = (at: number): void => {
         clearTimeout(timer);
     }
     timerDueAt = at;
-    timer = setTimeout(() => void flush(), Math.max(0, at - Date.now()));
+    timer = setTimeout(() => void flush(), Math.max(0, at - now()));
     timer.unref();
 };
 
 const flush = (): void => {
     timer = undefined;
-    const now = Date.now();
+    const flushedAt = now();
     const ready: RuntimeDomain[] = [];
     let soonest: number | undefined;
     // oxlint-disable-next-line unicorn/no-useless-spread -- The spread snapshots pending before deletion.
     for (const domain of [...pending]) {
         const allowedAt = nextAllowedAt.get(domain) ?? 0;
-        if (allowedAt > now) {
+        if (allowedAt > flushedAt) {
             soonest = soonest === undefined ? allowedAt : Math.min(soonest, allowedAt);
             continue;
         }
         pending.delete(domain);
-        nextAllowedAt.set(domain, now + THROTTLE_MS[domain]);
+        nextAllowedAt.set(domain, flushedAt + THROTTLE_MS[domain]);
         ready.push(domain);
     }
     // Re-armed before the listeners run, and each listener isolated, as domain-events isolates its own: one that
@@ -114,7 +119,7 @@ export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void
     for (const domain of domains) {
         pending.add(domain);
     }
-    arm(Date.now());
+    arm(now());
 };
 
 // The shortest gap a milestone keeps after the frame before it, so a fleet of children ending together still folds.
