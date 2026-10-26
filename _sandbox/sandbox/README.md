@@ -71,7 +71,9 @@ site's own build (`starter.Dockerfile`, run by `_tools/scripts/image/prepare-ima
 `normalize-starter.mjs`, which takes pnpm's clocks out of it so its image layer is the same bytes until the template
 changes. Each build resolves dependencies with a fresh registry metadata cache, so cached version lists cannot
 disagree with newly resolved transitive dependencies. `starter-site/` is intentic's own first page, laid over the
-template's there. `src/` itself is not shipped: the image runs `dist/`.
+template's there. The starter pins the canonical template revision used by CI's scaffold integration tests: upstream
+`main` no longer includes its Astro landing template. `STARTER_TEMPLATE_REF` explicitly overrides the image build's
+pin. `src/` itself is not shipped: the image runs `dist/`.
 `golden/host-files.json` is not copied: it names every file the daemon and `ic` both touch across the container
 boundary, with an example of each body the daemon defines, written by `src/system/host-files.test.ts` and read by
 ic's own tests, so a rename on either side fails a test instead of a rollback.

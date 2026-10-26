@@ -206,12 +206,16 @@ static_layer speech-models "$out/speech-models" /opt/speech-models
 # starter.Dockerfile, which says why it is built here and not in the image). Its output is already a layer root with
 # pnpm's clocks taken out; intentic's own first page goes over the template's (starter-site/ replaces src/ and public/
 # only, never the package or its install), and then every timestamp is fixed like the other static layers.
-# STARTER_TEMPLATE_REF picks the template's branch or tag, main by default.
+# STARTER_TEMPLATE_REF overrides the template revision pinned in starter.Dockerfile.
 # It also hands back pnpm's metadata for the `pnpm` package, which the seeded starter's first `pnpm` resolves its pinned
 # pnpm through (starter.Dockerfile says why it is kept apart); that tree is copied among the per-commit layers.
 starter_build="$out/layers/.starter-build"
+starter_args=()
+if [ -n "${STARTER_TEMPLATE_REF:-}" ]; then
+    starter_args+=(--build-arg "STARTER_TEMPLATE_REF=$STARTER_TEMPLATE_REF")
+fi
 docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
-    --build-arg STARTER_TEMPLATE_REF="${STARTER_TEMPLATE_REF:-main}" \
+    "${starter_args[@]}" \
     --output "type=local,dest=$starter_build" _sandbox/sandbox/starter
 [ -f "$starter_build/starter/opt/starter/node_modules/.modules.yaml" ] || { echo "the starter build produced no installed starter" >&2; exit 1; }
 mv "$starter_build/starter" "$out/layers/starter"

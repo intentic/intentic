@@ -32,7 +32,9 @@ COPY --from=cli . /opt/intentic-cli
 # fails "Failed to resolve pnpm@11.9.0"; online, a 1.9 MB fetch). It moves whenever pnpm publishes, so it leaves here
 # as its own small tree and the image copies it among the per-commit layers, never into the starter's. Its root/ is 700,
 # /root's own mode: a layer's directory entry replaces the one below it, and mkdir would have made it 755.
-ARG STARTER_TEMPLATE_REF=main
+# Match the canonical revision exercised by CI's scaffold integration tests. Upstream main removed the Astro
+# landing template (2026-10-26); the starter overlays Astro source and cannot use the Vue web template instead.
+ARG STARTER_TEMPLATE_REF=1ddb300d7f0c5dcaaf105255ab7e29ed0df4907d
 # Resolve against fresh registry metadata on every build. A persistent cache can mix an old @volar/typescript
 # version list with a newly resolved @volar/kit that pins a version missing from that list (CI, 2026-10-23).
 RUN --mount=type=tmpfs,target=/root/.cache/pnpm \
