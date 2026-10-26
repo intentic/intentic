@@ -1,5 +1,6 @@
 <!-- The app's one rename: a name that reads as text, a field in that same text's box, Enter/Esc/blur. -->
 <script setup lang="ts">
+import { keyCap } from "../../lib/input/keys.js";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import Icon from "../primitives/Icon.vue";
 import { createInlineRename } from "../../composables/inlineRename.js";
@@ -182,7 +183,7 @@ defineExpose({ begin: (): void => rename.begin() });
                 :class="ui.iconButton({ size: `xs` })"
                 :disabled="rename.busy"
                 :aria-label="t(`ui.action.save`)"
-                v-tooltip.top="{ title: t(`ui.action.save`), keys: t(`ui.keys.enter`) }"
+                v-tooltip.top="{ title: t(`ui.action.save`), keys: keyCap(`enter`) }"
                 @mousedown.prevent
                 @click.stop="rename.commit()"
             >

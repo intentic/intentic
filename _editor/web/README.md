@@ -86,6 +86,20 @@ flowchart LR
   to the account page. Restoring a sandbox reads only the platform and refreshes the account's registry.
 - **AI literacy notice.** When enabled in Sandbox ▸ Access ▸ People, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.
 - **Sandbox logo.** The owner presses the logo on Sandbox ▸ Overview to upload an image, stylize it with a preset icon and the Appearance color swatches, or remove it. The styling dialog previews the result and saves only on Save. Presets are ordinary SVG data-URL images, so the same logo appears in every sandbox list and rail; reopening the dialog restores its icon and color.
+- **Keyboard shortcuts per platform.** Every built-in command declares its chord once (`workbench/commands/builtinCommands.ts`),
+  with a Mac's own where the shared one is a Windows idiom (`mac`) and a Mac app window's where a browser tab may not
+  take it (`macApp`: ⌘W, ⌘⇧T, ⌘⇧], ⌘1–9, ⌘,), resolved by `declaredChord` per keystroke (`windowKind.ts` says which
+  window this is). A chord the system or the browser keeps (`reservedChords.ts`, from Chromium's own reserved list) is
+  never a default, and the Keyboard page marks one a person records. On a Mac the dispatcher never takes a key the field
+  under the caret answers itself (⌥↑, ⌃K, ⌘⌫: `isMacTextChord` in `@intentic/ui/keys`), letters match by the key
+  pressed whatever Option typed there, and keys draw as Apple's glyphs (⌘↩, ⌫, ⎋). The file tree and the home answer
+  Finder's keys there (Return renames, ⌘⌫ deletes, ⌘D duplicates, ⌥⌘V moves, ⌥-drag copies: `treeKeys.ts`,
+  `home/homeKeys.ts`), the live browser and the desktop translate a Mac's caret keys into Linux's (`keyIntent.ts`,
+  `desktopInput.ts`), and Mod+/ opens every shortcut the window answers (`shell/commands/ShortcutSheet.vue`). The
+  `modifier-tiers` check refuses a new "Ctrl or Cmd" read; `@intentic/ui/keys`' `primaryHeld` is the one way in.
+  _(2026-10-26) The keymap was Windows' drawn in Mac glyphs: 7 of 59 default chords reached ⌘. Translating the Windows
+  chords one for one was the alternative; it lands on chords a Mac browser keeps (⌘W) or a laptop lacks (PageDown).
+  `/work/docs/macos-keyboard-strategy.md` has the audit._
 - **Keyboard access.** The first Tab reveals “Skip to main content” in the workspace and local shells. It focuses the visible main surface, including a side panel filling the centre. Agent and workflow titles are native buttons beside their independent actions. The jump palette is a named dialog with an input combobox, named result groups and active-descendant navigation. The backend-free accessibility checks live in `_tools/e2e/accessibility/demo.spec.ts`.
 - **Results one press away.** The documents a turn made (Word, OpenDocument, RTF, PDF, decks, sheets, web pages) are
   chips under its answer, each with Download and Print beside it (`features/chat/transcript/deliverables/`). A press on

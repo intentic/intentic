@@ -1,5 +1,6 @@
 <!-- The AskUserQuestion card: the ask, the options, and the answer being composed. -->
 <script setup lang="ts">
+import { composingKey } from "@intentic/ui/keys";
 import { growTextarea, Icon, type IconName, useDevice } from "@intentic/ui";
 import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import { type ComponentPublicInstance, computed, inject, nextTick, reactive, ref, type Ref, watch } from "vue";
@@ -259,7 +260,7 @@ const dismiss = async (): Promise<void> => {
 
 // Enter submits, Shift+Enter breaks the line; mobile Enter always inserts a newline.
 const otherKeydown = (event: KeyboardEvent): void => {
-    if (event.key !== `Enter` || event.isComposing || event.shiftKey || mobile.value) {
+    if (event.key !== `Enter` || composingKey(event) || event.shiftKey || mobile.value) {
         return;
     }
     event.preventDefault();

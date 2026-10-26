@@ -1,6 +1,8 @@
 import type { Disposable } from "@intentic/extension-api";
 import type { Tip } from "@intentic/ui";
 import { evaluateWhen, parseWhen, type WhenExpression } from "@intentic/base/when";
+import { isTypingTarget } from "@intentic/ui/event-target";
+import { isMacTextChord } from "@intentic/ui/keys";
 import { shallowRef } from "vue";
 import { categoryLabel } from "./categories";
 import { commandContext } from "./contextKeys";
@@ -67,8 +69,13 @@ export const executeCommand = async (command: string, ...args: unknown[]): Promi
 };
 
 // Command bound to a live keydown: matches the effective chord (remap ?? default), skips a closed `when` gate.
-// Shared by the window dispatcher and terminal key-forwarding hook, so shell-owned chords can't drift.
+// Shared by the window dispatcher and terminal key-forwarding hook, so shell-owned chords can't drift. On a Mac, a chord
+// the field under the caret answers itself (⌥↑ to the paragraph's start, ⌃K to kill the line, ⌘⌫ to delete it) is the
+// field's whatever a command says: no `when` can forget it, and a person's own remap can't take it either.
 export const boundCommand = (event: KeyboardEvent, isMac: boolean): RegisteredCommand | undefined => {
+    if (isMac && isMacTextChord(event) && isTypingTarget(event.target)) {
+        return undefined;
+    }
     // Built once per keystroke: resolving the focused surface walks the DOM, costly to repeat per candidate.
     const context = commandContext(event);
     return commands.value.find((entry) => {

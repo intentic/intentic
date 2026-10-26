@@ -1,5 +1,5 @@
 import { computed, readonly, ref, type ComputedRef, type Ref } from "vue";
-import { isTypingTarget } from "../lib/eventTarget.js";
+import { isTypingTarget } from "../lib/input/eventTarget.js";
 
 export type Device = "mobile" | "tablet" | "desktop";
 

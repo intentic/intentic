@@ -117,7 +117,8 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/ui/time": fromRoot("_editor/ui/src/lib/timeWindow.ts"),
     // Where a key or press landed (a field being typed in, a floating surface), read by the keybinding context and the
     // desktop link policy, which loads with nothing booted.
-    "@intentic/ui/event-target": fromRoot("_editor/ui/src/lib/eventTarget.ts"),
+    "@intentic/ui/event-target": fromRoot("_editor/ui/src/lib/input/eventTarget.ts"),
+    "@intentic/ui/keys": fromRoot("_editor/ui/src/lib/input/keys.ts"),
     // Date/byte/token formatting used by pure projections (history day labels, usage window resets) whose unit tests
     // run without a DOM.
     "@intentic/ui/format": fromRoot("_editor/ui/src/lib/format.ts"),

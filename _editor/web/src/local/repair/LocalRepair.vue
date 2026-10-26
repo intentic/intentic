@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { composingKey } from "@intentic/ui/keys";
 import { Button, CopyButton, growTextarea, Icon, Markdown, Notice, SegmentedControl, toneRim, toneWash } from "@intentic/ui";
 import { formatClock, formatWhen } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
@@ -110,7 +111,7 @@ const send = async (): Promise<void> => {
 };
 // Enter sends, Shift+Enter breaks the line; a key that ends an IME composition is the composition's.
 const onEnter = (event: KeyboardEvent): void => {
-    if (event.isComposing) {
+    if (composingKey(event)) {
         return;
     }
     event.preventDefault();

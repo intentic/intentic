@@ -16,6 +16,8 @@ const DROP_ATTR = `data-drop-dir`;
 
 export interface EntryDragSpec {
     readonly paths: readonly string[];
+    // A copy rather than a move (a Mac's ⌥-drag); the ghost wears a plus, as Finder's does.
+    readonly copies?: boolean;
     // Runs the move; the drag has already checked the target can take these paths.
     readonly onDrop: (dir: string) => void;
 }
@@ -30,6 +32,8 @@ const paths = sandboxRef<readonly string[]>(
 );
 // allow(module-state): one pointer gesture, ended by its release, its Escape, or a switch (its paths are the sandbox's, and scoped)
 const pointer = ref({ x: 0, y: 0 });
+// allow(module-state): one pointer gesture, ended by its release, its Escape, or a switch (its paths are the sandbox's, and scoped)
+const copying = ref(false);
 // The folder under the pointer, when it can take the paths; undefined over nothing, or over one that can't.
 // allow(module-state): one pointer gesture, ended by its release, its Escape, or a switch (its paths are the sandbox's, and scoped)
 const over = ref<string | undefined>(undefined);
@@ -59,6 +63,7 @@ const settle = (): void => {
     listeners = undefined;
     spec = undefined;
     dragging.value = false;
+    copying.value = false;
     paths.value = [];
     over.value = undefined;
     document.body.style.userSelect = ``;
@@ -117,6 +122,7 @@ export const beginEntryDrag = (event: PointerEvent, next: EntryDragSpec): void =
     settle();
     spec = next;
     paths.value = next.paths;
+    copying.value = next.copies === true;
     origin = { x: event.clientX, y: event.clientY };
     pointer.value = origin;
     listeners = new AbortController();
@@ -138,5 +144,5 @@ export const consumeSuppressedClick = (): boolean => {
 };
 
 export function useEntryDrag() {
-    return { dragging, paths, label, pointer, over, begin: beginEntryDrag, consumeSuppressedClick };
+    return { dragging, copying, paths, label, pointer, over, begin: beginEntryDrag, consumeSuppressedClick };
 }

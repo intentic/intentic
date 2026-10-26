@@ -1,6 +1,6 @@
 // Every keystroke over a live browser picture goes to exactly one of two places (host or remote page); each case
 // here is one half of that split, and what stays with the host matters as much as what's forwarded.
-import { keyIntent } from "./keyIntent";
+import { type KeyIntent, keyIntent } from "./keyIntent";
 
 // A keydown as the host reports it; only the fields the decision reads.
 const press = (key: string, held: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean } = {}): KeyboardEvent =>
@@ -142,5 +142,46 @@ describe("what the host keeps", () => {
     test("alt chords other than history belong to the host's own menus", () => {
         expect(keyIntent(press(`f`, { alt: true }))).toEqual({ kind: `device` });
         expect(keyIntent(press(`a`, { ctrl: true, alt: true }))).toEqual({ kind: `device` });
+    });
+});
+
+// A Mac's text keys, which the Linux page spells with Ctrl and Home/End. Before this, ⌥← in a form went Back.
+describe("keys from a Mac", () => {
+    // SAFETY: the decision reads only the fields `press` sets, and the physical key a ⌃ letter is matched by.
+    const mac = (key: string, held: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean } = {}, code = ``): KeyIntent =>
+        keyIntent({ ...press(key, held), code } as KeyboardEvent, true);
+
+    test("⌘ with an arrow goes to the edge, ⌥ to the next word, and neither goes Back", () => {
+        expect(mac(`ArrowLeft`, { meta: true })).toEqual({ kind: `key`, frame: { type: `key`, key: `Home` } });
+        expect(mac(`ArrowDown`, { meta: true, shift: true })).toEqual({ kind: `key`, frame: { type: `key`, key: `End`, ctrl: true, shift: true } });
+        expect(mac(`ArrowLeft`, { alt: true })).toEqual({ kind: `key`, frame: { type: `key`, key: `ArrowLeft`, ctrl: true } });
+        expect(mac(`ArrowRight`, { alt: true, shift: true })).toEqual({ kind: `key`, frame: { type: `key`, key: `ArrowRight`, ctrl: true, shift: true } });
+    });
+
+    test("⌘⌫ deletes to the line's start in two keystrokes, ⌥⌫ a word in one", () => {
+        expect(mac(`Backspace`, { meta: true })).toEqual({
+            kind: `key`,
+            frame: { type: `key`, key: `Home`, shift: true },
+            after: { type: `key`, key: `Backspace` },
+        });
+        expect(mac(`Backspace`, { alt: true })).toEqual({ kind: `key`, frame: { type: `key`, key: `Backspace`, ctrl: true } });
+    });
+
+    test("⌘[ and ⌘] go Back and Forward", () => {
+        expect([mac(`[`, { meta: true }), mac(`]`, { meta: true })]).toEqual([
+            { kind: `command`, command: `back` },
+            { kind: `command`, command: `forward` },
+        ]);
+    });
+
+    test("⌃ with an Emacs letter moves the caret, and the rest of ⌃ stays with the host", () => {
+        expect(mac(`a`, { ctrl: true }, `KeyA`)).toEqual({ kind: `key`, frame: { type: `key`, key: `Home` } });
+        expect(mac(`e`, { ctrl: true }, `KeyE`)).toEqual({ kind: `key`, frame: { type: `key`, key: `End` } });
+        expect(mac(`c`, { ctrl: true }, `KeyC`)).toEqual({ kind: `device` });
+    });
+
+    test("a letter Option typed is a character, and ⌘ is still the primary modifier", () => {
+        expect(mac(`ą`, { alt: true }, `KeyA`)).toEqual({ kind: `text`, text: `ą` });
+        expect(mac(`l`, { meta: true }, `KeyL`)).toEqual({ kind: `command`, command: `address` });
     });
 });

@@ -3,7 +3,7 @@ import { Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useOperation } from "../../../workbench/operations/operations";
-import { keyIntent, type BrowserCommand, type KeyFrame } from "../../../models/browsers/keyIntent";
+import { keyFrames, keyIntent, type BrowserCommand, type KeyFrame } from "../../../models/browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../../models/browsers/pointerFrame";
 import { selectionCopy } from "../../../models/browsers/selectionCopy";
 import { type ScreencastMessage, useScreencast } from "../../../models/browsers/useScreencast";
@@ -292,7 +292,7 @@ const onKeyDown = (event: KeyboardEvent): void => {
     } else if (intent.kind === "text") {
         sendMsg(rawKeys ? { type: "text", text: intent.text, raw: true } : { type: "text", text: intent.text });
     } else if (intent.kind === "key") {
-        sendKey(intent.frame);
+        keyFrames(intent).forEach(sendKey);
     } else {
         void copy.copyOut(intent.frame, surface.value);
     }

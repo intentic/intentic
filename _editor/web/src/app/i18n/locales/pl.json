@@ -3309,8 +3309,8 @@
             "replacedSend": "zostanie zastąpiona przy wysyłce.",
             "runMessageThrough": "Przepuść tę wiadomość przez",
             "sandboxBusy": "Sandbox zajęty",
-            "shiftEnterNewLine": "Shift+Enter – nowa linia",
-            "shiftEnterOrNewAgent": "Shift+Enter – nowa linia, {chord} – nowy agent",
+            "shiftEnterNewLine": "{newline} – nowa linia",
+            "shiftEnterOrNewAgent": "{newline} – nowa linia, {chord} – nowy agent",
             "startConversation": "Zacznij rozmowę z {providerName}.",
             "startConversationAny": "Zacznij rozmowę.",
             "talkHandsFree": "Mów bez rąk",
@@ -3333,7 +3333,8 @@
             "plain": {
                 "startConversation": "Zacznij rozmowę z asystentem.",
                 "moreSettings": "Więcej opcji"
-            }
+            },
+            "shiftEnterKeys": "Shift+Enter"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "To konto trzeba podłączyć ponownie.",
@@ -10051,10 +10052,17 @@
         },
         "settingsKeybindings": {
             "alsoOn": "Także w",
+            "appWindowNote": "W karcie przeglądarki {close}, {reopen} i {next} zostają przy przeglądarce. Po instalacji jako aplikacja Intentic używa ich do własnych kart.",
             "cancelRecording": "Anuluj nagrywanie",
             "ext": "rozsz.",
             "filterCommands": "Filtruj polecenia…",
+            "installApp": "Zainstaluj aplikację",
+            "keptByBrowser": "Zajęte przez przeglądarkę",
+            "keptByMacos": "Zajęte przez macOS",
+            "keptBySystem": "Zajęte przez system",
             "noCommandsMatch": "Żadne polecenie nie pasuje do „{query}”.",
+            "optionIsMeta": "Option jako klawisz Meta",
+            "optionIsMetaHint": "⌥B, ⌥F i ⌥. trafiają do powłoki jako skoki o słowo i ostatni argument, zamiast wpisywać ∫, ƒ i ≥.",
             "pressKeysEsc": "Naciśnij klawisze… (Esc)",
             "recordShortcut": "Nagraj skrót",
             "recordShortcut2": "Nagraj skrót dla {label}",
@@ -10062,9 +10070,11 @@
             "resetDefault": "Resetuj",
             "resetToDefault2": "Przywróć {label} do domyślnego",
             "shortcutClash": "Konflikt skrótu",
+            "terminal": "Terminal",
             "unbind": "Odepnij",
             "unbind2": "Odepnij {label}",
-            "unbound": "Nieprzypisane"
+            "unbound": "Nieprzypisane",
+            "worksInApp": "Działa w aplikacji"
         },
         "settingsNotifications": {
             "notifyDevice": "Powiadamiaj to urządzenie",
@@ -10840,7 +10850,9 @@
             "dockBack": "Zadokuj z powrotem",
             "dockBackToSide": "Zadokuj z powrotem z boku",
             "dockToRail": "Zadokuj na pasku",
+            "keyboardShortcuts": "Skróty klawiszowe",
             "moveIntoNewWindow": "Przenieś do nowego okna",
+            "settings": "Ustawienia",
             "togglePanel": "Przełącz panel"
         },
         "windowControls": {
@@ -10907,6 +10919,10 @@
             "results": "Pasujące ustawienia",
             "noMatches": "Żadne ustawienie nie pasuje do „{query}”.",
             "searchEverything": "Szukaj „{query}” wszędzie"
+        },
+        "shortcutSheet": {
+            "change": "Zmień w ustawieniach",
+            "general": "Ogólne"
         }
     },
     "terminal": {
@@ -10924,6 +10940,7 @@
             "changeColor2": "Zmień kolor…",
             "changeIcon": "Zmień ikonę…",
             "changeIcon2": "Zmień ikonę…",
+            "clear": "Wyczyść",
             "closeFind": "Zamknij wyszukiwanie",
             "closeWindow": "Zamknij okno",
             "copyAll": "Kopiuj wszystko",
@@ -11652,8 +11669,11 @@
             "download": "Pobierz",
             "downloadItems": "Pobierz jako ZIP ({count})",
             "downloadZip": "Pobierz jako ZIP",
+            "duplicate": "Duplikuj",
+            "duplicateItems": "Duplikuj {count} element | Duplikuj {count} elementy | Duplikuj {count} elementów",
             "extract": "Wypakuj",
             "keepFolder": "Zostaw folder",
+            "moveHere": "Przenieś tutaj",
             "newFile": "Nowy plik",
             "newFolder": "Nowy folder",
             "openTerminal": "Otwórz terminal"
@@ -11933,7 +11953,6 @@
             "whatHappened": "Co się stało",
             "you": "Ty",
             "message": "Wiadomość",
-            "messageCtrlEnter": "Wiadomość (Ctrl+Enter, żeby zacommitować)",
             "agentId": "Agent {id}",
             "commitAll": "Zacommituj wszystko",
             "blockedByConflicts": "Najpierw rozwiąż konflikty: git nie zrobi commita, dopóki któraś ścieżka jest niescalona.",
@@ -11960,7 +11979,8 @@
             "unstageFrom": "Usuń z indeksu {count} plik od „{origin}” | Usuń z indeksu {count} pliki od „{origin}” | Usuń z indeksu {count} plików od „{origin}”",
             "stageFrom": "Dodaj do indeksu {count} plik od „{origin}” | Dodaj do indeksu {count} pliki od „{origin}” | Dodaj do indeksu {count} plików od „{origin}”",
             "messageBeingWritten": "wiadomość commita jest w trakcie pisania",
-            "namesTheCommit": "nadaje nazwę commitowi"
+            "namesTheCommit": "nadaje nazwę commitowi",
+            "messageCommitKeys": "Wiadomość ({keys}, żeby zacommitować)"
         },
         "rowActions": {
             "changedSinceOn": "Zmienione od włączenia",

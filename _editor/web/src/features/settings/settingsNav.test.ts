@@ -15,8 +15,8 @@ it(`offers every section on a desktop where a plan is sold, account first, then 
     expect(slugs(true)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `notifications`, `keybindings`, `tokens`]);
     expect(settingsGroups(settingsSections(true, false, false)).map((group) => [group.key, group.sections.map((section) => section.slug)])).toEqual([
         [`account`, [`profile`, `billing`, `organisation`, `data`]],
-        [`preferences`, [`appearance`, `notifications`]],
-        [`developer`, [`keybindings`, `tokens`]],
+        [`preferences`, [`appearance`, `notifications`, `keybindings`]],
+        [`developer`, [`tokens`]],
     ]);
 });
 
@@ -46,10 +46,11 @@ it(`asks the window itself whether it has a sandbox when not told`, () => {
 });
 
 // A reader who does not write code is not shown the developer's tools in the index; a developer's index is unchanged.
-it(`leaves the shortcut table and the tokens out of a non-coder's index, and their heading with them`, () => {
-    // An organisation's console is an office administrator's, not a developer's, so it stays; so does the wake word.
+it(`leaves the tokens out of a non-coder's index, and their heading with them, but keeps the shortcuts`, () => {
+    // An organisation's console is an office administrator's, not a developer's, so it stays; so does the wake word, and
+    // so do the keyboard shortcuts, which every keyboard user reads.
     const plain = settingsSections(true, false, false, true);
-    expect(plain.map((section) => section.slug)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `notifications`]);
+    expect(plain.map((section) => section.slug)).toEqual([`profile`, `billing`, `organisation`, `data`, `appearance`, `notifications`, `keybindings`]);
     expect(settingsGroups(plain).map((group) => group.key)).toEqual([`account`, `preferences`]);
     expect(settingsSections(true, false, false).map((section) => section.slug)).toContain(`tokens`);
 });

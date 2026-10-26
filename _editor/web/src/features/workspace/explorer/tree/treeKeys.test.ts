@@ -29,13 +29,16 @@ const view = (lead: string | null, over: Partial<KeyView> = {}): KeyView => ({
     lead,
     selected: 1,
     entryAt: (path) => INDEX.get(path),
+    isMac: false,
     ...over,
 });
+const mac = (lead: string | null, over: Partial<KeyView> = {}): KeyView => view(lead, { isMac: true, ...over });
 const press = (key: string, mods: Partial<Omit<KeyPress, `key`>> = {}): KeyPress => ({
     key,
     shiftKey: false,
     ctrlKey: false,
     metaKey: false,
+    altKey: false,
     ...mods,
 });
 const NONE: KeyIntent = { kind: `none` };
@@ -51,11 +54,15 @@ describe(`travelling the rows`, () => {
         expect(keyIntent(press(`ArrowDown`), view(null, { order: [] }))).toEqual(NONE);
     });
 
-    it(`widens with Shift and moves the cursor alone with Ctrl or Cmd, Shift winning over both`, () => {
+    it(`widens with Shift and moves the cursor alone with Ctrl, Shift winning over it`, () => {
         expect(keyIntent(press(`ArrowDown`, { shiftKey: true }), view(`src`))).toEqual({ kind: `extend`, path: `src/api` });
         expect(keyIntent(press(`ArrowDown`, { ctrlKey: true }), view(`src`))).toEqual({ kind: `lead`, path: `src/api` });
-        expect(keyIntent(press(`ArrowUp`, { metaKey: true }), view(`src/api`))).toEqual({ kind: `lead`, path: `src` });
         expect(keyIntent(press(`ArrowDown`, { shiftKey: true, ctrlKey: true }), view(`src`))).toEqual({ kind: `extend`, path: `src/api` });
+    });
+
+    it(`leaves Alt with an arrow to the shell, which walks the rail on it`, () => {
+        expect(keyIntent(press(`ArrowUp`, { altKey: true }), view(`src/api`))).toBeUndefined();
+        expect(keyIntent(press(`ArrowDown`, { altKey: true }), view(`src`))).toBeUndefined();
     });
 
     it(`jumps to either end with Home and End, widening with Shift, and has nowhere to go in an empty tree`, () => {
@@ -110,7 +117,7 @@ describe(`the verbs`, () => {
         expect(keyIntent(press(`Escape`), view(null))).toEqual({ kind: `deselect` });
         expect(keyIntent(press(`Delete`), view(null))).toEqual({ kind: `delete` });
         expect(keyIntent(press(`a`, { ctrlKey: true }), view(null))).toEqual({ kind: `selectAll` });
-        expect(keyIntent(press(`A`, { metaKey: true }), view(null))).toEqual({ kind: `selectAll` });
+        expect(keyIntent(press(`A`, { metaKey: true }), mac(null))).toEqual({ kind: `selectAll` });
     });
 
     it(`leaves the page every key the tree does not own, the clipboard's chords included`, () => {
@@ -119,5 +126,48 @@ describe(`the verbs`, () => {
                 keyIntent(key, view(`src`)),
             ),
         ).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    });
+});
+
+// A MacBook has no Delete key and its F2 is behind fn, so a Mac's tree answers as Finder does.
+describe(`on a Mac`, () => {
+    it(`renames on Return and previews on Space, as Finder does`, () => {
+        expect(keyIntent(press(`Enter`), mac(`src/main.ts`))).toEqual({ kind: `rename`, path: `src/main.ts` });
+        expect(keyIntent(press(`Enter`), mac(`src/main.ts`, { selected: 2 }))).toEqual(NONE);
+        expect(keyIntent(press(` `), mac(`src/main.ts`))).toEqual({ kind: `activate`, entry: MAIN });
+        // F2 still renames, for a keyboard that has one.
+        expect(keyIntent(press(`F2`), mac(`src/main.ts`))).toEqual({ kind: `rename`, path: `src/main.ts` });
+    });
+
+    it(`opens on ⌘↓ and goes up to the folder on ⌘↑`, () => {
+        expect(keyIntent(press(`ArrowDown`, { metaKey: true }), mac(`src/main.ts`))).toEqual({ kind: `activate`, entry: MAIN });
+        expect(keyIntent(press(`ArrowUp`, { metaKey: true }), mac(`src/main.ts`))).toEqual({ kind: `select`, path: `src` });
+        // A row at the top has no folder to go up to.
+        expect(keyIntent(press(`ArrowUp`, { metaKey: true }), mac(`src`))).toEqual(NONE);
+    });
+
+    it(`jumps to the first and last rows on ⌥↑ and ⌥↓, widening with Shift`, () => {
+        expect(keyIntent(press(`ArrowUp`, { altKey: true }), mac(`src/main.ts`))).toEqual({ kind: `select`, path: `src` });
+        expect(keyIntent(press(`ArrowDown`, { altKey: true }), mac(`src`))).toEqual({ kind: `select`, path: `README.md` });
+        expect(keyIntent(press(`ArrowDown`, { altKey: true, shiftKey: true }), mac(`src`))).toEqual({ kind: `extend`, path: `README.md` });
+    });
+
+    it(`deletes on ⌘⌫ and keeps Delete, and leaves a bare ⌫ alone`, () => {
+        expect(keyIntent(press(`Backspace`, { metaKey: true }), mac(`src/main.ts`))).toEqual({ kind: `delete` });
+        expect(keyIntent(press(`Delete`), mac(`src/main.ts`))).toEqual({ kind: `delete` });
+        expect(keyIntent(press(`Backspace`), mac(`src/main.ts`))).toBeUndefined();
+    });
+
+    it(`duplicates on ⌘D and moves what was copied on ⌥⌘V, by the key whatever Option typed`, () => {
+        expect(keyIntent(press(`d`, { metaKey: true, code: `KeyD` }), mac(`src/main.ts`))).toEqual({ kind: `duplicate` });
+        expect(keyIntent(press(`√`, { metaKey: true, altKey: true, code: `KeyV` }), mac(`src`))).toEqual({ kind: `moveHere` });
+        // Elsewhere neither chord is the tree's.
+        expect(keyIntent(press(`d`, { ctrlKey: true, code: `KeyD` }), view(`src/main.ts`))).toBeUndefined();
+    });
+
+    it(`leaves ⌃ to the text keys and ⌘C/⌘V to the clipboard`, () => {
+        expect(keyIntent(press(`a`, { ctrlKey: true, code: `KeyA` }), mac(null))).toBeUndefined();
+        expect(keyIntent(press(`c`, { metaKey: true, code: `KeyC` }), mac(`src`))).toBeUndefined();
+        expect(keyIntent(press(`v`, { metaKey: true, code: `KeyV` }), mac(`src`))).toBeUndefined();
     });
 });

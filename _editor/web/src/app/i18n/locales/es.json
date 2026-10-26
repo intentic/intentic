@@ -3309,8 +3309,8 @@
             "replacedSend": "se reemplaza al enviar.",
             "runMessageThrough": "Pasar este mensaje por",
             "sandboxBusy": "Sandbox ocupado",
-            "shiftEnterNewLine": "Shift+Enter para una nueva línea",
-            "shiftEnterOrNewAgent": "Shift+Enter para una nueva línea, {chord} para un nuevo agente",
+            "shiftEnterNewLine": "{newline} para una nueva línea",
+            "shiftEnterOrNewAgent": "{newline} para una nueva línea, {chord} para un nuevo agente",
             "startConversation": "Empieza una conversación con {providerName}.",
             "startConversationAny": "Empieza una conversación.",
             "talkHandsFree": "Habla con las manos libres",
@@ -3333,7 +3333,8 @@
             "plain": {
                 "startConversation": "Empieza una conversación con tu asistente.",
                 "moreSettings": "Más opciones"
-            }
+            },
+            "shiftEnterKeys": "Shift+Enter"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "Esta cuenta necesita volver a conectarse.",
@@ -10642,10 +10643,17 @@
         },
         "settingsKeybindings": {
             "alsoOn": "También en",
+            "appWindowNote": "En una pestaña del navegador, el navegador se queda con {close}, {reopen} y {next}. Instalado como app, Intentic los usa para sus propias pestañas.",
             "cancelRecording": "Cancelar la grabación",
             "ext": "ext",
             "filterCommands": "Filtrar comandos…",
+            "installApp": "Instalar como app",
+            "keptByBrowser": "Lo usa el navegador",
+            "keptByMacos": "Lo usa macOS",
+            "keptBySystem": "Lo usa el sistema",
             "noCommandsMatch": "Ningún comando coincide con «{query}».",
+            "optionIsMeta": "Usar Opción como Meta",
+            "optionIsMetaHint": "⌥B, ⌥F y ⌥. llegan a la shell como saltos de palabra y el último argumento, en lugar de escribir ∫, ƒ y ≥.",
             "pressKeysEsc": "Pulsa las teclas… (Esc)",
             "recordShortcut": "Grabar el atajo",
             "recordShortcut2": "Grabar el atajo de {label}",
@@ -10653,9 +10661,11 @@
             "resetDefault": "Restablecer",
             "resetToDefault2": "Restablecer {label} al valor por defecto",
             "shortcutClash": "Atajo repetido",
+            "terminal": "Terminal",
             "unbind": "Desasignar",
             "unbind2": "Desasignar {label}",
-            "unbound": "Sin asignar"
+            "unbound": "Sin asignar",
+            "worksInApp": "Funciona en la app"
         },
         "settingsNotifications": {
             "appIcon": "Barra de tareas y bandeja",
@@ -11471,7 +11481,9 @@
             "dockBack": "Volver a acoplar",
             "dockBackToSide": "Volver a acoplar al lateral",
             "dockToRail": "Acoplar a la barra",
+            "keyboardShortcuts": "Atajos de teclado",
             "moveIntoNewWindow": "Pasar a una ventana nueva",
+            "settings": "Ajustes",
             "togglePanel": "Alternar el panel"
         },
         "windowControls": {
@@ -11498,6 +11510,10 @@
             "results": "Ajustes que coinciden",
             "noMatches": "Ningún ajuste coincide con «{query}».",
             "searchEverything": "Buscar «{query}» en todo"
+        },
+        "shortcutSheet": {
+            "change": "Cambiar en Ajustes",
+            "general": "General"
         }
     },
     "terminal": {
@@ -11515,6 +11531,7 @@
             "changeColor2": "Cambiar el color…",
             "changeIcon": "Cambiar el icono…",
             "changeIcon2": "Cambiar el icono…",
+            "clear": "Limpiar",
             "closeFind": "Cerrar la búsqueda",
             "closeWindow": "Cerrar ventana",
             "copyAll": "Copiar todo",
@@ -12321,8 +12338,11 @@
             "download": "Descargar",
             "downloadItems": "Descargar {count} elementos como ZIP",
             "downloadZip": "Descargar como ZIP",
+            "duplicate": "Duplicar",
+            "duplicateItems": "Duplicar {count} elemento | Duplicar {count} elementos",
             "extract": "Extraer",
             "keepFolder": "Conservar la carpeta",
+            "moveHere": "Mover aquí",
             "newFile": "Archivo nuevo",
             "newFolder": "Carpeta nueva",
             "openTerminal": "Abrir terminal"
@@ -12542,7 +12562,6 @@
             "whatHappened": "Qué pasó",
             "you": "tú",
             "message": "Mensaje",
-            "messageCtrlEnter": "Mensaje (Ctrl+Enter para hacer commit)",
             "agentId": "Agente {id}",
             "commitAll": "Commit de todo",
             "blockedByConflicts": "Resuelve antes los conflictos: git no puede hacer commit mientras haya una ruta sin fusionar.",
@@ -12569,7 +12588,8 @@
             "unstageFrom": "Quitar del stage {count} archivo de {origin} | Quitar del stage {count} archivos de {origin}",
             "stageFrom": "Añadir al stage {count} archivo de {origin} | Añadir al stage {count} archivos de {origin}",
             "messageBeingWritten": "se está escribiendo su mensaje de commit",
-            "namesTheCommit": "da nombre al commit"
+            "namesTheCommit": "da nombre al commit",
+            "messageCommitKeys": "Mensaje ({keys} para hacer commit)"
         },
         "rowActions": {
             "changedSinceOn": "Cambiados desde que se activaron",

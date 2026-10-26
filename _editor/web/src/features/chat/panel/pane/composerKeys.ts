@@ -7,6 +7,7 @@ import { type InputHistory, inputHistoryFor, recallStep } from "../../drafts/inp
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import type { ComposerPopovers } from "./composerPopovers";
+import { composingKey, primaryHeld } from "@intentic/ui/keys";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 
 // One pane's composer keyboard: who gets each key, in order (an open list, then recall, then Escape's own ladder, then
@@ -88,10 +89,13 @@ const composerHintOf = (host: KeysHost): ComputedRef<string> => {
         if (draft.value === ``) {
             return t(`chat.chatPane.atForFilesAndSettings`);
         }
-        // The one place anyone learns the new-agent key, said only while it would open one.
+        // The one place anyone learns the new-agent key, said only while it would open one. A Mac reads the keys as its
+        // menus draw them (⇧↩, ⌘↩); elsewhere as the reader's language names them.
+        const isMac = isApplePlatform();
+        const newline = isMac ? formatChord(`Shift+Enter`, true) : t(`chat.chatPane.shiftEnterKeys`);
         return host.send.freshAgent.offered.value
-            ? t(`chat.chatPane.shiftEnterOrNewAgent`, { chord: formatChord(`Mod+Enter`, isApplePlatform()) })
-            : t(`chat.chatPane.shiftEnterNewLine`);
+            ? t(`chat.chatPane.shiftEnterOrNewAgent`, { newline, chord: formatChord(`Mod+Enter`, isMac) })
+            : t(`chat.chatPane.shiftEnterNewLine`, { newline });
     });
 };
 
@@ -178,8 +182,9 @@ export const useComposerKeys = (host: KeysHost) => {
 
     return {
         onKeydown: (event: KeyboardEvent): void => {
-            // Never submit mid-IME-composition: CJK candidates confirm with Enter.
-            if (event.isComposing) {
+            // Never submit mid-IME-composition: CJK candidates confirm with Enter, which Safari delivers after the
+            // composition ended (composingKey).
+            if (composingKey(event)) {
                 return;
             }
             if (popoverKeydown(event)) {
@@ -201,7 +206,7 @@ export const useComposerKeys = (host: KeysHost) => {
             }
             event.preventDefault();
             // A draft that runs as a slash command acts on this chat, never a new one.
-            if ((event.metaKey || event.ctrlKey) && popovers.commandRun.value === undefined && host.send.freshAgent.start()) {
+            if (primaryHeld(event) && popovers.commandRun.value === undefined && host.send.freshAgent.start()) {
                 return;
             }
             host.send.submit();

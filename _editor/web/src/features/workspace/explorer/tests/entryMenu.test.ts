@@ -1,7 +1,7 @@
 import type { MenuItem } from "primevue/menuitem";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { type EntryMenuInput, type EntryVerbs, entryMenuItems, VERB_ROUTES, ZIP_ROUTE } from "../entryMenu";
+import { type EntryMenuInput, type EntryVerbs, entryKeys, entryMenuItems, VERB_ROUTES, ZIP_ROUTE } from "../entryMenu";
 
 const file: WorkspaceTreeEntry = { name: `a.ts`, path: `src/a.ts`, type: `file` };
 const dir: WorkspaceTreeEntry = { name: `src`, path: `src`, type: `dir`, children: [] };
@@ -290,5 +290,31 @@ describe(`the entry menu`, () => {
         ]);
         // Nor on a surface with no way to an agent.
         expect(labels(entryMenuItems(input()))).not.toContain(`Ask an agent about this`);
+    });
+});
+
+// The keys a reader learns from the menu: Finder's on a Mac, Explorer's and VS Code's elsewhere, and none on a surface
+// that names none (a phone).
+describe(`the keys beside the verbs`, () => {
+    const shortcuts = (items: readonly MenuItem[]): string[] =>
+        items.filter((item) => item[`shortcut`] !== undefined).map((item) => `${String(item.label)} ${String(item[`shortcut`])}`);
+
+    it(`draws Finder's keys on a Mac, with Duplicate and Move Here`, () => {
+        const menu = entryMenuItems(
+            input({ keys: entryKeys(true), clipboardFull: true, clipboardCopied: true, verbs: { ...verbs(), duplicate: jest.fn(), moveHere: jest.fn() } }),
+        );
+        expect(shortcuts(menu)).toEqual([`Rename ↩`, `Delete ⌘⌫`, `Cut ⌘X`, `Copy ⌘C`, `Duplicate ⌘D`, `Paste ⌘V`, `Move Here ⌥⌘V`]);
+    });
+
+    it(`draws Explorer's keys elsewhere, where a cut is how a file moves`, () => {
+        const menu = entryMenuItems(input({ keys: entryKeys(false), clipboardFull: true, clipboardCopied: true, verbs: { ...verbs(), duplicate: jest.fn() } }));
+        expect(shortcuts(menu)).toEqual([`Rename F2`, `Delete Delete`, `Cut Ctrl+X`, `Copy Ctrl+C`, `Paste Ctrl+V`]);
+        expect(labels(menu)).not.toContain(`Move Here`);
+    });
+
+    it(`offers Move Here only while the clipboard holds a copy, and draws no keys unless asked`, () => {
+        const moving = { ...verbs(), moveHere: jest.fn() };
+        expect(labels(entryMenuItems(input({ clipboardFull: true, clipboardCopied: false, verbs: moving })))).not.toContain(`Move Here`);
+        expect(shortcuts(entryMenuItems(input({ clipboardFull: true })))).toEqual([]);
     });
 });

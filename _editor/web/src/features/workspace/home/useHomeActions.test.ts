@@ -17,6 +17,7 @@ const uploads = { enqueue: jest.fn(() => Promise.resolve()), enqueueFromDataTran
 jest.mock(`../../../models/workspace/tree/useWorkspaceTree`, () => ({ useWorkspaceTree: () => current.store }));
 jest.mock(`../files/upload/useUploadQueue`, () => ({ useUploadQueue: () => uploads }));
 const { useHomeActions } = await import(`./useHomeActions`);
+const { homeKeyVerb } = await import(`./homeKeys`);
 
 // The home open on `docs`, its three tiles in reading order.
 const homeOver = () => {
@@ -28,7 +29,7 @@ const homeOver = () => {
     const el = document.createElement(`div`);
     document.body.append(el);
     const home = effectScope().run(() =>
-        useHomeActions({ dir: ref(`docs`), order, lead, host: ref(el), open, openCreated: jest.fn(), cover, dirActions: () => [] }),
+        useHomeActions({ dir: ref(`docs`), order, lead, host: ref(el), open, up: jest.fn(), openCreated: jest.fn(), cover, dirActions: () => [] }),
     )!;
     const marked = (): string[] => [...home.selection.value];
     return { home, order, lead, open, cover, store: current.store, marked };
@@ -152,5 +153,41 @@ describe(`the verbs`, () => {
             [[[`docs/a.md`, `docs/b.md`]]],
             [],
         ]);
+    });
+});
+
+// The keys a file browser answers on each platform: Explorer's everywhere, Finder's on a Mac (homeKeys.ts).
+describe(`the tiles' keys`, () => {
+    const press = (name: string, init: Partial<KeyboardEvent> = {}) => ({ key: name, code: ``, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...init });
+    const named = () => {
+        const verbs = { remove: jest.fn(), rename: jest.fn(), selectAll: jest.fn(), duplicate: jest.fn(), moveHere: jest.fn(), open: jest.fn(), up: jest.fn() };
+        const which = (verb: (() => void) | undefined): string | undefined => Object.entries(verbs).find(([, fn]) => fn === verb)?.[0];
+        return { verbs, which };
+    };
+
+    it(`deletes on Delete, renames on F2 and selects all with the primary modifier everywhere`, () => {
+        const { verbs, which } = named();
+        expect([press(`Delete`), press(`F2`), press(`a`, { ctrlKey: true, code: `KeyA` }), press(`Enter`)].map((pressed) => which(homeKeyVerb(pressed, false, verbs)))).toEqual([
+            `remove`,
+            `rename`,
+            `selectAll`,
+            undefined,
+        ]);
+    });
+
+    it(`answers Finder's keys on a Mac`, () => {
+        const { verbs, which } = named();
+        const keys = [
+            press(`Enter`),
+            press(`Backspace`, { metaKey: true }),
+            press(`d`, { metaKey: true, code: `KeyD` }),
+            press(`√`, { metaKey: true, altKey: true, code: `KeyV` }),
+            press(`ArrowDown`, { metaKey: true }),
+            press(`ArrowUp`, { metaKey: true }),
+            press(`a`, { metaKey: true, code: `KeyA` }),
+            // ⌃A is a text key on a Mac, never select all.
+            press(`a`, { ctrlKey: true, code: `KeyA` }),
+        ];
+        expect(keys.map((pressed) => which(homeKeyVerb(pressed, true, verbs)))).toEqual([`rename`, `remove`, `duplicate`, `moveHere`, `open`, `up`, `selectAll`, undefined]);
     });
 });

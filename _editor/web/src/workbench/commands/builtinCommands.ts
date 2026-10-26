@@ -1,10 +1,12 @@
 import type { Disposable } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { isApplePlatform } from "@intentic/ui/keys";
 import { desktopApp } from "../../app/environments/desktop";
 import { useVocabulary } from "../views/vocabulary";
 import { ACCOUNT, AGENTS, BROWSERS, CHAT, GO_TO, SANDBOX, SIDE_PANEL, TERMINAL, WORKSPACE } from "./categories";
 import { type CommandRegistration, commands, registerCommand } from "./useCommands";
+import { inAppWindow } from "./windowKind";
 
 // EVERY BUILT-IN COMMAND WITH A FIXED ID, declared once: its name, family, glyph, default chord and the condition that
 // gates that chord. The component that can run one binds a handler to it by id (registerBuiltin) while it is mounted;
@@ -14,12 +16,34 @@ import { type CommandRegistration, commands, registerCommand } from "./useComman
 // Commands derived from live state (a destination per extension view, one per repository) are not here: they have no
 // fixed id to declare, and stay the registry's alone.
 
-export interface CommandDeclaration {
+// A Mac gets chords of its own where the shared one is a Windows idiom (⌃⇧X to close a tab, a PageDown a laptop does
+// not have), and an app window gets the chords a browser tab may not take (⌘W, ⌘⇧T, ⌘⇧]). The web README's "Keyboard
+// shortcuts per platform" has the reasons.
+export interface PlatformChords {
+    /** Windows and Linux, and every column below that names nothing of its own. */
+    readonly keybinding?: string;
+    /** A Mac in a browser tab, where it differs; `null` leaves the command unbound there. */
+    readonly mac?: string | null;
+    /** A Mac in an app window (inAppWindow), where it differs from `mac`. */
+    readonly macApp?: string;
+}
+
+/** The chord a declaration defaults to on this platform, in this kind of window. */
+export const declaredChord = (chords: PlatformChords, isMac: boolean = isApplePlatform(), app: boolean = inAppWindow()): string | undefined => {
+    if (!isMac) {
+        return chords.keybinding;
+    }
+    if (app && chords.macApp !== undefined) {
+        return chords.macApp;
+    }
+    return chords.mac === undefined ? chords.keybinding : (chords.mac ?? undefined);
+};
+
+export interface CommandDeclaration extends PlatformChords {
     /** Read when drawn, so a language switch reaches it. */
     readonly title: () => string;
     readonly category?: string;
     readonly icon?: string;
-    readonly keybinding?: string;
     readonly when?: string;
     /** Where the command exists at all, when that is not everywhere; the Keyboard page leaves it off elsewhere. */
     readonly offered?: () => boolean;
@@ -28,16 +52,37 @@ export interface CommandDeclaration {
 const onSurface = (surface: string): string => `tabSurface == '${surface}'`;
 const REVIEW_WHEN = `agentReviewOnScreen && !editableTarget`;
 
+// The tab family's chords, one set for the workspace, chat, side panel and terminal strips. On a Mac in a tab, ⌥⌘] and
+// ⌥⌘[ stand in for ⌘⇧] and ⌘⇧[ (the browser's), and ⌃W for ⌘W: Safari's ⌥⌘W closes every other browser tab.
+const NEXT_TAB: PlatformChords = { keybinding: `Alt+PageDown`, mac: `Mod+Alt+]`, macApp: `Mod+Shift+]` };
+const PREVIOUS_TAB: PlatformChords = { keybinding: `Alt+PageUp`, mac: `Mod+Alt+[`, macApp: `Mod+Shift+[` };
+const CLOSE_TAB: PlatformChords = { keybinding: `Ctrl+Shift+X`, mac: `Ctrl+W`, macApp: `Mod+W` };
+// Splitting on a Mac: ⌘\, the chord Ctrl+Shift+\ stands in for elsewhere to keep clear of the shell's Ctrl+\
+// (SIGQUIT). ⌘ never reaches a shell.
+const SPLIT: PlatformChords = { mac: `Mod+\\` };
+
 // Alt+1…9, one per place in the sandbox switcher's list (useSwitchCommands.ts); the live row names the sandbox there.
 const switchSlot = (slot: number): CommandDeclaration => ({
     title: () => t(`sandbox.sandboxSwitcher.switchToSlot`, { slot }),
     category: SANDBOX,
     icon: `server`,
     keybinding: `Alt+${slot}`,
+    // An app window frees ⌘1–9, the chord a Mac uses for the Nth of anything (Slack's workspaces, Safari's favourites).
+    macApp: `Mod+${slot}`,
 });
 
 export const BUILTIN_COMMANDS = {
-    "view.home": { title: () => t(`home.open`), category: GO_TO, icon: `th-large`, keybinding: `Mod+Alt+H` },
+    // ⌥⌘H is the Mac's Hide Others, taken by the system before any page; ⇧⌘H is Finder's Home.
+    "view.home": { title: () => t(`home.open`), category: GO_TO, icon: `th-large`, keybinding: `Mod+Alt+H`, mac: `Mod+Shift+H` },
+    // A Mac app's settings are ⌘, everywhere; a tab leaves it to the browser's own settings.
+    "view.settings": { title: () => t(`shell.useShellCommands.settings`), category: GO_TO, icon: `cog`, macApp: `Mod+,` },
+    // The sheet of every chord this window answers (ShortcutSheet.vue). Off a field, where Mod+/ comments a line.
+    "workbench.shortcuts": {
+        title: () => t(`shell.useShellCommands.keyboardShortcuts`),
+        icon: `bolt`,
+        keybinding: `Mod+/`,
+        when: `!editableTarget`,
+    },
     // The shell (useShellCommands.ts, ShellDesktop.vue).
     "workspace.goToAnything": { title: () => t(`shell.useShellCommands.anything`), category: GO_TO, icon: `search`, keybinding: `Mod+P` },
     // The one command with no family: it is the list the others are read from.
@@ -84,9 +129,9 @@ export const BUILTIN_COMMANDS = {
     },
 
     // The side panel's tabs (SidePanel.vue).
-    "side.nextTab": { title: () => t(`ui.action.next`), category: SIDE_PANEL, keybinding: `Alt+PageDown`, when: onSurface(`side`) },
-    "side.previousTab": { title: () => t(`shell.sidePanel.previous`), category: SIDE_PANEL, keybinding: `Alt+PageUp`, when: onSurface(`side`) },
-    "side.closeTab": { title: () => t(`ui.action.close`), category: SIDE_PANEL, icon: `times`, keybinding: `Ctrl+Shift+X`, when: onSurface(`side`) },
+    "side.nextTab": { title: () => t(`ui.action.next`), category: SIDE_PANEL, ...NEXT_TAB, when: onSurface(`side`) },
+    "side.previousTab": { title: () => t(`shell.sidePanel.previous`), category: SIDE_PANEL, ...PREVIOUS_TAB, when: onSurface(`side`) },
+    "side.closeTab": { title: () => t(`ui.action.close`), category: SIDE_PANEL, icon: `times`, ...CLOSE_TAB, when: onSurface(`side`) },
     "side.closeOtherTabs": { title: () => t(`shell.sidePanel.closeOthers`), category: SIDE_PANEL, icon: `times`, keybinding: `Ctrl+Shift+,`, when: onSurface(`side`) },
     "side.closeAllTabs": { title: () => t(`shell.sidePanel.closeAll`), category: SIDE_PANEL, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, when: onSurface(`side`) },
     "side.keepTab": { title: () => t(`ui.action.keepOpen`), category: SIDE_PANEL, icon: `pin` },
@@ -96,7 +141,7 @@ export const BUILTIN_COMMANDS = {
     // The chat's tabs (ChatTabs.vue). Close Finished, Pin, Archive, Reopen, Close Pane and Switch are unbound: no file-tab
     // twin, and no chord left free for them; the palette and this page reach them.
     "chat.rename": { title: () => t(`ui.action.renameEllipsis`), category: CHAT, icon: `pencil`, keybinding: `F2`, when: onSurface(`chat`) },
-    "chat.closeTab": { title: () => t(`ui.action.close`), category: CHAT, icon: `times`, keybinding: `Ctrl+Shift+X`, when: onSurface(`chat`) },
+    "chat.closeTab": { title: () => t(`ui.action.close`), category: CHAT, icon: `times`, ...CLOSE_TAB, when: onSurface(`chat`) },
     "chat.closeOtherTabs": { title: () => t(`chat.words.closeOthers`), category: CHAT, icon: `times`, keybinding: `Ctrl+Shift+,`, when: onSurface(`chat`) },
     "chat.closeTabsToRight": { title: () => t(`ui.action.closeToRight`), category: CHAT, icon: `times`, keybinding: `Ctrl+Shift+.`, when: onSurface(`chat`) },
     "chat.closeFinishedTabs": { title: () => t(`chat.words.closeFinished`), category: CHAT, icon: `times`, when: onSurface(`chat`) },
@@ -105,8 +150,8 @@ export const BUILTIN_COMMANDS = {
     "chat.archive": { title: () => t(`chat.chatTabs.archiveChat`), category: CHAT, icon: `box`, when: onSurface(`chat`) },
     "chat.reopenClosed": { title: () => t(`chat.words.reopenClosedChat`), category: CHAT, icon: `history`, when: onSurface(`chat`) },
     "chat.nextNeedsYou": { title: () => t(`chat.chatTabs.nextNeedsYou`), category: CHAT, icon: `exclamation-circle` },
-    "chat.nextTab": { title: () => t(`ui.action.next`), category: CHAT, keybinding: `Alt+PageDown`, when: onSurface(`chat`) },
-    "chat.previousTab": { title: () => t(`chat.chatTabs.previous`), category: CHAT, keybinding: `Alt+PageUp`, when: onSurface(`chat`) },
+    "chat.nextTab": { title: () => t(`ui.action.next`), category: CHAT, ...NEXT_TAB, when: onSurface(`chat`) },
+    "chat.previousTab": { title: () => t(`chat.chatTabs.previous`), category: CHAT, ...PREVIOUS_TAB, when: onSurface(`chat`) },
     // VSCode's split chord for a different chat, not a second view: a chat carries its own composer.
     "chat.splitView": { title: () => t(`chat.chatTabs.openNextBeside`), category: CHAT, keybinding: `Mod+\\`, when: onSurface(`chat`) },
     "chat.closePane": { title: () => t(`chat.words.closePane`), category: CHAT, when: onSurface(`chat`) },
@@ -125,13 +170,22 @@ export const BUILTIN_COMMANDS = {
     // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
     "workspace.codebaseHealth": { title: () => t(`workspace.workspaceDesktop.showCodebaseHealth`), category: WORKSPACE, icon: `wave-pulse` },
     "workspace.showHome": { title: () => t(`workspace.workspaceDesktop.showHome2`), category: WORKSPACE, icon: `th-large` },
-    "workspace.toggleSidebar": { title: () => t(`workspace.workspaceDesktop.toggleExplorer2`), category: WORKSPACE, icon: `bars`, keybinding: `Ctrl+Shift+B` },
+    // ⌘B on a Mac, as in VS Code; never from a field, where ⌘B is bold.
+    "workspace.toggleSidebar": {
+        title: () => t(`workspace.workspaceDesktop.toggleExplorer2`),
+        category: WORKSPACE,
+        icon: `bars`,
+        keybinding: `Ctrl+Shift+B`,
+        mac: `Mod+B`,
+        when: `!isMac || !editableTarget`,
+    },
     // One chord toggles both directions; Ctrl+Shift+\ avoids bare Ctrl+\, which is SIGQUIT in a focused terminal.
     "workspace.splitEditor": {
         title: () => t(`workspace.workspaceDesktop.openTabToSide`),
         category: WORKSPACE,
         icon: `split-columns`,
         keybinding: `Ctrl+Shift+\\`,
+        ...SPLIT,
         when: onSurface(`workspace`),
     },
     "workspace.unsplitEditor": { title: () => t(`workspace.workspaceDesktop.closeSplit`), category: WORKSPACE, icon: `split-columns` },
@@ -139,13 +193,13 @@ export const BUILTIN_COMMANDS = {
     "workspace.toggleIgnored": { title: () => t(`workspace.workspaceDesktop.toggleIgnoredFiles`), category: WORKSPACE, icon: `eye` },
     "workspace.toggleTests": { title: () => t(`workspace.workspaceDesktop.toggleTestFiles`), category: WORKSPACE, icon: `filter` },
     // Shared tab family with chat/terminal (tabSurface.ts resolves by focus); workspace is the fallback surface.
-    "workspace.nextTab": { title: () => t(`workspace.workspaceDesktop.nextTab`), category: WORKSPACE, keybinding: `Alt+PageDown`, when: onSurface(`workspace`) },
-    "workspace.previousTab": { title: () => t(`workspace.workspaceDesktop.previousTab`), category: WORKSPACE, keybinding: `Alt+PageUp`, when: onSurface(`workspace`) },
+    "workspace.nextTab": { title: () => t(`workspace.workspaceDesktop.nextTab`), category: WORKSPACE, ...NEXT_TAB, when: onSurface(`workspace`) },
+    "workspace.previousTab": { title: () => t(`workspace.workspaceDesktop.previousTab`), category: WORKSPACE, ...PREVIOUS_TAB, when: onSurface(`workspace`) },
     "workspace.closeTab": {
         title: () => t(`workspace.workspaceDesktop.closeTab`),
         category: WORKSPACE,
         icon: `times`,
-        keybinding: `Ctrl+Shift+X`,
+        ...CLOSE_TAB,
         when: onSurface(`workspace`),
     },
     "workspace.closeOtherTabs": {
@@ -169,12 +223,15 @@ export const BUILTIN_COMMANDS = {
         keybinding: `Ctrl+Shift+Backspace`,
         when: onSurface(`workspace`),
     },
-    // Ctrl+Shift+O ("reOpen"), not VSCode's Ctrl+Shift+T: that reopens the browser's own tab and isn't cancellable.
+    // Ctrl+Shift+O ("reOpen"), not VSCode's Ctrl+Shift+T: that reopens the browser's own tab and isn't cancellable. A
+    // Mac's browser leaves ⌃⇧T alone, and an app window gives back the real ⌘⇧T.
     "workspace.reopenClosedTab": {
         title: () => t(`workspace.workspaceDesktop.reopenClosedTab`),
         category: WORKSPACE,
         icon: `undo`,
         keybinding: `Ctrl+Shift+O`,
+        mac: `Ctrl+Shift+T`,
+        macApp: `Mod+Shift+T`,
         when: onSurface(`workspace`),
     },
     "workspace.refresh": { title: () => t(`workspace.workspaceDesktop.refreshFiles`), category: WORKSPACE, icon: `refresh` },
@@ -198,9 +255,26 @@ export const BUILTIN_COMMANDS = {
     "terminal.changeIcon": { title: () => t(`terminal.terminalPanel.changeIcon2`), category: TERMINAL, icon: `star` },
     "terminal.join": { title: () => t(`terminal.terminalPanel.joinSelected`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+Shift+G` },
     "terminal.unsplit": { title: () => t(`terminal.terminalPanel.unsplit`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+Shift+U` },
-    "terminal.nextTab": { title: () => t(`ui.action.next`), category: TERMINAL, keybinding: `Alt+PageDown`, when: onSurface(`terminal`) },
-    "terminal.previousTab": { title: () => t(`terminal.terminalPanel.previous`), category: TERMINAL, keybinding: `Alt+PageUp`, when: onSurface(`terminal`) },
-    "terminal.split": { title: () => t(`terminal.terminalPanel.split`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+Shift+5` },
+    "terminal.nextTab": { title: () => t(`ui.action.next`), category: TERMINAL, ...NEXT_TAB, when: onSurface(`terminal`) },
+    "terminal.previousTab": { title: () => t(`terminal.terminalPanel.previous`), category: TERMINAL, ...PREVIOUS_TAB, when: onSurface(`terminal`) },
+    // ⌘\ on a Mac (VS Code's), gated to this panel there since the chat and the workspace split on the same chord.
+    "terminal.split": {
+        title: () => t(`terminal.terminalPanel.split`),
+        category: TERMINAL,
+        icon: `code`,
+        keybinding: `Ctrl+Shift+5`,
+        ...SPLIT,
+        when: `!isMac || ${onSurface(`terminal`)}`,
+    },
+    // ⌘K, as every Mac terminal clears; elsewhere unbound, since Ctrl+K is the shell's kill-to-end-of-line.
+    "terminal.clear": {
+        title: () => t(`terminal.terminalPanel.clear`),
+        category: TERMINAL,
+        icon: `eraser`,
+        mac: `Mod+K`,
+        when: onSurface(`terminal`),
+    },
+    // ⌃⇧X on a Mac too: ⌃W there is the shell's delete-word, and killing a shell is no tab to close by reflex.
     "terminal.kill": { title: () => t(`terminal.terminalPanel.kill`), category: TERMINAL, icon: `trash`, keybinding: `Ctrl+Shift+X`, when: onSurface(`terminal`) },
     "terminal.killAll": {
         title: () => t(`terminal.terminalPanel.killAll`),
@@ -289,7 +363,10 @@ export const builtinRegistration = (command: BuiltinCommand, handler: CommandReg
         },
         category: declared.category,
         icon: declared.icon,
-        keybinding: binding.keybinding ?? declared.keybinding,
+        // A getter too: an app window's chord is read per keystroke, so a window installed mid-session follows.
+        get keybinding(): string | undefined {
+            return binding.keybinding ?? declaredChord(declared);
+        },
         when: declared.when,
         handler,
     };
@@ -309,7 +386,9 @@ const declaredRow = (command: string, declared: CommandDeclaration): KeymapComma
             return declared.title();
         },
         category: declared.category,
-        keybinding: declared.keybinding,
+        get keybinding(): string | undefined {
+            return declaredChord(declared);
+        },
         when: declared.when,
 });
 

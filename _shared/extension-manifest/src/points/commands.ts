@@ -24,6 +24,16 @@ export const CommandContributionSchema = z.object({
             'A global keyboard shortcut, e.g. "Mod+Shift+K" — `Mod` is ⌘ on Apple and Ctrl elsewhere. Declared here because a global shortcut is consequential: the owner approves it at install, and the host binds only what was approved.',
         )
         .meta({ power: { key: "keybinding:${command}", sentence: 'the global shortcut ${keybinding} ("${title}")' } }),
+    // The same shortcut as a Mac spells it, where `keybinding` is a Windows idiom there; approved on its own, since it is a
+    // second chord the extension claims.
+    mac: z
+        .string()
+        .regex(/^\S+$/)
+        .optional()
+        .describe(
+            'The shortcut on a Mac, where it differs from `keybinding`, e.g. "Mod+Alt+K" for a `keybinding` of "Ctrl+Shift+K". Without one, a Mac uses `keybinding` too. A Mac\'s text fields answer ⌃A, ⌃E, ⌃K, ⌥←/→ and ⌘←/→ themselves, so the host never binds those from a field whatever is declared.',
+        )
+        .meta({ power: { key: "keybinding-mac:${command}", sentence: 'the global shortcut ${mac} on a Mac ("${title}")' } }),
     // When the keybinding applies, as a condition over the shell's context keys; the palette ignores it since a command
     // is always runnable by name. Without one the chord is claimed everywhere, including inside a terminal.
     when: z

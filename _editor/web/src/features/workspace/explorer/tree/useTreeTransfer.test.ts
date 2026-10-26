@@ -110,6 +110,25 @@ describe(`paste`, () => {
         expect(store.clipboard.value).toEqual({ mode: `copy`, paths: [`src/main.ts`] });
     });
 
+    it(`moves what was copied on Move Here, a Mac's ⌥⌘V, and spends the clipboard as a cut does`, async () => {
+        const { transfer, store, selecting } = treeSurface(TREE);
+        store.clipboard.value = { mode: `copy`, paths: [`README.md`] };
+        selecting.lead.value = `src/main.ts`;
+
+        await transfer.moveHere();
+
+        expect([store.moveIntoMany.mock.calls, store.copyEntries.mock.calls, store.clipboard.value]).toEqual([[[[`README.md`], `src`]], [], undefined]);
+    });
+
+    it(`duplicates each selected entry beside itself under a free name, a Mac's ⌘D`, async () => {
+        const { transfer, store, select } = treeSurface(TREE);
+        select(`src/main.ts`, `README.md`, LOCKED);
+
+        await transfer.duplicate();
+
+        expect(store.copyEntries.mock.calls).toEqual([[[{ from: `src/main.ts`, to: `src/main copy.ts` }]], [[{ from: `README.md`, to: `README copy.md` }]]]);
+    });
+
     it(`moves a cut, less what is already there, and spends the clipboard`, async () => {
         const { transfer, store, selecting } = treeSurface(TREE);
         store.clipboard.value = { mode: `cut`, paths: [`src/main.ts`, `README.md`] };

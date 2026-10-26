@@ -28,7 +28,7 @@ interface SettingsGates {
     /** About what a sandbox does, so a desktop window on a folder of this computer, which has none, leaves it out. */
     readonly sandbox?: true;
     /**
-     * A developer's tool (shortcut tables, API tokens), so a reader who does not write code is not shown it in the index.
+     * A developer's tool (API tokens), so a reader who does not write code is not shown it in the index.
      * Still reachable by its address and from the command palette: nothing is taken away, only out of the way.
      */
     readonly developer?: true;
@@ -94,7 +94,9 @@ const SETTINGS_SECTIONS = [
         within: [{ slug: `voice`, icon: `microphone`, sandbox: true, desktop: true }],
         withinLabel: `notificationsVoice`,
     },
-    { slug: `keybindings`, icon: `bolt`, group: `developer`, keyboard: true, developer: true },
+    // Everyone's, not only a developer's: a Mac user who finds ⌃⇧X foreign looks here first (until 2026-10-26 it was
+    // filed under Developer and left out of a non-coder's index).
+    { slug: `keybindings`, icon: `bolt`, group: `preferences`, keyboard: true },
     // Account credentials, not this sandbox's: a token minted here acts for the person on every sandbox they own,
     // which is why it lives in the account's Settings rather than on a Sandbox tab.
     { slug: `tokens`, icon: `key`, group: `developer`, developer: true },

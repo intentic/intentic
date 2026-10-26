@@ -18,6 +18,7 @@ import { useChat } from "../models/conversations/run/useChat";
 import { accountsOf } from "../models/conversations/accounts/useChat-accounts";
 import { useAgents } from "../models/fleet/useAgents";
 import { startAgent } from "../models/fleet/agentActions";
+import { declaredChord } from "../workbench/commands/builtinCommands";
 import { registerCommand, executeCommand } from "../workbench/commands/useCommands";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { queryClient } from "../lib/queryPersistence";
@@ -323,7 +324,7 @@ export const createExtensionApi = (
                         title: declared.title,
                         category: declared.category,
                         icon: declared.icon,
-                        keybinding: declared.keybinding,
+                        keybinding: declaredChord({ keybinding: declared.keybinding, mac: declared.mac }),
                         when: declared.when,
                         handler,
                     }),

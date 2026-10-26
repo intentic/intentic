@@ -322,6 +322,15 @@
                                 "type": "string",
                                 "pattern": "^\\S+$"
                             },
+                            "mac": {
+                                "description": "The shortcut on a Mac, where it differs from `keybinding`, e.g. \"Mod+Alt+K\" for a `keybinding` of \"Ctrl+Shift+K\". Without one, a Mac uses `keybinding` too. A Mac's text fields answer ⌃A, ⌃E, ⌃K, ⌥←/→ and ⌘←/→ themselves, so the host never binds those from a field whatever is declared.",
+                                "power": {
+                                    "key": "keybinding-mac:${command}",
+                                    "sentence": "the global shortcut ${mac} on a Mac (\"${title}\")"
+                                },
+                                "type": "string",
+                                "pattern": "^\\S+$"
+                            },
                             "when": {
                                 "description": "When the shortcut applies, as a condition over the shell's context keys, `tabSurface == 'chat'`, `!editableTarget`. Without one the chord is claimed everywhere, including inside a terminal where a bare key belongs to the program running in it. The command palette ignores this: a command is always runnable by name.",
                                 "type": "string"

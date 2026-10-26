@@ -100,10 +100,13 @@ const open = (name: string): void => {
 const showDetail = computed(() => !narrow.value || detailOpen.value);
 const showList = computed(() => !narrow.value || !detailOpen.value || item.value === undefined);
 
-/* KEYS: Ctrl/⌘+K and `/` reach the search while the app has the focus; Esc clears it. */
+/* KEYS: Ctrl+K (⌘K on a Mac) and `/` reach the search while the app has the focus; Esc clears it. ⌃K on a Mac is a
+   text field's kill-to-end-of-line, so it stays the field's. */
 const search = ref<{ focus: () => void } | undefined>(undefined);
+const isMac = /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent);
 const onKey = (event: KeyboardEvent): void => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === `k`) {
+    const primary = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+    if (primary && event.key.toLowerCase() === `k`) {
         event.preventDefault();
         event.stopPropagation();
         search.value?.focus();

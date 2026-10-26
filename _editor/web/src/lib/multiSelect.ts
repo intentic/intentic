@@ -4,8 +4,13 @@ import { computed, type Ref, ref, watch } from "vue";
 export type ClickIntent = `range` | `toggle` | `single`;
 
 // `anchored` is false where there is nothing to range from, and then Shift reads as the keys held beside it.
-export const clickIntent = (keys: Pick<MouseEvent, `shiftKey` | `ctrlKey` | `metaKey`>, anchored = true): ClickIntent =>
-    keys.shiftKey && anchored ? `range` : keys.ctrlKey || keys.metaKey ? `toggle` : `single`;
+export const clickIntent = (keys: Pick<MouseEvent, `shiftKey` | `ctrlKey` | `metaKey`>, anchored = true): ClickIntent => {
+    if (keys.shiftKey && anchored) {
+        return `range`;
+    }
+    // allow(modifier-tiers): a click, where a Mac's ⌃ opens the context menu before it could toggle anything.
+    return keys.ctrlKey || keys.metaKey ? `toggle` : `single`;
+};
 
 // Anchor to row inclusive, either way round; the row alone for an unlisted anchor, undefined for an unlisted row.
 export const rangeSelect = <T>(order: readonly T[], anchor: T | undefined, row: T): T[] | undefined => {

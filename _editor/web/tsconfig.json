@@ -38,7 +38,8 @@
             "@intentic/ui/text-size": ["../../_editor/ui/src/composables/useTextSize.ts"],
             "@intentic/ui/theme": ["../../_editor/ui/src/composables/useTheme.ts"],
             "@intentic/ui/time": ["../../_editor/ui/src/lib/timeWindow.ts"],
-            "@intentic/ui/event-target": ["../../_editor/ui/src/lib/eventTarget.ts"],
+            "@intentic/ui/event-target": ["../../_editor/ui/src/lib/input/eventTarget.ts"],
+            "@intentic/ui/keys": ["../../_editor/ui/src/lib/input/keys.ts"],
             "@intentic/ui/reload-reason": ["../../_editor/ui/src/lib/reloadReason.ts"],
             "@intentic/api-contract/ingress": ["../../_shared/api-contract/src/ingress/index.ts"],
             "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"]

@@ -1,3 +1,4 @@
+import { keyCap } from "@intentic/ui/keys";
 import type { EditorContext } from "@intentic/sandbox-contract/schemas/agent";
 import type { IconName, TooltipValue } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
@@ -290,7 +291,7 @@ const stopPress = (host: Pick<SendHost, "mobile">, words: Readonly<Ref<ComposerW
                     note: t(`chat.composerIntent.discardsRequest`),
                 };
             }
-            return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: t(`ui.keys.esc`) };
+            return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: keyCap(`escape`) };
         }),
     };
 };

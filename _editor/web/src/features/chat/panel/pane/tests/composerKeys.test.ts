@@ -121,19 +121,20 @@ describe(`Enter`, () => {
         expect(host.send.submit).toHaveBeenCalledTimes(2);
     });
 
-    it(`with Cmd/Ctrl opens a new agent where one is offered, and only then`, () => {
+    // The primary modifier: Ctrl in this suite, which runs on no Apple platform (⌘ on a Mac, where ⌃↩ just sends).
+    it(`with the primary modifier opens a new agent where one is offered, and only then`, () => {
         const { host, press } = keysOf();
         host.send.freshAgent.start.mockReturnValue(true);
 
-        expect(press(`Enter`, { metaKey: true })).toBe(true);
         expect(press(`Enter`, { ctrlKey: true })).toBe(true);
+        expect(press(`Enter`, { metaKey: true })).toBe(true);
         press(`Enter`);
-        expect(host.send.freshAgent.start).toHaveBeenCalledTimes(2);
-        expect(host.send.submit).toHaveBeenCalledTimes(1);
+        expect(host.send.freshAgent.start).toHaveBeenCalledTimes(1);
+        expect(host.send.submit).toHaveBeenCalledTimes(2);
 
         host.send.freshAgent.start.mockReturnValue(false);
-        expect(press(`Enter`, { metaKey: true })).toBe(true);
-        expect(host.send.submit).toHaveBeenCalledTimes(2);
+        expect(press(`Enter`, { ctrlKey: true })).toBe(true);
+        expect(host.send.submit).toHaveBeenCalledTimes(3);
     });
 
     it(`with Cmd/Ctrl runs a slash command here, never in a new agent`, () => {
@@ -141,7 +142,7 @@ describe(`Enter`, () => {
         host.send.freshAgent.start.mockReturnValue(true);
         command.value = { name: `review`, description: `Review the diff.` };
 
-        press(`Enter`, { metaKey: true });
+        press(`Enter`, { ctrlKey: true });
 
         expect(host.send.freshAgent.start).not.toHaveBeenCalled();
         expect(host.send.submit).toHaveBeenCalledTimes(1);
@@ -250,7 +251,7 @@ describe(`the hint slot`, () => {
         expect(keys.composerHint.value).toBe(t(`chat.chatPane.atForFilesAndSettings`));
 
         chat.draft.value = `half`;
-        expect(keys.composerHint.value).toBe(t(`chat.chatPane.shiftEnterNewLine`));
+        expect(keys.composerHint.value).toBe(t(`chat.chatPane.shiftEnterNewLine`, { newline: t(`chat.chatPane.shiftEnterKeys`) }));
         host.send.freshAgent.offered.value = true;
         expect(keys.composerHint.value).toContain(`Enter for a new agent`);
         host.send.freshAgent.offered.value = false;

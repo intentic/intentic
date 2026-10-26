@@ -104,7 +104,6 @@ const emit = defineEmits<{
     pick: [entry: WorkspaceTreeEntry];
     clear: [];
 }>();
-
 const seams = fileVerbSeams();
 const { store } = seams;
 const { clipboard, lazyLoading } = store;
@@ -218,6 +217,7 @@ const { onRowClick, onRowDblClick, onChevronClick, onBackgroundClick, onKeydown 
     editing,
     beginRename,
     requestDelete,
+    transfer,
     focusRow,
     focusLead,
     openFile: (path, mode) => emit(`openFile`, path, mode),

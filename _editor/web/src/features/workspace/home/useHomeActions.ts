@@ -1,5 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
+import { isApplePlatform } from "@intentic/ui/keys";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref } from "vue";
 import type { RowAction } from "../explorer/rowActions";
@@ -8,6 +9,7 @@ import { fileVerbSeams } from "../explorer/tree/fileVerbSeams";
 import { useEmptyDirs } from "../explorer/useEmptyDirs";
 import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
+import { homeKeyVerb, type HomeKeyVerbs } from "./homeKeys";
 
 // The tree's own verbs (explorer/tree) over the home's tiles, every one aimed at the open folder; the clipboard is shared.
 
@@ -21,6 +23,8 @@ export interface HomeActionsContext {
     // The home element: the window a clipboard write targets, and where focus parks.
     readonly host: Ref<HTMLElement | undefined>;
     readonly open: (entry: WorkspaceTreeEntry) => void;
+    // Up to the folder holding this one (a Mac's ⌘↑).
+    readonly up: () => void;
     // A file just created opens straight into editing.
     readonly openCreated: (path: string) => void;
     // Reads a file's name in every folder in place of the tiles (homeCover.ts): the file right-clicked is the example.
@@ -85,16 +89,27 @@ export function useHomeActions(ctx: HomeActionsContext) {
             beginRename(path);
         }
     };
-    const KEY_VERBS: ReadonlyMap<string, () => void> = new Map([
-        [`Delete`, requestDelete],
-        [`F2`, renameLead],
-    ]);
-    // The keys the verbs answer (Delete, F2, select all); while a name is being typed, every key is the field's.
+    const isMac = isApplePlatform();
+    const keyVerbs: HomeKeyVerbs = {
+        remove: requestDelete,
+        rename: renameLead,
+        selectAll,
+        duplicate: () => void transfer.duplicate(),
+        moveHere: () => void transfer.moveHere(),
+        open: () => {
+            const entry = ctx.lead.value === undefined ? undefined : store.entry(ctx.lead.value);
+            if (entry !== undefined) {
+                ctx.open(entry);
+            }
+        },
+        up: ctx.up,
+    };
+    // The keys the verbs answer (homeKeys.ts); while a name is being typed, every key is the field's.
     const handleKey = (event: KeyboardEvent): boolean => {
         if (inline.editing.value) {
             return true;
         }
-        const verb = (event.ctrlKey || event.metaKey) && (event.key === `a` || event.key === `A`) ? selectAll : KEY_VERBS.get(event.key);
+        const verb = homeKeyVerb(event, isMac, keyVerbs);
         if (verb === undefined) {
             return false;
         }

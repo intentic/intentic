@@ -21,6 +21,7 @@ import { useCloseGuard } from "../features/workspace/tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../models/workspace/tabs/useWorkspaceTabs";
 import type { Disposable } from "@intentic/extension-api";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
+import ShortcutSheet from "../shell/commands/ShortcutSheet.vue";
 import { useQuickOpen } from "../workbench/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
 import { useFolderSandbox, useOtherAccount, useSandboxOpening } from "./folderSandbox";
@@ -452,6 +453,7 @@ onUnmounted(() => {
         </div>
         <!-- Ctrl/Cmd+P: this folder's files alone, each opened here. -->
         <QuickOpen :open-file="openKept" />
+        <ShortcutSheet />
         <!-- A close that would discard unsaved edits, the window's (held back by the app) or a tab's: it happens only on the reader's word. -->
         <CloseGuardDialog :open="asking" :question="question" @cancel="keepOpen" @confirm="closeAnyway" />
     </div>

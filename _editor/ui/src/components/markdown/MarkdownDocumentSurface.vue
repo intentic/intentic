@@ -8,12 +8,12 @@ import { splitMarkdownBlocks } from "../../markdown/index.js";
 import type { MarkdownDecorator } from "../../markdown/render.js";
 import { blockBody, buildBlockElement, caretAtOffset, FIGURE_HOLDER, offsetOfCaret, RENDERED } from "../../markdown/sourceDom.js";
 import { useT } from "../../i18n/index.js";
+import { isApplePlatform, primaryHeld } from "../../lib/input/keys.js";
 import { useTheme } from "../../composables/useTheme.js";
 import { drawFigures } from "./figureDrawing.js";
 import { alignContainers, createRenderedDrawing, sourceOffsetOfPress } from "./richBlocks.js";
 
 const t = useT();
-
 const {
     source,
     caretAt,
@@ -174,7 +174,7 @@ const titleLinks = (): void => {
     for (const link of host.value?.querySelectorAll<HTMLAnchorElement>(`a[data-md-href]:not([title]), .${RENDERED} a[href]:not([data-md-titled])`) ?? []) {
         const target = link.dataset[`mdHref`] ?? link.getAttribute(`href`) ?? ``;
         link.dataset[`mdTitled`] = ``;
-        link.title = t(`ui.markdownDocumentSurface.followLink`, { target: link.title === `` ? target : link.title });
+        link.title = t(`ui.markdownDocumentSurface.followLink`, { target: link.title === `` ? target : link.title, key: isApplePlatform() ? `⌘` : t(`ui.keys.ctrl`) });
     }
 };
 
@@ -204,7 +204,7 @@ const onRenderedPress = (event: MouseEvent): boolean => {
     if (target === undefined || holder === undefined || holder === null) {
         return false;
     }
-    if ((event.ctrlKey || event.metaKey) && target.closest(`a`) !== null) {
+    if (primaryHeld(event) && target.closest(`a`) !== null) {
         event.preventDefault();
         return true;
     }
@@ -545,8 +545,8 @@ const onFormatKey = (event: KeyboardEvent, key: string): boolean => {
     return true;
 };
 
-// Save, undo/redo, and formatting keys, split out of `onKeydown` since that handler otherwise mixes three unrelated
-// questions. Each returns whether it claimed the key.
+// Save, undo/redo, and formatting keys under the primary modifier alone (⌃ on a Mac is the field's: ⌃B back a character,
+// ⌃K kill the line, ⌃Y yank), split out of `onKeydown`. Each returns whether it claimed the key.
 const onChordKey = (event: KeyboardEvent, key: string): boolean => {
     if (key === `s`) {
         event.preventDefault();
@@ -688,7 +688,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     if (composing) {
         return;
     }
-    if (event.ctrlKey || event.metaKey) {
+    if (primaryHeld(event)) {
         onChordKey(event, event.key.toLowerCase());
         return;
     }

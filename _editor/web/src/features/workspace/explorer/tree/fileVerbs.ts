@@ -162,6 +162,7 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         requestDelete: deleting.requestDelete,
         stage: transfer.stage,
         paste: transfer.paste,
+        duplicate: transfer.duplicate,
         // Each only where its seam is: the menu drops a verb it is not handed.
         extract: store.extractEntry === undefined ? undefined : transfer.extract,
         openTerminal,

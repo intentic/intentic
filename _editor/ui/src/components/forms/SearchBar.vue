@@ -1,10 +1,11 @@
 <!-- The app's one search field, in `panel` (a popover's borderless first band) or `field` (a soft, filled box above a list) dress. -->
 <script setup lang="ts">
+import { keyCap } from "../../lib/input/keys.js";
 import { twMerge } from "tailwind-merge";
 import { computed, onBeforeUnmount, onMounted, ref, useAttrs, watch } from "vue";
 import Icon from "../primitives/Icon.vue";
 import type { IconName } from "../../icons/iconSets.js";
-import { isOverlayTarget, isTypingTarget } from "../../lib/eventTarget.js";
+import { isOverlayTarget, isTypingTarget } from "../../lib/input/eventTarget.js";
 import { useT } from "../../i18n/index.js";
 
 const t = useT();
@@ -185,7 +186,7 @@ onBeforeUnmount(() => listen(false));
             v-show="searching"
             type="button"
             class="ui-search-clear"
-            v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: t(`ui.keys.esc`) }"
+            v-tooltip.bottom="{ title: t(`ui.action.clear`), keys: keyCap(`escape`) }"
             :aria-label="t(`ui.action.clearFilter`)"
             @mousedown.prevent
             @click="clear"

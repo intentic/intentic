@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { keyCap } from "@intentic/ui/keys";
 import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, SearchBar, type Tip, toneTint, ui, useDevice } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
@@ -138,6 +139,8 @@ onMounted(async () => {
     // Cmd+F on a Mac, Ctrl+F elsewhere, gated to this panel so the page's own find keeps the chord everywhere else.
     commandDisposables = [
         registerBuiltin(`terminal.find`, openFind),
+        // ⌘K on a Mac, as Terminal.app and iTerm clear: the screen and the scrollback, the prompt kept.
+        registerBuiltin(`terminal.clear`, () => (activeName.value === undefined ? undefined : terminalSessionOf(activeName.value)?.term.clear())),
     ];
     const pane = container.value;
     if (pane === undefined) {
@@ -314,7 +317,7 @@ watch(
                     type="button"
                     :class="ui.iconButton()"
                     :aria-label="t(`terminal.terminalPanel.closeFind`)"
-                    v-tooltip.top="{ title: t(`ui.action.close`), keys: t(`ui.keys.esc`) }"
+                    v-tooltip.top="{ title: t(`ui.action.close`), keys: keyCap(`escape`) }"
                     @click="closeFind"
                 >
                     <Icon name="times" />

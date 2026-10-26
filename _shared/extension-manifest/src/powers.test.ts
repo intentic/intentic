@@ -117,6 +117,12 @@ const ROWS: readonly Row[] = [
         adds: ["keybinding:acme.run", 'the global shortcut Mod+Shift+K ("Run")'],
     },
     {
+        power: "keybinding-mac:${command}",
+        without: contributes({ commands: [{ ...COMMAND, keybinding: "Ctrl+Shift+K" }] }),
+        with: contributes({ commands: [{ ...COMMAND, keybinding: "Ctrl+Shift+K", mac: "Mod+Alt+K" }] }),
+        adds: ["keybinding-mac:acme.run", 'the global shortcut Mod+Alt+K on a Mac ("Run")'],
+    },
+    {
         power: "setting-env:${key}",
         without: contributes({ settings: [SETTING] }),
         with: contributes({ settings: [{ ...SETTING, env: "ACME_TOKEN" }] }),

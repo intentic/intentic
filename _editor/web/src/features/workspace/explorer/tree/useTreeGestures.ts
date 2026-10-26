@@ -1,5 +1,6 @@
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { isApplePlatform } from "@intentic/ui/keys";
 import type { Ref } from "vue";
 import { clickIntent } from "../../../../lib/multiSelect";
 import { opensAsFolder } from "../../../../models/workspace/files/archiveEntries";
@@ -25,6 +26,8 @@ export interface TreeGesturesHost {
     readonly editing: Readonly<Ref<boolean>>;
     readonly beginRename: (path: string) => void;
     readonly requestDelete: () => void;
+    // A copy of the selection beside itself, and a move here of what was copied (a Mac's ⌘D and ⌥⌘V).
+    readonly transfer: { readonly duplicate: () => Promise<void>; readonly moveHere: () => Promise<void> };
     readonly focusRow: (path: string) => void;
     readonly focusLead: () => Promise<void>;
     // A file to show: a click previews it into one slot, a double-click keeps the tab.
@@ -38,6 +41,71 @@ export interface TreeGesturesHost {
     // The selection was dropped, so the home drops its own mark too.
     readonly cleared: () => void;
 }
+
+// The keyboard half: treeKeys.ts decides what a key means, this does it. A move of the selection or the cursor takes
+// the focus with it.
+const treeKeyboard = (host: TreeGesturesHost, activate: (entry: WorkspaceTreeEntry, revealManagedDir: boolean, mode: OpenMode) => void) => {
+    const { selection, lead, selectSingle, extendTo, toggleAt } = host.selecting;
+    const ACTS: { readonly [K in KeyIntent["kind"]]: (intent: Extract<KeyIntent, { kind: K }>) => void } = {
+        select: ({ path }) => {
+            selectSingle(path);
+            const entry = host.follows?.() === true ? host.byPath.value.get(path) : undefined;
+            if (entry !== undefined) {
+                host.pick(entry);
+            }
+            void host.focusLead();
+        },
+        extend: ({ path }) => {
+            extendTo(path);
+            void host.focusLead();
+        },
+        lead: ({ path }) => {
+            lead.value = path;
+            void host.focusLead();
+        },
+        toggleExpand: ({ path }) => host.toggleExpand(path),
+        toggleSelected: ({ path }) => toggleAt(path),
+        activate: ({ entry }) => {
+            host.pick(entry);
+            activate(entry, true, `preview`);
+        },
+        rename: ({ path }) => host.beginRename(path),
+        deselect: () => {
+            selection.value = new Set();
+        },
+        delete: host.requestDelete,
+        selectAll: () => {
+            selection.value = new Set(host.order.value);
+        },
+        duplicate: () => void host.transfer.duplicate(),
+        moveHere: () => void host.transfer.moveHere(),
+        none: () => undefined,
+    };
+    const isMac = isApplePlatform();
+    const onKeydown = (event: KeyboardEvent): void => {
+        if (host.editing.value) {
+            return;
+        }
+        const intent = keyIntent(event, {
+            rows: host.rows.value,
+            order: host.order.value,
+            lead: lead.value,
+            selected: selection.value.size,
+            entryAt: (path) => host.byPath.value.get(path),
+            isMac,
+        });
+        if (intent === undefined) {
+            return;
+        }
+        (ACTS[intent.kind] as (intent: KeyIntent) => void)(intent);
+        event.preventDefault();
+        // A chord the tree answered is the tree's alone: a Mac's ⌥↑ to the first row must not also walk the rail.
+        if (event.altKey || event.metaKey) {
+            event.stopPropagation();
+        }
+    };
+    return onKeydown;
+};
 
 export const useTreeGestures = (host: TreeGesturesHost) => {
     const { selection, anchor, lead, selectSingle, extendTo, toggleAt, clear } = host.selecting;
@@ -111,57 +179,7 @@ export const useTreeGestures = (host: TreeGesturesHost) => {
         host.cleared();
     };
 
-    // What each key intent does; a move of the selection or the cursor takes the focus with it.
-    const ACTS: { readonly [K in KeyIntent["kind"]]: (intent: Extract<KeyIntent, { kind: K }>) => void } = {
-        select: ({ path }) => {
-            selectSingle(path);
-            const entry = host.follows?.() === true ? host.byPath.value.get(path) : undefined;
-            if (entry !== undefined) {
-                host.pick(entry);
-            }
-            void host.focusLead();
-        },
-        extend: ({ path }) => {
-            extendTo(path);
-            void host.focusLead();
-        },
-        lead: ({ path }) => {
-            lead.value = path;
-            void host.focusLead();
-        },
-        toggleExpand: ({ path }) => host.toggleExpand(path),
-        toggleSelected: ({ path }) => toggleAt(path),
-        activate: ({ entry }) => {
-            host.pick(entry);
-            activate(entry, true, `preview`);
-        },
-        rename: ({ path }) => host.beginRename(path),
-        deselect: () => {
-            selection.value = new Set();
-        },
-        delete: host.requestDelete,
-        selectAll: () => {
-            selection.value = new Set(host.order.value);
-        },
-        none: () => undefined,
-    };
-    const onKeydown = (event: KeyboardEvent): void => {
-        if (host.editing.value) {
-            return;
-        }
-        const intent = keyIntent(event, {
-            rows: host.rows.value,
-            order: host.order.value,
-            lead: lead.value,
-            selected: selection.value.size,
-            entryAt: (path) => host.byPath.value.get(path),
-        });
-        if (intent === undefined) {
-            return;
-        }
-        (ACTS[intent.kind] as (intent: KeyIntent) => void)(intent);
-        event.preventDefault();
-    };
+    const onKeydown = treeKeyboard(host, activate);
 
     return { onRowClick, onRowDblClick, onChevronClick, onBackgroundClick, onKeydown };
 };

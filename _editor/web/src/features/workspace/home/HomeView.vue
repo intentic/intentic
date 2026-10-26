@@ -46,7 +46,6 @@ import { useVocabulary } from "../../../workbench/views/vocabulary";
 // which folder is open, arrow travel and the quick look.
 
 const t = useT();
-
 const { homeDir, openDir, selected, cover } = useHome();
 const { tree, entriesByPath, entry: entryAt, listingOf, hiddenIn, keepListed, lazyLoading, isLoading } = useWorkspaceTree();
 const { openFile } = useWorkspaceTabs();
@@ -171,8 +170,9 @@ const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuIt
     order,
     lead: selected,
     host: home,
-    // Closures, not the functions: both are declared below, and are only ever called later.
+    // Closures, not the functions: each is declared below, and only ever called later.
     open: (entry) => open(entry),
+    up: () => up(),
     // A new file opens kept, not previewed, so a later look can't close it mid-type, and takes the caret.
     openCreated: (path) => {
         requestCaret(path);

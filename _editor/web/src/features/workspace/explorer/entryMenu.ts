@@ -2,6 +2,7 @@ import { archiveFormat } from "@intentic/sandbox-contract/text/archives";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import type { MenuItem } from "primevue/menuitem";
 import { t } from "@intentic/ui/i18n";
+import { formatChord } from "../../../workbench/commands/keybindings";
 
 // The right-click menu both file surfaces (the tree, the home) build: one list, so a verb never exists in one and not
 // the other, and the wording of a bulk verb ("Delete 3 items") is decided once. Each surface supplies its own rows in
@@ -28,7 +29,36 @@ export interface EntryVerbs {
     readonly download?: () => void;
     // Asks an agent about the one file right-clicked: the desktop app's way from a folder on this computer to an agent.
     readonly ask?: () => void;
+    // A copy of each entry beside itself, under a free name.
+    readonly duplicate?: () => void;
+    // What was copied, moved here instead (a Mac's ⌥⌘V); offered only while the clipboard holds a copy.
+    readonly moveHere?: () => void;
 }
+
+// The key each verb answers to on the surface, drawn at the right of its row: how a reader learns them.
+export interface EntryKeys {
+    readonly rename: string;
+    readonly remove: string;
+    readonly cut: string;
+    readonly copy: string;
+    readonly paste: string;
+    readonly duplicate?: string;
+    readonly moveHere?: string;
+}
+
+/** The file surfaces' keys on this platform (treeKeys.ts): Finder's on a Mac, Explorer's and VS Code's elsewhere. */
+export const entryKeys = (isMac: boolean): EntryKeys =>
+    isMac
+        ? {
+              rename: formatChord(`Enter`, true),
+              remove: formatChord(`Mod+Backspace`, true),
+              cut: formatChord(`Mod+X`, true),
+              copy: formatChord(`Mod+C`, true),
+              paste: formatChord(`Mod+V`, true),
+              duplicate: formatChord(`Mod+D`, true),
+              moveHere: formatChord(`Mod+Alt+V`, true),
+          }
+        : { rename: `F2`, remove: formatChord(`Delete`, false), cut: formatChord(`Mod+X`, false), copy: formatChord(`Mod+C`, false), paste: formatChord(`Mod+V`, false) };
 
 export interface EntryMenuInput {
     // The right-clicked entry; undefined for a click on the surface's own background.
@@ -47,6 +77,10 @@ export interface EntryMenuInput {
     // The target is a folder holding only empty folders.
     readonly barren: boolean;
     readonly clipboardFull: boolean;
+    // The clipboard holds a copy rather than a cut, which is when Move Here differs from Paste.
+    readonly clipboardCopied?: boolean;
+    // The keys drawn beside the verbs; none drawn without them.
+    readonly keys?: EntryKeys;
     // The surface's own rows: first of all (the home's Open), after New Folder (a folder's documents, personas,
     // checks, management), and last (the tree's Collapse Folders). The read-only menu keeps the readable ones.
     readonly head?: readonly MenuItem[];
@@ -76,6 +110,9 @@ export const VERB_ROUTES = {
 export const ZIP_ROUTE = `workspace.downloadTicket`;
 
 const offers = (input: Pick<EntryMenuInput, "serves">, route: string): boolean => input.serves?.(route) ?? true;
+
+// A verb's row with its key beside it, when the surface named one.
+const keyed = (item: MenuItem, keys: string | undefined): MenuItem => (keys === undefined ? item : { ...item, shortcut: keys });
 
 const lockedNote = (): MenuItem => ({ label: t(`workspace.words.keptPrivateBySandbox`), icon: `lock`, disabled: true });
 const readOnlyNote = (): MenuItem => ({ label: t(`workspace.words.readOnlyChangingFiles`), icon: `lock`, disabled: true });
@@ -131,7 +168,7 @@ const soleVerbs = (target: WorkspaceTreeEntry, input: EntryMenuInput): MenuItem[
         items.push({ label: t(`workspace.entryMenu.extract`), icon: `box`, command: verbs.extract });
     }
     if (offers(input, VERB_ROUTES.rename)) {
-        items.push({ label: t(`ui.action.rename`), icon: `pencil`, command: verbs.rename });
+        items.push(keyed({ label: t(`ui.action.rename`), icon: `pencil`, command: verbs.rename }, input.keys?.rename));
     }
     // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
     if (target.type === `dir` && barren) {
@@ -142,7 +179,7 @@ const soleVerbs = (target: WorkspaceTreeEntry, input: EntryMenuInput): MenuItem[
 
 // Two groups, each after a rule: what changes the entry itself, then what carries it elsewhere.
 const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
-    const { target, multi, count, verbs } = input;
+    const { target, multi, count, verbs, keys } = input;
     if (target === undefined) {
         return [];
     }
@@ -150,30 +187,64 @@ const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
         ...(multi ? [] : soleVerbs(target, input)),
         ...(offers(input, VERB_ROUTES.remove)
             ? [
-                  {
-                      label: multi ? t(`workspace.entryMenu.deleteItems`, { count }, count) : t(`ui.action.delete`),
-                      icon: `trash`,
-                      command: verbs.remove,
-                  },
+                  keyed(
+                      {
+                          label: multi ? t(`workspace.entryMenu.deleteItems`, { count }, count) : t(`ui.action.delete`),
+                          icon: `trash`,
+                          command: verbs.remove,
+                      },
+                      keys?.remove,
+                  ),
               ]
             : []),
     ];
     const carries: MenuItem[] = [
         ...(offers(input, VERB_ROUTES.cut)
             ? [
-                  {
-                      label: multi ? t(`workspace.entryMenu.cutItems`, { count }, count) : t(`workspace.entryMenu.cut`),
-                      icon: `arrows-h`,
-                      command: verbs.cut,
-                  },
+                  keyed(
+                      {
+                          label: multi ? t(`workspace.entryMenu.cutItems`, { count }, count) : t(`workspace.entryMenu.cut`),
+                          icon: `arrows-h`,
+                          command: verbs.cut,
+                      },
+                      keys?.cut,
+                  ),
               ]
             : []),
         ...(offers(input, VERB_ROUTES.copy)
-            ? [{ label: multi ? t(`workspace.entryMenu.copyItems`, { count }, count) : t(`ui.action.copy`), icon: `copy`, command: verbs.copy }]
+            ? [
+                  keyed(
+                      { label: multi ? t(`workspace.entryMenu.copyItems`, { count }, count) : t(`ui.action.copy`), icon: `copy`, command: verbs.copy },
+                      keys?.copy,
+                  ),
+              ]
+            : []),
+        ...(verbs.duplicate !== undefined && offers(input, VERB_ROUTES.copy)
+            ? [
+                  keyed(
+                      {
+                          label: multi ? t(`workspace.entryMenu.duplicateItems`, { count }, count) : t(`workspace.entryMenu.duplicate`),
+                          icon: `clone`,
+                          command: verbs.duplicate,
+                      },
+                      keys?.duplicate,
+                  ),
+              ]
             : []),
         ...downloadRow(input),
     ];
     return [...withSeparator(changes), ...withSeparator(carries)];
+};
+
+// What the clipboard holds, put here: Paste, and on a Mac with a copy held, Move Here.
+const pasteRows = (input: EntryMenuInput): MenuItem[] => {
+    const { clipboardFull, verbs, keys } = input;
+    if (!clipboardFull) {
+        return [];
+    }
+    const paste = keyed({ label: t(`ui.action.paste`), icon: `clone`, command: verbs.paste }, keys?.paste);
+    const moves = input.clipboardCopied === true && verbs.moveHere !== undefined && offers(input, VERB_ROUTES.cut);
+    return moves ? [paste, keyed({ label: t(`workspace.entryMenu.moveHere`), icon: `arrows-h`, command: verbs.moveHere }, keys?.moveHere)] : [paste];
 };
 
 export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
@@ -186,7 +257,7 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
     if (input.archived) {
         return archiveMenu(input);
     }
-    const { head = [], lead = [], tail = [], verbs, clipboardFull } = input;
+    const { head = [], lead = [], tail = [], verbs } = input;
     const opening = [...head, ...askRow(input)];
     return [
         ...opening,
@@ -198,7 +269,7 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
             ? [{ label: t(`workspace.entryMenu.openTerminal`), icon: `terminal`, command: verbs.openTerminal }]
             : []),
         ...entryVerbs(input),
-        ...(clipboardFull ? [{ label: t(`ui.action.paste`), icon: `clone`, command: verbs.paste }] : []),
+        ...pasteRows(input),
         ...withSeparator(tail),
     ];
 };

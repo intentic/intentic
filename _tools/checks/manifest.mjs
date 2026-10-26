@@ -203,6 +203,14 @@ export const CHECKS = [
         about: "every clipboard read and write the editor and the extensions make goes through the kit's clipboardOf, never navigator.clipboard",
     },
     {
+        id: "modifier-tiers",
+        file: "modifier-tiers.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "a keyboard or click handler in the editor and the extensions reads the primary modifier as one key per platform (primaryHeld), never \"Ctrl or Cmd\"",
+    },
+    {
         id: "reduced-motion",
         file: "reduced-motion.mjs",
         needs: "checkout",

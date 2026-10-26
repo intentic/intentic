@@ -42,6 +42,21 @@ describe(`matchesChord`, () => {
         expect(matchesChord(`Ctrl+\``, keydown({ key: `~`, code: `Backquote`, ctrlKey: true, shiftKey: true }), false)).toBe(false);
     });
 
+    it(`matches a letter Option composed into a symbol by the key it sits on`, () => {
+        // ⌥⌘H types "˙" on a US Mac layout, ⌥K types "˚", and ⌥E is a dead key.
+        expect(matchesChord(`Mod+Alt+H`, keydown({ key: `˙`, code: `KeyH`, metaKey: true, altKey: true }), true)).toBe(true);
+        expect(matchesChord(`Alt+K`, keydown({ key: `˚`, code: `KeyK`, altKey: true }), true)).toBe(true);
+        expect(matchesChord(`Alt+E`, keydown({ key: `Dead`, code: `KeyE`, altKey: true }), true)).toBe(true);
+        // A Cyrillic layout types its own letter on the same key.
+        expect(matchesChord(`Mod+P`, keydown({ key: `з`, code: `KeyP`, ctrlKey: true }), false)).toBe(true);
+    });
+
+    it(`binds a letter that a layout moved by what its key types, not where it sits`, () => {
+        // AZERTY puts "a" on the key QWERTY calls Q: Ctrl+A there is select-all, not Ctrl+Q.
+        expect(matchesChord(`Mod+A`, keydown({ key: `a`, code: `KeyQ`, ctrlKey: true }), false)).toBe(true);
+        expect(matchesChord(`Mod+Q`, keydown({ key: `a`, code: `KeyQ`, ctrlKey: true }), false)).toBe(false);
+    });
+
     it(`carries Alt+digit through the glyphs Option composes on Apple layouts`, () => {
         // Option+digit composes accented characters on Apple, so this must match by physical key, not glyph.
         expect(matchesChord(`Alt+1`, keydown({ key: `¡`, code: `Digit1`, altKey: true }), true)).toBe(true);
@@ -77,6 +92,13 @@ describe(`chordFromEvent`, () => {
         expect(chordFromEvent(keydown({ key: `A`, shiftKey: true }), true)).toBeUndefined();
     });
 
+    it(`records a letter Option composed as the letter, and never a dead key`, () => {
+        expect(chordFromEvent(keydown({ key: `˚`, code: `KeyK`, altKey: true }), true)).toBe(`Alt+k`);
+        expect(chordFromEvent(keydown({ key: `Dead`, code: `KeyE`, altKey: true }), true)).toBe(`Alt+e`);
+        expect(chordFromEvent(keydown({ key: `Dead`, code: `BracketLeft`, altKey: true, shiftKey: true }), true)).toBe(`Alt+Shift+[`);
+        expect(chordFromEvent(keydown({ key: `Dead`, code: `IntlBackslash`, altKey: true }), true)).toBeUndefined();
+    });
+
     it(`allows a bare function key`, () => {
         expect(chordFromEvent(keydown({ key: `F5` }), false)).toBe(`f5`);
     });
@@ -102,12 +124,24 @@ describe(`formatChord`, () => {
 
     it(`labels multi-word named keys readably`, () => {
         expect(formatChord(`Ctrl+PageDown`, false)).toBe(`Ctrl+PageDown`);
-        expect(formatChord(`Ctrl+PageUp`, true)).toBe(`⌃PageUp`);
+        expect(formatChord(`Mod+Space`, false)).toBe(`Ctrl+Space`);
+    });
+
+    it(`draws named keys as the glyphs Apple's menus use`, () => {
+        expect(formatChord(`Ctrl+PageUp`, true)).toBe(`⌃⇞`);
+        expect(formatChord(`Mod+Enter`, true)).toBe(`⌘↩`);
+        expect(formatChord(`Mod+Backspace`, true)).toBe(`⌘⌫`);
+        expect(formatChord(`Escape`, true)).toBe(`⎋`);
+        // Elsewhere the same keys keep their names.
+        expect(formatChord(`Mod+Enter`, false)).toBe(`Ctrl+Enter`);
+        expect(formatChord(`Escape`, false)).toBe(`Esc`);
     });
 
     it(`draws the arrows as arrows`, () => {
         // Read in a 44px tooltip, where the arrow glyph has to be the whole word (the rail's walk chords).
         expect(formatChord(`Alt+ArrowUp`, false)).toBe(`Alt+↑`);
         expect(formatChord(`Alt+ArrowDown`, true)).toBe(`⌥↓`);
+        expect(formatChord(`Alt+ArrowLeft`, false)).toBe(`Alt+←`);
+        expect(formatChord(`Mod+ArrowRight`, true)).toBe(`⌘→`);
     });
 });

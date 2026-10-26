@@ -53,6 +53,7 @@ export const pointerFrame = (
         ...(action === `move` || wheel ? {} : { button: event.button }),
         // `detail` is 0 on a move and on a wheel, and 1/2/3 on the presses that matter.
         ...(event.detail > 0 ? { clickCount: event.detail } : {}),
+        // allow(modifier-tiers): the page is Linux, where a Mac's ⌘-click and a PC's Ctrl-click are both its Ctrl-click.
         ...flag(event.ctrlKey || event.metaKey),
         ...(event.shiftKey ? { shift: true } : {}),
         ...(event.altKey ? { alt: true } : {}),

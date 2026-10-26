@@ -41,7 +41,7 @@ describe(`the panel's commands`, () => {
             [`terminal.unsplit`, `Ctrl+Shift+U`, undefined],
             [`terminal.nextTab`, `Alt+PageDown`, `tabSurface == 'terminal'`],
             [`terminal.previousTab`, `Alt+PageUp`, `tabSurface == 'terminal'`],
-            [`terminal.split`, `Ctrl+Shift+5`, undefined],
+            [`terminal.split`, `Ctrl+Shift+5`, `!isMac || tabSurface == 'terminal'`],
             [`terminal.kill`, `Ctrl+Shift+X`, `tabSurface == 'terminal'`],
             [`terminal.killAll`, `Ctrl+Shift+Backspace`, `tabSurface == 'terminal'`],
             [`terminal.killInactive`, undefined, undefined],

@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
 import { clipboardOf } from "@intentic/ui";
+import { isApplePlatform } from "@intentic/ui/keys";
 import { basename, joinPath, parentDir } from "@intentic/ui/path";
 import { onScopeDispose, type Ref, ref } from "vue";
 import type { useNotifications } from "../../../../workbench/notifications/notifications";
@@ -54,6 +55,63 @@ const namesIn = async (host: TreeTransferHost, dir: string): Promise<ReadonlySet
     return new Set(siblings.map((child) => child.name));
 };
 
+// Files dragged in from the OS: the platform's own drag, the one kind the page never starts (useEntryDrag.ts).
+const useOsFileDrop = (host: Pick<TreeTransferHost, "rules" | "openLanding" | "uploads">) => {
+    const { rules } = host;
+    // The folder an OS file drag is over; undefined over nothing, or over a folder that takes no drop.
+    const dropDir = ref<string | undefined>(undefined);
+    // OS files only: any other drag is left alone, so the browser declines it. Stopped here, so no zone behind claims it too.
+    const onDragOver = (event: DragEvent, dir: string): void => {
+        if (!filesOffered(event)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const invalid = rules.noDrops(dir);
+        if (event.dataTransfer !== null) {
+            event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
+        }
+        dropDir.value = invalid ? undefined : dir;
+    };
+    // `dragleave` also fires when the pointer crosses into a child; only a real exit clears the target.
+    const onDragLeave = (event: DragEvent, dir: string): void => {
+        const to = event.relatedTarget;
+        if (to instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(to)) {
+            return;
+        }
+        if (dropDir.value === dir) {
+            dropDir.value = undefined;
+        }
+    };
+    // A refused drop is swallowed here, so it can't bubble to the root and land files unexpectedly.
+    const onDrop = (event: DragEvent, dir: string): void => {
+        if (event.dataTransfer === null || !filesOffered(event)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        dropDir.value = undefined;
+        if (rules.noDrops(dir) || rules.refuseIn(dir)) {
+            return;
+        }
+        // Opened before the files are read, so the placeholder rows appear inside the folder (and nest) that took the drop.
+        host.openLanding(dir);
+        // Synchronous, since webkitGetAsEntry must fire while the drag items are still alive.
+        host.uploads.enqueueFromDataTransfer(dir, event.dataTransfer);
+    };
+    // A file drag that ends anywhere (dropped elsewhere, cancelled) clears the hint; capture, so a stopped drop counts.
+    const clearDropDir = (): void => {
+        dropDir.value = undefined;
+    };
+    window.addEventListener(`dragend`, clearDropDir, true);
+    window.addEventListener(`drop`, clearDropDir, true);
+    onScopeDispose(() => {
+        window.removeEventListener(`dragend`, clearDropDir, true);
+        window.removeEventListener(`drop`, clearDropDir, true);
+    });
+    return { dropDir, onDragOver, onDragLeave, onDrop };
+};
+
 export const useTreeTransfer = (host: TreeTransferHost) => {
     const { store, rules, selecting } = host;
     const { selection, lead } = selecting;
@@ -99,13 +157,14 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         revealLanded(dir, landed);
         await write;
     };
-    // A cut moves and consumes the clipboard; a copy leaves it for the next paste.
-    const paste = async (dir: string): Promise<void> => {
+    // A cut moves and consumes the clipboard; a copy leaves it for the next paste. `move` moves what was copied instead,
+    // as Finder's ⌥⌘V does with what ⌘C took.
+    const paste = async (dir: string, as?: `move`): Promise<void> => {
         const clip = clipboard.value;
         if (clip === undefined || rules.refuseIn(dir)) {
             return;
         }
-        if (clip.mode === `copy`) {
+        if (clip.mode === `copy` && as !== `move`) {
             await copyInto(clip.paths, dir, t(`workspace.fileVerbs.couldntPaste`));
             return;
         }
@@ -157,6 +216,25 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         void paste(dir);
     };
 
+    // A copy of each selected entry beside itself, under a free name ("<name> copy"), as Finder's ⌘D: the lead alone
+    // when nothing is selected.
+    const duplicate = async (): Promise<void> => {
+        const led = lead.value;
+        const paths = rules.unlockedOnly(selection.value.size > 0 ? [...selection.value] : led !== null ? [led] : []);
+        if (paths.length === 0 || !supportsRoute(VERB_ROUTES.copy)) {
+            return;
+        }
+        const byDir = new Map<string, string[]>();
+        for (const path of paths) {
+            byDir.set(parentDir(path), [...(byDir.get(parentDir(path)) ?? []), path]);
+        }
+        for (const [dir, siblings] of byDir) {
+            if (!rules.refuseIn(dir)) {
+                await copyInto(siblings, dir, t(`workspace.fileVerbs.couldntPaste`));
+            }
+        }
+    };
+
     // Where a dragged row lands. Out of an archive it is a copy: the member stays in the archive, since nothing here
     // rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
     const dragOnto = async (paths: readonly string[], dir: string): Promise<void> => {
@@ -172,74 +250,28 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         await write;
     };
     // Every press reaches beginEntryDrag, carrying nothing when it cannot travel: that is what ends a drag's claim on a click.
+    // ⌥ held on a Mac makes the drag a copy, as in Finder; any other modifier keeps the press a click (a range, a toggle).
+    const isMac = isApplePlatform();
     const onPointerDown = (event: PointerEvent, path: string): void => {
         const edit = host.inline.edit.value;
-        const modified = event.shiftKey || event.ctrlKey || event.metaKey || event.altKey;
+        const copies = isMac && event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey;
+        const modified = !copies && (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey);
         // A backend that moves nothing (a folder on this computer) has no drag to offer: the press stays a click.
         const held =
-            modified || (edit.kind === `renaming` && edit.path === path) || !supportsRoute(VERB_ROUTES.cut)
+            modified || (edit.kind === `renaming` && edit.path === path) || !supportsRoute(copies ? VERB_ROUTES.copy : VERB_ROUTES.cut)
                 ? []
                 : // Dragging a selected entry moves the whole selection; otherwise just that entry.
                   rules.unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
-        beginEntryDrag(event, { paths: held, onDrop: (dir) => void dragOnto(held, dir) });
+        const onDrop = copies ? (dir: string) => void copyInto(held, dir, t(`workspace.fileVerbs.couldntPaste`)) : (dir: string) => void dragOnto(held, dir);
+        beginEntryDrag(event, { paths: held, copies, onDrop });
     };
     const { dragging, paths: dragged, over } = useEntryDrag();
     // Dimmed while it travels.
     const carried = (path: string): boolean => dragging.value && dragged.value.includes(path);
 
-    // The folder an OS file drag is over; undefined over nothing, or over a folder that takes no drop.
-    const dropDir = ref<string | undefined>(undefined);
+    const { dropDir, onDragOver, onDragLeave, onDrop } = useOsFileDrop(host);
     // Lit as where a drop would land, by either drag.
     const dropLit = (path: string): boolean => path === dropDir.value || path === over.value;
-    // OS files only: any other drag is left alone, so the browser declines it. Stopped here, so no zone behind claims it too.
-    const onDragOver = (event: DragEvent, dir: string): void => {
-        if (!filesOffered(event)) {
-            return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        const invalid = rules.noDrops(dir);
-        if (event.dataTransfer !== null) {
-            event.dataTransfer.dropEffect = invalid ? `none` : `copy`;
-        }
-        dropDir.value = invalid ? undefined : dir;
-    };
-    // `dragleave` also fires when the pointer crosses into a child; only a real exit clears the target.
-    const onDragLeave = (event: DragEvent, dir: string): void => {
-        const to = event.relatedTarget;
-        if (to instanceof Node && event.currentTarget instanceof Node && event.currentTarget.contains(to)) {
-            return;
-        }
-        if (dropDir.value === dir) {
-            dropDir.value = undefined;
-        }
-    };
-    // A refused drop is swallowed here, so it can't bubble to the root and land files unexpectedly.
-    const onDrop = (event: DragEvent, dir: string): void => {
-        if (event.dataTransfer === null || !filesOffered(event)) {
-            return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        dropDir.value = undefined;
-        if (rules.noDrops(dir) || rules.refuseIn(dir)) {
-            return;
-        }
-        // Opened before the files are read, so the placeholder rows appear inside the folder (and nest) that took the drop.
-        host.openLanding(dir);
-        // Synchronous, since webkitGetAsEntry must fire while the drag items are still alive.
-        host.uploads.enqueueFromDataTransfer(dir, event.dataTransfer);
-    };
-    // A file drag that ends anywhere (dropped elsewhere, cancelled) clears the hint; capture, so a stopped drop counts.
-    const clearDropDir = (): void => {
-        dropDir.value = undefined;
-    };
-    window.addEventListener(`dragend`, clearDropDir, true);
-    window.addEventListener(`drop`, clearDropDir, true);
-    onScopeDispose(() => {
-        window.removeEventListener(`dragend`, clearDropDir, true);
-        window.removeEventListener(`drop`, clearDropDir, true);
-    });
 
     // Unpacks an archive into the folder holding it, selected once the daemon answers: only it can say what the entry is
     // called, and a guessed name would mark the wrong row whenever the archive turned out to hold its own folder.
@@ -256,5 +288,8 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }, t(`workspace.fileVerbs.couldntExtract`));
     };
 
-    return { stage, paste, extract, onCopyEvent, onPasteEvent, onPointerDown, carried, dropDir, dropLit, onDragOver, onDragLeave, onDrop };
+    // What was copied, moved into the folder the keyboard is on (a Mac's ⌥⌘V).
+    const moveHere = (): Promise<void> => paste(host.targetDir(lead.value), `move`);
+
+    return { stage, paste, duplicate, moveHere, extract, onCopyEvent, onPasteEvent, onPointerDown, carried, dropDir, dropLit, onDragOver, onDragLeave, onDrop };
 };

@@ -62,6 +62,7 @@ import TileMark from "../components/TileMark.vue";
 import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
+import ShortcutSheet from "./commands/ShortcutSheet.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -619,6 +620,7 @@ useGettingStarted();
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />
+        <ShortcutSheet />
 
         <!-- The chat tile carried off the rail: where it can go, and what letting go there does. -->
         <ChatTileDragLayer

@@ -1,3 +1,6 @@
+import { definePreference } from "@intentic/ui/preference";
+import type { Ref } from "vue";
+
 // Line edits the pane would otherwise swallow, retyped as bytes every line editor binds. xterm encodes
 // Ctrl+Backspace as ^H, which zle and readline both read as backward-delete-char — one character, not a word; it
 // emits nothing at all for Cmd+arrows; and it names Home/End the xterm way, while the pane's TERM (tmux-256color)
@@ -26,3 +29,12 @@ export const editKeyBytes = (event: KeyboardEvent, isMac: boolean): string | und
     const prefix = event.ctrlKey ? `ctrl+` : event.metaKey ? `meta+` : ``;
     return EDIT_KEYS[`${prefix}${event.key}`];
 };
+
+// Whether Option is the shell's Meta on a Mac (⌥B and ⌥F a word back and forward, ⌥. the last argument) rather than the
+// key that types ∫, ƒ and ≥: Terminal.app's and iTerm's own switch, off by default as theirs is. Ignored elsewhere, where
+// Alt already is Meta.
+export const optionIsMeta: Ref<boolean> = definePreference<boolean>({
+    key: `ui-terminal-option-meta`,
+    read: (raw) => raw === `on`,
+    write: (value) => (value ? `on` : null),
+});

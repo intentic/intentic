@@ -18,6 +18,7 @@ import { usePoll } from "@intentic/ui/async";
 import { useTextSize } from "@intentic/ui/text-size";
 import { useTheme } from "@intentic/ui/theme";
 import { useSkin } from "../../skins/useSkin";
+import { optionIsMeta } from "./terminalEditKeys";
 import { onScreen } from "../../workbench/window/onScreen";
 
 // Multi-tab terminal state for the terminal panel: an instance per surface over one shared session cache. `kind` gates
@@ -72,9 +73,8 @@ watch(useTextSize().scale, () => {
     }
 });
 
-// The scheme and the skin are the two things that move `--color-terminal`; either one repaints every cached session,
-// on screen or parked, since xterm keeps colours as values rather than reading them from CSS.
-watch([useTheme().scheme, useSkin().skin], () => {
+// Scheme, skin and a Mac's Option-as-Meta switch are values xterm holds, not CSS: each re-hands every cached session.
+watch([useTheme().scheme, useSkin().skin, optionIsMeta], () => {
     for (const session of cache.value.values()) {
         retintTerminalSession(session);
     }

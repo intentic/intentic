@@ -45,6 +45,10 @@ const gesturesOver = (follows = false) => {
         editing: ref(false),
         beginRename: jest.fn((path: string) => done.push(`rename ${path}`)),
         requestDelete: jest.fn(() => done.push(`delete`)),
+        transfer: {
+            duplicate: jest.fn(async () => void done.push(`duplicate`)),
+            moveHere: jest.fn(async () => void done.push(`move here`)),
+        },
         focusRow: jest.fn((path: string) => done.push(`focus ${path}`)),
         focusLead: jest.fn(() => {
             done.push(`focus lead`);
@@ -212,7 +216,8 @@ describe(`the keyboard`, () => {
 
         gestures.onKeydown(escape);
         expect([state(), escape.defaultPrevented]).toEqual([{ selected: [], anchor: `README.md`, lead: `README.md` }, true]);
-        gestures.onKeydown(key(`a`, { metaKey: true }));
+        // The primary modifier: Ctrl here, where the suite runs on no Apple platform.
+        gestures.onKeydown(key(`a`, { ctrlKey: true }));
         expect(state().selected).toEqual([`src`, `src/main.ts`, `package.json`, `bundle.zip`, `.intentic/secrets/auth`, `notes.md`, `README.md`]);
         gestures.onKeydown(key(`Delete`));
         selecting.selectSingle(`README.md`);

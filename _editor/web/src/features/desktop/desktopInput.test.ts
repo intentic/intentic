@@ -126,3 +126,26 @@ describe("keys", () => {
         expect(keyMessage(press(`a`, { isComposing: true }))).toBeUndefined();
     });
 });
+
+// A Mac's caret keys, which Linux spells with Ctrl and Home/End; and Option's own letters, which are typing.
+describe("keys from a Mac", () => {
+    const press = (key: string, held: KeyboardEventInit = {}): KeyboardEvent => new KeyboardEvent(`keydown`, { key, ...held });
+
+    test("⌘ with an arrow goes to the line's or the document's edge", () => {
+        expect(keyMessage(press(`ArrowLeft`, { metaKey: true }), true)).toEqual({ type: `key`, key: `Home` });
+        expect(keyMessage(press(`ArrowRight`, { metaKey: true, shiftKey: true }), true)).toEqual({ type: `key`, key: `End`, shift: true });
+        expect(keyMessage(press(`ArrowUp`, { metaKey: true }), true)).toEqual({ type: `key`, key: `Home`, ctrl: true });
+    });
+
+    test("⌥ with an arrow or ⌫ moves or deletes a word", () => {
+        expect(keyMessage(press(`ArrowLeft`, { altKey: true }), true)).toEqual({ type: `key`, key: `ArrowLeft`, ctrl: true });
+        expect(keyMessage(press(`Backspace`, { altKey: true }), true)).toEqual({ type: `key`, key: `Backspace`, ctrl: true });
+    });
+
+    test("a letter Option typed is a character, and ⌘ is still the primary modifier", () => {
+        expect(keyMessage(press(`ą`, { altKey: true }), true)).toEqual({ type: `text`, text: `ą` });
+        expect(keyMessage(press(`c`, { metaKey: true }), true)).toEqual({ type: `key`, key: `c`, ctrl: true });
+        // Elsewhere ⌘ with an arrow is the window manager's, sent as it was pressed.
+        expect(keyMessage(press(`ArrowLeft`, { altKey: true }), false)).toEqual({ type: `key`, key: `ArrowLeft`, alt: true });
+    });
+});

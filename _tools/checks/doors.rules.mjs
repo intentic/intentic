@@ -37,6 +37,32 @@ const clipboardTiers = {
     },
 };
 
+// THE PRIMARY MODIFIER IS ONE KEY PER PLATFORM: ⌘ on a Mac, Ctrl elsewhere, read by the kit's `primaryHeld`
+// (`@intentic/ui/keys`). "Ctrl or Cmd" takes ⌃ from a Mac's text fields, where ⌃A, ⌃E, ⌃K and ⌃Y edit the line: it is how
+// ⌃B came to bold a Mac user's prompt instead of moving the caret back. A shortcut the shell owns is a command declared
+// in builtinCommands.ts, whose chord notation already says `Mod`.
+//
+// Refused in the editor's surfaces (the web app, the desktop shell, the share view) and every extension, outside tests:
+// the two flags or'd on their own, in either order. A list of every modifier (`shiftKey || ctrlKey || metaKey ||
+// altKey`, a press the browser owns) asks something else and passes. A site that is right to take either (a remote
+// Linux machine, where both are its Ctrl; a trackpad pinch, which arrives as Ctrl) says why with
+// `// allow(modifier-tiers): <reason>`.
+const modifierTiers = {
+    roots: [],
+    subjects: surface,
+    comments: `lines`,
+    patterns: [
+        {
+            reach: /(?<!\|\|\s*)\b(\w+)\??\.(?:ctrlKey\s*\|\|\s*\1\??\.metaKey|metaKey\s*\|\|\s*\1\??\.ctrlKey)\b(?!\s*\|\|)/,
+            why: () => `"Ctrl or Cmd" takes ⌃ from a Mac's text fields; primaryHeld reads ⌘ on a Mac and Ctrl elsewhere`,
+        },
+    ],
+    report: {
+        heading: `a primary modifier read as "Ctrl or Cmd": use primaryHeld from @intentic/ui/keys (⌘ on a Mac, Ctrl elsewhere), declare the chord as a command, or say at the site why both are right with \`// allow(modifier-tiers): <reason>\``,
+        vouched: ({ files }) => `${files} files in the editor's surfaces and the extensions: every primary modifier is one key per platform`,
+    },
+};
+
 // The base library's labels are English and fixed ("1.4 MB", "90s"): right for the daemon and the CLIs, which have no
 // reader's language, and wrong on a screen that has one.
 const BASE_IMPORT = /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']@intentic\/base(?:\/[\w-]+)?["']/g;
@@ -422,6 +448,7 @@ const runSettings = {
 
 const RULES = {
     "clipboard-tiers": clipboardTiers,
+    "modifier-tiers": modifierTiers,
     "format-tiers": formatTiers,
     "primitive-tiers": primitiveTiers,
     "process-tiers": processTiers,

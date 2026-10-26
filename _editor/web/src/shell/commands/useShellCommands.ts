@@ -38,6 +38,7 @@ export function useShellCommands(): void {
                 mode.value = `commands`;
                 isOpen.value = true;
             }),
+            registerBuiltin(`view.settings`, (): void => void router.push(`/settings`)),
             // Both terminal commands no-op below maintainer, where the daemon refuses the socket.
             registerBuiltin(`terminal.toggle`, () => (canShip.value ? terminal.toggle() : undefined)),
             registerBuiltin(`terminal.new`, () => (canShip.value ? terminal.spawnShell() : undefined)),

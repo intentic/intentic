@@ -123,7 +123,7 @@ const { mobile } = useDevice();
 const layout = useLayout();
 
 // A phone keyboard has no Ctrl, so the shortcut hint moves to the button label instead.
-const commitPlaceholder = computed(() => (mobile.value ? t(`workspace.reviewPanel.message`) : t(`workspace.reviewPanel.messageCtrlEnter`)));
+const commitPlaceholder = computed(() => (mobile.value ? t(`workspace.reviewPanel.message`) : t(`workspace.reviewPanel.messageCommitKeys`, { keys: COMMIT_KEYS })));
 
 const legend = computed(() => summarizeOrigins(scannable.value));
 // Seeded from the standing ask (namedAfter), so reopening the panel restores the filter; "you" never travels,

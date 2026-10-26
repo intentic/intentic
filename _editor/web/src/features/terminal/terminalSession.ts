@@ -16,7 +16,7 @@ import { liveSocket, type LiveSocket } from "../../client/session/liveSocket";
 import { socketAddress } from "../../client/sandbox/streams/wsTicket";
 import { type ChannelEvents, readsDeflate, socketChannel, type TerminalChannel } from "./channel/terminalChannel";
 import { StreamSocket } from "./channel/streamSocket";
-import { editKeyBytes } from "./terminalEditKeys";
+import { editKeyBytes, optionIsMeta } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./links/terminalFileLinks";
 import { registerUrlLinks } from "./links/terminalUrlLinks";
 import { applyTerminalGrid, requestTerminalGrid, resetTerminalGrid, type TerminalSizing } from "./terminalSizing";
@@ -277,12 +277,13 @@ export const retypeTerminalSession = (s: TerminalSession): void => {
     scheduleResizeFrame(s);
 };
 
-// Repaints a live session after a scheme or skin change. xterm holds its palette as values, not as CSS, so a session
-// opened under one scheme keeps that scheme's ink until it is handed a new theme.
+// Repaints a live session after a scheme or skin change, and hands it the Option-as-Meta switch. xterm holds both as
+// values, not as CSS, so a session opened under one scheme keeps that scheme's ink until it is handed a new theme.
 export const retintTerminalSession = (s: TerminalSession): void => {
     const paint = terminalPaint();
     s.term.options.theme = paint.theme;
     s.term.options.minimumContrastRatio = paint.minimumContrastRatio;
+    s.term.options.macOptionIsMeta = optionIsMeta.value;
 };
 
 // Both clipboard verbs route through the terminal's own window: elsewhere this realm's document may be unfocused and
@@ -306,6 +307,30 @@ export const pasteIntoTerminal = (s: TerminalSession): void => {
             s.term.focus();
         })
         .catch(() => {});
+};
+
+// A bound shell command takes a chord before the pane; returning false stops xterm, not propagation. What's left is
+// xterm's to encode, except the line edits it has no useful encoding for (terminalEditKeys).
+const bindShellKeys = (term: Terminal): void => {
+    const isMac = isApplePlatform();
+    term.attachCustomKeyEventHandler((event) => {
+        if (event.type !== `keydown`) {
+            return true;
+        }
+        if (boundCommand(event, isMac) !== undefined) {
+            return false;
+        }
+        const typed = editKeyBytes(event, isMac);
+        if (typed === undefined) {
+            return true;
+        }
+        // Returning false leaves the event live, so Ctrl+Backspace would also edit xterm's own helper textarea.
+        event.preventDefault();
+        // wasUserInput, so the pane scrolls to the prompt and drops its selection as it would for any keystroke; a
+        // read-only pane drops it, since disableStdin gates the data event.
+        term.input(typed, true);
+        return false;
+    });
 };
 
 // Builds one session's xterm, host, and channel; the host stays out of the DOM until mountTerminalSession. `readOnly`
@@ -332,31 +357,15 @@ export const createTerminalSession = (
         scrollback: 30_000,
         // Right-click on a bare word selects it first, so the context menu's Copy has something to copy.
         rightClickSelectsWord: true,
+        // A Mac's Option: the shell's Meta when the person chose it (terminalEditKeys.ts), and Option-click selects
+        // through a program that has the mouse (tmux, vim), as Terminal.app and iTerm let it.
+        macOptionIsMeta: optionIsMeta.value,
+        macOptionClickForcesSelection: true,
         // Palette and contrast floor, snapshotted at creation; retintTerminalSession re-reads them on a scheme or
         // skin change.
         ...terminalPaint(),
     });
-    // A bound shell command takes a chord before the pane; returning false stops xterm, not propagation. What's left
-    // is xterm's to encode, except the line edits it has no useful encoding for (terminalEditKeys).
-    const isMac = isApplePlatform();
-    term.attachCustomKeyEventHandler((event) => {
-        if (event.type !== `keydown`) {
-            return true;
-        }
-        if (boundCommand(event, isMac) !== undefined) {
-            return false;
-        }
-        const typed = editKeyBytes(event, isMac);
-        if (typed === undefined) {
-            return true;
-        }
-        // Returning false leaves the event live, so Ctrl+Backspace would also edit xterm's own helper textarea.
-        event.preventDefault();
-        // wasUserInput, so the pane scrolls to the prompt and drops its selection as it would for any keystroke; a
-        // read-only pane drops it, since disableStdin gates the data event.
-        term.input(typed, true);
-        return false;
-    });
+    bindShellKeys(term);
     const search = new SearchAddon();
     term.loadAddon(search);
     // Makes plain-text URLs Ctrl/Cmd-clickable, including ones a program hard-wrapped across rows.

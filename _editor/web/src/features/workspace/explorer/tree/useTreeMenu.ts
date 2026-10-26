@@ -2,8 +2,10 @@ import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspac
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
 import type { MenuItem } from "primevue/menuitem";
+import { useDevice } from "@intentic/ui";
+import { isApplePlatform } from "@intentic/ui/keys";
 import { computed, ref } from "vue";
-import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "../entryMenu";
+import { type EntryMenuInput, type EntryVerbs, entryKeys, entryMenuItems } from "../entryMenu";
 import type { RowAction } from "../rowActions";
 import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
@@ -28,7 +30,9 @@ export interface TreeMenuHost {
     readonly keepFolder: (path: string) => Promise<void>;
     readonly requestDelete: () => void;
     readonly stage: (mode: "copy" | "cut", system: "async" | "event") => readonly string[];
-    readonly paste: (dir: string) => Promise<void>;
+    // `move` moves what was copied instead (Move Here).
+    readonly paste: (dir: string, as?: `move`) => Promise<void>;
+    readonly duplicate: () => Promise<void>;
     // What the surface may not have, each left out of the menu when absent (EntryVerbs).
     readonly extract?: (path: string) => Promise<void>;
     // `dir` is workspace-relative.
@@ -41,6 +45,9 @@ export interface TreeMenuHost {
 
 export const useTreeMenu = (host: TreeMenuHost) => {
     const { selection, selectSingle } = host.selecting;
+    // The keys beside the verbs, where there is a keyboard to press them on.
+    const { coarse } = useDevice();
+    const isMac = isApplePlatform();
     const menu = ref<{ show: (event: Event) => void } | undefined>(undefined);
     const menuEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
 
@@ -80,6 +87,9 @@ export const useTreeMenu = (host: TreeMenuHost) => {
                 host.stage(`copy`, `async`);
             },
             paste: () => void host.paste(dir),
+            duplicate: () => void host.duplicate(),
+            // Finder's Move Item Here, a Mac's alone: elsewhere Cut is how a file moves.
+            moveHere: isMac ? () => void host.paste(dir, `move`) : undefined,
             openTerminal: openTerminal === undefined ? undefined : () => openTerminal(dir),
             extract: extract === undefined || target === undefined ? undefined : () => void extract(target.path),
             // The selection it was opened in, the private entries left out as every bulk verb leaves them; else the one row.
@@ -112,6 +122,8 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             count: host.rules.unlockedOnly([...selection.value]).length,
             barren: target?.type === `dir` && host.isBarren(target.path),
             clipboardFull: host.store.clipboard.value !== undefined,
+            clipboardCopied: host.store.clipboard.value?.mode === `copy`,
+            keys: coarse.value ? undefined : entryKeys(isMac),
             lead: dirActionItems(target, multi),
             ...host.frame(target, multi),
             verbs: verbsFor(target, dir, multi),

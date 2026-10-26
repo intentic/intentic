@@ -3309,8 +3309,8 @@
             "replacedSend": "sie wird beim Senden ersetzt.",
             "runMessageThrough": "Diese Nachricht laufen lassen durch",
             "sandboxBusy": "Sandbox ausgelastet",
-            "shiftEnterNewLine": "Shift+Enter für eine neue Zeile",
-            "shiftEnterOrNewAgent": "Shift+Enter für eine neue Zeile, {chord} für einen neuen Agenten",
+            "shiftEnterNewLine": "{newline} für eine neue Zeile",
+            "shiftEnterOrNewAgent": "{newline} für eine neue Zeile, {chord} für einen neuen Agenten",
             "startConversation": "Beginnen Sie eine Unterhaltung mit {providerName}.",
             "startConversationAny": "Beginnen Sie eine Unterhaltung.",
             "talkHandsFree": "Freihändig sprechen",
@@ -3333,7 +3333,8 @@
             "plain": {
                 "startConversation": "Beginne ein Gespräch mit deinem Assistenten.",
                 "moreSettings": "Weitere Optionen"
-            }
+            },
+            "shiftEnterKeys": "Shift+Enter"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "Dieses Konto muss neu verbunden werden.",
@@ -10642,10 +10643,17 @@
         },
         "settingsKeybindings": {
             "alsoOn": "Auch bei",
+            "appWindowNote": "In einem Browser-Tab behält der Browser {close}, {reopen} und {next}. Als App installiert, nutzt Intentic sie für seine eigenen Tabs.",
             "cancelRecording": "Aufnahme abbrechen",
             "ext": "Erw.",
             "filterCommands": "Befehle filtern…",
+            "installApp": "Als App installieren",
+            "keptByBrowser": "Browser behält das",
+            "keptByMacos": "macOS behält das",
+            "keptBySystem": "System behält das",
             "noCommandsMatch": "Keine Befehle passen zu „{query}“.",
+            "optionIsMeta": "Option als Meta-Taste",
+            "optionIsMetaHint": "⌥B, ⌥F und ⌥. erreichen die Shell als Wortsprünge und letztes Argument, statt ∫, ƒ und ≥ zu tippen.",
             "pressKeysEsc": "Tasten drücken… (Esc)",
             "recordShortcut": "Kürzel aufnehmen",
             "recordShortcut2": "Kürzel für {label} aufnehmen",
@@ -10653,9 +10661,11 @@
             "resetDefault": "Zurücksetzen",
             "resetToDefault2": "{label} auf Standard zurücksetzen",
             "shortcutClash": "Kürzel doppelt",
+            "terminal": "Terminal",
             "unbind": "Lösen",
             "unbind2": "{label} lösen",
-            "unbound": "Nicht belegt"
+            "unbound": "Nicht belegt",
+            "worksInApp": "Geht in der App"
         },
         "settingsNotifications": {
             "appIcon": "Taskleiste und Infobereich",
@@ -11471,7 +11481,9 @@
             "dockBack": "Wieder andocken",
             "dockBackToSide": "Wieder seitlich andocken",
             "dockToRail": "An Leiste andocken",
+            "keyboardShortcuts": "Tastenkürzel",
             "moveIntoNewWindow": "In neues Fenster verschieben",
+            "settings": "Einstellungen",
             "togglePanel": "Panel umschalten"
         },
         "windowControls": {
@@ -11498,6 +11510,10 @@
             "results": "Passende Einstellungen",
             "noMatches": "Keine Einstellung passt zu „{query}“.",
             "searchEverything": "Überall nach „{query}“ suchen"
+        },
+        "shortcutSheet": {
+            "change": "In den Einstellungen ändern",
+            "general": "Allgemein"
         }
     },
     "terminal": {
@@ -11515,6 +11531,7 @@
             "changeColor2": "Farbe ändern…",
             "changeIcon": "Symbol ändern…",
             "changeIcon2": "Symbol ändern…",
+            "clear": "Leeren",
             "closeFind": "Suche schließen",
             "closeWindow": "Fenster schließen",
             "copyAll": "Alles kopieren",
@@ -12321,8 +12338,11 @@
             "download": "Herunterladen",
             "downloadItems": "{count} Elemente als ZIP herunterladen",
             "downloadZip": "Als ZIP herunterladen",
+            "duplicate": "Duplizieren",
+            "duplicateItems": "{count} Element duplizieren | {count} Elemente duplizieren",
             "extract": "Entpacken",
             "keepFolder": "Ordner behalten",
+            "moveHere": "Hierher verschieben",
             "newFile": "Neue Datei",
             "newFolder": "Neuer Ordner",
             "openTerminal": "Terminal öffnen"
@@ -12542,7 +12562,6 @@
             "whatHappened": "Was passiert ist",
             "you": "Sie",
             "message": "Nachricht",
-            "messageCtrlEnter": "Nachricht (Ctrl+Enter zum Committen)",
             "agentId": "Agent {id}",
             "commitAll": "Alles committen",
             "blockedByConflicts": "Lösen Sie zuerst die Konflikte: git kann nicht committen, solange ein Pfad nicht gemergt ist.",
@@ -12569,7 +12588,8 @@
             "unstageFrom": "{count} Datei von {origin} unstagen | {count} Dateien von {origin} unstagen",
             "stageFrom": "{count} Datei von {origin} stagen | {count} Dateien von {origin} stagen",
             "messageBeingWritten": "seine Commit-Nachricht wird geschrieben",
-            "namesTheCommit": "benennt den Commit"
+            "namesTheCommit": "benennt den Commit",
+            "messageCommitKeys": "Nachricht ({keys} zum Committen)"
         },
         "rowActions": {
             "changedSinceOn": "Seit Aktivierung geändert",

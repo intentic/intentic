@@ -4,6 +4,7 @@ import type { ImageViewState } from "./imageView.js";
 import type { Tip } from "../../lib/tooltip.js";
 import { ui } from "../../lib/ui.js";
 import { useT } from "../../i18n/index.js";
+import { isApplePlatform } from "../../lib/input/keys.js";
 
 // The one surface that draws a picture (file viewer, SVG preview, both sides of a binary diff), so zoom, pan
 // and the checkerboard match everywhere. Ctrl/pinch zooms about the pointer, not the whole app; dragging pans
@@ -38,11 +39,12 @@ const offset = ref({ x: 0, y: 0 });
 const fitted = ref(true);
 const dragging = ref(false);
 
-// The zoom readout's hover: each pointer gesture beside what it does.
+// The zoom readout's hover: each pointer gesture beside what it does. ⌘ on a Mac, where a trackpad pinch zooms too.
+const zoomKey = isApplePlatform() ? `⌘` : t(`ui.keys.ctrl`);
 const gestures = computed((): Tip => ({
     title: t(`ui.imageView.gestures`),
     rows: [
-        { label: t(`ui.imageView.ctrlScroll`), value: t(`ui.imageView.zoom`) },
+        { label: t(`ui.imageView.modifierScroll`, { key: zoomKey }), value: t(`ui.imageView.zoom`) },
         { label: t(`ui.imageView.drag`), value: t(`ui.imageView.pan`) },
         { label: t(`ui.imageView.doubleClick`), value: t(`ui.imageView.fit`) },
     ],
@@ -320,7 +322,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
         :class="dragging ? `cursor-grabbing` : pannable ? `cursor-grab` : `cursor-default`"
         tabindex="0"
         role="group"
-        :aria-label="t(`ui.imageView.imagePreviewCtrlScroll`)"
+        :aria-label="t(`ui.imageView.imagePreviewZoom`, { key: zoomKey })"
         @wheel="onWheel"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"

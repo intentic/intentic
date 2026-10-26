@@ -5,6 +5,7 @@ const viewStates = new Map<string, Monaco.editor.ICodeEditorViewState>();
 </script>
 
 <script setup lang="ts">
+import { primaryHeld } from "@intentic/ui/keys";
 import { useDevice } from "@intentic/ui";
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { modelLineOf } from "@intentic/code-read";
@@ -219,7 +220,7 @@ onMounted(async () => {
         view.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, doSave);
         // Monaco's command binds the key, but Ctrl/Cmd+S still reaches the browser's Save-page dialog: stop it.
         view.onKeyDown((event) => {
-            if ((event.ctrlKey || event.metaKey) && event.keyCode === m.KeyCode.KeyS) {
+            if (primaryHeld(event) && event.keyCode === m.KeyCode.KeyS) {
                 event.preventDefault();
             }
         });

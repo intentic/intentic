@@ -76,7 +76,7 @@ on raised entries. The complexity caps and the cyclomatic and length entries are
 
 ## Door checks
 
-Most tier checks answer one question: does this file reach past a concern's one door? `clipboard-tiers`,
+Most tier checks answer one question: does this file reach past a concern's one door? `clipboard-tiers`, `modifier-tiers`,
 `format-tiers`, `primitive-tiers`, `process-tiers`, `home-dir`, `tones` and `run-settings` are each one entry in
 `doors.rules.mjs` (the subjects, what counts as prose, the patterns or a `find`, the door, an optional baseline, the
 report) run by `lib/doors.mjs`; their `<check>.mjs` only names the entry. `buttons`, `inputs` and `rows` walk a tag
@@ -158,6 +158,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [time-zones](time-zones.mjs) | a cron, date format or day bucket with no zone |
 | [format-tiers](format-tiers.mjs) | a number or date the editor or an extension formats by hand instead of through the kit (ratcheted: `baselines/format-tiers.json`) |
 | [clipboard-tiers](clipboard-tiers.mjs) | the clipboard reached through `navigator.clipboard` in the editor or an extension instead of through the kit |
+| [modifier-tiers](modifier-tiers.mjs) | a primary modifier read as "Ctrl or Cmd" in the editor or an extension instead of the kit's `primaryHeld` (⌘ on a Mac, Ctrl elsewhere) |
 | [reduced-motion](reduced-motion.mjs) | the OS asked about reduced motion outside `@intentic/ui/motion`, a CSS animation utility or `motion-reduce:` variant in the app shell, the kit or an extension, or a skeleton that moves by CSS animation |
 | [layout](layout.mjs) | ghost, over-full, twin, colliding or dead directories |
 | [package-readmes](package-readmes.mjs) | a package with no `README.md`, or one with no H1 and lead sentence, found the way `intentic-docs validate` finds packages |

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { composingKey } from "@intentic/ui/keys";
 import {
     Button,
     ConfirmDialog,
@@ -146,7 +147,7 @@ const { focusAgent, focusSubagent, drillIn, reviewAgent, keepAgent, closeAgent, 
 const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
 const onFieldEnter = (event: KeyboardEvent): void => {
     // Enter that confirms an IME composition is the composition's, not a request to open anything.
-    if (event.isComposing) {
+    if (composingKey(event)) {
         return;
     }
     if (openFound()) {

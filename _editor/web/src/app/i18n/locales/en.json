@@ -3309,8 +3309,8 @@
             "replacedSend": "it is replaced when you send.",
             "runMessageThrough": "Run this message through",
             "sandboxBusy": "Sandbox busy",
-            "shiftEnterNewLine": "Shift+Enter for new line",
-            "shiftEnterOrNewAgent": "Shift+Enter for new line, {chord} for a new agent",
+            "shiftEnterNewLine": "{newline} for new line",
+            "shiftEnterOrNewAgent": "{newline} for new line, {chord} for a new agent",
             "startConversation": "Start a conversation with {providerName}.",
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Talk hands-free",
@@ -3333,7 +3333,8 @@
             "plain": {
                 "startConversation": "Start a conversation with your assistant.",
                 "moreSettings": "More options"
-            }
+            },
+            "shiftEnterKeys": "Shift+Enter"
         },
         "chatPaneNotices": {
             "accountNeedsToReconnected": "This account needs to be reconnected.",
@@ -10642,10 +10643,17 @@
         },
         "settingsKeybindings": {
             "alsoOn": "Also on",
+            "appWindowNote": "In a browser tab, the browser keeps {close}, {reopen} and {next}. Installed as an app, Intentic uses them for its own tabs.",
             "cancelRecording": "Cancel recording",
             "ext": "ext",
             "filterCommands": "Filter commands…",
+            "installApp": "Install as app",
+            "keptByBrowser": "Browser keeps this",
+            "keptByMacos": "macOS keeps this",
+            "keptBySystem": "System keeps this",
             "noCommandsMatch": "No commands match \"{query}\".",
+            "optionIsMeta": "Use Option as Meta",
+            "optionIsMetaHint": "⌥B, ⌥F and ⌥. reach the shell as word motions and the last argument, instead of typing ∫, ƒ and ≥.",
             "pressKeysEsc": "Press keys… (Esc)",
             "recordShortcut": "Record shortcut",
             "recordShortcut2": "Record shortcut for {label}",
@@ -10653,9 +10661,11 @@
             "resetDefault": "Reset",
             "resetToDefault2": "Reset {label} to default",
             "shortcutClash": "Shortcut clash",
+            "terminal": "Terminal",
             "unbind": "Unbind",
             "unbind2": "Unbind {label}",
-            "unbound": "Unbound"
+            "unbound": "Unbound",
+            "worksInApp": "Works in the app"
         },
         "settingsNotifications": {
             "appIcon": "Taskbar and tray",
@@ -11471,7 +11481,9 @@
             "dockBack": "Dock Back",
             "dockBackToSide": "Dock Back to the Side",
             "dockToRail": "Dock to Rail",
+            "keyboardShortcuts": "Keyboard Shortcuts",
             "moveIntoNewWindow": "Move into New Window",
+            "settings": "Settings",
             "togglePanel": "Toggle Panel"
         },
         "windowControls": {
@@ -11498,6 +11510,10 @@
             "results": "Settings that match",
             "noMatches": "No settings match “{query}”.",
             "searchEverything": "Search everything for “{query}”"
+        },
+        "shortcutSheet": {
+            "change": "Change in Settings",
+            "general": "General"
         }
     },
     "terminal": {
@@ -11515,6 +11531,7 @@
             "changeColor2": "Change Color…",
             "changeIcon": "Change icon…",
             "changeIcon2": "Change Icon…",
+            "clear": "Clear",
             "closeFind": "Close find",
             "closeWindow": "Close window",
             "copyAll": "Copy all",
@@ -12321,8 +12338,11 @@
             "download": "Download",
             "downloadItems": "Download {count} items as ZIP",
             "downloadZip": "Download as ZIP",
+            "duplicate": "Duplicate",
+            "duplicateItems": "Duplicate {count} item | Duplicate {count} items",
             "extract": "Extract",
             "keepFolder": "Keep folder",
+            "moveHere": "Move Here",
             "newFile": "New File",
             "newFolder": "New Folder",
             "openTerminal": "Open Terminal"
@@ -12542,7 +12562,6 @@
             "whatHappened": "What happened",
             "you": "you",
             "message": "Message",
-            "messageCtrlEnter": "Message (Ctrl+Enter to commit)",
             "agentId": "Agent {id}",
             "commitAll": "Commit all",
             "blockedByConflicts": "Resolve the conflicts first: git cannot commit while a path is unmerged.",
@@ -12569,7 +12588,8 @@
             "unstageFrom": "Unstage {count} file from {origin} | Unstage {count} files from {origin}",
             "stageFrom": "Stage {count} file from {origin} | Stage {count} files from {origin}",
             "messageBeingWritten": "its commit message is being written",
-            "namesTheCommit": "names the commit"
+            "namesTheCommit": "names the commit",
+            "messageCommitKeys": "Message ({keys} to commit)"
         },
         "rowActions": {
             "changedSinceOn": "Changed since switched on",

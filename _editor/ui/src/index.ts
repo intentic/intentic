@@ -402,7 +402,7 @@ export { type HoverIntent, type HoverIntentOptions, useHoverIntent } from "./com
 // A menu the pointer opens and a press pins, with the corridor that keeps it up on the way to it.
 export { type HoverMenu, useHoverMenu } from "./composables/useHoverMenu.js";
 export { inCorridor } from "./lib/pointerCorridor.js";
-export { isOverlayTarget, isTypingTarget } from "./lib/eventTarget.js";
+export { isOverlayTarget, isTypingTarget } from "./lib/input/eventTarget.js";
 export { messageOr, noticeFrom, noticeOf, useAsyncAction, useConcurrentActions } from "./composables/useAsyncAction.js";
 // Declares an account preference: read, write, apply and cross-window change notification in one definition, so
 // a setting can't be live in one window and stale in another.

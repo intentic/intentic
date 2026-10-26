@@ -9,6 +9,11 @@ import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../workbench
 import { useT } from "@intentic/ui/i18n";
 import { categoryLabel } from "../../workbench/commands/categories";
 import { useAudience } from "../../app/useAudience";
+import { installApp, installOffered } from "../../workbench/commands/appInstall";
+import { chordKeeper } from "../../workbench/commands/reservedChords";
+import { inAppWindow } from "../../workbench/commands/windowKind";
+import { optionIsMeta } from "../terminal/terminalEditKeys";
+import ToggleSwitch from "primevue/toggleswitch";
 
 // Lists every command a person can bind (keymapCommands: every declared built-in, whichever window this is and whatever
 // it has mounted, and every live registration, extensions' included) with its effective chord; lets the user record,
@@ -18,6 +23,7 @@ import { useAudience } from "../../app/useAudience";
 const t = useT();
 
 const isMac = isApplePlatform();
+const appWindow = inAppWindow();
 const { setKeybinding, unbindKeybinding, resetKeybinding, resetKeymap } = useKeymap();
 
 const query = ref(``);
@@ -83,6 +89,24 @@ const conflictTip = (row: CommandRow): Tip => {
     return { title: t(`settings.settingsKeybindings.shortcutClash`), tone: `warning`, rows: [{ label: t(`settings.settingsKeybindings.alsoOn`), value: others.join(`, `) }] };
 };
 
+// A chord this window never receives: the system answers it first, or (in a tab) the browser does. Said on the row, so a
+// default that only works in the app, or a chord someone recorded that their browser keeps, reads as what it is.
+const keeperOf = (chord: string | undefined): ReturnType<typeof chordKeeper> => (chord === undefined ? undefined : chordKeeper(chord, isMac, appWindow));
+const keeperTip = (chord: string | undefined): Tip => ({
+    title:
+        keeperOf(chord) === `browser`
+            ? t(`settings.settingsKeybindings.keptByBrowser`)
+            : isMac
+              ? t(`settings.settingsKeybindings.keptByMacos`)
+              : t(`settings.settingsKeybindings.keptBySystem`),
+    tone: `warning`,
+    note: keeperOf(chord) === `browser` && installOffered.value ? t(`settings.settingsKeybindings.worksInApp`) : undefined,
+});
+
+// A Mac in a tab is the one window whose own chords (⌘W, ⌘⇧T, ⌘⇧]) the browser keeps; installed, Intentic gets them.
+const appNote = computed(() => isMac && !appWindow && installOffered.value);
+const appKeys = { close: formatChord(`Mod+W`, true), reopen: formatChord(`Mod+Shift+T`, true), next: formatChord(`Mod+Shift+]`, true) };
+
 // Shared so the capture handler and stopRecording can each reference and clear the same listener.
 let capture: ((event: KeyboardEvent) => void) | undefined;
 
@@ -126,92 +150,109 @@ onUnmounted(stopRecording);
 </script>
 
 <template>
-    <RowGroup :label="t(`settings.section.keybindings`)">
-        <template v-if="hasAnyOverride" #actions>
-            <Button size="small" tier="boring" class="shrink-0" @click="resetKeymap()">
-                {{ t(`settings.settingsKeybindings.resetAll`) }}
-            </Button>
-        </template>
+    <div class="flex flex-col gap-6">
+        <RowGroup :label="t(`settings.section.keybindings`)">
+            <template v-if="hasAnyOverride" #actions>
+                <Button size="small" tier="boring" class="shrink-0" @click="resetKeymap()">
+                    {{ t(`settings.settingsKeybindings.resetAll`) }}
+                </Button>
+            </template>
+            <RowNote v-if="appNote" icon="info-circle">
+                <span class="flex flex-wrap items-center justify-between gap-2">
+                    <span>{{ t(`settings.settingsKeybindings.appWindowNote`, appKeys) }}</span>
+                    <Button size="small" tier="boring" class="shrink-0" @click="void installApp()">{{ t(`settings.settingsKeybindings.installApp`) }}</Button>
+                </span>
+            </RowNote>
 
-        <template #lead>
-            <FilterBar v-model="query" :placeholder="t(`settings.settingsKeybindings.filterCommands`)" />
-        </template>
+            <template #lead>
+                <FilterBar v-model="query" :placeholder="t(`settings.settingsKeybindings.filterCommands`)" />
+            </template>
 
-        <!-- Compact tier: a long list of commands read by scanning. -->
-        <Row v-for="row in rows" :key="row.command" :title="row.label" :description="maker ? undefined : row.command">
-            <template #title>
-                <span class="flex items-center gap-2">
-                    <span class="truncate"
-                        ><span v-if="row.category" class="text-muted">{{ row.category }}: </span>{{ row.title }}</span
+            <!-- Compact tier: a long list of commands read by scanning. -->
+            <Row v-for="row in rows" :key="row.command" :title="row.label" :description="maker ? undefined : row.command">
+                <template #title>
+                    <span class="flex items-center gap-2">
+                        <span class="truncate"
+                            ><span v-if="row.category" class="text-muted">{{ row.category }}: </span>{{ row.title }}</span
+                        >
+                        <span v-if="row.owner !== 'builtin'" class="shrink-0 rounded bg-overlay px-1 text-2xs font-normal text-subtle">{{
+                            t(`settings.settingsKeybindings.ext`)
+                        }}</span>
+                    </span>
+                </template>
+
+                <!-- Chord is a fact (#meta, right-aligned); the buttons that change it are actions (#control), at a fixed width. -->
+                <template #meta>
+                    <span class="flex w-40 items-center justify-end gap-1.5">
+                        <span v-if="recording === row.command" class="italic text-accent">{{
+                            t(`settings.settingsKeybindings.pressKeysEsc`)
+                        }}</span>
+                        <template v-else>
+                            <span
+                                v-if="conflicting(row.chord)"
+                                v-tooltip.top="conflictTip(row)"
+                                class="text-warning"
+                            >
+                                <Icon name="exclamation-triangle" />
+                            </span>
+                            <span v-else-if="keeperOf(row.chord) !== undefined" v-tooltip.top="keeperTip(row.chord)" class="text-warning">
+                                <Icon name="exclamation-triangle" />
+                            </span>
+                            <kbd
+                                v-if="row.chord"
+                                class="rounded border px-1.5 py-0.5 font-mono text-muted"
+                                :class="conflicting(row.chord) ? toneRim(`warning`, `strong`, `bg-overlay`) : `border-line bg-overlay`"
+                                >{{ formatChord(row.chord, isMac) }}</kbd
+                            >
+                            <span v-else>{{ t(`settings.settingsKeybindings.unbound`) }}</span>
+                        </template>
+                    </span>
+                </template>
+
+                <template #control>
+                    <button
+                        type="button"
+                        :class="ui.iconButton()"
+                        v-tooltip.top="recording === row.command ? t(`ui.action.cancel`) : t(`settings.settingsKeybindings.recordShortcut`)"
+                        :aria-label="
+                            recording === row.command
+                                ? t(`settings.settingsKeybindings.cancelRecording`)
+                                : t(`settings.settingsKeybindings.recordShortcut2`, { label: row.label })
+                        "
+                        @click="recording === row.command ? stopRecording() : startRecording(row.command)"
                     >
-                    <span v-if="row.owner !== 'builtin'" class="shrink-0 rounded bg-overlay px-1 text-2xs font-normal text-subtle">{{
-                        t(`settings.settingsKeybindings.ext`)
-                    }}</span>
-                </span>
-            </template>
+                        <Icon :name="recording === row.command ? 'times' : 'pencil'" />
+                    </button>
+                    <button
+                        v-if="row.chord && recording !== row.command"
+                        type="button"
+                        :class="ui.iconButton()"
+                        v-tooltip.top="t(`settings.settingsKeybindings.unbind`)"
+                        :aria-label="t(`settings.settingsKeybindings.unbind2`, { label: row.label })"
+                        @click="unbindKeybinding(row.command)"
+                    >
+                        <Icon name="trash" />
+                    </button>
+                    <button
+                        v-if="row.overridden && recording !== row.command"
+                        type="button"
+                        :class="ui.iconButton()"
+                        v-tooltip.top="t(`settings.settingsKeybindings.resetDefault`)"
+                        :aria-label="t(`settings.settingsKeybindings.resetToDefault2`, { label: row.label })"
+                        @click="resetKeybinding(row.command)"
+                    >
+                        <Icon name="undo" />
+                    </button>
+                </template>
+            </Row>
 
-            <!-- Chord is a fact (#meta, right-aligned); the buttons that change it are actions (#control), at a fixed width. -->
-            <template #meta>
-                <span class="flex w-40 items-center justify-end gap-1.5">
-                    <span v-if="recording === row.command" class="italic text-accent">{{
-                        t(`settings.settingsKeybindings.pressKeysEsc`)
-                    }}</span>
-                    <template v-else>
-                        <span
-                            v-if="conflicting(row.chord)"
-                            v-tooltip.top="conflictTip(row)"
-                            class="text-warning"
-                        >
-                            <Icon name="exclamation-triangle" />
-                        </span>
-                        <kbd
-                            v-if="row.chord"
-                            class="rounded border px-1.5 py-0.5 font-mono text-muted"
-                            :class="conflicting(row.chord) ? toneRim(`warning`, `strong`, `bg-overlay`) : `border-line bg-overlay`"
-                            >{{ formatChord(row.chord, isMac) }}</kbd
-                        >
-                        <span v-else>{{ t(`settings.settingsKeybindings.unbound`) }}</span>
-                    </template>
-                </span>
-            </template>
-
-            <template #control>
-                <button
-                    type="button"
-                    :class="ui.iconButton()"
-                    v-tooltip.top="recording === row.command ? t(`ui.action.cancel`) : t(`settings.settingsKeybindings.recordShortcut`)"
-                    :aria-label="
-                        recording === row.command
-                            ? t(`settings.settingsKeybindings.cancelRecording`)
-                            : t(`settings.settingsKeybindings.recordShortcut2`, { label: row.label })
-                    "
-                    @click="recording === row.command ? stopRecording() : startRecording(row.command)"
-                >
-                    <Icon :name="recording === row.command ? 'times' : 'pencil'" />
-                </button>
-                <button
-                    v-if="row.chord && recording !== row.command"
-                    type="button"
-                    :class="ui.iconButton()"
-                    v-tooltip.top="t(`settings.settingsKeybindings.unbind`)"
-                    :aria-label="t(`settings.settingsKeybindings.unbind2`, { label: row.label })"
-                    @click="unbindKeybinding(row.command)"
-                >
-                    <Icon name="trash" />
-                </button>
-                <button
-                    v-if="row.overridden && recording !== row.command"
-                    type="button"
-                    :class="ui.iconButton()"
-                    v-tooltip.top="t(`settings.settingsKeybindings.resetDefault`)"
-                    :aria-label="t(`settings.settingsKeybindings.resetToDefault2`, { label: row.label })"
-                    @click="resetKeybinding(row.command)"
-                >
-                    <Icon name="undo" />
-                </button>
-            </template>
-        </Row>
-
-        <RowNote v-if="rows.length === 0" variant="empty">{{ t(`settings.settingsKeybindings.noCommandsMatch`, { query }) }}</RowNote>
-    </RowGroup>
+            <RowNote v-if="rows.length === 0" variant="empty">{{ t(`settings.settingsKeybindings.noCommandsMatch`, { query }) }}</RowNote>
+        </RowGroup>
+        <!-- A Mac's Option is the shell's Meta only when chosen, as Terminal.app and iTerm offer it; elsewhere Alt already is. -->
+        <RowGroup v-if="isMac" :label="t(`settings.settingsKeybindings.terminal`)">
+            <Row as="label" icon="code" :title="t(`settings.settingsKeybindings.optionIsMeta`)" :description="t(`settings.settingsKeybindings.optionIsMetaHint`)">
+                <template #control><ToggleSwitch v-model="optionIsMeta" /></template>
+            </Row>
+        </RowGroup>
+    </div>
 </template>

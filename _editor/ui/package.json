@@ -83,8 +83,12 @@
             "default": "./src/lib/timeWindow.ts"
         },
         "./event-target": {
-            "types": "./src/lib/eventTarget.ts",
-            "default": "./src/lib/eventTarget.ts"
+            "types": "./src/lib/input/eventTarget.ts",
+            "default": "./src/lib/input/eventTarget.ts"
+        },
+        "./keys": {
+            "types": "./src/lib/input/keys.ts",
+            "default": "./src/lib/input/keys.ts"
         },
         "./highlighter": {
             "types": "./src/composables/useHighlighter.ts",

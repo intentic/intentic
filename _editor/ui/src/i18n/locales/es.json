@@ -227,13 +227,13 @@
     },
     "imageView": {
         "actualSize": "Tamaño real",
-        "ctrlScroll": "Ctrl+rueda",
         "doubleClick": "Doble clic",
         "drag": "Arrastrar",
         "fit": "Encajar",
         "fitToPane": "Encajar en panel",
         "gestures": "Gestos",
-        "imagePreviewCtrlScroll": "Vista previa de la imagen: Ctrl y rueda para ampliar, arrastra para desplazar",
+        "imagePreviewZoom": "Vista previa de la imagen: {key} y rueda para ampliar, arrastra para desplazar",
+        "modifierScroll": "{key}+rueda",
         "pan": "Desplazar",
         "zoom": "Zoom",
         "zoomIn2": "Ampliar",
@@ -253,7 +253,7 @@
     },
     "markdownDocumentSurface": {
         "document": "Documento",
-        "followLink": "{target} · Ctrl+clic para abrir",
+        "followLink": "{target} · {key}+clic para abrir",
         "drawingDiagram": "Dibujando el diagrama…"
     },
     "noteEditor": {
@@ -383,6 +383,7 @@
         "saving": "Guardando…"
     },
     "keys": {
+        "ctrl": "Ctrl",
         "enter": "Intro",
         "esc": "Esc",
         "space": "Espacio"

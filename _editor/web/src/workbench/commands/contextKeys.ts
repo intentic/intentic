@@ -1,6 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import type { WhenContext } from "@intentic/base/when";
 import { isTypingTarget } from "@intentic/ui/event-target";
+import { isApplePlatform } from "@intentic/ui/keys";
 import type { Ref } from "vue";
 import { tabSurfaceOf } from "./tabSurface";
 
@@ -37,5 +38,7 @@ export const commandContext = (event: KeyboardEvent): WhenContext => {
     // Whether the keystroke landed in a field that owns its keys (its own undo, selection, or option picking). Per-event,
     // not published: every editing chord needs the same exemption on where the keystroke landed.
     context[`editableTarget`] = isTypingTarget(event.target);
+    // A Mac spends some chords on text that elsewhere are free (⌘B is bold there), so a few conditions ask.
+    context[`isMac`] = isApplePlatform();
     return context;
 };

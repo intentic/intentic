@@ -1,3 +1,5 @@
+import { isApplePlatform, letterOfCode } from "@intentic/ui/keys";
+
 // Routes live-browser keystrokes: Command handles tabs, reload, back, address bar and find in the client's own chrome.
 // Host keeps window shortcuts and paste, whose clipboard belongs to the user; Page gets typing, control keys and editing chords.
 // clipboard round-trips copy/cut selections to the user's clipboard. Command shortcuts never reach the remote omnibox.
@@ -52,8 +54,8 @@ export interface KeyFrame {
 export type KeyIntent =
     // Ordinary typing, insert the character rather than synthesizing a keystroke for it.
     | { readonly kind: `text`; readonly text: string }
-    // A keystroke for the page, chord or not.
-    | { readonly kind: `key`; readonly frame: KeyFrame }
+    // A keystroke for the page, chord or not; `after` a second one, for a Mac edit Linux spells in two.
+    | { readonly kind: `key`; readonly frame: KeyFrame; readonly after?: KeyFrame }
     // Reads the selection before the page sees the chord; a cut running first would delete the text being read.
     | { readonly kind: `clipboard`; readonly frame: KeyFrame }
     // The chrome's own verb; never a keystroke.
@@ -62,6 +64,10 @@ export type KeyIntent =
     | { readonly kind: `device` };
 
 const host: KeyIntent = { kind: `device` };
+
+/** The keystrokes a page is sent for one intent, in order. */
+export const keyFrames = (intent: Extract<KeyIntent, { kind: `key` }>): readonly KeyFrame[] =>
+    intent.after === undefined ? [intent.frame] : [intent.frame, intent.after];
 const command = (name: BrowserCommand): KeyIntent => ({ kind: `command`, command: name });
 
 // Sent lower-case; Shift travels as a flag and the far end decides the resulting character (Ctrl+Shift+Z is a redo
@@ -114,9 +120,69 @@ const chordIntent = (event: KeyboardEvent): KeyIntent => {
     return CHORD_KEYS.has(event.key) ? { kind: `key`, frame: keyFrame(event, true) } : host;
 };
 
+// A Mac's text keys as the Linux page spells them. ⌘ with an arrow reaches the line's or the document's edge, and ⌥ with
+// one a word; ⌘⌫ deletes to the line's start and ⌥⌫ a word; ⌃ with A, E, B, F, N, P, D or H is the Emacs motion every
+// Mac field answers. Shift rides along, so a selection still extends. Without this, ⌘← moved a word and ⌥← went Back.
+const MAC_COMMAND_EDGES = new Map([
+    [`ArrowLeft`, { key: `Home`, ctrl: false }],
+    [`ArrowRight`, { key: `End`, ctrl: false }],
+    [`ArrowUp`, { key: `Home`, ctrl: true }],
+    [`ArrowDown`, { key: `End`, ctrl: true }],
+]);
+const MAC_CONTROL_MOTIONS = new Map([
+    [`a`, `Home`],
+    [`e`, `End`],
+    [`b`, `ArrowLeft`],
+    [`f`, `ArrowRight`],
+    [`n`, `ArrowDown`],
+    [`p`, `ArrowUp`],
+    [`d`, `Delete`],
+    [`h`, `Backspace`],
+]);
+const MAC_WORD_KEYS = new Set([`ArrowLeft`, `ArrowRight`, `Backspace`, `Delete`]);
+
+const commandIntent = (event: KeyboardEvent): KeyIntent | undefined => {
+    const edge = MAC_COMMAND_EDGES.get(event.key);
+    if (edge !== undefined) {
+        return { kind: `key`, frame: keyFrame(event, edge.ctrl, edge.key) };
+    }
+    if (event.key === `Backspace` || event.key === `Delete`) {
+        // Select to the line's edge, then delete the selection: Linux has no one key for it.
+        const edgeKey = event.key === `Backspace` ? `Home` : `End`;
+        return { kind: `key`, frame: { type: `key`, key: edgeKey, shift: true }, after: { type: `key`, key: event.key } };
+    }
+    // Safari's and Chrome's Back and Forward on a Mac.
+    return event.key === `[` || event.key === `]` ? command(event.key === `[` ? `back` : `forward`) : undefined;
+};
+
+// What a Mac means where it differs from the shared reading below, or undefined where it doesn't.
+const macIntent = (event: KeyboardEvent): KeyIntent | undefined => {
+    const { metaKey, altKey, ctrlKey } = event;
+    if (metaKey && !altKey && !ctrlKey) {
+        return commandIntent(event);
+    }
+    if (altKey && !metaKey && !ctrlKey) {
+        if (MAC_WORD_KEYS.has(event.key)) {
+            return { kind: `key`, frame: keyFrame(event, true) };
+        }
+        // Option types a letter of its own (ą, ß, é on a Mac's layouts): a character for the page, never a chord.
+        return [...event.key].length === 1 ? { kind: `text`, text: event.key } : host;
+    }
+    if (ctrlKey && !metaKey && !altKey) {
+        const motion = MAC_CONTROL_MOTIONS.get(letterOfCode(event.code) ?? event.key.toLowerCase());
+        // The rest of ⌃ (⌃K's kill, ⌃T's transpose) has no Linux twin, and stays with the host.
+        return motion === undefined ? host : { kind: `key`, frame: keyFrame(event, false, motion) };
+    }
+    return undefined;
+};
+
 // `primary` is Ctrl on Windows/Linux and Cmd on a Mac, the same chord in a person's hands, sent as the same `ctrl`
 // on the wire.
-export const keyIntent = (event: KeyboardEvent): KeyIntent => {
+export const keyIntent = (event: KeyboardEvent, isMac: boolean = isApplePlatform()): KeyIntent => {
+    const mac = isMac ? macIntent(event) : undefined;
+    if (mac !== undefined) {
+        return mac;
+    }
     // Alt chords are history navigation, or the host's (menus); they mean almost nothing in a page.
     if (event.altKey) {
         if (event.key === `ArrowLeft` || event.key === `ArrowRight`) {
@@ -124,6 +190,7 @@ export const keyIntent = (event: KeyboardEvent): KeyIntent => {
         }
         return host;
     }
+    // allow(modifier-tiers): the page is Linux, where ⌘ on a Mac and Ctrl on a PC are both its Ctrl.
     if (event.ctrlKey || event.metaKey) {
         return chordIntent(event);
     }

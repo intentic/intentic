@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { keyCap } from "@intentic/ui/keys";
 import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { isTurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { LimitResetClaim } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -107,7 +108,7 @@ const continueHint = computed((): TooltipValue => {
     if (accountBlock.value !== undefined) {
         return { title: sendBlockTitle(accountBlock.value), note: sendBlockLine(accountBlock.value) };
     }
-    const keys = !mobile.value && props.enterContinues === true ? t(`ui.keys.enter`) : undefined;
+    const keys = !mobile.value && props.enterContinues === true ? keyCap(`enter`) : undefined;
     // Before a spent account's reopen the press is a try: worth one, since the reopen is an estimate, and said as such.
     const trying = spent.value ? t(`chat.chatContinueStrip.tryNowNote`) : undefined;
     if (pickUp.value?.held !== undefined) {
@@ -147,7 +148,7 @@ const modelLabel = computed(() => modelLabelFor(provider.value, model.value));
 const otherModels = computed(() =>
     flagged.value ? modelOptionsFor(provider.value).filter((option) => option.value !== model.value && option.helperOnly === undefined) : [],
 );
-const continueKeys = computed(() => (!mobile.value && props.enterContinues === true ? t(`ui.keys.enter`) : undefined));
+const continueKeys = computed(() => (!mobile.value && props.enterContinues === true ? keyCap(`enter`) : undefined));
 const retryHint = computed((): Tip => ({
     title: t(`chat.chatContinueStrip.retryTitle`),
     keys: continueKeys.value,

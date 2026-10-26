@@ -1,5 +1,6 @@
 <!-- The home's full-window view of a picture or a video: asked for (Space, or a tile's expand button), never raised by a hover. -->
 <script setup lang="ts">
+import { keyCap } from "@intentic/ui/keys";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { Button, explorerColorClass, formatBytes, iconForEntry, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -257,7 +258,7 @@ const position = computed(() => t(`workspace.homeLightbox.position`, { at: index
                     <Button
                         size="small"
                         tier="boring"
-                        v-tooltip.bottom="{ title: t(`workspace.homeLightbox.open`), keys: t(`ui.keys.enter`) }"
+                        v-tooltip.bottom="{ title: t(`workspace.homeLightbox.open`), keys: keyCap(`enter`) }"
                         @click="openShown"
                     >
                         {{ t(`workspace.homeLightbox.open`) }}
@@ -266,7 +267,7 @@ const position = computed(() => t(`workspace.homeLightbox.position`, { at: index
                         type="button"
                         :class="ui.iconButton({ size: `lg` })"
                         :aria-label="t(`workspace.homeLightbox.close`)"
-                        v-tooltip.bottom="{ title: t(`workspace.homeLightbox.close`), keys: t(`ui.keys.esc`) }"
+                        v-tooltip.bottom="{ title: t(`workspace.homeLightbox.close`), keys: keyCap(`escape`) }"
                         @click="close"
                     >
                         <Icon name="times" aria-hidden="true" />

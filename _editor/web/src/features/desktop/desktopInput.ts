@@ -1,3 +1,4 @@
+import { isApplePlatform } from "@intentic/ui/keys";
 import { viewportCoords } from "../../models/browsers/viewportCoords";
 
 // What the owner's hands become on /system/desktop-view (the daemon's desktop-view.ts reads these): pointer events in
@@ -84,26 +85,36 @@ const MODIFIERS = new Set([`Shift`, `Control`, `Alt`, `Meta`, `AltGraph`, `CapsL
 // Half of a character the keyboard is still composing; the finished character arrives as its own keydown.
 const UNFINISHED = new Set([`Dead`, `Process`, `Unidentified`, `Compose`]);
 
-// Which keystrokes go to the desktop, and as what. Undefined leaves the keystroke with the host: a bare modifier, a
-// character mid-composition, and paste, whose host `paste` event carries the owner's own clipboard rather than the
-// sandbox's. Everything else goes, since the desktop has no chrome of ours to steer: Escape, Tab, F-keys and every
-// chord a desktop app answers (Ctrl+C in a terminal is an interrupt, not a copy).
-export const keyMessage = (event: KeyboardEvent): DesktopKey | DesktopText | undefined => {
-    if (event.isComposing || MODIFIERS.has(event.key) || UNFINISHED.has(event.key)) {
+// A Mac's caret keys as the Linux desktop spells them: ⌘ with an arrow to the line's or the document's edge, ⌥ with one
+// (or with ⌫) a word, which on Linux is Ctrl's. Shift rides along, so a selection still extends.
+const MAC_COMMAND_EDGES = new Map([
+    [`ArrowLeft`, { key: `Home`, ctrl: false }],
+    [`ArrowRight`, { key: `End`, ctrl: false }],
+    [`ArrowUp`, { key: `Home`, ctrl: true }],
+    [`ArrowDown`, { key: `End`, ctrl: true }],
+]);
+const MAC_WORD_KEYS = new Set([`ArrowLeft`, `ArrowRight`, `Backspace`, `Delete`]);
+
+const macCaretKey = (event: KeyboardEvent): DesktopKey | undefined => {
+    const only = (held: boolean, others: boolean): boolean => held && !others && !event.ctrlKey;
+    const edge = only(event.metaKey, event.altKey) ? MAC_COMMAND_EDGES.get(event.key) : undefined;
+    const word = only(event.altKey, event.metaKey) && MAC_WORD_KEYS.has(event.key);
+    if (edge === undefined && !word) {
         return undefined;
     }
-    const primary = event.ctrlKey || event.metaKey;
-    const character = [...event.key].length === 1;
-    // AltGr arrives as Ctrl+Alt on Windows, but the character it made is already the key: type it, never chord it.
-    const altGraph = event.getModifierState(`AltGraph`);
-    // Space is the one character sent as a key, so a focused button or checkbox answers it.
-    if (character && event.key !== ` ` && (altGraph || (!primary && !event.altKey))) {
-        return { type: `text`, text: event.key };
+    const chord: KeyDraft = { type: `key`, key: edge?.key ?? event.key };
+    if (word || edge?.ctrl === true) {
+        chord.ctrl = true;
     }
-    if (primary && !event.altKey && event.key.toLowerCase() === `v`) {
-        return undefined;
+    if (event.shiftKey) {
+        chord.shift = true;
     }
-    // Lower case: Shift travels as a flag, so Ctrl+Shift+Z is the chord ctrl+shift+z rather than a capital Z.
+    return chord;
+};
+
+// A keystroke sent as itself, its modifiers as flags. Lower case: Shift travels as a flag, so Ctrl+Shift+Z is the chord
+// ctrl+shift+z rather than a capital Z.
+const chordOf = (event: KeyboardEvent, primary: boolean, character: boolean): DesktopKey => {
     const chord: KeyDraft = { type: `key`, key: character ? event.key.toLowerCase() : event.key };
     if (primary) {
         chord.ctrl = true;
@@ -115,4 +126,32 @@ export const keyMessage = (event: KeyboardEvent): DesktopKey | DesktopText | und
         chord.shift = true;
     }
     return chord;
+};
+
+// Which keystrokes go to the desktop, and as what. Undefined leaves the keystroke with the host: a bare modifier, a
+// character mid-composition, and paste, whose host `paste` event carries the owner's own clipboard rather than the
+// sandbox's. Everything else goes, since the desktop has no chrome of ours to steer: Escape, Tab, F-keys and every
+// chord a desktop app answers (Ctrl+C in a terminal is an interrupt, not a copy).
+export const keyMessage = (event: KeyboardEvent, isMac: boolean = isApplePlatform()): DesktopKey | DesktopText | undefined => {
+    if (event.isComposing || MODIFIERS.has(event.key) || UNFINISHED.has(event.key)) {
+        return undefined;
+    }
+    const caret = isMac ? macCaretKey(event) : undefined;
+    if (caret !== undefined) {
+        return caret;
+    }
+    // allow(modifier-tiers): the desktop is Linux, where ⌘ on a Mac and Ctrl on a PC are both its Ctrl.
+    const primary = event.ctrlKey || event.metaKey;
+    const character = [...event.key].length === 1;
+    // AltGr arrives as Ctrl+Alt on Windows, and Option alone types a letter of its own on a Mac (ą, ß, é): the character
+    // it made is already the key, so type it, never chord it.
+    const altGraph = event.getModifierState(`AltGraph`) || (isMac && event.altKey && !primary);
+    // Space is the one character sent as a key, so a focused button or checkbox answers it.
+    if (character && event.key !== ` ` && (altGraph || (!primary && !event.altKey))) {
+        return { type: `text`, text: event.key };
+    }
+    if (primary && !event.altKey && event.key.toLowerCase() === `v`) {
+        return undefined;
+    }
+    return chordOf(event, primary, character);
 };

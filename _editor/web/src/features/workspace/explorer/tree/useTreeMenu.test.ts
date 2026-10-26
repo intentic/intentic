@@ -131,6 +131,7 @@ describe(`what the menu offers`, () => {
             `—`,
             `Cut 2 items`,
             `Copy 2 items`,
+            `Duplicate 2 items`,
             `Download 2 items as ZIP`,
         ]);
 
@@ -209,8 +210,8 @@ describe(`what the backend serves`, () => {
         const onArchive = labels(menu.menuItems.value);
         press(SRC);
         expect([onArchive, labels(menu.menuItems.value)]).toEqual([
-            [`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download`],
-            [`New File`, `New Folder`, `What src is`, `Open Terminal`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download as ZIP`],
+            [`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Download`],
+            [`New File`, `New Folder`, `What src is`, `Open Terminal`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Download as ZIP`],
         ]);
     });
 });
@@ -255,8 +256,8 @@ describe(`a surface without a sandbox's seams`, () => {
         press(WEB);
         const onFolder = labels(menu.menuItems.value);
         expect([onArchive, onFolder, asked]).toEqual([
-            [`Ask an agent about this`, `—`, `New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`],
-            [`New File`, `New Folder`, `—`, `Rename`, `Keep folder`, `Delete`, `—`, `Cut`, `Copy`],
+            [`Ask an agent about this`, `—`, `New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`],
+            [`New File`, `New Folder`, `—`, `Rename`, `Keep folder`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`],
             [ZIP.path],
         ]);
     });

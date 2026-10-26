@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { primaryHeld } from "@intentic/ui/keys";
 import { Button, ui, Icon, MarkdownDocument, ResponsiveOverlay, useNarrow, useTheme } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
 import { computed, inject, onMounted, ref, watch } from "vue";
@@ -114,11 +115,11 @@ const onPreviewClick = (event: MouseEvent): void => {
     openFileRefFromEvent(event);
 };
 
-// While writing, a link is inert (a click places the caret), so Ctrl/Cmd+click follows it, as a code editor does. Its
+// While writing, a link is inert (a click places the caret), so Ctrl+click (⌘-click on a Mac) follows it, as a code editor does. Its
 // target goes through the same decorator the rendered document uses, so a relative path opens the workspace file and
 // an address opens its own tab.
 const onEditingClick = (event: MouseEvent): void => {
-    if (!(event.ctrlKey || event.metaKey) || !(event.target instanceof Element)) {
+    if (!primaryHeld(event) || !(event.target instanceof Element)) {
         return;
     }
     const link = event.target.closest<HTMLAnchorElement>(`a[data-md-href], .md-rendered a[href]`);

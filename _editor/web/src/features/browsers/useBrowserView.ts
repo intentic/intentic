@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { t } from "@intentic/ui/i18n";
 import { type ComputedRef, onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
-import { keyIntent, type BrowserCommand, type KeyFrame } from "../../models/browsers/keyIntent";
+import { keyFrames, keyIntent, type BrowserCommand, type KeyFrame } from "../../models/browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../models/browsers/pointerFrame";
 import { selectionCopy } from "../../models/browsers/selectionCopy";
 import { type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
@@ -338,7 +338,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             } else if (intent.kind === `text`) {
                 send(rawKeys ? { type: `text`, text: intent.text, raw: true } : { type: `text`, text: intent.text });
             } else if (intent.kind === `key`) {
-                sendKey(intent.frame);
+                keyFrames(intent).forEach(sendKey);
             } else {
                 void copy.copyOut(intent.frame, event.target instanceof Element ? event.target : undefined);
             }

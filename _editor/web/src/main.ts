@@ -18,6 +18,8 @@ import { describeError, installClientDiagnostics, reportClient, sendClientDiagno
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
+import { installAppOffer } from "./workbench/commands/appInstall";
+import { installComposingEnterGuard } from "@intentic/ui/keys";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
 import { markBoot } from "./app/perf/boot";
 import { watchStalledQueries } from "./app/perf/queryStalls";
@@ -96,6 +98,8 @@ highlightInWorker();
 // Runs in every window too, and does nothing outside the desktop app: there, `target="_blank"` reaches the app only
 // because of this.
 installDesktopLinks();
+installAppOffer();
+installComposingEnterGuard();
 // Also the app's alone: a loaded workspace is taken to a sandbox picked in a local window without a reload.
 installDesktopOpener(openInPage);
 
