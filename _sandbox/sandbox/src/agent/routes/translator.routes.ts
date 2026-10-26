@@ -57,23 +57,24 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
             void services.cliProxy
                 .benchUnusable()
                 .then((benched) =>
-                    benched.length === 0 ? undefined : services.logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
+                    benched.length === 0
+                        ? undefined
+                        : services.logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
                 )
                 .catch((error: unknown) => services.logger.warn({ err: error }, "translator: could not bench unusable credentials"));
             // Each credential carries the facts the one serviceability rule judges, its bench included, never a verdict.
             return accounts;
         }),
         connect: i.connect.handler(async ({ input }) => {
-            // Codex has both shapes: its redirect is one click where someone of the owner's watches loopback, and a
-            // dead end anywhere else, where the device code is the easier thing to carry.
-            const redirect = input.provider === "codex" && loopbackWatchers(services).length > 0;
-            const login = await upstream(services.cliProxy.connect(input.provider, redirect ? { redirect: true } : undefined));
-            // A newer attempt replaces this provider's older one, in the translator and so here.
+            // Retire the previous watcher before starting again, including when the new start fails or times out.
             for (const [state, watch] of watches) {
                 if (watch.provider === input.provider) {
                     unwatch(state);
                 }
             }
+            // A connected device's capability says nothing about this attempt's callback port being available.
+            const redirect = input.provider === "codex" && loopbackWatchers(services).length > 0;
+            const login = await upstream(services.cliProxy.connect(input.provider, redirect ? { redirect: true } : undefined));
             const loopback = login.flow === "redirect" ? loopbackRedirectOf(login.url) : undefined;
             if (loopback === undefined) {
                 return login;
@@ -99,11 +100,25 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
             if (caught.catchers.length > 0) {
                 watches.set(login.state, { provider: input.provider, caught });
             }
-            return { ...login, catchers: [...caught.catchers] };
+            const catchers = await caught.ready;
+            if (catchers.length === 0) {
+                unwatch(login.state);
+                if (input.provider === "codex") {
+                    return { ...(await upstream(services.cliProxy.connect(input.provider))), catchers: [] };
+                }
+            }
+            return { ...login, catchers: [...catchers] };
         }),
         status: i.status.handler(async ({ input }): Promise<TranslatorStatus> => {
             const failed = caughtFailures.get(input.state);
-            return failed === undefined ? await upstream(services.cliProxy.status(input.provider, input.state)) : { status: "error", error: failed };
+            const status =
+                failed === undefined
+                    ? await upstream(services.cliProxy.status(input.provider, input.state))
+                    : { status: "error" as const, error: failed };
+            if (status.status !== "wait") {
+                unwatch(input.state);
+            }
+            return status;
         }),
         complete: i.complete.handler(async ({ input }) => {
             await upstream(complete(input));

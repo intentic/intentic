@@ -15,9 +15,9 @@ export interface FakeCatcher {
     readonly catchLoopback: (spec: LoopbackCatch, options: { readonly signal: AbortSignal }) => Promise<AsyncIterable<LoopbackCatchEvent>>;
 }
 
-export const fakeCatcher = (): FakeCatcher => {
+export const fakeCatcher = (initial: readonly LoopbackCatchEvent[] = [{ type: "listening" }]): FakeCatcher => {
     const asked: LoopbackCatch[] = [];
-    const queue: LoopbackCatchEvent[] = [];
+    const queue: LoopbackCatchEvent[] = [...initial];
     let wake: (() => void) | undefined;
     let signal: AbortSignal | undefined;
     const nudge = (): void => {
@@ -55,7 +55,14 @@ export const fakeCatcher = (): FakeCatcher => {
 };
 
 // A device agent new enough to catch, and a browser allowed to.
-export const CATCHING_DEVICE: DeviceFacts = { os: "Windows 11", arch: "x64", shell: "pwsh", home: "C:\\Users\\me", roots: [], features: ["loopback-catch"] };
+export const CATCHING_DEVICE: DeviceFacts = {
+    os: "Windows 11",
+    arch: "x64",
+    shell: "pwsh",
+    home: "C:\\Users\\me",
+    roots: [],
+    features: ["loopback-catch"],
+};
 export const CATCHING_BROWSER: WebExtFacts = { browser: "Brave 154 on Windows", tabs: 3, grants: [], paused: false, features: ["loopback-catch"] };
 
 export type FakePeers<Facts> = Record<string, { readonly facts: Facts | undefined; readonly catcher: FakeCatcher }>;

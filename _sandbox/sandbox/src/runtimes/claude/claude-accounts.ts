@@ -170,20 +170,20 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
                     }
                 },
             );
-            const watched = caught.catchers.length > 0;
+            const catchers = await caught.ready;
+            const watched = catchers.length > 0;
             const redirectUri = watched ? loopback.redirectUri : CLAUDE_PASTE_REDIRECT;
             pending.set(state, { verifier, expiresAt, redirectUri, caught, finishing: false });
             return {
                 url: watched ? loopback.authorizeUrl : authorizeUrlFor(loopback, CLAUDE_PASTE_REDIRECT),
                 code: "",
-                // A watched attempt dead-ends on a loopback address anywhere nobody watches, so what comes back by hand is
-                // that address: a redirect, recognisable by this state, rather than the code Anthropic's page shows.
+                // A watched attempt returns its callback address, rather than the paste page's code.
                 state: watched ? state : "",
                 flow: watched ? "redirect" : "paste",
                 variant: "",
                 handshake: state,
                 expiresAt,
-                catchers: [...caught.catchers],
+                catchers: [...catchers],
             };
         },
         complete: async ({ handshake, code, redirectUrl, label }) => {

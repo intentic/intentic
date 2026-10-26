@@ -3,6 +3,7 @@ import { armLoopbackCatch, type LoopbackBridgeDeps, type LoopbackTarget } from "
 import { CATCHING_BROWSER as BROWSER, CATCHING_DEVICE as CAN_CATCH, catchingHub, type FakePeers, fakeCatcher } from "./loopback-bridge.testing.js";
 import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 import type { WebExtFacts } from "@intentic/sandbox-contract/schemas/webext";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The bridge against fake peers (loopback-bridge.testing.ts): each records what it was asked to watch and streams what
 // the test pushes, ending when the bridge aborts it, exactly as a device agent's stream does over the socket.
@@ -56,7 +57,9 @@ test("one computer is asked once, on its native side, and a paused browser not a
         { kind: "browser", label: "Brave 154 on Windows" },
     ]);
     await settle();
-    expect(native.asked).toEqual([{ id: "attempt", host: "localhost", port: 54_321, path: "/callback", expiresAt: TARGET.expiresAt, title: "Claude" }]);
+    expect(native.asked).toEqual([
+        { id: "attempt", host: "localhost", port: 54_321, path: "/callback", expiresAt: TARGET.expiresAt, title: "Claude" },
+    ]);
     expect(JSON.stringify(native.asked)).not.toContain("the-state");
     expect(distro.asked).toEqual([]);
     expect(otherPc.asked).toHaveLength(1);
@@ -113,4 +116,39 @@ test("a failed finish is logged, not thrown out of the watch", async () => {
     rog.push({ type: "landed", url: "http://localhost:54321/callback?code=c&state=the-state" });
     await settle();
     expect(rog.aborted()).toBe(true);
+});
+
+test("readiness confirms only listening peers, excluding a busy callback port", async () => {
+    const rog = fakeCatcher([{ type: "busy", reason: "port 54321 is already taken on this machine" }]);
+    const brave = fakeCatcher();
+    const armed = armLoopbackCatch(
+        depsOf({ rog: { facts: CAN_CATCH, catcher: rog } }, { brave: { facts: BROWSER, catcher: brave } }),
+        TARGET,
+        async () => {},
+    );
+    try {
+        expect(await armed.ready).toEqual([{ kind: "browser", label: "Brave 154 on Windows" }]);
+    } finally {
+        armed.disarm();
+    }
+});
+
+test("a peer that never acknowledges cannot hold the sign-in start indefinitely", async () => {
+    jest.useFakeTimers();
+    const rog = fakeCatcher([]);
+    const armed = armLoopbackCatch(depsOf({ rog: { facts: CAN_CATCH, catcher: rog } }), TARGET, async () => {});
+    let ready = false;
+    void armed.ready.then(() => {
+        ready = true;
+    });
+    try {
+        await advanceTimersByTimeAsync(4_999);
+        expect(ready).toBe(false);
+        await advanceTimersByTimeAsync(1);
+        expect(await armed.ready).toEqual([]);
+        expect(rog.aborted()).toBe(true);
+    } finally {
+        armed.disarm();
+        jest.useRealTimers();
+    }
 });

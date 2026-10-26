@@ -184,7 +184,7 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
         variant: variant.id,
         handshake,
         expiresAt,
-        catchers: [...(caught?.catchers ?? [])],
+        catchers: [...((await caught?.ready) ?? [])],
     };
 };
 

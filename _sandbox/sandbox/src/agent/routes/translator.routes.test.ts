@@ -134,7 +134,9 @@ test("a Google sign-in watched on the owner's device finishes from the caught la
     expect(rog.asked).toMatchObject([{ host: "localhost", port: 51121, path: "/oauth-callback" }]);
     rog.push({ type: "landed", url: "http://localhost:51121/oauth-callback?code=google-code&state=g-1" });
     await waitFor(() =>
-        expect(completed).toEqual([{ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=google-code&state=g-1", state: "g-1" }]),
+        expect(completed).toEqual([
+            { provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=google-code&state=g-1", state: "g-1" },
+        ]),
     );
 });
 
@@ -145,7 +147,12 @@ test("a Codex sign-in takes the redirect only when a device of the owner's watch
         connect: async (_provider: string, options?: { readonly redirect?: boolean }) => {
             asked.push(options);
             return options?.redirect === true
-                ? { url: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback", code: "", state: "c-1", flow: "redirect" as const }
+                ? {
+                      url: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback",
+                      code: "",
+                      state: "c-1",
+                      flow: "redirect" as const,
+                  }
                 : { url: "https://auth.openai.com/codex/device", code: "ABCD-1234", state: "codex-2", flow: "device" as const };
         },
     };
@@ -153,9 +160,98 @@ test("a Codex sign-in takes the redirect only when a device of the owner's watch
     await expect(nobody.translator.connect({ provider: "codex" })).resolves.toMatchObject({ flow: "device", code: "ABCD-1234" });
 
     const watched = clientFor(
-        createApp(services({ config: withTranslator, cliProxy, ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: fakeCatcher() } }) })),
+        createApp(
+            services({ config: withTranslator, cliProxy, ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: fakeCatcher() } }) }),
+        ),
     );
     const started = await watched.translator.connect({ provider: "codex" });
     expect(started).toMatchObject({ flow: "redirect", state: "c-1", catchers: [{ kind: "device", label: "rog" }] });
     expect(asked).toEqual([undefined, { redirect: true }]);
+});
+
+test("a busy callback port falls back to a ChatGPT device code instead of promising a callback nobody can catch", async () => {
+    const rog = fakeCatcher([{ type: "busy", reason: "port 1455 is already taken on this machine" }]);
+    const connect = jest.fn(async (_provider: string, options?: { readonly redirect?: boolean }) =>
+        options?.redirect === true
+            ? {
+                  url: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback",
+                  code: "",
+                  state: "c-1",
+                  flow: "redirect" as const,
+              }
+            : { url: "https://auth.openai.com/codex/device", code: "ABCD-1234", state: "codex-2", flow: "device" as const },
+    );
+    const client = clientFor(
+        createApp(
+            services({ config: withTranslator, cliProxy: { connect }, ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: rog } }) }),
+        ),
+    );
+
+    await expect(client.translator.connect({ provider: "codex" })).resolves.toEqual({
+        url: "https://auth.openai.com/codex/device",
+        code: "ABCD-1234",
+        state: "codex-2",
+        flow: "device",
+        catchers: [],
+    });
+    expect(connect.mock.calls).toEqual([["codex", { redirect: true }], ["codex"]]);
+    expect(rog.aborted()).toBe(true);
+});
+
+test("retry retires the previous callback watcher even when the new sign-in fails to start", async () => {
+    const rog = fakeCatcher();
+    let starts = 0;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: rog } }),
+                cliProxy: {
+                    connect: async () => {
+                        if (++starts > 1) {
+                            throw new Error("translator is restarting");
+                        }
+                        return {
+                            url: "https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=http%3A%2F%2Flocalhost%3A51121%2Foauth-callback",
+                            code: "",
+                            state: "g-1",
+                            flow: "redirect" as const,
+                        };
+                    },
+                },
+            }),
+        ),
+    );
+
+    await client.translator.connect({ provider: "gemini" });
+    await expect(client.translator.connect({ provider: "gemini" })).rejects.toThrow("translator is restarting");
+    expect(rog.aborted()).toBe(true);
+});
+
+test("a terminal sign-in status releases its callback watcher before the next retry", async () => {
+    const rog = fakeCatcher();
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: rog } }),
+                cliProxy: {
+                    connect: async () => ({
+                        url: "https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=http%3A%2F%2Flocalhost%3A51121%2Foauth-callback",
+                        code: "",
+                        state: "g-1",
+                        flow: "redirect" as const,
+                    }),
+                    status: async () => ({ status: "error", error: "Timeout waiting for OAuth callback" }),
+                },
+            }),
+        ),
+    );
+
+    await client.translator.connect({ provider: "gemini" });
+    await expect(client.translator.status({ provider: "gemini", state: "g-1" })).resolves.toEqual({
+        status: "error",
+        error: "Timeout waiting for OAuth callback",
+    });
+    expect(rog.aborted()).toBe(true);
 });

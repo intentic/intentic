@@ -105,7 +105,7 @@ export const devinAccountDoor = (services: DevinAccountDeps): AccountDoor => {
             );
             caught.set(handshake, armed);
             // A watcher that left between the question and the watch leaves a paste of the dead-end address, which works.
-            return { ...base, state: started.landing.state, flow: "redirect", catchers: [...armed.catchers] };
+            return { ...base, state: started.landing.state, flow: "redirect", catchers: [...(await armed.ready)] };
         },
         complete: async ({ handshake, code, redirectUrl, label }) => finish(handshake, redirectUrl?.trim() || code?.trim() || "", label ?? ""),
         status: (handshake) => {

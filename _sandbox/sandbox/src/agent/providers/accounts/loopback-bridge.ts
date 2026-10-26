@@ -58,8 +58,10 @@ export interface LoopbackTarget {
 }
 
 export interface ArmedCatch {
-    // Who is watching, for the card; empty means nobody, and the attempt is a paste as it always was.
+    // Candidates asked to watch; `ready` confirms which actually started before a door promises them to its caller.
     readonly catchers: readonly SignInCatcher[];
+    // A candidate may have a taken port or disconnect: only a listening acknowledgement confirms this attempt.
+    readonly ready: Promise<readonly SignInCatcher[]>;
     // Stops every watch. Idempotent; a door calls it on cancel, on a paste that finished first, and on expiry.
     readonly disarm: () => void;
 }
@@ -135,7 +137,7 @@ export const loopbackWatchers = (deps: LoopbackBridgeDeps): SignInCatcher[] => c
 export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarget, deliver: (url: string) => Promise<void>): ArmedCatch => {
     const catchers = catchersOf(deps);
     if (catchers.length === 0) {
-        return { catchers: [], disarm: () => {} };
+        return { catchers: [], ready: Promise.resolve([]), disarm: () => {} };
     }
     const abort = new AbortController();
     const disarm = (): void => abort.abort();
@@ -152,41 +154,75 @@ export const armLoopbackCatch = (deps: LoopbackBridgeDeps, target: LoopbackTarge
         title: target.title,
     };
     let delivered = false;
-    const watch = async ({ catcher, open }: Catcher): Promise<void> => {
+    const land = async (catcher: SignInCatcher, url: string): Promise<void> => {
+        if (!sameState(target.state, landingState(target, url))) {
+            log.warn({ catcher: catcher.label }, "loopback bridge: a landing without this attempt's state was ignored");
+            return;
+        }
+        delivered = true;
+        disarm();
+        log.info({ catcher: catcher.label }, "loopback bridge: the sign-in landed, finishing it");
+        // The door records its failure where the card reads it; this only logs.
         try {
-            for await (const event of await open(spec, abort.signal)) {
-                if (event.type === "busy") {
-                    log.info({ catcher: catcher.label, reason: event.reason }, "loopback bridge: a catcher could not watch");
-                    return;
-                }
-                if (event.type !== "landed" || delivered) {
-                    continue;
-                }
-                if (!sameState(target.state, landingState(target, event.url))) {
-                    log.warn({ catcher: catcher.label }, "loopback bridge: a landing without this attempt's state was ignored");
-                    continue;
-                }
-                delivered = true;
-                disarm();
-                log.info({ catcher: catcher.label }, "loopback bridge: the sign-in landed, finishing it");
-                // The door records its own failure where the card reads it (the attempt's status); this only logs.
-                try {
-                    await deliver(event.url);
-                } catch (error) {
-                    log.warn({ err: errorMessage(error) }, "loopback bridge: finishing the sign-in failed");
-                }
-                return;
-            }
+            await deliver(url);
         } catch (error) {
-            if (!abort.signal.aborted) {
-                log.info({ catcher: catcher.label, err: errorMessage(error) }, "loopback bridge: a catcher dropped");
-            }
+            log.warn({ err: errorMessage(error) }, "loopback bridge: finishing the sign-in failed");
         }
     };
-    for (const catcher of catchers) {
-        void watch(catcher);
-    }
-    return { catchers: catchers.map(({ catcher }) => catcher), disarm };
+    const accept = async (
+        event: LoopbackCatchEvent,
+        catcher: SignInCatcher,
+        listening: (catcher: SignInCatcher | undefined) => void,
+    ): Promise<boolean> => {
+        switch (event.type) {
+            case "listening":
+                listening(catcher);
+                return true;
+            case "busy":
+                log.info({ catcher: catcher.label, reason: event.reason }, "loopback bridge: a catcher could not watch");
+                return false;
+            case "landed":
+                if (!delivered) {
+                    await land(catcher, event.url);
+                }
+                return !delivered;
+        }
+    };
+    const watch = async ({ catcher, open }: Catcher, signal: AbortSignal, listening: (catcher: SignInCatcher | undefined) => void): Promise<void> => {
+        try {
+            for await (const event of await open(spec, signal)) {
+                if (signal.aborted || !(await accept(event, catcher, listening))) {
+                    return;
+                }
+            }
+        } catch (error) {
+            if (!signal.aborted) {
+                log.info({ catcher: catcher.label, err: errorMessage(error) }, "loopback bridge: a catcher dropped");
+            }
+        } finally {
+            listening(undefined);
+        }
+    };
+    const ready = Promise.all(
+        catchers.map((catcher) => {
+            const started = Promise.withResolvers<SignInCatcher | undefined>();
+            const pending = new AbortController();
+            const signal = AbortSignal.any([abort.signal, pending.signal]);
+            // A peer that never acknowledges must not hold the start until the full OAuth deadline.
+            const timer = setTimeout(() => pending.abort(), 5_000);
+            timer.unref();
+            const listening = (value: SignInCatcher | undefined): void => {
+                clearTimeout(timer);
+                signal.removeEventListener("abort", stopped);
+                started.resolve(value);
+            };
+            const stopped = (): void => listening(undefined);
+            signal.addEventListener("abort", stopped, { once: true });
+            void watch(catcher, signal, listening);
+            return started.promise;
+        }),
+    ).then((confirmed) => confirmed.filter((catcher): catcher is SignInCatcher => catcher !== undefined));
+    return { catchers: catchers.map(({ catcher }) => catcher), ready, disarm };
 };
 
 // Where an authorize URL sends the browser, when that is a loopback address: its `redirect_uri`, read off the URL the
