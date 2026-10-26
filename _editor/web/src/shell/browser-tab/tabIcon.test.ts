@@ -31,6 +31,37 @@ describe(`the tab's icon`, () => {
     });
 });
 
+describe(`the tab's icon over the sandbox's logo`, () => {
+    const LOGO = `data:image/webp;base64,AAAA`;
+
+    it(`draws the logo in the lotus's place, alone when there is no mark`, () => {
+        const svg = iconSvg(undefined, LOGO);
+        expect(svg).toContain(`<image href="${LOGO}"`);
+        expect(svg).not.toContain(`<path d="M16 9.5`);
+        expect(svg).not.toContain(`<circle`);
+    });
+
+    it(`keeps the mark's disc, cutting only the ring out of the logo`, () => {
+        const svg = iconSvg({ kind: `asks`, count: 2 }, LOGO);
+        expect(svg).toContain(`<image href="${LOGO}"`);
+        expect(svg).toContain(`fill="#e5484d"`);
+        expect(svg).toMatch(/<text[^>]*>2<\/text>/);
+        expect(svg).not.toMatch(/<mask[^]*<rect x=/);
+        expect(iconSvg({ kind: `working` }, LOGO)).toContain(`r="6.5" fill="#3d8bf2"`);
+    });
+
+    it(`greys the logo for offline`, () => {
+        const svg = iconSvg({ kind: `offline` }, LOGO);
+        expect(svg).toContain(`feColorMatrix type="saturate" values="0"`);
+        expect(svg).toContain(`filter="url(#grey)"`);
+    });
+
+    it(`keeps the lotus for a logo that is not an inline picture, and escapes one that is`, () => {
+        expect(iconSvg(undefined, `https://example.com/logo.png`)).toContain(`<path d="M16 9.5`);
+        expect(iconSvg(undefined, `data:image/svg+xml,<svg a="b"/>`)).toContain(`href="data:image/svg+xml,&lt;svg a=&quot;b&quot;/>"`);
+    });
+});
+
 // The mark alone, for the desktop app's taskbar button, where Windows draws it over the app's own icon.
 describe(`the taskbar's overlay`, () => {
     it(`is the disc alone, with the count while one digit holds it`, () => {

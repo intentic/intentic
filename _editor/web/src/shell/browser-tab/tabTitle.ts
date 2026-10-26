@@ -5,9 +5,11 @@ import { type TabMark, tabTitle } from "./tabSignal";
 // The one writer of document.title and the tab's icon in a main window. The router names the page (setPageTitle) and
 // the fleet the mark (browserTab.ts); a popped-out panel's window names itself (FloatingSection.vue).
 
-// The page the router last named, and the mark last shown: plain, since nothing reads them but the writer below.
+// The page the router last named, the mark last shown and the open sandbox's logo: plain, since nothing reads them but
+// the writer below.
 let page: string | undefined;
 let mark: TabMark | undefined;
+let logo: string | undefined;
 
 const write = (): void => {
     const title = tabTitle(page, mark, t(`shell.browserTab.offline`));
@@ -15,7 +17,7 @@ const write = (): void => {
     if (document.title !== title) {
         document.title = title;
     }
-    showTabIcon(mark);
+    showTabIcon(mark, logo);
 };
 
 /** The router's half: the page's own name, in the reader's language, or undefined for the bare brand. */
@@ -26,5 +28,11 @@ export const setPageTitle = (title: string | undefined): void => {
 
 export const setTabMark = (next: TabMark | undefined): void => {
     mark = next;
+    write();
+};
+
+/** The open sandbox's logo, which the tab's icon wears in the lotus's place; undefined for the lotus. */
+export const setTabLogo = (next: string | undefined): void => {
+    logo = next;
     write();
 };

@@ -15,7 +15,7 @@ import { type Chime, ringOnce } from "../../workbench/browser-tab/chimes";
 import { showDesktopBadge } from "./desktopBadge";
 import { readerBack, settleDesktop, tellDesktop } from "./desktopSignal";
 import { readerHere } from "../../workbench/browser-tab/readerHere";
-import { setTabMark } from "./tabTitle";
+import { setTabLogo, setTabMark } from "./tabTitle";
 import { chimeAsks, chimeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
 import { newsItemsBetween, type TabFrame, tabMark, tabOffline } from "./tabSignal";
 import { justSetUp } from "../../models/sandbox/live/justSetUp";
@@ -153,7 +153,14 @@ export const startBrowserTab = (): void => {
         },
         { immediate: true },
     );
+    // The open sandbox's logo stands in for the lotus whether or not the tab shows the fleet's marks.
+    watch(
+        () => active.value?.image ?? undefined,
+        (logo) => setTabLogo(logo),
+        { immediate: true },
+    );
     onScopeDispose(() => {
+        setTabLogo(undefined);
         setTabMark(undefined);
         showDesktopBadge(undefined);
     });

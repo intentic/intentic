@@ -1,8 +1,9 @@
 import type { TabMark } from "./tabSignal";
 
-// The tab's icon for a mark: the lotus (public/favicon.svg, the same paths) with a disc in its lower right corner, cut
-// out of the flower by a ring so it reads on a light tab strip and a dark one alike. Drawn at 32 units and meant to be
-// seen at 16 pixels, so the disc is half the icon wide and carries one glyph at most.
+// The tab's icon for a mark: the open sandbox's logo, or the lotus (public/favicon.svg, the same paths) where it has
+// none, with a disc in its lower right corner, cut out of the picture by a ring so it reads on a light tab strip and a
+// dark one alike. Drawn at 32 units and meant to be seen at 16 pixels, so the disc is half the icon wide and carries
+// one glyph at most.
 
 const LOTUS_PATHS = [
     `<path d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" transform="rotate(-74 16 22.6)" opacity=".55"/>`,
@@ -22,6 +23,20 @@ const DONE = `#2f9e64`;
 const WORKING = `#3d8bf2`;
 
 const lotus = (fill: string): string => `<svg x="0" y="0" width="32" height="32" viewBox="7.2 2.6 17.6 20.2" fill="${fill}">${LOTUS_PATHS}</svg>`;
+
+// Only an inline picture: an SVG drawn as an image loads nothing from the network, and every sandbox logo is one
+// (an upload is downscaled to a data URL, a preset is an SVG data URL), so anything else keeps the lotus.
+const drawableLogo = (logo: string | undefined): string | undefined => (logo?.startsWith(`data:image/`) === true ? logo : undefined);
+
+const attribute = (value: string): string => value.replaceAll(`&`, `&amp;`).replaceAll(`"`, `&quot;`).replaceAll(`<`, `&lt;`);
+
+// Offline takes the colour out of a logo as it does out of the lotus, and fades it a little, so the grey reads as
+// "not connected" rather than as a grey logo.
+const GREY = `<filter id="grey"><feColorMatrix type="saturate" values="0"/></filter>`;
+
+const picture = (logo: string, offline: boolean): string =>
+    `${offline ? GREY : `` 
+    }<image href="${attribute(logo)}" x="0" y="0" width="32" height="32" preserveAspectRatio="xMidYMid slice"${offline ? ` filter="url(#grey)" opacity=".7"` : ``}/>`;
 
 // A digit up to nine; past that a bare disc, since two digits at this size are a smudge and the title spells the count.
 const asksGlyph = (count: number): string =>
@@ -53,17 +68,20 @@ const discOf = (mark: TabMark): Disc | undefined => {
     }
 };
 
-export const iconSvg = (mark: TabMark): string => {
-    const disc = discOf(mark);
-    const flower = lotus(mark.kind === `offline` ? LOTUS_OFFLINE : LOTUS);
+/** The tab's icon: the logo (or the lotus) with the mark's disc, if any. Neither leaves the page's own icon, never drawn. */
+export const iconSvg = (mark: TabMark | undefined, logo?: string): string => {
+    const disc = mark === undefined ? undefined : discOf(mark);
+    const offline = mark?.kind === `offline`;
+    const own = drawableLogo(logo);
+    const art = own === undefined ? lotus(offline ? LOTUS_OFFLINE : LOTUS) : picture(own, offline);
+    // Under the lotus, the quadrant above and right of the disc goes too: only the outer petal's tip reaches there,
+    // and past the ring it would float as a speck. A logo fills its square, so there it is only the ring.
+    const corner = disc === undefined || own !== undefined ? `` : `<rect x="${disc.at}" width="${32 - disc.at}" height="${disc.at}" fill="#000"/>`;
     const body =
         disc === undefined
-            ? flower
-            : // The quadrant above and right of the disc goes too: only the outer petal's tip reaches there, and past the
-              // ring it would float as a speck.
-              `<mask id="cut"><rect width="32" height="32" fill="#fff"/><circle cx="${disc.at}" cy="${disc.at}" r="${disc.radius + 2.5}" fill="#000"/>` +
-              `<rect x="${disc.at}" width="${32 - disc.at}" height="${disc.at}" fill="#000"/></mask>` +
-              `<g mask="url(#cut)">${flower}</g><circle cx="${disc.at}" cy="${disc.at}" r="${disc.radius}" fill="${disc.fill}"/>${disc.glyph}`;
+            ? art
+            : `<mask id="cut"><rect width="32" height="32" fill="#fff"/><circle cx="${disc.at}" cy="${disc.at}" r="${disc.radius + 2.5}" fill="#000"/>${corner}</mask>` +
+              `<g mask="url(#cut)">${art}</g><circle cx="${disc.at}" cy="${disc.at}" r="${disc.radius}" fill="${disc.fill}"/>${disc.glyph}`;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 32 32">${body}</svg>`;
 };
 
@@ -167,20 +185,22 @@ const restore = (): void => {
     originals = undefined;
 };
 
-/** Shows the icon for this mark, or the page's own for none; a mark already showing costs nothing. */
-export const showTabIcon = (mark: TabMark | undefined): void => {
-    const key = iconKey(mark);
+/** Shows the icon for this mark over this logo, or the page's own for neither; one already showing costs nothing. */
+export const showTabIcon = (mark: TabMark | undefined, logo?: string): void => {
+    const own = drawableLogo(logo);
+    const markKey = iconKey(mark);
+    const key = own === undefined ? markKey : `${markKey ?? `none`}|${own}`;
     if (key === shown) {
         return;
     }
     shown = key;
     drawing += 1;
     const turn = drawing;
-    if (mark === undefined) {
+    if (key === undefined) {
         restore();
         return;
     }
-    void rasterize(iconSvg(mark)).then(({ href, type }) => {
+    void rasterize(iconSvg(mark, own)).then(({ href, type }) => {
         if (turn === drawing) {
             place(href, type);
         }
