@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, nextTick, ref, shallowRef } from "vue";
 import { indexEntries, type MoreRow, type Row } from "./treeRows";
 import { useTreeReveal } from "./useTreeReveal";
@@ -25,7 +26,8 @@ const revealOver = (opened: string | null | undefined, built: readonly string[],
     const showRow = jest.fn(async (path: string) =>
         rows.value.some((row) => !(`more` in row) && row.entry.path === path) ? document.createElement(`button`) : undefined,
     );
-    effectScope().run(() =>
+    const scope = effectScope();
+    scope.run(() =>
         useTreeReveal({
             selectedPath: () => selectedPath.value,
             rows,
@@ -37,13 +39,15 @@ const revealOver = (opened: string | null | undefined, built: readonly string[],
             showRow,
         }),
     );
-    return { selectedPath, rows, openAll, showRow };
+    return { selectedPath, rows, openAll, showRow, stop: () => scope.stop() };
 };
 // Two ticks: the watch's own, then the one it awaits before showing the row.
 const settle = async (): Promise<void> => {
     await nextTick();
     await nextTick();
 };
+
+beforeEach(() => resetSandboxScope());
 
 describe(`revealing the open file`, () => {
     it(`opens the way down to it at once, then shows its row`, async () => {
@@ -81,5 +85,39 @@ describe(`revealing the open file`, () => {
         selectedPath.value = `src`;
         await settle();
         expect(showRow.mock.calls).toEqual([[`src`]]);
+    });
+
+    it(`leaves collapsed folders alone when the explorer remounts with the same file`, async () => {
+        const first = revealOver(`src/api/routes.ts`, [`src/api/routes.ts`]);
+        await settle();
+        first.stop();
+
+        const returned = revealOver(`src/api/routes.ts`, [`src`, `README.md`]);
+        await settle();
+
+        expect([returned.openAll.mock.calls, returned.showRow.mock.calls]).toEqual([[], []]);
+    });
+
+    it(`reveals a different file selected while the explorer was away`, async () => {
+        const first = revealOver(`README.md`, [`README.md`]);
+        await settle();
+        first.stop();
+
+        const returned = revealOver(`src/api/routes.ts`, [`src/api/routes.ts`]);
+        await settle();
+
+        expect([returned.openAll.mock.calls, returned.showRow.mock.calls]).toEqual([[[[`src`, `src/api`]]], [[`src/api/routes.ts`]]]);
+    });
+
+    it(`reveals the same path afresh after a sandbox switch`, async () => {
+        const first = revealOver(`src/api/routes.ts`, [`src/api/routes.ts`]);
+        await settle();
+        first.stop();
+        resetSandboxScope();
+
+        const switched = revealOver(`src/api/routes.ts`, [`src/api/routes.ts`]);
+        await settle();
+
+        expect([switched.openAll.mock.calls, switched.showRow.mock.calls]).toEqual([[[[`src`, `src/api`]]], [[`src/api/routes.ts`]]]);
     });
 });

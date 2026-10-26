@@ -216,6 +216,26 @@ describe(`the explorer after a reload`, () => {
         expect(scrolled).toEqual([`routes.ts`]);
     });
 
+    it(`keeps collapse all when leaving and returning to the explorer`, async () => {
+        const props = { tree: TREE, selectedPath: `src/api/routes.ts` };
+        const el = await mount(props);
+        const tree = el.querySelector(`[role="tree"]`);
+        tree?.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        await nextTick();
+        const collapse = [...document.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`Collapse Folders`));
+        collapse?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        expect(rows(el)).toEqual([`src`, `README.md`]);
+        expect(sessionStorage.getItem(`intentic.workspaceTree.${SANDBOX}`)).toBe(`[]`);
+        app?.unmount();
+
+        const returned = await mount(props);
+
+        expect(rows(returned)).toEqual([`src`, `README.md`]);
+        expect(scrolled).toEqual([`routes.ts`]);
+    });
+
     it(`leaves a folder the user collapsed closed when the tree refetches`, async () => {
         const tree = ref(TREE);
         const el = document.createElement(`div`);
