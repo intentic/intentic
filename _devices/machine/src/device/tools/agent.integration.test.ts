@@ -61,3 +61,55 @@ test("a log rotated before the run started is read from its start", async () => 
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test("a line written in pieces is handed on whole", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-log-pieces-"));
+    try {
+        const log = join(dir, "agent.log");
+        await writeFile(log, "error: The agent was not up");
+        const lines: string[] = [];
+        const writing = new Promise<void>((resolve, reject) => {
+            setTimeout(() => void appendFile(log, "dated.\n").then(resolve, reject), 40);
+        });
+        await followLog({ path: log, from: 0, isAlive: () => false, onLine: (line) => lines.push(line), timing: FAST });
+        await writing;
+        expect(lines).toEqual(["error: The agent was not updated."]);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test("the starting offset counts bytes in a log with non-ASCII history", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-log-utf8-"));
+    try {
+        const log = join(dir, "agent.log");
+        const old = "previous: 日本語\n";
+        await writeFile(log, `${old}error: failed\n`);
+        const lines: string[] = [];
+        await followLog({ path: log, from: Buffer.byteLength(old), isAlive: () => false, onLine: (line) => lines.push(line), timing: FAST });
+        expect(lines).toEqual(["error: failed"]);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test("a read failure rejects the follow instead of escaping from its timer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-log-unreadable-"));
+    try {
+        await expect(followLog({ path: dir, from: 0, isAlive: () => true, onLine: () => undefined, timing: FAST })).rejects.toThrow();
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test("a failed line consumer rejects the follow instead of escaping from its timer", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-log-consumer-"));
+    try {
+        const log = join(dir, "agent.log");
+        await writeFile(log, "line\n");
+        const error = new Error("connection closed");
+        await expect(followLog({ path: log, from: 0, isAlive: () => false, onLine: () => { throw error; }, timing: FAST })).rejects.toBe(error);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});

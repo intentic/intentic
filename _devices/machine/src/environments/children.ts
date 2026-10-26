@@ -104,26 +104,34 @@ interface Held {
 
 const inWords = (ms: number): string => (ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)}s`);
 
+const retiredExit = (code: number | null): boolean => code === 0 || code === NO_AGENT_EXIT;
+
+const disappeared = (distro: string, listed: readonly string[] | undefined): boolean => listed !== undefined && !listed.includes(distro);
+
+const cancel = (entry: Held): void => {
+    clearTimeout(entry.timer);
+    clearTimeout(entry.backstop);
+    entry.timer = undefined;
+    entry.backstop = undefined;
+    entry.wait = undefined;
+};
+
 export const superviseChildren = (log: Log, drop: (distro: string, why: string) => Promise<void>, spawner: ChildSpawner = realSpawner): Children => {
     const held = new Map<string, Held>();
     let stopping = false;
 
     const current = (distro: string, entry: Held): boolean => held.get(distro) === entry && !stopping;
 
-    const cancel = (entry: Held): void => {
-        clearTimeout(entry.timer);
-        clearTimeout(entry.backstop);
-        entry.timer = undefined;
-        entry.backstop = undefined;
-        entry.wait = undefined;
-    };
-
     const start = (distro: string, entry: Held): void => {
         cancel(entry);
         entry.startedAt = spawner.now();
         const child = spawner.spawn(distro);
         entry.process = child;
-        child.once("error", (error) => log(`${distro}: could not start its agent through wsl.exe (${error.message})`));
+        child.once("error", (error) => {
+            log(`${distro}: could not start its agent through wsl.exe (${error.message})`);
+            // Failed spawns have no exit event; exited's identity check prevents duplicate retries.
+            void exited(distro, entry, child, null);
+        });
         child.once("exit", (code) => void exited(distro, entry, child, code));
     };
 
@@ -157,13 +165,17 @@ export const superviseChildren = (log: Log, drop: (distro: string, why: string) 
     };
 
     const exited = async (distro: string, entry: Held, child: ChildProcess, code: number | null): Promise<void> => {
-        if (held.get(distro) !== entry || entry.process !== child || stopping) {
+        if (!current(distro, entry) || entry.process !== child) {
             return;
         }
         entry.process = undefined;
-        const listed = code === 0 || code === NO_AGENT_EXIT ? undefined : await spawner.distros();
+        const listed = retiredExit(code) ? undefined : await spawner.distros();
+        // A detach, reattach or stop while WSL answered ends this exit's authority over the current session.
+        if (!current(distro, entry)) {
+            return;
+        }
         const verdict: ChildVerdict =
-            listed !== undefined && !listed.includes(distro)
+            disappeared(distro, listed)
                 ? { kind: "drop", why: "WSL no longer has that distro" }
                 : childVerdict(code, spawner.now() - entry.startedAt, entry.failures);
         if (verdict.kind === "drop") {

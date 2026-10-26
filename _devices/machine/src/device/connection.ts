@@ -7,7 +7,7 @@ import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@
 import { RPCHandler } from "@orpc/server/websocket";
 import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
 import { answeredGone, GONE_RECHECK_MS, GONE_RETIRE_MS } from "../sync/gone.js";
-import { type HostLink, readDeviceConfig, rememberScopes, removeLinks, writeDeviceConfig } from "./config.js";
+import { type HostLink, rememberScopes, removeLinks, updateDeviceConfig } from "./config.js";
 import { type Indicator, machineIndicator } from "./indicator.js";
 import { createHostRouter } from "./router.js";
 
@@ -65,8 +65,7 @@ export interface LinkGoneStore {
 
 const fileGoneStore: LinkGoneStore = {
     mark: async (link, since) => {
-        const config = await readDeviceConfig();
-        await writeDeviceConfig({
+        await updateDeviceConfig((config) => ({
             ...config,
             links: config.links.map((held) => {
                 if (held.sandboxUrl !== link.sandboxUrl || held.token !== link.token) {
@@ -76,7 +75,7 @@ const fileGoneStore: LinkGoneStore = {
                 const { goneSince: _was, ...rest } = held as MarkedLink;
                 return since === undefined ? rest : { ...rest, goneSince: since };
             }),
-        });
+        }));
     },
 };
 

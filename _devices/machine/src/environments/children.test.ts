@@ -73,7 +73,11 @@ class FakeChild extends EventEmitter {
 }
 
 // `running` is what `wsl -l --running` answers, read afresh on every ask; by default every listed distro is running.
-const harness = (listed: readonly string[] | undefined = ["archlinux", "Ubuntu"], running: { now: readonly string[] | undefined } = { now: listed }) => {
+const harness = (
+    listed: readonly string[] | undefined = ["archlinux", "Ubuntu"],
+    running: { now: readonly string[] | undefined } = { now: listed },
+    distros: ChildSpawner["distros"] = async () => listed,
+) => {
     const spawned: { distro: string; child: FakeChild }[] = [];
     const dropped: string[] = [];
     const logged: string[] = [];
@@ -84,7 +88,7 @@ const harness = (listed: readonly string[] | undefined = ["archlinux", "Ubuntu"]
             spawned.push({ distro, child });
             return child as unknown as ChildProcess;
         },
-        distros: async () => await Promise.resolve(listed),
+        distros,
         running: async () => {
             runningAsks += 1;
             return await Promise.resolve(running.now);
@@ -121,6 +125,58 @@ describe("superviseChildren", () => {
         expect(spawned).toHaveLength(1);
         await advanceTimersByTimeAsync(10);
         expect(spawned).toHaveLength(2);
+    });
+
+    it("retries a failed spawn even when no exit event follows", async () => {
+        jest.useFakeTimers();
+        const { spawned, children } = harness();
+        try {
+            children.reconcile(["archlinux"]);
+            spawned[0]?.child.emit("error", new Error("spawn wsl.exe EAGAIN"));
+            await advanceTimersByTimeAsync(1_100);
+
+            expect(spawned).toHaveLength(2);
+        } finally {
+            children.stopAll();
+        }
+    });
+
+    it("schedules one retry when an error is followed by an exit", async () => {
+        jest.useFakeTimers();
+        const { spawned, children } = harness();
+        try {
+            children.reconcile(["archlinux"]);
+            spawned[0]?.child.emit("error", new Error("spawn wsl.exe EAGAIN"));
+            spawned[0]?.child.exit(1);
+            await advanceTimersByTimeAsync(1_100);
+
+            expect(spawned).toHaveLength(2);
+            expect(jest.getTimerCount()).toBe(0);
+        } finally {
+            children.stopAll();
+        }
+    });
+
+    it("does not retire a newly attached session after an older exit's listing returns", async () => {
+        let answer!: (listed: readonly string[]) => void;
+        const listed = new Promise<readonly string[]>((resolve) => {
+            answer = resolve;
+        });
+        const { spawned, children, dropped } = harness([], { now: [] }, async () => await listed);
+        try {
+            children.reconcile(["archlinux"]);
+            spawned[0]?.child.exit(1);
+            children.reconcile([]);
+            children.reconcile(["archlinux"]);
+            answer([]);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(children.held()).toEqual(["archlinux"]);
+            expect(dropped).toEqual([]);
+            expect(spawned[1]?.child.killed).toBe(false);
+        } finally {
+            children.stopAll();
+        }
     });
 
     it("drops a child that retired, from the registry as well as from what it holds", async () => {

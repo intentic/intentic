@@ -133,6 +133,37 @@ test("a writer sets unparseable content aside instead of building on it", async 
     await config.removeLinks();
 });
 
+test("concurrent enrollments preserve every link", async () => {
+    const urls = ["https://concurrent-one.example", "https://concurrent-two.example", "https://concurrent-three.example"];
+    try {
+        await Promise.all(urls.map(async (url) => await config.upsertLink(link(url, "laptop"))));
+        expect((await config.readLinks()).map((entry) => entry.sandboxUrl).sort()).toEqual(urls.toSorted());
+    } finally {
+        await config.removeLinks();
+    }
+});
+
+test("concurrent scope pushes preserve each sandbox's grant", async () => {
+    const urls = ["https://grant-one.example", "https://grant-two.example", "https://grant-three.example"];
+    try {
+        for (const url of urls) {
+            await config.upsertLink(link(url, "laptop"));
+        }
+        await Promise.all(urls.map(async (url) => await config.rememberScopes(url, scopes("on"))));
+        expect((await config.readLinks()).map((entry) => entry.scopes.shell)).toEqual(["on", "on", "on"]);
+    } finally {
+        await config.removeLinks();
+    }
+});
+
+test("disconnecting all links includes an enrollment queued just before it", async () => {
+    const adding = config.upsertLink(link("https://just-added.example", "laptop"));
+    const removing = config.removeLinks();
+    await adding;
+    expect((await removing).map((entry) => entry.sandboxUrl)).toEqual(["https://just-added.example"]);
+    expect(await config.readLinks()).toEqual([]);
+});
+
 /* A link stamp is valid only inside its freshness window; an expired stamp cannot report a live link. */
 test("a machine whose agent never stamped its links has no answer, rather than a wrong one", async () => {
     // Runs before anything below writes a stamp: this is an agent too old to have the code, seen from here.

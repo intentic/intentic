@@ -1,7 +1,7 @@
 import { readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { writeFileAtomic } from "@intentic/base/fs";
+import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { parseJsonOr } from "@intentic/base/json";
 import { writeSecretFile } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -116,16 +116,18 @@ const readForUpdate = async (recover: boolean): Promise<DeviceConfigFile> => {
 };
 
 // Read-modify-write for every writer below, so none of them rebuild the file from `links` alone and drop another field.
+// Serialized within the resident process: scope pushes and gone marks from different links can arrive together.
 // A file this build cannot parse propagates: every mutation writes back what it read, and reading nothing wipes links.
 // Only a person re-adding a link (`recover`) may set such a file aside as `.corrupt` and start the list again.
-const updateDeviceConfig = async (
+export const updateDeviceConfig = async (
     mutate: (config: DeviceConfigFile) => DeviceConfigFile,
     { recover = false }: { readonly recover?: boolean } = {},
-): Promise<DeviceConfigFile> => {
-    const next = mutate(await readForUpdate(recover));
-    await writeDeviceConfig(next);
-    return next;
-};
+): Promise<DeviceConfigFile> =>
+    await queueOnFile(configPath, async () => {
+        const next = mutate(await readForUpdate(recover));
+        await writeDeviceConfig(next);
+        return next;
+    });
 
 // Every link, or none when nothing has ever been connected, so a missing file and an empty list aren't two cases. An
 // unreadable file is a third case and throws: callers act on emptiness, and none of them may act on a guess.
@@ -146,9 +148,11 @@ export const upsertLink = async (link: HostLink): Promise<readonly HostLink[]> =
 
 // Forget one sandbox, or all of them. Returns what was actually dropped so the caller can say so by name.
 export const removeLinks = async (sandboxUrl?: string): Promise<readonly HostLink[]> => {
-    const links = await readLinks();
-    const dropped = sandboxUrl === undefined ? links : links.filter((link) => link.sandboxUrl === sandboxUrl);
-    await updateDeviceConfig((config) => ({ ...config, links: config.links.filter((link) => !dropped.some((gone) => gone.sandboxUrl === link.sandboxUrl)) }));
+    let dropped: readonly HostLink[] = [];
+    await updateDeviceConfig((config) => {
+        dropped = sandboxUrl === undefined ? config.links : config.links.filter((link) => link.sandboxUrl === sandboxUrl);
+        return { ...config, links: sandboxUrl === undefined ? [] : config.links.filter((link) => link.sandboxUrl !== sandboxUrl) };
+    });
     return dropped;
 };
 

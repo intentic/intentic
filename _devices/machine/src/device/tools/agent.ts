@@ -1,5 +1,4 @@
 import { pollUntil } from "@intentic/base/async";
-import { readTextIfExists } from "@intentic/base/fs";
 import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
 import type { DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 import { agentLogPath } from "../../config.js";
@@ -7,6 +6,7 @@ import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../resident/supervision.js";
 import { SWAP_WAIT_MAX_MS } from "../sandbox-rounds/swap-records.js";
 import { onFileChange } from "./programs/file-changes.js";
+import { agentLogReader, logSize } from "./logs/agent-log.js";
 import { icSwapsInFlight } from "./sandboxes.js";
 
 // Updates or restarts this device's own agent, asked for from the browser. Both operations stop the process
@@ -42,13 +42,6 @@ const AGENT_LOG_TIMING: LogFollowTiming = { aliveCheckMs: 250, drainQuietMs: 300
 // The timeout above is the ceiling on how long this streams for, far above a slow download: it only protects a reader
 // whose device went quiet without closing the socket, the run itself finishes regardless.
 
-// What is in the log now, from `from` on. Missing file means nothing yet; a log shorter than `from` was rotated
-// (spawnDetached rotates a large one before it starts the run), so it is read from its start.
-const readFrom = async (path: string, from: number): Promise<{ text: string; at: number }> => {
-    const raw = (await readTextIfExists(path)) ?? "";
-    return { text: raw.slice(raw.length < from ? 0 : from), at: raw.length };
-};
-
 export interface LogFollow {
     readonly path: string;
     readonly from: number;
@@ -60,22 +53,17 @@ export interface LogFollow {
 // Hands every new line of the log to `onLine` until the run is gone and its log has drained, or the timeout. Timed on
 // the monotonic clock: a wall clock moved under it (a test's fake time, an NTP step) would end the drain early or late.
 export const followLog = async ({ path, from, isAlive, onLine, timing = AGENT_LOG_TIMING }: LogFollow): Promise<void> => {
-    let at = from;
     let lastLineAt = performance.now();
     // Never read yet: the first look reads whatever landed before the follow began.
     let lastReadAt = Number.NEGATIVE_INFINITY;
     let running: Promise<void> | undefined;
     let again = false;
+    let stopped = false;
+    const reader = agentLogReader(path, from, onLine);
     const readOnce = async (): Promise<void> => {
         lastReadAt = performance.now();
-        const { text, at: next } = await readFrom(path, at);
-        at = next;
-        const lines = text.split(/\r?\n/).filter((one) => one.trim() !== "");
-        if (lines.length > 0) {
+        if ((await reader.read()) > 0) {
             lastLineAt = performance.now();
-        }
-        for (const line of lines) {
-            onLine(line);
         }
     };
     // One read at a time; changes during it ask for one more, so a burst of writes costs two reads, not one per write.
@@ -88,21 +76,38 @@ export const followLog = async ({ path, from, isAlive, onLine, timing = AGENT_LO
             do {
                 again = false;
                 await readOnce();
+                if (stopped) {
+                    break;
+                }
             } while (again);
         })().finally(() => {
             running = undefined;
         });
         return await running;
     };
-    const unwatch = onFileChange(path, () => void drain());
+    let unwatch: (() => void) | undefined;
+    let tick: NodeJS.Timeout | undefined;
     const startedAt = performance.now();
     let goneAt: number | undefined;
     try {
-        await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve, reject) => {
+            const stop = (): void => {
+                stopped = true;
+                clearInterval(tick);
+                resolve();
+            };
+            unwatch = onFileChange(path, () => {
+                if (!stopped) {
+                    void drain().catch(reject);
+                }
+            });
             const look = async (): Promise<void> => {
                 const now = performance.now();
                 if (unwatch === undefined || now - lastReadAt >= timing.fallbackReadMs) {
                     await drain();
+                }
+                if (stopped) {
+                    return;
                 }
                 if (now - startedAt >= timing.timeoutMs) {
                     stop();
@@ -119,16 +124,15 @@ export const followLog = async ({ path, from, isAlive, onLine, timing = AGENT_LO
                     stop();
                 }
             };
-            const tick = setInterval(() => void look(), timing.aliveCheckMs);
-            const stop = (): void => {
-                clearInterval(tick);
-                resolve();
-            };
+            tick = setInterval(() => void look().catch(reject), timing.aliveCheckMs);
         });
     } finally {
+        stopped = true;
         unwatch?.();
-        await drain();
+        clearInterval(tick);
     }
+    await drain();
+    reader.end();
 };
 
 // Start it, then narrate it. The answer is about what was STARTED, not what it achieved, since this process is
@@ -185,7 +189,7 @@ export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => vo
     }
     onLine(started(op, installedBuild()));
     // Taken before the spawn: the log is append-only and long-lived, and a reader sees only this run's lines.
-    const at = (await readFrom(agentLogPath, 0)).at;
+    const at = await logSize(agentLogPath);
     const argv = AGENT_VERB[op];
     const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes: true });
     onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
