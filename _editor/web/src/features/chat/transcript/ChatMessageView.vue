@@ -464,7 +464,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <ChatAttachmentStrip
                 v-if="attachmentThumbs.length"
                 :attachments="attachmentThumbs"
-                class="flex-wrap justify-end"
+                class="chat-prompt-attachments flex-wrap justify-end"
                 :class="attachmentsAside && '@lg:hidden'"
             />
             <!-- A stuck prompt is ONE NOWRAP LINE, whose min-content is the whole prompt — and min-content is the floor
@@ -473,7 +473,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  above); `min-w-0` on the frame is what then lets it shrink to the clamp. Both inert while it wraps. -->
             <div class="flex max-w-full items-center gap-1">
                 <!-- Beside-prompt thumbnail once the panel is wide enough (attachmentsAside gates it): costs only the taller element. -->
-                <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="mr-1 hidden shrink-0 self-start @lg:flex" />
+                <ChatAttachmentStrip v-if="attachmentsAside" :attachments="attachmentThumbs" class="chat-prompt-attachments mr-1 hidden shrink-0 self-start @lg:flex" />
                 <!-- The frame owns positioning for the fade and toggle chip. -->
                 <div
                     v-if="message.text"

@@ -70,6 +70,13 @@
 .chat-prompt-pinned:not(.chat-prompt-open) .chat-surface {
     max-width: 34rem;
 }
+/* A TITLE CARRIES NO PICTURES. Stacked above the bubble they doubled the band's height, and beside it a thumbnail taller
+   than the one line stood the bubble off-centre in its own band, so every pinned prompt sat in a band of a different
+   size. Shut and stuck, the band is the one-line bubble and the gap around it, whatever the prompt carried; scrolled
+   back to, or opened, the attachments are where they were. */
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-attachments {
+    display: none;
+}
 /* Room for the chevron, which centres on that line rather than sitting under it — on a row that HAS one, or a prompt
    short enough to need no chevron pins as a lopsided bubble. */
 .chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped .chat-prompt-text {
