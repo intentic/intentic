@@ -1,7 +1,8 @@
 // The structured schedule the automations dialog edits instead of raw cron. `cronOf` composes the cron string;
 // `parseCron` inverts it for the shapes the builder produces, falling back to freq "custom" with the raw string.
 // `scheduleLabel` renders the human badge for the automations list.
-import { asZone, type Zone, zoneLabel } from "@intentic/sandbox-contract/time";
+import { asZone, cronOptions, type Zone, zoneLabel } from "@intentic/sandbox-contract/time";
+import { Cron } from "croner";
 import { t } from "./i18n";
 
 export type ScheduleFreq = `minutes` | `hourly` | `daily` | `weekly` | `monthly` | `custom`;
@@ -145,7 +146,7 @@ export const localInputOf = (at: number): string => {
 export const instantOf = (local: string): number => new Date(local).getTime();
 
 // Built when read, so the names follow the language on screen; Sunday first, as cron counts.
-const dayNames = (): readonly string[] => [
+export const dayNames = (): readonly string[] => [
     t(`automationFields.sun`),
     t(`automationFields.mon`),
     t(`automationFields.tue`),
@@ -156,7 +157,7 @@ const dayNames = (): readonly string[] => [
 ];
 
 // A language without suffixed ordinals spells all four the same (Polish: "1.").
-const ordinal = (day: number): string => {
+export const ordinal = (day: number): string => {
     if (day % 10 === 1 && day !== 11) {
         return t(`cronSchedule.ordinal.st`, { day });
     }
@@ -261,4 +262,20 @@ export const scheduleLabel = (cron: string, reader: Zone, rule: Zone): string =>
     // Mon-first display order.
     const names = schedule.days.toSorted((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((day) => dayNames()[day]);
     return qualify(`${names.join(`, `)} ${schedule.time}`);
+};
+
+// The next three moments a cron fires, or why it never will. Evaluated in the zone the DAEMON fires it in, not the
+// browser's: a preview computed on the reader's own clock showed the times they typed and the daemon fired at others, so
+// the one screen built to prove the schedule was right was the one confirming the bug. A callback-less Cron is only a
+// queryable pattern.
+export const previewOf = (cron: string | undefined, zone: Zone): { runs: number[] } | { error: string } | undefined => {
+    if (cron === undefined) {
+        return undefined;
+    }
+    try {
+        const runs = new Cron(cron, cronOptions(zone)).nextRuns(3).map((date) => date.getTime());
+        return runs.length > 0 ? { runs } : { error: t(`useAutomationForm.neverFires`) };
+    } catch {
+        return { error: t(`useAutomationForm.invalidCron`) };
+    }
 };

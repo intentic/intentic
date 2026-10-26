@@ -2,7 +2,7 @@ import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/autom
 import { computed, type Ref } from "vue";
 import { host } from "../host";
 import { t } from "../i18n.js";
-import { type ShelfWords, shelfOf, shelvesOf } from "./grouping";
+import { type ShelfOf, type ShelfWords, shelfOf, shelvesOf } from "./grouping";
 import { builtInLabel } from "../persona/usePersonaReach";
 
 // grouping.ts read against this sandbox's own personas, in the words this page says its two unnamed shelves in. The
@@ -17,7 +17,9 @@ export const useShelves = (automations: Ref<readonly AutomationSummary[]>) => {
         return { chores: t(`automationsView.codeChores`), other: t(`automationsView.other`), personaLabel: (id) => labels.get(id) ?? builtInLabel(id) };
     });
     const shelves = computed(() => shelvesOf(automations.value, words.value));
-    // Which shelf an automation sits on, for a row that says its gist without repeating the shelf's name.
-    const shelfLabelOf = (automation: AutomationSummary): string => shelfOf(automation, words.value).label;
-    return { shelves, shelfLabelOf };
+    // Which shelf an automation sits on and by what (a group it names, its persona, the chores), for a row that says its
+    // gist without repeating the shelf's name and for the opened automation saying where it is filed.
+    const placeOf = (automation: AutomationSummary): ShelfOf => shelfOf(automation, words.value);
+    const shelfLabelOf = (automation: AutomationSummary): string => placeOf(automation).label;
+    return { shelves, shelfLabelOf, placeOf };
 };

@@ -67,3 +67,19 @@ export const effortLabelOf = (
     const running = clampEffort(effort, provider, modelId, thinking);
     return effortsFor(provider, modelId, thinking).find((option) => option.value === running)?.label ?? running;
 };
+
+// Where a selection's tier sits on its model's ladder, by the same clamp as its label: the rung the composer's meter
+// lights, from 0, and how many it draws. Undefined for a pick with no tier, and for a provider with no ladder.
+export const effortRungOf = (
+    effort: string | undefined,
+    provider: AgentProvider,
+    modelId: string | undefined,
+    thinking: boolean | undefined,
+): { readonly rung: number; readonly rungs: number } | undefined => {
+    if (effort === undefined || effort === ``) {
+        return undefined;
+    }
+    const ladder = effortsFor(provider, modelId, thinking);
+    const rung = ladder.findIndex((option) => option.value === clampEffort(effort, provider, modelId, thinking));
+    return rung === -1 ? undefined : { rung, rungs: ladder.length };
+};

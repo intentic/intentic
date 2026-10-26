@@ -155,13 +155,19 @@ const targetPhrase = computed<string | undefined>(() => {
 });
 const TARGET_ICON = { conversation: `comments`, notify: `mobile` } as const;
 
-// The form itself is AutomationEditor's, mounted only while editing, so it loads fresh on every Edit.
+// Every value of an opened automation is changed where it is shown (properties/); the full form is for what has no
+// place there of its own, mounted only while open, so it loads fresh each time.
 const editing = ref(false);
 const sandboxZone = useSandboxZone();
 
+// The pencil opens the automation, where everything it shows can be changed in place, rather than swapping it for a form.
 const startEdit = (): void => {
+    if (!props.expanded) {
+        emit(`expand`);
+    }
+};
+const openSettings = (): void => {
     editing.value = true;
-    // Editing implies reading what you are editing: a collapsed row would hide the form entirely.
     if (!props.expanded) {
         emit(`expand`);
     }
@@ -187,6 +193,7 @@ const { mobile } = useDevice();
 const verbs = computed((): ActionItem[] => [
     ...(visitorChat.value === undefined ? [] : [{ id: `install`, label: t(`automationRow.embedCode`), icon: `globe` as const, run: () => emit(`install`) }]),
     { id: `edit`, label: t(`automationRow.edit2`), icon: `pencil`, run: () => startEdit() },
+    { id: `settings`, label: t(`automationDetail.allSettings`), icon: `sliders-h`, run: () => openSettings() },
     ...(trigger.value.kind === `listener`
         ? []
         : [{ id: `run`, label: t(`automationRow.runNow2`), icon: `play` as const, disabled: props.busy === true, run: () => emit(`run`) }]),
@@ -381,6 +388,7 @@ const verbs = computed((): ActionItem[] => [
             <!-- Not a dialog, same reasoning as the acceptance rows: a modal hides the list you're comparing against. -->
             <AutomationEditor
                 v-if="editing"
+                back
                 class="pr-3"
                 :automation="automation"
                 :listener-sources="listenerSources"
@@ -391,13 +399,11 @@ const verbs = computed((): ActionItem[] => [
             <AutomationDetail
                 v-else
                 :automation="automation"
-                :trigger-icon="TRIGGER_ICON[trigger.kind]"
                 :trigger-label="triggerLabel"
                 :target-phrase="targetPhrase"
-                :target-icon="automation.target && automation.target.kind !== `agent` ? TARGET_ICON[automation.target.kind] : undefined"
                 :spent="spent"
                 :busy="busy"
-                @edit="startEdit"
+                @settings="openSettings"
                 @run="emit(`run`)"
                 @install="emit(`install`)"
             />

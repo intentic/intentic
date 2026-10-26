@@ -292,7 +292,6 @@
         "turnstileUnfinished": "Turnstile nie jest dokończony: brak sprawdzania botów",
         "builtInBotCheck": "wbudowane sprawdzanie botów",
         "noBotCheck": "brak sprawdzania botów",
-        "noModel": "brak modelu",
         "othersPhrase": {
             "allow": "pozostali obsługiwani zgodnie z ustawieniami",
             "hold": "pozostali wstrzymani dla Ciebie",
@@ -307,7 +306,6 @@
         "continues": "Kontynuuje {conversation}",
         "notifiesYou": "Powiadamia cię",
         "then": "Wtedy",
-        "check": "Sprawdzenie",
         "lastSaw": "Co ostatnio zobaczyła",
         "lastSawSince": "Co ostatnio zobaczyła, bez zmian od {when}",
         "checkedAt": "Sprawdzono {at}",
@@ -487,25 +485,10 @@
         "total": "Razem"
     },
     "automationDetail": {
-        "beforeItRuns": "Przed uruchomieniem",
-        "copyInstructions": "Kopiuj instrukcje",
+        "allSettings": "Wszystkie ustawienia",
         "failedInARow": "Nie powiodła się {count} raz z rzędu | Nie powiodła się {count} razy z rzędu | Nie powiodła się {count} razy z rzędu",
-        "fallbacks": "{count} zapasowy | {count} zapasowe | {count} zapasowych",
-        "instructions": "Instrukcje",
         "lastRunFailed": "Ostatnie uruchomienie nie powiodło się",
-        "model": "Model",
-        "nextAt": "Następne {in} · {at}",
-        "offNothingScheduled": "Wyłączona, więc nic nie jest zaplanowane",
-        "onceItsCheckPasses": "Gdy jej sprawdzenie przejdzie",
-        "onlyWhenItChanges": "Tylko gdy sprawdzane się zmieni",
-        "openRun": "Otwórz uruchomienie",
-        "runsAs": "Działa jako",
-        "runsOnItsOwn": "Rusza sama",
-        "showAllInstructions": "Pokaż całe instrukcje",
-        "showLess": "Pokaż mniej",
-        "waitsForYou": "Czeka na twoją zgodę",
-        "waitsThenRuns": "Czeka {seconds} s, potem rusza",
-        "when": "Kiedy"
+        "openRun": "Otwórz uruchomienie"
     },
     "runHistory": {
         "cutOffCount": "{count} przerwane | {count} przerwane | {count} przerwanych",
@@ -528,5 +511,82 @@
         "fullAccessNote": "każde narzędzie i każde zalogowane konto",
         "noAccounts": "Bez kont",
         "noAccountsNote": "każde narzędzie, żadnego zalogowanego konta"
+    },
+    "scheduleWords": {
+        "daysAt": "W dni: {days}, o {times}",
+        "everyDayAt": "Codziennie o {times}",
+        "everyHourAt": "Co godzinę o :{minute}",
+        "everyHourBetween": "Co godzinę od {from} do {to}",
+        "everyHoursAt": "Co godzinę o :{minute} | Co {count} godziny o :{minute} | Co {count} godzin o :{minute}",
+        "everyHoursBetween": "Co godzinę od {from} do {to} | Co {count} godziny od {from} do {to} | Co {count} godzin od {from} do {to}",
+        "everyMinutes": "Co minutę | Co {count} minuty | Co {count} minut",
+        "monthlyAt": "Co miesiąc, dnia {day}, o {time}",
+        "onDays": "{sentence}, w dni: {days}",
+        "onWeekdays": "{sentence}, w dni robocze",
+        "onWeekends": "{sentence}, w weekendy",
+        "pair": "{first} i {last}",
+        "weekdaysAt": "W dni robocze o {times}",
+        "weekendsAt": "W weekendy o {times}"
+    },
+    "scheduleProperty": {
+        "afterSessions": "Dopiero po {count} nowej sesji | Dopiero po {count} nowych sesjach | Dopiero po {count} nowych sesjach",
+        "change": "Zmień harmonogram: {now}",
+        "next": "Następne {when} · {in}",
+        "offNotScheduled": "Nie zaplanowana, dopóki jest wyłączona",
+        "onceAt": "Raz, {at}",
+        "schedule": "Harmonogram",
+        "trigger": "Startuje przy"
+    },
+    "personaProperty": {
+        "runsAs": "Działa jako"
+    },
+    "modelProperty": {
+        "cannotRunOn": "Automatyzacja nie może działać na {model}.",
+        "change": "Zmień model: {now}",
+        "model": "Model",
+        "none": "Nie wybrano modelu",
+        "use": "Użyj tego modelu"
+    },
+    "gateProperty": {
+        "afterCheck": "Gdy jej sprawdzenie przejdzie",
+        "ask": "Najpierw pyta ciebie",
+        "askNote": "Czeka w Akceptacjach, aż się zgodzisz.",
+        "change": "Zmień, co dzieje się przed startem: {now}",
+        "delay": "Czeka {seconds} s, potem rusza",
+        "delayChoice": "Czeka, potem rusza",
+        "delayNote": "Przez chwilę widać ją w Akceptacjach, potem startuje sama.",
+        "label": "Przed startem",
+        "onlyOnChange": "Tylko gdy sprawdzane się zmieni",
+        "own": "Rusza sama",
+        "ownNote": "Startuje od razu, gdy się wyzwoli.",
+        "seconds": "sekund",
+        "waitFor": "Czekaj"
+    },
+    "groupProperty": {
+        "byChore": "Zadanie przy kodzie",
+        "byNothing": "Jeszcze bez grupy",
+        "byPersona": "Według persony",
+        "change": "Zmień grupę: {now}",
+        "group": "Grupa",
+        "hint": "Zostaw puste, by ułożyć ją według persony.",
+        "placeholder": "Marketing"
+    },
+    "instructionsSection": {
+        "copy": "Kopiuj instrukcje",
+        "edit": "Edytuj instrukcje",
+        "editShort": "Edytuj",
+        "empty": "Instrukcje nie mogą być puste.",
+        "instructions": "Instrukcje",
+        "showAll": "Pokaż całość",
+        "showLess": "Pokaż mniej"
+    },
+    "checkSection": {
+        "check": "Sprawdzenie",
+        "edit": "Edytuj sprawdzenie",
+        "hint": "Polecenie powłoki uruchamiane najpierw. Kod 0 idzie dalej, każdy inny pomija uruchomienie. Puste usuwa sprawdzenie."
+    },
+    "automationEditor": {
+        "allSettings": "Wszystkie ustawienia",
+        "back": "Wróć"
     }
 }

@@ -292,7 +292,6 @@
         "turnstileUnfinished": "Turnstile nicht fertig eingerichtet: keine Bot-Prüfung",
         "builtInBotCheck": "eingebaute Bot-Prüfung",
         "noBotCheck": "keine Bot-Prüfung",
-        "noModel": "kein Modell",
         "othersPhrase": {
             "allow": "alle anderen wie konfiguriert beantwortet",
             "hold": "alle anderen für Sie zurückgehalten",
@@ -307,7 +306,6 @@
         "continues": "Setzt {conversation} fort",
         "notifiesYou": "Benachrichtigt Sie",
         "then": "Dann",
-        "check": "Prüfung",
         "lastSaw": "Was sie zuletzt gesehen hat",
         "lastSawSince": "Was sie zuletzt gesehen hat, unverändert seit {when}",
         "checkedAt": "Geprüft {at}",
@@ -487,25 +485,10 @@
         "total": "Gesamt"
     },
     "automationDetail": {
-        "beforeItRuns": "Bevor sie läuft",
-        "copyInstructions": "Anweisungen kopieren",
+        "allSettings": "Alle Einstellungen",
         "failedInARow": "{count}-mal hintereinander fehlgeschlagen | {count}-mal hintereinander fehlgeschlagen",
-        "fallbacks": "{count} Ausweichmodell | {count} Ausweichmodelle",
-        "instructions": "Anweisungen",
         "lastRunFailed": "Letzter Lauf fehlgeschlagen",
-        "model": "Modell",
-        "nextAt": "Nächste {in} · {at}",
-        "offNothingScheduled": "Aus, daher nichts geplant",
-        "onceItsCheckPasses": "Sobald ihre Prüfung besteht",
-        "onlyWhenItChanges": "Nur wenn sich das Geprüfte ändert",
-        "openRun": "Lauf öffnen",
-        "runsAs": "Läuft als",
-        "runsOnItsOwn": "Läuft von selbst",
-        "showAllInstructions": "Alle Anweisungen anzeigen",
-        "showLess": "Weniger anzeigen",
-        "waitsForYou": "Wartet auf deine Freigabe",
-        "waitsThenRuns": "Wartet {seconds} s, dann läuft sie",
-        "when": "Wann"
+        "openRun": "Lauf öffnen"
     },
     "runHistory": {
         "cutOffCount": "{count} abgebrochen | {count} abgebrochen",
@@ -528,5 +511,82 @@
         "fullAccessNote": "jedes Werkzeug und jedes angemeldete Konto",
         "noAccounts": "Keine Konten",
         "noAccountsNote": "jedes Werkzeug, kein angemeldetes Konto"
+    },
+    "scheduleWords": {
+        "daysAt": "Jeden {days} um {times}",
+        "everyDayAt": "Täglich um {times}",
+        "everyHourAt": "Stündlich um :{minute}",
+        "everyHourBetween": "Stündlich von {from} bis {to}",
+        "everyHoursAt": "Stündlich um :{minute} | Alle {count} Stunden um :{minute}",
+        "everyHoursBetween": "Stündlich von {from} bis {to} | Alle {count} Stunden von {from} bis {to}",
+        "everyMinutes": "Jede Minute | Alle {count} Minuten",
+        "monthlyAt": "Monatlich am {day} um {time}",
+        "onDays": "{sentence}, am {days}",
+        "onWeekdays": "{sentence}, werktags",
+        "onWeekends": "{sentence}, am Wochenende",
+        "pair": "{first} und {last}",
+        "weekdaysAt": "Werktags um {times}",
+        "weekendsAt": "Am Wochenende um {times}"
+    },
+    "scheduleProperty": {
+        "afterSessions": "Erst nach {count} neuen Sitzung | Erst nach {count} neuen Sitzungen",
+        "change": "Zeitplan ändern: {now}",
+        "next": "Nächster Lauf {when} · {in}",
+        "offNotScheduled": "Nicht geplant, solange sie aus ist",
+        "onceAt": "Einmal, {at}",
+        "schedule": "Zeitplan",
+        "trigger": "Startet bei"
+    },
+    "personaProperty": {
+        "runsAs": "Läuft als"
+    },
+    "modelProperty": {
+        "cannotRunOn": "Eine Automation kann nicht auf {model} laufen.",
+        "change": "Modell ändern: {now}",
+        "model": "Modell",
+        "none": "Kein Modell gewählt",
+        "use": "Dieses Modell verwenden"
+    },
+    "gateProperty": {
+        "afterCheck": "Sobald ihre Prüfung besteht",
+        "ask": "Fragt dich zuerst",
+        "askNote": "Wartet unter Freigaben, bis du zustimmst.",
+        "change": "Ändern, was vor dem Start passiert: {now}",
+        "delay": "Wartet {seconds} s, dann läuft sie",
+        "delayChoice": "Wartet, dann läuft sie",
+        "delayNote": "Steht eine Weile unter Freigaben und startet dann von selbst.",
+        "label": "Vor dem Start",
+        "onlyOnChange": "Nur wenn sich das Geprüfte ändert",
+        "own": "Läuft von selbst",
+        "ownNote": "Startet, sobald sie auslöst.",
+        "seconds": "Sekunden",
+        "waitFor": "Warten"
+    },
+    "groupProperty": {
+        "byChore": "Eine Code-Aufgabe",
+        "byNothing": "Noch keine Gruppe",
+        "byPersona": "Nach ihrer Persona",
+        "change": "Gruppe ändern: {now}",
+        "group": "Gruppe",
+        "hint": "Leer lassen, um sie nach ihrer Persona einzuordnen.",
+        "placeholder": "Marketing"
+    },
+    "instructionsSection": {
+        "copy": "Anweisungen kopieren",
+        "edit": "Anweisungen bearbeiten",
+        "editShort": "Bearbeiten",
+        "empty": "Anweisungen dürfen nicht leer sein.",
+        "instructions": "Anweisungen",
+        "showAll": "Alles anzeigen",
+        "showLess": "Weniger anzeigen"
+    },
+    "checkSection": {
+        "check": "Prüfung",
+        "edit": "Prüfung bearbeiten",
+        "hint": "Ein Shell-Befehl, der zuerst läuft. Exit 0 geht weiter, alles andere überspringt den Lauf. Leer entfernt die Prüfung."
+    },
+    "automationEditor": {
+        "allSettings": "Alle Einstellungen",
+        "back": "Zurück"
     }
 }

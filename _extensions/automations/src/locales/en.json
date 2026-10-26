@@ -292,7 +292,6 @@
         "turnstileUnfinished": "Turnstile not finished: no bot check",
         "builtInBotCheck": "built-in bot check",
         "noBotCheck": "no bot check",
-        "noModel": "no model",
         "othersPhrase": {
             "allow": "everyone else answered as configured",
             "hold": "everyone else held for you",
@@ -307,7 +306,6 @@
         "continues": "Continues {conversation}",
         "notifiesYou": "Notifies you",
         "then": "Then",
-        "check": "Check",
         "lastSaw": "What it saw last",
         "lastSawSince": "What it saw last, unchanged since {when}",
         "checkedAt": "Checked {at}",
@@ -487,25 +485,10 @@
         "total": "Total"
     },
     "automationDetail": {
-        "beforeItRuns": "Before it runs",
-        "copyInstructions": "Copy instructions",
+        "allSettings": "All settings",
         "failedInARow": "Failed {count} time in a row | Failed {count} times in a row",
-        "fallbacks": "{count} fallback | {count} fallbacks",
-        "instructions": "Instructions",
         "lastRunFailed": "Last run failed",
-        "model": "Model",
-        "nextAt": "Next {in} · {at}",
-        "offNothingScheduled": "Off, so nothing is scheduled",
-        "onceItsCheckPasses": "Once its check passes",
-        "onlyWhenItChanges": "Only when what it checks changes",
-        "openRun": "Open run",
-        "runsAs": "Runs as",
-        "runsOnItsOwn": "Runs on its own",
-        "showAllInstructions": "Show all instructions",
-        "showLess": "Show less",
-        "waitsForYou": "Waits for your approval",
-        "waitsThenRuns": "Waits {seconds}s, then runs",
-        "when": "When"
+        "openRun": "Open run"
     },
     "runHistory": {
         "cutOffCount": "{count} cut off | {count} cut off",
@@ -528,5 +511,82 @@
         "fullAccessNote": "every tool and every signed-in account",
         "noAccounts": "No accounts",
         "noAccountsNote": "every tool, no signed-in account"
+    },
+    "scheduleWords": {
+        "daysAt": "Every {days} at {times}",
+        "everyDayAt": "Every day at {times}",
+        "everyHourAt": "Every hour at :{minute}",
+        "everyHourBetween": "Every hour from {from} to {to}",
+        "everyHoursAt": "Every hour at :{minute} | Every {count} hours at :{minute}",
+        "everyHoursBetween": "Every hour from {from} to {to} | Every {count} hours from {from} to {to}",
+        "everyMinutes": "Every minute | Every {count} minutes",
+        "monthlyAt": "Monthly on the {day} at {time}",
+        "onDays": "{sentence}, on {days}",
+        "onWeekdays": "{sentence}, weekdays",
+        "onWeekends": "{sentence}, weekends",
+        "pair": "{first} and {last}",
+        "weekdaysAt": "Weekdays at {times}",
+        "weekendsAt": "Weekends at {times}"
+    },
+    "scheduleProperty": {
+        "afterSessions": "Only once {count} new session has run | Only once {count} new sessions have run",
+        "change": "Change schedule: {now}",
+        "next": "Next {when} · {in}",
+        "offNotScheduled": "Not scheduled while it's off",
+        "onceAt": "Once, {at}",
+        "schedule": "Schedule",
+        "trigger": "Starts on"
+    },
+    "personaProperty": {
+        "runsAs": "Runs as"
+    },
+    "modelProperty": {
+        "cannotRunOn": "An automation can't run on {model}.",
+        "change": "Change model: {now}",
+        "model": "Model",
+        "none": "No model chosen",
+        "use": "Use this model"
+    },
+    "gateProperty": {
+        "afterCheck": "Once its check passes",
+        "ask": "Asks you first",
+        "askNote": "Waits in Approvals until you say yes.",
+        "change": "Change what happens before it runs: {now}",
+        "delay": "Waits {seconds}s, then runs",
+        "delayChoice": "Waits, then runs",
+        "delayNote": "Shows in Approvals for a while, then starts by itself.",
+        "label": "Before it runs",
+        "onlyOnChange": "Only when what it checks changes",
+        "own": "Runs on its own",
+        "ownNote": "Starts the moment it fires.",
+        "seconds": "seconds",
+        "waitFor": "Wait"
+    },
+    "groupProperty": {
+        "byChore": "A code chore",
+        "byNothing": "No group yet",
+        "byPersona": "From its persona",
+        "change": "Change group: {now}",
+        "group": "Group",
+        "hint": "Leave blank to file it by its persona.",
+        "placeholder": "Marketing"
+    },
+    "instructionsSection": {
+        "copy": "Copy instructions",
+        "edit": "Edit instructions",
+        "editShort": "Edit",
+        "empty": "Instructions can't be empty.",
+        "instructions": "Instructions",
+        "showAll": "Show all",
+        "showLess": "Show less"
+    },
+    "checkSection": {
+        "check": "Check",
+        "edit": "Edit check",
+        "hint": "A shell command run first. Exit 0 goes ahead, anything else skips the run. Blank removes the check."
+    },
+    "automationEditor": {
+        "allSettings": "All settings",
+        "back": "Back"
     }
 }

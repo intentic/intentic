@@ -292,7 +292,6 @@
         "turnstileUnfinished": "Turnstile non finalisé : pas de vérification anti-robot",
         "builtInBotCheck": "vérification anti-robot intégrée",
         "noBotCheck": "pas de vérification anti-robot",
-        "noModel": "aucun modèle",
         "othersPhrase": {
             "allow": "tous les autres reçoivent une réponse selon la configuration",
             "hold": "tous les autres retenus pour vous",
@@ -307,7 +306,6 @@
         "continues": "Poursuit {conversation}",
         "notifiesYou": "Vous notifie",
         "then": "Ensuite",
-        "check": "Vérification",
         "lastSaw": "Dernière valeur vue",
         "lastSawSince": "Dernière valeur vue, inchangée depuis {when}",
         "checkedAt": "Vérifiée {at}",
@@ -487,25 +485,10 @@
         "total": "Total"
     },
     "automationDetail": {
-        "beforeItRuns": "Avant de s'exécuter",
-        "copyInstructions": "Copier les instructions",
+        "allSettings": "Tous les réglages",
         "failedInARow": "A échoué {count} fois de suite | A échoué {count} fois de suite",
-        "fallbacks": "{count} repli | {count} replis",
-        "instructions": "Instructions",
         "lastRunFailed": "La dernière exécution a échoué",
-        "model": "Modèle",
-        "nextAt": "Prochaine {in} · {at}",
-        "offNothingScheduled": "Désactivée, rien n'est planifié",
-        "onceItsCheckPasses": "Une fois sa vérification réussie",
-        "onlyWhenItChanges": "Seulement quand ce qu'elle vérifie change",
-        "openRun": "Ouvrir l'exécution",
-        "runsAs": "S'exécute en tant que",
-        "runsOnItsOwn": "S'exécute seule",
-        "showAllInstructions": "Afficher toutes les instructions",
-        "showLess": "Afficher moins",
-        "waitsForYou": "Attend ton approbation",
-        "waitsThenRuns": "Attend {seconds} s, puis s'exécute",
-        "when": "Quand"
+        "openRun": "Ouvrir l'exécution"
     },
     "runHistory": {
         "cutOffCount": "{count} interrompue | {count} interrompues",
@@ -528,5 +511,82 @@
         "fullAccessNote": "tous les outils et tous les comptes connectés",
         "noAccounts": "Aucun compte",
         "noAccountsNote": "tous les outils, aucun compte connecté"
+    },
+    "scheduleWords": {
+        "daysAt": "Chaque {days} à {times}",
+        "everyDayAt": "Tous les jours à {times}",
+        "everyHourAt": "Toutes les heures à :{minute}",
+        "everyHourBetween": "Toutes les heures de {from} à {to}",
+        "everyHoursAt": "Toutes les heures à :{minute} | Toutes les {count} heures à :{minute}",
+        "everyHoursBetween": "Toutes les heures de {from} à {to} | Toutes les {count} heures de {from} à {to}",
+        "everyMinutes": "Chaque minute | Toutes les {count} minutes",
+        "monthlyAt": "Chaque mois le {day} à {time}",
+        "onDays": "{sentence}, le {days}",
+        "onWeekdays": "{sentence}, en semaine",
+        "onWeekends": "{sentence}, le week-end",
+        "pair": "{first} et {last}",
+        "weekdaysAt": "En semaine à {times}",
+        "weekendsAt": "Le week-end à {times}"
+    },
+    "scheduleProperty": {
+        "afterSessions": "Seulement après {count} nouvelle session | Seulement après {count} nouvelles sessions",
+        "change": "Modifier le planning : {now}",
+        "next": "Prochaine {when} · {in}",
+        "offNotScheduled": "Pas planifiée tant qu'elle est désactivée",
+        "onceAt": "Une fois, {at}",
+        "schedule": "Planning",
+        "trigger": "Démarre sur"
+    },
+    "personaProperty": {
+        "runsAs": "Agit en tant que"
+    },
+    "modelProperty": {
+        "cannotRunOn": "Une automatisation ne peut pas tourner sur {model}.",
+        "change": "Changer de modèle : {now}",
+        "model": "Modèle",
+        "none": "Aucun modèle choisi",
+        "use": "Utiliser ce modèle"
+    },
+    "gateProperty": {
+        "afterCheck": "Une fois sa vérification réussie",
+        "ask": "Te demande d'abord",
+        "askNote": "Attend dans Approbations jusqu'à ton accord.",
+        "change": "Modifier ce qui se passe avant l'exécution : {now}",
+        "delay": "Attend {seconds} s, puis s'exécute",
+        "delayChoice": "Attend, puis s'exécute",
+        "delayNote": "Reste un moment dans Approbations, puis démarre seule.",
+        "label": "Avant de s'exécuter",
+        "onlyOnChange": "Seulement quand ce qu'elle vérifie change",
+        "own": "S'exécute seule",
+        "ownNote": "Démarre dès qu'elle se déclenche.",
+        "seconds": "secondes",
+        "waitFor": "Attendre"
+    },
+    "groupProperty": {
+        "byChore": "Une tâche de code",
+        "byNothing": "Pas encore de groupe",
+        "byPersona": "D'après sa persona",
+        "change": "Changer de groupe : {now}",
+        "group": "Groupe",
+        "hint": "Laisse vide pour la classer selon sa persona.",
+        "placeholder": "Marketing"
+    },
+    "instructionsSection": {
+        "copy": "Copier les instructions",
+        "edit": "Modifier les instructions",
+        "editShort": "Modifier",
+        "empty": "Les instructions ne peuvent pas être vides.",
+        "instructions": "Instructions",
+        "showAll": "Tout afficher",
+        "showLess": "Afficher moins"
+    },
+    "checkSection": {
+        "check": "Vérification",
+        "edit": "Modifier la vérification",
+        "hint": "Une commande shell lancée d'abord. Sortie 0 continue, toute autre saute l'exécution. Vide retire la vérification."
+    },
+    "automationEditor": {
+        "allSettings": "Tous les réglages",
+        "back": "Retour"
     }
 }

@@ -10,7 +10,7 @@ import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes"
 import { watch } from "vue";
 import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
-import { effortLabelOf } from "../models/providers/effortScale";
+import { effortLabelOf, effortRungOf } from "../models/providers/effortScale";
 import { modelLabelFor } from "../models/providers/providerCatalog";
 import { agentRunChoice, shellModelPicking } from "../models/conversations/accounts/shellModelPicking";
 import { summonChat } from "../models/conversations/run/summon";
@@ -81,6 +81,7 @@ const named = (selection: {
 }): PickedModel => {
     const { provider, model, account, harness, effort, thinking, fast } = selection;
     const effortLabel = effortLabelOf(effort, provider, model, thinking);
+    const ladder = effortRungOf(effort, provider, model, thinking);
     return {
         provider,
         model,
@@ -90,6 +91,9 @@ const named = (selection: {
         ...(harness !== undefined ? { harness } : {}),
         ...(effort === undefined || effort === `` ? {} : { effort }),
         ...(effortLabel === undefined ? {} : { effortLabel }),
+        // Read together or not at all: a rung means nothing without the ladder it is counted on.
+        effortRung: ladder?.rung,
+        effortRungs: ladder?.rungs,
         ...(thinking !== undefined ? { thinking } : {}),
         ...(fast !== undefined ? { fast } : {}),
     };

@@ -13,11 +13,10 @@ import type {
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
 import { unwatchedPick, VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
-import { asZone, cronOptions, type Zone } from "@intentic/sandbox-contract/time";
-import { Cron } from "croner";
+import { asZone, type Zone } from "@intentic/sandbox-contract/time";
 import { computed, type ComputedRef, reactive, watch } from "vue";
 import { type AvailableSource, listenerSourceOf } from "./catalog";
-import { cronOf, defaultSchedule, instantOf, localInputOf, parseCron } from "./cronSchedule";
+import { cronOf, defaultSchedule, instantOf, localInputOf, parseCron, previewOf } from "./cronSchedule";
 import { t } from "./i18n";
 
 // Shared create/edit form: `load` and `build` round-trip, omitting fields at their defaults.
@@ -252,21 +251,8 @@ export function useAutomationForm(
     /** The clock this form's times are actually on: its own override, else the sandbox's. Never the browser's. */
     const effectiveZone = computed<Zone>(() => asZone(form.tz) ?? sandboxZone.value);
 
-    // A callback-less Cron is only a queryable pattern. Evaluated in the zone the DAEMON will fire it in, not the
-    // browser's: a preview computed on the reader's own clock showed the times they typed and the daemon fired at
-    // others, so the one screen built to prove the schedule was right was the one confirming the bug.
-    const cronPreview = computed<{ runs: number[] } | { error: string } | undefined>(() => {
-        const cron = effectiveCron.value;
-        if (form.kind !== `schedule` || cron === undefined) {
-            return undefined;
-        }
-        try {
-            const runs = new Cron(cron, cronOptions(effectiveZone.value)).nextRuns(3).map((date) => date.getTime());
-            return runs.length > 0 ? { runs } : { error: t(`useAutomationForm.neverFires`) };
-        } catch {
-            return { error: t(`useAutomationForm.invalidCron`) };
-        }
-    });
+    // When it fires next, on the clock the daemon fires it on (cronSchedule.ts `previewOf`).
+    const cronPreview = computed(() => (form.kind === `schedule` ? previewOf(effectiveCron.value, effectiveZone.value) : undefined));
 
     // The moment the box currently names, or NaN for blank or half-typed. Read by both the error and the preview, so
     // the two can't disagree about what was picked.

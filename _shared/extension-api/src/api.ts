@@ -281,6 +281,11 @@ export interface PickedModel {
     readonly effort?: string | undefined;
     // What the shell calls that tier ("X-High"); absent whenever `effort` is.
     readonly effortLabel?: string | undefined;
+    // Where that tier sits on the model's own reasoning ladder, from 0, and how many rungs the ladder has: what the
+    // composer's meter lights, so a view can draw the same picture of it. Absent with no tier, and for a provider whose
+    // models have no ladder.
+    readonly effortRung?: number | undefined;
+    readonly effortRungs?: number | undefined;
     /* WHAT THE PRESS DOES TO THE ATTEMPT THE PICKER WAS OPENED OVER (`attempt` on `pick`): continue it, or start over from it. */
     readonly resume?: "continue" | "start-over" | undefined;
     /* WHETHER THE MODEL REASONS BEFORE IT ANSWERS, where that is a choice it offers. */

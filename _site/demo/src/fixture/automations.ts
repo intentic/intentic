@@ -492,8 +492,10 @@ export const saveAutomation = (now: number, automation: Automation): void => {
         all.unshift({ ...automation, runs: [] });
         return;
     }
-    // Existing spreads first, so runs/nextRun survive fields the form doesn't send.
-    all[index] = { ...existing, ...automation };
+    // The save replaces the automation whole, as the daemon's upsert does, so a setting it removed (an approval, a
+    // group, a check) is gone; only what the list carries beside the definition (its runs, next fire, what its check
+    // saw, its door's token) is kept from before.
+    all[index] = { ...automation, runs: existing.runs, nextRun: existing.nextRun, watch: existing.watch, webhookToken: existing.webhookToken };
 };
 
 export const deleteAutomation = (now: number, id: string): void => {

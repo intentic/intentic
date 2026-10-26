@@ -292,7 +292,6 @@
         "turnstileUnfinished": "Turnstile sin terminar: sin comprobación de bots",
         "builtInBotCheck": "comprobación de bots integrada",
         "noBotCheck": "sin comprobación de bots",
-        "noModel": "sin modelo",
         "othersPhrase": {
             "allow": "se responde al resto según la configuración",
             "hold": "el resto espera tu aprobación",
@@ -307,7 +306,6 @@
         "continues": "Continúa {conversation}",
         "notifiesYou": "Te avisa",
         "then": "Entonces",
-        "check": "Comprobación",
         "lastSaw": "Último resultado",
         "lastSawSince": "Último resultado, sin cambios desde {when}",
         "checkedAt": "Comprobado {at}",
@@ -487,25 +485,10 @@
         "total": "Total"
     },
     "automationDetail": {
-        "beforeItRuns": "Antes de ejecutarse",
-        "copyInstructions": "Copiar instrucciones",
+        "allSettings": "Todos los ajustes",
         "failedInARow": "Falló {count} vez seguida | Falló {count} veces seguidas",
-        "fallbacks": "{count} alternativa | {count} alternativas",
-        "instructions": "Instrucciones",
         "lastRunFailed": "La última ejecución falló",
-        "model": "Modelo",
-        "nextAt": "Próxima {in} · {at}",
-        "offNothingScheduled": "Desactivada, no hay nada programado",
-        "onceItsCheckPasses": "Cuando su comprobación pasa",
-        "onlyWhenItChanges": "Solo cuando cambia lo que comprueba",
-        "openRun": "Abrir ejecución",
-        "runsAs": "Se ejecuta como",
-        "runsOnItsOwn": "Se ejecuta sola",
-        "showAllInstructions": "Mostrar todas las instrucciones",
-        "showLess": "Mostrar menos",
-        "waitsForYou": "Espera tu aprobación",
-        "waitsThenRuns": "Espera {seconds} s y se ejecuta",
-        "when": "Cuándo"
+        "openRun": "Abrir ejecución"
     },
     "runHistory": {
         "cutOffCount": "{count} interrumpida | {count} interrumpidas",
@@ -528,5 +511,82 @@
         "fullAccessNote": "todas las herramientas y todas las cuentas con sesión iniciada",
         "noAccounts": "Sin cuentas",
         "noAccountsNote": "todas las herramientas, ninguna cuenta con sesión iniciada"
+    },
+    "scheduleWords": {
+        "daysAt": "Cada {days} a las {times}",
+        "everyDayAt": "Todos los días a las {times}",
+        "everyHourAt": "Cada hora, en el minuto {minute}",
+        "everyHourBetween": "Cada hora de {from} a {to}",
+        "everyHoursAt": "Cada hora, en el minuto {minute} | Cada {count} horas, en el minuto {minute}",
+        "everyHoursBetween": "Cada hora de {from} a {to} | Cada {count} horas de {from} a {to}",
+        "everyMinutes": "Cada minuto | Cada {count} minutos",
+        "monthlyAt": "Cada mes, el día {day} a las {time}",
+        "onDays": "{sentence}, los {days}",
+        "onWeekdays": "{sentence}, entre semana",
+        "onWeekends": "{sentence}, los fines de semana",
+        "pair": "{first} y {last}",
+        "weekdaysAt": "Entre semana a las {times}",
+        "weekendsAt": "Los fines de semana a las {times}"
+    },
+    "scheduleProperty": {
+        "afterSessions": "Solo tras {count} sesión nueva | Solo tras {count} sesiones nuevas",
+        "change": "Cambiar horario: {now}",
+        "next": "Próxima {when} · {in}",
+        "offNotScheduled": "Sin programar mientras está desactivada",
+        "onceAt": "Una vez, {at}",
+        "schedule": "Horario",
+        "trigger": "Empieza con"
+    },
+    "personaProperty": {
+        "runsAs": "Actúa como"
+    },
+    "modelProperty": {
+        "cannotRunOn": "Una automatización no puede ejecutarse en {model}.",
+        "change": "Cambiar modelo: {now}",
+        "model": "Modelo",
+        "none": "Ningún modelo elegido",
+        "use": "Usar este modelo"
+    },
+    "gateProperty": {
+        "afterCheck": "Cuando su comprobación pasa",
+        "ask": "Te pregunta antes",
+        "askNote": "Espera en Aprobaciones hasta que digas que sí.",
+        "change": "Cambiar qué pasa antes de ejecutarse: {now}",
+        "delay": "Espera {seconds} s y se ejecuta",
+        "delayChoice": "Espera y se ejecuta",
+        "delayNote": "Aparece un rato en Aprobaciones y luego empieza sola.",
+        "label": "Antes de ejecutarse",
+        "onlyOnChange": "Solo cuando cambia lo que comprueba",
+        "own": "Se ejecuta sola",
+        "ownNote": "Empieza en cuanto se dispara.",
+        "seconds": "segundos",
+        "waitFor": "Esperar"
+    },
+    "groupProperty": {
+        "byChore": "Una tarea de código",
+        "byNothing": "Aún sin grupo",
+        "byPersona": "Por su persona",
+        "change": "Cambiar grupo: {now}",
+        "group": "Grupo",
+        "hint": "Déjalo en blanco para ordenarla por su persona.",
+        "placeholder": "Marketing"
+    },
+    "instructionsSection": {
+        "copy": "Copiar instrucciones",
+        "edit": "Editar instrucciones",
+        "editShort": "Editar",
+        "empty": "Las instrucciones no pueden estar vacías.",
+        "instructions": "Instrucciones",
+        "showAll": "Mostrar todo",
+        "showLess": "Mostrar menos"
+    },
+    "checkSection": {
+        "check": "Comprobación",
+        "edit": "Editar comprobación",
+        "hint": "Un comando de shell que se ejecuta antes. Salida 0 continúa; cualquier otra omite la ejecución. En blanco elimina la comprobación."
+    },
+    "automationEditor": {
+        "allSettings": "Todos los ajustes",
+        "back": "Volver"
     }
 }
