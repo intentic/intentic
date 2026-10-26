@@ -35,6 +35,10 @@ with 15- and 45-second delays. This also retries metadata and signed-URL request
 the transfer does not discard completed builds. The final failure still stops the job, and the upstream action's
 digest verification remains enabled.
 
+The machine lane's pinned canonical-template fetch retries DNS and connection failures up to five times,
+with 2-, 4-, 8- and 16-second delays. Other failures stop immediately; an exhausted retry budget still fails
+the job before the suites run.
+
 ## The fork boundary
 
 The repository is public and the runners hold release credentials, a shared cache and the host docker socket, so a fork's code must never reach them.

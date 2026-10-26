@@ -693,7 +693,22 @@ jobs:
           dir="$RUNNER_TEMP/canonical"
           rm -rf "$dir"
           git init -q -b main "$dir"
-          git -C "$dir" fetch -q --depth 1 "$CANONICAL_REPO" "$CANONICAL_COMMIT"
+          # A DNS or connection hiccup must not discard the lane before its suites run. Keep the ref pinned.
+          delay=2
+          for attempt in 1 2 3 4 5; do
+            if output=$(git -C "$dir" fetch -q --depth 1 "$CANONICAL_REPO" "$CANONICAL_COMMIT" 2>&1); then
+              break
+            else
+              status=$?
+            fi
+            printf '%s\n' "$output" >&2
+            if [ "$attempt" -eq 5 ] || ! grep -qiE 'Could not resolve (host|proxy)|Failed to connect|Connection timed out|Connection reset' <<<"$output"; then
+              exit "$status"
+            fi
+            echo "::warning::template fetch could not connect (attempt $attempt/5); retrying in ${delay}s" >&2
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
           git -C "$dir" checkout -q -B main FETCH_HEAD
           echo "INTENTIC_CANONICAL_DIR=$dir" >> "$GITHUB_ENV"
       # The query worker runs dist/query/query-worker.js on a worker thread, which has no TypeScript loader; everything
