@@ -42,7 +42,7 @@ const close = (): void => {
 <template>
     <Modal
         :open="true"
-        size="sm"
+        size="md"
         :header="t(`home.newSandbox.title`)"
         :description="t(`setup.addSandbox.description`)"
         :dismissable="!creating"

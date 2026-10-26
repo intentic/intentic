@@ -73,7 +73,7 @@ const machineFailed = computed(() => started.value?.kind === `machine` && onMach
 <template>
     <Modal
         :open="true"
-        size="sm"
+        size="md"
         :header="t(`setup.addSandbox.title`)"
         :description="started === undefined ? t(`setup.addSandbox.description`) : undefined"
         @update:open="(open: boolean) => open || emit(`close`)"
