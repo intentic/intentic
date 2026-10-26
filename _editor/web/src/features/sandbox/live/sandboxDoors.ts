@@ -27,6 +27,8 @@ export interface MachineDoor {
      * folder of it, through the app's own `ic` (localHost.ts `machine`). Absent on every door a daemon relays.
      */
     readonly carry?: (slug: string) => Promise<void>;
+    /** The side a new sandbox is made on (`setupDoors` only), for what a pick says about it: its OS, its engine's size. */
+    readonly side?: Device;
 }
 
 const machineOfDoor = (devices: readonly Device[], hostId: string): Machine | undefined =>
@@ -127,7 +129,7 @@ export const setupDoors = (relays: readonly DeviceRelay[]): readonly MachineDoor
             const identity = machineIdentity(machine);
             const side = seen.has(identity) ? undefined : setupSide(machine.environments);
             if (side?.hostId !== undefined) {
-                seen.set(identity, { relay: relay.sandboxId, hostId: side.hostId, machineKey: machine.key, machineLabel: machine.label, severs: false });
+                seen.set(identity, { relay: relay.sandboxId, hostId: side.hostId, machineKey: machine.key, machineLabel: machine.label, severs: false, side });
             }
         }
     }

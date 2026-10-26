@@ -11022,7 +11022,6 @@
         "setup": {
             "acceptedNeverAnswered": "Diese Adresse hat die Verbindung angenommen, aber nie geantwortet.",
             "acceptedNeverAnsweredDetail": "Etwas lauscht dort, antwortet aber nicht: eine noch startende Sandbox oder ein Proxy auf dem falschen Port. Warten Sie kurz und versuchen Sie es erneut.",
-            "alreadyRunningSandboxContainer": "Sie betreiben den Sandbox-Container schon hinter einer eigenen Domain? Nennen Sie uns die Adresse, unter der er antwortet. Wir prüfen sie und öffnen dann Ihren Workspace. Nichts zu installieren, nichts bereitzustellen.",
             "appSettingUp": "Die App richtet es ein.",
             "askOwnerToInvite": "Bitten Sie den Besitzer, {email} einzuladen, und verbinden Sie sie dann erneut.",
             "askOwnerToInviteYou": "Bitten Sie den Besitzer, Sie einzuladen, und verbinden Sie sie dann erneut.",
@@ -11065,7 +11064,6 @@
             "webOriginMustName": "Der {variable} des Daemons muss außerdem {origin} benennen. Sonst blockiert Ihr Browser den Aufruf, bevor er gesendet wird.",
             "wellConnectTo": "Wir verbinden uns mit",
             "wellNoticeMomentSandbox": "Wir merken es in dem Moment, in dem Ihre Sandbox startet.",
-            "whereSandboxRuns": "Wo die Sandbox läuft",
             "needsGoogleDetail": "Ihr Konto meldet sich mit einem E-Mail-Code an. Eine kostenlose Maschine benötigt zuerst eine verknüpfte Google-Anmeldung; eine gekaufte Maschine oder Ihr eigener Computer brauchen nichts weiter.",
             "linkGoogle": "Ihr Google-Konto verknüpfen",
             "buyMachine": "Eine Maschine kaufen",
@@ -11196,7 +11194,7 @@
         },
         "addSandbox": {
             "title": "Sandbox hinzufügen",
-            "description": "Eine neue Sandbox mit eigenem Arbeitsbereich, eigenen Agenten und Werkzeugen.",
+            "description": "Eigener Arbeitsbereich, Agenten und Werkzeuge.",
             "lookingForMachines": "Suche, wo sie laufen kann…",
             "nothingInOnePress": "Nichts Verbundenes kann eine mit einem Klick starten.",
             "intenticMachine": "Intentic-Maschine",
@@ -11208,13 +11206,17 @@
             "machineGone": "Dieses Gerät ist nicht mehr verbunden. Wähle ein anderes.",
             "gettingReady": "{name} wird vorbereitet",
             "connecting": "Verbindung wird hergestellt…",
-            "nothingInOnePressMore": "Nichts Verbundenes kann eine mit einem Klick starten. Weitere Wege unten: ein Befehl für einen Server oder die Adresse einer bereits laufenden.",
             "wayCommand": "Ein Befehl für einen Server",
             "wayAttach": "Eine bereits laufende",
-            "commandLine": "Erstellen zeigt den Befehl für deinen Server, und die Sandbox öffnet sich, sobald sie antwortet.",
             "hostedOccupied": "Deine kostenlose Maschine ist bereits in Gebrauch.",
             "ownZoneNote": "Einmal genutzt, um deine Cloudflare-Zonen nachzuschlagen, dann reist er mit dem Befehl auf deinen Server; intentic speichert ihn nie.",
-            "connected": "Verbunden. Wird geöffnet…"
+            "connected": "Verbunden. Wird geöffnet…",
+            "hereNote": "Docker hier, mit einem synchronisierten Ordner",
+            "machineNote": "Verbundene Maschine",
+            "hostedNote": "Läuft in unserer Cloud",
+            "hostedHoursNote": "In unserer Cloud · noch {hours} Stunde diesen Monat | In unserer Cloud · noch {hours} Stunden diesen Monat",
+            "wayCommandNote": "Zeigt eine Zeile für deinen Server",
+            "wayAttachNote": "Über die Adresse verbinden, unter der sie antwortet"
         }
     },
     "shared": {

@@ -4,14 +4,15 @@
      takes the press its own way. "More ways" folds the two that are not one press (a command to run on a server, an
      address a sandbox already answers on) under the picks, in the same form: there is no other page to go to for them. -->
 <script setup lang="ts">
-import { Notice, SegmentedControl, ui } from "@intentic/ui";
+import { Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import { RouterLink } from "vue-router";
 import SetupNeedsGoogle from "../SetupNeedsGoogle.vue";
 import AddSandboxAttach from "./AddSandboxAttach.vue";
+import AddSandboxWays from "./AddSandboxWays.vue";
 import { HERE } from "../flow/useSetupOnMachine";
-import { ATTACH, COMMAND } from "./useAddSandbox";
+import { ATTACH } from "./useAddSandbox";
 import type { AddSandboxHere } from "./useAddSandboxHere";
 
 const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
@@ -42,6 +43,15 @@ const hostedProblemLine = computed(() => {
             return ``;
     }
 });
+const runsOnId = useId();
+// The name it was given is a suggestion: the first focus selects it, so typing replaces it and a press keeps it.
+let suggested = true;
+const takeSuggestion = (event: FocusEvent): void => {
+    if (suggested && event.target instanceof HTMLInputElement) {
+        suggested = false;
+        event.target.select();
+    }
+};
 // What the press does under "More ways", said before it is pressed.
 const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : error.value));
 </script>
@@ -50,59 +60,57 @@ const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : err
     <form class="flex flex-col gap-4" data-add-sandbox @submit.prevent="emit(`submit`)">
         <label class="ui-field">
             <span class="ui-field-label">{{ t(`shared.name`) }}</span>
-            <input v-model="name" autofocus :maxlength="80" :class="[ui.input(), problem ? `ui-field-error-box` : ``]" data-add-sandbox-name />
+            <input
+                v-model="name"
+                autofocus
+                :maxlength="80"
+                :class="[ui.input(), problem ? `ui-field-error-box` : ``]"
+                data-add-sandbox-name
+                @focus="takeSuggestion"
+            />
             <span v-if="problem" class="ui-field-error">
                 <Icon name="exclamation-triangle" class="text-2xs" />
                 {{ problem }}
             </span>
         </label>
 
+        <!-- WHERE IT RUNS: one list of rows, each saying what the place is; "More ways" folds the two that are not one press
+             under the same list, so the pick is one choice whichever row it lands on. -->
         <div class="flex flex-col gap-1.5">
-            <span class="ui-field-label">{{ t(`setup.setupOnMachine.runsOn`) }}</span>
-            <p v-if="!loaded" class="flex items-center gap-2 text-xs text-muted">
+            <span :id="runsOnId" class="ui-field-label">{{ t(`setup.setupOnMachine.runsOn`) }}</span>
+            <p v-if="!loaded" class="flex items-center gap-2 py-2 text-xs text-muted">
                 <Icon name="spinner" spin class="text-xs" />
                 {{ t(`setup.addSandbox.lookingForMachines`) }}
             </p>
-            <p v-else-if="nothingOffered" class="text-xs text-muted">{{ t(`setup.addSandbox.nothingInOnePressMore`) }}</p>
-            <fieldset v-else :disabled="busy" class="min-w-0">
-                <!-- Drawn only with something on offer, so a pick always stands. -->
-                <SegmentedControl
-                    :model-value="morePicked ? `` : (pick ?? ``)"
-                    :options="options"
-                    :wrap="true"
-                    :aria-label="t(`setup.setup.whereSandboxRuns`)"
-                    @update:model-value="(value: string) => (pick = value)"
-                />
-            </fieldset>
-            <!-- The free machine needs a Google sign-in on this account: the ways on, in place of its pick. -->
-            <SetupNeedsGoogle v-if="hostedProblem === `google`" :choose-mine="hereOffered ? chooseHere : undefined" />
-            <p v-else-if="hostedProblem !== undefined" class="text-xs text-muted" data-add-sandbox-hosted-problem>
-                {{ hostedProblemLine }}
-                <RouterLink v-if="hostedProblem === `occupied`" to="/settings/billing" :class="ui.textButton({ size: `xs` })">{{
-                    t(`setup.setup.buyMachine`)
-                }}</RouterLink>
-            </p>
-        </div>
-
-        <div v-if="loaded" class="flex flex-col gap-2">
-            <button v-if="!moreShown" type="button" :class="ui.textButton({ size: `xs` }, `self-start`)" data-add-sandbox-more @click="moreAsked = true">
-                {{ t(`setup.addSandbox.moreWays`) }}
-            </button>
             <template v-else>
-                <span class="ui-field-label">{{ t(`setup.addSandbox.moreWays`) }}</span>
+                <p v-if="nothingOffered" class="text-xs text-muted">{{ t(`setup.addSandbox.nothingInOnePress`) }}</p>
                 <fieldset :disabled="busy" class="min-w-0">
-                    <SegmentedControl
-                        :model-value="morePicked ? (pick ?? ``) : ``"
-                        :options="moreOptions"
-                        :wrap="true"
-                        :aria-label="t(`setup.addSandbox.moreWays`)"
-                        @update:model-value="(value: string) => (pick = value)"
-                    />
+                    <AddSandboxWays v-model="pick" :options="options" :more="moreShown ? moreOptions : undefined" :labelled-by="runsOnId">
+                        <template #fold>
+                            <button
+                                type="button"
+                                class="ui-row-select flex items-center gap-1.5 self-start rounded-lg px-2.5 py-1.5 text-xs text-muted hover:text-content"
+                                data-add-sandbox-more
+                                @click="moreAsked = true"
+                            >
+                                {{ t(`setup.addSandbox.moreWays`) }}
+                                <Icon name="chevron-down" class="text-2xs" />
+                            </button>
+                        </template>
+                    </AddSandboxWays>
                 </fieldset>
-                <p v-if="pick === COMMAND" class="text-xs text-muted">{{ t(`setup.addSandbox.commandLine`) }}</p>
-                <AddSandboxAttach v-else-if="pick === ATTACH" :attach="attach" @submit="emit(`submit`)" />
+                <!-- The free machine needs a Google sign-in on this account: the ways on, in place of its pick. -->
+                <SetupNeedsGoogle v-if="hostedProblem === `google`" :choose-mine="hereOffered ? chooseHere : undefined" />
+                <p v-else-if="hostedProblem !== undefined" class="text-xs text-muted" data-add-sandbox-hosted-problem>
+                    {{ hostedProblemLine }}
+                    <RouterLink v-if="hostedProblem === `occupied`" to="/settings/billing" :class="ui.textButton({ size: `xs` })">{{
+                        t(`setup.setup.buyMachine`)
+                    }}</RouterLink>
+                </p>
             </template>
         </div>
+
+        <AddSandboxAttach v-if="pick === ATTACH" :attach="attach" @submit="emit(`submit`)" />
 
         <Notice v-if="notice" :of="notice" />
         <button type="submit" class="hidden" tabindex="-1" aria-hidden="true"></button>

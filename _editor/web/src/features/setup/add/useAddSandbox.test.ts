@@ -117,6 +117,26 @@ describe(`what it offers`, () => {
         });
     });
 
+    it(`says what each place is: a machine's OS and engine, the hours a machine of ours has left, and what the other ways do`, async () => {
+        const described = listedDevice({
+            key: `omen`,
+            label: `omen`,
+            hostId: `omen`,
+            online: true,
+            sandboxes: [],
+            facts: { os: `Windows 11 Pro (26100)`, arch: `x64`, shell: `pwsh`, home: `C:\\Users\\me`, roots: [], engine: { memoryBytes: 32 * 1024 ** 3, cpus: 16 } },
+        });
+        const { add } = stage({ machines: [described, rog], hosted: { enabled: true, remaining: 1, hours: { allowance: 40, remaining: 12 } } });
+        await add.read();
+        expect([...add.options.value, ...add.moreOptions.value].map((option) => [option.label, option.note, option.mark?.icon])).toEqual([
+            [`omen`, `Windows 11 Pro · 32 GiB · 16 cores`, `windows`],
+            [`rog`, `Connected machine`, `desktop`],
+            [`Intentic machine`, `In our cloud · 12 hours left this month`, undefined],
+            [`A command for a server`, `Shows one line to run on your server`, undefined],
+            [`One already running`, `Connect it by the address it answers on`, undefined],
+        ]);
+    });
+
     it(`offers no this computer in a browser, and no machine of ours once the account has none left, saying why`, async () => {
         const { add } = stage({ machines: [rog], hosted: { enabled: true, remaining: 0 } });
         await add.read();

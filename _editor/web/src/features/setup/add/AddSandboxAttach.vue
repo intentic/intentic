@@ -19,7 +19,6 @@ const webOrigin = webOriginOf(globalThis.location.origin);
 
 <template>
     <div class="flex flex-col gap-3" data-add-sandbox-attach>
-        <p class="text-xs text-muted">{{ t(`setup.setup.alreadyRunningSandboxContainer`) }}</p>
         <label class="ui-field">
             <span class="ui-field-label">{{ t(`shared.domain`) }}</span>
             <input

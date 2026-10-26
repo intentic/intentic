@@ -4,14 +4,16 @@
      app makes the row and starts it; from then it is a process on both faces' rails, and its page here follows it. -->
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import { Button, Notice, Page, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Notice, Page, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, useId } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { localHost } from "../../app/environments/localHost";
 import type { LocalNewSandboxOffers } from "../../app/environments/processes/localProcessHost";
 import { autoSandboxName, SANDBOX_NAME_MAX } from "../../client/sandbox/sandboxName";
 import { processOnThisComputer } from "../../models/processes/processAddress";
+import AddSandboxWays from "../../features/setup/add/AddSandboxWays.vue";
+import type { AddOption } from "../../features/setup/add/useAddSandbox";
 
 const t = useT();
 const route = useRoute();
@@ -34,12 +36,22 @@ const problem = computed(() => {
     }
     return clean.length > SANDBOX_NAME_MAX ? t(`setup.addSandbox.nameTooLong`, { max: SANDBOX_NAME_MAX }) : undefined;
 });
-const options = computed(() => [
-    ...(offers.value?.here === true ? [{ value: `here`, label: t(`setup.setupOnMachine.thisComputer`), icon: `desktop` as const }] : []),
-    ...(offers.value?.hosted === true ? [{ value: `hosted`, label: t(`setup.addSandbox.intenticMachine`), icon: `cloud` as const }] : []),
+const options = computed<readonly AddOption[]>(() => [
+    ...(offers.value?.here === true
+        ? [{ value: `here`, label: t(`setup.setupOnMachine.thisComputer`), icon: `desktop` as const, note: t(`setup.addSandbox.hereNote`) }]
+        : []),
+    ...(offers.value?.hosted === true
+        ? [{ value: `hosted`, label: t(`setup.addSandbox.intenticMachine`), icon: `cloud` as const, note: t(`setup.addSandbox.hostedNote`) }]
+        : []),
 ]);
+const runsOnId = useId();
 const picked = ref<string>(route.query[`on`] === `hosted` ? `hosted` : `here`);
-const pick = computed(() => (options.value.some((option) => option.value === picked.value) ? picked.value : options.value[0]?.value));
+const pick = computed<string | undefined>({
+    get: () => (options.value.some((option) => option.value === picked.value) ? picked.value : options.value[0]?.value),
+    set: (next) => {
+        picked.value = next ?? picked.value;
+    },
+});
 const creating = ref(false);
 const failure = ref<string | undefined>(undefined);
 
@@ -95,20 +107,13 @@ const create = async (): Promise<void> => {
                     </span>
                 </label>
                 <div class="flex flex-col gap-1.5">
-                    <span class="ui-field-label">{{ t(`setup.setupOnMachine.runsOn`) }}</span>
+                    <span :id="runsOnId" class="ui-field-label">{{ t(`setup.setupOnMachine.runsOn`) }}</span>
                     <p v-if="offers === undefined" class="flex items-center gap-2 text-xs text-muted">
                         <Icon name="spinner" spin class="text-xs" />
                         {{ t(`setup.addSandbox.lookingForMachines`) }}
                     </p>
                     <p v-else-if="options.length === 0" class="text-xs text-muted">{{ offers.hostedProblem ?? t(`setup.addSandbox.nothingInOnePress`) }}</p>
-                    <SegmentedControl
-                        v-else
-                        :model-value="pick ?? ``"
-                        :options="options"
-                        :wrap="true"
-                        :aria-label="t(`setup.setup.whereSandboxRuns`)"
-                        @update:model-value="(value: string) => (picked = value)"
-                    />
+                    <AddSandboxWays v-else v-model="pick" :options="options" :labelled-by="runsOnId" />
                 </div>
                 <Notice v-if="failure" :of="{ tone: `warning`, title: failure }" />
                 <Button tier="accent" type="submit" class="w-fit" :label="t(`sandbox.words.addSandbox`)" :loading="creating" :disabled="creating || pick === undefined" />

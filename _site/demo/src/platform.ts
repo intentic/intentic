@@ -154,6 +154,8 @@ const ANSWERS: PlatformAnswers = {
             remaining: 1,
             hours: { allowance: FREE_TIER.monthlyHours, remaining: FREE_TIER.monthlyHours },
         }),
+        // Addresses are minted, so the new sandbox's dialog offers the connected machines and the command for a server.
+        addressOffer: () => ({ enabled: true }),
         trash: () => ({ sandboxes: [...DEMO_TRASH] }),
         // The recovery panel's command carries one; nothing ever claims it here.
         fixCode: () => ({ code: `DEMOFIX7K2Q`, expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() }),

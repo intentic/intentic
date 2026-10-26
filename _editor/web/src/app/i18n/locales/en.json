@@ -11022,7 +11022,6 @@
         "setup": {
             "acceptedNeverAnswered": "That address accepted the connection but never answered.",
             "acceptedNeverAnsweredDetail": "Something is listening, but it isn't replying: a sandbox still starting up, or a proxy pointed at the wrong port. Give it a moment and try again.",
-            "alreadyRunningSandboxContainer": "Already running the sandbox container behind a domain of your own? Give us the address it answers on. We'll check it, then open your workspace. Nothing to install, nothing to provision.",
             "appSettingUp": "The app is setting it up.",
             "askOwnerToInvite": "Ask its owner to invite {email}, then connect it again.",
             "askOwnerToInviteYou": "Ask its owner to invite you, then connect it again.",
@@ -11065,7 +11064,6 @@
             "webOriginMustName": "The daemon's {variable} also has to name {origin}. Otherwise your browser blocks the call before it's sent.",
             "wellConnectTo": "We'll connect to",
             "wellNoticeMomentSandbox": "We'll notice the moment your sandbox starts.",
-            "whereSandboxRuns": "Where the sandbox runs",
             "needsGoogleDetail": "Your account signs in with an email code. A free machine needs a Google sign-in linked to it first; a machine you buy, or your own computer, needs nothing more.",
             "linkGoogle": "Link your Google account",
             "buyMachine": "Buy a machine",
@@ -11196,7 +11194,7 @@
         },
         "addSandbox": {
             "title": "Add sandbox",
-            "description": "A new sandbox with its own workspace, agents and tools.",
+            "description": "Its own workspace, agents and tools.",
             "lookingForMachines": "Looking for where it can run…",
             "nothingInOnePress": "Nothing connected can start one in a press.",
             "intenticMachine": "Intentic machine",
@@ -11208,13 +11206,17 @@
             "machineGone": "That machine is no longer connected. Pick another.",
             "gettingReady": "Getting {name} ready",
             "connecting": "Connecting to it…",
-            "nothingInOnePressMore": "Nothing connected can start one in a press. More ways below: a command to run on a server, or the address of one already running.",
             "wayCommand": "A command for a server",
             "wayAttach": "One already running",
-            "commandLine": "Create shows the command to run on your server, and this sandbox opens once it answers.",
             "hostedOccupied": "Your free machine is already in use.",
             "ownZoneNote": "Used once to look up your Cloudflare zones, then it rides the command to your server, never stored by intentic.",
-            "connected": "Connected. Opening it…"
+            "connected": "Connected. Opening it…",
+            "hereNote": "Docker here, synced to a folder",
+            "machineNote": "Connected machine",
+            "hostedNote": "Runs in our cloud",
+            "hostedHoursNote": "In our cloud · {hours} hour left this month | In our cloud · {hours} hours left this month",
+            "wayCommandNote": "Shows one line to run on your server",
+            "wayAttachNote": "Connect it by the address it answers on"
         }
     },
     "shared": {

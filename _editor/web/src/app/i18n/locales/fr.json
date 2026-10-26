@@ -11022,7 +11022,6 @@
         "setup": {
             "acceptedNeverAnswered": "Cette adresse a accepté la connexion mais n'a jamais répondu.",
             "acceptedNeverAnsweredDetail": "Quelque chose écoute, mais ne répond pas : un sandbox encore en démarrage, ou un proxy pointé vers le mauvais port. Patientez un instant et réessayez.",
-            "alreadyRunningSandboxContainer": "Vous faites déjà tourner le conteneur du sandbox derrière un domaine à vous ? Donnez-nous l'adresse sur laquelle il répond. Nous la vérifions, puis nous ouvrons votre espace de travail. Rien à installer, rien à provisionner.",
             "appSettingUp": "L'application s'en occupe.",
             "askOwnerToInvite": "Demandez à son propriétaire d'inviter {email}, puis reconnectez-le.",
             "askOwnerToInviteYou": "Demandez à son propriétaire de vous inviter, puis reconnectez-le.",
@@ -11065,7 +11064,6 @@
             "webOriginMustName": "Le {variable} du daemon doit aussi nommer {origin}. Sinon votre navigateur bloque l'appel avant qu'il ne parte.",
             "wellConnectTo": "Nous nous connecterons à",
             "wellNoticeMomentSandbox": "Nous le verrons dès l'instant où votre sandbox démarre.",
-            "whereSandboxRuns": "Où tourne le sandbox",
             "needsGoogleDetail": "Votre compte se connecte avec un code par e-mail. Une machine gratuite nécessite d'abord d'y lier une connexion Google ; une machine achetée, ou votre propre ordinateur, ne demande rien de plus.",
             "linkGoogle": "Lier votre compte Google",
             "buyMachine": "Acheter une machine",
@@ -11196,7 +11194,7 @@
         },
         "addSandbox": {
             "title": "Ajouter une sandbox",
-            "description": "Une nouvelle sandbox avec son propre espace de travail, ses agents et ses outils.",
+            "description": "Son propre espace de travail, ses agents et ses outils.",
             "lookingForMachines": "Recherche de l'endroit où elle peut tourner…",
             "nothingInOnePress": "Rien de connecté ne peut en démarrer une en un clic.",
             "intenticMachine": "Machine Intentic",
@@ -11208,13 +11206,17 @@
             "machineGone": "Cette machine n'est plus connectée. Choisissez-en une autre.",
             "gettingReady": "Préparation de {name}",
             "connecting": "Connexion en cours…",
-            "nothingInOnePressMore": "Rien de connecté ne peut en démarrer une en un clic. D'autres moyens ci-dessous : une commande pour un serveur, ou l'adresse d'une sandbox déjà en marche.",
             "wayCommand": "Une commande pour un serveur",
             "wayAttach": "Une déjà en marche",
-            "commandLine": "Créer affiche la commande à lancer sur votre serveur, et la sandbox s'ouvre dès qu'elle répond.",
             "hostedOccupied": "Votre machine gratuite est déjà utilisée.",
             "ownZoneNote": "Utilisé une fois pour lister vos zones Cloudflare, puis il voyage avec la commande jusqu'à votre serveur ; intentic ne le conserve jamais.",
-            "connected": "Connectée. Ouverture…"
+            "connected": "Connectée. Ouverture…",
+            "hereNote": "Docker ici, avec un dossier synchronisé",
+            "machineNote": "Machine connectée",
+            "hostedNote": "Tourne dans notre cloud",
+            "hostedHoursNote": "Dans notre cloud · {hours} heure restante ce mois-ci | Dans notre cloud · {hours} heures restantes ce mois-ci",
+            "wayCommandNote": "Affiche une ligne à lancer sur votre serveur",
+            "wayAttachNote": "La connecter par l'adresse où elle répond"
         }
     },
     "shared": {

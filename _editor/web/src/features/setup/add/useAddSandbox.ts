@@ -2,6 +2,7 @@ import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
 import type { HostedTierId } from "@intentic/constants";
 import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import type { NoticeModel } from "@intentic/ui";
+import { engineCapacity, type OsMark } from "@intentic/ui/device-machine";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref, type Ref } from "vue";
@@ -10,6 +11,7 @@ import { type DesktopSetupArgs, desktopSetupLink, desktopSetupStopLink } from ".
 import { arrivingProfile } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
 import { autoSandboxName, SANDBOX_NAME_MAX } from "../../../client/sandbox/sandboxName";
+import { osLabel, osMark } from "../../../models/sandbox/devices/deviceFacts";
 import type { MachineDoor } from "../../sandbox/live/sandboxDoors";
 import { touched } from "../setupArrival";
 import type { probeDaemon } from "../setupAttach";
@@ -74,7 +76,30 @@ export interface AddOption {
     readonly value: string;
     readonly label: string;
     readonly icon: `desktop` | `server` | `cloud` | `terminal` | `link`;
+    /** The line under the label: what the pick IS (a machine's OS and engine, the free hours left) or what it does. */
+    readonly note?: string;
+    /** The OS a connected machine runs, in its own colour, in place of `icon`. */
+    readonly mark?: OsMark | undefined;
 }
+
+// A connected machine as the pick says it: its OS and the engine every sandbox there shares ("Arch Linux on WSL · 32 GiB
+// · 16 cores"), both read off the side a new sandbox is made on; a machine that never described itself is just connected.
+const machineOption = (door: MachineDoor): AddOption => {
+    const side = door.side;
+    const engine = side?.facts?.engine;
+    const note = [side === undefined ? undefined : osLabel(side), engine === undefined ? undefined : engineCapacity(engine)].filter(Boolean).join(` · `);
+    return {
+        value: door.machineKey,
+        label: door.machineLabel,
+        icon: `server`,
+        note: note === `` ? t(`setup.addSandbox.machineNote`) : note,
+        mark: side === undefined ? undefined : osMark(side),
+    };
+};
+
+// A machine of ours: the free hours this account has left this month where it is metered, else only where it runs.
+const hostedNote = (hours: { readonly remaining: number } | undefined): string =>
+    hours === undefined ? t(`setup.addSandbox.hostedNote`) : t(`setup.addSandbox.hostedHoursNote`, { hours: hours.remaining }, hours.remaining);
 
 /** Why a typed name cannot be used, or undefined when it can. */
 export const nameProblem = (name: string): string | undefined => {
@@ -136,15 +161,19 @@ const useAddOffers = ({ host, row, hosted, setup }: Flows) => {
         return hosted.hostedFull.value ? `full` : undefined;
     });
     const options = computed<readonly AddOption[]>(() => [
-        ...(codeOffered.value && host.inApp() ? [{ value: HERE, label: t(`setup.setupOnMachine.thisComputer`), icon: `desktop` as const }] : []),
-        ...onMachine.doors.value.map((door) => ({ value: door.machineKey, label: door.machineLabel, icon: `server` as const })),
+        ...(codeOffered.value && host.inApp()
+            ? [{ value: HERE, label: t(`setup.setupOnMachine.thisComputer`), icon: `desktop` as const, note: t(`setup.addSandbox.hereNote`) }]
+            : []),
+        ...onMachine.doors.value.map(machineOption),
         ...(hosted.hostedOffered.value && hostedProblem.value === undefined
-            ? [{ value: HOSTED, label: t(`setup.addSandbox.intenticMachine`), icon: `cloud` as const }]
+            ? [{ value: HOSTED, label: t(`setup.addSandbox.intenticMachine`), icon: `cloud` as const, note: hostedNote(hosted.hostedOffer.value?.hours) }]
             : []),
     ]);
     const moreOptions = computed<readonly AddOption[]>(() => [
-        ...(addressed.value ? [{ value: COMMAND, label: t(`setup.addSandbox.wayCommand`), icon: `terminal` as const }] : []),
-        { value: ATTACH, label: t(`setup.addSandbox.wayAttach`), icon: `link` as const },
+        ...(addressed.value
+            ? [{ value: COMMAND, label: t(`setup.addSandbox.wayCommand`), icon: `terminal` as const, note: t(`setup.addSandbox.wayCommandNote`) }]
+            : []),
+        { value: ATTACH, label: t(`setup.addSandbox.wayAttach`), icon: `link` as const, note: t(`setup.addSandbox.wayAttachNote`) },
     ]);
     const read = async (): Promise<void> => {
         const tier = host.tier;
