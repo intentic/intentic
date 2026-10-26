@@ -129,7 +129,7 @@ interface Shot {
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
     /** The demo recording; `showcase` unless a shot names another. `desk` is the documents recording. */
-    mode?: "showcase" | "home" | "desk";
+    mode?: "showcase" | "home" | "hero" | "desk";
     /** A disturbance the quiet recording should still serve, for a shot that is a picture of it. */
     keep?: readonly "proposal"[];
     /**
@@ -167,7 +167,7 @@ const SHOTS: Shot[] = [
     {
         name: "hero-home",
         path: "/home",
-        mode: "home",
+        mode: "hero",
         viewport: { width: 1280, height: 720 },
         waitFor: "text=I'll walk through it in the browser",
         settleMs: 1400,
@@ -185,8 +185,8 @@ const SHOTS: Shot[] = [
         settleMs: 900,
     },
 
-    // The hero opens on /home and automatically rotates to the board and a review. The portrait chat shots below remain
-    // in use on feature pages.
+    // The landing page's hero is the demo itself, live (_site/site/src/components/landing/live-demo.ts), and `hero-home`
+    // above is its poster: the view the live frame opens on, at the frame's own 1280×720.
     //
     // The board with the chat parked on the rail, so its three lanes get the whole window: one card asking for you,
     // three at work, three done (the showcase roster, _site/demo/src/mode.ts). Opened from a conversation first, since
@@ -200,17 +200,6 @@ const SHOTS: Shot[] = [
         settleMs: 1400,
         storage: CHAT_ON_RAIL,
     },
-    // A finished run waiting for a yes, open on the route file: a whole file with three small edits in it
-    // (fixture/workspace.ts, USERS_ROUTE_*), where the schema's eleven lines left two thirds of the frame empty.
-    {
-        name: "hero-review",
-        path: "/agents/cnv_soft_deletes",
-        openFirst: "/agents/cnv_soft_deletes",
-        waitFor: "text=Land now",
-        click: [changesRow("users.ts")],
-        settleMs: 1600,
-        storage: CHAT_ON_RAIL,
-    },
     // The left wing: the plan the checkout agent wrote, and the bar that waits for a yes. Also the Approvals page's
     // hero, drawn whole there.
     {
@@ -220,15 +209,6 @@ const SHOTS: Shot[] = [
         waitFor: PLAN_WAITING,
         settleMs: 1200,
         ...wing(PLAN_WING),
-    },
-    // The right wing: the soft-deletes agent's own account of what it did, on its branch, beside the review it opens.
-    {
-        name: "hero-report",
-        path: "/agents/cnv_soft_deletes",
-        openFirst: "/agents/cnv_soft_deletes",
-        waitFor: "text=held on",
-        settleMs: 1600,
-        ...wing(REPORT_WING),
     },
 
     // THE TOUR: one 16:9 stage per Features page, each a different surface. Only the first keeps the chat docked

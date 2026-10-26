@@ -6,6 +6,7 @@ import { templeScene } from "@intentic/site-content/temple";
 import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { DESK_VARIANT } from "../lib/variant";
 import ProductShot from "./ProductShot.astro";
 import Corners from "./Corners.astro";
 import DownloadCta from "./DownloadCta.astro";
@@ -32,12 +33,14 @@ interface Props {
 }
 
 const content = landingContent;
+const demo = content.hero.demo;
 
 // FAQPage data stays flat; topic bands belong only to the page layout.
 const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
 
-const appSizes = "(min-width: 78rem) 959px, (min-width: 48rem) calc(81vw - 3.24rem), calc(100vw - 3rem)";
+// The frame fills the hero stack (74rem) inside the grid's 2rem gutters, 1.5rem on a phone.
+const appSizes = "(min-width: 78rem) 1184px, (min-width: 48rem) calc(100vw - 4rem), calc(100vw - 3rem)";
 
 
 /* Getting started: the app is the primary path, the command and the hosted workspace are its labelled alternatives. */
@@ -83,36 +86,47 @@ const { steps: appSteps, alternatives } = content.connect;
                         </p>
                     </div>
 
-                    <!-- One frame cycles through the home view and the other product surfaces. -->
-                    <figure class="hero-visual">
+                    {/* THE HERO IS THE APP, LIVE (landing/live-demo.ts): the demo runs in the frame and answers clicks. The poster
+                        is a screenshot of the view the frame opens on, so it is the LCP and stands until the app has drawn,
+                        and it is all a phone or a reader saving data gets until they press for the live one. */}
+                    <a class="live-skip sr-only focus:not-sr-only" href="#build">{demo.skipLabel}</a>
+                    <figure class="hero-visual live" data-live data-state="poster" data-src={DEMO_PATH} data-light-variant={DESK_VARIANT}>
                         <div class="hero-stack">
                             <Window class="window-app" finial>
                                 <div class="window-crop window-crop-app">
-                                    {
-                                        content.hero.screens.app.map((screen, index) => (
-                                            <ProductShot
-                                                name={screen.name}
-                                                alt={screen.alt}
-                                                sizes={appSizes}
-                                                priority={index === 0}
-                                                class={`screen screen-app${index === 0 ? " is-on" : ""}`}
-                                                data-screen="app"
-                                                data-hero-frame={index}
-                                                aria-hidden={index > 0 ? "true" : undefined}
-                                            />
-                                        ))
-                                    }
+                                    <ProductShot
+                                        name={demo.poster.name}
+                                        alt={demo.poster.alt}
+                                        sizes={appSizes}
+                                        priority
+                                        class="screen-app live-poster"
+                                        data-live-poster
+                                    />
+                                    {/* Popover, so "Full screen" lifts it into the top layer where it stands: an iframe moved in the
+                                        document reloads, and the visitor's place in the app would go with it. */}
+                                    <div class="live-stage" popover="manual" data-live-stage aria-label={demo.frameTitle}>
+                                        <div class="live-bar">
+                                            <span class="live-bar-label">{demo.frameTitle}</span>
+                                            <button type="button" class="btn btn-sm" data-live-close>{demo.closeLabel}</button>
+                                        </div>
+                                        <p class="live-wait">Starting the live workspace…</p>
+                                    </div>
                                 </div>
 
-                                {/* The demo control stays available to pointer, keyboard, and touch users. */}
-                                <a class="play" href={DEMO_PATH}>
-                                    <span class="btn btn-sm">
+                                {/* Until the app has drawn: the press that starts it here, or on a phone opens it over the page. */}
+                                <div class="play live-start" data-live-start hidden>
+                                    <button type="button" class="btn btn-sm">
                                         <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
-                                        <span>{content.hero.demo.playLabel}</span>
-                                    </span>
-                                </a>
+                                        <span class="live-start-idle">{demo.startLabel}</span>
+                                        <span class="live-start-busy">Starting…</span>
+                                    </button>
+                                </div>
                             </Window>
                         </div>
+                        <figcaption class="live-caption">
+                            <span>{demo.note}</span>
+                            <button type="button" class="live-expand link" data-live-expand hidden>{demo.expandLabel}</button>
+                        </figcaption>
                     </figure>
                 </div>
             </section>
@@ -218,48 +232,10 @@ const { steps: appSteps, alternatives } = content.connect;
 
     <script>
         import { observeHeroCta } from "./landing/hero-cta";
+        import { mountLiveDemo } from "./landing/live-demo";
 
         observeHeroCta();
 
-        // Cycle through the product views while the page is visible, starting on /home.
-        const preview = document.querySelector<HTMLElement>(".home-focused .window-app");
-        const frames = [...document.querySelectorAll<HTMLElement>("[data-hero-frame]")];
-        if (preview && frames.length > 1) {
-            let shown = 0;
-            let timer: ReturnType<typeof setInterval> | undefined;
-            const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-            const count = new Set(frames.map((frame) => frame.dataset.heroFrame)).size;
-            const show = (index: number): void => {
-                shown = index;
-                frames.forEach((frame) => {
-                    const visible = Number(frame.dataset.heroFrame) === index;
-                    frame.classList.toggle("is-on", visible);
-                    frame.setAttribute("aria-hidden", String(!visible));
-                });
-            };
-            const stop = (): void => {
-                clearInterval(timer);
-                timer = undefined;
-            };
-            const start = (): void => {
-                if (timer !== undefined) {
-                    return;
-                }
-                timer = setInterval(() => show((shown + 1) % count), 3200);
-            };
-            const syncPlayback = (): void => {
-                if (document.hidden || reducedMotion.matches) {
-                    stop();
-                    if (reducedMotion.matches) {
-                        show(0);
-                    }
-                } else {
-                    start();
-                }
-            };
-            document.addEventListener("visibilitychange", syncPlayback);
-            reducedMotion.addEventListener("change", syncPlayback);
-            syncPlayback();
-        }
+        mountLiveDemo();
     </script>
 </BaseLayout>

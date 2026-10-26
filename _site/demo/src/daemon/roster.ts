@@ -10,7 +10,7 @@ import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, quietCard } from "..
 import { demoNeeds } from "../fixture/needs";
 import { specimenCard } from "../fixture/specimen";
 import { homeAgent } from "../fixture/home/recording";
-import { demoMode, demoQuiet, deskEdition, freshEdition, photographed } from "../mode";
+import { demoMode, demoQuiet, deskEdition, freshEdition, homeRecording, photographed } from "../mode";
 
 // The live agent board the demo mutates and re-broadcasts: the roster, who it waits on, and the pub/sub every
 // write goes through (snapshot-not-diff, newest rev wins).
@@ -22,14 +22,16 @@ export const FEATURED_ID = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
 export const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
 
 const servedRoster = (): AgentSummary[] => {
+    // The home conversation is a card like any other; the home mode serves it alone, the hero mode beside the showcase.
+    const home = homeRecording ? [homeAgent(DEMO_USER.email, STARTED_AT)] : [];
     if (demoMode.id === `home`) {
-        return [homeAgent(DEMO_USER.email, STARTED_AT)];
+        return home;
     }
     const agents = deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
     // The transcript specimen (fixture/specimen.ts) rides along in a dev build only, whatever the mode, and never into
     // a screenshot: a shot taken off a dev server must match one taken off the build.
     const served = import.meta.env.DEV && !photographed ? [...agents, specimenCard(STARTED_AT)] : agents;
-    return demoQuiet() ? served.map(quietCard) : served;
+    return [...home, ...(demoQuiet() ? served.map(quietCard) : served)];
 };
 export const roster = { agents: servedRoster(), rev: 1 };
 
@@ -93,7 +95,7 @@ export const TEAMMATE: PresenceUser = {
 export const homeDoors = {
     home: () => ({
         conversationId: homeConversationId(DEMO_USER.email),
-        agent: demoMode.id === `home` ? roster.agents.find((agent) => agent.id === homeConversationId(DEMO_USER.email)) : undefined,
+        agent: homeRecording ? roster.agents.find((agent) => agent.id === homeConversationId(DEMO_USER.email)) : undefined,
         lands: `itself` as const,
     }),
     attentionMine: () => fleetAttention(boardAgents().filter((agent) => agent.owner === undefined || agent.owner.email === DEMO_USER.email), []),

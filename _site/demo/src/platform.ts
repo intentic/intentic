@@ -4,7 +4,7 @@ import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { homeSandboxLogos } from "./fixture/home/logos";
 import { officeOrganisation, officeOrganisations } from "./fixture/offices/organisation";
-import { demoMode, deskEdition, demoTier } from "./mode";
+import { deskEdition, demoTier, homeRecording } from "./mode";
 import { demoOutage, outageHosted, outageReport } from "./outage";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 import { ingressPath, type BrowsingCatalog } from "@intentic/api-contract/ingress";
@@ -46,7 +46,7 @@ export const DEMO_SANDBOX: SandboxSummary = {
     hostReport: outageReport(),
 };
 
-export const DEMO_SANDBOXES: SandboxSummary[] = demoMode.id === `home`
+export const DEMO_SANDBOXES: SandboxSummary[] = homeRecording
     ? [
         { ...DEMO_SANDBOX, image: homeSandboxLogos.shop },
         { ...DEMO_SANDBOX, id: `demo-research`, name: `Research`, image: homeSandboxLogos.research },

@@ -20,27 +20,26 @@ export interface ShotImage {
     alt: string;
 }
 
-/** One screen inside one of the hero's two frames, with the address it was taken at for the frame's title bar. */
-export interface HeroScreen extends ShotImage {
-    /** The pill in the frame's title bar. Where in the app this shot was taken. */
-    frameLabel: string;
-}
-
-// Two windows: the workspace behind, the chat popped out in front; `app` and `chat` cycle in the order listed, first
-// item shown first. Frames crop to one window height rather than scaling to fit (see Landing.astro).
-export interface HeroScreens {
-    /** The workspace window, behind and larger. */
-    app: HeroScreen[];
-    /** The chat, in the window the product pops it out into, in front, smaller, overlapping. */
-    chat: HeroScreen[];
-}
-
-// Still image, kept as the page's LCP since it ships almost no JavaScript; the press link opens the demo in its own
-// full-viewport page.
+// THE HERO IS THE APP ITSELF: the demo, running live in the hero's frame (Landing.astro, landing/live-demo.ts). Until
+// it has drawn, and wherever it is not loaded on its own (a phone, a reader saving data, no JavaScript), the frame
+// shows `poster`, a screenshot of the very view the live frame opens on, so the swap is a cross-fade between two
+// pictures of one screen. The poster is also the page's LCP.
 export interface HeroDemo {
-    /** On the frame itself; says where the press goes, since "Play" alone could mean a video. */
+    /** Screenshot of the view the live frame opens on (capture.mts, taken at the frame's own 1280×720). */
+    poster: ShotImage;
+    /** The live frame's accessible name. */
+    frameTitle: string;
+    /** On the poster, where the frame waits for a press: a phone, a reader saving data. */
+    startLabel: string;
+    /** Opens the live frame over the whole window, where it keeps its state. */
+    expandLabel: string;
+    /** Puts it back in the page. */
+    closeLabel: string;
+    /** Passes the frame by for a keyboard reader, who would otherwise tab through the whole app. */
+    skipLabel: string;
+    /** On /desk/'s hero, which still opens the demo in its own page. */
     playLabel: string;
-    /** Under the link: what the visitor is about to get, and what it is not. */
+    /** Under the frame: what the visitor is looking at, and that it answers. */
     note: string;
 }
 
@@ -66,7 +65,6 @@ export interface LandingContent {
     hero: {
         headlineLines: string[];
         subhead: string;
-        screens: HeroScreens;
         demo: HeroDemo;
     };
     // Same five rows as the Features menu; no `sub` (showcase). Its old branch claim now closes `workspace`.
@@ -107,35 +105,18 @@ export const landingContent: LandingContent = {
     hero: {
         headlineLines: ["Shared AI agents."],
         subhead: "Agents that can do anything you ask, powered by your Claude, Codex or other plan.",
-        screens: {
-            app: [
-                {
-                    name: "hero-home",
-                    alt: "The real intentic home view with three sandboxes in the left rail, a conversation about the day's work in the center, and Claude and Codex plan usage on the right.",
-                    frameLabel: "intentic · /home",
-                },
-                {
-                    name: "hero-agents",
-                    alt: "The intentic agents board over a misty forest: one agent in Attention with a question for you; three in Active, auditing the test suite, adding Stripe checkout and chasing a latency spike; and three in Finished, where a soft-delete migration offers Land now above release notes already landed and a nightly dependency audit started from Discord. Each card carries a plain-English title, the model behind it, its branch and what it has cost.",
-                    frameLabel: "acme-shop · /agents",
-                },
-                {
-                    name: "hero-review",
-                    alt: "A finished change waiting for a yes: the agent's task as a plain title, a Land now button not yet pressed, its four files grouped by repository, and the users route open as a side-by-side diff in which the delete becomes an update and both reads skip retired rows.",
-                    frameLabel: "acme-shop · /agents",
-                },
-            ],
-            chat: [
-                {
-                    name: "hero-report",
-                    alt: "The finished agent's own chat: the task as it was asked, what it did and why, and its report: four files, +210 / −55, held on agent/soft-deletes, with one decision left for you to make when you read it.",
-                    frameLabel: "Chat · Soft-delete the users table",
-                },
-            ],
-        },
         demo: {
+            poster: {
+                name: "hero-home",
+                alt: "The real intentic home view with three sandboxes in the left rail, a conversation about the day's work in the center, and Claude and Codex plan usage on the right.",
+            },
+            frameTitle: "intentic, live: the real app on a recorded workspace",
+            startLabel: "Try it live",
+            expandLabel: "Full screen",
+            closeLabel: "Back to the page",
+            skipLabel: "Skip the live demo",
             playLabel: "Open the live workspace",
-            note: "The real app on a recorded workspace. Approve a plan, answer an agent, read a diff.",
+            note: "The real app, live, on a recorded workspace. Approve a plan, answer an agent, read a diff.",
         },
     },
     // Five rows, one screenful each, order matches the Features menu; Automations draws a diagram, not a screenshot.

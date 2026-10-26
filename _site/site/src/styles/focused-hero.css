@@ -19,8 +19,9 @@
 .home.home-focused .hero-visual {
     margin-top: 2.8rem;
 }
+/* The whole stack's width: an app is read at its own size, and 1280px drawn into 74rem keeps its type near its own. */
 .home.home-focused .window-app {
-    width: 81%;
+    width: 100%;
 }
 .home.home-focused .window-crop-app {
     aspect-ratio: 16 / 9;
@@ -30,6 +31,146 @@
 }
 .home.home-focused .play {
     background: transparent;
+}
+
+/* THE LIVE HERO (landing/live-demo.ts). The stage is the iframe's box: over the poster inside the crop, and, expanded,
+   the same element in the top layer over the whole window. It is a popover, so its UA styles are undone here while it
+   sits in the page. Until the app has drawn it takes no pointer, so a press lands on the start overlay. */
+.home.home-focused .live-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    pointer-events: none;
+}
+.home.home-focused .live-stage iframe {
+    display: block;
+    width: var(--live-w, 1280px);
+    height: var(--live-h, 720px);
+    border: 0;
+    opacity: 0;
+    transform: scale(var(--live-scale, 1));
+    transform-origin: 0 0;
+    transition: opacity 0.6s ease;
+}
+.home.home-focused .live[data-state="live"] .live-stage {
+    pointer-events: auto;
+}
+.home.home-focused .live[data-state="live"] .live-stage iframe {
+    opacity: 1;
+}
+.home.home-focused .live-bar,
+.home.home-focused .live-wait {
+    display: none;
+}
+.home.home-focused .live[data-expanded] .live-stage {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background: var(--role-window-fill);
+    pointer-events: auto;
+}
+.home.home-focused .live-stage::backdrop {
+    background: rgb(0 0 0 / 0.6);
+}
+.home.home-focused .live[data-expanded] .live-stage iframe {
+    flex: 1;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    transform: none;
+}
+.home.home-focused .live[data-expanded] .live-bar {
+    display: flex;
+    flex: none;
+    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    height: 3.25rem;
+    padding: 0 0.75rem 0 1rem;
+    border-bottom: 1px solid var(--color-line);
+    background: var(--role-rail-fill);
+}
+/* Its own size at every width: the page's phone-sized buttons would wrap it onto two lines and out of the bar. */
+.home.home-focused .live-bar .btn {
+    flex: none;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+.home.home-focused .live-bar-label {
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    color: var(--color-subtle);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.home.home-focused .live[data-expanded][data-state="loading"] .live-wait {
+    position: absolute;
+    inset: 3.25rem 0 0;
+    display: grid;
+    place-items: center;
+    margin: 0;
+    color: var(--color-subtle);
+}
+html.live-open {
+    overflow: hidden;
+}
+
+/* The press over the poster: starts the frame in place, or on a phone opens it over the page. */
+.home.home-focused .live-start {
+    z-index: 2;
+    cursor: pointer;
+}
+.home.home-focused .live-start[hidden],
+.home.home-focused .live-expand[hidden] {
+    display: none;
+}
+.home.home-focused .live-start-busy,
+.home.home-focused .live[data-state="loading"] .live-start-idle {
+    display: none;
+}
+.home.home-focused .live[data-state="loading"] .live-start-busy {
+    display: inline;
+}
+
+/* Says the frame is the app and answers, which a frame that looks like its own screenshot cannot say for itself. */
+.home.home-focused .live-caption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    align-items: baseline;
+    justify-content: center;
+    max-width: 74rem;
+    margin: 1.1rem auto 0;
+    font-size: 0.875rem;
+    color: var(--color-subtle);
+    text-align: center;
+    text-wrap: balance;
+}
+.home.home-focused .live-expand {
+    padding: 0;
+    font: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.home.home-focused .live-skip:focus {
+    display: table;
+    margin: 1.5rem auto 0;
 }
 .home.home-focused .play .btn {
     opacity: 0;
@@ -63,10 +204,22 @@
     .home.home-focused .hero-visual {
         margin-top: 2.4rem;
     }
+    /* A phone-sized app inside the page would be a scroll trap: here the frame is only ever drawn over the window. */
+    .home.home-focused .live:not([data-expanded]) .live-stage {
+        visibility: hidden;
+    }
+    /* So the press that opens it is always in sight, pointer or not. */
+    .home.home-focused .live-start .btn {
+        opacity: 1;
+        transform: none;
+    }
 }
 @media (prefers-reduced-motion: reduce) {
     .home.home-focused .play .btn {
         transition: none;
         transform: none;
+    }
+    .home.home-focused .live-stage iframe {
+        transition: none;
     }
 }

@@ -12,7 +12,7 @@ import {
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `home` | `desk` | `fresh`;
+export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `home` | `hero` | `desk` | `fresh`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -30,6 +30,8 @@ export interface DemoMode {
     readonly openChats: boolean;
     /** Served quiet (see `demoQuiet` below) whatever the session asks. */
     readonly quiet?: true;
+    /** Serves the home recording: the person's home conversation, three sandboxes in the rail and connected plan usage. */
+    readonly homeRecording?: true;
 }
 
 // One agent kept: the featured run, since its card is the one with a real conversation behind it.
@@ -115,9 +117,25 @@ const HOME: DemoMode = {
     teammate: false,
     openChats: false,
     quiet: true,
+    homeRecording: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, HOME, DESK, FRESH];
+// What the landing page's hero runs live (src/embed.ts): it opens on the home view the hero's poster was taken of, and
+// every place a visitor clicks to next has the showcase's afternoon behind it rather than an empty board. No chats open,
+// so the first frame matches the poster.
+const HERO: DemoMode = {
+    id: `hero`,
+    label: `Hero`,
+    note: `The home view, with the showcase's board behind it: what the landing page runs live.`,
+    agents: SHOWCASE.agents,
+    extensions: [],
+    teammate: false,
+    openChats: false,
+    quiet: true,
+    homeRecording: true,
+};
+
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, HOME, HERO, DESK, FRESH];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;
@@ -170,6 +188,9 @@ export const deskEdition = demoMode.id === `desk`;
 
 /** Whether this page load is a first-day sandbox: every seam that carries the recording's history serves it empty. */
 export const freshEdition = demoMode.id === `fresh`;
+
+/** Whether this page load serves the home recording (home conversation, three sandboxes, plan usage). */
+export const homeRecording = demoMode.homeRecording === true;
 
 // WHETHER ANYTHING IS CONNECTED TO RUN A CHAT ON this page load, from `?models=`, sticky per tab like the mode and the
 // outage: `?models=none` is a sandbox with no account, no subscription, no trial and no endpoint, the first run the

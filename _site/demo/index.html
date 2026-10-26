@@ -15,22 +15,31 @@
              step with _editor/web/index.html is what stops the demo painting one look and useTheme correcting it. -->
         <script>
             try {
-                // THE DESK RECORDING IS READ IN THE DESK PROFILE'S LOOK (src/mode.ts DESK_LOOK, the same three keys
-                // @intentic/constants profile.ts seeds): light, unskinned, a maker. Written here so the first frame is
-                // already in it; a `?mode=desk` link is this page's own, and the stored mode is what a reload serves.
-                var demoMode = new URL(window.location.href).searchParams.get("mode") || sessionStorage.getItem("intentic.demo.mode");
-                if (demoMode === "desk") {
-                    localStorage.setItem("ui-color-scheme", "light");
-                    localStorage.setItem("ui-skin", "none");
-                    localStorage.setItem("ui-audience", "maker");
+                // THE LANDING PAGE'S HERO (src/embed.ts) wears the look of the page around it, which its frame's name
+                // carries, and never reads the visitor's storage: dark in Sanctum, or unskinned daylight.
+                if (window.name === "intentic-demo-hero") {
+                    document.documentElement.setAttribute("data-mode", "dark");
+                    document.documentElement.setAttribute("data-skin", "sanctum");
+                } else if (window.name === "intentic-demo-hero:light") {
+                    // Daylight is the attributes' absence.
+                } else {
+                    // THE DESK RECORDING IS READ IN THE DESK PROFILE'S LOOK (src/mode.ts DESK_LOOK, the same three keys
+                    // @intentic/constants profile.ts seeds): light, unskinned, a maker. Written here so the first frame is
+                    // already in it; a `?mode=desk` link is this page's own, and the stored mode is what a reload serves.
+                    var demoMode = new URL(window.location.href).searchParams.get("mode") || sessionStorage.getItem("intentic.demo.mode");
+                    if (demoMode === "desk") {
+                        localStorage.setItem("ui-color-scheme", "light");
+                        localStorage.setItem("ui-skin", "none");
+                        localStorage.setItem("ui-audience", "maker");
+                    }
+                    var uiScheme = localStorage.getItem("ui-color-scheme");
+                    var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+                    if (dark) document.documentElement.setAttribute("data-mode", "dark");
+                    var uiSkin = localStorage.getItem("ui-skin");
+                    if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+                    var themeMeta = document.querySelector('meta[name="theme-color"]');
+                    if (themeMeta) themeMeta.setAttribute("content", dark ? "#141210" : "#f4f1ec");
                 }
-                var uiScheme = localStorage.getItem("ui-color-scheme");
-                var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-                if (dark) document.documentElement.setAttribute("data-mode", "dark");
-                var uiSkin = localStorage.getItem("ui-skin");
-                if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
-                var themeMeta = document.querySelector('meta[name="theme-color"]');
-                if (themeMeta) themeMeta.setAttribute("content", dark ? "#141210" : "#f4f1ec");
             } catch (e) {}
         </script>
 <!-- The runtime config the app reads synchronously at module-eval time (src/environments/environment.ts). -->

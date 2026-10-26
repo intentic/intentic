@@ -1,7 +1,7 @@
 import type { LoginStart, Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { ProviderRefusals, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { homeRecording } from "../mode";
 import { STARTED_AT } from "./roster";
-import { demoMode } from "../mode";
 
 // The connected accounts and model catalogs the Agent tab reads: two Claude subscriptions, the translator's rows in
 // every state it can show, and one catalog per provider the picker lists.
@@ -43,7 +43,7 @@ export const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
     codex: [{
         name: `chatgpt-ada`,
         label: `ada@acme.dev`,
-        usage: demoMode.id === `home` ? {
+        usage: homeRecording ? {
             measuredAt: STARTED_AT - 4 * 60_000,
             windows: [
                 { kind: `seven_day`, utilization: 18, resetsAt: Math.round(STARTED_AT / 1000) + 4 * 24 * 3600, gates: `all` },
@@ -55,7 +55,7 @@ export const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
     kimi: [],
     // One of every state a Google row can be in, so the Agent tab shows what each says: serving, waiting on its owner
     // to verify it, its allowance spent, and benched by the proxy until an instant.
-    gemini: demoMode.id === `home` ? [] : [
+    gemini: homeRecording ? [] : [
         {
             name: `antigravity-ada.json`,
             label: `ada@acme.dev`,
@@ -116,7 +116,7 @@ export const DEMO_CATALOGS: Readonly<Record<string, { models: Model[]; default: 
 // model is the editor's to judge from these beside each account's usage. A spent week on one Google account, and one
 // Codex model refused on every credential until a little after load.
 export const demoRefusals = (): ProviderRefusals => ({
-    refusals: demoMode.id === `home` ? {} : {
+    refusals: homeRecording ? {} : {
         gemini: [
             {
                 at: STARTED_AT - 20 * 60_000,

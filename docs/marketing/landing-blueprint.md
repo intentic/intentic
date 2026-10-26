@@ -212,12 +212,11 @@ except `#trust`, whose copy is in `about.ts` because `/about/` shares it, and `#
 words are in `temple.ts`.
 
 1. **Hero (`#hero`)**: the greeting eyebrow, the brand line kept verbatim ("More work. Less AI waste.
-   Same subscriptions."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **three frames
-   on one axis**: the workspace wide on the centre line, a plan and a conversation leaning in from either
-   side and overlapping its edges, with the press into the live demo covering the centre frame. The
+   Same subscriptions."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **one frame
+   running the app itself** (below). The
    subhead **says what the product is**: nothing else above the fold did, and that is precisely what
-   readers bounced on. Visibility is shown by the three live surfaces, not said; scale is shown by the full
-   board; persistence lives in the meta description and the FAQ; ownership stays out of the first screen
+   readers bounced on. Visibility is shown by the live app, not said; scale is shown by the board a click
+   away inside it; persistence lives in the meta description and the FAQ; ownership stays out of the first screen
    (it answers a fear, it does not create a want). (P1, P2, P6)
 
    **Cut from the fold, and the slots with them (2026-09-06): do not re-add.** The subhead's second beat
@@ -230,28 +229,22 @@ words are in `temple.ts`.
    **The band is symmetric, because the picture behind it is.** The plate is a framed plaque with a
    devata standing in each outer third and a deliberately empty middle; the copy sits on that middle,
    capped at 44rem, and the product is laid out UNDER it rather than beside it. An off-centre column
-   over this art reads as a misprint. The band itself takes no measure: the frames take their width
-   from the window exactly as the plate does, so the two track each other at every size: and the two
-   wings are pulled up until their top rails cross the figures, which is what binds the product to
-   the wall. Below 64rem they stop climbing; below 48rem they come off entirely and the workspace
-   stands alone, full width and cropped harder.
+   over this art reads as a misprint. The band itself takes no measure: the frame takes its width
+   from the window exactly as the plate does, the whole 74rem stack since it went live (an app is read
+   at its own size), so the two track each other at every size.
 
-   **Only the centre frame cycles.** A cross-fade inside a 340px wing is a flicker at the edge of
-   vision, and caught mid-fade it reads as two pictures printed over each other, so the wings hold
-   stills. The list is in `landing.ts` (`hero.screens.app`): `/agents` → `/workspace` (Changes,
-   grouped by repository, with a diff open) → `/pipelines`, four seconds each. Order is editorial and
-   the FIRST is what a stranger sees. The frame's ledge names the route the screen was taken on and
-   turns with it. Each frame **crops from the top-left** rather than fitting its screen, which is what
-   lets captures of very different lengths share one frame and what keeps the app's own 13px type
-   readable at this size.
-
-   **`prefers-reduced-motion` changes the transition, not whether the frames turn.** It first skipped
-   the rotation outright, and that was the wrong reading twice over: what the frames carry is content
-   that exists nowhere else above the fold, so holding them still hid two thirds of the first screen
-   rather than calming it: and on a machine with the setting on, the hero silently became a single
-   screenshot with no sign it was meant to be more. The animation is the cross-fade, and that is what
-   the preference turns off (`.screen` in global.css cuts instead of fading). If the script never runs
-   at all, the first screen stands.
+   **The frame is the app, live (2026-10-26), not a slideshow of it.** The stills that cycled here, and the
+   press that sent a visitor off to `/demo/`, gave way to the demo running in the hero's own window
+   (`landing/live-demo.ts`; the demo's half is `src/embed.ts`), as openbot.run does: the reader clicks into
+   the product where they first see it. It stands on a poster, `hero-home`, captured from the same `hero`
+   recording at the frame's own 1280×720, which is the page's LCP and all a reader without JavaScript gets.
+   A wide screen loads the frame once the page is idle and the frame is in view, and swaps it in when the app
+   says it has drawn; it is drawn at 1280×720 and scaled to the frame, never below 0.75, so the app's type
+   stays readable. Phones, and readers asking for less data, keep the poster until they press it, and get the
+   app over the whole window: a phone-sized app inside the page would be a scroll trap. "Full screen" lifts
+   the same frame over the page and back without reloading it. The frame is a guest: storage of its own,
+   no focus until it is pressed, and it never moves the page's scroll. `prefers-reduced-motion` cuts the
+   swap instead of fading it.
 
    **The bar is furniture inside the plate's frame, and it is the SAME bar on every page.** It is
    transparent everywhere, and what sits behind it is the plate: this page's hero paints its own, and

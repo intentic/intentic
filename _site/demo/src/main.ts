@@ -1,3 +1,5 @@
+// First, before anything that reads storage: the landing page's hero seals its storage here (embed.ts).
+import { announceWhenDrawn, embedded } from "./embed";
 import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { daemon, sockets } from "./daemon";
 import { openTabSnapshot } from "./fixture/openChats";
@@ -39,11 +41,11 @@ const seedOpenChats = (): void => {
 const SOCKETS = new Map(Object.entries(sockets).map(([key, session]) => [rawRoutePath(key as RawRouteKey), session]));
 
 // Redirects the bare base URL to the fleet board (what the app is for) before boot, so there's no wrong first paint or
-// Back-able history entry. Any other address is left alone.
+// Back-able history entry; the landing page's hero opens on the home view its poster shows. Any other address is left alone.
 const openOnFleet = (): void => {
     const base = import.meta.env.BASE_URL;
     if (window.location.pathname === base || window.location.pathname === base.replace(/\/$/, ``)) {
-        window.history.replaceState(window.history.state, ``, `${base}agents${window.location.search}${window.location.hash}`);
+        window.history.replaceState(window.history.state, ``, `${base}${embedded ? `home` : `agents`}${window.location.search}${window.location.hash}`);
     }
 };
 
@@ -70,4 +72,5 @@ console.info(
     `[demo] ${demoMode.id}: fixture daemon serving ${served.served} of the contract's ${served.contract} routes; anything else answers 404 and logs here, with the reason unserved.ts gives for it.`,
 );
 
+announceWhenDrawn();
 await import("@intentic/web/main");
