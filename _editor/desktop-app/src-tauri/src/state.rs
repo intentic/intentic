@@ -993,7 +993,13 @@ mod tests {
             "same answer, nothing to write"
         );
         assert_eq!(state_in(&dir).ui_look(), Some(Look::Sanctum));
-        for look in [Look::System, Look::Light, Look::Dark, Look::Sanctum, Look::Silver] {
+        for look in [
+            Look::System,
+            Look::Light,
+            Look::Dark,
+            Look::Sanctum,
+            Look::Silver,
+        ] {
             assert_eq!(Look::parse(look.id()), Some(look));
         }
         assert_eq!(Look::parse("sepia"), None);
