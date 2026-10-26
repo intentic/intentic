@@ -15,7 +15,9 @@ import type { LandStandings } from "../../../conversations/land/standing.js";
 import type { Services } from "../../../composition.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import { claudeLimitRefusal, claudeReading } from "../../providers/claude/claude-usage.testing.js";
-import { createTurnResumeScheduler, handoffFor } from "./turn-resume.js";
+import { createTurnResumeScheduler } from "./turn-resume.js";
+import { handoffFor } from "./holds/handoff-way.js";
+import { sendableAt } from "../../../conversations/actor/limit-booking.js";
 import type { HeldOf, HeldTurn } from "./holds/held-turn.js";
 
 // Which way a spent allowance's held turn continues: the press's word, then the person's pick on the card, then the
@@ -171,7 +173,7 @@ describe("the resume pass fires only the hold it judged", () => {
         expect(runsOf("c1")).toEqual([]);
         expect(conversations.state("c1")?.resume.held).toMatchObject({ onto: { account: "acct-b" }, fired: false, reopensAt: 10_000 });
 
-        await createTurnResumeScheduler(services).tick(10_000_000);
+        await createTurnResumeScheduler(services).tick(sendableAt(10_000));
         expect(runsOf("c1").map((input) => input.account)).toEqual(["acct-b"]);
     });
 });
@@ -182,7 +184,7 @@ describe("a spent allowance's hold taken at the door", () => {
     const standings = (): LandStandings => ({ of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} });
     const PROFILE = { agent: "codex", harness: "native" } as const;
 
-    const rerunOfHold = async (hold: Pick<HeldTurn, "ran" | "turnedAway" | "run">): Promise<TurnInput | undefined> => {
+    const rerunOfHold = async (hold: Pick<HeldOf<"limit">, "ran" | "turnedAway" | "run" | "handoff">): Promise<TurnInput | undefined> => {
         const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
         await agents.init();
         await beginTurn(conversations, { conversationId: "c1", isolated: true, prompt: "Port the EZD connector", profile: PROFILE }, 1_000);
@@ -223,6 +225,27 @@ describe("a spent allowance's hold taken at the door", () => {
 
         expect(rerun?.sessionId).toBeUndefined();
         expect(rerun?.resume).toBe("refused");
+    });
+
+    // proud-meadow-86lu, 2026-10-26: a "Continue" booked for the reset went on a hold whose card read Summary, and was
+    // refused at the reset before anything ran. Its hold kept that summary (handoff-way.ts keptHandoffOf), so the re-run
+    // writes one instead of opening fresh on the bare record.
+    const KEPT: HandoffOffer = { suggested: "summary", basis: "size", summary: { tokens: 40_000, reads: 300_000 }, chosen: "summary" };
+
+    it("goes as the summary its turn kept, where the provider refused that turn before answering", async () => {
+        const rerun = await rerunOfHold({ ran: false, handoff: KEPT });
+
+        expect(rerun?.sessionId).toBeUndefined();
+        expect(rerun?.resume).toBe("summarized");
+        expect(rerun?.prompt).toContain(RESUME_NOTES.summarized);
+    });
+
+    // A door's hold goes on the session as it stood, but this turn had already left that session for a summary.
+    it("goes as the summary its turn kept, where the door turned that turn away", async () => {
+        const rerun = await rerunOfHold({ ran: false, turnedAway: true, run: "run-held", handoff: KEPT });
+
+        expect(rerun?.sessionId).toBeUndefined();
+        expect(rerun?.resume).toBe("summarized");
     });
 });
 
@@ -285,7 +308,7 @@ describe("the pass books words for the reopen rather than sending them into a sp
         expect(drained).toEqual([]);
         const queue = conversations.queued("c1");
         // Booked as the reopen it is, on the account it waits out, so every window can tell it from a chosen time.
-        expect(queue.items).toMatchObject([{ id: "m-1", until: REOPEN * 1000, reopenOf: { agent: "claude", account: "acct-b" } }]);
+        expect(queue.items).toMatchObject([{ id: "m-1", until: sendableAt(REOPEN), reopenOf: { agent: "claude", account: "acct-b" } }]);
         // Booked, the hold is answered: the queue reads scheduled, and no memory hold is left for a later pass.
         expect(queue.paused).toBe("scheduled");
     });
@@ -303,7 +326,7 @@ describe("the pass books words for the reopen rather than sending them into a sp
 
         await createTurnResumeScheduler(services).tick(NOW);
         expect(drained).toEqual([]);
-        expect(conversations.queued("c1").items).toMatchObject([{ id: "m-at", until: REOPEN * 1000 }]);
+        expect(conversations.queued("c1").items).toMatchObject([{ id: "m-at", until: sendableAt(REOPEN) }]);
     });
 
     it("lets a booking whose time came go when its account has room", async () => {
@@ -383,7 +406,7 @@ describe("a stranded card's lane follows what the pass will do", () => {
 
         await createTurnResumeScheduler(at.services).tick(NOW);
         expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reopensAt: REOPEN, fired: false });
-        expect(at.agents.get("c1")).toMatchObject({ limitResetsAt: REOPEN, next: { kind: "rerun", at: REOPEN * 1000 } });
+        expect(at.agents.get("c1")).toMatchObject({ limitResetsAt: REOPEN, next: { kind: "rerun", at: sendableAt(REOPEN) } });
         expect(at.lane()).toBe("active");
     });
 
@@ -498,9 +521,9 @@ describe("the pass never sends a held turn into an allowance the records call sp
         await createTurnResumeScheduler(at.services).tick(NOW);
         expect(at.started).toEqual([]);
         expect(at.conversations.state("c1")?.resume.held).toMatchObject({ fired: false, onto: { account: "acct-b" } });
-        expect(at.agents.get("c1")).toMatchObject({ next: { kind: "rerun", at: REOPEN * 1000 } });
+        expect(at.agents.get("c1")).toMatchObject({ next: { kind: "rerun", at: sendableAt(REOPEN) } });
 
-        await createTurnResumeScheduler(at.services).tick(REOPEN * 1000 + 1_000);
+        await createTurnResumeScheduler(at.services).tick(sendableAt(REOPEN));
         expect(at.started.map((turn) => turn.account)).toEqual(["acct-b"]);
     });
 

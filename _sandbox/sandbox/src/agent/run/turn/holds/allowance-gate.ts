@@ -4,6 +4,7 @@ import type { TurnInput } from "../../../../seams/turn-starter.js";
 import { spentRung } from "../../../models/role-model-quota.js";
 import { allowanceWall } from "../../../../usage/serviceability/serviceability.js";
 import { reopenOfRouted } from "../booking-ask.js";
+import { sendableAt } from "../../../../conversations/actor/limit-booking.js";
 
 /* WHAT GOES OUT WITH NOBODY PRESSING ANYTHING NEVER GOES INTO AN ALLOWANCE THE RECORDS CALL SPENT. A person's words the
    sandbox releases by itself (a memory hold once room comes back, a booking whose time came) used to go straight to the
@@ -17,9 +18,9 @@ import { reopenOfRouted } from "../booking-ask.js";
 type Routed = Pick<TurnInput, "agent" | "harness" | "account" | "model"> & { readonly conversationId: string };
 
 /**
- * When the account these words would go on lets them through again, in milliseconds, where the records call it spent
- * with a reopening still ahead; undefined to let them go now (room, no reading, a spent reading naming no reopening, or a
- * reopening already past). The account is the one the words name, else the conversation's own; with neither, every
+ * When the account these words would go on lets them through again, in milliseconds (its reopening and the grace after
+ * it, limit-booking.ts RESET_GRACE_MS), where the records call it spent with that still ahead; undefined to let them go
+ * now (room, no reading, a spent reading naming no reopening, or a reopening already past). The account is the one the words name, else the conversation's own; with neither, every
  * account of the provider must read spent, as spent-door.ts reads it.
  */
 export const spentUntil = async (services: Services, turn: Routed, now: number = Date.now()): Promise<number | undefined> => {
@@ -30,7 +31,8 @@ export const spentUntil = async (services: Services, turn: Routed, now: number =
         account === undefined
             ? (await spentRung(services, { provider: agent, model: model ?? "" }, now))?.reopensAt
             : await accountReopening(services, agent, account, model, now);
-    return reopensAt === undefined || reopensAt * 1000 <= now ? undefined : reopensAt * 1000;
+    const until = reopensAt === undefined ? undefined : sendableAt(reopensAt);
+    return until === undefined || until <= now ? undefined : until;
 };
 
 // One account's reopening while the records call it spent (serviceability.ts allowanceWall); undefined for any other

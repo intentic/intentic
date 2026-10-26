@@ -9,7 +9,7 @@ import { beginTurn } from "../../../conversations/actor/conversation-actors.test
 import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
 import type { ConversationState } from "../../../conversations/actor/conversation-state.js";
 import { onHeldRepointed } from "../../../conversations/actor/held-decide.js";
-import { limitBooking } from "../../../conversations/actor/limit-booking.js";
+import { limitBooking, reopenedBy, sendableAt } from "../../../conversations/actor/limit-booking.js";
 import { switchAccount } from "./switch-account.js";
 
 // The one command that moves who pays. A conversation's account is the daemon's record; this is the only write to it
@@ -195,6 +195,12 @@ const REOPEN_B = 1_700_005_000;
 const FULL_B = claudeReading({ five_hour: { utilization: 100, resetsAt: REOPEN_B } }, T0);
 const REFUSED_B = claudeLimitRefusal({ account: "acct-b", resetsAt: REOPEN_B, at: T0 - 60_000, model: "opus" });
 
+// Due at the pick, to the second: what a booking for now reads as, whatever the grace a provider's reset waits out.
+const expectDueNow = (at: number | undefined): void => {
+    expect(at).toBeGreaterThanOrEqual(T0);
+    expect(at).toBeLessThan(T0 + 1_000);
+};
+
 // Read off the bare reading, every spent Claude account looked open: a pick from one spent account to another booked the
 // held turn for now, and the next pass sent it to be refused within seconds (2026-10-19, grand-alder-29zo, kind-lynx-7jba).
 test("without run, a held turn stays held, and its booking moves to the picked account's reopen", async () => {
@@ -204,7 +210,7 @@ test("without run, a held turn stays held, and its booking moves to the picked a
     expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: REOPEN_B });
     // The card is re-stated in the same write: the picked account's reset; the re-run its `next` derives is the hold's.
     expect(moved).toEqual([["acct-b", { resetsAt: REOPEN_B }]]);
-    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: REOPEN_B * 1000 });
+    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: sendableAt(REOPEN_B) });
 });
 
 // An account with room has nothing to wait for: the booking is due now (an armed resend goes on the next pass, a
@@ -212,10 +218,10 @@ test("without run, a held turn stays held, and its booking moves to the picked a
 test("a pick onto an account with room clears the wait rather than keeping the refused account's", async () => {
     const { deps, moved, sent } = heldOnPick({ "acct-b": claudeReading({ five_hour: { utilization: 40, resetsAt: REOPEN_B } }, T0) });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: Math.ceil(T0 / 1000) });
-    // No clock on the card, and the re-run booked for now: the next pass sends it.
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: reopenedBy(T0) });
+    // No clock on the card, and the re-run booked for now, not the grace after a provider's reset: the next pass sends it.
     expect(moved).toEqual([["acct-b", {}]]);
-    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: Math.ceil(T0 / 1000) * 1000 });
+    expectDueNow(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")?.at);
 });
 
 // At the line with no refusal standing is not spent: the pool may hold a sliver, so the booked re-run goes now and the
@@ -224,7 +230,7 @@ test("a pick onto an account only at the line, with no refusal standing, books t
     const { deps, moved } = heldOnPick({ "acct-b": FULL_B });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
     expect(moved).toEqual([["acct-b", {}]]);
-    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: Math.ceil(T0 / 1000) * 1000 });
+    expectDueNow(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")?.at);
 });
 
 // Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access

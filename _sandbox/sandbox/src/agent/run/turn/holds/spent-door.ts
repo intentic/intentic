@@ -3,6 +3,7 @@ import type { Services } from "../../../../composition.js";
 import type { TurnInput } from "../../../../seams/turn-starter.js";
 import { opt } from "../../../../opt.js";
 import { spentRung } from "../../../models/role-model-quota.js";
+import { sendableAt } from "../../../../conversations/actor/limit-booking.js";
 
 /* THE SANDBOX DOES NOT SEND ITS OWN TURNS INTO AN ALLOWANCE IT KNOWS IS SPENT. A rebuild's restart re-ran three Codex
    subagents onto an allowance every account read as spent, logging "expect the provider to refuse it" as it did; the
@@ -44,7 +45,7 @@ export const spentDoor = async (
         return undefined;
     }
     const spent = await spentRung(services, { provider: turn.agent, model: turn.model ?? "" }, now);
-    if (spent?.reopensAt === undefined || spent.reopensAt * 1000 <= now) {
+    if (spent?.reopensAt === undefined || sendableAt(spent.reopensAt) <= now) {
         return undefined;
     }
     services.logger.info(

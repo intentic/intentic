@@ -23,6 +23,7 @@ import { type JournalledTurn, sqliteTurnJournal } from "../../store/journals/tur
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { nextPromptDayAt } from "../actor/conversation-state.js";
+import { sendableAt } from "../actor/limit-booking.js";
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.
@@ -2926,7 +2927,7 @@ it("derives a held spent allowance's re-run from the answer it holds now", async
     expect(registry.get("c1")).toMatchObject({ limitHeld: true, limitResetsAt: reopensAt });
     expect(registry.get("c1")?.next).toBeUndefined();
 
-    expect(await registry.setBreakPolicy("c1", "limit", "resend")).toMatchObject({ limitPolicy: "resend", next: { kind: "rerun", at: reopensAt * 1000 } });
+    expect(await registry.setBreakPolicy("c1", "limit", "resend")).toMatchObject({ limitPolicy: "resend", next: { kind: "rerun", at: sendableAt(reopensAt) } });
     // Cleared to the sandbox's default, which waits: nothing goes at the reset any more.
     expect((await registry.setBreakPolicy("c1", "limit", null))?.next).toBeUndefined();
     // Another ending's answer leaves the limit's alone.
@@ -2944,7 +2945,7 @@ it("derives a move only while the answer is to move, and nothing without a reset
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     const recordedAt = conversations.state("c1")?.resume.held?.recordedAt ?? 0;
     expect((await registry.setBreakPolicy("c1", "limit", "move"))?.next).toEqual({ kind: "rerun", at: recordedAt, onto: "acct-2" });
-    expect((await registry.setBreakPolicy("c1", "limit", "resend"))?.next).toEqual({ kind: "rerun", at: 9_000_000_000_000 });
+    expect((await registry.setBreakPolicy("c1", "limit", "resend"))?.next).toEqual({ kind: "rerun", at: sendableAt(9_000_000_000) });
 
     await beginTurn(conversations, turn({ conversationId: "c2" }), 3_000);
     conversations.send("c2", { kind: "frame", frame: { kind: "error", code: "rate_limit", message: "spent", held: { ran: true } } });
@@ -3006,7 +3007,7 @@ it("derives a re-run behind the wall the pass read, and back at the reset once t
     holdLimit(conversations, "c1");
     await conversations.send("c1", { kind: "settle" }, 2_000).settled;
     await registry.setBreakPolicy("c1", "limit", "resend");
-    const reset = (conversations.state("c1")?.resume.held?.reopensAt ?? 0) * 1000;
+    const reset = sendableAt(conversations.state("c1")?.resume.held?.reopensAt ?? 0);
     const wall = reset + 3_600_000;
     conversations.send("c1", { kind: "held-walled", until: wall });
     expect(registry.get("c1")?.next).toEqual({ kind: "rerun", at: wall });

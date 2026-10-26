@@ -3,6 +3,7 @@ import type { Ending } from "../registry/agents-store.js";
 import { NO_QUEUE, type QueuedItem, removed, returned, scheduled, type TurnQueue } from "./conversation-queue.js";
 import { nextOf, type WallAnswers } from "./conversation-next.js";
 import { type HeldRecord, idleConversation } from "./conversation-state.js";
+import { sendableAt } from "./limit-booking.js";
 
 // WHAT CARRIES A CONVERSATION ON BY ITSELF is one value derived from what it holds (AgentSummary.next), which the lane,
 // the card's corner, the chat and the phone all read. Each case below is a way the surfaces once disagreed because each
@@ -43,20 +44,20 @@ describe("a spent allowance's held turn", () => {
     // amber-sable-9p, brisk-sage-gs1: "Send again" chosen, and the card's lane followed a copy of the booking that a
     // restart, a changed answer or a pick left stale. The answer is read now, every time.
     test("goes again at its reset only where the conversation's answer says so", () => {
-        expect(nextOf(holding(NO_QUEUE, limitHold()), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: RESET * 1000 });
+        expect(nextOf(holding(NO_QUEUE, limitHold()), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) });
         expect(nextOf(holding(NO_QUEUE, limitHold()), { ending: LIMITED }, WAIT)).toBeUndefined();
     });
 
     test("moves at once while the answer is to move, naming where", () => {
         const moving = limitHold({ move: { account: "acct-2", carry: true } });
         expect(nextOf(holding(NO_QUEUE, moving), { ending: LIMITED }, { ...SEND, limit: "move" })).toEqual({ kind: "rerun", at: RECORDED, onto: "acct-2" });
-        expect(nextOf(holding(NO_QUEUE, moving), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: RESET * 1000 });
+        expect(nextOf(holding(NO_QUEUE, moving), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) });
     });
 
     // The wall the pass read in front of where it goes: the card says the instant the pass will fire at.
     test("waits behind the wall in front of where it goes, which never brings it earlier", () => {
-        expect(nextOf(holding(NO_QUEUE, limitHold({ walledUntil: RESET * 1000 + 60_000 })), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: RESET * 1000 + 60_000 });
-        expect(nextOf(holding(NO_QUEUE, limitHold({ walledUntil: RECORDED })), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: RESET * 1000 });
+        expect(nextOf(holding(NO_QUEUE, limitHold({ walledUntil: sendableAt(RESET) + 60_000 })), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) + 60_000 });
+        expect(nextOf(holding(NO_QUEUE, limitHold({ walledUntil: RECORDED })), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) });
     });
 
     // A hold refused with no instant, one already fired, or dropped by a parent's cancel: nothing will send it.
@@ -122,7 +123,7 @@ test("reads the entry's bookings for a conversation no actor holds yet", () => {
 // A card goes one way first: the held turn the ending stopped, then its memory hold, then what was booked after it.
 test("reads the held turn first, then a memory hold, then the soonest booking", () => {
     const booked = scheduled(NO_QUEUE, words("later"), { until: 5_000_000 });
-    expect(nextOf(holding(booked, limitHold()), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: RESET * 1000 });
+    expect(nextOf(holding(booked, limitHold()), { ending: LIMITED }, SEND)).toEqual({ kind: "rerun", at: sendableAt(RESET) });
     expect(nextOf(holding(booked, limitHold()), { ending: LIMITED }, WAIT)).toEqual({ kind: "send", at: 5_000_000, count: 1 });
     const memory = scheduled(returned(NO_QUEUE, [words("held")]), words("later"), { until: 5_000_000 });
     expect(nextOf(holding(memory), { ending: MEMORY }, SEND)).toEqual({ kind: "room" });

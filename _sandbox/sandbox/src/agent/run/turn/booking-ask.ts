@@ -1,6 +1,7 @@
 import { DEFAULT_PROVIDER, type QueuedReopen } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import type { Booking } from "../../../conversations/actor/conversation-queue.js";
+import { RESET_GRACE_MS } from "../../../conversations/actor/limit-booking.js";
 import { opt } from "../../../opt.js";
 import { unwaitable, workLanded } from "../../../conversations/land/work-landed.js";
 import type { Said, Unsaid } from "../../../seams/turn-starter.js";
@@ -54,10 +55,12 @@ export const bookingOfAsk = (services: Services, ask: BookingAsk, now: number): 
         }
         return workLanded(services, ask.sendAfter, now) ? undefined : { after: { conversationId: ask.sendAfter, since: now } };
     }
-    if (ask.sendAt === undefined || ask.sendAt <= now) {
+    // A reopen is the provider's clock: words booked for it go the grace after it (limit-booking.ts RESET_GRACE_MS).
+    const at = ask.sendAt === undefined || ask.sendAtReopen !== true ? ask.sendAt : ask.sendAt + RESET_GRACE_MS;
+    if (at === undefined || at <= now) {
         return undefined;
     }
-    const until = Math.min(ask.sendAt, now + LONGEST_BOOKING_MS);
+    const until = Math.min(at, now + LONGEST_BOOKING_MS);
     return ask.sendAtReopen === true ? { until, reopenOf: reopenOfRouted(services, ask.conversationId, ask) } : { until };
 };
 

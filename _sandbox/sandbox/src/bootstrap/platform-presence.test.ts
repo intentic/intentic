@@ -13,6 +13,7 @@ import { memoryAutomationsStore } from "../automations/automations-slice.testing
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { automationRecord } from "../harness/route-stores.testing.js";
 import { opt } from "../opt.js";
+import { sendableAt } from "../conversations/actor/limit-booking.js";
 import { openConversationsDb } from "../store/conversations-db.js";
 import { createFleet } from "../conversations/registry/agents-registry.js";
 import type { LandStandings } from "../conversations/land/standing.js";
@@ -71,10 +72,11 @@ describe("the wake a booked spent-allowance resend promises", () => {
         const now = Date.now();
         const reopensAt = Math.ceil((now + 8 * 60_000) / 1000);
         const { agents, services } = await heldUntil(now, reopensAt, "resend");
-        expect(agents.get("c1")).toMatchObject({ limitHeld: true, next: { kind: "rerun", at: reopensAt * 1000 } });
+        // Booked for the grace after the reset (limit-booking.ts), when the re-run really goes.
+        expect(agents.get("c1")).toMatchObject({ limitHeld: true, next: { kind: "rerun", at: sendableAt(reopensAt) } });
         // Nothing runs: the wake is what holds the machine, not a turn.
         expect(workingNow(services, "idle-stop")).toEqual([]);
-        expect(await nextPromisedWakeAt(services)).toBe(reopensAt * 1000);
+        expect(await nextPromisedWakeAt(services)).toBe(sendableAt(reopensAt));
 
         const stop = jest.fn();
         const dispose = startIdleStop(
@@ -82,7 +84,7 @@ describe("the wake a booked spent-allowance resend promises", () => {
             { connected: () => 0, terminalActivityAt: async () => 0, working: () => workingNow(services, "idle-stop").length, nextPromisedWakeAt: () => nextPromisedWakeAt(services) },
             stop,
         );
-        for (let minute = 0; minute < 8; minute += 1) {
+        for (let minute = 0; minute < 9; minute += 1) {
             await advanceTimersByTimeAsync(60_000);
         }
         expect(stop).not.toHaveBeenCalled();
@@ -110,7 +112,7 @@ describe("the wake a booked spent-allowance resend promises", () => {
         const moving = await heldUntil(now, reopensAt, "move", { account: "acct-b", carry: false });
         expect(await nextPromisedWakeAt(moving.services)).toBe(now);
         const resending = await heldUntil(now, reopensAt, "resend", { account: "acct-b", carry: false });
-        expect(await nextPromisedWakeAt(resending.services)).toBe(reopensAt * 1000);
+        expect(await nextPromisedWakeAt(resending.services)).toBe(sendableAt(reopensAt));
     });
 });
 

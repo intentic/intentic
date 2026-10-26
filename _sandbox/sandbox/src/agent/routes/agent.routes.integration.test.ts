@@ -20,6 +20,7 @@ import { ROOM_SETTLE_MS } from "../run/turn/holds/room-holds.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../providers/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, seededRefusals, STILL_OFF } from "../providers/claude/claude-seat-check.testing.js";
 import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
+import { RESET_GRACE_MS } from "../../conversations/actor/limit-booking.js";
 
 // Exercises the agent routes over the daemon's HTTP surface, as the browser does. Shared fakes and client live in
 // route-services.testing.ts and its siblings.
@@ -541,13 +542,14 @@ describe("the conversation's queue", () => {
         await client.agent.run({ prompt: "write the guide", conversationId: "conv-reopen", agent: "grok", model: "grok-5", sendAt: at, sendAtReopen: true });
 
         const moved = await client.agent.queueReroute({ conversationId: "conv-reopen", routing: { agent: "grok", harness: "native", model: "grok-5-mini", effort: "low" } });
-        expect(moved.items).toMatchObject([{ until: at, reopenOf: { agent: "grok" }, serves: { agent: "grok", model: "grok-5-mini", effort: "low" } }]);
+        // Booked for the reopen, it goes the grace after it, past the provider's own clock (limit-booking.ts).
+        expect(moved.items).toMatchObject([{ until: at + RESET_GRACE_MS, reopenOf: { agent: "grok" }, serves: { agent: "grok", model: "grok-5-mini", effort: "low" } }]);
 
         // A time somebody chose is an appointment, not an allowance's wait; booked for the reopen again, it is one.
         const chosen = await client.agent.queueSchedule({ conversationId: "conv-reopen", sendAt: at + 1_000 });
         expect(chosen.items[0]).not.toHaveProperty("reopenOf");
         expect((await client.agent.queueSchedule({ conversationId: "conv-reopen", sendAt: at, sendAtReopen: true })).items).toMatchObject([
-            { until: at, reopenOf: { agent: "grok" } },
+            { until: at + RESET_GRACE_MS, reopenOf: { agent: "grok" } },
         ]);
         expect(await errorCode(client.agent.queueReroute({ conversationId: "conv-empty", routing: { agent: "grok", harness: "native" } }))).toBe("NOT_FOUND");
     });

@@ -9,7 +9,7 @@ import type { ContextTrim } from "@intentic/sandbox-contract/schemas/context-tri
 import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import type { HandedOff } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { HandedOff, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { Logger } from "pino";
 import { createOutboundSniffer } from "../../activity/outbound.js";
 import { turnCliEnv } from "./harness/turn-env.js";
@@ -56,6 +56,7 @@ import { handoffStateNote } from "../prompt/handoff-state.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { sessionToResume, handoffOf, attachmentsOf } from "./turn/turn-preflight-input.js";
 import { resumeTrimTurn, trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
+import { carriedHandoff, carriedOffOf, keptHandoffOf, type Replaced, replaceHeld, withoutSession } from "./turn/holds/handoff-way.js";
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
 import { codedFailure } from "./frames/error-frames.js";
@@ -331,19 +332,7 @@ const preflightClock = (): { readonly mark: (stage: string) => void; readonly re
     };
 };
 
-// The turn a spent allowance or a dead runtime is holding for this conversation, read as this turn supersedes every
-// pending resume: a fresh session gets what the dead turn's ledgers measured. Nothing for a turn with no conversation.
-const supersedeHeld = (services: Pick<Services, "conversations">, conversationId: string | undefined): HeldTurn | undefined =>
-    conversationId === undefined ? undefined : services.conversations.send(conversationId, { kind: "resume-superseded" }).reply;
-
 const HANDOFF_STATUS = "handoff";
-
-// A held turn a person could have trimmed or summarised, carried whole instead: said too, with what it re-reads, so the
-// transcript names every way a choice went and not only the cheaper ones.
-const carriedHandoff = (input: RoutedTurn, held: HeldTurn | undefined): HandedOff | undefined =>
-    held?.handoff === undefined || (input.resume !== "limit" && input.resume !== "carried")
-        ? undefined
-        : { mode: "carry", ...opt("tokens", held.contextTokens) };
 
 // What a fresh session is told beside the transcript: the tree, the proof, the checklist — only for a turn seeded from
 // the record.
@@ -536,12 +525,6 @@ interface Preflight {
     readonly carriedOff: boolean;
 }
 
-// Whether this turn re-runs a held one with its session onto another account than the one it was held on: the carry an
-// unanswered death reads as that account refusing it (classify-failure.ts, dressDeath). Read off the hold it replaces
-// rather than the note, since a trimmed hand-off is sent with the same note whether or not the account changed.
-const carriedOffOf = (input: RoutedTurn, held: HeldTurn | undefined): boolean =>
-    held !== undefined && (input.resume === "carried" || input.resume === "trimmed") && held.input.account !== input.account;
-
 const preflight = async (
     services: Services,
     input: RoutedTurn,
@@ -551,8 +534,9 @@ const preflight = async (
     steering: SteeringQueue | undefined,
     clock: ReturnType<typeof preflightClock>,
     coldTrimBasis: ColdTrimBasis | undefined,
+    replaced: Replaced,
 ): Promise<Preflight | { readonly refused: string } | SetupRefusal> => {
-    const held = supersedeHeld(services, input.conversationId);
+    const { held, way } = replaced;
     // Shared with the boot-time condition-watch restore, so a drifted second copy can't quietly stop working.
     const cliEnv = await turnCliEnv(services, input.conversationId);
     clock.mark("env");
@@ -581,8 +565,9 @@ const preflight = async (
               });
     // A trimmed hand-off resumes a copy of the session with older tool output cleared, written before the store is asked.
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
-    const trim = await resumeTrimTurn(services, input, settings, held, coldTrimBasis);
-    const turnInput = trim.turn;
+    const trim = await resumeTrimTurn(services, input, settings, held, coldTrimBasis, way);
+    // A summary opens a fresh session: a re-run was sent without one (turn-resume.ts), new words leave theirs here.
+    const turnInput = way === "summary" ? withoutSession(trim.turn) : trim.turn;
     // Asks the runtime's store whether it still holds the named session: a session id is a claim, not a fact.
     const resumed = await sessionToResume(services, turnInput, execution);
     const delivery = trimDelivery(trim, resumed);
@@ -590,11 +575,11 @@ const preflight = async (
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, held);
     const summarized =
-        input.resume === "summarized" && history.length > 0 && input.conversationId !== undefined
+        way === "summary" && history.length > 0 && input.conversationId !== undefined
             ? await summaryNote(services, execution, { conversationId: input.conversationId, rows: history, contextTokens: held?.contextTokens, signal })
             : undefined;
     const handedOff =
-        delivery.event ?? summarized?.event ?? carriedHandoff(input, held);
+        delivery.event ?? summarized?.event ?? carriedHandoff(way, held, resumed);
     clock.mark("history");
     const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
     const frames = createTurnFrames(effectiveCwd, resumed);
@@ -719,6 +704,7 @@ interface PreparedTurn {
     readonly effectiveCwd: string;
     readonly frames: TurnFrames;
     readonly carriedOff: boolean;
+    readonly keptHandoff: HandoffOffer | undefined;
 }
 
 // Preflight, then the plan, then the notes the message grew and the checkpoint it can be rewound to; a refusal at any
@@ -734,12 +720,13 @@ async function* prepareTurn(
     coldTrimBasis: ColdTrimBasis | undefined,
 ): AsyncGenerator<AgentEvent, PreparedTurn | undefined> {
     const clock = preflightClock();
+    const replaced = replaceHeld(services, input);
     // A summary hand-off asks a model before the turn's own does, which takes a while on a long conversation: said.
-    const summarizing = input.resume === "summarized";
+    const summarizing = replaced.way === "summary";
     if (summarizing) {
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: "Writing a summary of the conversation for the hand-off…" };
     }
-    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock, coldTrimBasis);
+    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock, coldTrimBasis, replaced);
     if (summarizing) {
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
     }
@@ -775,7 +762,8 @@ async function* prepareTurn(
     }
     clock.mark("snapshot");
     clock.report(services.logger);
-    return { plan, request: wire.request, isolation: ready.isolation, effectiveCwd: ready.effectiveCwd, frames: ready.frames, carriedOff: ready.carriedOff };
+    const { isolation, effectiveCwd, frames, carriedOff } = ready;
+    return { plan, request: wire.request, isolation, effectiveCwd, frames, carriedOff, keptHandoff: keptHandoffOf(replaced) };
 }
 
 // Only a stored Claude account's credential is re-minted, never on the re-mint itself: refused again, it is dead.
@@ -817,6 +805,7 @@ interface TurnState {
     readonly remint: FailureContext["remint"];
     readonly frames: TurnFrames;
     readonly carriedOff: boolean;
+    readonly keptHandoff: HandoffOffer | undefined;
     // Held at the door for a spent allowance (spent-door.ts): nothing was sent, so its refusal files nothing.
     readonly door: boolean;
 }
@@ -841,6 +830,7 @@ const classified = async (services: Services, event: ErrorFrame, turn: TurnState
             answered: readings.silence.answered,
             childRerunHorizonMs: childRerunHorizonMs(services.conversations, input.conversationId, await services.sandboxSettings.get()),
             carriedOff: turn.carriedOff,
+            keptHandoff: turn.keptHandoff,
             door: turn.door,
             remint: turn.remint,
             limitReset: readings.limitReset,
@@ -942,7 +932,7 @@ async function* runPreparedTurn(
     prepared: PreparedTurn,
     reach: ReachWatch | undefined,
 ): AsyncGenerator<AgentEvent> {
-    const { plan, request, isolation, effectiveCwd, frames, carriedOff } = prepared;
+    const { plan, request, isolation, effectiveCwd, frames, carriedOff, keptHandoff } = prepared;
     assertAgentExecution(request.execution, request.spec);
     const provider = input.agent;
     const account = plan.account;
@@ -964,6 +954,7 @@ async function* runPreparedTurn(
         remint: remintFor(input, account, request),
         frames,
         carriedOff,
+        keptHandoff,
         door: plan.door === true,
     };
     const aborted = (): boolean => signal?.aborted === true;

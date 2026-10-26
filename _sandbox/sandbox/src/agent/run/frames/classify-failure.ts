@@ -3,6 +3,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { breakArmed, RETRY_LADDER_TRIES, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { LimitWay, limitWayOf } from "../../models/limit-way.js";
 import { isAdminGrantedAllowanceText, mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
@@ -64,6 +65,9 @@ export interface FailureContext {
     readonly childRerunHorizonMs?: number | undefined;
     // Whether this turn re-ran a held one, its session carried onto another account than the one it was held on.
     readonly carriedOff?: boolean | undefined;
+    // The way on this turn kept from the held turn it took the place of, for a refusal that runs nothing to keep in turn
+    // (handoff-way.ts keptHandoffOf).
+    readonly keptHandoff?: HandoffOffer | undefined;
     // Held at the door for a spent allowance (spent-door.ts): no request went out, so nothing is filed against the
     // provider (the records already say it, and a refusal filed now would only push its reopening out), and the
     // session is as the last turn left it.
@@ -416,6 +420,7 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
         checklist: context.checklist,
         contextTokens: context.contextTokens,
         sessionId: context.sessionId,
+        ...opt("kept", context.keptHandoff),
     });
     const { conversationId } = turn;
     // A door's hold names its run, whose rows the model never saw, and re-runs on the session as it stood (turn-resume.ts).

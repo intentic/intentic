@@ -9,6 +9,7 @@ import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import type { FailedEnding } from "../registry/agents-store.js";
 import { holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
+import { sendableAt } from "./limit-booking.js";
 
 // One conversation's in-memory life as a value: which phase it is in, what its live turn has measured, and the
 // leases and records that outlive a turn. Only conversation-decide.ts writes it, one event at a time; everything else
@@ -105,9 +106,11 @@ export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fire
 /**
  * Whether a spent allowance holds this conversation and its window is known to be shut at `now`: a turn started then
  * is refused before the model sees it. No published instant is never shut, as the card reads it (agentStatus.limitClosed).
+ * Shut until the grace after the reopen is out (limit-booking.ts sendableAt), so the held turn's own re-run, booked
+ * for that instant, still goes ahead of the words waiting on it.
  */
 export const windowShut = (held: HeldRecord | undefined, now: number): boolean =>
-    held?.reason === "limit" && held.reopensAt !== undefined && held.reopensAt * 1000 > now;
+    held?.reason === "limit" && held.reopensAt !== undefined && sendableAt(held.reopensAt) > now;
 
 // The turn a wall stranded, until a press or the resume pass (turn-resume.ts) fires it or a new turn supersedes it.
 export interface ResumeRecords {

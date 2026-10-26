@@ -10,7 +10,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/turn-break";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { RESUME_NOTES, type ResumeReason, resumeNoteWith, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract/events/resume";
-import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import { errorMessage } from "@intentic/base/errors";
 import { replaceRejectedToken } from "../../providers/claude/claude-credentials.js";
 import { planRevision } from "../../prompt/plan-revision.js";
@@ -22,7 +22,8 @@ import type { Caller } from "../../../auth/auth.js";
 import { POST_PLAN_MODE } from "../harness/claude-code-runner.js";
 import { formatAnswers } from "../../../sessions/vocabulary/question-answers.js";
 import { OUTAGE_MAX_ATTEMPTS, outageRetryDue, outageRetryFired, providerOutage } from "../../providers/provider-health.js";
-import { type Routing, routingFor, sameLoop, sessionFor } from "../../../conversations/registry/routing.js";
+import { sessionFor } from "../../../conversations/registry/routing.js";
+import { handoffFor, pressed, sameRuntime } from "./holds/handoff-way.js";
 import { consumeEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "../../../store/journals/turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
@@ -31,6 +32,7 @@ import { type RunOptions, startTurnRun, type TurnRun } from "./turn-runs.js";
 import type { BeginRefusal } from "../../../conversations/actor/conversation-decide.js";
 import { waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { type HeldRecord, windowShut } from "../../../conversations/actor/conversation-state.js";
+import { sendableAt } from "../../../conversations/actor/limit-booking.js";
 import { opt } from "../../../opt.js";
 import { spentRung } from "../../models/role-model-quota.js";
 import { recordInterrupted } from "./recovery/interrupted-ledger.js";
@@ -51,23 +53,6 @@ import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
 // reader answers for — a spent allowance, a provider outage, a turn that stopped short — each of which fires only on
 // that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
 // What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
-// Where a press sends the held turn, by the one routing rule (conversations/registry/routing.ts), with the held turn's own
-// routing as the profile: naming no account keeps the held turn's on its provider, since only a person's explicit pick
-// (switchAccount, or an older editor's `account`) moves a conversation to another account.
-// A held turn is a stored copy, which a turn written before the port routed it may have left unnamed.
-const pressed = (held: AgentTurn, routing: ResumeRouting): Routing => {
-    const { agent: provider, harness, account } = withRuntimeDefaults(held);
-    return routingFor({ provider, harness, account }, routing);
-};
-
-// Whether the press keeps the held turn's runtime (provider and loop), whatever it does to the account. Compared as loops,
-// so a press naming the other name of the same runtime keeps the session.
-const sameRuntime = (input: AgentTurn, routing: ResumeRouting): boolean => {
-    const where = pressed(input, routing);
-    const held = withRuntimeDefaults(input);
-    return where.provider === held.agent && sameLoop({ provider: held.agent, harness: held.harness }, where.harness);
-};
-
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
 // Destructure-then-add so a press onto another runtime leaves none of the old runtime's fields standing.
 const reroutedInput = (input: TurnInput & { conversationId: string }, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
@@ -109,29 +94,6 @@ interface RerunNote {
     readonly tail?: string | undefined;
 }
 
-// The ways on a spent allowance's held turn can take where it is going: carrying or trimming the session needs the turn
-// to have run, its session not refused, and the press to keep its runtime; a summary goes anywhere.
-const handoffCan = (held: HeldTurn, routing: ResumeRouting | undefined, offer: HandoffOffer, mode: HandoffMode): boolean => {
-    if (offer[mode] === undefined) {
-        return false;
-    }
-    return mode === "summary" || (held.ran && held.carryRefused !== true && (routing === undefined || sameRuntime(held.input, routing)));
-};
-
-// Which way a held turn the owner had a choice for continues: the press's own word, else the person's pick on the card,
-// else an older editor's `carry`, else the suggestion the card showed. A way the destination cannot take (another
-// provider holds no session) falls to a summary, then a trim, then carrying, whichever the offer has. Undefined for a
-// hold with no offer, which goes on as it always has.
-export const handoffFor = (held: HeldTurn, routing: ResumeRouting | undefined): HandoffMode | undefined => {
-    const offer = held.reason === "limit" ? held.handoff : undefined;
-    if (offer === undefined) {
-        return undefined;
-    }
-    const asked = routing?.handoff ?? offer.chosen ?? (routing?.carry === true ? "carry" : undefined) ?? offer.suggested;
-    const can = (mode: HandoffMode): boolean => handoffCan(held, routing, offer, mode);
-    return can(asked) ? asked : (["summary", "trim", "carry"] as const).find(can);
-};
-
 const handoffNote = (held: HeldTurn, routing: ResumeRouting | undefined, mode: HandoffMode): RerunNote => {
     switch (mode) {
         case "carry":
@@ -171,8 +133,10 @@ const rerunNote = (held: HeldTurn, routing: ResumeRouting | undefined): RerunNot
         // Its own session never saw it, and stays unless the press moved runtimes; so for a spent allowance's door.
         case "door":
             return doorNote(held, routing);
+        // A door's hold goes on the session as it stood, unless its turn had already left that session for a summary it
+        // kept from the hold it replaced (handoff-way.ts keptHandoffOf): then it goes that way, as a refused turn's does.
         case "limit":
-            return held.turnedAway === true ? doorNote(held, routing) : wallNote(held, routing);
+            return held.turnedAway === true && held.handoff === undefined ? doorNote(held, routing) : wallNote(held, routing);
         // The one wall whose own session is the obstacle: fresh whatever ran, with the hand-off the record seeds.
         case "overflow":
             return { reason: "overflow", fresh: true, restate: true };
@@ -592,7 +556,7 @@ const wakesReopened = (services: Services, conversationId: string, held: HeldRec
         return false;
     }
     if (windowShut(held, now)) {
-        due(held.reopensAt * 1000);
+        due(sendableAt(held.reopensAt));
         return false;
     }
     return true;

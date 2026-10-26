@@ -38,6 +38,7 @@ import { turnRunOf } from "../../../../conversations/actor/conversation-holdings
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
+import { sendableAt } from "../../../../conversations/actor/limit-booking.js";
 import { createTurnResumeScheduler, fireHeldResume, startConversationTurn } from "../turn-resume.js";
 import { resumeInterruptedTurns } from "../recovery/cut-turns.testing.js";
 import { nudgeResumesOn } from "../holds/resume-nudges.js";
@@ -2551,8 +2552,11 @@ test("an armed conversation sends the held turn again once the window reopens, a
     // An hour into a four-hour window: still shut, so firing here would repeat the same refusal.
     await scheduler.tick(RECORDED + 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
-
+    // The reset itself is the provider's clock, which may not have turned over yet (2026-10-26): it waits the grace out.
     await scheduler.tick(REOPENS * 1000 + 1);
+    expect(turns).toHaveLength(0);
+
+    await scheduler.tick(sendableAt(REOPENS) + 1);
     await settle(services, "lim-auto-1");
     expect(turns).toHaveLength(1);
     expect(turns[0]!.prompt).toContain("ship the parser");
@@ -2571,10 +2575,10 @@ test("an armed conversation fires exactly once per hold", async () => {
         RECORDED,
     );
 
-    await scheduler.tick(REOPENS * 1000 + 1);
+    await scheduler.tick(sendableAt(REOPENS) + 1);
     await settle(services, "lim-auto-2");
-    await scheduler.tick(REOPENS * 1000 + 5_000);
-    await scheduler.tick(REOPENS * 1000 + 10_000);
+    await scheduler.tick(sendableAt(REOPENS) + 5_000);
+    await scheduler.tick(sendableAt(REOPENS) + 10_000);
     await settle(services, "lim-auto-2");
 
     expect(turns).toHaveLength(1);
@@ -2610,7 +2614,7 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
         RECORDED,
     );
 
-    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(REOPENS * 1000 + 1);
+    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(sendableAt(REOPENS) + 1);
     await settle(services, "lim-auto-4");
     expect(turns).toHaveLength(1);
     clearPendingResume(services, "lim-auto-4");
@@ -2731,15 +2735,15 @@ test("an armed hold re-pointed by a pick fires at the picked account's reopen, o
         true,
     );
 
-    await scheduler.tick(sooner * 1000 - 1_000);
+    await scheduler.tick(sendableAt(sooner) - 1_000);
     expect(turns).toHaveLength(0);
-    await scheduler.tick(sooner * 1000 + 1);
+    await scheduler.tick(sendableAt(sooner) + 1);
     await settle(services, "lim-repoint");
     expect(turns).toHaveLength(1);
     expect(turns[0]!.account).toBe("picked");
     expect(turns[0]!.sessionId).toBeUndefined();
 
-    await scheduler.tick(REOPENS * 1000 + 1);
+    await scheduler.tick(sendableAt(REOPENS) + 1);
     await settle(services, "lim-repoint");
     expect(turns).toHaveLength(1);
     clearPendingResume(services, "lim-repoint");
@@ -2774,7 +2778,7 @@ test("a booked move fires on the next pass, with the session the policy said to 
 
     // One hold, one fire: neither the next pass nor the reset fires it again.
     await scheduler.tick(RECORDED + 10_000);
-    await scheduler.tick(REOPENS * 1000 + 1);
+    await scheduler.tick(sendableAt(REOPENS) + 1);
     await settle(services, "lim-move");
     expect(turns).toHaveLength(1);
     clearPendingResume(services, "lim-move");
@@ -2800,7 +2804,7 @@ test("a booked move the owner took back before the pass stays held on its own ac
     );
 
     await scheduler.tick(RECORDED + 5_000);
-    await scheduler.tick(REOPENS * 1000 + 1);
+    await scheduler.tick(sendableAt(REOPENS) + 1);
     await settle(services, "lim-withdrawn");
 
     expect(turns).toEqual([]);
@@ -2818,7 +2822,7 @@ test("a held turn with no booked move and no arming stays held", async () => {
     );
 
     await scheduler.tick(RECORDED + 5_000);
-    await scheduler.tick(REOPENS * 1000 + 1);
+    await scheduler.tick(sendableAt(REOPENS) + 1);
     expect(turns).toHaveLength(0);
     clearPendingResume(services, "lim-unbooked");
 });
@@ -2828,7 +2832,7 @@ test("a held turn with no booked move and no arming stays held", async () => {
 // the work. The admission clock is the system's, so each case sets it where the tick's own clock stands.
 describe("the sandbox's words to a conversation stranded behind a spent allowance", () => {
     const SHUT = RECORDED + 60 * 60 * 1000;
-    const REOPENED = REOPENS * 1000 + 1;
+    const REOPENED = sendableAt(REOPENS) + 1;
     const PROMPT = "Watch fired: the downloads finished.";
     afterEach(() => jest.setSystemTime());
 

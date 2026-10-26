@@ -3,13 +3,15 @@ import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@int
 import type { Services } from "../../../composition.js";
 import { allowanceWall, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import { opt } from "../../../opt.js";
+import { reopenedBy } from "../../../conversations/actor/limit-booking.js";
 
 // Repoint a conversation's account; run resumes a held turn immediately, while a plain picker change starts nothing.
 // Retire the previous account's session unless carry is set, and reroute usage holds plus held/queued/booked messages to the chosen account.
 // Recompute the hold's reopen time; a person's pick also triggers a seat-marked Claude account's async recheck.
 
 // When the picked account lets the held turn through, in epoch seconds: its reset while it reads spent (absent when it
-// names none), now while it has room or no reading. `shown` is what the card states: only a real wait gets a clock.
+// names none), now while it has room or no reading (with no grace to wait out: limit-booking.ts reopenedBy). `shown` is
+// what the card states: only a real wait gets a clock.
 //
 // Judged by the one allowance wall (serviceability.ts allowanceWall) that the allowance gate and the resume pass read
 // too, never by the polled reading alone. Every Claude reading is rounded, and a rounded pool at 100 is "at the line",
@@ -27,7 +29,7 @@ const reopeningOf = async (
         return undefined;
     });
     if (wall === undefined) {
-        return { reopensAt: Math.ceil(now / 1000) };
+        return { reopensAt: reopenedBy(now) };
     }
     return wall.reopensAt === undefined ? {} : { reopensAt: wall.reopensAt, shown: wall.reopensAt };
 };

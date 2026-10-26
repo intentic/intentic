@@ -1,6 +1,6 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
-import type { HandedOff } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { HandedOff, HandoffMode } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { TurnExperimentStamps } from "./turn-plan.js";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { opt } from "../../../opt.js";
@@ -88,15 +88,18 @@ export const coldTrimTurn = async <T extends TurnInput>(
 };
 
 // One copy path before the runtime probe: a held hand-off owns its choice, ordinary follow-ups may enter the experiment.
+// `way` is how this turn goes on from the held turn it replaces (handoff-way.ts). A re-run drops the message nobody
+// answered, which it sends again; new words taking the held turn's place keep it, since nothing sends it again.
 export const resumeTrimTurn = async <T extends TurnInput>(
     services: Services,
     turn: T,
     settings: SandboxSettings,
     held: { readonly contextTokens?: number | undefined } | undefined,
     basis: ColdTrimBasis | undefined,
+    way: HandoffMode | undefined,
 ): Promise<TrimOutcome<T> & { readonly cold: boolean }> => {
-    if (turn.resume === "trimmed") {
-        return { ...(await trimmedTurn(services, turn, held)), stamps: {}, cold: false };
+    if (way === "trim") {
+        return { ...(await trimmedTurn(services, turn, held, { dropUnanswered: turn.resume === "trimmed" })), stamps: {}, cold: false };
     }
     const cold = await coldTrimTurn(services, turn, settings, held !== undefined, basis);
     return { turn: cold?.turn ?? turn, event: cold?.event, stamps: cold?.stamps ?? {}, cold: cold !== undefined };

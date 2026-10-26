@@ -39,6 +39,8 @@ export const limitWayOf = async (
         readonly checklist: readonly TodoItem[] | undefined;
         readonly contextTokens: number | undefined;
         readonly sessionId: string | undefined;
+        // The way on the turn kept from the held turn it replaced (handoff-way.ts keptHandoffOf).
+        readonly kept?: HandoffOffer | undefined;
     },
 ): Promise<LimitWay | undefined> => {
     const { standing, checklist, contextTokens } = params;
@@ -51,7 +53,7 @@ export const limitWayOf = async (
         handoffHistory(services, turn),
     ]);
     const handoffTokens = tokensOfChars(withRuntimeHistory("", rows).length + (note?.text.length ?? 0));
-    const handoff = await handoffOfferOf(services, { turn, ran: params.ran, sessionId: params.sessionId, contextTokens, handoffTokens, rows }).catch(
+    const handoff = await handoffOfferOf(services, { turn, ran: params.ran, sessionId: params.sessionId, contextTokens, handoffTokens, rows, kept: params.kept }).catch(
         (error: unknown) => {
             services.logger.warn({ err: error, conversationId: turn.conversationId }, "hand-off: could not work out the ways on");
             return undefined;

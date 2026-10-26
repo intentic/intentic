@@ -38,6 +38,9 @@ export interface OfferParams {
     // The capped record plus the measured brief: what a fresh session opens with before any summary.
     readonly handoffTokens: number;
     readonly rows: readonly TranscriptRow[];
+    // The way on the turn kept from the held turn it took the place of (handoff-way.ts keptHandoffOf): what a turn
+    // that never ran still offers, since its own session holds nothing worth a choice.
+    readonly kept?: HandoffOffer | undefined;
 }
 
 const runsClaudeCode = (turn: AgentTurn): boolean => {
@@ -50,13 +53,14 @@ const sessionStoreOf = (services: Pick<Services, "agents" | "agentWorktrees">, c
 
 // The ways a held turn can continue on its own runtime, the sizes each starts from, and the one the sandbox would use:
 // the owner's standing setting where it names an available one, else the size-based suggestion. Undefined when there is
-// nothing to choose between (the turn never ran, so no session holds anything worth carrying, and no summary is set).
+// nothing to choose between (the turn never ran, so no session holds anything worth carrying, and no summary is set),
+// except the summary a turn that never ran kept from the held turn it replaced.
 export const handoffOfferOf = async (
     services: Services,
     params: OfferParams,
 ): Promise<HandoffOffer | undefined> => {
     if (!params.ran) {
-        return undefined;
+        return params.kept;
     }
     const settings = await services.sandboxSettings.get();
     const carries = params.sessionId !== undefined;

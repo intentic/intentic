@@ -7,6 +7,7 @@ import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conve
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { type Booking, holdOf, type QueuedItem, together, waitingOf } from "../../../conversations/actor/conversation-queue.js";
 import { windowShut } from "../../../conversations/actor/conversation-state.js";
+import { sendableAt } from "../../../conversations/actor/limit-booking.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
 import { forgetConversations } from "../../../conversations/registry/archive.js";
 import { conversationProfile, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
@@ -135,7 +136,7 @@ const releaseHeldBy = (services: Services, conversationId: string): string | und
     const held = services.conversations.state(conversationId)?.resume.held;
     if (heldBehindLimit(services, conversationId, waiting.map((item) => item.voice)) && held?.reopensAt !== undefined) {
         const provider = withRuntimeDefaults(held.input).agent;
-        return `behind the ${provider} limit until ${new Date(held.reopensAt * 1000).toISOString()}: words nobody at the composer typed wait for it to reopen`;
+        return `behind the ${provider} limit until ${new Date(sendableAt(held.reopensAt)).toISOString()}: words nobody at the composer typed wait for it to reopen`;
     }
     if (goesFirst(services, conversationId)) {
         return "a recovery or a rewind the sandbox runs by itself goes first";
