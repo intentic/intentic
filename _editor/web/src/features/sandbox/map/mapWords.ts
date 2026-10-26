@@ -2,6 +2,7 @@ import type { ControlScope } from "@intentic/sandbox-contract/policy/control-sco
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { accessPath } from "../../../models/sandbox/sandboxNav";
 import { type GroupKey, type MapNode, type Principal, REST_ID } from "./reachModel";
 
 // The map's words and marks for the model's ids: the model stays language-free, and every surface of the map (the stage,
@@ -106,7 +107,7 @@ export const editPath = (node: MapNode): string | undefined => {
     switch (node.kind) {
         case `area`:
         case `rest`:
-            return `/sandbox/areas`;
+            return accessPath(`areas`);
         case `persona`:
             return node.ref === undefined ? `/sandbox/personas` : `/sandbox/personas?open=${encodeURIComponent(node.ref)}`;
         case `secret`:

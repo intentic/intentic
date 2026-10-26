@@ -108,7 +108,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
     const { user } = useAuth();
     const { activeSandboxId } = useSandbox();
 
-    // The areas procedure's own cache entry, the one Sandbox ▸ Areas reads and writes.
+    // The areas procedure's own cache entry, the one Access ▸ Areas reads and writes.
     const areas = useSandboxQuery({ ...rpcQuery(`areas.list`), select: (answer) => answer.areas });
     const { personas } = usePersonas();
     const { capabilities, loaded: capabilitiesRead } = useCapabilities();

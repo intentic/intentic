@@ -2,6 +2,7 @@
 import { SegmentedControl } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
+import { accessPath } from "../../../models/sandbox/sandboxNav";
 import { useAreas } from "../areas/useAreas";
 import MultiPick from "./pick/MultiPick.vue";
 import type { PickSection } from "./pick/multiPick";
@@ -72,7 +73,7 @@ const sections = computed<PickSection[]>(() => [
     <div class="flex flex-col gap-2.5">
         <p v-if="areas.length === 0" class="text-xs text-muted">
             {{ t(`sandbox.sandboxAccess.noAreasToGrant`) }}
-            <RouterLink to="/sandbox/areas" class="text-content underline">{{ t(`sandbox.sandboxAccess.nameOne`) }}</RouterLink>
+            <RouterLink :to="accessPath(`areas`)" class="text-content underline">{{ t(`sandbox.sandboxAccess.nameOne`) }}</RouterLink>
         </p>
         <template v-else>
             <SegmentedControl

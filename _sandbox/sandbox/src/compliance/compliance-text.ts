@@ -139,7 +139,7 @@ const PL: Words = {
         areas: {
             name: "Obszary (ograniczenie dostępu do folderów)",
             what: "Dostęp osoby można zawęzić do wybranych folderów; reszta przestrzeni roboczej jest dla niej niewidoczna.",
-            where: "Sandbox ▸ Obszary",
+            where: "Sandbox ▸ Dostęp ▸ Obszary",
         },
         "guest-jail": {
             name: "Izolacja gości",
@@ -350,7 +350,7 @@ const EN: Words = {
         areas: {
             name: "Areas (folder-level access)",
             what: "A person's access can be narrowed to chosen folders; the rest of the workspace is invisible to them.",
-            where: "Sandbox ▸ Areas",
+            where: "Sandbox ▸ Access ▸ Areas",
         },
         "guest-jail": {
             name: "Guest isolation",

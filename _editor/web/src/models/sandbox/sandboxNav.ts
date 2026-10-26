@@ -85,11 +85,9 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
         label: t(`sandbox.sandboxNav.reach`),
         items: [
             // Who may use this box: members, invites, roles. `shield`, not `users` (Personas' glyph, one row below).
-            // Access stays below maintainer: revoking your own grant is anyone's.
+            // Access stays below maintainer: revoking your own grant is anyone's. Areas, what the folders behind a grant
+            // are, was the row below until 2026-10-26; it is a part of Access now, beside the profiles built from it.
             { slug: `access`, label: t(`sandbox.words.access`), icon: `shield` },
-            // What the folders behind a grant are. Beside Access rather than under Configuration: an area is half of
-            // a grant, and reading it as configuration is how somebody edits one without noticing whose reach moved.
-            { slug: `areas`, label: t(`sandbox.words.areas`), icon: `folder`, maintainer: true },
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
             // Devices was the last row here until 2026-10-01; it is a rail view of its own now (/devices).
             { slug: `personas`, label: t(`shared.personas`), icon: `user`, maintainer: true },
@@ -203,11 +201,13 @@ export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectio
 
 /**
  * Access's parts (features/sandbox/access/SandboxAccess.vue), drawn as tabs and kept in the query as Agent's and
- * Activity's are; the first writes no param. Who may come in and what they are told, how they prove it, what reaches the
- * box with nobody signing in, and what conversations were allowed past their persona or area. One page of ten groups until
- * 2026-10-19, which read as one long list of everything that has to do with getting in.
+ * Activity's are; the first writes no param. Who may come in and what they are told, the profiles they can hold, the
+ * areas those profiles and people name, how they prove it, what reaches the box with nobody signing in, and what
+ * conversations were allowed past their persona or area. One page of ten groups until 2026-10-19, which read as one long
+ * list of everything that has to do with getting in. Areas was a hub row of its own until 2026-10-26, so a grant's two
+ * halves sat on two rows, and the area picker's "name one" led out of the page the grant was being written on.
  */
-export const ACCESS_PARTS = [`people`, `profiles`, `sign-in`, `programs`, `allowed`] as const;
+export const ACCESS_PARTS = [`people`, `profiles`, `areas`, `sign-in`, `programs`, `allowed`] as const;
 export type AccessPart = (typeof ACCESS_PARTS)[number];
 
 /** The parts drawn below maintainer: the reader's own card, the people here now, and their own passkeys. */

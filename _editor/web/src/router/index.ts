@@ -320,6 +320,11 @@ const routes: RouteRecordRaw[] = [
                         ? { name: `sandbox`, params: { tab: `retention` } }
                         : { name: `sandbox`, params: { tab: `activity` }, query: { ...to.query, section: `audit` }, hash: to.hash },
             },
+            // Areas was a hub section until 2026-10-26; it is a part of Access now, beside the profiles that name it.
+            {
+                path: `sandbox/areas`,
+                redirect: (to) => ({ name: `sandbox`, params: { tab: `access` }, query: { ...to.query, section: `areas` }, hash: to.hash }),
+            },
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,

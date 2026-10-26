@@ -206,7 +206,7 @@ export const MEASURE_LINKS = new Map<MeasureId, RouteLocationRaw>([
     [`guest-jail`, tab(`access`)],
     [`sign-in`, tab(`access`)],
     [`ai-notice`, tab(`access`)],
-    [`areas`, tab(`areas`)],
+    [`areas`, { name: `sandbox`, params: { tab: `access` }, query: { section: `areas` } }],
     [`credential-gates`, tab(`secrets`)],
     [`host-guards`, tab(`secrets`)],
 ]);

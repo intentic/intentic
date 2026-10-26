@@ -306,7 +306,7 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview (version, update, Sandbox URL), Usage, Environment, Secrets, Agent
   (`?section=` models, instructions, tools, safety, finishing), Extensions (finding and installing them too),
-  Access, Areas, Personas, Devices, Recently deleted.
+  Access (`?section=` people, profiles, areas, sign-in, programs, allowed), Personas, Devices, Recently deleted.
 - **Workspace** (`/workspace/<path>`): the file tree, and the Changes panel where work is committed (**Commit**,
   or **Save N changes** in plain words). **Browsers** (`/browsers`): watch a live browser session. **Settings**
   (`/settings`): the owner's own preferences, not the sandbox's, except Appearance ▸ **How you work**, git's words

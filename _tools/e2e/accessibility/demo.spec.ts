@@ -74,12 +74,12 @@ test.describe(`composer model controls`, () => {
 
 const screens = [
     `login`, `agents`, `chat`, `workspace`, `settings`, `settings/appearance`, `settings/organisation`, `sandbox`,
-    `sandbox/access`, `sandbox/areas`, `sandbox/personas`, `sandbox/data-protection`, `sandbox/audit`,
+    `sandbox/access`, `sandbox/access?section=areas`, `sandbox/personas`, `sandbox/data-protection`, `sandbox/audit`,
     `capabilities`, `ext/approvals`, `ext/workflows`, `ext/e-urzad/office-ezd`, `ext/e-urzad/office-ed`,
 ] as const;
 
 const open = async (page: Page, path: string): Promise<void> => {
-    await page.goto(`${path}?mode=full`, { waitUntil: `domcontentloaded` });
+    await page.goto(`${path}${path.includes(`?`) ? `&` : `?`}mode=full`, { waitUntil: `domcontentloaded` });
     if (![`agents`, `chat`, `workspace`].includes(path)) {
         await page.locator(`main h1, main h2`).first().waitFor();
     }
@@ -380,7 +380,7 @@ test(`agent cards expose independent native buttons`, async ({ page }) => {
 });
 
 test(`area disclosure and persona routing have names and keyboard actions`, async ({ page }) => {
-    await open(page, `sandbox/areas`);
+    await open(page, `sandbox/access?section=areas`);
     const disclosure = page.getByRole(`button`, { name: /^Toggle details for / }).first();
     await expect(disclosure).toHaveAttribute(`aria-expanded`, `false`);
     await disclosure.focus();
@@ -392,7 +392,7 @@ test(`area disclosure and persona routing have names and keyboard actions`, asyn
 });
 
 for (const locale of [`en`, `pl`] as const) {
-    for (const screen of [`agents`, `settings/organisation`, `sandbox/access`, `sandbox/areas`, `ext/approvals`, `ext/e-urzad/office-ezd`, `ext/e-urzad/office-ed`]) {
+    for (const screen of [`agents`, `settings/organisation`, `sandbox/access`, `sandbox/access?section=areas`, `ext/approvals`, `ext/e-urzad/office-ezd`, `ext/e-urzad/office-ed`]) {
         test(`${locale} reflow at 320px: ${screen}`, async ({ page }) => {
             await page.setViewportSize({ width: 320, height: 800 });
             await page.addInitScript((language) => localStorage.setItem(`ui-locale`, language), locale);

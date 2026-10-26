@@ -24,8 +24,9 @@ import { usePersonaReach } from "../access/usePersonaReach";
 import AreasExplainer from "./AreasExplainer.vue";
 import { useAreas } from "./useAreas";
 
-// The named parts of the workspace, and the folders behind each. This is where "who sees what" is decided: the
-// Access tab hands a person an area by name, and this page is the only thing that says what that name means.
+// The named parts of the workspace, and the folders behind each: Access ▸ Areas, beside the profiles that name them. This
+// is where "who sees what" is decided: a person or a profile is handed an area by name, and this part is the only thing
+// that says what that name means.
 // It is also where "who talks to whom" is decided, since an assistant belongs to the area its starting folder is in
 // and anyone holding that area may speak through it — so each row names the assistants it hands over.
 // Owner-only to write, like the roster itself, since editing an area moves everyone holding it at once.
@@ -80,6 +81,8 @@ const quietly = (mutate: () => void): void => {
 const isOpen = (area: Area): boolean => draft.value?.original === area.id;
 const toggleOpen = (area: Area): void => {
     saveError.value = undefined;
+    // Whatever was typed in the last moment is written, not dropped with the drawer.
+    flush();
     if (isOpen(area)) {
         draft.value = undefined;
         return;
@@ -124,11 +127,24 @@ watch(
             return;
         }
         clearTimeout(pending);
-        pending = setTimeout(() => void persist(), WRITE_DELAY_MS);
+        pending = setTimeout(() => {
+            pending = undefined;
+            void persist();
+        }, WRITE_DELAY_MS);
     },
     { deep: true },
 );
-onBeforeUnmount(() => clearTimeout(pending));
+// A write still waiting out its delay goes now: closing the row, opening another, or leaving the tab (Access mounts only
+// the part that is open) would otherwise drop what was typed in the last moment.
+function flush(): void {
+    if (pending === undefined) {
+        return;
+    }
+    clearTimeout(pending);
+    pending = undefined;
+    void persist();
+}
+onBeforeUnmount(flush);
 
 // Writes the whole area (an upsert), reading from the open draft when there is one so a rename can't clobber a folder
 // picked a moment ago. The edit state is the row's own, inside <InlineRename>; this is only where the name goes.
@@ -153,6 +169,7 @@ const submitting = ref(false);
 
 const startAdd = (): void => {
     saveError.value = undefined;
+    flush();
     draft.value = undefined;
     newFolders.value = [];
     newName.value = ``;
@@ -248,7 +265,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
 </script>
 
 <template>
-    <div>
+    <div data-setting="access-areas">
         <Notice v-if="pageNotice" :of="pageNotice" class="mb-4" />
 
         <!-- The empty state must not show before we know whether areas exist; the list's shape stands in while loading,

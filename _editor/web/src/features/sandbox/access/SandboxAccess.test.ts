@@ -1,10 +1,11 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
-// refusal vs silence, must all read differently on screen. The page is four parts drawn as tabs (People, Sign-in,
-// Programs, Allowed); a test about one opens it as a reader would, by its tab.
+// refusal vs silence, must all read differently on screen. The page is parts drawn as tabs (People, Profiles, Areas,
+// Sign-in, Programs, Allowed); a test about one opens it as a reader would, by its tab.
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import "@intentic/testing/dom";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
+import { type OrgPolicyState, OrgPolicyStateSchema, type OrgSectionMode } from "@intentic/sandbox-contract/schemas/organisation";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
@@ -52,6 +53,14 @@ const saveService = jest.fn(async (_service: unknown) => ({ ok: true as const })
 const removeService = jest.fn(async (_id: unknown) => {
     throw new Error(`Used by nightly automation`);
 });
+// Personal unless a test binds it to an organisation that holds Areas, the one part of this page with an org section of its own.
+const orgPolicy = ref<OrgPolicyState>({ bound: false });
+const held = (mode: OrgSectionMode): OrgPolicyState =>
+    OrgPolicyStateSchema.parse({
+        bound: true,
+        receivedAt: `2026-10-26T00:00:00.000Z`,
+        policy: { orgId: `acme`, orgName: `Acme`, version: 1, sections: { areas: mode } },
+    });
 const doorReads = {
     automations: jest.fn(async (): Promise<Answer<`automations`, `list`>> => unread()),
     workflows: jest.fn(async (): Promise<Answer<`workflows`, `list`>> => unread()),
@@ -89,6 +98,7 @@ jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
         capabilities: { list: () => connected.capabilities() },
         secrets: { inventory: () => connected.inventory() },
         extensions: { list: async () => ({ extensions: [], invalid: [], pending: [] }) },
+        org: { policy: async () => orgPolicy.value },
     }),
 }));
 
@@ -119,8 +129,15 @@ const areas = ref([
     { id: `support`, label: `Support guest`, folders: [`support`] },
     { id: `finance`, label: `Finance`, folders: [`finance`] },
 ]);
+const idle = { mutateAsync: async () => ({ ok: true }), isPending: ref(false) };
 jest.mock(`../areas/useAreas`, () => ({
-    useAreas: () => ({ areas, labelOf: (id: string) => areas.value.find((area) => area.id === id)?.label ?? id }),
+    useAreas: () => ({
+        areas,
+        labelOf: (id: string) => areas.value.find((area) => area.id === id)?.label ?? id,
+        loaded: computed(() => ({ state: `ready`, data: areas.value, refreshing: false, refreshError: undefined })),
+        save: idle,
+        remove: idle,
+    }),
 }));
 jest.mock(`../../../workbench/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
@@ -257,6 +274,7 @@ afterEach(() => {
         read.mockImplementation(unread);
     }
     role.value = `owner`;
+    orgPolicy.value = { bound: false };
     // Nothing advertised reads as every route answered: today's daemon.
     setDaemonRoutes(undefined);
     create.mockReset();
@@ -693,7 +711,7 @@ it(`gives a maintainer the token, sign-out and door surfaces, and keeps the rost
     mount();
     await settle();
 
-    expect(pageTabs()).toEqual([`People`, `Profiles`, `Sign-in`, `Programs`, `Allowed`]);
+    expect(pageTabs()).toEqual([`People`, `Profiles`, `Areas`, `Sign-in`, `Programs`, `Allowed`]);
     expect(list).not.toHaveBeenCalled();
     expect(document.body.querySelector(`input[type=email]`)).toBeNull();
     expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
@@ -851,7 +869,7 @@ it(`changes a person's email sign-in with the rest of their access kept, at the 
 it(`opens on People, and keeps the part it was switched to in the address`, async () => {
     mount();
     await settle();
-    expect(pageTabs()).toEqual([`People`, `Profiles`, `Sign-in`, `Programs`, `Allowed`]);
+    expect(pageTabs()).toEqual([`People`, `Profiles`, `Areas`, `Sign-in`, `Programs`, `Allowed`]);
     expect(shown()).toContain(`Add person`);
     expect(shown()).not.toContain(`Passkeys`);
 
@@ -909,12 +927,39 @@ it(`counts what stands on the Allowed tab, so it is seen from any part`, async (
 });
 
 
+// Areas was a hub row until 2026-10-26, and an organisation still holds it as a section of its own: hidden, it leaves the
+// tabs; locked, it reads under the organisation's notice. A sandbox's old address for it lands on the part.
+it(`draws Areas as a part, and lets an organisation hide or lock it`, async () => {
+    mount();
+    await openPart(`Areas`);
+    expect(router?.currentRoute.value.query[`section`]).toBe(`areas`);
+    await waitFor(() => expect(shown()).toContain(`Finance`));
+    expect(shown()).toContain(`New area`);
+    expect(shown()).not.toContain(`manages this part`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    // The policy is a cached read; a fresh mount reads it again only once the cache is gone.
+    queryClient.clear();
+    orgPolicy.value = held(`locked`);
+    await mountAt(`/?section=areas`);
+    await waitFor(() => expect(shown()).toContain(`Acme manages this part`));
+    expect(shown()).toContain(`Finance`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    queryClient.clear();
+    orgPolicy.value = held(`hidden`);
+    mount();
+    await waitFor(() => expect(pageTabs()).toEqual([`People`, `Profiles`, `Sign-in`, `Programs`, `Allowed`]));
+});
+
 it(`hides profiles and services on older daemons`, async () => {
     // A daemon from before access profiles advertises every route but theirs.
     setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`accessProfiles.`) && !name.startsWith(`services.`)));
     mount();
     await settle();
-    expect(pageTabs()).toEqual([`People`, `Sign-in`, `Programs`, `Allowed`]);
+    expect(pageTabs()).toEqual([`People`, `Areas`, `Sign-in`, `Programs`, `Allowed`]);
     await openPart(`Programs`);
     expect(shown()).not.toContain(`New service`);
     expect(shown()).not.toContain(`Runs as`);

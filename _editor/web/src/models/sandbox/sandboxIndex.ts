@@ -22,7 +22,6 @@ export const sandboxPageTerms = () =>
         secrets: t(`sandbox.search.pages.secrets`),
         extensions: t(`sandbox.search.pages.extensions`),
         access: t(`sandbox.search.pages.access`),
-        areas: t(`sandbox.search.pages.areas`),
         personas: t(`sandbox.search.pages.personas`),
         map: t(`sandbox.search.pages.map`),
         "data-protection": t(`sandbox.search.pages.dataProtection`),
@@ -352,15 +351,25 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [t(`sandbox.keyrings.pair`), t(`sandbox.search.secretsKeyrings`)],
     },
 
-    // Access: who may come in and what they are told (People, the page's default part, which writes no param), how they
-    // prove it (Sign-in), and what programs and other sandboxes hold (Programs). A member sees People and Passkeys; the
-    // rest is a maintainer's. Allowed has no card: it is a list, found by the page's own words.
+    // Access: who may come in and what they are told (People, the page's default part, which writes no param), the named
+    // folders a grant is drawn in (Areas), how they prove it (Sign-in), and what programs and other sandboxes hold
+    // (Programs). A member sees People and Passkeys; the rest is a maintainer's. Allowed has no card: it is a list, found by
+    // the page's own words. Areas is a list too, but one that was a page of its own until 2026-10-26, found by its name.
     {
         id: `access-people`,
         slug: `access`,
         partLabel: () => t(`sandbox.sandboxAccess.partPeople`),
         title: () => t(`sandbox.sandboxAccess.people`),
         terms: () => [t(`sandbox.sandboxAccess.addPerson`), t(`sandbox.search.accessPeople`)],
+    },
+    {
+        id: `access-areas`,
+        slug: `access`,
+        part: `areas`,
+        partLabel: () => t(`sandbox.words.areas`),
+        title: () => t(`sandbox.sandboxAreas.areas`),
+        terms: () => [t(`sandbox.sandboxAreas.newArea`), t(`sandbox.search.accessAreas`)],
+        shown: (reader) => reader.canShip,
     },
     {
         id: `access-ai-notice`,

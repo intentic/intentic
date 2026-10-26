@@ -142,6 +142,24 @@ it(`writes an open area as it changes, with no Save button anywhere`, async () =
     expect(save.mock.calls[0]![0].folders).toEqual([`web/support`, `docs`]);
 });
 
+// The write waits a moment to gather one decision, and closing the row or leaving the page inside that moment sends it
+// rather than dropping it: Access mounts only the part that is open, so a tab switch is an unmount.
+it(`sends what was typed a moment ago when the row closes or the page goes`, async () => {
+    const el = mount();
+    await openRow(el, `Support desk`);
+    await type(el.querySelector<HTMLInputElement>(`input[id="area-brief-support"]`)!, `Tickets and replies`);
+    await openRow(el, `Support desk`);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]![0].brief).toBe(`Tickets and replies`);
+
+    await openRow(el, `Support desk`);
+    await type(el.querySelector<HTMLInputElement>(`input[id="area-brief-support"]`)!, `The help centre`);
+    app?.unmount();
+    app = undefined;
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]![0].brief).toBe(`The help centre`);
+});
+
 it(`holds the write while an area holds no folder, and says what it is waiting for`, async () => {
     const el = mount();
     await openRow(el, `Support desk`);

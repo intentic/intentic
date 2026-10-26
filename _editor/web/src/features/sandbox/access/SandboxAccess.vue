@@ -7,6 +7,9 @@ import { useRole } from "../../../client/sandbox/useRole";
 import { ACCESS_PARTS, type AccessPart, LINKED_SANDBOXES_ANCHOR, MEMBER_ACCESS_PARTS } from "../../../models/sandbox/sandboxNav";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import AccessProfiles from "./parts/AccessProfiles.vue";
+import OrgHeldSection from "../../organisations/OrgHeldSection.vue";
+import { useOrgPolicy } from "../../organisations/useOrgPolicy";
+import SandboxAreas from "../areas/SandboxAreas.vue";
 import AccessAllowed from "./parts/AccessAllowed.vue";
 import AccessPeople from "./parts/AccessPeople.vue";
 import AccessPrograms from "./parts/AccessPrograms.vue";
@@ -14,11 +17,12 @@ import AccessSignIn from "./parts/AccessSignIn.vue";
 import { useWaitingLinkTasks } from "../../../models/sandbox/useInboundLinks";
 import { useStandingGrants } from "./useStandingGrants";
 
-// ACCESS: everything about getting into this sandbox, in four parts drawn as tabs, underlined as Agent's and Activity's
-// are: who may come in (People), how they prove it (Sign-in), what reaches the box with nobody signing in (Programs), and
-// what conversations were allowed past their fences (Allowed). Until 2026-10-19 these were ten groups on one page, read
-// top to bottom: an owner come to mint a token scrolled past the roster, the AI notice and every passkey, and a standing
-// "allow everything" sat at the very foot, under the people who happened to be online.
+// ACCESS: everything about getting into this sandbox, in parts drawn as tabs, underlined as Agent's and Activity's are:
+// who may come in (People), the reach they can be handed whole (Profiles), the named folders that reach is drawn in
+// (Areas), how they prove it (Sign-in), what reaches the box with nobody signing in (Programs), and what conversations
+// were allowed past their fences (Allowed). Until 2026-10-19 these were ten groups on one page, read top to bottom: an
+// owner come to mint a token scrolled past the roster, the AI notice and every passkey, and a standing "allow everything"
+// sat at the very foot, under the people who happened to be online.
 //
 // The part lives in the query, so a link lands on it (sandboxNav.ts `accessPath`, a search answer's `?section=`); People,
 // the first, writes no param. A member below maintainer is drawn their own card and their own passkeys, the two parts the
@@ -33,8 +37,18 @@ const t = useT();
 const route = useRoute();
 const router = useRouter();
 const { canShip } = useRole();
+// Areas is an organisation section of its own (sandbox-contract schemas/organisation.ts), from when it was a hub row: a
+// hidden one leaves the tabs, a locked one is drawn read-only under its own notice, as Activity's parts held by another
+// section are.
+const { modeOf } = useOrgPolicy();
 
-const parts = computed<readonly AccessPart[]>(() => (canShip.value ? ACCESS_PARTS.filter((part) => part !== `profiles` || supportsRoute(`accessProfiles.list`)) : MEMBER_ACCESS_PARTS));
+const parts = computed<readonly AccessPart[]>(() =>
+    canShip.value
+        ? ACCESS_PARTS.filter(
+              (part) => (part !== `profiles` || supportsRoute(`accessProfiles.list`)) && (part !== `areas` || modeOf(`areas`) !== `hidden`),
+          )
+        : MEMBER_ACCESS_PARTS,
+);
 const first = computed<AccessPart>(() => parts.value[0] ?? `people`);
 
 // Two parts carry a count, so what waits on them is seen from whichever part the reader came for: Programs the tasks a
@@ -46,6 +60,7 @@ const COUNTS = computed<Partial<Record<AccessPart, number>>>(() => ({ programs: 
 
 const LABELS = computed<Record<AccessPart, string>>(() => ({
     profiles: t(`sandbox.accessProfiles.title`),
+    areas: t(`sandbox.words.areas`),
     people: t(`sandbox.sandboxAccess.partPeople`),
     "sign-in": t(`sandbox.sandboxAccess.partSignIn`),
     programs: t(`sandbox.sandboxAccess.partPrograms`),
@@ -74,6 +89,7 @@ const part = computed<AccessPart>({
 
         <AccessPeople v-if="part === `people`" :open="open" />
         <AccessProfiles v-else-if="part === `profiles`" />
+        <OrgHeldSection v-else-if="part === `areas`" slug="areas"><SandboxAreas /></OrgHeldSection>
         <AccessSignIn v-else-if="part === `sign-in`" />
         <AccessPrograms v-else-if="part === `programs`" />
         <AccessAllowed v-else />

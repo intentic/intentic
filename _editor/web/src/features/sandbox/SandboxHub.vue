@@ -18,7 +18,6 @@ const SandboxEnvironment = lazySection(`SandboxEnvironment`, () => import("./env
 const SandboxMap = lazySection(`SandboxMap`, () => import("./map/SandboxMap.vue"));
 const SandboxAccess = lazySection(`SandboxAccess`, () => import("./access/SandboxAccess.vue"));
 const SandboxPersonas = lazySection(`SandboxPersonas`, () => import("./personas/SandboxPersonas.vue"));
-const SandboxAreas = lazySection(`SandboxAreas`, () => import("./areas/SandboxAreas.vue"));
 const SandboxModels = lazySection(`SandboxModels`, () => import("./models/SandboxModels.vue"));
 const SandboxAgent = lazySection(`SandboxAgent`, () => import("./overview/SandboxAgent.vue"));
 const SandboxExtensions = lazySection(`SandboxExtensions`, () => import("./extensions/SandboxExtensions.vue"));
@@ -37,7 +36,6 @@ const SECTIONS = new Map<string, Component>([
     [`map`, SandboxMap],
     [`access`, SandboxAccess],
     [`personas`, SandboxPersonas],
-    [`areas`, SandboxAreas],
     [`models`, SandboxModels],
     [`agent`, SandboxAgent],
     [`extensions`, SandboxExtensions],
@@ -260,7 +258,6 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
                 <SandboxMap v-else-if="slug === `map`" :models="sources" />
                 <SandboxAccess v-else-if="slug === `access`" :open="openPersona" />
                 <SandboxPersonas v-else-if="slug === `personas`" :open="openPersona" />
-                <SandboxAreas v-else-if="slug === `areas`" />
                 <SandboxModels v-else-if="slug === `models`" />
                 <SandboxAgent v-else-if="slug === `agent`" />
                 <SandboxExtensions v-else-if="slug === `extensions`" />
