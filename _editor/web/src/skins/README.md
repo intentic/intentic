@@ -34,7 +34,9 @@ flowchart LR
   utility keep a plain colour, so their hover still shows. Separation comes from tone, not drawn rules. The accent
   ramp is near-colourless silver, and the loud button is a polished plate. Over a wallpaper, the board's cards are
   true `backdrop-filter` glass. Their hover fades a wash in over the fill instead of swapping the fill, which made
-  the card flash clear.
+  the card flash clear. The valley wallpaper has its own Silver cut, `valley-silver-*.avif`, with the sky's glow
+  toned down (`wallpaper:art` makes it too). With the full glow, the left of the board sat bright against the rail
+  and the rail read as near-black.
 - A new skin needs its name in `Skin` and `SKINS`, a stylesheet scoped to its attribute, its name in the
   pre-paint scripts (`index.html`, `_site/demo/index.html`, the desktop app's `local.html` and `sandbox.html`),
   a place on the theme row, and a spelling in the desktop app's `Look` and the Android app's `Looks`.

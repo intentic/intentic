@@ -17,6 +17,11 @@
     [data-wallpaper="valley"][data-mode="dark"] {
         --wallpaper-art: url("/assets/wallpaper/valley-dark-1600.avif");
     }
+    /* Silver wears its own cut of the valley, the sky's glow pulled down (wallpaper-art.mjs `CUTS`): beside that glow
+       the rail's grey glass read as near-black. */
+    [data-wallpaper="valley"][data-skin="silver"][data-mode="dark"] {
+        --wallpaper-art: url("/assets/wallpaper/valley-silver-1600.avif");
+    }
     @media (max-width: 40rem) and (max-resolution: 1.5dppx) {
         [data-wallpaper="mist"] {
             --wallpaper-art: url("/assets/wallpaper/mist-light-900.avif");
@@ -29,6 +34,9 @@
         }
         [data-wallpaper="valley"][data-mode="dark"] {
             --wallpaper-art: url("/assets/wallpaper/valley-dark-900.avif");
+        }
+        [data-wallpaper="valley"][data-skin="silver"][data-mode="dark"] {
+            --wallpaper-art: url("/assets/wallpaper/valley-silver-900.avif");
         }
     }
 
