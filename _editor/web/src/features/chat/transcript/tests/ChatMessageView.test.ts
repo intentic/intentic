@@ -44,6 +44,9 @@ const pane = {
     queued: [] as { readonly id: string; readonly text: string }[],
     // When the account the conversation is on reopens, in epoch seconds, while it reads spent (ConversationView).
     spentReopensAt: undefined as number | undefined,
+    // Whether several people have typed here (ConversationView.severalPeople), and the signed-in one.
+    severalPeople: false,
+    self: { email: `owner@example.com`, name: `Owner` } as { email: string; name?: string } | undefined,
 };
 // Why what waits is held, if it is: a held queue's row is said by the held message's own line instead.
 interface QueueHold {
@@ -113,6 +116,11 @@ jest.mock("@intentic/ui", async () => {
         formatElapsed,
         timeAgo,
         useDevice: () => ({ mobile: vue.ref(false) }),
+        // A face that says whose it is; the kit's own picture-or-initials ladder has its own suite.
+        Avatar: vue.defineComponent({
+            props: { name: { type: String, default: undefined } },
+            setup: (props) => () => vue.h(`span`, { role: `img`, "aria-label": props.name }),
+        }),
         // Real `<button>` with attrs passthrough, since card answers are asserted by click; the kit's own press-lock
         // has its own suite.
         Button: vue.defineComponent({
@@ -240,6 +248,8 @@ jest.mock("../../../../models/conversations/panel/useChat-view", () => {
             lastFailure: computed(() => undefined),
             spentReopensAt: computed(() => pane.spentReopensAt),
             servingState: computed(() => undefined),
+            self: computed(() => pane.self),
+            severalPeople: computed(() => pane.severalPeople),
         }),
         // The question card injects the pane's view by this key; nothing provides it here, so it reads none.
         PANE_VIEW: Symbol.for(`intentic.chat-pane-view`),
@@ -326,6 +336,7 @@ beforeEach(() => {
     resendKept.mockClear();
     scheduleContinue.mockClear();
     pane.spentReopensAt = undefined;
+    pane.severalPeople = false;
     reply.mockClear();
     beginEdit.mockClear();
     resizers.length = 0;
@@ -1137,6 +1148,27 @@ describe(`ChatMessageView sent time`, () => {
 
     it(`draws nothing for a message with no stamp`, () => {
         expect(mount({ id: 7, role: `user`, text: `fix the bug` }).querySelector(`.group-hover\\:opacity-100`)).toBeNull();
+    });
+});
+
+// A prompt wears its author's face only once more than one person has typed into the chat (promptAuthor.ts).
+describe(`ChatMessageView prompt author`, () => {
+    const ann: ChatMessage = { id: 30, role: `user`, text: `ship it`, speaker: { kind: `person`, email: `ann@example.com`, name: `Ann Lee` } };
+
+    it(`draws no face in a chat only one person speaks in`, () => {
+        expect(mount(ann).querySelector(`[aria-label="Ann Lee"]`)).toBeNull();
+    });
+
+    it(`names who typed each prompt once several people speak`, () => {
+        pane.severalPeople = true;
+        expect(mount(ann).querySelector(`[aria-label="Ann Lee"]`)).not.toBeNull();
+    });
+
+    it(`gives the bubble this window drew the signed-in person's face, and the agent's words none`, () => {
+        pane.severalPeople = true;
+        expect(mount({ id: 31, role: `user`, text: `on it`, local: true }).querySelector(`[aria-label="Owner"]`)).not.toBeNull();
+        app?.unmount();
+        expect(mount({ id: 32, role: `assistant`, text: `done` }).querySelector(`[role="img"]`)).toBeNull();
     });
 });
 

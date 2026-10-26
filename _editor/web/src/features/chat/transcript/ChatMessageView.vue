@@ -49,6 +49,7 @@ import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
 import { isMemoryHold } from "./held/heldQueue";
 import { noticeFailure, noticeLine } from "../../../models/conversations/transcript/sandboxNotice";
 import { useAudience } from "../../../app/useAudience";
+import ChatPromptAuthor from "./ChatPromptAuthor.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card answers go through the pane's
@@ -500,6 +501,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                     </button>
                 </div>
+                <!-- Who typed it, once more than one person speaks here. -->
+                <ChatPromptAuthor :message="message" />
             </div>
             <!-- Words the sandbox has not taken yet (ChatMessage.unsent): said under them, with what a person can do about it. -->
             <ChatUnsentLine v-if="message.unsent" :message-id="message.messageId" />

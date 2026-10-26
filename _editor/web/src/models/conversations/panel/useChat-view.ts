@@ -23,6 +23,8 @@ import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
 import { waitKindOf } from "./pendingDecision";
 import { bookedGroups, holdOfQueue, unbookedOf, withoutMessage } from "../drafts/bookings";
+import { type PromptAuthor, severalPeopleIn } from "../transcript/promptAuthor";
+import { useAuth } from "../../../client/auth/useAuth";
 
 // The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
 // the fleet store; a view handed none reads only what its own window saw.
@@ -76,11 +78,29 @@ const queueReadings = (conversation: ComputedRef<Conversation>) => ({
     bookedGroups: computed(() => bookedGroups(shownQueue(conversation.value))),
 });
 
+// The signed-in person, as a prompt names its author (promptAuthor.ts); undefined with nobody signed in.
+const { user } = useAuth();
+const selfAuthor = computed<PromptAuthor | undefined>(() => {
+    if (user.value === null) {
+        return undefined;
+    }
+    const { email, name } = user.value;
+    return name ? { email, name } : { email };
+});
+
+// The signed-in person, and whether more than one person has typed here: each prompt then wears its author's face.
+// One scan per pane, a boolean, so a streamed frame that adds no prompt wakes no bubble.
+const authorsView = (conversation: ComputedRef<Conversation>) => ({
+    self: selfAuthor,
+    severalPeople: computed(() => severalPeopleIn(conversation.value.transcript.messages.value, selfAuthor.value)),
+});
+
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
 // `active`, since the floating window shows several conversations at once.
 export const conversationView = (conversation: ComputedRef<Conversation>, cardOf?: CardOf) => ({
     conversation,
     messages: computed(() => conversation.value.transcript.messages.value),
+    ...authorsView(conversation),
     streaming: computed(() => conversation.value.turn.streaming.value),
     ...endingView(conversation, cardOf),
     // This chat's slash commands: its own turns' list if any, else the provider's last known list.
