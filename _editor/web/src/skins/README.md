@@ -25,10 +25,14 @@ flowchart LR
   300 as the bright gold, so every selection, tab, check, toggle, focus ring and the Send button share that one
   metal (the rule is "One signal colour" in [../../../ui/README.md](../../../ui/README.md)). The colour picked in
   Appearance still tints the stone through the neutral ramp, and its row says so while Sanctum is on.
-- Silver is cool slate and frosted glass: a slate surface ramp with a sixth of the picked colour stirred in (so
-  the Appearance colour still tints it, and its row says so), hairline light for edges instead of drawn rules,
-  frosted overlays, and a silver accent ramp with a polished-silver loud button. Over a wallpaper the board's
-  cards turn to glass and the picture is veiled less than under the other looks.
+- Silver is smoked glass in a misty room, in neutral greys. The room is `valley-ground.avif`, the valley blurred past
+  recognition (`wallpaper:art` makes it). The canvas, the panes and the raised surfaces (composer, dialogs, menus)
+  each paint that same ground, fixed to the window, under a veil of their own weight. So a pane shows the room's
+  light through it, yet stays opaque and never stacks darker when nested. Elements that also carry a `hover:bg-*`
+  utility keep a plain colour, so their hover still shows. Separation comes from tone, not drawn rules. The accent
+  ramp is near-colourless silver, and the loud button is a polished plate. Over a wallpaper, the board's cards are
+  true `backdrop-filter` glass. Their hover fades a wash in over the fill instead of swapping the fill, which made
+  the card flash clear.
 - A new skin needs its name in `Skin` and `SKINS`, a stylesheet scoped to its attribute, its name in the
   pre-paint scripts (`index.html`, `_site/demo/index.html`, the desktop app's `local.html` and `sandbox.html`),
   a place on the theme row, and a spelling in the desktop app's `Look` and the Android app's `Looks`.
@@ -44,7 +48,7 @@ canvas band and stop pinning, since a pinned header with nothing behind it would
 
 - A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;
   `pnpm --filter @intentic/web wallpaper:art` encodes every master into the AVIF rungs under
-  `public/assets/wallpaper/`, which are committed.
+  `public/assets/wallpaper/`, which are committed, plus the blurred grounds its `GROUNDS` list names.
 - Picking the Silver look in Appearance also puts on `valley`, the misty valley it was drawn over, unless
   wallpapers are off; the wallpaper row can change it straight back.
 - A new wallpaper needs its masters, its name in `WALLPAPERS`, its `--wallpaper-art` rules in `wallpapers.css` and

@@ -9,6 +9,10 @@ const here = import.meta.dirname;
 const MASTERS = join(here, `../src/assets/wallpaper`);
 const OUT_DIR = join(here, `../public/assets/wallpaper`);
 
+// A GROUND is a master blurred past recognition and half drained of colour: the Silver skin's room (skins/silver.css),
+// which its panes are tinted over. Small on purpose, since the blur leaves nothing a larger rung would add.
+const GROUNDS = new Map([[`valley-dark`, `valley-ground`]]);
+
 // 16:9, which wallpapers.css covers from; the board is never wider than the window, so 1600 is the top rung.
 const RUNGS = [
     { width: 900, quality: 56 },
@@ -28,5 +32,17 @@ for (const master of (await readdir(MASTERS)).filter((file) => file.endsWith(`.p
         const file = join(OUT_DIR, `${name}-${width}.avif`);
         await writeFile(file, buffer);
         console.log(`${file}  ${width}×${height}  ${(buffer.length / 1024).toFixed(1)} KB`);
+    }
+    const ground = GROUNDS.get(name);
+    if (ground !== undefined) {
+        const buffer = await sharp(join(MASTERS, master))
+            .resize(480, 270, { fit: `cover`, position: `centre` })
+            .blur(14)
+            .modulate({ saturation: 0.35 })
+            .avif({ quality: 50, effort: 9, chromaSubsampling: `4:4:4`, bitdepth: 10 })
+            .toBuffer();
+        const file = join(OUT_DIR, `${ground}.avif`);
+        await writeFile(file, buffer);
+        console.log(`${file}  480×270  ${(buffer.length / 1024).toFixed(1)} KB`);
     }
 }
