@@ -1,7 +1,7 @@
 ---
-import { referenceHref } from "@intentic/site-content/reference";
+import { referenceBook, referenceHref } from "@intentic/site-content/reference";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
-import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
 
 const shape = `curl -X POST "$SANDBOX/git/root/commit" \\
   -H "x-intentic-control: $INTENTIC_TOKEN" \\
@@ -22,7 +22,8 @@ const headings = [
 ];
 ---
 
-<ReferenceLayout
+<DocsLayout
+    book={referenceBook}
     pageId="errors"
     heading="When a call fails"
     lead="Every failure comes back as JSON with a message, never as an empty body and never as a stack trace. There are five statuses to know, and one distinction that matters more than all of them."
@@ -96,4 +97,4 @@ const headings = [
         <code>404</code> deserves a second look before you retry it: on an older daemon it may mean the route does not exist yet rather than
         that the thing does not. <a href={referenceHref("calls")}>Old daemon, new client</a> is how to tell those apart.
     </p>
-</ReferenceLayout>
+</DocsLayout>

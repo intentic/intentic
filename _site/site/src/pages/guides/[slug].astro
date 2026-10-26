@@ -4,6 +4,8 @@ import { APP_URL, HOSTED_START_LABEL, githubIssuesUrl } from "@intentic/site-con
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import PageHero from "../../components/content/PageHero.astro";
+import ResponsiveTable from "../../components/content/ResponsiveTable.astro";
 
 /* Each guide renders from one question template. */
 
@@ -30,23 +32,18 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
     <Nav />
     <main class="flex-1">
         <!-- Guide question stays directly above its answer. -->
-        <section class="page-hero">
-            <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14 lg:pb-16">
-                <a href={guidesHref("")} class="eyebrow transition-colors hover:text-link">Guides</a>
-                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{page.question}</h1>
-
-                {/* Flush with the question: its own eyebrow names it the answer, so no rule down its left. */}
-                <div class="mt-7">
-                    <div class="eyebrow text-primary-400">The short answer</div>
-                    <p class="mt-2 max-w-copy text-lg leading-relaxed text-content sm:text-xl">{page.answer}</p>
-                </div>
-
-                <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
-                    <a class="btn btn-secondary" href="/features/">See the product</a>
-                </div>
+        <PageHero heading={page.question} eyebrow="Guides" eyebrowHref={guidesHref("")} class="lg:pb-16">
+            {/* Flush with the question: its own eyebrow names it the answer, so no rule down its left. */}
+            <div class="mt-7">
+                <div class="eyebrow text-primary-400">The short answer</div>
+                <p class="mt-2 max-w-copy text-lg leading-relaxed text-content sm:text-xl">{page.answer}</p>
             </div>
-        </section>
+
+            <div class="mt-8 flex flex-wrap gap-3">
+                <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
+                <a class="btn btn-secondary" href="/features/">See the product</a>
+            </div>
+        </PageHero>
 
         <div class="mx-auto max-w-7xl px-6">
             <!-- Facts must be specific and falsifiable. -->
@@ -67,7 +64,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
             <!-- Each approach includes its limit. -->
             <section class="fade-in border-b band-rule py-14 lg:py-16">
                 <h2 class="text-xl font-semibold tracking-tight text-content">Your options, and where each one stops</h2>
-                <table class="opts mt-7 w-full">
+                <ResponsiveTable class="mt-7 w-full">
                     <thead>
                         <tr>
                             <th scope="col">Approach</th>
@@ -90,7 +87,7 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
                             ))
                         }
                     </tbody>
-                </table>
+                </ResponsiveTable>
             </section>
 
             <!-- Recommendation follows the alternatives. -->
@@ -185,80 +182,6 @@ const faqEntries = page.faq.map((entry) => ({ question: entry.question, answer: 
 
     <Footer />
 
-    <style>
-        /* Options use three columns on desktop and stack on phones. */
-        .opts {
-            border-collapse: collapse;
-        }
 
-        .opts thead th {
-            padding: 0 18px 10px 0;
-            text-align: left;
-            font-size: 0.75rem;
-            font-weight: var(--font-weight-semibold);
-            letter-spacing: 0.03em;
-            text-transform: uppercase;
-            color: var(--color-subtle);
-            border-bottom: 1px solid var(--color-line-strong);
-        }
-
-        .opts tbody th {
-            width: 24%;
-            text-align: left;
-            font-weight: var(--font-weight-medium);
-        }
-
-        .opts tbody td {
-            width: 38%;
-            color: var(--color-muted);
-        }
-
-        .opts tbody th,
-        .opts tbody td {
-            padding: 16px 18px 16px 0;
-            font-size: 0.875rem;
-            line-height: 1.55;
-            vertical-align: top;
-            border-bottom: 1px solid var(--color-line);
-        }
-
-        @media (max-width: 48rem) {
-            .opts thead {
-                display: none;
-            }
-            .opts,
-            .opts tbody,
-            .opts tr,
-            .opts tbody th,
-            .opts tbody td {
-                display: block;
-                width: auto;
-            }
-            .opts tr {
-                border: 1px solid var(--color-line);
-                border-radius: var(--radius-lg);
-                padding: 14px 16px;
-                margin-bottom: 10px;
-            }
-            .opts tbody th {
-                padding: 0 0 10px;
-                border-bottom: 1px solid var(--color-line);
-            }
-            .opts tbody td {
-                padding: 10px 0 0;
-                border-bottom: none;
-            }
-            .opts tbody td::before {
-                content: attr(data-side);
-                display: block;
-                margin-bottom: 2px;
-                font-size: var(--text-2xs);
-                font-weight: var(--font-weight-semibold);
-                letter-spacing: 0.05em;
-                text-transform: uppercase;
-                color: var(--color-subtle);
-            }
-        }
-    </style>
 
 </BaseLayout>

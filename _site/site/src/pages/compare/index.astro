@@ -5,6 +5,7 @@ import BaseLayout from "../../layouts/BaseLayout.astro";
 import ComparisonFaq from "../../components/compare/ComparisonFaq.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import PageHero from "../../components/content/PageHero.astro";
 
 /* The comparison hub resolves the question of how Intentic compares to another tool. */
 
@@ -17,34 +18,13 @@ const pageByName = new Map(comparePages.map((page) => [page.name, page]));
     <Nav />
     <main class="flex-1">
         <!-- Hero + the jump strip: find your tool without reading anything -->
-        <section class="page-hero">
-            <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14">
-                <div class="eyebrow">{compareIndex.eyebrow}</div>
-                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{compareIndex.heading}</h1>
-                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{compareIndex.sub}</p>
-
-                <div class="mt-8 border-t border-line pt-6">
-                    <div class="eyebrow">Find your tool</div>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        {
-                            comparePages.map((page) => (
-                                <a
-                                    href={compareHref(page.slug)}
-                                    class="border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
-                                >
-                                    {page.navLabel}
-                                </a>
-                            ))
-                        }
-                    </div>
-                </div>
-
-                <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Try intentic free</a>
-                    <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
-                </div>
+        <PageHero eyebrow={compareIndex.eyebrow} heading={compareIndex.heading} sub={compareIndex.sub}
+            jumpLinks={{ label: "Find your tool", links: comparePages.map((page) => ({ href: compareHref(page.slug), label: page.navLabel })) }}>
+            <div class="mt-8 flex flex-wrap gap-3">
+                <a class="btn btn-primary" href={APP_URL}>Try intentic free</a>
+                <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
             </div>
-        </section>
+        </PageHero>
 
         <!-- The frame. Two factual axes, not a quadrant: they are the same two the landing page argues. -->
         <section class="border-b band-rule">

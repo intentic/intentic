@@ -1,0 +1,24 @@
+---
+import type { LandingSectionIntro } from "@intentic/site-content/landing";
+
+interface Props {
+    id: string;
+    intro?: LandingSectionIntro;
+}
+
+const { id, intro } = Astro.props;
+---
+
+<section class="band" id={id}>
+    <div class="wall" aria-hidden="true"></div>
+    <div class="shell fade-in">
+        {intro && (
+            <>
+                <div class="eyebrow">{intro.eyebrow}</div>
+                <h2 class="h2 display">{intro.heading}</h2>
+                <p class="lede">{intro.sub}</p>
+            </>
+        )}
+        <slot />
+    </div>
+</section>

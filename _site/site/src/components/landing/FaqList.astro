@@ -1,0 +1,32 @@
+---
+import type { FaqItem } from "@intentic/site-content/faq";
+import Bullet from "../Bullet.astro";
+
+interface Props {
+    items: FaqItem[];
+    groupId: string;
+}
+
+const { items, groupId } = Astro.props;
+---
+
+<div class="faq-list">
+    {items.map((item) => (
+        <details id={item.id} name={groupId} class="faq-item scroll-mt-28">
+            <summary>
+                <Bullet mark="lozenge" markClass="faq-mark" />
+                <span>{item.question}</span>
+            </summary>
+            <div class="faq-answer">
+                {item.answer.map((paragraph) => (
+                    <p>{paragraph}</p>
+                ))}
+                {item.more && (
+                    <a href={item.more.href} class="link">
+                        {item.more.label} →
+                    </a>
+                )}
+            </div>
+        </details>
+    ))}
+</div>

@@ -2,6 +2,7 @@
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import SetupSteps from "../../components/devices/SetupSteps.astro";
 
 /* INTENTIC DEVICE ON WEAR OS: the same app as /phone/, on a watch. Where the Wear OS watch card's install link and its
    QR code's fallback both lead. A watch has no browser and no camera, so the page leads with the two things that are
@@ -45,17 +46,7 @@ const promises = [
                 <span class="text-xs text-subtle">Wear OS 3 or newer · the same .apk as the phone app, signed by intentic</span>
             </div>
 
-            <ol class="mt-12 grid gap-6 sm:grid-cols-3">
-                {
-                    steps.map((step, at) => (
-                        <li class="flex flex-col gap-2">
-                            <span class="text-xs font-semibold text-subtle">Step {at + 1}</span>
-                            <h2 class="text-base font-semibold text-content">{step.title}</h2>
-                            <p class="text-sm text-muted">{step.body}</p>
-                        </li>
-                    ))
-                }
-            </ol>
+            <SetupSteps steps={steps} />
         </section>
 
         <section class="mx-auto max-w-5xl px-6 pb-16">

@@ -1,7 +1,7 @@
 ---
-import { referenceHref } from "@intentic/site-content/reference";
+import { referenceBook, referenceHref } from "@intentic/site-content/reference";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
-import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
 import { groupCounts } from "../../lib/api-reference";
 
 /* The count is COUNTED, not typed. */
@@ -32,7 +32,8 @@ const headings = [
 ];
 ---
 
-<ReferenceLayout
+<DocsLayout
+    book={referenceBook}
     pageId="calls"
     heading="The shape of a call"
     lead="There is no envelope and no versioning scheme. The contract's path is the URL, the body you send is the declared shape, and two conventions cover every route on the site."
@@ -113,4 +114,4 @@ const headings = [
         route the daemon predates surfaces as a named gap instead of a 404 nobody can attribute.
     </p>
     <p>Pin nothing; ask.</p>
-</ReferenceLayout>
+</DocsLayout>

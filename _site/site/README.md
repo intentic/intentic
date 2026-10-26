@@ -13,6 +13,8 @@ flowchart LR
 ```
 
 - Pages are `.astro` files under `src/pages/`; their words, navigation and metadata come from `@intentic/site-content`. `/docs`, `/developers` and `/api` share one layout, sidebar and search index (`src/components/docs/`), and `/api` is generated from `@intentic/sandbox-openapi`.
+- Repeated marketing introductions and jump links use `src/components/content/PageHero.astro`; guide and comparison tables use `content/ResponsiveTable.astro`, which owns their desktop columns and labelled mobile cards. `devices/SetupSteps.astro` and `content/NumberedSteps.astro` own the two instruction-list presentations. Phone and watch pairing routes share `devices/DevicePairing.astro`, including the fragment-only handoff to the Android app.
+- The developer and Desk landing pages share their section frames, tours, economics, trust, FAQ and closing sections under `src/components/landing/`. Each page retains its own copy, hero composition and screenshot playback; `landing/hero-cta.ts` owns the navigation action's visibility behavior.
 - The landing hero opens on a screenshot of the real `/home` view, captured from the demo's `home` recording with three sandboxes, a short conversation and the plan-usage rail. It automatically cycles through the product screenshots while the page is visible. Reduced motion keeps the home view still. Its layout is scoped in `focused-hero.css` so `/desk/` keeps its own composition.
 - `/accessibility/` and `/pl/deklaracja-dostepnosci/` share `src/components/legal/AccessibilityStatement.astro` and are linked
   in the footer. The Polish page sets `lang="pl"`; the statement records the scoped axe review and tells public offices

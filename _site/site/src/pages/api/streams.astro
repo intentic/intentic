@@ -1,8 +1,8 @@
 ---
 import { specGroup } from "@intentic/sandbox-openapi/groups";
-import { referenceHref } from "@intentic/site-content/reference";
+import { referenceBook, referenceHref } from "@intentic/site-content/reference";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
-import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
 import { openApiDocument } from "../../lib/api-reference";
 
 /* THE STREAMING ROUTES, FOUND RATHER THAN LISTED. */
@@ -41,7 +41,8 @@ const headings = [
 ];
 ---
 
-<ReferenceLayout
+<DocsLayout
+    book={referenceBook}
     pageId="streams"
     heading="Streams"
     lead={`${streams.length} routes answer a stream rather than a value: a turn as it happens, the sandbox's own live feed, and the operations that take minutes. They are server-sent events, and reading one takes no library.`}
@@ -106,4 +107,4 @@ const headings = [
         string instead of the credential every other route takes. It is not in this reference for the same reason the byte routes are not:
         it is not a JSON contract and cannot be described as one.
     </p>
-</ReferenceLayout>
+</DocsLayout>

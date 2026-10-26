@@ -1,0 +1,22 @@
+---
+interface Props {
+    steps: { title: string; body?: string }[];
+    class?: string;
+}
+
+const { steps, class: className } = Astro.props;
+---
+
+<ol class:list={["list-none space-y-4 p-0", className]}>
+    {steps.map((step, i) => (
+        <li class="flex gap-4">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary-500/40 text-sm font-semibold text-link">
+                {i + 1}
+            </span>
+            <div>
+                <div class="text-sm font-medium text-content">{step.title}</div>
+                <p class="mt-1 text-sm leading-relaxed text-muted">{step.body ?? <slot name="fallback" />}</p>
+            </div>
+        </li>
+    ))}
+</ol>

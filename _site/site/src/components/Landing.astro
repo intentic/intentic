@@ -1,26 +1,26 @@
 ---
 /* Landing page composition for the Intentic site. */
-import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene } from "@intentic/site-content/temple";
-import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL, githubUrl } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
-// Provider marks match the session icons used by the app.
-import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ProductShot from "./ProductShot.astro";
-import AutomateFigure from "./figures/AutomateFigure.astro";
-import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
-import Divider from "./Divider.astro";
 import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
-import Lotus from "./Lotus.astro";
 import Nav from "./Nav.astro";
-import Point from "./Point.astro";
+import Band from "./landing/Band.astro";
+import Economics from "./landing/Economics.astro";
+import FaqList from "./landing/FaqList.astro";
+import Final from "./landing/Final.astro";
+import Headline from "./landing/Headline.astro";
+import Station from "./landing/Station.astro";
+import Tour from "./landing/Tour.astro";
+import Trust from "./landing/Trust.astro";
+import Workspace from "./landing/Workspace.astro";
 import TempleFigure from "./figures/TempleFigure.astro";
-import TrustCards from "./TrustCards.astro";
 import Window from "./Window.astro";
 import "../styles/home.css";
 import "../styles/focused-hero.css";
@@ -36,16 +36,9 @@ const content = landingContent;
 // FAQPage data stays flat; topic bands belong only to the page layout.
 const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
 
-/* Headline text is split into sentence beats. */
-const beats = content.hero.headlineLines
-    .flatMap((line) => line.split(/(?<=\.)\s+/u))
-    .map((beat) => beat.replace(/\.\s*$/u, ""))
-    .filter((beat) => beat.length > 0);
 
 const appSizes = "(min-width: 78rem) 959px, (min-width: 48rem) calc(81vw - 3.24rem), calc(100vw - 3rem)";
 
-/* Stage screenshots size from the shell and viewport bleed. */
-const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), calc(275vw - 11rem)";
 
 /* Getting started: the app is the primary path, the command and the hosted workspace are its labelled alternatives. */
 const { steps: appSteps, alternatives } = content.connect;
@@ -73,20 +66,7 @@ const { steps: appSteps, alternatives } = content.connect;
 
                 <div class="hero-grid">
                     <div class="hero-copy">
-                        {/* Beat spans need spaces for assistive text and crawlers. */}
-                        <h1 class="headline">
-                            {
-                                beats.map((beat, index) => (
-                                    <>
-                                        <span class="headline-line">
-                                            <span class="display">{beat}</span>
-                                            <span class="stop">.</span>
-                                        </span>
-                                        {index < beats.length - 1 && " "}
-                                    </>
-                                ))
-                            }
-                        </h1>
+                        <Headline lines={content.hero.headlineLines} />
 
                         <p class="hero-sub">{content.hero.subhead}</p>
 
@@ -156,326 +136,90 @@ const { steps: appSteps, alternatives } = content.connect;
             </section>
 
             <!-- Rows render as one screenful per showcase stage. -->
-            <section class="band" id="verbs">
-                <div class="wall" aria-hidden="true"></div>
-
-                <div class="shell verbs-open fade-in">
-                    <div class="eyebrow">{content.verbs.eyebrow}</div>
-                    {content.verbs.heading !== undefined && <h2 class="h2 display">{content.verbs.heading}</h2>}
-                </div>
-
-                {
-                    content.verbs.items.map((item) => {
-                        return (
-                            <div class="stage fade-in">
-                                <div class="stage-head">
-                                    <h3 class="stage-verb">
-                                        <Bullet size="md" />
-                                        {item.label}
-                                    </h3>
-                                    <p class="stage-line">{item.line}</p>
-                                    <a href={item.href} class="link see">See it<span class="sr-only">: {item.label}</span> →</a>
-                                </div>
-
-                                {item.shot !== undefined && (
-/* Each showcase frame gets its own finial. */
-                                    <Window class="stage-frame" finial label={item.shot.label}>
-                                        <div class="stage-crop">
-                                            <ProductShot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
-                                        </div>
-                                    </Window>
-                                )}
-
-                                {item.figure === "automate" && (
-/* Automate uses its machine figure instead of a screenshot. */
-                                    <div class="card stage-machine">
-                                        <Corners />
-                                        <AutomateFigure />
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })
-                }
-
-                <div class="shell verbs-close">
-                    <a href="/features/" class="link band-cta">{content.verbs.cta} →</a>
-                </div>
-            </section>
+            <Tour content={content.verbs} />
 
             <!-- Compare the two working environments side by side. -->
-            <section class="band" id="workspace">
-                <div class="wall" aria-hidden="true"></div>
-                <div class="shell fade-in">
-                    <div class="eyebrow">{content.workspace.eyebrow}</div>
-                    <h2 class="h2 display">{content.workspace.heading}</h2>
-                    <p class="lede">{content.workspace.sub}</p>
-
-                    <div class="compare">
-                        <div class="card compare-ours">
-                            <Corners />
-                            <div class="compare-head">
-                                <h3>{content.workspace.comparison.ours.label}</h3>
-                                <span>{content.workspace.comparison.ours.note}</span>
-                            </div>
-                            <ul>
-                                {
-                                    content.workspace.comparison.ours.items.map((item) => <Point>{item}</Point>)
-                                }
-                            </ul>
-                        </div>
-
-                        <div class="compare-chat">
-                            <div class="compare-head">
-                                <h3>{content.workspace.comparison.chat.label}</h3>
-                                <span>{content.workspace.comparison.chat.note}</span>
-                            </div>
-                            <ul>
-                                {
-                                    content.workspace.comparison.chat.items.map((item) => (
-                                        <Point mark="lozenge" markClass="lozenge-quiet">
-                                            {item}
-                                        </Point>
-                                    ))
-                                }
-                            </ul>
-                            <p class="compare-missing">{content.workspace.comparison.chat.missing}</p>
-                        </div>
-                    </div>
-
-                    <div class="compare-foot">
-                        <p>{content.workspace.comparison.footnote}</p>
-                        <a href="/features/review/" class="link">How reviewing agent work works →</a>
-                    </div>
-                </div>
-            </section>
+            <Workspace content={content.workspace} />
 
             <!-- Explain the cost model. -->
-            <section class="band" id="economics">
-                <div class="wall" aria-hidden="true"></div>
-                <div class="shell fade-in">
-                    <div class="eyebrow">{content.economics.eyebrow}</div>
-                    <h2 class="h2 display">{content.economics.heading}</h2>
-                    <p class="lede">{content.economics.sub}</p>
-
-                    <div class="econ">
-                        <div class="card accounts">
-                            <Corners set="diag" />
-                            <div class="accounts-head"><span class="eyebrow">Your agent accounts</span></div>
-                            <ul>
-                                {
-                                    content.economics.accounts.map((account) => (
-                                        <li>
-                                            <Bullet>
-                                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                                                    <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
-                                                </svg>
-                                            </Bullet>
-                                            <span class="account-name">{account.name}</span>
-                                            <span class="account-detail">{account.detail}</span>
-                                            <span class="account-tag">subscription</span>
-                                        </li>
-                                    ))
-                                }
-                            </ul>
-                        </div>
-
-                        <div class="card flat">
-                            <Corners set="diag" />
-                            <div class="eyebrow">Flat, not metered</div>
-                            <ul>
-                                {
-                                    content.economics.points.map((point) => <Point>{point}</Point>)
-                                }
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <Economics content={content.economics} accountsLabel="Your agent accounts" flatLabel="Flat, not metered" />
 
             <!-- Identify who builds it. -->
-            <section class="band" id="trust">
-                <div class="wall" aria-hidden="true"></div>
-                <div class="shell fade-in">
-                    <div class="trust">
-                        <div>
-                            <div class="eyebrow">{content.trust.eyebrow}</div>
-                            <h2 class="h2 display">{CREATOR_NAME}</h2>
-                            <p class="lede">{creatorRole}</p>
-                            <p class="trust-bio">{creatorBio}</p>
-                            <a href="/about/" class="link band-cta">{content.trust.cta} →</a>
-                        </div>
-
-                        {/* Trust claims share the about module and build-time commit count. */}
-                        <TrustCards />
-                    </div>
-                </div>
-            </section>
+            <Trust />
 
             <!-- Show how to get started. -->
-            <section class="band" id="connect">
-                <div class="wall" aria-hidden="true"></div>
-                <div class="shell fade-in">
-                    <div class="eyebrow">{content.connect.eyebrow}</div>
-                    <h2 class="h2 display">{content.connect.heading}</h2>
-                    <p class="lede">{content.connect.sub}</p>
-
-                    {/* Same sequence as /download/: install, sign in, Run on this computer. Alternatives sit in their own labelled zone. */}
-                    <div class="flow">
-                        <div class="flow-zone">
-                            <div class="flow-where">With the app</div>
-                            {
-                                appSteps.map((step) => (
-                                    <div class="station">
-                                        <h3>
-                                            <Bullet />
-                                            {step.title}
-                                        </h3>
-                                        <p>{step.body}</p>
-                                    </div>
-                                ))
-                            }
-                            <p class="mt-6">
-                                <DownloadCta primary class="btn-sm" label={content.connect.appCta} icon={false} />
-                            </p>
-                        </div>
-
-                        <div class="flow-seam" aria-hidden="true"></div>
-
-                        <div class="flow-zone">
-                            <div class="flow-where">{alternatives.heading}</div>
-                            <div class="station">
-                                <h3>
-                                    <Bullet />
-                                    {alternatives.command.title}
-                                </h3>
-                                <p>{alternatives.command.body}</p>
-                            </div>
-
-                            <div class="frame command">
-                                <Corners />
-                                <div class="command-head"><span class="command-where">your terminal</span></div>
-                                <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
-                            </div>
-                            <p class="command-note">{alternatives.command.note}</p>
-                            <p class="command-note">
-                                {alternatives.command.compare.lead}{" "}
-                                <a href="/where-it-runs/" class="text-link hover:underline">{alternatives.command.compare.cta}</a>
-                            </p>
-
-                            <div class="station mt-8">
-                                <h3>
-                                    <Bullet />
-                                    {alternatives.hosted.title}
-                                </h3>
-                                <p>{alternatives.hosted.body}</p>
-                                <p class="mt-3">
-                                    <a class="btn btn-secondary btn-sm" href={APP_URL}>{HOSTED_START_LABEL}</a>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- FAQ uses native details for keyboard and screen-reader behavior. -->
-            <section class="band" id="faq">
-                <div class="wall" aria-hidden="true"></div>
-                <div class="shell fade-in">
-                    <div class="eyebrow">FAQ</div>
-                    <h2 class="h2 display">Before you install it.</h2>
-                    <p class="lede">What it costs, where your code sits, and what is not built yet.</p>
-
-                    <div class="faq">
+            <Band id="connect" intro={content.connect}>
+                {/* Same sequence as /download/: install, sign in, Run on this computer. Alternatives sit in their own labelled zone. */}
+                <div class="flow">
+                    <div class="flow-zone">
+                        <div class="flow-where">With the app</div>
                         {
-                            faqGroups.map((group) => (
-                                <div class="faq-group" id={group.id}>
-                                    <div class="faq-group-head">
-                                        <h3>{group.label}</h3>
-                                        <p>{group.blurb}</p>
-                                    </div>
-                                    <div class="faq-list">
-                                        {group.items.map((item) => (
-                                            <details id={item.id} name={group.id} class="faq-item scroll-mt-28">
-                                                <summary>
-                                                    <Bullet mark="lozenge" markClass="faq-mark" />
-                                                    <span>{item.question}</span>
-                                                </summary>
-                                                <div class="faq-answer">
-                                                    {item.answer.map((paragraph) => (
-                                                        <p>{paragraph}</p>
-                                                    ))}
-                                                    {item.more && (
-                                                        <a href={item.more.href} class="link">
-                                                            {item.more.label} →
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            </details>
-                                        ))}
-                                    </div>
-                                </div>
+                            appSteps.map((step) => (
+                                <Station step={step} />
                             ))
                         }
+                        <p class="mt-6">
+                            <DownloadCta primary class="btn-sm" label={content.connect.appCta} icon={false} />
+                        </p>
+                    </div>
+
+                    <div class="flow-seam" aria-hidden="true"></div>
+
+                    <div class="flow-zone">
+                        <div class="flow-where">{alternatives.heading}</div>
+                        <Station step={alternatives.command} />
+
+                        <div class="frame command">
+                            <Corners />
+                            <div class="command-head"><span class="command-where">your terminal</span></div>
+                            <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
+                        </div>
+                        <p class="command-note">{alternatives.command.note}</p>
+                        <p class="command-note">
+                            {alternatives.command.compare.lead}{" "}
+                            <a href="/where-it-runs/" class="text-link hover:underline">{alternatives.command.compare.cta}</a>
+                        </p>
+
+                        <Station step={alternatives.hosted} class="mt-8">
+                            <p class="mt-3">
+                                <a class="btn btn-secondary btn-sm" href={APP_URL}>{HOSTED_START_LABEL}</a>
+                            </p>
+                        </Station>
                     </div>
                 </div>
-            </section>
+            </Band>
+
+            <!-- FAQ uses native details for keyboard and screen-reader behavior. -->
+            <Band id="faq" intro={{ eyebrow: "FAQ", heading: "Before you install it.", sub: "What it costs, where your code sits, and what is not built yet." }}>
+                <div class="faq">
+                    {
+                        faqGroups.map((group) => (
+                            <div class="faq-group" id={group.id}>
+                                <div class="faq-group-head">
+                                    <h3>{group.label}</h3>
+                                    <p>{group.blurb}</p>
+                                </div>
+                                <FaqList items={group.items} groupId={group.id} />
+                            </div>
+                        ))
+                    }
+                </div>
+            </Band>
 
             <!-- Closing cartouche returns the plate at the page end. -->
-            <section class="band final">
-                <div class="plate plate-foot" aria-hidden="true">
-                    <div class="plate-img"></div>
-                </div>
-                {/* The closing band is the only page-authored copy; other copy comes from landing.ts. */}
-                <div class="shell fade-in final-inner">
-                    <Lotus size="lg" />
-                    <h2 class="h2 display final-heading">
-                        <span>Open-source and free</span>
-                        {/* The underline is a separate gold element below the heading text. */}
-                        {" "}
-                        <span class="final-forever">forever</span>
-                    </h2>
-                    <p class="lede final-sub">
-                        Contribute to our code, extend your workspace.
-                    </p>
-                    <Divider class="final-divider" />
-                    <div class="hero-actions">
-                        <DownloadCta primary />
-                        <a class="btn" href={githubUrl} target="_blank" rel="noopener">See the source</a>
-                    </div>
-                </div>
-            </section>
+            <Final>
+                <Fragment slot="description">Contribute to our code, extend your workspace.</Fragment>
+                <DownloadCta primary />
+            </Final>
         </main>
 
         <Footer />
     </div>
 
     <script>
-/* The page remains usable when these enhancements are unavailable. */
-        const bar = document.getElementById("site-bar");
+        import { observeHeroCta } from "./landing/hero-cta";
 
-/* The bar CTA hides while the hero CTA is visible. */
-        const heroCta = document.querySelector("[data-hero-cta]");
-        if (bar && heroCta && "IntersectionObserver" in window) {
-            // rootMargin takes px or % only: --bar-height is a viewport-scaled clamp, so the bar is measured instead,
-            // and measured again whenever its height changes, because a margin set at construction never updates.
-            let ctaObserver: IntersectionObserver | undefined;
-            // The ResizeObserver reports the bar's height on its first callback too, after layout, so the height is
-            // read from the entry rather than measured here, which would force a layout while the page is still loading.
-            new ResizeObserver(([resize]) => {
-                const height = resize?.borderBoxSize[0]?.blockSize ?? resize?.contentRect.height ?? 0;
-                ctaObserver?.disconnect();
-                ctaObserver = new IntersectionObserver(
-                    (entries) => {
-                        for (const entry of entries) {
-                            bar.toggleAttribute("data-cta-shown", !entry.isIntersecting);
-                        }
-                    },
-                    { rootMargin: `-${Math.round(height)}px 0px 0px 0px`, threshold: 0 },
-                );
-                ctaObserver.observe(heroCta);
-            }).observe(bar);
-        }
+        observeHeroCta();
 
         // Cycle through the product views while the page is visible, starting on /home.
         const preview = document.querySelector<HTMLElement>(".home-focused .window-app");

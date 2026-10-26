@@ -4,6 +4,7 @@ import { APP_URL, HOSTED_START_LABEL, DEMO_PATH } from "@intentic/site-content/s
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import PageHero from "../../components/content/PageHero.astro";
 import Window from "../../components/Window.astro";
 import { shotAsset } from "../../lib/shots";
 import ProductShot from "../../components/ProductShot.astro";
@@ -17,21 +18,12 @@ import ProductShot from "../../components/ProductShot.astro";
 >
     <Nav />
     <main class="flex-1">
-        <section class="page-hero">
-            <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14">
-                <div class="eyebrow">Features</div>
-                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
-                    What you do with a fleet of agents.
-                </h1>
-                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    Run them, connect them, automate them, review their work and host them on your own machine.
-                </p>
-                <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
-                    <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
-                </div>
+        <PageHero eyebrow="Features" heading="What you do with a fleet of agents." sub="Run them, connect them, automate them, review their work and host them on your own machine.">
+            <div class="mt-7 flex flex-wrap gap-3">
+                <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
+                <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
             </div>
-        </section>
+        </PageHero>
 
         <div class="mx-auto max-w-7xl px-6 py-16 lg:py-20">
             {/* Feature shots use two columns to preserve readable scale. */}

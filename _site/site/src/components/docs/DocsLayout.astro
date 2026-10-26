@@ -2,6 +2,7 @@
 import { type Book, bookHref, bookNeighbours, bookPage } from "@intentic/site-content/book";
 import { docsBook } from "@intentic/site-content/docs";
 import { assertNoCodeBleed, extractDocsContent } from "../../lib/docs-headings";
+import type { DocsHeading } from "../../lib/docs-headings";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import DocsSearch from "./DocsSearch.astro";
 import DocsSearchField from "./DocsSearchField.astro";
@@ -19,16 +20,18 @@ interface Props {
     lead: string;
 /** Heading ids this page links to internally: from a hand-written index table, say. */
     requireAnchors?: string[];
+    /** Contract-derived section links keep the API's authored HTML intact. */
+    headings?: DocsHeading[];
 }
 
-const { book = docsBook, pageId, heading, lead, requireAnchors } = Astro.props;
+const { book = docsBook, pageId, heading, lead, requireAnchors, headings: suppliedHeadings } = Astro.props;
 const page = bookPage(book, pageId);
 const bookRoot = bookHref(book, "");
 
 /* The content is RENDERED HERE rather than dropped straight into a <slot />. */
 const rendered = await Astro.slots.render("default");
-assertNoCodeBleed(rendered, pageId);
-const { html, headings } = extractDocsContent(rendered);
+if (suppliedHeadings === undefined) {assertNoCodeBleed(rendered, pageId);}
+const { html, headings } = suppliedHeadings === undefined ? extractDocsContent(rendered) : { html: rendered, headings: suppliedHeadings };
 
 const absent = (requireAnchors ?? []).filter((anchor) => !headings.some((entry) => entry.id === anchor));
 if (absent.length > 0) {
@@ -59,7 +62,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                     <button
                         class="flex items-center gap-2 border border-line bg-card px-3.5 py-2 text-sm text-muted"
                         id="docs-sidebar-toggle"
-                        aria-label="Toggle docs menu"
+                        aria-label={book.id === "api" ? "Toggle API menu" : "Toggle docs menu"}
                         aria-expanded="false"
                     >
                         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">

@@ -1,0 +1,52 @@
+---
+import type { LandingContent } from "@intentic/site-content/landing";
+import Band from "./Band.astro";
+import Corners from "../Corners.astro";
+import Point from "../Point.astro";
+
+interface Props {
+    content: LandingContent["workspace"];
+    cta?: { label: string; href: string };
+}
+
+const { content, cta = { href: "/features/review/", label: "How reviewing agent work works" } } = Astro.props;
+---
+
+<Band id="workspace" intro={content}>
+    <div class="compare">
+        <div class="card compare-ours">
+            <Corners />
+            <div class="compare-head">
+                <h3>{content.comparison.ours.label}</h3>
+                <span>{content.comparison.ours.note}</span>
+            </div>
+            <ul>
+                {
+                    content.comparison.ours.items.map((item) => <Point>{item}</Point>)
+                }
+            </ul>
+        </div>
+
+        <div class="compare-chat">
+            <div class="compare-head">
+                <h3>{content.comparison.chat.label}</h3>
+                <span>{content.comparison.chat.note}</span>
+            </div>
+            <ul>
+                {
+                    content.comparison.chat.items.map((item) => (
+                        <Point mark="lozenge" markClass="lozenge-quiet">
+                            {item}
+                        </Point>
+                    ))
+                }
+            </ul>
+            <p class="compare-missing">{content.comparison.chat.missing}</p>
+        </div>
+    </div>
+
+    <div class="compare-foot">
+        <p>{content.comparison.footnote}</p>
+        <a href={cta.href} class="link">{cta.label} →</a>
+    </div>
+</Band>

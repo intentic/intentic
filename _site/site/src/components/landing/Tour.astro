@@ -1,0 +1,64 @@
+---
+import type { LandingContent } from "@intentic/site-content/landing";
+import AutomateFigure from "../figures/AutomateFigure.astro";
+import Bullet from "../Bullet.astro";
+import Corners from "../Corners.astro";
+import DeskShot from "../DeskShot.astro";
+import ProductShot from "../ProductShot.astro";
+import Window from "../Window.astro";
+
+interface Props {
+    content: LandingContent["verbs"];
+    desk?: boolean;
+}
+
+const { content, desk = false } = Astro.props;
+const Shot = desk ? DeskShot : ProductShot;
+// Stage screenshots size from the shell and viewport bleed.
+const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), calc(275vw - 11rem)";
+---
+
+<section class="band" id="verbs">
+    <div class="wall" aria-hidden="true"></div>
+
+    <div class="shell verbs-open fade-in">
+        <div class="eyebrow">{content.eyebrow}</div>
+        {content.heading !== undefined && <h2 class="h2 display">{content.heading}</h2>}
+    </div>
+
+    {
+        content.items.map((item) => {
+            return (
+                <div class="stage fade-in">
+                    <div class="stage-head">
+                        <h3 class="stage-verb">
+                            <Bullet size="md" />
+                            {item.label}
+                        </h3>
+                        <p class="stage-line">{item.line}</p>
+                        <a href={item.href} class="link see">See it<span class="sr-only">: {item.label}</span> →</a>
+                    </div>
+
+                    {item.shot !== undefined && (
+                        <Window class="stage-frame" finial label={item.shot.label}>
+                            <div class="stage-crop">
+                                <Shot name={item.shot.name} alt={item.shot.alt} sizes={STAGE_SIZES} class="stage-shot" />
+                            </div>
+                        </Window>
+                    )}
+
+                    {item.figure === "automate" && (
+                        <div class="card stage-machine">
+                            <Corners />
+                            <AutomateFigure />
+                        </div>
+                    )}
+                </div>
+            );
+        })
+    }
+
+    <div class="shell verbs-close">
+        <a href="/features/" class="link band-cta">{content.cta} →</a>
+    </div>
+</section>

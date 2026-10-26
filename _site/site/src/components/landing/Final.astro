@@ -1,0 +1,25 @@
+---
+import { githubUrl } from "@intentic/site-content/site";
+import Divider from "../Divider.astro";
+import Lotus from "../Lotus.astro";
+---
+
+<section class="band final">
+    <div class="plate plate-foot" aria-hidden="true">
+        <div class="plate-img"></div>
+    </div>
+    <div class="shell fade-in final-inner">
+        <Lotus size="lg" />
+        <h2 class="h2 display final-heading">
+            <span>Open-source and free</span>
+            {" "}
+            <span class="final-forever">forever</span>
+        </h2>
+        <p class="lede final-sub"><slot name="description" /></p>
+        <Divider class="final-divider" />
+        <div class="hero-actions">
+            <slot />
+            <a class="btn" href={githubUrl} target="_blank" rel="noopener">See the source</a>
+        </div>
+    </div>
+</section>

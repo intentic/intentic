@@ -1,0 +1,25 @@
+---
+interface Props {
+    lines: string[];
+}
+
+// Sentence beats retain spaces so assistive text and crawlers read the full headline.
+const beats = Astro.props.lines
+    .flatMap((line) => line.split(/(?<=\.)\s+/u))
+    .map((beat) => beat.replace(/\.\s*$/u, ""))
+    .filter((beat) => beat.length > 0);
+---
+
+<h1 class="headline">
+    {
+        beats.map((beat, index) => (
+            <>
+                <span class="headline-line">
+                    <span class="display">{beat}</span>
+                    <span class="stop">.</span>
+                </span>
+                {index < beats.length - 1 && " "}
+            </>
+        ))
+    }
+</h1>

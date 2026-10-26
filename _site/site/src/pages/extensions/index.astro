@@ -5,6 +5,8 @@ import { APP_URL } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import PageHero from "../../components/content/PageHero.astro";
+import NumberedSteps from "../../components/content/NumberedSteps.astro";
 import type { RegistryEntry } from "@intentic/registry";
 import { loadGallery, markArtUrl, markInitials, markLogoUrl, sourceHref } from "../../lib/registry";
 
@@ -94,48 +96,21 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
 >
     <Nav />
     <main class="flex-1">
-        <section class="page-hero">
-            <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14">
-                <div class="eyebrow">Extensions</div>
-                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
-                    Add tools and views to intentic.
-                </h1>
-                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    Extensions can add pages, panels, file viewers, connections and automations. Even built-in features use the same extension system.
-                </p>
-                <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={developersHref("build")}>Build one</a>
-                    <a class="btn btn-secondary" href={developersHref("publish")}>Get listed</a>
-                </div>
+        <PageHero eyebrow="Extensions" heading="Add tools and views to intentic." sub="Extensions can add pages, panels, file viewers, connections and automations. Even built-in features use the same extension system.">
+            <div class="mt-7 flex flex-wrap gap-3">
+                <a class="btn btn-primary" href={developersHref("build")}>Build one</a>
+                <a class="btn btn-secondary" href={developersHref("publish")}>Get listed</a>
             </div>
-        </section>
+        </PageHero>
 
         <div class="mx-auto max-w-7xl space-y-10 px-6 pt-8 pb-16 lg:pb-20">
             {
                 groups.length === 0 && (
                     <section class="card px-6 py-12 text-center">
                         <h2 class="text-lg font-semibold tracking-tight text-content">Nothing listed yet.</h2>
-                        <ol class="mx-auto mt-6 max-w-copy list-none space-y-4 p-0 text-left">
-                            {
-                                publishSteps.map((step, i) => (
-                                    <li class="flex gap-4">
-                                        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary-500/40 text-sm font-semibold text-link">
-                                            {i + 1}
-                                        </span>
-                                        <div>
-                                            <div class="text-sm font-medium text-content">{step.title}</div>
-                                            <p class="mt-1 text-sm leading-relaxed text-muted">
-                                                {step.body ?? (
-                                                    <>
-                                                        Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your GitHub repository.
-                                                    </>
-                                                )}
-                                            </p>
-                                        </div>
-                                    </li>
-                                ))
-                            }
-                        </ol>
+                        <NumberedSteps steps={publishSteps} class="mx-auto mt-6 max-w-copy text-left">
+                            <Fragment slot="fallback">Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your GitHub repository.</Fragment>
+                        </NumberedSteps>
                         <a class="btn btn-primary mt-8" href={developersHref("build")}>
                             Build an extension
                         </a>

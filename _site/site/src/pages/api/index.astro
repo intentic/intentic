@@ -1,8 +1,8 @@
 ---
 import { specShelves } from "@intentic/sandbox-openapi/groups";
-import { referenceHref } from "@intentic/site-content/reference";
+import { referenceBook, referenceHref } from "@intentic/site-content/reference";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
-import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
 import { groupCounts } from "../../lib/api-reference";
 
 /* THE BOOK'S FRONT DOOR. */
@@ -37,7 +37,8 @@ const headings = [
 ];
 ---
 
-<ReferenceLayout
+<DocsLayout
+    book={referenceBook}
     pageId=""
     heading="Sandbox API"
     lead={`Every call an intentic sandbox answers (${total} of them), generated from the wire contract the daemon and its own browser client both import. Each one has a playground on its page that answers you back.`}
@@ -102,7 +103,7 @@ const headings = [
         The same thing is served as a machine-readable document at <a href={`${referenceHref("")}openapi.json`}>openapi.json</a>: OpenAPI 3.1,
         for a client generator, an editor's HTTP plugin, or a model that needs to be told what a sandbox can do.
     </p>
-</ReferenceLayout>
+</DocsLayout>
 
 <style is:global>
     .api-shelf {

@@ -1,0 +1,99 @@
+---
+interface Props {
+    variant?: "options" | "comparison";
+    class?: string;
+}
+
+const { variant = "options", class: className } = Astro.props;
+---
+
+<table class:list={["responsive-table", className]} data-variant={variant}><slot /></table>
+
+<style>
+    .responsive-table {
+        --heading-width: 24%;
+        --cell-width: 38%;
+        --cell-padding: 16px;
+        border-collapse: collapse;
+    }
+
+    .responsive-table[data-variant="comparison"] {
+        --heading-width: 22%;
+        --cell-width: 39%;
+        --cell-padding: 14px;
+    }
+
+    .responsive-table :global(thead th) {
+        padding: 0 18px 10px 0;
+        text-align: left;
+        font-size: 0.75rem;
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--color-subtle);
+        border-bottom: 1px solid var(--color-line-strong);
+    }
+
+    .responsive-table :global(tbody th) {
+        width: var(--heading-width);
+        text-align: left;
+        font-weight: var(--font-weight-medium);
+    }
+
+    .responsive-table[data-variant="comparison"] :global(tbody th) {
+        color: var(--color-content);
+    }
+
+    .responsive-table :global(tbody td) {
+        width: var(--cell-width);
+        color: var(--color-muted);
+    }
+
+    .responsive-table :global(tbody th),
+    .responsive-table :global(tbody td) {
+        padding: var(--cell-padding) 18px var(--cell-padding) 0;
+        font-size: 0.875rem;
+        line-height: 1.55;
+        vertical-align: top;
+        border-bottom: 1px solid var(--color-line);
+    }
+
+    /* A phone reads the same cells as labelled cards, in document order. */
+    @media (max-width: 48rem) {
+        .responsive-table :global(thead) {
+            display: none;
+        }
+        .responsive-table,
+        .responsive-table :global(tbody),
+        .responsive-table :global(tr),
+        .responsive-table :global(tbody th),
+        .responsive-table :global(tbody td) {
+            display: block;
+            width: auto;
+        }
+        .responsive-table :global(tr) {
+            border: 1px solid var(--color-line);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+        .responsive-table :global(tbody th) {
+            padding: 0 0 10px;
+            border-bottom: 1px solid var(--color-line);
+        }
+        .responsive-table :global(tbody td) {
+            padding: 10px 0 0;
+            border-bottom: none;
+        }
+        .responsive-table :global(tbody td)::before {
+            content: attr(data-side);
+            display: block;
+            margin-bottom: 2px;
+            font-size: var(--text-2xs);
+            font-weight: var(--font-weight-semibold);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--color-subtle);
+        }
+    }
+</style>

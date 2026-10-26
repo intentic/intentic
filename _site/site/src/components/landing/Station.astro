@@ -1,0 +1,17 @@
+---
+import type { LandingFact } from "@intentic/site-content/landing";
+import Bullet from "../Bullet.astro";
+
+interface Props {
+    step: LandingFact;
+    class?: string;
+}
+
+const { step, class: className } = Astro.props;
+---
+
+<div class:list={["station", className]}>
+    <h3><Bullet />{step.title}</h3>
+    <p>{step.body}</p>
+    <slot />
+</div>

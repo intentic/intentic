@@ -1,0 +1,21 @@
+---
+import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
+import { landingContent } from "@intentic/site-content/landing";
+import Band from "./Band.astro";
+import TrustCards from "../TrustCards.astro";
+---
+
+<Band id="trust">
+    <div class="trust">
+        <div>
+            <div class="eyebrow">{landingContent.trust.eyebrow}</div>
+            <h2 class="h2 display">{CREATOR_NAME}</h2>
+            <p class="lede">{creatorRole}</p>
+            <p class="trust-bio">{creatorBio}</p>
+            <a href="/about/" class="link band-cta">{landingContent.trust.cta} →</a>
+        </div>
+
+        {/* Trust claims share the about module and build-time commit count. */}
+        <TrustCards />
+    </div>
+</Band>

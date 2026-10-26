@@ -1,0 +1,46 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../Footer.astro";
+import Nav from "../Nav.astro";
+
+interface Props {
+    product: { name: string; path: string };
+    heading: string;
+    hasCode: string;
+    noCode: string;
+    openLabel: string;
+    downloadLabel: string;
+    scheme: "pair" | "watch";
+}
+
+const { product, heading, hasCode, noCode, openLabel, downloadLabel, scheme } = Astro.props;
+---
+
+<BaseLayout breadcrumbs={[product, { name: "Pair", path: `${product.path}pair/` }]} noindex>
+    <Nav />
+    <main class="flex-1">
+        <section class="below-bar mx-auto max-w-3xl px-6 pb-24">
+            <h1 class="display text-3xl font-semibold">{heading}</h1>
+            <p id="pair-has-code" class="mt-4 hidden max-w-copy text-lg text-muted">{hasCode}</p>
+            <p id="pair-no-code" class="mt-4 max-w-copy text-lg text-muted">{noCode}</p>
+            <div class="mt-8 flex flex-wrap items-center gap-4">
+                <a id="pair-open" href={product.path} data-pair-scheme={scheme} class="btn btn-primary hidden">{openLabel}</a>
+                <a href="/phone/apk" data-download-cta class="text-sm text-link hover:underline">{downloadLabel}</a>
+            </div>
+            <p class="mt-6 max-w-copy text-xs text-subtle"><slot /></p>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>
+
+<script>
+    // Pairing codes stay in the fragment and are handed only to the app's local scheme.
+    const code = window.location.hash.slice(1);
+    const open = document.querySelector<HTMLAnchorElement>("[data-pair-scheme]");
+    if (code.startsWith("ixp1_") && open) {
+        open.href = `intentic-device://${open.dataset.pairScheme}#${code}`;
+        open.classList.remove("hidden");
+        document.getElementById("pair-has-code")?.classList.remove("hidden");
+        document.getElementById("pair-no-code")?.classList.add("hidden");
+    }
+</script>

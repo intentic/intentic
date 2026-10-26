@@ -4,6 +4,7 @@ import { APP_URL, HOSTED_START_LABEL, DEMO_PATH } from "@intentic/site-content/s
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
+import PageHero from "../../components/content/PageHero.astro";
 
 /* The guides hub. */
 
@@ -13,34 +14,13 @@ const faqEntries = guidePages.map((page) => ({ question: page.question, answer: 
 <BaseLayout breadcrumbs={[{ name: "Guides", path: guidesHref("") }]} faq={faqEntries}>
     <Nav />
     <main class="flex-1">
-        <section class="page-hero">
-            <div class="below-bar relative mx-auto max-w-7xl px-6 pb-14">
-                <div class="eyebrow">{guidesIndex.eyebrow}</div>
-                <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">{guidesIndex.heading}</h1>
-                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{guidesIndex.sub}</p>
-
-                <div class="mt-8 border-t border-line pt-6">
-                    <div class="eyebrow">Jump to one</div>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                        {
-                            guidePages.map((page) => (
-                                <a
-                                    href={guidesHref(page.slug)}
-                                    class="border border-line px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary-600/40 hover:text-link"
-                                >
-                                    {page.navLabel}
-                                </a>
-                            ))
-                        }
-                    </div>
-                </div>
-
-                <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
-                    <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
-                </div>
+        <PageHero eyebrow={guidesIndex.eyebrow} heading={guidesIndex.heading} sub={guidesIndex.sub}
+            jumpLinks={{ label: "Jump to one", links: guidePages.map((page) => ({ href: guidesHref(page.slug), label: page.navLabel })) }}>
+            <div class="mt-8 flex flex-wrap gap-3">
+                <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
+                <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
             </div>
-        </section>
+        </PageHero>
 
         <!-- Question and answer per row. The hub carries the substance rather than pointing at it. -->
         <section>

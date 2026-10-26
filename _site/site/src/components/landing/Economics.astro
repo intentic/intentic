@@ -1,0 +1,51 @@
+---
+import { landingContent, type LandingSectionIntro } from "@intentic/site-content/landing";
+import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
+import Band from "./Band.astro";
+import Bullet from "../Bullet.astro";
+import Corners from "../Corners.astro";
+import Point from "../Point.astro";
+
+interface Props {
+    content: LandingSectionIntro & { points: string[] };
+    accountsLabel: string;
+    flatLabel: string;
+}
+
+const { content, accountsLabel, flatLabel } = Astro.props;
+---
+
+<Band id="economics" intro={content}>
+    <div class="econ">
+        <div class="card accounts">
+            <Corners set="diag" />
+            <div class="accounts-head"><span class="eyebrow">{accountsLabel}</span></div>
+            <ul>
+                {
+                    landingContent.economics.accounts.map((account) => (
+                        <li>
+                            <Bullet>
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                                    <path d={PROVIDER_BRAND_PATHS[account.logo]} fill-rule={providerFillRule(account.logo)} />
+                                </svg>
+                            </Bullet>
+                            <span class="account-name">{account.name}</span>
+                            <span class="account-detail">{account.detail}</span>
+                            <span class="account-tag">subscription</span>
+                        </li>
+                    ))
+                }
+            </ul>
+        </div>
+
+        <div class="card flat">
+            <Corners set="diag" />
+            <div class="eyebrow">{flatLabel}</div>
+            <ul>
+                {
+                    content.points.map((point) => <Point>{point}</Point>)
+                }
+            </ul>
+        </div>
+    </div>
+</Band>

@@ -1,8 +1,8 @@
 ---
-import { referenceGroups } from "@intentic/site-content/reference";
+import { referenceBook, referenceGroups } from "@intentic/site-content/reference";
 import ApiOperation from "../../components/ApiOperation.astro";
 import ApiPlayground from "../../components/ApiPlayground.astro";
-import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
 import { groupOperations, playgroundPayload } from "../../lib/api-reference";
 
 /* ONE PAGE PER ROUTE GROUP, and there is no list of them anywhere. */
@@ -25,12 +25,12 @@ const openFlat = operations.length <= 6;
 const headings = operations.map((operation) => ({ id: operation.id, text: operation.summary, level: 2 as const }));
 ---
 
-<ReferenceLayout
+<DocsLayout
+    book={referenceBook}
     pageId={group.name}
     heading={group.label}
     lead={group.summary}
     headings={headings}
-    simulated={true}
 >
     <p>{group.description}</p>
 
@@ -56,4 +56,4 @@ const headings = operations.map((operation) => ({ id: operation.id, text: operat
     {operations.map((operation) => <ApiOperation operation={operation} open={openFlat} />)}
 
     <ApiPlayground payload={playgroundPayload(operations)} />
-</ReferenceLayout>
+</DocsLayout>

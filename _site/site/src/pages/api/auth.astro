@@ -1,8 +1,8 @@
 ---
 import { CONTROL_SCOPE_REACH } from "@intentic/sandbox-openapi";
-import { referenceHref } from "@intentic/site-content/reference";
+import { referenceBook, referenceHref } from "@intentic/site-content/reference";
 import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
-import ReferenceLayout from "../../components/ReferenceLayout.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
 
 /* The scope ladder is IMPORTED rather than retyped, from the same module that puts it in the generated document's security schemes. */
 
@@ -38,7 +38,8 @@ const headings = [
 ];
 ---
 
-<ReferenceLayout
+<DocsLayout
+    book={referenceBook}
     pageId="auth"
     heading="Authorising a call"
     lead="Two credentials reach a sandbox, and the difference between them is whether a person is present. Everything else about authorisation follows from that."
@@ -147,4 +148,4 @@ const headings = [
         Only <code>/health</code> is missing from this reference, and that is on purpose too: it is not part of the contract. It exists so a
         script can tell a live sandbox from a dead port, and it deliberately checks nothing.
     </p>
-</ReferenceLayout>
+</DocsLayout>
