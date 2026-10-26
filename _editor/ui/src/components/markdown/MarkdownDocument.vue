@@ -179,6 +179,7 @@ defineExpose({ text, commit, focus: (): void => surface.value?.focus(), dirty, s
                 <slot name="actions" />
                 <!-- Always on screen under `explicit`, not appearing on dirty, since a control that materializes gets pressed by accident; disabled instead. -->
                 <Button
+                    tier="accent"
                     v-if="policy === `explicit`"
                     :label="t(`ui.action.save`)"
                     size="small"

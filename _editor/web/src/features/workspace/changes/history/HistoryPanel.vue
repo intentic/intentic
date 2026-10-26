@@ -143,7 +143,7 @@ const confirmRestore = (id: string): void => {
                         <template v-if="confirmRestoreId === snapshot.id">
                             <!-- Not decoration: an open chat is reasoning about these files and must be told they moved. -->
                             <span class="flex-1 text-2xs text-warning">{{ words.restoreConfirm }}</span>
-                            <Button size="small" tone="danger" @click="confirmRestore(snapshot.id)">{{ words.restore }}</Button>
+                            <Button tier="accent" size="small" tone="danger" @click="confirmRestore(snapshot.id)">{{ words.restore }}</Button>
                             <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="confirmRestoreId = undefined" />
                         </template>
                         <Button

@@ -63,7 +63,7 @@ const detail = computed(() => setupDetail(props.setup, nameOf));
         <span class="block font-medium">{{ t(`desktop.pcSetup.quiet.title`, { count: setup.quietMinutes }) }}</span>
         <span class="mt-0.5 block">{{ t(`desktop.pcSetup.quiet.body`) }}</span>
         <span class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Button size="small" tier="boring" :label="t(`desktop.pcSetup.quiet.again`)" @click="emit(`again`)" />
+            <Button size="small" tier="accent" :label="t(`desktop.pcSetup.quiet.again`)" @click="emit(`again`)" />
             <button v-if="canShowLog" type="button" :class="ui.textButton({ tone: `quiet` })" @click="emit(`log`)">
                 {{ t(`desktop.pcSetup.showLog`) }}
             </button>

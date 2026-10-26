@@ -738,7 +738,7 @@ const onPick = (event: Event): void => {
             />
             <template #footer>
                 <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="cancelRename()" />
-                <Button :label="t(`ui.action.rename`)" @click="confirmRename" />
+                <Button tier="accent" :label="t(`ui.action.rename`)" @click="confirmRename" />
             </template>
         </Modal>
     </div>

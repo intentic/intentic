@@ -347,7 +347,7 @@ const pushToCi = async (): Promise<void> => {
 
                 <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                     <span>{{ emptyNote }}</span>
-                    <Button v-if="rows.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="clearFilters" />
+                    <Button tier="boring" v-if="rows.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="clearFilters" />
                 </div>
             </div>
         </Await>

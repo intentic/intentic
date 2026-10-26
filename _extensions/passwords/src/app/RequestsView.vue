@@ -121,7 +121,7 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                     <Button
                         v-for="(choice, index) in answers"
                         :key="choice.how"
-                        :tier="index === 0 ? undefined : `boring`"
+                        :tier="index === 0 ? `accent` : `boring`"
                         size="small"
                         :label="choice.label"
                         :disabled="waiting !== undefined"
@@ -130,6 +130,7 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                     />
                 </template>
                 <Button
+                    tier="accent"
                     v-else
                     size="small"
                     :label="t(`app.requests.saveAllow`)"

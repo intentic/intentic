@@ -45,7 +45,7 @@ const where = computed(() =>
     <div class="flex min-w-0 flex-col gap-2">
         <p class="text-xs text-muted">{{ where }} {{ t(`sandbox.diagnosis.fixWhat`) }}</p>
         <div v-if="desktop && slug" class="flex flex-wrap items-center gap-2">
-            <Button size="small" :label="t(`sandbox.diagnosis.fixInApp`)" @click="openDesktopLink(desktopFixLink(slug, code))">
+            <Button tier="accent" size="small" :label="t(`sandbox.diagnosis.fixInApp`)" @click="openDesktopLink(desktopFixLink(slug, code))">
                 <template #icon><Icon name="wrench" /></template>
             </Button>
             <span class="text-xs text-subtle">{{ t(`sandbox.diagnosis.fixInAppNote`) }}</span>

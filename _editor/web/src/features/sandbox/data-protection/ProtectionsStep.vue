@@ -82,8 +82,8 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                      dialog it opens lists them before anything changes. -->
                 <template #actions>
                     <Button
+                        tier="accent"
                         size="small"
-                        tone="accent"
                         :disabled="!isOwner || pickedItems.length === 0"
                         :loading="apply.isPending.value"
                         :label="t(`sandbox.dataProtection.apply`, { count: pickedItems.length }, pickedItems.length)"
@@ -131,7 +131,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                     <template #control>
                         <div class="flex items-center gap-2">
                             <StatusBadge :variant="STATUS_TONE[entry.measure.status]" dot :label="statusOf(entry.measure)" />
-                            <Button v-if="MEASURE_LINKS.has(entry.measure.id)" :as="RouterLink" :to="MEASURE_LINKS.get(entry.measure.id)" size="small" tier="quiet" tone="accent">
+                            <Button v-if="MEASURE_LINKS.has(entry.measure.id)" :as="RouterLink" :to="MEASURE_LINKS.get(entry.measure.id)" size="small" tier="quiet">
                                 {{ t(`sandbox.dataProtection.change`) }}
                             </Button>
                         </div>
@@ -149,7 +149,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                         <template #control>
                             <div class="flex items-center gap-2">
                                 <StatusBadge :variant="STATUS_TONE[measure.status]" dot :label="statusOf(measure)" />
-                                <Button v-if="MEASURE_LINKS.has(measure.id)" :as="RouterLink" :to="MEASURE_LINKS.get(measure.id)" size="small" tier="quiet" tone="accent">
+                                <Button v-if="MEASURE_LINKS.has(measure.id)" :as="RouterLink" :to="MEASURE_LINKS.get(measure.id)" size="small" tier="quiet">
                                     {{ t(`sandbox.dataProtection.change`) }}
                                 </Button>
                             </div>

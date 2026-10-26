@@ -57,6 +57,7 @@ const { maker } = useAudience();
         </Button>
         <!-- Success-toned with the check glyph, matching the board card's own Land now: the same action on the same work reads as such. -->
         <Button
+            tier="accent"
             v-else-if="canShip"
             :size="block ? undefined : `small`"
             tone="success"

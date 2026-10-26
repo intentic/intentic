@@ -90,6 +90,7 @@ const hasChanges = computed(() => sections.value.length > 0);
                 <SecretField :secret-key="key" no-hint />
             </div>
             <Button
+                tier="accent"
                 class="self-end"
                 :label="t(`ui.action.continue`)"
                 :disabled="missingSecrets.length > 0 || running"

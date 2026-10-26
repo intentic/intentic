@@ -304,7 +304,7 @@ onMounted(async () => {
                                 >
                                     <template #icon><Icon name="bolt" /></template>
                                 </Button>
-                                <Button v-if="!app.running" :label="t(`appsView.start`)" size="small" :disabled="busy" @click="startOne(app.app)">
+                                <Button tier="boring" v-if="!app.running" :label="t(`appsView.start`)" size="small" :disabled="busy" @click="startOne(app.app)">
                                     <template #icon><Icon name="play" /></template>
                                 </Button>
                                 <Button
@@ -367,7 +367,7 @@ onMounted(async () => {
                             <div v-for="dir in projects" :key="dir" class="flex items-center gap-3 px-4 py-2">
                                 <Icon name="bolt" class="shrink-0 text-subtle" />
                                 <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>
-                                <Button :label="t(`appsView.run`)" size="small" @click="runTests(libSuffix(dir), [dir])">
+                                <Button tier="boring" :label="t(`appsView.run`)" size="small" @click="runTests(libSuffix(dir), [dir])">
                                     <template #icon><Icon name="play" /></template>
                                 </Button>
                             </div>

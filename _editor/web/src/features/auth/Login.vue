@@ -214,6 +214,7 @@ watch(
 
                     <!-- The site's primary button style (@intentic/entry-css), shown only when Google's embedded button could not render. -->
                     <Button
+                        tier="accent"
                         v-else-if="!googleReady"
                         :label="desktop ? t(`auth.words.continueGoogleInBrowser`) : t(`auth.words.continueGoogle`)"
                         class="w-full justify-center"

@@ -258,6 +258,7 @@ const pickFolder = async (): Promise<void> => {
                             <p>{{ handedOver === project.path ? t(`local.agentsTile.finishInBrowser`) : otherLead(project) }}</p>
                             <div class="flex flex-wrap items-center gap-2">
                                 <Button
+                                    tier="accent"
                                     :label="project.owner === undefined ? t(`local.foundProjects.switchAccount`) : t(`local.foundProjects.switchTo`, { owner: project.owner })"
                                     :loading="switching === project.path"
                                     size="small"
@@ -308,7 +309,7 @@ const pickFolder = async (): Promise<void> => {
             <span v-if="face" class="mt-1.5 block truncate font-mono text-2xs text-subtle" v-tooltip.bottom="face.path">{{ face.path }}</span>
         </template>
         <template #actions>
-            <Button :label="t(`local.emptyFolder.openFolder`)" size="small" @click="pickFolder">
+            <Button tier="accent" :label="t(`local.emptyFolder.openFolder`)" size="small" @click="pickFolder">
                 <template #icon><Icon name="folder-open" /></template>
             </Button>
             <Button :label="t(`local.emptyFolder.showInFileManager`)" size="small" tier="boring" @click="askLocalApp(`reveal`)">

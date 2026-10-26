@@ -216,13 +216,13 @@ const sessionNote = computed(() => {
         <!-- Buttons hide once busy: progress lives in the rows above, not in a disabled button beside them. -->
         <!-- The hosted alternative rides the same row, right-aligned: it is the other answer to this question, not a footnote under it. -->
         <div v-if="!busy" class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
+            <Button tier="accent" v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <Button v-if="restarting || signOutAgain" :label="t(`desktop.requirements.restartNow`)" @click="emit(`restart`)">
+            <Button :tier="ours ? `boring` : `accent`" v-if="restarting || signOutAgain" :label="t(`desktop.requirements.restartNow`)" @click="emit(`restart`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button v-else-if="signingOut && !signOutExhausted" :label="t(`desktop.requirements.signOutNow`)" @click="emit(`signout`)">
+            <Button :tier="ours ? `boring` : `accent`" v-else-if="signingOut && !signOutExhausted" :label="t(`desktop.requirements.signOutNow`)" @click="emit(`signout`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <!-- The only control when nothing here can act: primary, so a screen with one honest move shows it as one. -->

@@ -166,20 +166,20 @@ const askRepair = (): void => {
         </ul>
         <div v-if="primary === `restart-hosted`" class="flex flex-col gap-1">
             <div>
-                <Button size="small" :label="t(`sandbox.diagnosis.restartIt`)" :loading="restart.busy.value" @click="restartHosted">
+                <Button tier="accent" size="small" :label="t(`sandbox.diagnosis.restartIt`)" :loading="restart.busy.value" @click="restartHosted">
                     <template #icon><Icon name="refresh" /></template>
                 </Button>
             </div>
             <p v-if="restartFailed" class="text-xs text-danger">{{ t(`sandbox.diagnosis.restartFailed`) }}</p>
         </div>
         <div v-else-if="primary === `rollback-hosted`">
-            <Button size="small" :label="t(`capabilities.hostRecreate.rollBackVerb`)" @click="rollingBack = true">
+            <Button tier="accent" size="small" :label="t(`capabilities.hostRecreate.rollBackVerb`)" @click="rollingBack = true">
                 <template #icon><Icon name="undo" /></template>
             </Button>
         </div>
         <FixCommand v-else-if="primary === `fix`" :machine="machine" />
         <div v-if="desktop && !hosted && owner && !calm" class="flex flex-wrap items-center gap-2">
-            <Button size="small" :label="t(`local.repair.title`)" @click="askRepair">
+            <Button tier="accent" size="small" :label="t(`local.repair.title`)" @click="askRepair">
                 <template #icon><Icon name="wrench" /></template>
             </Button>
             <span class="text-xs text-subtle">{{ t(`local.repair.subtitle`) }}</span>

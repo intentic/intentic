@@ -140,7 +140,7 @@ const radio = (on: boolean): void => {
                                 :aria-label="t(`desktop.os.network.password`, { name: each.ssid })"
                                 :class="ui.input(`min-w-0 flex-1`)"
                             />
-                            <Button size="small" :label="t(`desktop.os.network.join`)" :disabled="password === `` || busy" @click="joinWith(each.ssid)" />
+                            <Button tier="accent" size="small" :label="t(`desktop.os.network.join`)" :disabled="password === `` || busy" @click="joinWith(each.ssid)" />
                             <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" :disabled="busy" @click="cancel" />
                         </div>
                         <label class="flex items-center gap-2 text-2xs text-muted">

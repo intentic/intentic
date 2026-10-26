@@ -137,7 +137,7 @@ const takeBack = (): void => {
                 }}</Button>
             </span>
             <Button v-if="group.continues" size="small" thumb tier="quiet" @click="takeBack()">{{ t(`chat.chatHeld.takeBack`) }}</Button>
-            <Button size="small" thumb :disabled="availability.blockedLine.value !== undefined" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <Button tier="accent" size="small" thumb :disabled="availability.blockedLine.value !== undefined" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </span>
     </ChatHeldStatus>
     <p v-if="availability.blockedLine.value" class="text-2xs text-muted" role="status">{{ availability.blockedLine.value }}</p>

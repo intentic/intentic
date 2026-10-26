@@ -577,7 +577,7 @@ const runPending = async (): Promise<void> => {
             <span v-if="operation.actionError.value" class="block text-danger">{{ operation.actionError.value }}</span>
             <template #actions>
                 <Button
-                    size="small"
+                    size="small" tier="accent"
                     tone="warning"
                     :disabled="operation.busy.value"
                     @click="operation.abort()"
@@ -861,7 +861,7 @@ const runPending = async (): Promise<void> => {
             <template #footer>
                 <Button tier="quiet" :label="t(`gitHistoryTab.cancel`)" @click="cancelAction" />
                 <Button
-                    v-if="pending"
+                    v-if="pending" tier="accent"
                     :tone="ACTIONS[pending.kind].danger ? `warning` : `success`"
                     :label="actionWords(pending.kind).confirm"
                     :disabled="acting || (ACTIONS[pending.kind].needsName && nameInput.trim() === '')"

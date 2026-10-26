@@ -48,7 +48,7 @@ const retried = computed(() => machineFailed.value || (resumed.value && refusal.
                         {{ t(`home.newSandbox.preparing`) }}
                     </p>
                     <div v-if="phase === `failed`" class="flex flex-wrap items-center gap-2">
-                        <Button v-if="retried" :label="t(`ui.action.tryAgain`)" @click="run.retry" />
+                        <Button tier="accent" v-if="retried" :label="t(`ui.action.tryAgain`)" @click="run.retry" />
                         <Button :label="t(`home.newSandbox.dismiss`)" tier="quiet" @click="run.dismiss" />
                     </div>
                 </div>

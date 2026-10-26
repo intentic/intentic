@@ -215,7 +215,7 @@ const save = async (): Promise<void> => {
 
         <div class="flex justify-end gap-2 pt-2">
             <Button tier="quiet" :label="t(`app.cancel`)" @click="emit(`cancel`)" />
-            <Button type="submit" :label="t(`app.save`)" :loading="saving" />
+            <Button tier="accent" type="submit" :label="t(`app.save`)" :loading="saving" />
         </div>
         <p v-if="saving" class="flex items-center justify-end gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
     </form>

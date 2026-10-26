@@ -60,7 +60,7 @@ const deliveryLabel = (row: (typeof deliveries.value)[number]): string => {
                     <Button :label="t(`test`)" tier="boring" :disabled="pending !== undefined" :loading="pending === `test`" @click="test">
                         <template #icon><Icon name="check-circle" /></template>
                     </Button>
-                    <Button :label="t(`refresh`)" :disabled="pending !== undefined" :loading="pending === `refresh`" @click="refresh">
+                    <Button tier="boring" :label="t(`refresh`)" :disabled="pending !== undefined" :loading="pending === `refresh`" @click="refresh">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
                 </template>

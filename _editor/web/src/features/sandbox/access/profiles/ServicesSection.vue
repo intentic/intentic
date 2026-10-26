@@ -81,6 +81,7 @@ const profileName = (id: string | undefined): string =>
                     <div class="flex flex-wrap items-center gap-2">
                         <strong class="mr-auto text-sm">{{ draft.label || draft.id || t(`sandbox.accessServices.add`) }}</strong
                         ><Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="busy" @click="draft = undefined" /><Button
+                            tier="accent"
                             type="submit"
                             :label="t(`ui.action.save`)"
                             size="small"

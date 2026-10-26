@@ -47,7 +47,7 @@ const pressLabel = computed(() => (props.starts === `now` ? t(`desktop.pcSetup.t
                 <Icon :name="kept.state === `sending` ? `spinner` : `clock`" :spin="kept.state === `sending`" class="shrink-0" aria-hidden="true" />
                 <span>{{ kept.state === `sending` ? t(`desktop.pcSetup.task.sending`) : startsLine }}</span>
             </p>
-            <Button v-else size="small" :label="t(`ui.action.tryAgain`)" :disabled="busy" @click="emit(`retry`)" />
+            <Button tier="accent" v-else size="small" :label="t(`ui.action.tryAgain`)" :disabled="busy" @click="emit(`retry`)" />
             <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" :disabled="busy" @click="emit(`edit`)">
                 <Icon name="pencil" class="shrink-0" aria-hidden="true" />
                 <span>{{ t(`desktop.pcSetup.task.edit`) }}</span>
@@ -78,7 +78,7 @@ const pressLabel = computed(() => (props.starts === `now` ? t(`desktop.pcSetup.t
         />
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <p class="min-w-0 flex-1 text-2xs text-muted">{{ startsLine }}</p>
-            <Button size="small" :label="pressLabel" :disabled="!ready || busy" @click="emit(`queue`)">
+            <Button tier="accent" size="small" :label="pressLabel" :disabled="!ready || busy" @click="emit(`queue`)">
                 <template #icon><Icon name="send" /></template>
             </Button>
         </div>

@@ -51,6 +51,7 @@ const showPrompt = ref(false);
                     />
                 </div>
                 <Button
+                    tier="accent"
                     class="self-end"
                     size="small"
                     :label="t(`sandbox.agentMemory.addToMemory`)"

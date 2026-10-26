@@ -65,10 +65,11 @@ const run = async (): Promise<void> => {
             <span class="text-muted">{{ t(`app.import.deleteFile`) }}</span>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <Button :tier="parsed && parsed.rows.length > 0 ? `boring` : undefined" :label="t(`app.import.pick`)" @click="input?.click()">
+            <Button :tier="parsed && parsed.rows.length > 0 ? `boring` : `accent`" :label="t(`app.import.pick`)" @click="input?.click()">
                 <template #icon><Icon name="upload" /></template>
             </Button>
             <Button
+                tier="accent"
                 v-if="parsed && parsed.rows.length > 0"
                 :label="t(`app.import.run`, { count: parsed.rows.length }, parsed.rows.length)"
                 :loading="running"

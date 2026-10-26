@@ -116,7 +116,7 @@ const submit = (): void => {
         </div>
 
         <template #footer>
-            <Button :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
+            <Button tier="accent" :label="t(`addAppDialog.add`)" :disabled="!canAdd" @click="submit">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </template>

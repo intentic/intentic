@@ -122,7 +122,7 @@ const size = (bytes: number): string => {
                             <Button
                                 :label="t(`publicView.unpublish`)"
                                 size="small"
-                                tier="boring"
+                                tier="quiet" tone="danger"
                                 :disabled="busy !== undefined"
                                 @click="withdraw(file.path)"
                             >

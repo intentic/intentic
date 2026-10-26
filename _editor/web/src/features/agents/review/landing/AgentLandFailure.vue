@@ -18,7 +18,7 @@ const details = computed(() => props.agent.landFailure?.reason ?? props.agent.fa
         <div class="flex flex-wrap items-center gap-2">
             <p role="status" class="min-w-0 flex-1 break-words text-danger">{{ t(`agents.agentStatus.couldntLand`, { reason: line }) }}</p>
             <Button v-if="canChat" size="small" tier="boring" @click="emit('chat')">{{ t(`agents.agentStatus.openChat`) }}</Button>
-            <Button v-if="canShip && retryLand(agent)" size="small" tier="boring" :disabled="busy" @click="emit('retry')">{{ t(`ui.action.retry`) }}</Button>
+            <Button v-if="canShip && retryLand(agent)" size="small" tier="accent" :disabled="busy" @click="emit('retry')">{{ t(`ui.action.retry`) }}</Button>
         </div>
         <p v-if="agent.branch" class="mt-1 break-words text-2xs text-muted">{{ t(`agents.agentStatus.landWorkKept`, { branch: agent.branch }) }}</p>
         <details v-if="details" class="mt-2 text-2xs text-muted">

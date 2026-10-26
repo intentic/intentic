@@ -291,6 +291,7 @@ const rungs = computed(() => {
                                 <Icon v-if="rung.status.icon" :name="rung.status.icon" spin class="text-2xs" />{{ rung.status.label }}
                             </StatusBadge>
                             <Button
+                                tier="boring"
                                 v-else
                                 size="small"
                                 :label="rung.action"

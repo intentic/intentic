@@ -156,15 +156,15 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
             <!-- What the run asks, answered on this page: the go-ahead, or when Windows ends the session it waits on. -->
             <div v-if="inPlaceAnswers && silence !== `gone` && (asking || sessionEnd !== undefined)" class="flex flex-wrap items-center gap-2" data-setup-answers>
                 <template v-if="asking">
-                    <Button size="small" :label="t(`setup.desktopSetupProgress.goAhead`)" @click="answer(`consent`)" />
+                    <Button tier="accent" size="small" :label="t(`setup.desktopSetupProgress.goAhead`)" @click="answer(`consent`)" />
                     <Button size="small" tier="quiet" :label="t(`setup.desktopSetupProgress.stop`)" @click="answer(`stop`)" />
                 </template>
                 <template v-else-if="sessionEnd === `restart`">
-                    <Button size="small" :label="t(`setup.desktopSetupProgress.restartNow`)" @click="answer(`restart-now`)" />
+                    <Button tier="accent" size="small" :label="t(`setup.desktopSetupProgress.restartNow`)" @click="answer(`restart-now`)" />
                     <Button size="small" tier="boring" :label="t(`setup.desktopSetupProgress.restartIn10`)" @click="answer(`restart-in-10`)" />
                     <Button size="small" tier="quiet" :label="t(`setup.desktopSetupProgress.restartLater`)" @click="answer(`restart-later`)" />
                 </template>
-                <Button v-else size="small" :label="t(`setup.desktopSetupProgress.signOutNow`)" @click="answer(`sign-out`)" />
+                <Button tier="accent" v-else size="small" :label="t(`setup.desktopSetupProgress.signOutNow`)" @click="answer(`sign-out`)" />
             </div>
             <button v-if="sessionEnd !== undefined && hostedOffered" type="button" :class="ui.textButton({ size: `xs` }, `self-start`)" @click="emit(`elsewhere`)">
                 {{ t(`setup.desktopSetupProgress.useHostedInstead`) }}
@@ -176,7 +176,7 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                     <span class="font-medium text-content">{{ t(`setup.desktopSetupProgress.slowDownload`) }}</span>
                     {{ t(`setup.desktopSetupProgress.slowDownloadInstead`) }}
                 </span>
-                <Button size="small" :label="t(`setup.desktopSetupProgress.startOnOurServers`)" class="self-start" @click="emit(`hosted`)">
+                <Button tier="boring" size="small" :label="t(`setup.desktopSetupProgress.startOnOurServers`)" class="self-start" @click="emit(`hosted`)">
                     <template #icon><Icon name="bolt" /></template>
                 </Button>
             </div>
@@ -193,7 +193,7 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                 <Button
                     v-if="inPlaceAnswers"
                     size="small"
-                    tier="boring"
+                    tier="accent"
                     :label="report.state === `failed` ? t(`ui.action.tryAgain`) : t(`setup.desktopSetupProgress.startAgain`)"
                     class="ml-2 shrink-0"
                     @click="answer(`retry`)"

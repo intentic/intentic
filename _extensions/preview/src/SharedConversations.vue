@@ -110,7 +110,7 @@ const when = (at: number): string => {
                             <Button
                                 :label="t(`sharedConversations.stopSharing`)"
                                 size="small"
-                                tier="boring"
+                                tier="quiet" tone="danger"
                                 :disabled="busy !== undefined"
                                 @click="act(share.id, remove.mutateAsync)"
                             >

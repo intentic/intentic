@@ -308,8 +308,8 @@ const emptyNote = computed<string | undefined>(() => {
                     @keyup.enter="applyChange"
                 />
                 <input v-model="draftToken" type="password" autocomplete="off" :placeholder="t(`shared.token`)" :class="ui.input(`w-32`)" />
-                <Button :label="t(`ui.action.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
-                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" tone="accent" @click="changing = false" />
+                <Button tier="accent" :label="t(`ui.action.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
+                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="changing = false" />
             </div>
             <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
         </div>
@@ -352,7 +352,7 @@ const emptyNote = computed<string | undefined>(() => {
 
                 <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
                     <span>{{ emptyNote }}</span>
-                    <Button v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
+                    <Button tier="boring" v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
                 </div>
             </div>
         </Await>

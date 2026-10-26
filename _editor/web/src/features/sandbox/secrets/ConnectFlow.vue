@@ -356,6 +356,7 @@ watch(flow, (live) => {
              subject, so going back to the provider is a quiet link there rather than a second primary press. -->
         <Teleport defer :to="`#${actionsTarget}`" :disabled="actionsTarget === undefined">
             <Button
+                tier="accent"
                 v-if="step === `device` || step === `watched` || step === `go`"
                 as="a"
                 class="touch-target"
@@ -476,6 +477,7 @@ watch(flow, (live) => {
                         @keydown.enter="finish"
                     />
                     <Button
+                        tier="accent"
                         :label="t(`sandbox.connectFlow.finish`)"
                         class="touch-target"
                         :size="controlSize"

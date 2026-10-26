@@ -86,6 +86,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                     />
                     <Button v-if="asked" :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="busy" @click="asked = false" />
                     <Button
+                        tier="accent"
                         type="submit"
                         :label="t(`sandbox.words.addPasskey`)"
                         size="small"

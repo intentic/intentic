@@ -108,6 +108,7 @@ watch(online, (isOnline) => {
                 <!-- On the phone itself there is nothing to scan: the same link opens the app (which, for a watch, sends it on). -->
                 <a v-if="mobile" :href="link" class="self-start">
                     <Button
+                        tier="accent"
                         :label="
                             forWatch
                                 ? t(`capabilities.phoneConnectDialog.watchOpenOnThisPhone`)

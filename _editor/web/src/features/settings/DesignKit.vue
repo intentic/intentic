@@ -169,17 +169,17 @@ const POLICY = `# Safety policy\n\nAsk before anything that **deletes**, and bef
 const policy = ref(POLICY);
 const policyOnDisk = ref(POLICY);
 
-// Order is the rank, top to bottom; the last rows are tones, not ranks, laid on a tier (button.ts).
-const BUTTON_TIERS: readonly { name: string; spelling: string; props: ButtonLook }[] = [
-    { name: `Gilded`, spelling: `tier="loud" gilded`, props: { tier: `loud`, gilded: true } },
-    { name: `Loud`, spelling: `tier="loud"`, props: { tier: `loud` } },
-    { name: `Accent`, spelling: `<Button>`, props: {} },
-    { name: `Boring`, spelling: `tier="boring"`, props: { tier: `boring` } },
-    { name: `Quiet`, spelling: `tier="quiet"`, props: { tier: `quiet` } },
-    { name: `Quiet accent`, spelling: `tier="quiet" tone="accent"`, props: { tier: `quiet`, tone: `accent` } },
-    { name: `Danger`, spelling: `tone="danger"`, props: { tone: `danger` } },
-    { name: `Warning`, spelling: `tone="warning"`, props: { tone: `warning` } },
-    { name: `Success`, spelling: `tone="success"`, props: { tone: `success` } },
+// Order is the rank; the last rows are tones on a tier (button.ts). `when` is the rule button-tiers holds call sites to.
+const BUTTON_TIERS: readonly { name: string; spelling: string; when: string; props: ButtonLook }[] = [
+    { name: `Gilded`, spelling: `tier="loud" gilded`, when: `The one press that moves the workspace up a version.`, props: { tier: `loud`, gilded: true } },
+    { name: `Loud`, spelling: `tier="loud"`, when: `The page's one paid or turn-it-on step.`, props: { tier: `loud` } },
+    { name: `Accent`, spelling: `tier="accent"`, when: `Completes what this surface is open for: submit, the yes to a question asked, the way forward from a failure or an empty list. One at a time.`, props: { tier: `accent` } },
+    { name: `Boring`, spelling: `tier="boring"`, when: `A tool used when the reader chooses (scan, clean, rebuild, open, add), and the alternatives beside the accent one.`, props: { tier: `boring` } },
+    { name: `Quiet`, spelling: `tier="quiet"`, when: `Leaves, cancels, dismisses, goes back, shows or hides.`, props: { tier: `quiet` } },
+    { name: `Danger`, spelling: `tier="accent" tone="danger"`, when: `Confirms a removal.`, props: { tier: `accent`, tone: `danger` } },
+    { name: `Quiet danger`, spelling: `tier="quiet" tone="danger"`, when: `Starts a removal, which then asks.`, props: { tier: `quiet`, tone: `danger` } },
+    { name: `Warning`, spelling: `tier="accent" tone="warning"`, when: `A risky step: abort, export with secrets.`, props: { tier: `accent`, tone: `warning` } },
+    { name: `Success`, spelling: `tier="accent" tone="success"`, when: `Ships work: land, commit.`, props: { tier: `accent`, tone: `success` } },
 ];
 
 const COUNTS = [
@@ -433,7 +433,7 @@ const pickedTier = ref(`collaborator`);
                     <Card class="h-56 p-0">
                         <EmptyState icon="robot" size="page" title="No working copy to show." line="The agent was archived; its work stays on its branch." class="h-full">
                             <template #actions>
-                                <Button size="small" label="See changes" />
+                                <Button tier="accent" size="small" label="See changes" />
                                 <Button size="small" tier="boring" label="Back to the shared workspace" />
                             </template>
                         </EmptyState>
@@ -713,7 +713,7 @@ const pickedTier = ref(`collaborator`);
                             <tr v-for="tier in BUTTON_TIERS" :key="tier.name">
                                 <td class="whitespace-nowrap text-2xs text-muted">
                                     <span class="font-medium text-content">{{ tier.name }}</span>
-                                    <span class="ml-1 font-mono text-3xs text-subtle">{{ tier.spelling }}</span>
+                                    <span class="ml-1 font-mono text-3xs text-subtle">{{ tier.spelling }}</span><span class="block max-w-64 whitespace-normal text-3xs text-subtle">{{ tier.when }}</span>
                                 </td>
                                 <td><Button v-bind="tier.props" label="Land now" /></td>
                                 <td><Button v-bind="tier.props" label="Land now" size="small" /></td>
@@ -939,8 +939,8 @@ const pickedTier = ref(`collaborator`);
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
                     <SegmentedControl v-model="modalSize" :options="MODAL_SIZES.map((value) => ({ label: value, value }))" size="sm" />
-                    <Button size="small" label="Open modal" @click="modalOpen = true" />
-                    <Button size="small" tone="danger" label="Open confirm" @click="confirmOpen = true" />
+                    <Button tier="boring" size="small" label="Open modal" @click="modalOpen = true" />
+                    <Button tier="quiet" size="small" tone="danger" label="Open confirm" @click="confirmOpen = true" />
                     <button ref="anchoredTrigger" type="button" :class="ui.addTile(`px-3 py-1.5`)" @click="anchoredOpen = !anchoredOpen">
                         Anchored overlay
                     </button>
@@ -950,7 +950,7 @@ const pickedTier = ref(`collaborator`);
                     <button ref="responsiveTrigger" type="button" :class="ui.addTile(`px-3 py-1.5`)" @click="responsiveOpen = !responsiveOpen">
                         Responsive overlay
                     </button>
-                    <Button size="small" label="Open resources" @click="resourcesOpen = true" />
+                    <Button tier="boring" size="small" label="Open resources" @click="resourcesOpen = true" />
                 </div>
             </section>
         </div>
@@ -974,7 +974,7 @@ const pickedTier = ref(`collaborator`);
             </div>
             <template #footer>
                 <Button label="Cancel" tier="quiet" @click="modalOpen = false" />
-                <Button label="Save" @click="modalOpen = false" />
+                <Button tier="accent" label="Save" @click="modalOpen = false" />
             </template>
         </Modal>
 

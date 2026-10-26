@@ -270,6 +270,7 @@ const confirmRemove = async (): Promise<void> => {
                     <template #meta><StatusBadge variant="warning" :label="t(`sandbox.extensionsInstalled.pendingBadge`)" size="xs" /></template>
                     <template #control>
                         <Button
+                            tier="accent"
                             size="small"
                             :label="t(`sandbox.extensionsInstalled.approve`)"
                             :loading="extensionBusy(extension.id)"
@@ -343,6 +344,7 @@ const confirmRemove = async (): Promise<void> => {
                             }}
                         </button>
                         <Button
+                            tier="boring"
                             v-if="matches.length === 0 && entries.length > 0"
                             size="small"
                             :label="t(`ui.action.clearFilter`)"

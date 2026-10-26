@@ -121,6 +121,7 @@ const confirmDelete = async (): Promise<void> => {
             >
                 <template #control>
                     <Button
+                        tier="quiet"
                         v-if="local"
                         :label="t(`settings.settingsData.deleteInWorkspace`)"
                         tone="danger"
@@ -131,6 +132,7 @@ const confirmDelete = async (): Promise<void> => {
                         <template #icon><Icon name="arrow-up-right" /></template>
                     </Button>
                     <Button
+                        tier="quiet"
                         v-else-if="!confirmingDelete && !deleting"
                         :label="t(`ui.action.delete`)"
                         tone="danger"
@@ -144,6 +146,7 @@ const confirmDelete = async (): Promise<void> => {
                         <span class="mr-auto text-2xs text-subtle">{{ t(`settings.settingsData.sureAccessRevokedBefore`) }}</span>
                         <Button :label="t(`ui.action.cancel`)" tier="quiet" size="small" :disabled="deleting" @click="confirmingDelete = false" />
                         <Button
+                            tier="accent"
                             :label="t(`settings.settingsData.deleteMyAccount`)"
                             tone="danger"
                             size="small"

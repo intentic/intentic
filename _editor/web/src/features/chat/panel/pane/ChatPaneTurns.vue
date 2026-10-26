@@ -228,7 +228,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
             class="flex-1 px-4"
         >
             <template #actions>
-                <Button size="small" thumb tier="boring" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
+                <Button size="small" thumb tier="accent" @click="retryHydrate(conversation)">{{ t(`chat.chatTranscriptSkeleton.retry`) }}</Button>
             </template>
         </EmptyState>
         <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
@@ -251,7 +251,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                 <Icon name="exclamation-triangle" class="text-2xs text-warning" />
                 <span>{{ t(`chat.chatPaneTurns.couldntRefresh`) }}</span>
                 <span v-if="staleness.reason">{{ staleness.reason }}</span>
-                <Button size="small" thumb tier="quiet" @click="retryHydrate(conversation)">{{ t(`ui.action.retry`) }}</Button>
+                <Button size="small" thumb tier="accent" @click="retryHydrate(conversation)">{{ t(`ui.action.retry`) }}</Button>
             </template>
         </p>
         <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->

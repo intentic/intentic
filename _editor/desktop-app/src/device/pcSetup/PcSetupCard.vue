@@ -349,7 +349,7 @@ const retryTask = (): Promise<void> =>
             </ul>
             <p class="text-xs text-muted">{{ t(`desktop.pcSetup.hosted`) }}</p>
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <Button size="small" :label="t(`desktop.pcSetup.cloud`)" :disabled="busy !== undefined" @click="useCloud">
+                <Button tier="accent" size="small" :label="t(`desktop.pcSetup.cloud`)" :disabled="busy !== undefined" @click="useCloud">
                     <template #icon><Icon name="cloud" /></template>
                 </Button>
                 <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="busy !== undefined" @click="recheck">
@@ -363,7 +363,7 @@ const retryTask = (): Promise<void> =>
         <Notice v-else-if="phase === `checkUnknown`" tone="warning" class="text-xs">
             <span class="block">{{ t(`desktop.pcSetup.unknown`) }}</span>
             <span class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-                <Button size="small" tier="boring" :label="t(`desktop.requirements.checkAgain`)" :loading="busy === `recheck`" @click="recheck" />
+                <Button size="small" tier="accent" :label="t(`desktop.requirements.checkAgain`)" :loading="busy === `recheck`" @click="recheck" />
                 <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="startSetup(false)">{{ t(`desktop.app.setUpThisPc`) }}</button>
                 <button v-if="unknownWhy" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="detailsOpen = !detailsOpen">
                     {{ detailsOpen ? t(`desktop.pcSetup.details.hide`) : t(`desktop.pcSetup.details.show`) }}
@@ -419,7 +419,7 @@ const retryTask = (): Promise<void> =>
                         </li>
                     </ul>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Button size="small" :label="moving ? t(`desktop.pcSetup.setUpAndMove`) : t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">
+                        <Button tier="accent" size="small" :label="moving ? t(`desktop.pcSetup.setUpAndMove`) : t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">
                             <template #icon><Icon name="bolt" /></template>
                         </Button>
                         <!-- For what only the reader can change (a firmware setting, disk space, Docker installed by hand). -->
@@ -454,7 +454,7 @@ const retryTask = (): Promise<void> =>
                         <span>{{ t(`desktop.pcSetup.restart.at`, { time: restartAt }) }}</span>
                     </p>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Button size="small" :label="t(`desktop.requirements.restartNow`)" :disabled="busy !== undefined" @click="restart(`now`)">
+                        <Button tier="accent" size="small" :label="t(`desktop.requirements.restartNow`)" :disabled="busy !== undefined" @click="restart(`now`)">
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
                         <template v-if="restartAt">
@@ -476,14 +476,14 @@ const retryTask = (): Promise<void> =>
                 <!-- Windows' permission prompt was closed or answered No: nothing changed, and the same press asks again. -->
                 <template v-else-if="phase === `admin`">
                     <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.app.pcSetupAdminDeclined`) }}</p>
-                    <Button class="self-start" size="small" :label="t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">
+                    <Button tier="accent" class="self-start" size="small" :label="t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">
                         <template #icon><Icon name="shield" /></template>
                     </Button>
                 </template>
 
                 <template v-else-if="phase === `signOut`">
                     <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.pcSetup.signOut`) }}</p>
-                    <Button class="self-start" size="small" :label="t(`desktop.requirements.signOutNow`)" :disabled="busy !== undefined" @click="signOut()">
+                    <Button tier="accent" class="self-start" size="small" :label="t(`desktop.requirements.signOutNow`)" :disabled="busy !== undefined" @click="signOut()">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
                 </template>
@@ -493,7 +493,7 @@ const retryTask = (): Promise<void> =>
                     <p class="max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.app.pcSetupFailed`) }}</p>
                     <p v-if="failedReason && detailsOpen" class="rounded-md bg-canvas px-2.5 py-2 font-mono break-words text-2xs text-muted">{{ failedReason }}</p>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Button size="small" :label="t(`ui.action.tryAgain`)" @click="startSetup(false)">
+                        <Button tier="accent" size="small" :label="t(`ui.action.tryAgain`)" @click="startSetup(false)">
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
                         <button v-if="host.repair" type="button" :class="ui.textButton({ tone: `quiet` })" @click="askRepair">
@@ -517,7 +517,7 @@ const retryTask = (): Promise<void> =>
                 <template v-if="signedOut" #aside>
                     <Button
                         size="small"
-                        :tier="steps.account === `current` ? undefined : `boring`"
+                        :tier="steps.account === `current` ? `accent` : `boring`"
                         :label="t(`desktop.pcSetup.signIn.button`)"
                         :disabled="busy !== undefined"
                         @click="signInNow"

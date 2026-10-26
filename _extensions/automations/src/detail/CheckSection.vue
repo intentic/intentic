@@ -52,7 +52,7 @@ const save = async (): Promise<void> => {
                 <p v-if="error" class="text-xs break-words text-danger">{{ error }}</p>
                 <div class="flex items-center justify-end gap-2">
                     <Button :label="t(`automationRow.cancel`)" size="small" tier="quiet" @click="writing = false" />
-                    <Button :label="t(`automationRow.save`)" size="small" :loading="saving" :disabled="saving" @click="save" />
+                    <Button tier="accent" :label="t(`automationRow.save`)" size="small" :loading="saving" :disabled="saving" @click="save" />
                 </div>
             </template>
             <Code v-else-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />

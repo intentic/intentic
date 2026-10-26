@@ -388,7 +388,7 @@ const confirmRemove = async (): Promise<void> => {
                     </span>
                 </div>
                 <!-- Never disabled for having no accounts: a persona with none still bounds where an agent works. -->
-                <Button :label="t(`sandbox.sandboxPersonas.addPersona`)" size="small" @click="startAdd">
+                <Button tier="accent" :label="t(`sandbox.sandboxPersonas.addPersona`)" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
             </div>
@@ -461,6 +461,7 @@ const confirmRemove = async (): Promise<void> => {
                                 @keyup.enter="submit"
                             />
                             <Button
+                                tier="accent"
                                 :label="t(`ui.action.create`)"
                                 size="small"
                                 :loading="save.isPending.value"

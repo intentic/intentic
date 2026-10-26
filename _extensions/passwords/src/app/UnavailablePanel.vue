@@ -94,9 +94,9 @@ const run = async (): Promise<void> => {
 
         <p v-if="error" class="text-sm text-danger" role="alert">{{ error }}</p>
         <template v-if="!running">
-            <Button v-if="fix" :label="error ? t(`app.unavailable.tryAgain`) : fix.label" @click="run()" />
-            <Button v-else tier="boring" :label="t(`app.retry`)" @click="emit(`retry`)" />
+            <Button tier="accent" v-if="fix" :label="error ? t(`app.unavailable.tryAgain`) : fix.label" @click="run()" />
+            <Button v-else tier="accent" :label="t(`app.retry`)" @click="emit(`retry`)" />
         </template>
-        <Button v-else-if="!showSteps" :label="fix?.label ?? ``" disabled />
+        <Button tier="accent" v-else-if="!showSteps" :label="fix?.label ?? ``" disabled />
     </div>
 </template>

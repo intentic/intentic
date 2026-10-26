@@ -142,6 +142,7 @@ const choose = (entry: PickerEntry): void => {
                     <p class="truncate text-2xs text-muted" v-tooltip.top.overflow="request.attempt.summary">{{ request.attempt.summary }}</p>
                     <div class="flex gap-1.5">
                         <Button
+                            tier="accent"
                             v-if="request.attempt.continuable"
                             :label="t(`ui.action.continue`)"
                             class="flex-1"
@@ -164,6 +165,7 @@ const choose = (entry: PickerEntry): void => {
                     </div>
                 </template>
                 <Button
+                    tier="accent"
                     v-else
                     :label="request.action"
                     class="w-full"

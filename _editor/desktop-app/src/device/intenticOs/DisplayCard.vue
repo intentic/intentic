@@ -84,7 +84,7 @@ const held = computed(() => displayChanging.value !== undefined);
         <Notice v-if="displayTrial" tone="info" icon="screen" class="items-center text-xs">
             <span class="min-w-0 flex-1">{{ t(`desktop.os.display.trial`, { count: secondsLeft }, secondsLeft) }}</span>
             <template #actions>
-                <Button size="small" :label="t(`desktop.os.display.keep`)" @click="keepDisplay" />
+                <Button tier="accent" size="small" :label="t(`desktop.os.display.keep`)" @click="keepDisplay" />
                 <Button size="small" tier="quiet" :label="t(`desktop.os.display.undo`)" @click="undoDisplay" />
             </template>
         </Notice>

@@ -174,6 +174,7 @@ watch(online, (isOnline) => {
                     </p>
                     <div class="flex flex-wrap items-center gap-2">
                         <Button
+                            tier="boring"
                             :label="t(`capabilities.hostConnectDialog.nameIt`, { name: hostnameSuggestion })"
                             size="small"
                             :loading="renaming"

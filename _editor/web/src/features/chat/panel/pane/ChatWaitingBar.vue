@@ -133,7 +133,7 @@ const memoryLine = computed(() => {
                 <span class="flex max-w-full shrink-0 flex-wrap items-center gap-1 max-md:w-full max-md:[&>*]:flex-auto">
                     <!-- The plan's answers stand here alone, not on its card too: pinned, and beside the box whose notes they carry. -->
                     <template v-if="decision.kind === `plan` && decision.requestId !== undefined">
-                        <Button size="small" thumb :disabled="!props.canDrive || replying" @click="emit(`approve`)">
+                        <Button tier="accent" size="small" thumb :disabled="!props.canDrive || replying" @click="emit(`approve`)">
                             {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}
                         </Button>
                         <Button size="small" thumb tier="boring" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
@@ -147,6 +147,7 @@ const memoryLine = computed(() => {
                 {{ reopen.blockedLine.value === undefined ? memoryLine : `${memoryLine} · ${reopen.blockedLine.value}` }}
                 <template #actions>
                     <Button
+                        tier="accent"
                         v-if="reopen.reopenAt.value !== undefined"
                         size="small"
                         thumb
@@ -158,7 +159,7 @@ const memoryLine = computed(() => {
                     <Button
                         size="small"
                         thumb
-                        :tier="reopen.reopenAt.value === undefined ? undefined : `quiet`"
+                        :tier="reopen.reopenAt.value === undefined ? `accent` : `quiet`"
                         :disabled="!props.canDrive || reopen.blockedLine.value !== undefined"
                         v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()"
                         @click="sendHeld()"

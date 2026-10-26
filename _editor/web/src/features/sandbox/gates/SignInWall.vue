@@ -223,6 +223,7 @@ const backToSetup = async (): Promise<void> => {
                     <Notice v-if="notice" :of="notice" class="w-full text-left" />
                     <template v-if="passkeysWork">
                         <Button
+                            tier="accent"
                             v-if="stepUp.enrolled"
                             :label="t(`sandbox.signInWall.usePasskey`)"
                             class="mt-2 w-full justify-center"
@@ -239,7 +240,7 @@ const backToSetup = async (): Promise<void> => {
                                 :placeholder="t(`sandbox.words.nameEGWork`)"
                                 :class="ui.input({ size: `sm` }, `w-full`)"
                             />
-                            <Button type="submit" :label="t(`sandbox.words.addPasskey`)" class="w-full justify-center" :loading="busy">
+                            <Button tier="accent" type="submit" :label="t(`sandbox.words.addPasskey`)" class="w-full justify-center" :loading="busy">
                                 <template #icon><Icon name="key" /></template>
                             </Button>
                         </form>

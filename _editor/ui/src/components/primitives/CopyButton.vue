@@ -54,7 +54,7 @@ const copy = async (): Promise<void> => {
 </script>
 
 <template>
-    <Button v-if="label && (cta || stretch)" ref="root" size="small" :class="chrome" @click="copy">
+    <Button tier="accent" v-if="label && (cta || stretch)" ref="root" size="small" :class="chrome" @click="copy">
         <Icon :name="copied ? 'check' : 'copy'" :class="[stretch ? `` : `text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? t(`ui.action.copied`) : label }}
     </Button>

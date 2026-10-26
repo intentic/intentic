@@ -77,6 +77,11 @@ const savePin = (): void => {
             </p>
             <div v-if="!editing" class="flex flex-wrap gap-2">
                 <Button
+                    :tier="status.enabled
+                    ?
+                    `boring`
+                    :
+                    `accent`"
                     size="small"
                     :disabled="busy"
                     :label="t(status.enabled ? `desktop.os.security.change` : `desktop.os.security.set`)"
@@ -96,8 +101,8 @@ const savePin = (): void => {
                 <p class="text-2xs text-subtle">{{ t(`desktop.os.security.pinHint`) }}</p>
                 <p v-if="again && !matches" class="text-2xs text-warning">{{ t(`desktop.os.security.mismatch`) }}</p>
                 <div class="flex gap-2">
-                    <Button type="submit" size="small" :disabled="busy || !validPin || !matches" :label="t(`desktop.os.security.savePin`)" />
-                    <Button type="button" size="small" tier="boring" :disabled="busy" :label="t(`ui.action.cancel`)" @click="editing = false; pin = ``; again = ``" />
+                    <Button tier="accent" type="submit" size="small" :disabled="busy || !validPin || !matches" :label="t(`desktop.os.security.savePin`)" />
+                    <Button type="button" size="small" tier="quiet" :disabled="busy" :label="t(`ui.action.cancel`)" @click="editing = false; pin = ``; again = ``" />
                 </div>
             </form>
             <form v-if="status.enabled" class="flex flex-wrap items-end gap-2" @submit.prevent="validMinutes && change(() => security.idle(minutes))">
@@ -105,7 +110,7 @@ const savePin = (): void => {
                     {{ t(`desktop.os.security.idle`) }}
                     <input v-model.number="minutes" type="number" min="1" max="240" step="1" :disabled="busy" :class="ui.input(`w-24`)" />
                 </label>
-                <Button type="submit" size="small" :disabled="busy || !validMinutes || minutes === status.idleMinutes" :label="t(`desktop.os.security.saveIdle`)" />
+                <Button tier="accent" type="submit" size="small" :disabled="busy || !validMinutes || minutes === status.idleMinutes" :label="t(`desktop.os.security.saveIdle`)" />
             </form>
         </template>
     </section>

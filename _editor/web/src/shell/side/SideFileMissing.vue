@@ -75,7 +75,7 @@ const pick = (path: string): void => {
         class="gap-4 py-8"
     >
         <template v-if="paletteHere && name !== ``" #actions>
-            <Button tier="boring" @click="searchInQuickOpen(name)">
+            <Button tier="accent" @click="searchInQuickOpen(name)">
                 <Icon name="search" />
                 {{ t(`shell.sidePanel.searchFor`, { name }) }}
             </Button>

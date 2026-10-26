@@ -234,6 +234,7 @@ const PROBLEM = `flex items-center gap-1.5 text-xs text-danger`;
             </span>
             <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="emit(`cancel`)" />
             <Button
+                tier="accent"
                 size="small"
                 :label="creating ? t(`sandbox.skillForm.addSkill`) : t(`sandbox.words.saveChanges`)"
                 :disabled="disabled || !dirty"

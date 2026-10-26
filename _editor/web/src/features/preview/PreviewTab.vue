@@ -374,6 +374,7 @@ watch(
     <Teleport v-if="active && toolsTo && target" :to="toolsTo">
         <!-- Tooltip names target and command, since "Start" alone says neither in a multi-repo workspace. -->
         <Button
+            tier="boring"
             v-if="target.startable && !target.running"
             :label="compact ? undefined : t(`ui.action.start`)"
             :aria-label="t(`ui.action.start`)"
@@ -462,7 +463,7 @@ watch(
                 </i18n-t>
             </template>
             <template #actions>
-                <Button :label="t(`ui.action.tryAgain`)" size="small" tier="boring" @click="resolvePreview()" />
+                <Button :label="t(`ui.action.tryAgain`)" size="small" tier="accent" @click="resolvePreview()" />
                 <Button :as="RouterLink" to="/sandbox/ports" :label="t(`preview.previewPanel.openPorts`)" size="small" tier="boring" />
             </template>
         </EmptyState>
@@ -512,6 +513,7 @@ watch(
         >
             <template #actions>
                 <Button
+                    tier="accent"
                     :label="forwarding !== undefined ? t(`preview.previewPanel.opening`) : t(`shared.preview`)"
                     size="small"
                     :disabled="forwarding !== undefined"
@@ -547,6 +549,7 @@ watch(
                 />
                 <!-- Restart appears only after the wait becomes a verdict. -->
                 <Button
+                    tier="accent"
                     v-if="target.startable && (waitingLong || target.launch === `exited`)"
                     :label="t(`ui.action.restart`)"
                     size="small"
@@ -575,7 +578,7 @@ watch(
                 </i18n-t>
             </template>
             <template v-if="target.startable" #actions>
-                <Button :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(`starting`, start)">
+                <Button tier="accent" :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(`starting`, start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>
             </template>

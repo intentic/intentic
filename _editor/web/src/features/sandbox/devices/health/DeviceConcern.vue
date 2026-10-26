@@ -63,7 +63,7 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
             :as="RouterLink"
             :to="route"
             size="small"
-            tier="quiet"
+            tier="boring"
             :label="concern.fix.label"
             class="ml-auto shrink-0"
         >

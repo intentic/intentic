@@ -93,7 +93,7 @@ const signIn = async (): Promise<void> => {
                     </p>
                 </div>
             </div>
-            <Button :label="t(`ui.action.signIn`)" :loading="busy" size="small" class="w-full" @click="signIn">
+            <Button tier="accent" :label="t(`ui.action.signIn`)" :loading="busy" size="small" class="w-full" @click="signIn">
                 <template #icon><Icon name="sign-in" /></template>
             </Button>
             <Notice v-if="failure" tone="danger" class="text-2xs">{{ failure }}</Notice>

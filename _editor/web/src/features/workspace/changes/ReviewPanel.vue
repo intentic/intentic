@@ -1164,7 +1164,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         v-if="changes.count.value > 0"
                         size="small"
                         tone="success"
-                        thumb
+                        thumb tier="accent"
                         class="min-w-24 shrink-0 whitespace-nowrap"
                         :disabled="!commitReady"
                         :loading="commitRunning"
@@ -1489,7 +1489,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     <span class="block text-muted">{{ t(`workspace.reviewPanel.resolveConflictsStageTo`, { operation: group.operation }) }}</span>
                     <template #actions>
                         <Button
-                            size="small"
+                            size="small" tier="accent"
                             tone="warning"
                             class="shrink-0"
                             :disabled="changes.actionBusy.value"

@@ -111,7 +111,7 @@ const create = async (): Promise<void> => {
                     />
                 </div>
                 <Notice v-if="failure" :of="{ tone: `warning`, title: failure }" />
-                <Button type="submit" class="w-fit" :label="t(`sandbox.words.addSandbox`)" :loading="creating" :disabled="creating || pick === undefined" />
+                <Button tier="accent" type="submit" class="w-fit" :label="t(`sandbox.words.addSandbox`)" :loading="creating" :disabled="creating || pick === undefined" />
             </form>
         </div>
     </Page>

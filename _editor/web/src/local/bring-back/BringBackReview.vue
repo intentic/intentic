@@ -91,6 +91,7 @@ const tooMany = computed(() => chosen.value.size > BRING_BACK_CAP);
         <template #footer>
             <Button tier="quiet" :label="t(`ui.action.cancel`)" @click="open = false" />
             <Button
+                tier="accent"
                 :label="t(`local.bringBackReview.bring`, { count: chosen.size }, chosen.size)"
                 :loading="busy"
                 :disabled="chosen.size === 0 || tooMany"

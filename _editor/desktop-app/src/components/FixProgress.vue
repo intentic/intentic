@@ -212,7 +212,7 @@ const stateWord = (state: string): string | undefined => {
 
         <!-- One yes per fix ic can make once someone agrees: the click that stands in for the terminal it would have asked in. -->
         <div v-if="!running && accepts.length > 0" class="flex flex-wrap items-center gap-2">
-            <Button v-for="check in accepts" :key="check.id" size="small" :label="check.label" :disabled="busy" @click="emit(`accept`, check.id)">
+            <Button v-for="(check, at) in accepts" :key="check.id" :tier="at === 0 ? `accent` : `boring`" size="small" :label="check.label" :disabled="busy" @click="emit(`accept`, check.id)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
         </div>

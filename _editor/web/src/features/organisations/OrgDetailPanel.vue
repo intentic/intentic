@@ -120,7 +120,7 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
 
         <OrgAccessPolicy v-model:profiles="profiles" v-model:ceiling="ceiling" :readonly="!admin" />
         <div v-if="admin">
-            <Button :label="t(`organisations.detail.savePolicy`)" size="small" :disabled="!dirty || busy" :loading="busy" @click="savePolicy" />
+            <Button tier="accent" :label="t(`organisations.detail.savePolicy`)" size="small" :disabled="!dirty || busy" :loading="busy" @click="savePolicy" />
         </div>
 
         <RowGroup v-if="admin" :label="t(`organisations.detail.members`)">
@@ -140,7 +140,7 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
                         :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                     />
                     <SegmentedControl v-model="role" :options="roleOptions" :aria-label="t(`organisations.detail.members`)" size="xs" />
-                    <Button type="submit" :label="t(`organisations.detail.add`)" size="small" :disabled="busy || email.trim() === ``" />
+                    <Button tier="accent" type="submit" :label="t(`organisations.detail.add`)" size="small" :disabled="busy || email.trim() === ``" />
                 </form>
             </RowNote>
         </RowGroup>
@@ -164,7 +164,7 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
                         <option value="" disabled>{{ t(`organisations.detail.pickSandbox`) }}</option>
                         <option v-for="sandbox in bindable" :key="sandbox.id" :value="sandbox.id">{{ sandbox.name }}</option>
                     </select>
-                    <Button type="submit" :label="t(`organisations.detail.bind`)" size="small" :disabled="busy || toBind === ``" />
+                    <Button tier="accent" type="submit" :label="t(`organisations.detail.bind`)" size="small" :disabled="busy || toBind === ``" />
                 </form>
                 <p class="mt-2 text-2xs text-subtle">{{ t(`organisations.detail.bindNote`) }}</p>
             </RowNote>

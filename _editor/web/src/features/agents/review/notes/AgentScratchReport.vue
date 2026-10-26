@@ -65,7 +65,7 @@ const labelOf = (repo: string, path: string): string => (repo === `root` ? path 
                 </Button>
                 <Button
                     size="small"
-                    tier="quiet"
+                    tier="quiet" tone="danger"
                     class="whitespace-nowrap"
                     :disabled="busy || streaming"
                     @click="emit('delete', group.repo, [entry.path])"

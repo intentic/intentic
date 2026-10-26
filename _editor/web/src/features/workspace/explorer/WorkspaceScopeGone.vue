@@ -20,7 +20,7 @@ const title = useScopeTitle();
     <EmptyState icon="robot" size="page" :title="t(`workspace.workspaceScopeGone.noWorkingCopyTo`, { title })" :line="error" class="h-full">
         <template #actions>
             <!-- A link styled as a button, not a button that navigates: it's a destination, meant to open in a new tab. -->
-            <Button size="small" :as="RouterLink" :to="`/agents/${workspaceAgent}`">
+            <Button tier="accent" size="small" :as="RouterLink" :to="`/agents/${workspaceAgent}`">
                 <Icon name="check-square" />
                 {{ t(`workspace.words.seeChanges`) }}
             </Button>

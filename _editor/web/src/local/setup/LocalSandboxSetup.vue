@@ -167,10 +167,10 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
         <div v-if="view?.carriesOn" class="flex flex-wrap items-center gap-3 rounded-lg border border-line-subtle px-4 py-3 text-xs text-muted">
             <Icon name="info-circle" class="shrink-0 text-sm" aria-hidden="true" />
             <span class="min-w-0 flex-1">{{ t(`local.sandboxSetup.carriesOn`) }}</span>
-            <Button :as="RouterLink" :to="FILES" tier="boring" size="small" :label="t(`local.sandboxSetup.backToFiles`)" />
+            <Button :as="RouterLink" :to="FILES" tier="quiet" size="small" :label="t(`local.sandboxSetup.backToFiles`)" />
         </div>
         <div v-else-if="view !== undefined && view.steps.length === 0" class="flex">
-            <Button :as="RouterLink" :to="FILES" tier="boring" :label="t(`local.sandboxSetup.backToFiles`)" />
+            <Button :as="RouterLink" :to="FILES" tier="quiet" :label="t(`local.sandboxSetup.backToFiles`)" />
         </div>
     </div>
 </template>

@@ -262,8 +262,8 @@ watch(
                         class="ui-field-box ui-field-sm min-w-40 flex-1"
                         @keydown.enter="resolveHelp(true)"
                     />
-                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`chat.words.doneHandBack`) }} </Button>
-                    <Button size="small" tier="boring" class="shrink-0" @click="() => resolveHelp(false)">
+                    <Button tier="accent" size="small" class="shrink-0" @click="() => resolveHelp(true)"> {{ t(`chat.words.doneHandBack`) }} </Button>
+                    <Button size="small" tier="quiet" class="shrink-0" @click="() => resolveHelp(false)">
                         {{ t(`chat.words.cantHelpNow`) }}
                     </Button>
                 </div>
@@ -370,7 +370,7 @@ watch(
                     }}</template>
                 </template>
                 <template v-if="newTab !== undefined" #actions>
-                    <Button class="pointer-events-auto" :label="t(`terminal.terminalPanel.newTerminal`)" size="small" tier="boring" @click="newTab()">
+                    <Button class="pointer-events-auto" :label="t(`terminal.terminalPanel.newTerminal`)" size="small" tier="accent" @click="newTab()">
                         <template #icon><Icon name="plus" class="text-2xs" /></template>
                     </Button>
                 </template>

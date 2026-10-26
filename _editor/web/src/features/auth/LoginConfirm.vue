@@ -91,7 +91,7 @@ const brokenNotice = noticeOf(t(`auth.loginConfirm.linkIncomplete`), { tone: `wa
                 <!-- A link with a part missing: the sign-in page is where a code can be asked for again. -->
                 <template v-if="!complete">
                     <Notice :of="brokenNotice" class="rounded-none text-left" />
-                    <Button :label="t(`auth.desktopAuthComplete.backToSignIn`)" tier="boring" class="mt-4 self-center" @click="void router.replace(`/login`)" />
+                    <Button :label="t(`auth.desktopAuthComplete.backToSignIn`)" tier="accent" class="mt-4 self-center" @click="void router.replace(`/login`)" />
                 </template>
 
                 <!-- The code is spent: one more mail to the same address, typed here this time. -->
@@ -111,6 +111,7 @@ const brokenNotice = noticeOf(t(`auth.loginConfirm.linkIncomplete`), { tone: `wa
                         <Notice v-if="notice" :of="notice" class="mt-4 rounded-none text-left" />
                     </div>
                     <Button
+                        tier="accent"
                         :label="t(`auth.loginConfirm.confirm`)"
                         class="mt-5 w-full justify-center"
                         :loading="state === `signing-in` || state === `done`"

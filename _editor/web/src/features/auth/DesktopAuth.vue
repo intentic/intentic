@@ -345,7 +345,7 @@ onMounted(() => {
                     <!-- The shared failure box, squared and set left: every other edge inside this frame is a straight rule. -->
                     <Notice :of="error" class="rounded-none text-left" />
                     <div class="gate-actions">
-                        <Button :label="t(`ui.action.tryAgain`)" tier="boring" :loading="working" @click="hand" />
+                        <Button :label="t(`ui.action.tryAgain`)" tier="accent" :loading="working" @click="hand" />
                     </div>
                     <!-- Offered with the retry, since retrying alone repeats what just failed (often the platform refusing the token). -->
                     <button type="button" class="escape" v-action="useGooglesOwnPage">{{ t(`auth.desktopAuth.useGooglesOwnPage`) }}</button>
@@ -371,7 +371,7 @@ onMounted(() => {
                         <Button
                             :label="t(`auth.desktopAuth.continueAs`, { email: disagreement.google })"
                             class="w-full justify-center"
-                            :loading="working"
+                            :loading="working" tier="accent"
                             @click="continueAsGoogle"
                         />
                         <Button
@@ -422,7 +422,7 @@ onMounted(() => {
                         <div ref="googleButton" class="entry-socket-slot"></div>
                     </div>
                     <div v-if="!googleReady" class="gate-actions">
-                        <Button :label="t(`auth.desktopAuth.openInBrowser`)" class="w-full justify-center" @click="openInBrowser">
+                        <Button tier="accent" :label="t(`auth.desktopAuth.openInBrowser`)" class="w-full justify-center" @click="openInBrowser">
                             <template #icon><Icon name="external-link" /></template>
                         </Button>
                     </div>

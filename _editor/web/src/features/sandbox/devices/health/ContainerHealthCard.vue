@@ -187,6 +187,7 @@ const repair = async (): Promise<void> => {
                     </Button>
                     <template v-else-if="canRepair">
                         <Button
+                            tier="accent"
                             size="small"
                             :loading="busy"
                             :disabled="busy"

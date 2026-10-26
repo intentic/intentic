@@ -61,7 +61,7 @@ const useDevRebuild = (slug: string): ReturnType<typeof followRebuild> => {
 
 let app: App | undefined;
 
-const mount = (props: { slug: string; base: string; root?: string; recipePending?: boolean; secondary?: boolean }): HTMLElement => {
+const mount = (props: { slug: string; base: string; root?: string; recipePending?: boolean }): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(DevRebuild, props) });
@@ -187,15 +187,15 @@ it(`says it applies the waiting recipe at the confirmation, and nowhere on the c
     expect(document.body.textContent).toContain(`the pending rebuild clears once the sandbox is back`);
 });
 
-// The same offer is the step that finishes a pending recipe, and a standing one when nothing is waiting: the caller
-// says which, and the tier follows.
-it(`draws the offer a tier down when the card isn't asking for it`, () => {
+// The same offer is the step that finishes a pending recipe, and a tool kept to hand when nothing is waiting: the
+// tier follows the recipe.
+it(`draws the offer a tier down when nothing is waiting on it`, () => {
     const step = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic`, recipePending: true });
     expect(step.querySelector(`button`)?.classList.contains(`p-button-secondary`)).toBe(false);
     app?.unmount();
     document.body.innerHTML = ``;
 
-    const offer = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic`, secondary: true });
+    const offer = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
     expect(offer.querySelector(`button`)?.classList.contains(`p-button-secondary`)).toBe(true);
 });
 

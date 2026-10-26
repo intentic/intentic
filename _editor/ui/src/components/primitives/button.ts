@@ -1,14 +1,22 @@
 import { tv } from "tailwind-variants";
 
-/* DOM-free button tiers: loud is the single primary paid action; gilded is reserved for workspace updates.
- * accent (default) commits, boring is neutral-filled secondary, quiet is chromeless. Size follows density: small 26px, default 38px.
+/* DOM-free button tiers. Bright means "the step we are asking you to take", so every call site names its tier, by
+ * the first of these questions it answers yes to (button-tiers.mjs holds the repository to it, DesignKit shows it):
+ *   quiet  — does it leave, cancel, dismiss, go back, show or hide? Chromeless. With tone danger: the press that only
+ *            starts a removal, whose confirmation is the accent one.
+ *   accent — does it complete what this surface is open for: a form's or dialog's submit, the yes to a question the
+ *            app asked, the way forward from a failure, blocker or empty list? Brand fill, one at a time per surface.
+ *   boring — everything else: a tool used when the reader chooses (scan, clean, rebuild, run, open, download, add to
+ *            a list), and the alternatives beside the accent one. Neutral fill.
+ *   loud   — the page's one paid or turn-it-on step; gilded is reserved for workspace updates.
+ * Tones colour a tier: danger removes, warning risks, success ships. Size follows density: small 26px, default 38px.
  * Centralize PrimeVue/kit class mapping here; button-tiers.mjs rejects severity/text/ui-button-* at repository call sites.
- * Button.vue still honors those legacy forms for installed extensions. */
+ * Button.vue still honors those legacy forms, the accent default and the accent tone for installed extensions. */
 
 export type ButtonTier = `loud` | `accent` | `boring` | `quiet`;
 
-/** `accent` is the brand colour: the accent tier's own, and the ink a quiet button takes when it should read as a
- *  link-coloured action rather than a neutral one. */
+/** `danger` removes, `warning` risks, `success` ships. `accent` is retired in the repository (a link is
+ *  `ui.textButton()`); installed extensions built against it still get the brand-coloured quiet button. */
 export type ButtonTone = `accent` | `danger` | `warning` | `success`;
 
 export interface ButtonLook {

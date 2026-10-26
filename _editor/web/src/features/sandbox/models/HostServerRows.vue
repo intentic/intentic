@@ -86,6 +86,7 @@ const use = async (server: HostModelServer): Promise<void> => {
         >
             <template #control>
                 <Button
+                    tier="boring"
                     size="small"
                     :label="t(`connect.hostServers.use`)"
                     :loading="busy === server.baseUrl"

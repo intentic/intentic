@@ -150,7 +150,7 @@ watch(
                                     <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="handoff.cancel" />
                                 </div>
                             </div>
-                            <Button v-else :label="t(`auth.words.continueGoogleInBrowser`)" class="w-full justify-center" @click="continueInBrowser">
+                            <Button tier="accent" v-else :label="t(`auth.words.continueGoogleInBrowser`)" class="w-full justify-center" @click="continueInBrowser">
                                 <template #icon><Icon name="google" /></template>
                             </Button>
                         </template>

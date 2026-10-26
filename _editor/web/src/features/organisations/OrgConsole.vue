@@ -130,7 +130,7 @@ onMounted(async () => {
                         :aria-label="t(`organisations.console.namePlaceholder`)"
                         :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                     />
-                    <Button type="submit" :label="t(`organisations.console.create`)" size="small" :loading="busy" :disabled="busy" />
+                    <Button tier="accent" type="submit" :label="t(`organisations.console.create`)" size="small" :loading="busy" :disabled="busy" />
                 </form>
             </RowNote>
         </RowGroup>

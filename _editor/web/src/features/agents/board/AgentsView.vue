@@ -335,7 +335,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     {{ chatStrip.panes.length }}
                 </Button>
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
-                <Button v-if="!mobile" size="small" thumb @click="startAgent()">
+                <Button tier="boring" v-if="!mobile" size="small" thumb @click="startAgent()">
                     <Icon name="plus" />{{ words.newAgent }}
                 </Button>
             </div>

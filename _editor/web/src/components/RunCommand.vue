@@ -78,7 +78,7 @@ const expired = computed(() => secondsLeft.value === 0);
         <p v-if="secondsLeft !== undefined" class="text-2xs text-subtle">
             <template v-if="expired">{{ t(`common.runCommand.expired`) }}</template>
             <template v-else>{{ t(`common.runCommand.expiresIn`, { time: formatElapsed(secondsLeft) }) }}</template>
-            <Button class="ml-1" :label="t(`common.runCommand.renew`)" size="small" tier="quiet" tone="accent" :disabled="renewing" @click="emit(`renew`)" />
+            <Button class="ml-1" :label="t(`common.runCommand.renew`)" size="small" tier="quiet" :disabled="renewing" @click="emit(`renew`)" />
         </p>
     </div>
 </template>

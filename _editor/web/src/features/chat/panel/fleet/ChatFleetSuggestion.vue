@@ -90,7 +90,7 @@ const keepHere = (): void => {
     >
         {{ view.text }}
         <template #actions>
-            <Button v-if="view.kind === `offer`" size="small" thumb @click="start(view.machine.runner)">
+            <Button tier="accent" v-if="view.kind === `offer`" size="small" thumb @click="start(view.machine.runner)">
                 {{ t(`chat.fleetAdvice.startThere`, { machine: view.machine.name }) }}
             </Button>
             <Button v-else size="small" thumb tier="quiet" @click="keepHere">{{ t(`chat.fleetAdvice.keepHere`) }}</Button>

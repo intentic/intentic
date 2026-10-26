@@ -567,6 +567,7 @@ const confirmLabel = computed(() => {
 
         <template #footer>
             <!-- Left: the way out, which means something different in each moment. -->
+            <!-- allow(buttons): in the grace period Undo is the one live press; the confirm beside it only holds its countdown. -->
             <Button v-if="phase === 'grace'" :label="t(`ui.action.undo`)" tier="accent" data-removal-undo @click="undo" />
             <Button v-else :label="phase === 'ask' ? t(`ui.action.cancel`) : t(`ui.action.close`)" tier="quiet" @click="onOpen(false)" />
             <Button
@@ -576,10 +577,11 @@ const confirmLabel = computed(() => {
                 @click="retry(true)"
             />
             <!-- Right: the confirm, held in place from the press to the end, so presses after the first fall on nothing. -->
-            <Button v-if="phase === 'failed'" :label="t(`ui.action.tryAgain`)" tone="danger" autofocus @click="retry(false)">
+            <Button tier="accent" v-if="phase === 'failed'" :label="t(`ui.action.tryAgain`)" tone="danger" autofocus @click="retry(false)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <Button
+                tier="accent"
                 v-else
                 ref="confirmButton"
                 :label="confirmLabel"

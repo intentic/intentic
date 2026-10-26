@@ -229,6 +229,7 @@ const processesLine = computed(() => {
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`close`)" />
             <Button
+                tier="accent"
                 :label="t(`ui.action.remove`)"
                 tone="danger"
                 autofocus

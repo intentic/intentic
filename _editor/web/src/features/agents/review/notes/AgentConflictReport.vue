@@ -101,7 +101,7 @@ const ROW = `flex flex-wrap items-center gap-x-2 gap-y-1`;
             </span>
             <span class="flex-1"></span>
             <!-- Desktop already shows the conversation in the docked chat; only mobile needs a mode switch to watch it. -->
-            <Button v-if="mobile" size="small" tier="quiet" tone="accent" class="whitespace-nowrap" @click="emit('chat')">
+            <Button v-if="mobile" size="small" tier="quiet" class="whitespace-nowrap" @click="emit('chat')">
                 {{ t(`agents.agentConflictReport.watch`) }}
             </Button>
             <Button v-if="streaming" size="small" tier="boring" class="whitespace-nowrap" :label="t(`ui.action.stop`)" @click="emit('stop')" />

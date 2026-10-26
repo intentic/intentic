@@ -225,7 +225,7 @@ const signInId = useId();
                 </span>
                 <template v-if="confirmingRemove">
                     <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirmingRemove = false" />
-                    <Button :label="t(`sandbox.sandboxAccess.removeAccess`)" size="small" tone="danger" :loading="busy" @click="emit(`remove`, email)" />
+                    <Button tier="accent" :label="t(`sandbox.sandboxAccess.removeAccess`)" size="small" tone="danger" :loading="busy" @click="emit(`remove`, email)" />
                 </template>
                 <template v-else>
                     <Button v-if="pending" :label="t(`sandbox.sandboxAccess.resend`)" size="small" tier="quiet" :disabled="busy" @click="emit(`resend`, email)">

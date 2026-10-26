@@ -216,6 +216,7 @@ const cancel = async (): Promise<void> => {
                     <template v-if="host.found === undefined" #description>{{ host.detail }}</template>
                     <template #control>
                         <Button
+                            tier="boring"
                             v-if="host.found !== undefined"
                             :label="t(`sandbox.arrivalPanel.bringItIn`)"
                             size="small"
@@ -239,6 +240,13 @@ const cancel = async (): Promise<void> => {
             <!-- One picker, no format question: the daemon tells the formats apart. -->
             <div class="flex flex-wrap items-center gap-2">
                 <Button
+                    :tier="ready.length
+                    >
+                    0
+                    ?
+                    `boring`
+                    :
+                    `accent`"
                     :label="ready.length > 0 ? t(`sandbox.arrivalPanel.chooseFile`) : t(`sandbox.arrivalPanel.chooseFile2`)"
                     size="small"
                     :loading="planning"
@@ -355,6 +363,7 @@ const cancel = async (): Promise<void> => {
 
             <div class="flex flex-wrap items-center gap-2">
                 <Button
+                    tier="accent"
                     :label="t(`sandbox.arrivalPanel.bringIn`, { count: tickedCount }, tickedCount)"
                     size="small"
                     :loading="applying"

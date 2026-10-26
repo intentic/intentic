@@ -78,7 +78,7 @@ defineExpose({ reveal });
             </h3>
             <div v-if="phase === `live`" :id="actionsId" class="flex items-center gap-2 empty:hidden"></div>
             <template v-else-if="phase === `failed`">
-                <Button size="small" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
+                <Button tier="accent" size="small" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
                 <Button size="small" tier="quiet" :label="t(`ui.action.dismiss`)" @click="emit(`dismiss`)" />
             </template>
             <!-- Cancel sits with the heading, not inside the steps: it ends this whole attempt, whichever step it is on. -->

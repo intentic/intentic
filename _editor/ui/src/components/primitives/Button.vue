@@ -14,7 +14,8 @@ const {
     gilded = false,
     thumb = false,
 } = defineProps<{
-    /** What the button IS: `loud` (one per page), `accent` (the default commit action), `boring`, `quiet`. */
+    /** What the button IS (button.ts): `quiet` leaves, `accent` completes the surface's task, `boring` is every other
+     *  tool, `loud` the page's one paid step. Named at every call site; left out, it is accent for old extensions. */
     tier?: ButtonTier;
     /** A colour laid on the tier: a destructive accent button, a quiet button in the brand colour. */
     tone?: ButtonTone;

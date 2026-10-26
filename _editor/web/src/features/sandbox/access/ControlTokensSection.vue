@@ -267,6 +267,7 @@ const describe = (token: ControlTokenSummary): string =>
                         <p class="mr-auto min-w-0 text-2xs text-subtle">{{ scopeHint }}</p>
                         <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="minting" @click="creating = false" />
                         <Button
+                            tier="accent"
                             type="submit"
                             :label="t(`sandbox.controlTokensSection.mintToken`)"
                             size="small"

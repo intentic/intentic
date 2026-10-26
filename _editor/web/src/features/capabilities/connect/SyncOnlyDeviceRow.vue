@@ -35,7 +35,7 @@ const emit = defineEmits<{ connect: []; disconnect: [] }>();
                 <Button :label="t(`ui.action.disconnect`)" size="small" tier="quiet" tone="danger" @click="emit(`disconnect`)">
                     <template #icon><Icon name="times" /></template>
                 </Button>
-                <Button :label="t(`ui.action.connect`)" size="small" tier="quiet" tone="accent" @click="emit(`connect`)">
+                <Button :label="t(`ui.action.connect`)" size="small" tier="quiet" @click="emit(`connect`)">
                     <template #icon><Icon name="desktop" /></template>
                 </Button>
             </span>

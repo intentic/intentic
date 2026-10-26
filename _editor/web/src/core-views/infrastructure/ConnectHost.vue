@@ -216,7 +216,7 @@ onUnmounted(() => inventoryWatch.dispose());
             </div>
             <div v-else-if="coded && code === undefined" class="flex flex-col gap-2">
                 <div>
-                    <Button size="small" :label="t(`views.connectHost.showCommand`)" :loading="minting" @click="void mint()">
+                    <Button tier="boring" size="small" :label="t(`views.connectHost.showCommand`)" :loading="minting" @click="void mint()">
                         <template #icon><Icon name="terminal" /></template>
                     </Button>
                 </div>

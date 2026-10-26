@@ -373,7 +373,7 @@ onMounted(() => {
                 <!-- The code is older than the platform will accept, and the app could not mint a fresh one itself: not a dead end, one click. -->
                 <Notice v-if="expired" tone="warning" class="items-center text-xs">
                     <span class="flex-1">{{ resumedHow ? t(`desktop.app.setupCodeRanOut`) : t(`desktop.app.setupCodeRanOutHere`) }}</span>
-                    <Button class="ml-2 shrink-0" size="small" tier="boring" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
+                    <Button class="ml-2 shrink-0" size="small" tier="accent" :label="t(`desktop.app.getFreshCode`)" @click="freshCode" />
                 </Notice>
                 <!-- THIS PC'S OWN SETUP COMES FIRST: parked, the header's one line says so, and the card for this PC above
                      does it; the setup carries on by itself after. `=== false`, not `!`: unknown is a real third state here. -->
@@ -421,7 +421,7 @@ onMounted(() => {
                     v-if="(setupError || wasStopped) && !expired && requirements.length === 0 && !pcParked"
                     class="flex flex-wrap items-center gap-x-4 gap-y-2"
                 >
-                    <Button :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup(`retry`)">
+                    <Button tier="accent" :label="t(`ui.action.tryAgain`)" :disabled="running" @click="runSetup(`retry`)">
                         <template #icon><Icon name="bolt" /></template>
                     </Button>
                     <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="running" @click="setUpElsewhere(`stopped`)">
@@ -483,7 +483,7 @@ onMounted(() => {
                 />
                 <!-- The same pairing again: good for this machine for ten minutes on a current sandbox; the note covers an older or late one. -->
                 <div v-if="syncSetup.error" class="flex flex-wrap items-center gap-3">
-                    <Button :label="t(`ui.action.tryAgain`)" size="small" :disabled="running" @click="retrySync">
+                    <Button tier="accent" :label="t(`ui.action.tryAgain`)" size="small" :disabled="running" @click="retrySync">
                         <template #icon><Icon name="refresh" /></template>
                     </Button>
                     <span class="text-2xs text-subtle">{{ t(`desktop.app.saysPairingAlreadyUsed`) }}</span>
@@ -528,11 +528,11 @@ onMounted(() => {
                 <Button
                     v-if="waitingFor === `restart`"
                     class="ml-2 shrink-0"
-                    size="small"
+                    size="small" tier="accent"
                     :label="t(`desktop.requirements.restartNow`)"
                     @click="endSession(`restart`)"
                 />
-                <Button v-else class="ml-2 shrink-0" size="small" :label="t(`desktop.requirements.signOutNow`)" @click="endSession(`signout`)" />
+                <Button tier="accent" v-else class="ml-2 shrink-0" size="small" :label="t(`desktop.requirements.signOutNow`)" @click="endSession(`signout`)" />
                 <button type="button" :class="ui.textButton({ tone: `quiet` }, `ml-3 shrink-0`)" @click="setUpElsewhere(`requirements`)">
                     <Icon name="server" class="shrink-0" />
                     <span>{{ t(`desktop.requirements.runOnMachineWe`) }}</span>
@@ -558,7 +558,7 @@ onMounted(() => {
                 <Notice v-else-if="listError" tone="warning" class="items-start text-2xs">
                     <span class="block font-medium">{{ t(`desktop.app.dockerDidntAnswer`) }}</span>
                     <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
-                    <Button class="mt-2" size="small" tier="boring" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
+                    <Button class="mt-2" size="small" tier="accent" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
                 </Notice>
                 <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. -->
                 <Notice v-else-if="engineListening === false" tone="warning" icon="box" class="items-center">
@@ -566,7 +566,7 @@ onMounted(() => {
                     <Button
                         class="ml-2 shrink-0"
                         size="small"
-                        tier="boring"
+                        tier="accent"
                         :label="onOurEngine ? t(`desktop.app.startEngine`) : t(`desktop.app.startDocker`)"
                         @click="startDocker(`notice`)"
                     />
@@ -644,7 +644,7 @@ onMounted(() => {
                     </div>
                 </div>
                 <Button
-                    size="small"
+                    size="small" tier="accent"
                     :label="signedIn ? t(`desktop.device.setOneUp`) : t(`desktop.device.signInToSetUp`)"
                     class="ml-12"
                     @click="void (signedIn ? router.push(`/sandbox-new`) : signIn())"

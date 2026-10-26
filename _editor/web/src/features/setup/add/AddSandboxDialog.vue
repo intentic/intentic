@@ -99,8 +99,8 @@ const machineFailed = computed(() => started.value?.kind === `machine` && onMach
                     />
                 </template>
                 <template v-else>
-                    <Button v-if="machineFailed" :label="t(`ui.action.tryAgain`)" tier="quiet" @click="here.add.retry" />
-                    <Button :label="t(`ui.action.close`)" @click="emit(`close`)" />
+                    <Button v-if="machineFailed" :label="t(`ui.action.tryAgain`)" tier="accent" @click="here.add.retry" />
+                    <Button :tier="machineFailed ? `quiet` : `accent`" :label="t(`ui.action.close`)" @click="emit(`close`)" />
                 </template>
             </div>
         </template>

@@ -111,10 +111,10 @@ const signIn = async (): Promise<void> => {
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <ProgressMeter v-if="notice.waiting && notice.wait" :progress="notice.wait" :details="details" class="mt-3" />
         <template #actions>
-            <Button v-if="notice.action?.kind === `setup`" :as="RouterLink" :to="setupTo" :label="notice.action.label" icon-pos="right" tier="boring">
+            <Button v-if="notice.action?.kind === `setup`" :as="RouterLink" :to="setupTo" :label="notice.action.label" icon-pos="right" tier="accent">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
-            <Button v-else-if="notice.action?.kind === `signin`" :label="notice.action.label" icon-pos="right" tier="boring" @click="signIn">
+            <Button v-else-if="notice.action?.kind === `signin`" :label="notice.action.label" icon-pos="right" tier="accent" @click="signIn">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
             <!-- The plan and the free alternative, side by side; the free option must never read as lesser. -->

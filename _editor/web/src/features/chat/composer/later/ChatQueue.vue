@@ -120,7 +120,7 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
             <span class="min-w-0 flex-1">{{ hint }}</span>
             <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. Not words a
                  spent allowance holds: the press would let nothing go, and the strip's Continue is the way to try sooner. -->
-            <Button v-if="!streaming && heldUntil === undefined" size="small" thumb tier="quiet" tone="accent" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <Button v-if="!streaming && heldUntil === undefined" size="small" thumb tier="quiet" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </p>
     </div>
 </template>

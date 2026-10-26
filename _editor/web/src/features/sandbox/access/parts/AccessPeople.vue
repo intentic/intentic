@@ -524,6 +524,7 @@ const revoke = async (target: string): Promise<void> => {
                                     }}</span>
                                 </span>
                                 <Button
+                                    tier="accent"
                                     type="submit"
                                     size="small"
                                     :loading="busy"

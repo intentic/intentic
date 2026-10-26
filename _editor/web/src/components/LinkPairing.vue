@@ -147,7 +147,7 @@ const pair = async (): Promise<void> => {
                             <input v-model.number="turnsPerHour" type="number" min="1" max="120" :class="ui.input({ size: `sm` }, `w-20`)" />
                             {{ t(`capabilities.linkPairing.turnsAnHour`) }}
                         </label>
-                        <Button type="submit" :label="t(`capabilities.linkPairing.pair`)" size="small" :loading="pairing" :disabled="pairing || loadingPersonas">
+                        <Button tier="accent" type="submit" :label="t(`capabilities.linkPairing.pair`)" size="small" :loading="pairing" :disabled="pairing || loadingPersonas">
                             <template #icon><Icon name="link" /></template>
                         </Button>
                     </div>

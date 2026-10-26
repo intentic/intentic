@@ -55,7 +55,7 @@ const submit = async (): Promise<void> => {
                 <template #icon><Icon name="arrow-left" /></template>
             </Button>
             <span class="min-w-0 flex-1 truncate text-xs text-subtle">{{ t(`automationEditor.allSettings`) }}</span>
-            <Button :label="t(`automationRow.save`)" size="small" :loading="saving" @click="submit">
+            <Button tier="accent" :label="t(`automationRow.save`)" size="small" :loading="saving" @click="submit">
                 <template #icon><Icon name="check" /></template>
             </Button>
         </div>
@@ -64,7 +64,7 @@ const submit = async (): Promise<void> => {
         <!-- Match the composer's footer size because this is a form submit. -->
         <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
             <Button :label="t(`automationRow.cancel`)" tier="quiet" @click="emit(`done`)" />
-            <Button :label="t(`automationRow.save`)" :loading="saving" @click="submit">
+            <Button tier="accent" :label="t(`automationRow.save`)" :loading="saving" @click="submit">
                 <template #icon><Icon name="check" /></template>
             </Button>
         </div>

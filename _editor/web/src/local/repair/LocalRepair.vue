@@ -219,7 +219,7 @@ const modes = computed(() => [
                         <p v-if="verdict.detail" class="text-xs text-muted">{{ verdict.detail }}</p>
                     </div>
                     <Button v-if="firstAsk !== undefined && mode === `summary`" tier="accent" :label="t(`local.repair.review`)" @click="reviewAsk" />
-                    <Button v-if="empty && !working" tier="accent" :label="t(`local.repair.runChecks`)" @click="runChecks">
+                    <Button v-else-if="empty && !working" tier="accent" :label="t(`local.repair.runChecks`)" @click="runChecks">
                         <template #icon><Icon name="play" aria-hidden="true" /></template>
                     </Button>
                 </section>

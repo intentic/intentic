@@ -972,11 +972,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         :to="voiceFailure.action.to"
                                         size="small"
                                         thumb
-                                        tier="quiet"
+                                        tier="accent"
                                     >
                                         {{ voiceFailure.action.label }}
                                     </Button>
-                                    <Button v-else size="small" thumb tier="quiet" @click="voiceFailure.action.run?.()">
+                                    <Button v-else size="small" thumb tier="accent" @click="voiceFailure.action.run?.()">
                                         {{ voiceFailure.action.label }}
                                     </Button>
                                 </template>

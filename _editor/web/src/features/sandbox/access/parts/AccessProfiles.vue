@@ -96,6 +96,7 @@ const destroy = async (id: string): Promise<void> => {
                     <div class="flex flex-wrap items-center gap-2">
                         <strong class="mr-auto text-sm">{{ draft.label || draft.id || t(`sandbox.accessProfiles.add`) }}</strong
                         ><Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="busy" @click="draft = undefined" /><Button
+                            tier="accent"
                             v-if="!readonly"
                             type="submit"
                             :label="t(`ui.action.save`)"

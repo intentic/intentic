@@ -122,7 +122,7 @@ const allowOrigin = async (origin: string): Promise<void> => {
         </div>
 
         <template #footer>
-            <Button :label="t(`visitorChatInstallDialog.done`)" @click="visible = false" />
+            <Button tier="accent" :label="t(`visitorChatInstallDialog.done`)" @click="visible = false" />
         </template>
     </Modal>
 </template>

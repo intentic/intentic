@@ -59,7 +59,6 @@ const keepBoth = (): void => {
             size="small"
             thumb
             tier="quiet"
-            tone="accent"
             class="shrink-0"
             v-tooltip.top="{ title: t(`chat.chatPane.cancelEdit`), note: t(`chat.chatPane.nothingChangedYet`) }"
             @click="conversation.transcript.cancelEdit()"

@@ -95,7 +95,7 @@ const canOpen = computed(
         <span v-else-if="detail" class="mt-1.5 block font-mono text-2xs break-words text-subtle">{{ detail }}</span>
 
         <span v-if="!starting || canOpen" class="mt-2.5 flex flex-wrap items-center gap-2">
-            <Button v-if="!starting" size="small" :label="t(`desktop.docker.checkAgain`)" @click="emit(`start`)" />
+            <Button :tier="outcome === `notInstalled` ? `boring` : `accent`" v-if="!starting" size="small" :label="t(`desktop.docker.checkAgain`)" @click="emit(`start`)" />
             <!-- Offered during the wait too: a welcome or sign-in screen in Docker's own window is what usually holds a start up. -->
             <Button
                 v-if="canOpen"
@@ -107,7 +107,7 @@ const canOpen = computed(
             <Button
                 v-if="!starting && outcome === `notInstalled`"
                 size="small"
-                tier="boring"
+                tier="accent"
                 :label="t(`desktop.docker.getDockerDesktop`)"
                 @click="emit(`install`)"
             />

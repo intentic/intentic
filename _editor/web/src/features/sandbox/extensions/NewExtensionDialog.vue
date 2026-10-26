@@ -127,6 +127,7 @@ const submit = async (): Promise<void> => {
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="open = false" />
             <Button
+                tier="accent"
                 :label="wish.trim() === `` ? t(`ui.action.create`) : t(`sandbox.newExtensionDialog.createStart`)"
                 :loading="busy"
                 :disabled="!ready"

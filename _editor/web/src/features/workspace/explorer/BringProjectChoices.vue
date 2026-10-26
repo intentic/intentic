@@ -82,7 +82,7 @@ const connectHost = (): void => {
                         placeholder="https://github.com/owner/repo.git"
                         class="ui-field-box ui-field-sm min-w-0 flex-1"
                     />
-                    <Button size="small" type="submit" :disabled="!canClone" class="shrink-0">
+                    <Button tier="accent" size="small" type="submit" :disabled="!canClone" class="shrink-0">
                         <Icon :name="cloning ? `spinner` : `arrow-down-left`" :spin="cloning" />{{
                             cloning ? t(`workspace.workspaceEmptyState.cloning`) : t(`workspace.workspaceEmptyState.clone`)
                         }}

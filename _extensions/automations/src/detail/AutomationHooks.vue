@@ -35,7 +35,7 @@ const rotate = async (): Promise<void> => {
                         v-if="!confirmingRotate"
                         :label="t(`automationRow.rotate`)"
                         size="small"
-                        tier="quiet"
+                        tier="quiet" tone="danger"
                         :disabled="rotateToken.isPending.value"
                         v-tooltip.top="{ title: t(`automationRow.newToken`), note: t(`automationRow.oldUrlStops`) }"
                         @click="confirmingRotate = true"
@@ -45,7 +45,7 @@ const rotate = async (): Promise<void> => {
                 <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
                     <span class="mr-auto text-2xs text-subtle">{{ t(`automationRow.sureEverySenderWired`) }}</span>
                     <Button :label="t(`automationRow.cancel`)" size="small" tier="quiet" @click="confirmingRotate = false" />
-                    <Button :label="t(`automationRow.rotateToken`)" size="small" tone="danger" :loading="rotateToken.isPending.value" @click="rotate" />
+                    <Button tier="accent" :label="t(`automationRow.rotateToken`)" size="small" tone="danger" :loading="rotateToken.isPending.value" @click="rotate" />
                 </div>
             </div>
         </Section>

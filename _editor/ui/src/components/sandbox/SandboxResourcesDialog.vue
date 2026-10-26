@@ -270,7 +270,7 @@ const uid = useId();
                 :disabled="!saveReady"
                 @click="emit(`save`, saveShape)"
             />
-            <Button :label="canSave ? t(`ui.sandboxResourcesDialog.applyNow`) : t(`ui.action.apply`)" :disabled="!applyReady" @click="emit(`apply`, form)">
+            <Button tier="accent" :label="canSave ? t(`ui.sandboxResourcesDialog.applyNow`) : t(`ui.action.apply`)" :disabled="!applyReady" @click="emit(`apply`, form)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
         </template>

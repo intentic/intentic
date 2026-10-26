@@ -294,7 +294,7 @@ const places = computed(() =>
                         <p class="text-xs font-medium text-content">{{ t(`sandbox.extensionRow.removeTitle`) }}</p>
                         <p class="mt-0.5 text-2xs text-subtle">{{ removalHint }}</p>
                     </div>
-                    <Button size="small" tone="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`, entry.extension)">
+                    <Button tier="quiet" size="small" tone="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`, entry.extension)">
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </footer>

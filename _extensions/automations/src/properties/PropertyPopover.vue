@@ -32,7 +32,7 @@ const emit = defineEmits<{ save: [] }>();
             <p v-if="error" class="text-xs break-words text-danger">{{ error }}</p>
             <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
                 <Button :label="t(`automationRow.cancel`)" size="small" tier="quiet" @click="open = false" />
-                <Button :label="t(`automationRow.save`)" size="small" :loading="saving" :disabled="!canSave || saving" @click="emit(`save`)" />
+                <Button tier="accent" :label="t(`automationRow.save`)" size="small" :loading="saving" :disabled="!canSave || saving" @click="emit(`save`)" />
             </div>
         </div>
     </ResponsiveOverlay>

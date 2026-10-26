@@ -48,7 +48,7 @@ const unread = computed(() => landable.value && !props.landing && files.value > 
         </p>
         <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
         <div class="flex flex-wrap items-center gap-1.5">
-            <Button size="small" tone="success" thumb :disabled="landing || busy" class="self-start whitespace-nowrap" @click.stop="emit('land')">
+            <Button tier="accent" size="small" tone="success" thumb :disabled="landing || busy" class="self-start whitespace-nowrap" @click.stop="emit('land')">
                 <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
             </Button>
             <!-- Unread work offers its review after the land, never before it (see `unread`). -->

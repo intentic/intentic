@@ -75,7 +75,7 @@ const held = computed(() =>
             <div class="flex flex-wrap items-center gap-3">
                 <Icon name="check" class="shrink-0 text-success" />
                 <span class="min-w-0 flex-1 text-sm text-content">{{ landed }}</span>
-                <Button size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
+                <Button tier="accent" size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
             </div>
         </RowNote>
 

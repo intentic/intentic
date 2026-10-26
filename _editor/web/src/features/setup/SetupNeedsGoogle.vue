@@ -33,7 +33,7 @@ const linkGoogleHere = async (): Promise<void> => {
     <div class="flex flex-col gap-2 text-left" role="note">
         <p class="text-xs leading-snug text-muted">{{ t(`setup.setup.needsGoogleDetail`) }}</p>
         <div class="flex flex-wrap gap-2">
-            <Button :label="t(`setup.setup.linkGoogle`)" size="small" :loading="linkingGoogle" @click="linkGoogleHere">
+            <Button tier="accent" :label="t(`setup.setup.linkGoogle`)" size="small" :loading="linkingGoogle" @click="linkGoogleHere">
                 <template #icon><Icon name="google" /></template>
             </Button>
             <Button :as="RouterLink" to="/settings/billing" :label="t(`setup.setup.buyMachine`)" size="small" tier="boring">

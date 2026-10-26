@@ -409,12 +409,13 @@ const finish = async (): Promise<void> => {
 
         <template #footer>
             <!-- Browsing ends by closing (the daemon flushes the profile), so one button, not a Cancel implying it's undoable. -->
-            <Button v-if="browsing" :label="t(`ui.action.close`)" :loading="status === 'saving'" @click="finish">
+            <Button tier="accent" v-if="browsing" :label="t(`ui.action.close`)" :loading="status === 'saving'" @click="finish">
                 <template #icon><Icon name="check" /></template>
             </Button>
             <template v-else>
                 <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="cancel" />
                 <Button
+                    tier="accent"
                     :label="t(`capabilities.browserProfileDialog.imDone`)"
                     :disabled="status !== 'ready'"
                     :loading="status === 'saving'"

@@ -81,11 +81,11 @@ const memoryLine = computed<string | undefined>(() => {
             </div>
 
             <!-- The account whose sign-in refused the push, when connecting it is the fix. -->
-            <Button v-if="connectLabel" size="small" :label="connectLabel" @click="connect" />
+            <Button tier="accent" v-if="connectLabel" size="small" :label="connectLabel" @click="connect" />
             <Button
                 v-if="pushFlow.canSyncAndRetry.value"
                 size="small"
-                tier="accent"
+                :tier="connectLabel ? `boring` : `accent`"
                 :label="t(`shell.pushQuestionBody.syncAndRetry`)"
                 @click="pushFlow.syncAndRetry"
             />

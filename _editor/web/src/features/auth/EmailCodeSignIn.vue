@@ -116,6 +116,7 @@ const onCode = (event: Event): void => typeCode(event.target instanceof HTMLInpu
                 @input="onCode"
             />
             <Button
+                tier="accent"
                 type="submit"
                 :label="t(`ui.action.signIn`)"
                 class="w-full justify-center"

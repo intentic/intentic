@@ -72,7 +72,7 @@ const save = async (): Promise<void> => {
         </div>
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" tier="quiet" :disabled="saving" @click="emit(`close`)" />
-            <Button :label="t(`ui.action.save`)" :loading="saving" :disabled="preview === image" @click="save" />
+            <Button tier="accent" :label="t(`ui.action.save`)" :loading="saving" :disabled="preview === image" @click="save" />
         </template>
     </Modal>
 </template>

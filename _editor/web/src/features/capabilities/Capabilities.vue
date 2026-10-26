@@ -347,7 +347,6 @@ onBeforeUnmount(() => {
                                         :label="t(`capabilities.capabilities.logs`)"
                                         size="small"
                                         tier="quiet"
-                                        tone="accent"
                                         @click="viewProcessLogs(row)"
                                     >
                                         <template #icon><Icon name="align-left" /></template>
@@ -356,7 +355,6 @@ onBeforeUnmount(() => {
                                         :label="row.running ? t(`ui.action.restart`) : t(`ui.action.start`)"
                                         size="small"
                                         tier="quiet"
-                                        tone="accent"
                                         :disabled="processBusy === row.id"
                                         @click="startProcess(row)"
                                     >
@@ -601,13 +599,13 @@ onBeforeUnmount(() => {
                                 class="ml-auto"
                                 :label="t(`capabilities.capabilities.test`)"
                                 size="small"
-                                tier="quiet"
+                                tier="boring"
                                 :loading="probing"
                                 @click="runProbe"
                             >
                                 <template #icon><Icon name="wave-pulse" /></template>
                             </Button>
-                            <Button type="submit" size="small" :label="submitLabel" :loading="submitting">
+                            <Button tier="accent" type="submit" size="small" :label="submitLabel" :loading="submitting">
                                 <template #icon><Icon name="check" /></template>
                             </Button>
                         </div>
@@ -633,7 +631,7 @@ onBeforeUnmount(() => {
                             {{ t(`capabilities.capabilities.eachOneSomethingOwn`) }}
                         </div>
                     </div>
-                    <Button :label="t(`capabilities.capabilities.setUp`)" size="small" @click="startSetup">
+                    <Button tier="accent" :label="t(`capabilities.capabilities.setUp`)" size="small" @click="startSetup">
                         <template #icon><Icon name="arrow-right" /></template>
                     </Button>
                 </div>

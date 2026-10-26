@@ -64,6 +64,7 @@ watch(
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`cancel`)" />
             <!-- Label mirrors the switch, so the confirm carries the choice too, not just the switch. -->
             <Button
+                tier="accent"
                 :label="secrets ? t(`sandbox.exportBundleDialog.exportSecrets`) : t(`sandbox.words.export`)"
                 :tone="secrets ? `warning` : undefined"
                 autofocus

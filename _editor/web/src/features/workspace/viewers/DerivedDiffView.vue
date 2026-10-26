@@ -209,7 +209,7 @@ const filename = computed(() => basename(path));
 
         <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full">
             <template #actions>
-                <Button tier="boring" @click="load()">
+                <Button tier="accent" @click="load()">
                     <Icon name="refresh" class="text-xs" />
                     {{ t(`ui.action.tryAgain`) }}
                 </Button>

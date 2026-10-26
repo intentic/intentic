@@ -295,7 +295,7 @@ const items = computed<MenuItem[]>(() => {
                         v-if="row.link && spec.up(row.link)"
                         :label="spec.close()"
                         size="small"
-                        tier="quiet" tone="accent"
+                        tier="quiet"
                         :loading="busy(row.id)"
                         @click="onClose(row.id)"
                     />
@@ -303,7 +303,7 @@ const items = computed<MenuItem[]>(() => {
                         v-else-if="row.link"
                         :label="spec.open()"
                         size="small"
-                        tier="quiet" tone="accent"
+                        tier="quiet"
                         :disabled="row.link.state === 'unavailable'"
                         :loading="busy(row.id)"
                         @click="onOpen(row.id)"
@@ -330,7 +330,7 @@ const items = computed<MenuItem[]>(() => {
                             autocomplete="one-time-code"
                             @keydown.enter.prevent="onOpen(row.id)"
                         />
-                        <Button :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy(row.id)" @click="onOpen(row.id)" />
+                        <Button tier="accent" :label="t(`common.vpnConnections.connectCode`)" size="small" :loading="busy(row.id)" @click="onOpen(row.id)" />
                         <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="otpFor = undefined" />
                     </div>
                     <button

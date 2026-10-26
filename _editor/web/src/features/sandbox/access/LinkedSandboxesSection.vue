@@ -222,6 +222,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                         <div class="ml-auto flex items-center gap-2">
                             <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="minting" @click="creating = false" />
                             <Button
+                                tier="accent"
                                 type="submit"
                                 :label="t(`sandbox.linkedSandboxes.createLink`)"
                                 size="small"
@@ -277,7 +278,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                     :description="askedLine(request)"
                 >
                     <template #control>
-                        <Button :label="t(`sandbox.linkedSandboxes.allow`)" size="small" @click="decide(link, request, true)" />
+                        <Button tier="accent" :label="t(`sandbox.linkedSandboxes.allow`)" size="small" @click="decide(link, request, true)" />
                         <Button
                             :label="t(`sandbox.linkedSandboxes.decline`)"
                             size="small"
@@ -313,7 +314,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                                 />
                                 {{ t(`sandbox.linkedSandboxes.turnsAnHour`) }}
                             </label>
-                            <Button type="submit" :label="t(`ui.action.save`)" size="small" />
+                            <Button tier="accent" type="submit" :label="t(`ui.action.save`)" size="small" />
                         </div>
                     </form>
                 </RowNote>

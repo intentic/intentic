@@ -281,7 +281,7 @@ watch(item, async (found) => {
                 <Notice v-if="state.readError.value" tone="danger" size="sm">{{ state.readError.value }}</Notice>
                 <Notice v-if="askRemember" tone="info" size="sm">
                     {{ t(`app.remember.strip`) }}
-                    <template #actions><Button size="small" :label="t(`app.remember.turnOn`)" @click="rememberAll()" /></template>
+                    <template #actions><Button tier="accent" size="small" :label="t(`app.remember.turnOn`)" @click="rememberAll()" /></template>
                 </Notice>
                 <p v-if="ready?.locked" class="text-xs text-muted">{{ t(`app.lock.lockedNote`) }}</p>
             </template>

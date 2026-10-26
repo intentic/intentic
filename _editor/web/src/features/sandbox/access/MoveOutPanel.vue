@@ -239,7 +239,7 @@ const compare = async (event: Event): Promise<void> => {
                         @click="confirmingPublish = true"
                     />
                     <template v-else>
-                        <Button :label="t(`ui.action.publish`)" size="small" :loading="publishing" @click="publish" />
+                        <Button tier="accent" :label="t(`ui.action.publish`)" size="small" :loading="publishing" @click="publish" />
                         <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirmingPublish = false" />
                     </template>
                 </template>
@@ -262,7 +262,7 @@ const compare = async (event: Event): Promise<void> => {
 
         <!-- Publishable and private export choices remain visible together. -->
         <div class="flex flex-wrap items-center gap-2">
-            <Button :label="t(`sandbox.moveOutPanel.downloadSandboxToml`)" size="small" :loading="deriving" @click="downloadDefinition">
+            <Button tier="boring" :label="t(`sandbox.moveOutPanel.downloadSandboxToml`)" size="small" :loading="deriving" @click="downloadDefinition">
                 <template #icon><Icon name="download" /></template>
             </Button>
             <!-- Disabled while one pack runs; two concurrent packs would only halve each other's speed, and the daemon 409s anyway. -->

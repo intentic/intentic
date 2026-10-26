@@ -64,7 +64,7 @@ onMounted(() => void complete());
                 <Notice :of="error" class="rounded-none text-left" />
                 <Button
                     :label="t(`auth.desktopAuthComplete.backToSignIn`)"
-                    tier="boring"
+                    tier="accent"
                     class="mt-4 self-center"
                     @click="void router.replace(`/login`)"
                 />

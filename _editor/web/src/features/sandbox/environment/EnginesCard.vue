@@ -88,6 +88,7 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
             <template #actions>
                 <div class="flex flex-wrap items-center justify-end gap-2">
                     <Button
+                        tier="boring"
                         v-if="updatable.length > 0"
                         size="small"
                         :loading="updatingAll"
@@ -146,6 +147,7 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                         @update:model-value="(kind) => kind !== undefined && setChannel(engine, kind)"
                     />
                     <Button
+                        tier="boring"
                         v-if="engine.offered"
                         size="small"
                         :loading="isEngineUpdating(engine)"

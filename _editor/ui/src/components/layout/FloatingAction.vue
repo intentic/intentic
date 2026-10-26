@@ -28,6 +28,7 @@ defineEmits<{ click: [event: MouseEvent] }>();
              control in the app whose box is not a tier's. The same goes for `rounded`: a circle is what a floating
              action button is. Nothing else in the app may take this prop. -->
         <Button
+            tier="accent"
             rounded
             class="h-14 py-0"
             :class="labelled ? `gap-2 px-5 text-sm font-semibold` : `w-14 px-0`"

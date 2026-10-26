@@ -87,6 +87,7 @@ const autoRunLabel = computed(() => {
                 {{ t(`agents.heldWakeCard.reject`) }}
             </Button>
             <Button
+                tier="accent"
                 size="small"
                 thumb
                 :aria-label="t(`agents.heldWakeCard.approveHeldWake`)"

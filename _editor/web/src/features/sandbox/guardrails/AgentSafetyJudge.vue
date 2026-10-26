@@ -55,7 +55,6 @@ const judgeChain = computed<readonly string[]>(() => judge.chain.value.map(model
                     :to="{ name: `sandbox`, params: { tab: `agent` }, query: { job: `safety-judge` } }"
                     size="small"
                     tier="quiet"
-                    tone="accent"
                 >
                     {{ t(`sandbox.agentSafetyJudge.changeInModels`) }}
                 </Button>

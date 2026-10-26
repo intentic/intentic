@@ -75,6 +75,7 @@ const revokeSessions = async (): Promise<void> => {
                 <template #control>
                     <!-- Clears the last run's receipt; the row says one thing at a time, not a stale result under a live confirm. -->
                     <Button
+                        tier="quiet"
                         v-if="!confirmingRevoke"
                         :label="t(`sandbox.sandboxAccess.signOutAllBrowsers`)"
                         tone="danger"
@@ -96,6 +97,7 @@ const revokeSessions = async (): Promise<void> => {
                             @click="confirmingRevoke = false"
                         />
                         <Button
+                            tier="accent"
                             :label="t(`sandbox.sandboxAccess.signOutAllBrowsers`)"
                             tone="danger"
                             size="small"

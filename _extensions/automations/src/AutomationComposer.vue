@@ -255,7 +255,7 @@ const finish = (id: string): void => {
 
             <div :class="['flex justify-end gap-2 border-t border-line-subtle pt-3', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
                 <Button :label="t(`automationComposer.cancel`)" tier="quiet" @click="emit(`close`)" />
-                <Button type="submit" :label="t(`automationComposer.create`)" :loading="save.isPending.value">
+                <Button tier="accent" type="submit" :label="t(`automationComposer.create`)" :loading="save.isPending.value">
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </div>
@@ -277,7 +277,7 @@ const finish = (id: string): void => {
                 {{ t(`automationComposer.pasteBefore`) }} <span class="font-mono">&lt;/body&gt;</span>
                 {{ t(`automationComposer.onAnyPageListed`) }}
             </p>
-            <Button class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
+            <Button tier="accent" class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
         </div>
         <div v-else class="flex flex-col gap-3">
             <p class="text-sm text-content">
@@ -291,7 +291,7 @@ const finish = (id: string): void => {
                 />
             </div>
             <p class="text-xs text-muted">{{ template?.setup ?? t(`automationComposer.anyExternalSystemWake`) }}</p>
-            <Button class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
+            <Button tier="accent" class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
         </div>
     </section>
 </template>

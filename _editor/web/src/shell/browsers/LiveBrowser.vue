@@ -1518,7 +1518,7 @@ const { floats } = useBrowsersFloating();
                 <div v-if="current && pages.length === 0" class="absolute inset-0 z-[1] flex items-center justify-center bg-card">
                     <EmptyState icon="browsers" :title="t(`browsers.browsers.noPagesOpen`)">
                         <template #actions>
-                            <Button size="small" @click="openTab">
+                            <Button tier="accent" size="small" @click="openTab">
                                 <Icon name="plus" class="text-2xs" />
                                 {{ t(`browsers.browsers.newTab`) }}
                             </Button>
@@ -1592,10 +1592,10 @@ const { floats } = useBrowsersFloating();
                             @keydown.esc.prevent="answerDialog(false)"
                         />
                         <div class="flex justify-end gap-2">
-                            <Button v-if="dialog.kind !== `alert`" size="small" tier="boring" @click="answerDialog(false)">
+                            <Button v-if="dialog.kind !== `alert`" size="small" tier="quiet" @click="answerDialog(false)">
                                 {{ dialog.kind === `beforeunload` ? t(`browsers.browsers.stay`) : t(`ui.action.cancel`) }}
                             </Button>
-                            <Button size="small" @click="answerDialog(true)">
+                            <Button tier="accent" size="small" @click="answerDialog(true)">
                                 {{ dialog.kind === `beforeunload` ? t(`ui.action.leave`) : t(`browsers.browsers.ok`) }}
                             </Button>
                         </div>
@@ -1651,10 +1651,10 @@ const { floats } = useBrowsersFloating();
                                     class="ui-field-box ui-field-sm min-w-40 flex-1"
                                     @keydown.enter="resolveHelp(true)"
                                 />
-                                <Button size="small" class="shrink-0" :loading="replying" @click="() => resolveHelp(true)">
+                                <Button tier="accent" size="small" class="shrink-0" :loading="replying" @click="() => resolveHelp(true)">
                                     {{ t(`chat.words.doneHandBack`) }}
                                 </Button>
-                                <Button size="small" tier="boring" class="shrink-0" :disabled="replying" @click="() => resolveHelp(false)">
+                                <Button size="small" tier="quiet" class="shrink-0" :disabled="replying" @click="() => resolveHelp(false)">
                                     {{ t(`chat.words.cantHelpNow`) }}
                                 </Button>
                             </div>

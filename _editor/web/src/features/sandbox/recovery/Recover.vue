@@ -102,6 +102,13 @@ onMounted(async () => {
                         <p class="text-2xs" :class="toneOf(candidate)">{{ statusOf(candidate) }}</p>
                     </div>
                     <Button
+                        :tier="recoverable
+                        >
+                        1
+                        ?
+                        `boring`
+                        :
+                        `accent`"
                         v-if="candidate.state.kind === `recoverable`"
                         :label="t(`sandbox.recover.reconnect`)"
                         size="small"
@@ -128,7 +135,7 @@ onMounted(async () => {
             </ul>
 
             <div class="flex flex-wrap items-center gap-2">
-                <Button v-if="recoverable > 1" :label="t(`sandbox.recover.reconnectAll`)" :disabled="busy" @click="reconnectAll" />
+                <Button tier="accent" v-if="recoverable > 1" :label="t(`sandbox.recover.reconnectAll`)" :disabled="busy" @click="reconnectAll" />
                 <Button
                     v-if="reconnected > 0"
                     :label="t(`sandbox.recover.openWorkspace`)"

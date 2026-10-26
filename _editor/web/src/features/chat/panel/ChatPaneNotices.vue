@@ -69,7 +69,7 @@ const activeAccountReauth = computed(() => {
         <Button
             size="small"
             thumb
-            tier="quiet" tone="accent"
+            tier="boring"
             class="shrink-0"
             :disabled="!reachable || busyIds.includes(activeArchived.id)"
             @click="restore([activeArchived.id])"

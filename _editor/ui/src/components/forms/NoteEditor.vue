@@ -55,8 +55,8 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 
         <template #actions>
             <template v-if="editing">
-                <Button :label="t(`ui.action.cancel`)" size="small" tier="boring" @click="emit(`cancel`)" />
-                <Button :label="t(`ui.action.save`)" size="small" :loading="saving" @click="emit(`save`)">
+                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="emit(`cancel`)" />
+                <Button tier="accent" :label="t(`ui.action.save`)" size="small" :loading="saving" @click="emit(`save`)">
                     <template #icon><Icon name="save" /></template>
                 </Button>
             </template>
@@ -90,8 +90,9 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
             <div v-if="confirming" :class="toneTint(`danger`, `strong`, `flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5`)">
                 <span class="text-xs text-danger"><slot name="confirm" /></span>
                 <div class="flex shrink-0 items-center gap-1.5">
-                    <Button :label="t(`ui.noteEditor.keep`)" size="small" tier="boring" @click="confirming = false" />
+                    <Button :label="t(`ui.noteEditor.keep`)" size="small" tier="quiet" @click="confirming = false" />
                     <Button
+                        tier="accent"
                         :label="t(`ui.noteEditor.it`, { verb: verb ?? t(`ui.action.delete`) })"
                         size="small"
                         tone="danger"

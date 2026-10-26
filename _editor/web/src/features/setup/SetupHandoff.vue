@@ -65,6 +65,7 @@ const send = async (): Promise<void> => {
             </button>
         </template>
         <Button
+            tier="accent"
             v-else
             :label="t(`setup.setupHandoff.emailMeLink`)"
             class="w-full justify-center"

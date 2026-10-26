@@ -545,7 +545,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <Button
                                         v-if="canShip"
                                         :label="t(`approvalsView.approve`)"
-                                        size="small"
+                                        size="small" tier="accent"
                                         :disabled="save.isPending.value"
                                         @click="approve(item)"
                                     >
@@ -608,7 +608,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <Button
                                         v-if="canShip"
                                         :label="t(`approvalsView.letThemRun`)"
-                                        size="small"
+                                        size="small" tier="accent"
                                         :disabled="approveHooks.isPending.value"
                                         @click="letHooksRun(request)"
                                     >
@@ -646,7 +646,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <Button
                                         v-if="canShip"
                                         :label="wake.autoRunAt !== undefined ? t(`approvalsView.startNow`) : t(`approvalsView.approve`)"
-                                        size="small"
+                                        size="small" tier="accent"
                                         :disabled="approveWake.isPending.value"
                                         :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.startItem`, { item: wakeName(wake) }) : t(`approvalsView.approveItem`, { item: wakeName(wake) })"
                                         @click="releaseWake(wake)"

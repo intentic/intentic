@@ -211,6 +211,7 @@ const hasFooter = computed(() => !isDev || restartStatus.value || failed.value !
              for the whole group belongs, rather than under a list the reader has to get past first. -->
         <template v-if="isDev && hostId" #actions>
             <Button
+                tier="accent"
                 :label="restarting ? t(`sandbox.sandboxBehindCard.restarting`) : t(`sandbox.sandboxBehindCard.restartSandbox`)"
                 size="small"
                 v-tooltip.top="restartTip"

@@ -94,10 +94,10 @@ const switchAccount = async (): Promise<void> => {
             >
         </i18n-t>
         <template #actions>
-            <Button v-if="emailSignInOff || withoutGoogle" :label="t(`ui.action.tryAgain`)" tier="boring" @click="tryAgain">
+            <Button v-if="emailSignInOff || withoutGoogle" :label="t(`ui.action.tryAgain`)" tier="accent" @click="tryAgain">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button v-else :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" tier="boring" @click="switchAccount">
+            <Button v-else :label="t(`sandbox.sandboxUnauthorized.switchGoogleAccount`)" tier="accent" @click="switchAccount">
                 <template #icon><Icon name="user" /></template>
             </Button>
         </template>

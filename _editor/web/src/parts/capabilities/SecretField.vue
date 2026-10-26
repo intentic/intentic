@@ -126,7 +126,7 @@ const onEnter = (event: KeyboardEvent): void => {
                 >
                     <template #icon><Icon :name="show ? 'eye-slash' : 'eye'" /></template>
                 </Button>
-                <Button v-if="!collect" :label="t(`ui.action.save`)" :disabled="!canSave" :loading="saving" @click="save">
+                <Button tier="accent" v-if="!collect" :label="t(`ui.action.save`)" :disabled="!canSave" :loading="saving" @click="save">
                     <template #icon><Icon name="check" /></template>
                 </Button>
                 <Button v-if="cancellable" tier="quiet" :aria-label="t(`ui.action.cancel`)" @click="emit(`cancel`)">

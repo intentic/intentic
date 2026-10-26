@@ -177,7 +177,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             <button type="button" class="text-2xs text-muted hover:text-content" @click="armedDelete = undefined">
                                 {{ t(`branchSwitcher.cancel`) }}
                             </button>
-                            <Button size="small" tone="danger" :disabled="busy" @click="() => confirmDelete(branch.name)">
+                            <Button tier="accent" size="small" tone="danger" :disabled="busy" @click="() => confirmDelete(branch.name)">
                                 {{ forceFor === branch.name ? t(`branchSwitcher.forceDelete`) : t(`branchSwitcher.delete2`) }}
                             </Button>
                         </div>
@@ -205,7 +205,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             @keyup.enter="submitCreate"
                             @keydown.escape="creating = false"
                         />
-                        <Button size="small" tier="boring" :disabled="busy || newName.trim() === ''" @click="submitCreate">
+                        <Button size="small" tier="accent" :disabled="busy || newName.trim() === ''" @click="submitCreate">
                             {{ t(`branchSwitcher.create`) }}
                         </Button>
                     </div>

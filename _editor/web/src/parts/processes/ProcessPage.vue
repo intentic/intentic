@@ -63,11 +63,11 @@ const needs = computed(() => report?.needs ?? []);
                                     </div>
                                     <div v-if="need.actions?.length" class="flex flex-wrap gap-2">
                                         <Button
-                                            v-for="act in need.actions"
+                                            v-for="(act, at) in need.actions"
                                             :key="act"
                                             size="small"
                                             :label="processActionLabel(act, report)"
-                                            :tier="quietAction(act) ? `quiet` : undefined"
+                                            :tier="quietAction(act) ? `quiet` : at === 0 ? `accent` : `boring`"
                                             @click="emit(`act`, act, need.id)"
                                         />
                                     </div>
@@ -82,7 +82,7 @@ const needs = computed(() => report?.needs ?? []);
                                 v-for="(act, at) in actions"
                                 :key="act"
                                 :label="processActionLabel(act, report)"
-                                :tier="at === 0 && !quietAction(act) ? undefined : quietAction(act) ? `quiet` : `boring`"
+                                :tier="quietAction(act) ? `quiet` : at === 0 ? `accent` : `boring`"
                                 @click="emit(`act`, act)"
                             />
                         </div>

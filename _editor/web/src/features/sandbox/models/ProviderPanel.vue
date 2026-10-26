@@ -393,7 +393,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
             <div class="flex flex-wrap items-center gap-3">
                 <Icon name="check" class="shrink-0 text-success" />
                 <span class="min-w-0 flex-1 text-sm text-content">{{ landed }}</span>
-                <Button size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
+                <Button tier="accent" size="small" :label="chatLabel ?? t(`connect.connect.startChatting`)" @click="emit(`chat`)" />
             </div>
         </RowNote>
 
@@ -421,10 +421,11 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
         >
             <template #control>
                 <!-- The fix is the account owner's, on the provider's page: the one action this row wants. -->
-                <Button v-if="row.verify !== undefined" :label="t(`sandbox.aiAccountSection.verify`)" size="small" @click="openVerify(row.verify)">
+                <Button tier="accent" v-if="row.verify !== undefined" :label="t(`sandbox.aiAccountSection.verify`)" size="small" @click="openVerify(row.verify)">
                     <template #icon><Icon name="external-link" /></template>
                 </Button>
                 <Button
+                    tier="accent"
                     v-else-if="row.reconnect && !signingInHere"
                     :label="t(`ui.action.reconnect`)"
                     size="small"
@@ -463,7 +464,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
                 <!-- The plan is the sign-in's own first step, so it is asked beside the button, before anything starts. -->
                 <EstatePicker v-if="offersEstates" v-model="estate" :provider="provider" :label="t(`connect.connect.whichPlan`)" />
                 <div class="flex flex-wrap gap-2">
-                    <Button v-for="way in ways" :key="way.key" size="small" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
+                    <Button v-for="(way, index) in ways" :tier="index === 0 ? `accent` : `boring`" :key="way.key" size="small" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">
                         <template #icon><Icon name="sign-in" /></template>
                     </Button>
                 </div>

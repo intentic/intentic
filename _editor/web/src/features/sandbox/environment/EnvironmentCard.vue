@@ -253,7 +253,7 @@ watch(
             <template v-if="proposal">
                 <p class="text-xs text-content">{{ proposalSummary }}</p>
                 <div v-if="canOperate" class="flex flex-wrap items-center gap-2">
-                    <Button :label="t(`ui.action.approve`)" size="small" :disabled="busy || !reviewed" :loading="busy && decidedAt === `step`" @click="approve">
+                    <Button tier="accent" :label="t(`ui.action.approve`)" size="small" :disabled="busy || !reviewed" :loading="busy && decidedAt === `step`" @click="approve">
                         <template #icon><Icon name="check" /></template>
                     </Button>
                     <Button

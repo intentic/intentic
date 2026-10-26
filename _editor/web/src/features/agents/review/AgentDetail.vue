@@ -805,7 +805,7 @@ const confirmHandOver = async (): Promise<void> => {
                 <Button
                     :label="t(`agents.agentDetail.handOverConfirm`)"
                     :disabled="handOverBusy || handOverTo.trim() === ''"
-                    @click="confirmHandOver"
+                    @click="confirmHandOver" tier="accent"
                 />
             </template>
         </Modal>

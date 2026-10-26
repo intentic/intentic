@@ -105,6 +105,7 @@ const pasteSnippet = computed(() => t(`settings.settingsTokens.pastePath`));
                             :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                         />
                         <Button
+                            tier="accent"
                             type="submit"
                             :label="t(`settings.settingsTokens.mintToken`)"
                             size="small"

@@ -421,7 +421,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                             {{ t(`chat.chatContinueStrip.continueOnOther`) }}<Icon name="chevron-down" class="ml-1 text-2xs" />
                         </Button>
                     </span>
-                    <Button size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.retryOn`, { model: modelLabel })" v-tooltip.top="retryHint" @click="pressContinue">
+                    <Button tier="accent" size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.retryOn`, { model: modelLabel })" v-tooltip.top="retryHint" @click="pressContinue">
                         {{ t(`chat.chatContinueStrip.retryOn`, { model: modelLabel }) }}
                     </Button>
                 </template>
@@ -431,6 +431,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                         {{ t(`chat.chatContinueStrip.tryNow`) }}
                     </Button>
                     <Button
+                        tier="accent"
                         v-if="atReopen === `book`"
                         size="small"
                         thumb
@@ -442,7 +443,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     </Button>
                 </template>
                 <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
-                <Button v-else size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`ui.action.continue`)" v-tooltip.top="continueHint" @click="pressContinue">
+                <Button tier="accent" v-else size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`ui.action.continue`)" v-tooltip.top="continueHint" @click="pressContinue">
                     {{ t(`ui.action.continue`) }}
                 </Button>
                 <Button

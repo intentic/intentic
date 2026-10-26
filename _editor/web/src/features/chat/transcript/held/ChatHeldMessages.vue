@@ -86,13 +86,13 @@ const press = computed((): HeldPress => {
                     <Button
                         size="small"
                         thumb
-                        :tier="reopenAt === undefined ? undefined : `quiet`"
+                        :tier="reopenAt === undefined ? `accent` : `quiet`"
                         :disabled="reopen.blockedLine.value !== undefined"
                         v-tooltip.top="reopen.blockedHint.value ?? press.hint"
                         @click="resumeQueue(heldIds)"
                         >{{ press.label }}</Button
                     >
-                    <Button v-if="reopenAt !== undefined" size="small" thumb v-tooltip.top="sendAtHint" @click="sendAtReopen()">
+                    <Button tier="accent" v-if="reopenAt !== undefined" size="small" thumb v-tooltip.top="sendAtHint" @click="sendAtReopen()">
                         <Icon name="clock" class="mr-1 text-2xs" />{{ sendAtLabel }}
                     </Button>
                     <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->

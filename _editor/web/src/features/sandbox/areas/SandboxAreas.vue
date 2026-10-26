@@ -272,7 +272,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                     <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAreas.everyoneSeesWhole`) }}</span>
                     <span class="max-w-md text-xs text-muted">{{ t(`sandbox.sandboxAreas.whatAnAreaIs`) }}</span>
                 </div>
-                <Button v-if="isOwner" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" @click="startAdd">
+                <Button tier="accent" v-if="isOwner" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" @click="startAdd">
                     <template #icon><Icon name="plus" /></template>
                 </Button>
                 <span v-else class="text-xs text-subtle">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</span>
@@ -387,7 +387,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                                 autofocus
                                 @keyup.enter="submit"
                             />
-                            <Button :label="t(`ui.action.create`)" size="small" :loading="submitting" :disabled="!newValid" @click="submit" />
+                            <Button tier="accent" :label="t(`ui.action.create`)" size="small" :loading="submitting" :disabled="!newValid" @click="submit" />
                             <button type="button" :class="ui.textButton({ tone: `quiet` })" @click="cancelAdd">
                                 {{ t(`ui.action.cancel`) }}
                             </button>

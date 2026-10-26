@@ -151,6 +151,7 @@ const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<
                         @input="setFolder(environment, ($event.target as HTMLInputElement).value)"
                     />
                     <Button
+                        tier="accent"
                         size="small"
                         :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
                         :disabled="ops.working.value || folderFor(environment).trim() === ``"

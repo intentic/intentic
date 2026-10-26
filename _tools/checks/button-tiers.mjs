@@ -13,7 +13,11 @@
 // 9. A <Button> that adds (its icon is the plus) drawn in the quiet tier: adding an element is a filled button.
 // 10. A <Button> handed an icon by name in its `icon` prop: PrimeVue reads that prop as a CSS class, so `icon="plus"` draws
 //     nothing. The kit's glyph goes in the `#icon` slot as an <Icon>.
+// 11–14. The rank (lib/button-ranks.mjs): every <Button> names its tier, since bright is "the step we are asking you to
+//     take" and never a default; no two bright ones side by side or repeated by v-for; the kit's words for leaving are
+//     quiet; `tone="accent"` is retired.
 // Exceptions: `<!-- allow(buttons): <reason> -->` above the element.
+import { buttonRankFindings } from "./lib/button-ranks.mjs";
 import { at, blank, classesOf, excusedAt, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 
 // A text size, not text-left or text-muted: the scale's own steps, what makes a control a button, not a row.
@@ -70,6 +74,7 @@ const findings = [];
 for (const path of tracked) {
     const source = templateSource(path);
     const scan = blank(source);
+    findings.push(...buttonRankFindings(path, source));
     const excused = (index) => excusedAt(source, scan, index, `buttons`);
     const stack = [{ name: `#file`, attrs: ``, buttons: [] }];
     const inDense = () => stack.some((frame) => DENSE.has(frame.name)) && stack.some((frame) => frame.cluster);
@@ -202,7 +207,7 @@ for (const path of tracked) {
             if (retired !== null && !excused(index)) {
                 findings.push({
                     at: where,
-                    why: `\`${retired[0].trim()}\` is retired: say what the button IS with \`tier\` (loud, accent — the default —, boring, quiet) and lay a colour on it with \`tone\` (accent, danger, warning, success). \`severity="secondary"\` is \`tier="boring"\`, \`text\` is \`tier="quiet"\`, \`severity="danger"\` is \`tone="danger"\`; \`outlined\` was the neutral tier's second spelling`,
+                    why: `\`${retired[0].trim()}\` is retired: say what the button IS with \`tier\` (loud, accent, boring, quiet) and lay a colour on it with \`tone\` (danger, warning, success). \`severity="secondary"\` is \`tier="boring"\`, \`text\` is \`tier="quiet"\`, \`severity="danger"\` is \`tone="danger"\`; \`outlined\` was the neutral tier's second spelling`,
                 });
             }
             // Rule 9: the owner asked for one look for adding (2026-10-26) — "New setup" quiet beside "Add another account"
@@ -239,5 +244,5 @@ for (const path of tracked) {
 finishFindings(
     findings,
     `with button tiers. The app has one action button: <Button>, in four tiers and two sizes.`,
-    `${tracked.length} templates: every button is <Button>, every tier is a rank, and "not right now" has one answer`,
+    `${tracked.length} templates: every button is <Button>, every one names its tier, one bright step at a time, and "not right now" has one answer`,
 );

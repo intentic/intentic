@@ -61,6 +61,7 @@ const STEPS = [`create`, `ask`, `open`] as const;
             </ol>
             <div class="flex flex-wrap items-center gap-2">
                 <Button
+                    tier="accent"
                     v-if="unfinished && finish"
                     :as="RouterLink"
                     :to="finish"

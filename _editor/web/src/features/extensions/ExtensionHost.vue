@@ -59,7 +59,7 @@ const imprint = computed(() => `ext:${ext.value}/${key.value}`);
     />
     <EmptyState v-else-if="factsFailed" tone="danger" :title="t(`extensions.extensionHost.couldntFindViews`)" :line="factsFailed.error" class="h-full">
         <template v-if="factsFailed.retry" #actions>
-            <Button size="small" tier="boring" :label="t(`ui.action.tryAgain`)" @click="factsFailed.retry()" />
+            <Button size="small" tier="accent" :label="t(`ui.action.tryAgain`)" @click="factsFailed.retry()" />
         </template>
     </EmptyState>
     <EmptyState
@@ -73,7 +73,7 @@ const imprint = computed(() => `ext:${ext.value}/${key.value}`);
                 :as="RouterLink"
                 to="/sandbox/extensions?view=installed"
                 size="small"
-                tier="boring"
+                tier="accent"
                 :label="t(`extensions.extensionHost.turnBackOnIn`)"
             />
         </template>

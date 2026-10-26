@@ -64,7 +64,7 @@ onBeforeUnmount(() => window.removeEventListener(`keydown`, onKey, { capture: tr
                         <span class="min-w-0 truncate">{{ destinationLabel(pending.to) }}</span>
                     </p>
                     <div class="flex flex-wrap items-center gap-1.5">
-                        <Button size="small" thumb @click="delivery.sendNow">{{ t(`chat.wake.sendNow`) }}</Button>
+                        <Button tier="accent" size="small" thumb @click="delivery.sendNow">{{ t(`chat.wake.sendNow`) }}</Button>
                         <Button v-if="pending.instead !== undefined" size="small" thumb tier="quiet" @click="delivery.switchRoute">
                             {{ t(`chat.wake.instead`, { destination: destinationLabel(pending.instead) }) }}
                         </Button>

@@ -213,7 +213,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                         as="a"
                                         :label="t(`views.words.komodo`)"
                                         size="small"
-                                        tier="quiet" tone="accent"
+                                        tier="boring"
                                         :href="d.komodoDeploymentUrl"
                                         target="_blank"
                                         rel="noopener"

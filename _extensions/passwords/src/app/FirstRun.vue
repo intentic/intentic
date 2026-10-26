@@ -104,7 +104,7 @@ const notNow = (): Promise<void> =>
                     <Checkbox v-model="keySaved" binary :input-id="`recovery-saved`" />
                     {{ t(`app.first.saved`) }}
                 </label>
-                <Button class="self-end" :label="t(`app.first.continue`)" :disabled="!keySaved" :loading="busy" @click="toRemember()" />
+                <Button tier="accent" class="self-end" :label="t(`app.first.continue`)" :disabled="!keySaved" :loading="busy" @click="toRemember()" />
             </section>
 
             <section v-else-if="step === `remember`" class="flex flex-col gap-4">
@@ -133,7 +133,7 @@ const notNow = (): Promise<void> =>
                 <p class="text-sm text-muted">{{ t(`app.first.importHelp`) }}</p>
                 <ImportPanel :port="port" />
                 <div class="flex justify-end gap-2">
-                    <Button :label="t(`app.first.finish`)" @click="emit(`done`)" />
+                    <Button tier="accent" :label="t(`app.first.finish`)" @click="emit(`done`)" />
                 </div>
             </section>
         </div>

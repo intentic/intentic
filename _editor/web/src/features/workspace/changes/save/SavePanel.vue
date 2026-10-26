@@ -244,6 +244,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                     savingNow ? t(`workspace.savePanel.saving`) : t(`workspace.savePanel.backingUp`)
                 }}</span>
                 <Button
+                    tier="accent"
                     v-if="pending > 0"
                     size="small"
                     tone="success"
@@ -454,7 +455,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             </div>
             <template #footer>
                 <Button tier="quiet" :label="t(`workspace.savePanel.keep`)" @click="actions.dismiss()" />
-                <Button tone="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
+                <Button tier="accent" tone="danger" @click="actions.runDiscard()">{{ words.discard }}</Button>
             </template>
         </Modal>
     </div>

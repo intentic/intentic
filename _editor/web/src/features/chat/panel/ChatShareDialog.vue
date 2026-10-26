@@ -150,10 +150,10 @@ const done = (): void => {
 
         <template #footer>
             <CopyButton v-if="result?.url" :text="result.url" :label="t(`ui.action.copyLink`)" class="mr-auto" />
-            <Button v-if="result" :label="t(`ui.action.done`)" @click="done" />
+            <Button tier="accent" v-if="result" :label="t(`ui.action.done`)" @click="done" />
             <template v-else>
                 <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`update:visible`, false)" />
-                <Button :label="t(`chat.chatShareDialog.share`)" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
+                <Button tier="accent" :label="t(`chat.chatShareDialog.share`)" :loading="busy" :disabled="name.trim().length === 0" @click="share" />
             </template>
         </template>
     </Modal>

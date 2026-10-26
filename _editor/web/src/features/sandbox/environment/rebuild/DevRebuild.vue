@@ -28,10 +28,9 @@ const props = defineProps<{
     // Host path of that checkout; absent on a sandbox handed a local image without one, which leaves only the command.
     root?: string | undefined;
     // Whether an approved recipe is waiting to be built. This rebuild applies it either way — the overlay rides the
-    // image it builds — so the confirmation says so, at the moment the reader weighs it.
+    // image it builds — so the confirmation says so, at the moment the reader weighs it. It is also what makes the
+    // rebuild the step this card is asking for (accent) rather than a tool kept to hand (boring).
     recipePending?: boolean;
-    // Drawn a tier down: an offer on a card that isn't asking for it, rather than the step that finishes one.
-    secondary?: boolean;
 }>();
 
 // The door that can reach `root`, not merely one that reports the container: a PC answers through its Windows side
@@ -268,7 +267,7 @@ const checkout = computed(() => {
                     @focusout="onBlur"
                 >
                     <!-- A hammer, not the bolt a swap onto an image that already exists wears: this one builds it first. -->
-                    <Button :label="t(`sandbox.devRebuild.rebuildCheckout`)" size="small" :tier="secondary ? `boring` : `accent`" @click="onButtonClick">
+                    <Button :label="t(`sandbox.devRebuild.rebuildCheckout`)" size="small" :tier="recipePending ? `accent` : `boring`" @click="onButtonClick">
                         <template #icon><Icon name="hammer" /></template>
                     </Button>
                 </div>

@@ -94,6 +94,7 @@ const NAMED = 5;
             <slot name="actions" />
             <!-- autofocus on the CONFIRM button is deliberate and is what the call sites already did: the dialog is dismissable by mask, Esc and Cancel. -->
             <Button
+                tier="accent"
                 :label="confirmLabel"
                 :tone="tone ?? (destructive ? `danger` : undefined)"
                 :gilded="gilded && !destructive"

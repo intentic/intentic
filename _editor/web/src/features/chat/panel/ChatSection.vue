@@ -50,7 +50,7 @@ publishSlot(chatFullSlot, () => slot.value);
             class="absolute inset-0 p-6"
         >
             <template #actions>
-                <Button size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`chat.chatArea.bringBackHere`) }} </Button>
+                <Button tier="accent" size="small" @click="dock()"> <Icon name="sign-in" />{{ t(`chat.chatArea.bringBackHere`) }} </Button>
             </template>
         </EmptyState>
     </div>

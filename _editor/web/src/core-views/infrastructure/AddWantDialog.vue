@@ -324,6 +324,7 @@ const submit = async (): Promise<void> => {
                 <template #icon><Icon name="arrow-left" /></template>
             </Button>
             <Button
+                tier="accent"
                 v-if="cloudflareEntries.length > 0 && hostOptions.length > 0"
                 type="submit"
                 :form="formId"

@@ -178,7 +178,7 @@ const actionLabel = computed(() => {
                 <!-- Done: the next place to go, and the way back to browsing. Nothing to install or audit is left to offer. -->
                 <template v-if="outcome">
                     <Button :label="t(`ui.action.done`)" size="small" tier="quiet" @click="emit(`back`)" />
-                    <Button :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
+                    <Button tier="accent" :label="t(`sandbox.discoverDetail.showInInstalled`)" size="small" @click="emit(`reveal`)" />
                 </template>
                 <!-- Order follows what's been earned: where the code's been read, Install leads and the read sits quiet at the
                      front; where it hasn't, the read leads instead, last, with Install a tier below it. -->
@@ -209,7 +209,7 @@ const actionLabel = computed(() => {
                         :tier="auditLeads ? `boring` : `accent`"
                         @click="emit(`install`)"
                     />
-                    <Button v-if="auditLeads" :label="t(`sandbox.discoverDetail.myAgentReadCode`)" size="small" @click="emit(`audit`)">
+                    <Button tier="accent" v-if="auditLeads" :label="t(`sandbox.discoverDetail.myAgentReadCode`)" size="small" @click="emit(`audit`)">
                         <template #icon><Icon name="sparkles" /></template>
                     </Button>
                 </template>

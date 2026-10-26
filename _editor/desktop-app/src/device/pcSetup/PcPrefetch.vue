@@ -58,7 +58,7 @@ const percent = computed(() => {
                 {{ prefetch.retrying ? t(`desktop.pcSetup.prefetch.retrying`) : t(`desktop.pcSetup.prefetch.later`) }}
             </p>
             <p v-if="prefetch.reason" class="font-mono break-words text-subtle">{{ prefetch.reason }}</p>
-            <Button v-if="!prefetch.retrying" class="self-start" size="small" tier="boring" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
+            <Button v-if="!prefetch.retrying" class="self-start" size="small" tier="accent" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
         </template>
         <template v-else>
             <div class="flex items-center gap-3">

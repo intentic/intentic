@@ -212,7 +212,7 @@ const switchAccount = async (): Promise<void> => {
                     >
                     <template #grant>{{ grantSentence }}</template>
                 </i18n-t>
-                <Button :label="t(`setup.acceptInvite.acceptInvitation`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
+                <Button tier="accent" :label="t(`setup.acceptInvite.acceptInvitation`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </template>
@@ -239,7 +239,7 @@ const switchAccount = async (): Promise<void> => {
                         ><span class="font-medium text-content">{{ sandboxName }}</span></template
                     >
                 </i18n-t>
-                <Button :label="t(`setup.acceptInvite.openSandbox`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
+                <Button tier="accent" :label="t(`setup.acceptInvite.openSandbox`)" class="mt-6 w-full justify-center" :loading="busy" @click="accept">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
             </template>

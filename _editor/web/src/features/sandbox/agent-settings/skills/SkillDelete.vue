@@ -26,7 +26,7 @@ const asking = ref(false);
     />
     <span v-else class="flex flex-wrap items-center gap-2">
         <span class="text-2xs text-muted">{{ t(`sandbox.skillRow.deleteAgentStopsBeing`, { name }) }}</span>
-        <Button size="small" tone="danger" :label="t(`ui.action.delete`)" :disabled="disabled" @click="emit(`remove`)" />
+        <Button tier="accent" size="small" tone="danger" :label="t(`ui.action.delete`)" :disabled="disabled" @click="emit(`remove`)" />
         <Button size="small" tier="quiet" :label="t(`sandbox.skillRow.keep`)" @click="asking = false" />
     </span>
 </template>

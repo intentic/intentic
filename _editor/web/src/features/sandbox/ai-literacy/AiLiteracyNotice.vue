@@ -42,7 +42,7 @@ const confirm = async (): Promise<void> => {
         <div class="flex flex-col gap-4">
             <p class="whitespace-pre-wrap text-sm leading-relaxed">{{ query.data.value?.text }}</p>
             <Notice v-if="error" tone="danger">{{ error }}</Notice>
-            <div class="flex justify-end"><Button autofocus :label="t(`sandbox.aiLiteracy.confirm`)" :loading="busy" @click="confirm" /></div>
+            <div class="flex justify-end"><Button tier="accent" autofocus :label="t(`sandbox.aiLiteracy.confirm`)" :loading="busy" @click="confirm" /></div>
         </div>
     </Modal>
 </template>

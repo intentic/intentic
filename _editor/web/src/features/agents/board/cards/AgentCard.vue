@@ -819,7 +819,7 @@ const grab = (event: PointerEvent): void => {
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
                 <!-- No in-flight face: the press moves the card to Active at once, taking this block with it. -->
-                <Button size="small" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
+                <Button tier="accent" size="small" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
                     <Icon name="sparkles" />{{ words.resolveConflict }}
                 </Button>
                 <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
@@ -867,7 +867,7 @@ const grab = (event: PointerEvent): void => {
                 </Button>
             </div>
 
-            <Button v-if="canShip && agent.archivedAt === undefined && retryLand(agent)" size="small" tier="boring" :disabled="busy || landing" @click.stop="emit('land')">
+            <Button v-if="canShip && agent.archivedAt === undefined && retryLand(agent)" size="small" tier="accent" :disabled="busy || landing" @click.stop="emit('land')">
                 {{ t(`ui.action.retry`) }}
             </Button>
             <!-- What the land did in the owner's own folder: warm only where they have something to look at or do, and the paths it kept out in the hover. -->

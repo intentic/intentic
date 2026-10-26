@@ -334,6 +334,7 @@ const submit = async (): Promise<void> => {
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="dir = undefined" />
             <!-- The verb follows the mode, so the button never promises "add" while the panel is actually moving a card. -->
             <Button
+                tier="accent"
                 :label="
                     mode === `new`
                         ? t(`workspace.directoryPersonas.addPersona`)

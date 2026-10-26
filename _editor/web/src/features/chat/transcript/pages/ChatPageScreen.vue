@@ -96,7 +96,7 @@ const back = (): void => {
                 <Icon name="arrow-left" class="text-base" />
             </button>
             <h1 class="min-w-0 flex-1 truncate text-sm font-medium">{{ page?.title ?? t(`chat.chatPages.screenTitle`) }}</h1>
-            <Button v-if="asked?.status === `pending`" tier="boring" size="small" :disabled="settling" :label="t(`chat.chatPages.dismiss`)" @click="void dismiss()" />
+            <Button v-if="asked?.status === `pending`" tier="quiet" size="small" :disabled="settling" :label="t(`chat.chatPages.dismiss`)" @click="void dismiss()" />
         </header>
         <p v-if="asked?.status === `pending`" class="shrink-0 px-3.5 pt-2 text-xs text-muted">{{ t(`chat.chatPages.askHint`) }}</p>
         <!-- Inset as in the chat, where the page lines up with the prose around it, so it reads as the same page. -->
@@ -106,7 +106,7 @@ const back = (): void => {
             <p v-else-if="reading === `gone`" class="py-1 text-xs text-muted">{{ t(`chat.chatPages.conversationGone`) }}</p>
             <div v-else-if="reading === `failed`" class="flex flex-col items-start gap-2 py-1">
                 <p class="text-xs text-muted">{{ t(`chat.chatPages.readFailed`) }}</p>
-                <Button tier="boring" size="small" :label="t(`ui.action.retry`)" @click="read" />
+                <Button tier="accent" size="small" :label="t(`ui.action.retry`)" @click="read" />
             </div>
             <p v-else class="py-1 text-xs text-muted">{{ t(`chat.chatPages.notFound`) }}</p>
         </div>

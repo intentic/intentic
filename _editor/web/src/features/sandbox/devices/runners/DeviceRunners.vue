@@ -220,7 +220,7 @@ const add = async (): Promise<void> => {
                 @keydown.enter.prevent="add()"
                 @keydown.esc.prevent="adding = false"
             />
-            <Button size="small" :label="t(`ui.action.create`)" :disabled="asked === `` || nameError !== undefined" @click="add()" />
+            <Button tier="accent" size="small" :label="t(`ui.action.create`)" :disabled="asked === `` || nameError !== undefined" @click="add()" />
             <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="adding = false" />
             <span v-if="nameError" class="text-2xs text-danger">{{ nameError }}</span>
         </RowNote>
@@ -272,7 +272,7 @@ const add = async (): Promise<void> => {
                     />
                     <Button
                         size="small"
-                        tier="quiet"
+                        tier="quiet" tone="danger"
                         :label="t(`ui.action.remove`)"
                         :disabled="busy || door.device.online !== true"
                         @click="run(`remove`, runner.id)"

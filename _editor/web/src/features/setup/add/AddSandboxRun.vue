@@ -66,6 +66,7 @@ const takeHostedForSlowDownload = (): void => {
                 <p class="text-xs text-muted">{{ hostedWait.failure.remedy }}</p>
                 <!-- Starting it over only where it can work: after a refused start, another is the one press that cannot help. -->
                 <Button
+                    tier="accent"
                     v-if="hostedWait.failure.action !== `none`"
                     :label="t(`setup.setup.startOver`)"
                     size="small"

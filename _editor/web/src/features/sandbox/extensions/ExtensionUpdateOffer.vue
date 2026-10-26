@@ -208,6 +208,7 @@ const shown = computed(
             <span v-if="unhealthy.detail" class="mt-0.5 block text-content">{{ unhealthy.detail }}</span>
             <template v-if="unhealthy.autoReverted !== true && extension.previous" #actions>
                 <Button
+                    tier="accent"
                     size="small"
                     tone="warning"
                     :label="t(`sandbox.extensionUpdateOffer.revertTo`, { ref: short(extension.previous.ref) })"
@@ -275,9 +276,9 @@ const shown = computed(
             </div>
 
             <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                <Button v-if="!preview" size="small" :loading="busy" :label="t(`sandbox.extensionUpdateOffer.reviewUpdate`)" @click="stage" />
+                <Button tier="accent" v-if="!preview" size="small" :loading="busy" :label="t(`sandbox.extensionUpdateOffer.reviewUpdate`)" @click="stage" />
                 <template v-else>
-                    <Button size="small" :tone="added.length > 0 ? `warning` : undefined" :loading="busy" :label="confirmLabel" @click="apply" />
+                    <Button tier="accent" size="small" :tone="added.length > 0 ? `warning` : undefined" :loading="busy" :label="confirmLabel" @click="apply" />
                     <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" :disabled="busy" @click="staging.dismiss()" />
                 </template>
                 <ActionLink

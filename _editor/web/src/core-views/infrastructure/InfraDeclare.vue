@@ -283,7 +283,7 @@ onMounted(progress.recover);
                     t(`views.infraDeclare.liveStatus`)
                 }}</RouterLink>
             </div>
-            <Button :label="t(`ui.action.add`)" size="small" @click="addOpen = true">
+            <Button tier="boring" :label="t(`ui.action.add`)" size="small" @click="addOpen = true">
                 <template #icon><Icon name="plus" /></template>
             </Button>
         </div>
@@ -411,14 +411,14 @@ onMounted(progress.recover);
                             v-if="hasGithub"
                             :label="t(`views.infraDeclare.unlink`)"
                             size="small"
-                            tier="quiet"
+                            tier="quiet" tone="danger"
                             @click="removeEntry('gh')"
                         />
                         <Button
                             v-else-if="hasGitlab"
                             :label="t(`views.infraDeclare.unlink`)"
                             size="small"
-                            tier="quiet"
+                            tier="quiet" tone="danger"
                             @click="removeEntry('gl')"
                         />
                         <template v-else-if="!showGithub && !showGitlab">
@@ -446,7 +446,7 @@ onMounted(progress.recover);
                     <div class="flex justify-end gap-2">
                         <Button type="button" :label="t(`ui.action.cancel`)" tier="quiet" @click="showGithub = false" />
                         <Button
-                            type="submit"
+                            type="submit" tier="accent"
                             :label="t(`views.infraDeclare.linkGithub`)"
                             :disabled="ghToken.trim().length === 0 || ghSubmitting"
                             :loading="ghSubmitting"
@@ -478,7 +478,7 @@ onMounted(progress.recover);
                     <div class="flex justify-end gap-2">
                         <Button type="button" :label="t(`ui.action.cancel`)" tier="quiet" @click="showGitlab = false" />
                         <Button
-                            type="submit"
+                            type="submit" tier="accent"
                             :label="t(`views.infraDeclare.linkGitlab`)"
                             :disabled="glToken.trim().length === 0 || glSubmitting"
                             :loading="glSubmitting"
@@ -508,7 +508,7 @@ onMounted(progress.recover);
                         v-if="hasStripe"
                         :label="t(`ui.action.disconnect`)"
                         size="small"
-                        tier="quiet"
+                        tier="quiet" tone="danger"
                         @click="removeEntry('stripe')"
                     />
                     <Button
@@ -533,7 +533,7 @@ onMounted(progress.recover);
                     <div class="flex justify-end gap-2">
                         <Button type="button" :label="t(`ui.action.cancel`)" tier="quiet" @click="showStripe = false" />
                         <Button
-                            type="submit"
+                            type="submit" tier="accent"
                             :label="t(`views.infraDeclare.connectStripe`)"
                             :disabled="stripeKey.trim().length === 0 || stripeSubmitting"
                             :loading="stripeSubmitting"
@@ -563,7 +563,7 @@ onMounted(progress.recover);
                         v-if="hasCloudflare"
                         :label="t(`ui.action.disconnect`)"
                         size="small"
-                        tier="quiet"
+                        tier="quiet" tone="danger"
                         @click="removeEntry('cf')"
                     />
                     <Button
@@ -625,7 +625,7 @@ onMounted(progress.recover);
             <Button
                 :label="isFirstProvision ? t(`views.infraDeclare.setUpDeploy`) : t(`views.infraDeclare.applyChanges`)"
                 :disabled="!canApply"
-                :loading="applying"
+                :loading="applying" tier="accent"
                 @click="progress.launch()"
             >
                 <template #icon><Icon name="bolt" /></template>

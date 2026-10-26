@@ -175,6 +175,7 @@ const retryTrial = async (): Promise<void> => {
             <!-- Notice actions share one button style and baseline. -->
             <div class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
                 <Button
+                    tier="accent"
                     v-if="card.state === `unavailable`"
                     size="small"
                     thumb

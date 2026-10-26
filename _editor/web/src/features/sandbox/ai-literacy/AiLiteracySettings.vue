@@ -53,7 +53,7 @@ const toggle = (value: boolean): void => {
                 <span class="ui-field-label">{{ t(`sandbox.aiLiteracy.customText`) }}</span>
                 <textarea v-model="draft" rows="5" maxlength="4000" :class="ui.input()" class="w-full" :placeholder="t(`sandbox.aiLiteracy.customPlaceholder`)" />
             </label>
-            <div class="flex justify-end"><Button :label="t(`sandbox.aiLiteracy.save`)" :loading="save.isPending.value" @click="saveNotice" /></div>
+            <div class="flex justify-end"><Button tier="accent" :label="t(`sandbox.aiLiteracy.save`)" :loading="save.isPending.value" @click="saveNotice" /></div>
             <div>
                 <p class="text-xs text-muted">{{ t(`sandbox.aiLiteracy.preview`) }}</p>
                 <p class="whitespace-pre-wrap text-sm">{{ draft.trim() || AI_LITERACY_TEXT[locale] }}</p>

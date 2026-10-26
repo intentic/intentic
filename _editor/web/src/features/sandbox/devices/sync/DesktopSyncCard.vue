@@ -151,6 +151,13 @@ const showFootprint = ref(false);
                     <div v-if="candidates.length > 0 && !takeover" class="flex flex-col gap-1.5">
                         <div class="flex flex-wrap items-center gap-2">
                             <Button
+                                :tier="candidates.length
+                                ===
+                                1
+                                ?
+                                `accent`
+                                :
+                                `boring`"
                                 v-for="device in candidates"
                                 :key="device.key"
                                 size="small"
@@ -174,6 +181,7 @@ const showFootprint = ref(false);
                     </div>
                     <div class="flex flex-wrap items-center gap-3">
                         <Button
+                            tier="accent"
                             :label="
                                 portsOnly
                                     ? t(`sandbox.desktopSyncCard.mirrorPortsToDevice`)
@@ -222,6 +230,7 @@ const showFootprint = ref(false);
                     <div v-if="desktopVersion() !== undefined && desktopLink !== undefined" class="flex flex-col gap-1.5">
                         <div>
                             <Button
+                                tier="accent"
                                 :label="
                                     pairMode === 'mirror'
                                         ? t(`sandbox.desktopSyncCard.mirrorPortsToDevice2`)

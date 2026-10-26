@@ -62,6 +62,7 @@ const path = computed(() => (props.overlap === undefined && props.settingsPages 
         <!-- Keeping it gone leads: deleting it was the owner's own last word on the file. -->
         <div v-if="deleted !== undefined" class="flex flex-wrap items-center gap-1.5">
             <Button
+                tier="accent"
                 v-if="local"
                 size="small"
                 :disabled="busy"
@@ -73,7 +74,7 @@ const path = computed(() => (props.overlap === undefined && props.settingsPages 
             </Button>
             <Button
                 size="small"
-                tier="quiet"
+                tier="boring"
                 :disabled="busy"
                 class="whitespace-nowrap"
                 v-tooltip.bottom="{

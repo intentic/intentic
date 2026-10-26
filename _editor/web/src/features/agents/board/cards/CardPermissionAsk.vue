@@ -94,7 +94,7 @@ watch(
                 >
             </p>
             <div class="flex shrink-0 items-center gap-1">
-                <Button size="small" :disabled="disabled || sending !== undefined" class="whitespace-nowrap" @click.stop="answer(`once`)">
+                <Button tier="accent" size="small" :disabled="disabled || sending !== undefined" class="whitespace-nowrap" @click.stop="answer(`once`)">
                     <Icon :name="sending === `once` ? `spinner` : `check`" :spin="sending === `once`" />{{ t(`chat.chatMessageView.allowOnce`) }}
                 </Button>
                 <!-- The chat card's "skip this, keep going": this one call refused, the turn left to carry on without it. -->

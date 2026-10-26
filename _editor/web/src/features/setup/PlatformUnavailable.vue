@@ -58,7 +58,7 @@ onUnmounted(() => {
                 <p class="mt-1 text-xs text-muted">{{ t(`setup.platformUnavailable.signInNotChanged`) }}</p>
             </div>
             <div class="flex flex-wrap justify-center gap-2">
-                <Button :label="t(`ui.action.tryAgain`)" tier="boring" @click="retry" />
+                <Button :label="t(`ui.action.tryAgain`)" tier="accent" @click="retry" />
                 <Button v-if="thisComputer" :label="t(`setup.platformUnavailable.useThisComputer`)" tier="boring" @click="openThisComputersSandboxes" />
             </div>
             <p v-if="thisComputer" class="-mt-2 text-2xs text-subtle">{{ t(`setup.platformUnavailable.thisComputerNote`) }}</p>

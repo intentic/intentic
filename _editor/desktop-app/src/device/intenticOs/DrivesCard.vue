@@ -213,7 +213,7 @@ watch(
                         </div>
                     </template>
                     <div class="flex flex-wrap items-center gap-2">
-                        <Button v-if="targets.length > 0" size="small" :label="t(`desktop.os.drives.copy`)" :disabled="target === undefined || refused" @click="copy" />
+                        <Button tier="accent" v-if="targets.length > 0" size="small" :label="t(`desktop.os.drives.copy`)" :disabled="target === undefined || refused" @click="copy" />
                         <Button size="small" tier="quiet" :label="t(`ui.action.cancel`)" @click="choosing = undefined" />
                     </div>
                 </form>

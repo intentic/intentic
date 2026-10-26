@@ -268,7 +268,7 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
                         </label>
                     </div>
                     <Notice v-if="exportNotice !== undefined" :of="exportNotice" />
-                    <Button :label="t(`sandbox.sandboxAudit.downloadButton`)" size="small" class="self-end" :loading="exporting" @click="void runExport()">
+                    <Button tier="accent" :label="t(`sandbox.sandboxAudit.downloadButton`)" size="small" class="self-end" :loading="exporting" @click="void runExport()">
                         <template #icon><Icon name="download" /></template>
                     </Button>
                 </div>

@@ -443,6 +443,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 </template>
                 <template #control>
                     <Button
+                        tier="boring"
                         size="small"
                         :label="t(`ui.action.connect`)"
                         :loading="starting === provider"
@@ -463,6 +464,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                         ><Icon name="check" class="text-2xs" />{{ t(`connect.connect.foundKeyAdded`) }}</span
                     >
                     <Button
+                        tier="boring"
                         v-else
                         size="small"
                         :label="t(`ui.action.add`)"

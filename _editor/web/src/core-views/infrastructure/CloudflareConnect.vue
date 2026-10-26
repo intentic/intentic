@@ -67,7 +67,7 @@ const connect = async (): Promise<void> => {
                 <RouterLink to="/sandbox/secrets" class="text-xs text-link hover:underline">{{
                     t(`views.cloudflareConnect.replaceTokenInSandbox`)
                 }}</RouterLink>
-                <Button :label="t(`views.cloudflareConnect.enableCloudflare`)" :loading="submitting" @click="connect">
+                <Button tier="accent" :label="t(`views.cloudflareConnect.enableCloudflare`)" :loading="submitting" @click="connect">
                     <template #icon><Icon name="check" /></template>
                 </Button>
             </div>
@@ -98,7 +98,7 @@ const connect = async (): Promise<void> => {
                 </template>
             </CloudflareTokenField>
 
-            <Button type="submit" class="self-end" :label="t(`views.words.connectCloudflare`)" :disabled="!canConnect || submitting" :loading="submitting">
+            <Button tier="accent" type="submit" class="self-end" :label="t(`views.words.connectCloudflare`)" :disabled="!canConnect || submitting" :loading="submitting">
                 <template #icon><Icon name="check" /></template>
             </Button>
         </form>
