@@ -3,6 +3,8 @@ import type { Glyph } from "./glyph.js";
 /** Files, tools and people. Cut corners provide character without adding interior ornament. */
 export const OBJECT_GLYPHS = {
     box: { outline: `m12 3 9 5v9l-9 5-9-5V8Z M3 8l9 5 9-5 M12 13v9` },
+    // Add a sandbox: the sandbox's own box with a plus beside it, so it never reads as the rail's other, bare +.
+    "box-plus": { outline: `m9 2 7 4v7l-7 4-7-4V6Z M2 6l7 4 7-4 M9 10v7 M19 14v8 M15 18h8` },
     boxes: { outline: `m12 2 10 5-10 5L2 7Z M2 12l10 5 10-5 M2 17l10 5 10-5` },
     camera: { outline: `M3 7h4l2-3h6l2 3h4v13H3Z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z` },
     cloud: { outline: `M6 19a4 4 0 0 1-1-8 6 6 0 0 1 12-2 5 5 0 0 1 0 10Z` },
@@ -37,6 +39,8 @@ export const OBJECT_GLYPHS = {
     palette: { outline: `M12 3a9 9 0 1 0 0 18h1c2 0 3-2 1-4s0-4 2-4h2c5 0 3-10-6-10Z`, solid: `M7 7h2v2H7Z M13 6h2v2h-2Z M5 12h2v2H5Z` },
     paperclip: { outline: `m9 15 7-7a2 2 0 0 1 3 3l-9 9a4 4 0 0 1-6-6L15 3` },
     // A printer: the tray, the body, the sheet coming out of it.
+    // A capability: something plugged into the sandbox (a connector, an account, a machine).
+    plug: { outline: `M9 2v5 M15 2v5 M5 7h14v4l-4 5H9l-4-5Z M12 16v6` },
     print: { outline: `M6 9V3h12v6 M6 17H3V9h18v8h-3 M6 14h12v7H6Z M17 11h1` },
     save: { outline: `M3 3h15l3 3v15H3Z M7 3v6h9V3 M7 21v-7h10v7` },
     server: {

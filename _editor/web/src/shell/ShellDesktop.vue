@@ -574,7 +574,7 @@ useGettingStarted();
                 v-tooltip.right="words.newAgent"
                 @click="startAgent()"
             >
-                <RailIcon section="capabilities" class="icon-rail-glyph" />
+                <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
             </button>
             <RouterLink
                 v-else-if="!isGuest"

@@ -121,7 +121,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 @focus="warmAddSandbox"
             >
                 <span class="flex size-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-line-strong">
-                    <Icon name="plus" aria-hidden="true" />
+                    <Icon name="box-plus" aria-hidden="true" />
                 </span>
                 <span>{{ t(`sandbox.words.addSandbox`) }}</span>
             </button>
@@ -159,7 +159,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 @pointerenter="warmAddSandbox"
                 @focus="warmAddSandbox"
             >
-                <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
+                <Icon name="box-plus" class="icon-rail-glyph" aria-hidden="true" />
             </button>
             <Beacon v-if="!boxes.length && !making && !newSandbox" size="sm" class="absolute right-1 top-1" />
         </span>
