@@ -4,6 +4,7 @@ after it still run, because an uninstall that stops halfway leaves more behind t
 is left. Only what is Intentic's is touched: Docker objects by our own name families (never the `intentic-app-*`
 deployments a server runs for its owner), files under ic's own home, the app's own folders. */
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -257,20 +258,25 @@ pub fn sweep_ours(list: &dyn Fn(&[&str]) -> Option<String>, remove: &dyn Fn(&[&s
         let Some(names) = list(listing) else {
             continue;
         };
-        let mut done: Vec<&str> = Vec::new();
+        let mut seen = HashSet::new();
+        let mut handles = Vec::new();
         for line in names.lines().map(str::trim) {
             let (name, handle) = match line.split_once(' ') {
                 Some((name, id)) if kind == Kind::Image => (name, id.trim()),
                 _ => (line, line),
             };
-            if !ours(kind, name) || handle.is_empty() || done.contains(&handle) {
+            if !ours(kind, name) || handle.is_empty() || !seen.insert(handle) {
                 continue;
             }
-            done.push(handle);
+            handles.push(handle);
+        }
+        // Each Docker verb accepts several objects. Bound the batches for Windows' command-line limit, while
+        // avoiding a CLI startup for every leftover volume or image. Finish each kind before listing the next.
+        for batch in handles.chunks(64) {
             let mut args: Vec<&str> = removal.to_vec();
-            args.push(handle);
+            args.extend_from_slice(batch);
             remove(&args);
-            swept += 1;
+            swept += batch.len();
         }
     }
     swept
@@ -656,9 +662,9 @@ mod tests {
             &|args| {
                 Some(
                     match args[0] {
-                        "ps" => "intentic-sandbox-a\nweb\n",
-                        "volume" => "intentic-workspace-a\nmine\n",
-                        "network" => "bridge\nintentic-workspace-a\n",
+                        "ps" => "intentic-sandbox-a\nweb\nintentic-trash-b\n",
+                        "volume" => "intentic-workspace-a\nmine\nintentic-history-b\n",
+                        "network" => "bridge\nintentic-workspace-a\nintentic-workspace-b\n",
                         _ => "ghcr.io/intentic/sandbox:stable 1a\nghcr.io/intentic/sandbox:1.2 1a\nintentic-sandbox-env-a:<none> 2b\nnode:22 3c\n",
                     }
                     .to_string(),
@@ -666,17 +672,36 @@ mod tests {
             },
             &|args| removed.borrow_mut().push(args.join(" ")),
         );
-        assert_eq!(swept, 5);
+        assert_eq!(swept, 8);
         assert_eq!(
             removed.into_inner(),
             vec![
-                "rm -f intentic-sandbox-a",
-                "volume rm -f intentic-workspace-a",
-                "network rm intentic-workspace-a",
-                "image rm -f 1a",
-                "image rm -f 2b",
+                "rm -f intentic-sandbox-a intentic-trash-b",
+                "volume rm -f intentic-workspace-a intentic-history-b",
+                "network rm intentic-workspace-a intentic-workspace-b",
+                "image rm -f 1a 2b",
             ]
         );
+    }
+
+    #[test]
+    fn a_large_sweep_bounds_each_command_and_removes_every_handle_once() {
+        let handles: Vec<String> = (0..129)
+            .map(|number| format!("intentic-workspace-{number}"))
+            .collect();
+        let listing = handles.join("\n");
+        let removed = RefCell::new(Vec::new());
+        let swept = sweep_ours(
+            &|args| (args[0] == "volume").then(|| format!("{listing}\n{listing}\n")),
+            &|args| {
+                assert_eq!(&args[..3], &["volume", "rm", "-f"]);
+                removed.borrow_mut().push(args[3..].join("\n"));
+            },
+        );
+        let commands = removed.into_inner();
+        assert_eq!(swept, handles.len());
+        assert_eq!(commands.len(), 3);
+        assert_eq!(commands.join("\n"), listing);
     }
 
     #[test]

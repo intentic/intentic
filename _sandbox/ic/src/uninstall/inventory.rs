@@ -30,7 +30,8 @@ pub struct Inventory {
 /// Read the device.
 pub fn gather() -> Inventory {
     let windows = cfg!(windows);
-    let docker = docker::cli_present() && docker::daemon_reachable();
+    let docker_cli = docker::cli_present();
+    let docker = docker_cli && docker::daemon_reachable();
     let rows = sandbox_rows(docker);
     let data_bytes = rows
         .iter()
@@ -66,7 +67,7 @@ pub fn gather() -> Inventory {
         app: app.is_some(),
         cache_bytes: cache_bytes(),
         deploys: cfg!(unix) && Path::new("/opt/intentic").is_dir(),
-        stays: stays(engine_here),
+        stays: stays(engine_here, docker_cli),
     };
     Inventory { facts, rows, app }
 }
@@ -74,31 +75,38 @@ pub fn gather() -> Inventory {
 /// The sandboxes and runners: from docker when it answers, the recoverable ones included, else from ic's own records,
 /// so a device whose engine is down still says what an uninstall would delete.
 fn sandbox_rows(docker_up: bool) -> Vec<SandboxRow> {
-    let mut rows = Vec::new();
     if docker_up {
-        let sizes = volume_sizes();
-        let size_of = |slug: &str| sizes.as_ref().map(|sizes| slug_bytes(sizes, slug));
-        for slug in crate::sandbox::list_slugs() {
-            rows.push(SandboxRow {
-                bytes: size_of(&slug),
-                slug,
-            });
-        }
+        let mut slugs = crate::sandbox::list_slugs();
         for entry in trash::list() {
-            if rows.iter().any(|row| row.slug == entry.slug) {
-                continue;
+            if !slugs.contains(&entry.slug) {
+                slugs.push(entry.slug);
             }
-            rows.push(SandboxRow {
-                bytes: size_of(&entry.slug),
-                slug: entry.slug,
-            });
         }
-        return rows;
+        return rows_with_sizes(slugs, volume_sizes);
     }
-    for slug in recorded_slugs(&crate::logfile::intentic_home()) {
-        rows.push(SandboxRow { bytes: None, slug });
+    recorded_slugs(&crate::logfile::intentic_home())
+        .into_iter()
+        .map(|slug| SandboxRow { bytes: None, slug })
+        .collect()
+}
+
+/// Measure only when there are sandboxes to report: Docker's full disk-usage query can take its entire deadline,
+/// even on a device whose only remaining Intentic installation is the app or the agent.
+fn rows_with_sizes(
+    slugs: Vec<String>,
+    measure: impl FnOnce() -> Option<Vec<(String, u64)>>,
+) -> Vec<SandboxRow> {
+    if slugs.is_empty() {
+        return Vec::new();
     }
-    rows
+    let sizes = measure();
+    slugs
+        .into_iter()
+        .map(|slug| SandboxRow {
+            bytes: sizes.as_ref().map(|sizes| slug_bytes(sizes, &slug)),
+            slug,
+        })
+        .collect()
 }
 
 /// The slugs ic keeps a record for (`sandbox-<slug>.channel`, record.rs). Pure but for the listing.
@@ -286,7 +294,7 @@ pub fn cache_paths() -> Vec<PathBuf> {
 }
 
 /// What is not Intentic's and stays, named the way a person knows it.
-fn stays(engine_here: bool) -> Vec<String> {
+fn stays(engine_here: bool, docker_cli: bool) -> Vec<String> {
     let mut stays = Vec::new();
     if cfg!(windows) {
         if crate::engine::docker_desktop_installed() {
@@ -295,7 +303,7 @@ fn stays(engine_here: bool) -> Vec<String> {
         if engine_here || Path::new(r"C:\Windows\System32\wsl.exe").exists() {
             stays.push("WSL".to_string());
         }
-    } else if docker::cli_present() {
+    } else if docker_cli {
         stays.push("Docker".to_string());
     }
     stays
@@ -328,6 +336,30 @@ impl Inventory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_sandboxes_need_no_docker_disk_usage_query() {
+        let rows = rows_with_sizes(Vec::new(), || panic!("nothing needs measuring"));
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn one_disk_usage_query_sizes_every_sandbox_and_preserves_unknown_sizes() {
+        let rows = rows_with_sizes(vec!["a".into(), "b".into()], || {
+            Some(vec![
+                ("intentic-workspace-a".into(), 10),
+                ("intentic-history-a".into(), 5),
+                ("intentic-workspace-b".into(), 7),
+                ("unrelated".into(), 100),
+            ])
+        });
+        assert_eq!(rows[0].slug, "a");
+        assert_eq!(rows[0].bytes, Some(15));
+        assert_eq!(rows[1].slug, "b");
+        assert_eq!(rows[1].bytes, Some(7));
+        let unknown = rows_with_sizes(vec!["a".into()], || None);
+        assert_eq!(unknown[0].bytes, None);
+    }
 
     #[test]
     fn docker_sizes_are_read_in_its_own_units() {

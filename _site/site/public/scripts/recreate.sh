@@ -346,7 +346,8 @@ ic_fetch() {
             7f454c46 | cffaedfe | cafebabe) ;;
             *) return 1 ;;
         esac
-        case "$( ("$1" --version) 2>/dev/null)" in
+        ic_seen="$( ("$1" --version) 2>/dev/null)"
+        case "$ic_seen" in
             "ic "*) return 0 ;;
         esac
         return 1
@@ -415,8 +416,8 @@ ic_fetch() {
     # Compared as versions: major.minor.patch first, then a pre-release below its own release. An installed ic whose
     # answer is not a version this can read counts as older, and is replaced.
     ic_not_older() {
-        ic_seen="$("$1" --version 2>/dev/null || true)"
-        ic_have="${ic_seen#ic }"
+        # ic_runs already asked the binary; compare that answer without starting it a second time.
+        ic_have="${1#ic }"
         ic_have="${ic_have#v}"
         ic_want="${2#v}"
         ic_have_pre=""
@@ -431,9 +432,15 @@ ic_fetch() {
             ic_want="${ic_want%%-*}"
             ;;
         esac
+        # A trailing separator lets shell builtins consume each component, including an absent one, without
+        # starting six cut processes just to compare a three-part version.
+        ic_have="${ic_have}."
+        ic_want="${ic_want}."
         for ic_part in 1 2 3; do
-            ic_h="$(printf '%s' "$ic_have" | cut -d. -f"$ic_part")"
-            ic_w="$(printf '%s' "$ic_want" | cut -d. -f"$ic_part")"
+            ic_h="${ic_have%%.*}"
+            ic_w="${ic_want%%.*}"
+            ic_have="${ic_have#*.}"
+            ic_want="${ic_want#*.}"
             case "$ic_h" in "" | *[!0-9]*) return 1 ;; esac
             case "$ic_w" in "" | *[!0-9]*) return 1 ;; esac
             [ "$ic_h" -gt "$ic_w" ] && return 0
@@ -441,7 +448,7 @@ ic_fetch() {
         done
         [ -z "$ic_have_pre" ] || [ "$ic_have_pre" = "$ic_want_pre" ]
     }
-    if [ -n "${IC_VERSION:-}" ] && ic_runs "$dest" && ic_not_older "$dest" "$IC_VERSION"; then
+    if [ -n "${IC_VERSION:-}" ] && ic_runs "$dest" && ic_not_older "$ic_seen" "$IC_VERSION"; then
         IC="$dest"
         kit_say "$ic_seen is installed, and this run asks for ic ${IC_VERSION#v} or newer, so nothing is downloaded."
     else
