@@ -455,21 +455,12 @@ const HOVER_ACTION = `touch-target flex h-5 w-5 shrink-0 items-center justify-ce
 // no hover, so what it keeps of them (one ⋯, or a lone press) stays drawn, quieter than the ink around it.
 const actionClass = computed(() => `${HOVER_ACTION} ${mobile.value || coarse.value ? `opacity-60` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`}`);
 
-// Every press the header offers, in the order the row draws them. Keep leads, since it is the one with a deadline (the
-// look closes on the next click elsewhere); the drill-in closes the row. Adding a mark rides with the card's other
+// Every press the header offers, in the order the row draws them; the drill-in closes the row. Keep open lives in the
+// card's menu only. Adding a mark rides with the card's other
 // actions, not with the marks themselves: this row reserves its seats and lets the title take what is left, so
 // revealing it resizes nothing, while the stats row below has no seat to spare.
 const cardActions = computed((): ActionItem[] => {
     const actions: ActionItem[] = [];
-    if (props.peek === true) {
-        actions.push({
-            id: `keep`,
-            label: t(`chat.words.keepChatOpen`),
-            icon: `pin`,
-            hint: { title: t(`ui.action.keepOpen`), note: t(`agents.agentCard.closesWhenAnotherOpens`) },
-            run: () => emit(`keep`),
-        });
-    }
     if (localOnly.value) {
         actions.push({ id: `rename`, label: words.value.renameAgent, icon: `pencil`, hint: t(`ui.action.rename`), disabled: busy.value, run: () => edit.begin() });
     }
