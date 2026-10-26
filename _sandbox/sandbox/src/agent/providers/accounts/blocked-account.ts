@@ -17,8 +17,10 @@ export type BlockedAccountDeps = ServiceabilityDeps & Pick<Services, "claudeSeat
 export type AccountRoute =
     // Run where routingFor points.
     | { readonly kind: "keep" }
-    // Moved to a ready account of the same provider; the conversation follows (switchAccount's profile write).
-    | { readonly kind: "move"; readonly from: string; readonly to: string; readonly reason: string }
+    // Moved to a ready account of the same provider; the conversation follows (switchAccount's profile write). `reach`
+    // marks a move off an account the people it works for may not use (agent/run/decide/account-reach.ts) rather than
+    // one that cannot serve.
+    | { readonly kind: "move"; readonly from: string; readonly to: string; readonly reason: string; readonly reach?: true }
     // Nothing of the provider's can serve: refused before anything spawns, the words held for a press.
     | { readonly kind: "held"; readonly account: string; readonly reason: string };
 

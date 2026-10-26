@@ -45,12 +45,12 @@ const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> 
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, agents, edit, lands, emailSignIn, credentials } = body.data;
-    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials };
+    const { email, role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts } = body.data;
+    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts };
 };
 
-// A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, and what their
-// conversations may spend (absent: what their row already says).
+// A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, what their
+// conversations may spend and which AI accounts they run on (absent: what their row already says).
 interface MemberGrantRequest {
     readonly email: string;
     readonly role: GrantedRole;
@@ -60,6 +60,7 @@ interface MemberGrantRequest {
     readonly lands?: boolean | undefined;
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
+    readonly aiAccounts?: readonly string[] | "all" | undefined;
 }
 
 // What the audit trail keeps of a grant: the tier it made and the one it replaced, and the shape of the fence (area ids
@@ -110,11 +111,19 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: MemberGrant
 };
 
 // A maintainer reads every credential the sandbox holds and operates the box as the owner does, so a list of what its
-// conversations may spend would be a line on a screen rather than a boundary, as a folder fence over it would be.
-const reachRefusal = (grant: { role: GrantedRole; credentials?: CredentialReach | "all" | undefined }): string | undefined =>
-    grant.role === "maintainer" && grant.credentials !== undefined && grant.credentials !== "all"
-        ? "a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them"
+// conversations may spend would be a line on a screen rather than a boundary, as a folder fence over it would be. The
+// same holds for the AI accounts it runs on: it connects and disconnects them.
+const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "credentials" | "aiAccounts">): string | undefined => {
+    if (grant.role !== "maintainer") {
+        return undefined;
+    }
+    if (grant.credentials !== undefined && grant.credentials !== "all") {
+        return "a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them";
+    }
+    return grant.aiAccounts !== undefined && grant.aiAccounts !== "all"
+        ? "a maintainer holds the owner's operating authority and manages every AI account, so it cannot be limited to some of them"
         : undefined;
+};
 
 // Why a guest's fence cannot be granted even though its areas exist: no card works in the folders it names. A guest
 // reaches nothing but its assistants, so such a grant would sign somebody in to a chat that answers nothing.
@@ -130,6 +139,32 @@ const guestReachRefusal = async (services: PersonaReachDeps, grant: MemberGrantR
         : "no assistant works in those areas, so a guest fenced to them would have nobody to talk to; give an assistant a starting folder inside one, or fence the guest to an area that already has one";
 };
 
+
+// GET /members/self: what the signed-in person may do here, as the request's own identity carries it; the owner, and a
+// caller the sandbox cannot name (loopback, a panel), manage everything. The AI accounts are read off the roster rather
+// than the identity, which carries only what a route's floor reads; a roster that cannot be read leaves them out, and
+// the turn's own planning still refuses what is not theirs.
+const selfAccess = async (services: Pick<Services, "members">, c: Context<AppEnv>): Promise<Response> => {
+    const identity = c.get("identity");
+    if (identity === undefined || identity.role === "owner") {
+        return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true } satisfies MemberSelf);
+    }
+    const edits = identity.edits ?? "all";
+    const self: MemberSelf = { role: identity.role, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
+    if (callerLands(identity)) {
+        self.lands = true;
+    }
+    if (identity.areas !== undefined) {
+        self.areas = [...identity.areas];
+    }
+    const email = identity.email.toLowerCase();
+    // allow(silent-catch): the list is a picker's courtesy; planning reads the roster again and refuses on its own.
+    const row = (await services.members.list().catch(() => [])).find((member) => member.email.toLowerCase() === email);
+    if (row?.aiAccounts !== undefined) {
+        self.aiAccounts = [...row.aiAccounts];
+    }
+    return c.json(self);
+};
 
 // A roster this build cannot read is refused rather than replaced (auth.ts `fileMembersStore`), so a grant or a removal
 // over it answers 503 (`unavailableIfUnreadable`) and leaves every socket and ticket as it was.
@@ -195,23 +230,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         });
     },
     /** GET /members/self */
-    // What the signed-in person may do here, as the request's own identity carries it; the owner, and a caller the
-    // sandbox cannot name (loopback, a panel), manage everything.
-    self: (c: Context<AppEnv>): Response => {
-        const identity = c.get("identity");
-        if (identity === undefined || identity.role === "owner") {
-            return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true } satisfies MemberSelf);
-        }
-        const edits = identity.edits ?? "all";
-        const self: MemberSelf = { role: identity.role, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
-        if (callerLands(identity)) {
-            self.lands = true;
-        }
-        if (identity.areas !== undefined) {
-            self.areas = [...identity.areas];
-        }
-        return c.json(self);
-    },
+    self: (c: Context<AppEnv>): Promise<Response> => selfAccess(services, c),
     /** DELETE /members/self */
     removeSelf: async (c: Context<AppEnv>): Promise<Response> => {
         const identity = c.get("identity");

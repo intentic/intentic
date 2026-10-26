@@ -16,7 +16,13 @@ import type { KeyringSync } from "./device/keyring-sync.js";
 import { createProgramGuardGate, type ProgramGuardGate } from "./gates/program-guard-gate.js";
 import { fileSecretProgramGuards, type ProgramGuard, type SecretProgramGuardsStore, secretProgramGuardsDocument } from "./guards/program-guards.js";
 import { createCredentialGate, type CredentialGate } from "./gates/credential-gate.js";
-import { type ConversationReachOf, type CredentialReachDeps, createConversationReach } from "./credential-reach.js";
+import {
+    type ConversationAccountReachOf,
+    type ConversationReachOf,
+    type CredentialReachDeps,
+    createConversationAccountReach,
+    createConversationReach,
+} from "./credential-reach.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
 import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
@@ -39,6 +45,9 @@ export interface SecretsSlice {
     // What a conversation may spend as the people it works for may: read by the turn's preflight and by the gate, so
     // a capability outside it is neither mounted nor spent (credential-reach.ts).
     readonly credentialReach: ConversationReachOf;
+    // Which AI accounts a conversation may run on as the people it works for may: read by the turn's planning, so a turn
+    // never runs on an account outside it (agent/run/decide/account-reach.ts).
+    readonly accountReach: ConversationAccountReachOf;
     // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
     // A secret was stored or removed here, by any door (the sandbox store, or desired-state/.env through the Secrets
@@ -128,6 +137,7 @@ export const createSecretsSlice = ({
     };
     const sandboxSecrets = notifyingSandboxSecrets(fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path)), secretsChanged);
     const credentialReach = createConversationReach({ members, ownerEmail, entry: conversationEntry });
+    const accountReach = createConversationAccountReach({ members, ownerEmail, entry: conversationEntry });
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
     const hostGuards = async (): Promise<readonly SecretHostGuard[]> => {
@@ -185,6 +195,7 @@ export const createSecretsSlice = ({
         credentialGates,
         credentialGrants,
         credentialReach,
+        accountReach,
         // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
         credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, reach: credentialReach, ...cards, hold }),
     };

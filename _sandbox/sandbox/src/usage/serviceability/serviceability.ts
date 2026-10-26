@@ -78,6 +78,16 @@ export const serviceabilities = async (
     return facts.map((entry) => ({ id: entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
 };
 
+/** As `serviceabilities`, with each account's own name beside it, for a sentence that has to name them. */
+export const namedServiceabilities = async (
+    deps: ServiceabilityDeps,
+    provider: AgentProvider,
+    model?: ModelRef,
+): Promise<readonly { readonly id: string; readonly label: string; readonly state: AccountState }[]> => {
+    const { facts, states } = await judged(deps, provider, model);
+    return facts.map((entry) => ({ id: entry.account, label: entry.label ?? entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
+};
+
 /** One account's verdict; `unknown` for an account the provider does not hold. */
 export const serviceability = async (deps: ServiceabilityDeps, provider: AgentProvider, account: string, model?: ModelRef): Promise<AccountState> =>
     (await serviceabilities(deps, provider, model)).find((entry) => entry.id === account)?.state ?? { kind: "unknown" };

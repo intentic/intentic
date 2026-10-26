@@ -1,6 +1,6 @@
 import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CredentialGateKind } from "@intentic/sandbox-contract/schemas/secrets";
-import { type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
+import { aiAccountAllowed, type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
 import type { Member } from "../auth/auth.js";
 import { parentOfActor } from "../auth/principal.js";
 import { errorMessage } from "@intentic/base/errors";
@@ -126,31 +126,112 @@ export interface CredentialReachDeps {
 // roster read; a roster that cannot be read answers nothing, never everything.
 export type ConversationReachOf = (conversationId: string | undefined, also?: readonly string[]) => Promise<ConversationReach>;
 
+// The people a conversation acts for and the roster their reach is read off: `nobody` when nobody limited could be in it
+// (no one, or the owner alone), `unreadable` when the roster or the owner could not be read.
+type PeopleRoster =
+    | { readonly kind: "nobody" }
+    | { readonly kind: "unreadable"; readonly people: readonly string[]; readonly detail: string }
+    | { readonly kind: "read"; readonly people: readonly string[]; readonly roster: readonly Member[]; readonly owner: string | undefined };
+
+const peopleRoster = async (deps: CredentialReachDeps, conversationId: string | undefined, also: readonly string[]): Promise<PeopleRoster> => {
+    const people = [...new Set([...peopleOf(deps.entry, conversationId), ...also.map(lower)])];
+    if (people.length === 0) {
+        return { kind: "nobody" };
+    }
+    try {
+        const owner = await deps.ownerEmail();
+        const ownerAddress = owner === undefined ? undefined : lower(owner);
+        if (people.every((email) => email === ownerAddress)) {
+            return { kind: "nobody" };
+        }
+        return { kind: "read", people, roster: await deps.members.list(), owner };
+    } catch (error) {
+        return { kind: "unreadable", people, detail: errorMessage(error) };
+    }
+};
+
 export const createConversationReach =
     (deps: CredentialReachDeps): ConversationReachOf =>
     async (conversationId, also = []) => {
-        const people = [...new Set([...peopleOf(deps.entry, conversationId), ...also.map(lower)])];
-        if (people.length === 0) {
+        const read = await peopleRoster(deps, conversationId, also);
+        if (read.kind === "nobody") {
             return REACH_ALL;
         }
-        let owner: string | undefined;
-        let roster: readonly Member[];
-        try {
-            owner = await deps.ownerEmail();
-            const ownerAddress = owner === undefined ? undefined : lower(owner);
-            if (people.every((email) => email === ownerAddress)) {
-                return REACH_ALL;
-            }
-            roster = await deps.members.list();
-        } catch (error) {
-            const detail = errorMessage(error);
-            return { kind: "some", capabilities: new Set(), secrets: new Set(), who: people, unreadable: detail };
+        if (read.kind === "unreadable") {
+            return { kind: "some", capabilities: new Set(), secrets: new Set(), who: read.people, unreadable: read.detail };
         }
-        return reachOfPeople(people, roster, owner);
+        return reachOfPeople(read.people, read.roster, read.owner);
+    };
+
+// WHICH AI ACCOUNTS A CONVERSATION MAY RUN ON, as the people it works for may (auth.ts `Member.aiAccounts`): the same
+// people, the same live roster read and the same rule as the reach above, applied to the model accounts that pay for
+// its turns rather than to what its agent works with. Kept as one list per limited person rather than one intersected
+// set, since a key may name a whole provider (`claude`) where another person's names one account of it
+// (`claude:work`): an account is allowed when every list allows it (agent/run/decide/account-reach.ts decides the turn).
+
+export type AccountReach =
+    | { readonly kind: "all" }
+    | {
+          readonly kind: "some";
+          readonly lists: readonly ReadonlySet<string>[];
+          readonly who: readonly string[];
+          readonly unreadable?: string;
+      };
+
+export const ACCOUNTS_ALL: AccountReach = { kind: "all" };
+
+// One person's AI accounts: the owner and a maintainer every one, a member what their row says (absent: every one),
+// and anyone the roster no longer names none at all.
+const personAccounts = (email: string, roster: readonly Member[], owner: string | undefined): readonly string[] | "all" => {
+    if (owner !== undefined && lower(owner) === email) {
+        return "all";
+    }
+    const member = roster.find((row) => lower(row.email) === email);
+    if (member === undefined) {
+        return [];
+    }
+    return member.role === "maintainer" || member.aiAccounts === undefined ? "all" : member.aiAccounts;
+};
+
+/** The AI accounts a conversation acting for these people may run on: every limited person's list, each of which must allow. */
+export const accountReachOfPeople = (people: readonly string[], roster: readonly Member[], owner: string | undefined): AccountReach => {
+    const lists: ReadonlySet<string>[] = [];
+    const who: string[] = [];
+    for (const email of new Set(people.map(lower))) {
+        const accounts = personAccounts(email, roster, owner);
+        if (accounts !== "all") {
+            lists.push(new Set(accounts));
+            who.push(email);
+        }
+    }
+    return lists.length === 0 ? ACCOUNTS_ALL : { kind: "some", lists, who };
+};
+
+/** Whether a reach lets a turn run on one account of a provider; `account` undefined asks about the provider as a whole. */
+export const accountReachAllows = (reach: AccountReach, provider: string, account: string | undefined): boolean =>
+    reach.kind === "all" || (reach.unreadable === undefined && reach.lists.every((list) => aiAccountAllowed(list, provider, account)));
+
+export type ConversationAccountReachOf = (conversationId: string | undefined, also?: readonly string[]) => Promise<AccountReach>;
+
+// No conversation and nobody limited both answer `all`; a roster that cannot be read answers no account, never every one.
+export const createConversationAccountReach =
+    (deps: CredentialReachDeps): ConversationAccountReachOf =>
+    async (conversationId, also = []) => {
+        const read = await peopleRoster(deps, conversationId, also);
+        if (read.kind === "nobody") {
+            return ACCOUNTS_ALL;
+        }
+        if (read.kind === "unreadable") {
+            return { kind: "some", lists: [], who: read.people, unreadable: read.detail };
+        }
+        return accountReachOfPeople(read.people, read.roster, read.owner);
     };
 
 const naming = (who: readonly string[]): string =>
     who.length <= 1 ? (who[0] ?? "the person this conversation works for") : `${who.slice(0, -1).join(", ")} and ${who.at(-1) ?? ""}`;
+
+/** Who a reach names, in a sentence: the people whose lists narrowed it. */
+export const reachWho = (who: readonly string[]): string => naming(who);
 
 /** The refusal an exit answers with for a subject outside the reach: final, and nothing to ask anybody for. */
 export const outOfReachReason = (reach: Extract<ConversationReach, { kind: "some" }>, subject: string): string =>

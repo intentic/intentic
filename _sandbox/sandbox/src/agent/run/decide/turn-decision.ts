@@ -1,5 +1,6 @@
 import { compactedSinceLastTurn } from "../../../conversations/registry/agents-store.js";
-import { type AccountRoute, heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
+import { heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
+import type { ReachedRoute } from "./account-reach.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentHarness, AgentProvider, AgentTurn, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
@@ -80,21 +81,30 @@ const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): 
 // the one its conversation runs on for this provider, else none, which the credential resolver answers by serviceability.
 // A session resumes only under the account that minted it, so a turn naming none must not wander, except off an account
 // that can no longer serve it (blocked-account.ts), onto the ready one the conversation is moved to.
-const routedInput = (input: RoutedAgentTurn, entry: ConversationEntry | undefined, route: AccountRoute | undefined): RoutedAgentTurn => {
-    const account = route?.kind === "move" ? route.to : routingFor(entry?.profile, input).account;
+const routedInput = (input: RoutedAgentTurn, entry: ConversationEntry | undefined, route: ReachedRoute | undefined): RoutedAgentTurn => {
+    const account = route?.kind === "move" || route?.kind === "pin" ? route.to : routingFor(entry?.profile, input).account;
     return account === undefined || account === input.account ? input : { ...input, account };
 };
 
 // What the log owes a turn moved off its conversation's account.
-const routeWarnings = (route: AccountRoute | undefined, input: AgentTurn): TurnWarning[] =>
-    route?.kind === "move"
-        ? [
-              {
-                  fields: { conversationId: input.conversationId, from: route.from, to: route.to, reason: route.reason },
-                  message: "account: the conversation's account cannot serve, moving the conversation to one that can",
-              },
-          ]
-        : [];
+const routeWarnings = (route: ReachedRoute | undefined, input: AgentTurn): TurnWarning[] => {
+    if (route?.kind === "pin") {
+        return [{ fields: { conversationId: input.conversationId, to: route.to }, message: "account: left to the pick, run on one the people it works for may use" }];
+    }
+    if (route?.kind !== "move") {
+        return [];
+    }
+    const fields = { conversationId: input.conversationId, from: route.from, to: route.to, reason: route.reason };
+    return [
+        {
+            fields,
+            message:
+                route.reach === true
+                    ? "account: the people this conversation works for may not use its account, moving the conversation to one they may"
+                    : "account: the conversation's account cannot serve, moving the conversation to one that can",
+        },
+    ];
+};
 
 // Taught through the `agents` CLI to runtimes with only a shell door, once, on the conversation's opening turn. A runtime
 // the daemon's own tools reach (`mcp` full or tools: today every loop, in-process or through the MCP door) already carries
@@ -206,6 +216,12 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         const { account, reason } = facts.accountRoute;
         const warning = { fields: { conversationId: input.conversationId, account, reason }, message: "account: no account of the provider can serve, turn held" };
         return { ok: false, code: "claude-not-entitled", message: heldForAccountMessage(input.agent, reason), account, warnings: [warning], spawn: false };
+    }
+    // The people this conversation works for may not run it on that account, or on any of the provider's (account-reach.ts).
+    if (facts.accountRoute?.kind === "refused") {
+        const { account, message } = facts.accountRoute;
+        const warning = { fields: { conversationId: input.conversationId, provider: input.agent, account }, message: "account: outside what the people it works for may use, refused before sending" };
+        return { ok: false, code: "account-not-allowed", message, ...opt("account", account), warnings: [warning], spawn: false };
     }
     const runtime = turnRuntime(input, facts.entry);
     // A model that can only write one-shot jobs is turned away at the door whatever the turn would carry: an agent turn

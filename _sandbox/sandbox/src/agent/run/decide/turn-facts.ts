@@ -22,6 +22,8 @@ import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { type FreshFacts, freshFactsIfAny } from "../../context/fresh-session.js";
 import { homeNoteIfDue } from "../../../conversations/home/home-policy.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
+import { type ReachedRoute, routeWithinReach } from "./account-reach.js";
+import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import { type FieldNotes, fieldNotes } from "@intentic/agent-context/field-notes";
 import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
@@ -99,8 +101,9 @@ export interface AdmittedTurnFacts {
     // What checks the work (nothing here, CI after a push); present only on a turn that owes it.
     readonly landingChecksNote: TurnNote | undefined;
     readonly sessionStore: string;
-    // Where a turn that names no account goes when the one its conversation remembers is blocked; absent is `keep`.
-    readonly accountRoute?: AccountRoute;
+    // Where a turn goes when the account its conversation remembers is blocked, or when the people it works for may not
+    // run it where it was routed (account-reach.ts); absent is `keep`.
+    readonly accountRoute?: ReachedRoute;
 }
 
 export type TurnFacts = HeldTurnFacts | AdmittedTurnFacts;
@@ -253,6 +256,33 @@ const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry:
     }
 };
 
+// The route a turn takes once the people it works for have their say over the account (account-reach.ts): asked after
+// the blocked-account route, which it can only narrow. Unreadable verdicts route as before, as above: the account the
+// turn runs on is still one the reach was asked about, since the reach refuses rather than guesses when it cannot read.
+const reachedRouteOf = async (
+    services: TurnFactsDeps,
+    input: RoutedTurn,
+    entry: ConversationEntry | undefined,
+    installed: readonly Capability[],
+): Promise<ReachedRoute> => {
+    const [route, reach] = await Promise.all([
+        accountRouteOf(services, input, entry),
+        services.accountReach(input.conversationId, input.owner === undefined ? [] : [input.owner.email]),
+    ]);
+    if (reach.kind === "all") {
+        return route;
+    }
+    const turn = {
+        provider: input.agent,
+        named: input.account,
+        remembered: routingFor(entry?.profile, input).account,
+        model: input.model,
+        // A local model rides the endpoint kind (`endpoint/<capability id>`); its weights spend nobody's allowance.
+        free: installed.some((capability) => capability.kind === "localmodel" && capability.id === endpointIdOf(input.agent)),
+    };
+    return services.perf.track("turn.plan.account-reach", { provider: input.agent }, () => routeWithinReach(services, reach, turn, route));
+};
+
 // Every seam the reads above reach. The one write is the field-notes pin, which records what a conversation read.
 export type TurnFactsDeps = ServiceabilityDeps &
     Pick<
@@ -267,6 +297,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "credentialGates"
     | "credentialGrants"
     | "credentialReach"
+    | "accountReach"
     | "cursorStore"
     | "dependencies"
     | "endpointModels"
@@ -323,7 +354,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     // names this turn's person beside the conversation's own: begin records them, and this must not lean on its order.
     const [gates, accountRoute, reach] = await Promise.all([
         gatesOf(services),
-        accountRouteOf(services, input, entry),
+        reachedRouteOf(services, input, entry, installed),
         services.credentialReach(input.conversationId, input.owner === undefined ? [] : [input.owner.email]),
         services.credentialGrants.ready,
     ]);

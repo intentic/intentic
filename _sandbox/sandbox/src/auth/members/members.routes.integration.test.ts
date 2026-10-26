@@ -150,6 +150,32 @@ test("a grant sets, keeps and lifts what a member's conversations may spend, and
     expect(await members.list()).toEqual([{ email: "bob@example.com", role: "collaborator" }]);
 });
 
+// Which AI accounts a person's conversations run on rides on the grant the same way: `all` lifts the list, a list sets
+// it, a re-grade that never mentions it keeps it, and a maintainer is refused one. The person's own editor is told it.
+test("a grant sets, keeps and lifts the AI accounts a member runs on, and tells the member", async () => {
+    const { app, members } = await ownerApp();
+    const accounts = ["claude:work", "endpoint/my-endpoint"];
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", aiAccounts: accounts })).status).toBe(200);
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "viewer" })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "viewer", aiAccounts: accounts }]);
+
+    const self = createApp(
+        services({
+            auth: { authorize: async () => ({ ...proven(`bob@example.com`, `viewer`), agents: `off`, edits: `none` }), authorizeOwner: async () => undefined },
+            ownerEmail: async () => `ada@example.com`,
+            members,
+        }),
+    );
+    expect(await (await self.request("/members/self", { headers: { authorization: "Bearer bob" } })).json()).toMatchObject({ aiAccounts: accounts });
+
+    const maintainer = await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", aiAccounts: accounts });
+    expect(maintainer.status).toBe(400);
+    expect(await maintainer.json()).toEqual({ error: expect.stringContaining("every AI account") });
+
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", aiAccounts: "all" })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "collaborator" }]);
+});
+
 // Access is three answers, and the role a grant names must be the tier they make: a person who sees the whole workspace
 // and edits one area of it, with agents off, is a writer; the same answers named as anything else are refused.
 test("a grant carries agents and edit areas, and its role must be the tier they make", async () => {

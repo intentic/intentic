@@ -15,6 +15,7 @@ interface MemberRowDraft {
     lands?: true;
     emailSignIn?: boolean;
     credentials?: CredentialReach;
+    aiAccounts?: string[];
 }
 
 // The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's. A
@@ -26,6 +27,16 @@ const reachOfRow = (grant: MemberGrant, previous: Member | undefined): Credentia
     }
     const reach = grant.credentials ?? previous?.credentials;
     return reach === undefined ? undefined : { capabilities: [...reach.capabilities], secrets: [...reach.secrets] };
+};
+
+// The AI accounts a grant leaves on the row, by the same rule as the reach above: `all` lifts it, a list replaces it,
+// silence keeps the previous row's, and a maintainer holds none, since the tier runs on every account.
+const aiAccountsOfRow = (grant: MemberGrant, previous: Member | undefined): string[] | undefined => {
+    if (grant.role === "maintainer" || grant.aiAccounts === "all") {
+        return undefined;
+    }
+    const kept = grant.aiAccounts ?? previous?.aiAccounts;
+    return kept === undefined ? undefined : [...new Set(kept)];
 };
 
 export const memberRow = (email: string, grant: MemberGrant, previous?: Member): Member => {
@@ -50,6 +61,10 @@ export const memberRow = (email: string, grant: MemberGrant, previous?: Member):
     const credentials = reachOfRow(grant, previous);
     if (credentials !== undefined) {
         row.credentials = credentials;
+    }
+    const aiAccounts = aiAccountsOfRow(grant, previous);
+    if (aiAccounts !== undefined) {
+        row.aiAccounts = aiAccounts;
     }
     return row;
 };

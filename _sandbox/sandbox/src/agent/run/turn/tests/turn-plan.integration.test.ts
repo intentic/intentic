@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { claudeStoreOf } from "../../../../sessions/session-store.js";
 import { createCredentialGrants } from "../../../../secrets/credential-grants.js";
-import { REACH_ALL } from "../../../../secrets/credential-reach.js";
+import { ACCOUNTS_ALL, REACH_ALL } from "../../../../secrets/credential-reach.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
@@ -85,6 +85,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
         credentialGrants: createCredentialGrants(),
         credentialReach: async () => REACH_ALL,
+        accountReach: async () => ACCOUNTS_ALL,
         // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
         conversations: memoryFleet().conversations,
         // No conversation-level grants: what a conversation nobody has widened reads.

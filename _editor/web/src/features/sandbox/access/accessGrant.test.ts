@@ -4,6 +4,7 @@ const draft = (over: Partial<AccessDraft> = {}): AccessDraft => ({ ...newPerson(
 
 describe(`newPerson`, () => {
     // Read-only, no agents, nothing to spend: the invite can go out at once without handing over anything undecided.
+    // Every AI account, so turning agents on later runs them rather than holding them on an empty list.
     it(`starts able to see and nothing more`, () => {
         expect(newPerson(`ana@corp.example`)).toEqual({
             manage: false,
@@ -12,6 +13,7 @@ describe(`newPerson`, () => {
             edit: `none`,
             emailSignIn: true,
             credentials: { capabilities: [], secrets: [] },
+            aiAccounts: `all`,
         });
     });
 });
@@ -25,6 +27,7 @@ describe(`draftGrant`, () => {
             agents: `off`,
             emailSignIn: true,
             credentials: { capabilities: [], secrets: [] },
+            aiAccounts: `all`,
         });
         expect(draftGrant(`ana@corp.example`, draft({ agents: `off`, see: [`web`, `support`], edit: [`support`], credentials: `all` }))).toEqual({
             email: `ana@corp.example`,
@@ -34,12 +37,23 @@ describe(`draftGrant`, () => {
             edit: [`support`],
             emailSignIn: true,
             credentials: `all`,
+            aiAccounts: `all`,
+        });
+    });
+
+    // The AI accounts ride as a list, so the daemon holds the person to exactly the ones ticked.
+    it(`sends the AI accounts a person may run on`, () => {
+        expect(draftGrant(`ana@corp.example`, draft({ agents: `run`, aiAccounts: [`claude:work`, `endpoint/gateway`] }))).toMatchObject({
+            role: `collaborator`,
+            aiAccounts: [`claude:work`, `endpoint/gateway`],
         });
     });
 
     // Managing is every other answer at once, and the daemon refuses a fence or a list of credentials on it.
     it(`sends a manager's tier and sign-in alone`, () => {
-        expect(draftGrant(`mai@example.com`, draft({ manage: true, see: [`web`], credentials: { capabilities: [`github`], secrets: [] } }))).toEqual({
+        expect(
+            draftGrant(`mai@example.com`, draft({ manage: true, see: [`web`], credentials: { capabilities: [`github`], secrets: [] }, aiAccounts: [`claude:work`] })),
+        ).toEqual({
             email: `mai@example.com`,
             role: `maintainer`,
             emailSignIn: true,
@@ -60,7 +74,14 @@ describe(`draftGrant for a home-only person`, () => {
 describe(`draftOf`, () => {
     // A row from before agents and edit reads as its role meant, and a person the daemon never wrote as the platform's tier.
     it(`reads what the daemon holds, else the platform's tier`, () => {
-        expect(draftOf({ email: `w@x.example`, role: `writer`, areas: [`web`] }, `writer`)).toMatchObject({ agents: `run`, see: [`web`], edit: [`web`], credentials: `all` });
+        expect(draftOf({ email: `w@x.example`, role: `writer`, areas: [`web`] }, `writer`)).toMatchObject({
+            agents: `run`,
+            see: [`web`],
+            edit: [`web`],
+            credentials: `all`,
+            aiAccounts: `all`,
+        });
+        expect(draftOf({ email: `c@x.example`, role: `collaborator`, aiAccounts: [`codex:me`] }, `collaborator`)).toMatchObject({ aiAccounts: [`codex:me`] });
         expect(draftOf(undefined, `collaborator`)).toMatchObject({ agents: `run`, see: undefined, edit: `none`, emailSignIn: false });
     });
 });
@@ -79,6 +100,13 @@ describe(`draftProblem`, () => {
         expect(draftProblem(draft({ see: [`web`], edit: [`finance`] }), 0)).toBe(`editOutsideSee`);
         expect(draftProblem(draft({ see: [`web`], edit: [`web`] }), 0)).toBeUndefined();
         expect(draftProblem(draft({ manage: true, see: [] }), 0)).toBeUndefined();
+    });
+
+    // Agents that may run on no AI account would run nothing; a person who runs none needs no account.
+    it(`holds a narrowed AI account list until one is ticked, while agents run`, () => {
+        expect(draftProblem(draft({ agents: `run`, aiAccounts: [] }), 0)).toBe(`pickAiAccount`);
+        expect(draftProblem(draft({ agents: `off`, aiAccounts: [] }), 0)).toBeUndefined();
+        expect(draftProblem(draft({ agents: `run`, aiAccounts: [`claude:work`] }), 0)).toBeUndefined();
     });
 });
 

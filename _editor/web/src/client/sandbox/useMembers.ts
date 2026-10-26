@@ -54,9 +54,10 @@ export const revokeMember = async (email: string): Promise<MembersList> => adopt
 
 // WHETHER THE SIGNED-IN PERSON RUNS AGENTS, for the two tiers whose name does not say: a writer edits files by hand and
 // may or may not drive agents, and a guest either chats with the assistants in its areas or has only its home
-// conversation (sandbox-contract `memberAccess`). Every other tier answers it by itself, so the read is made for those
-// two alone. One query for the whole app, made once in its own scope, since `useRole` is read from plain functions as
-// well as components and a per-call query would need a component to belong to.
+// conversation (sandbox-contract `memberAccess`); and WHICH AI ACCOUNTS their turns may run on, which any tier below
+// maintainer may have been held to. So the read is made for every tier but the two that manage the sandbox. One query
+// for the whole app, made once in its own scope, since `useRole` is read from plain functions as well as components and
+// a per-call query would need a component to belong to.
 
 let self: ComputedRef<MemberSelf | undefined> | undefined;
 
@@ -68,7 +69,10 @@ const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
             const { query } = useSandboxQuery<MemberSelf>({
                 queryKey: SANDBOX_SELF_ACCESS.of(),
                 queryFn: () => sandboxRaw(`GET /members/self`),
-                enabled: computed(() => active.value?.role === `writer` || active.value?.role === `guest`),
+                enabled: computed(() => {
+                    const role = active.value?.role;
+                    return role !== undefined && role !== `owner` && role !== `maintainer`;
+                }),
             });
             return computed(() => query.data.value);
         });
@@ -80,6 +84,14 @@ const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
 export const selfAgents = (): ComputedRef<AgentAccess | undefined> => {
     const access = selfAccess();
     return computed(() => access.value?.agents);
+};
+
+// The AI accounts the signed-in person's turns may run on (Access ▸ People), keyed as sandbox-contract `aiAccountKey`;
+// undefined is every one, which is also the answer until the read lands. A picker narrows by it so it offers only what
+// the daemon will run; the daemon refuses the rest whatever a picker offered.
+export const selfAiAccounts = (): ComputedRef<readonly string[] | undefined> => {
+    const access = selfAccess();
+    return computed(() => access.value?.aiAccounts);
 };
 
 // Whether work done for the signed-in person lands by itself, which is also whether they may land it (sandbox-contract

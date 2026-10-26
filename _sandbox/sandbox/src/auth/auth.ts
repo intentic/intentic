@@ -4,6 +4,7 @@ import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import {
     accessRefusal,
     AgentAccessSchema,
+    AiAccountKeySchema,
     CredentialReachSchema,
     EditScopeSchema,
     memberAccess,
@@ -147,6 +148,9 @@ export interface Member {
     // The capabilities and secrets their conversations may spend (secrets/credential-reach.ts). Absent means every one,
     // which is what a row written before it meant; never on a maintainer, who reads every credential.
     readonly credentials?: CredentialReach;
+    // The AI accounts their conversations may run on, keyed as the contract's `aiAccountKey` (agent/run/decide/
+    // account-reach.ts). Absent means every one, which is what a row written before it meant; never on a maintainer.
+    readonly aiAccounts?: readonly string[];
 }
 
 // What a grant decides, in the shape both the store and the route pass it around in. `emailSignIn` and `credentials`
@@ -160,6 +164,7 @@ export interface MemberGrant {
     readonly lands?: boolean | undefined;
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
+    readonly aiAccounts?: readonly string[] | "all" | undefined;
 }
 
 export interface MembersStore {
@@ -184,6 +189,8 @@ const MemberSchema = z
         emailSignIn: z.boolean().optional(),
         // Added 2026-10-13, optional: a row written before it reaches every credential, as it did then.
         credentials: CredentialReachSchema.optional(),
+        // Added 2026-10-26, optional: a row written before it runs on every AI account, as it did then.
+        aiAccounts: z.array(AiAccountKeySchema).optional(),
         // Added 2026-10-13, optional: a row written before them reads as its role meant (sandbox-contract `memberAccess`).
         agents: AgentAccessSchema.optional(),
         edit: EditScopeSchema.optional(),

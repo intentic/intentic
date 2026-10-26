@@ -59,7 +59,10 @@ const workspaceThumb = (path: string): Response => (path.endsWith(`.svg`) ? refu
 // access no grant could make, a role that is not the tier the access makes, and a maintainer carrying a fence or a list
 // of credentials, which that tier would enforce nothing of.
 const grantMember = async ({ request }: RawContext): Promise<Response> => {
-    const grant = (await request.json()) as Omit<DemoGrant, "credentials"> & { credentials?: DemoGrant["credentials"] | `all` };
+    const grant = (await request.json()) as Omit<DemoGrant, "credentials" | "aiAccounts"> & {
+        credentials?: DemoGrant["credentials"] | `all`;
+        aiAccounts?: DemoGrant["aiAccounts"] | `all`;
+    };
     const access = memberAccess(grant);
     const refused = accessRefusal(access);
     if (refused !== undefined) {
@@ -68,10 +71,17 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
     if (tierOf(access) !== grant.role) {
         return refuse(`the role does not match the access granted, which makes a ${tierOf(access)}`, 400);
     }
-    if (grant.role === `maintainer` && (grant.areas !== undefined || (grant.credentials !== undefined && grant.credentials !== `all`))) {
+    const listsCredentials = grant.credentials !== undefined && grant.credentials !== `all`;
+    const listsAccounts = grant.aiAccounts !== undefined && grant.aiAccounts !== `all`;
+    if (grant.role === `maintainer` && (grant.areas !== undefined || listsCredentials || listsAccounts)) {
         return refuse(`a maintainer holds the owner's operating authority and cannot be limited`, 400);
     }
-    grantAccess(grant.email, grant.role, grant.areas, grant.credentials, { agents: grant.agents, edit: grant.edit, emailSignIn: grant.emailSignIn });
+    grantAccess(grant.email, grant.role, grant.areas, grant.credentials, {
+        agents: grant.agents,
+        edit: grant.edit,
+        emailSignIn: grant.emailSignIn,
+        aiAccounts: grant.aiAccounts,
+    });
     return json({ members: grants() });
 };
 

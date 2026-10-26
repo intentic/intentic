@@ -4,6 +4,7 @@ import type { Services } from "../../composition.js";
 import { accountFactsOf, serviceabilities, type ServiceabilityDeps } from "../../usage/serviceability/serviceability.js";
 import { pickAccount, type PlannerDeps } from "../run/spend/budget-planner.js";
 import { breakPolicyFor } from "../run/turn/break-policy.js";
+import { ACCOUNTS_ALL, accountReachAllows } from "../../secrets/credential-reach.js";
 
 // Claude-only: a routed provider balances its own credentials before refusing, so a refusal there already means nothing
 // is left. Picks among the accounts the one serviceability rule calls ready with room: a revoked, seatless, benched,
@@ -11,15 +12,25 @@ import { breakPolicyFor } from "../run/turn/break-policy.js";
 // the fan-out planner projects left with the most room once this turn and what already runs there are on it (ten
 // children once moved together onto the account reading most room and emptied it in thirty minutes, 2026-10-20); the
 // roomiest by its reading where the planner cannot say.
+// `allows` narrows the destinations to the accounts the people the conversation works for may use (account-reach.ts):
+// a move onto any other would only be refused when it fires.
 export const siblingWithRoom = async (
     services: ServiceabilityDeps & Partial<PlannerDeps>,
-    params: { readonly provider: AgentProvider; readonly model: string | undefined; readonly refused: string | undefined },
+    params: {
+        readonly provider: AgentProvider;
+        readonly model: string | undefined;
+        readonly refused: string | undefined;
+        readonly allows?: ((account: string) => boolean) | undefined;
+    },
 ): Promise<string | undefined> => {
     if (params.provider !== "claude") {
         return undefined;
     }
     const model = params.model === undefined || params.model === "" ? undefined : { id: params.model };
-    const accounts = (await serviceabilities(services, "claude", model).catch(() => [])).filter((account) => account.id !== params.refused);
+    const allows = params.allows ?? (() => true);
+    const accounts = (await serviceabilities(services, "claude", model).catch(() => [])).filter(
+        (account) => account.id !== params.refused && allows(account.id),
+    );
     const roomiest = roomiestAccount(accounts)?.id;
     const planned = model === undefined ? undefined : await plannedSibling(services, model.id, params.refused);
     return planned !== undefined && accounts.some((account) => account.id === planned) ? planned : roomiest;
@@ -39,7 +50,7 @@ const plannedSibling = async (services: ServiceabilityDeps & Partial<PlannerDeps
 // Where a held turn moves to, decided once at the failure; undefined means no policy applies or no account has room.
 // `carry` requires the turn to have run, a known context under the owner's line, and not already refused elsewhere.
 export const bookLimitMove = async (
-    services: ServiceabilityDeps & Pick<Services, "agents" | "sandboxSettings">,
+    services: ServiceabilityDeps & Pick<Services, "agents" | "sandboxSettings"> & Partial<Pick<Services, "accountReach">>,
     params: {
         readonly conversationId: string;
         readonly provider: AgentProvider;
@@ -55,7 +66,9 @@ export const bookLimitMove = async (
     if ((await breakPolicyFor(services, params.conversationId, "limit")) !== "move") {
         return undefined;
     }
-    const account = await siblingWithRoom(services, params);
+    // Only onto an account every person the conversation works for may use; an unreadable roster allows none, so it holds.
+    const reach = (await services.accountReach?.(params.conversationId)) ?? ACCOUNTS_ALL;
+    const account = await siblingWithRoom(services, { ...params, allows: (id) => accountReachAllows(reach, params.provider, id) });
     if (account === undefined) {
         return undefined;
     }

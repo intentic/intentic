@@ -20,6 +20,7 @@ import { experimentArm } from "@intentic/agent-context/experiments";
 import { ruleCommandIn } from "../../harness/harness-hooks.js";
 import { RECORD_READ_ROOTS } from "../../../../execution/js-runtime.js";
 import { planTurn } from "../turn-plan.js";
+import { opt } from "../../../../opt.js";
 import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "../turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../../providers/harness-credentials.js";
 import { LANDING_CHECKS_NOTE_HEADER } from "../../../../sessions/vocabulary/prompt-envelope.js";
@@ -674,6 +675,63 @@ describe("a conversation whose account can no longer serve it", () => {
 
         expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
         expect([Object.keys(seat.marks), moves]).toEqual([[], []]);
+    });
+});
+
+// A person the owner held to some AI accounts (Access ▸ People) spends only those, whoever started the conversation and
+// whatever the runtime's own picker would choose: the account is decided at planning, before any arm resolves one.
+describe("a conversation working for someone held to some AI accounts", () => {
+    const moves: [string, string][] = [];
+    const roomy = { measuredAt: Date.now(), windows: [{ kind: "five_hour" as const, utilization: 20, gates: "all" as const }] };
+    const fleet = (aiAccounts: readonly string[], remembered?: string): Services =>
+        harnessServices({
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: () => conversationAfter(3, { profile: { provider: "claude", harness: "native", ...opt("account", remembered) } }),
+                switchAccount: async (id: string, account: string) => {
+                    moves.push([id, account]);
+                    return undefined;
+                },
+            }),
+            claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+                list: async () => [
+                    { id: "owners", label: "Owner's", connectedAt: 0 },
+                    { id: "team", label: "Team", connectedAt: 1 },
+                ],
+            }),
+            claudeSeats: memorySeats({}),
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ owners: roomy, team: roomy }) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+            accountReach: async () => ({ kind: "some", lists: [new Set(aiAccounts)], who: ["bob@example.com"] }),
+        });
+
+    beforeEach(() => {
+        moves.length = 0;
+    });
+
+    test("refuses an account the turn names outside their list, before anything spawns", async () => {
+        const plan = await planTurn(fleet(["claude:team"]), turn({ conversationId: "conv-reach", account: "owners" }), context);
+
+        expect(plan).toMatchObject({ ok: false, code: "account-not-allowed", account: "owners" });
+        expect(plan.ok ? "" : plan.message).toContain(`"Team"`);
+        expect(credentials).not.toHaveBeenCalled();
+    });
+
+    test("moves a conversation remembering another account onto theirs", async () => {
+        const services = fleet(["claude:team"], "owners");
+
+        await planTurn(services, turn({ conversationId: "conv-reach" }), context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "team" }));
+        expect(moves).toEqual([["conv-reach", "team"]]);
+    });
+
+    test("pins a turn left to the pick to an account of theirs", async () => {
+        const services = fleet(["claude:team"]);
+
+        await planTurn(services, turn({ conversationId: "conv-reach" }), context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "team" }));
+        expect(moves).toEqual([]);
     });
 });
 

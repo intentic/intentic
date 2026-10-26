@@ -129,6 +129,7 @@ jest.mock(`../ai-literacy/AiLiteracySettings.vue`, () => quietGroup);
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
 const { queryClient } = await import("../../../lib/queryPersistence");
+const { providerAccounts } = await import("../../../models/providers/providerAccounts");
 // A read that fails is shown at once rather than after the retries a browser would give it.
 queryClient.setDefaultOptions({ queries: { ...queryClient.getDefaultOptions().queries, retry: false } });
 
@@ -456,7 +457,7 @@ it(`adds a person read-only with nothing to spend, and opens them`, async () => 
     await addPerson(`dee@corp.example`);
 
     expect(grantsSent()).toEqual([
-        { email: `dee@corp.example`, role: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] } },
+        { email: `dee@corp.example`, role: `viewer`, emailSignIn: true, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all` },
     ]);
     expect(create).toHaveBeenCalledWith({ sandboxId: `s1`, email: `dee@corp.example`, role: `viewer` });
     // Their tile says what they can do, and their panel is open for the rest.
@@ -485,7 +486,9 @@ it(`holds a move to chatting until its areas reach an assistant, then saves it`,
     daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, agents: `chat`, areas: [`support`] }]);
     await autosaved();
 
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all` }]);
+    expect(grantsSent()).toEqual([
+        { email: `guest@example.com`, role: `guest`, emailSignIn: false, agents: `chat`, areas: [`support`], credentials: `all`, aiAccounts: `all` },
+    ]);
     expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `guest` });
 });
 
@@ -517,7 +520,9 @@ it(`lets a person edit some areas by hand, see everything, and run no agents`, a
     await tickRow(`Support guest`, part(`Can edit by hand`));
     await autosaved();
 
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all` }]);
+    expect(grantsSent()).toEqual([
+        { email: `guest@example.com`, role: `writer`, emailSignIn: false, agents: `off`, edit: [`support`], credentials: `all`, aiAccounts: `all` },
+    ]);
     expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `writer` });
 });
 
@@ -528,7 +533,7 @@ it(`limits what a person's agents may use`, async () => {
     mount();
     await settle();
     await openPerson(`guest@example.com`);
-    await tab(`Only these`);
+    await tab(`Only these`, part(`Connections and secrets`));
     await settle();
     expect(shown()).toContain(`0 of 2 picked`);
     expect(shown()).toContain(`Always available, nothing to withhold: Docker.`);
@@ -536,9 +541,47 @@ it(`limits what a person's agents may use`, async () => {
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: { capabilities: [`github`], secrets: [] } },
+        {
+            email: `guest@example.com`,
+            role: `collaborator`,
+            emailSignIn: false,
+            agents: `run`,
+            credentials: { capabilities: [`github`], secrets: [] },
+            aiAccounts: `all`,
+        },
     ]);
     expect(setRole).not.toHaveBeenCalled();
+});
+
+// Which AI accounts pay for their turns is its own answer beside what their agents work with: narrowing it starts from
+// nothing ticked, and the grant names the accounts as the daemon keys them, so a turn on any other is refused there.
+it(`limits which AI accounts a person's conversations run on`, async () => {
+    providerAccounts.value = {
+        ...providerAccounts.value,
+        claude: [
+            { id: `home`, label: `Home`, connectedAt: 0 },
+            { id: `work`, label: `Work`, connectedAt: 1 },
+        ],
+    };
+    try {
+        withMember(`collaborator`);
+        mount();
+        await settle();
+        await openPerson(`guest@example.com`);
+        const accounts = part(`AI accounts`);
+        expect(accounts?.textContent).toContain(`Every AI account this sandbox holds`);
+        await tab(`Only these`, accounts);
+        await settle();
+        expect(shown()).toContain(`Pick at least one AI account their agents can run on.`);
+        await tickRow(`Work`, part(`AI accounts`));
+        await autosaved();
+
+        expect(grantsSent()).toEqual([
+            { email: `guest@example.com`, role: `collaborator`, emailSignIn: false, agents: `run`, credentials: `all`, aiAccounts: [`claude:work`] },
+        ]);
+    } finally {
+        providerAccounts.value = { ...providerAccounts.value, claude: [] };
+    }
 });
 
 // Managing is every other answer at once; the panel says so rather than drawing controls that would mean nothing.
@@ -757,7 +800,7 @@ it(`leaves email-code sign-in off for an address Google holds`, async () => {
     await addPerson(address);
 
     expect(grantsSent()).toEqual([
-        { email: address, role: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] } },
+        { email: address, role: `viewer`, emailSignIn: false, agents: `off`, credentials: { capabilities: [], secrets: [] }, aiAccounts: `all` },
     ]);
 });
 
@@ -774,7 +817,7 @@ it(`changes a person's email sign-in with the rest of their access kept, at the 
     await autosaved();
 
     expect(grantsSent()).toEqual([
-        { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all` },
+        { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all`, aiAccounts: `all` },
     ]);
     expect(setRole).not.toHaveBeenCalled();
 });

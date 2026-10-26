@@ -36,6 +36,31 @@ export const REACHABLE_CREDENTIAL_KINDS: readonly CapabilityKind[] = [
     "link",
 ];
 
+// WHICH AI ACCOUNTS A PERSON'S CONVERSATIONS MAY RUN ON: the model accounts that pay for a turn (a Claude or Codex
+// subscription, a routed provider's sign-in, an API-key endpoint), as distinct from the connections above, which are
+// what a turn's agent works WITH. Kept apart from `credentials` because the two are narrowed for different reasons
+// (whose allowance a person spends, against what they may touch) and because narrowing one must never empty the other:
+// a reach listing no AI account would leave a person who runs agents unable to run any.
+// An entry is `<provider>:<account>`, one account of a provider that holds accounts (its id as the provider's account
+// list names it), or `<provider>` alone, every account of that provider including any connected later: how an API-key
+// endpoint or an installed agent, which hold no accounts of their own, are named. Enforced where the daemon decides the
+// account a turn runs on (agent/run/decide): a turn naming an account outside it is refused, one left to the sandbox's
+// pick runs only on an account inside it, and a conversation remembering one outside it is moved onto one inside it.
+// A conversation runs only on what every person who has written in it may, as with `credentials`.
+export const AiAccountKeySchema = z.string().min(1).max(300);
+
+/** The key an AI account is listed under: the provider alone for every account of it, else `provider:account`. */
+export const aiAccountKey = (provider: string, account?: string): string => (account === undefined ? provider : `${provider}:${account}`);
+
+/**
+ * Whether a list of AI account keys lets a turn run on one account of a provider. `account` undefined asks about the
+ * provider as a whole (one that holds no accounts of its own): only its own key answers yes then.
+ */
+export const aiAccountAllowed = (keys: Iterable<string>, provider: string, account: string | undefined): boolean => {
+    const held = new Set(keys);
+    return held.has(provider) || (account !== undefined && held.has(aiAccountKey(provider, account)));
+};
+
 // WHAT ONE PERSON MAY DO, as three independent answers rather than one rung of a ladder: whether their conversations
 // run agents (`agents`), where they may look (`areas`, the fence their agents run inside too) and where they may change
 // files by hand (`edit`), and whether they manage the sandbox (the maintainer tier, which implies every other answer).
@@ -159,6 +184,13 @@ export const MemberSchema = z.object({
     credentials: CredentialReachSchema.optional().describe(
         "The capabilities and secrets their conversations may spend. Absent means every one, including any connected later.",
     ),
+    aiAccounts: z
+        .array(AiAccountKeySchema)
+        .max(500)
+        .optional()
+        .describe(
+            "The AI accounts their conversations may run on, each `provider:account`, or a provider's id alone for every account of it (how an API-key endpoint is named). Absent means every one, including any connected later.",
+        ),
 });
 export type Member = z.infer<typeof MemberSchema>;
 
@@ -181,7 +213,8 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 // `agents` and `edit` decide the rest of the access; absent, the role's own meaning stands, so an editor that predates
 // them still grants what it always did. `lands` is written as sent: absent is no, so a re-grade that never mentions it
 // can never hand a home-only person's agent the authority to land. The role sent must be the tier the access makes (`tierOf`): two answers to one
-// question are refused rather than one of them guessed away.
+// question are refused rather than one of them guessed away. `aiAccounts` reads as `credentials` does: `all` lifts it, a
+// list sets it, absent keeps the row's; a maintainer is refused a list, since the tier runs on every account.
 export const MemberGrantSchema = z.object({
     email: z.string(),
     role: GrantedRoleSchema,
@@ -191,6 +224,7 @@ export const MemberGrantSchema = z.object({
     lands: z.boolean().optional(),
     emailSignIn: z.boolean().optional(),
     credentials: z.union([z.literal("all"), CredentialReachSchema]).optional(),
+    aiAccounts: z.union([z.literal("all"), z.array(AiAccountKeySchema).max(500)]).optional(),
 });
 export type MemberGrant = z.infer<typeof MemberGrantSchema>;
 
@@ -205,6 +239,10 @@ export const MemberSelfSchema = z.object({
         .boolean()
         .optional()
         .describe("Whether work done for them lands by itself and they may land it: a maintainer's everywhere, a home-only person's on their home. Absent means no."),
+    aiAccounts: z
+        .array(AiAccountKeySchema)
+        .optional()
+        .describe("The AI accounts their conversations may run on, as the roster keys them, so a picker offers only those. Absent means every one."),
 });
 export type MemberSelf = z.infer<typeof MemberSelfSchema>;
 

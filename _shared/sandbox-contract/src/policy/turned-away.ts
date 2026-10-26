@@ -8,6 +8,8 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     // An organisation turned the account's Claude Code access off, or no account of the provider can serve: the next
     // turn is routed off it (the daemon's blocked-account route), so the words wait for it rather than being spent.
     "claude-not-entitled",
+    // The people this conversation works for may not spend the account the turn would run on.
+    "account-not-allowed",
     "unknown-command",
     "context-window-too-small",
     "model-helper-only",
@@ -34,6 +36,7 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
 // gets past: a turn one of these stops partway offers to carry on elsewhere rather than to wait.
 const ANOTHER_MODEL_CLEARS: ReadonlySet<string> = new Set([
     "claude-not-entitled",
+    "account-not-allowed",
     "context-window-too-small",
     "model-helper-only",
     "trial-unavailable",

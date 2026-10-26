@@ -4,6 +4,7 @@ import { Button, Notice, type NoticeModel, Section, SegmentedControl } from "@in
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import { type AccessDraft, draftGrant, draftProblem, drivesAgents } from "./accessGrant";
+import AiAccountsPicker from "./ai-accounts/AiAccountsPicker.vue";
 import AreaPicker from "./AreaPicker.vue";
 import EditPicker from "./EditPicker.vue";
 import PersonCard from "./PersonCard.vue";
@@ -12,7 +13,8 @@ import { usePersonaReach } from "./usePersonaReach";
 import { useT } from "@intentic/ui/i18n";
 
 // ONE PERSON'S ACCESS, opened under their tile: whether their conversations run agents, where they see, where they edit
-// by hand, what their agents may spend, whether they manage the sandbox, and how they sign in. Changes save as they are
+// by hand, which AI accounts their turns run on and what their agents may spend, whether they manage the sandbox, and
+// how they sign in. Changes save as they are
 // made, like a persona's: a run of clicks is one write, and an answer the daemon would refuse (a chat with no area, a
 // narrowed scope with nothing ticked) waits here, said, instead of being sent. Mounted once per person, so a draft never
 // carries from one to the next; one still waiting when the panel closes is sent on its way out.
@@ -142,6 +144,7 @@ const PROBLEMS = {
     chatNeedsArea: () => t(`sandbox.sandboxAccess.guestNeedsArea`),
     chatReachesNobody: () => t(`sandbox.sandboxAccess.noAssistantWorksHere`),
     editOutsideSee: () => t(`sandbox.sandboxAccess.editOutsideSee`),
+    pickAiAccount: () => t(`sandbox.sandboxAccess.pickAiAccount`),
 } as const;
 
 const confirmingRemove = ref(false);
@@ -215,6 +218,10 @@ const signInId = useId();
 
             <Section v-if="draft.agents !== `chat` && draft.agents !== `home`" :label="t(`sandbox.sandboxAccess.editSection`)">
                 <EditPicker :edit="draft.edit" :see="draft.see" @change="(edit) => set({ edit })" />
+            </Section>
+
+            <Section v-if="drivesAgents(draft.agents)" :label="t(`sandbox.sandboxAccess.aiAccountsSection`)">
+                <AiAccountsPicker :accounts="draft.aiAccounts" @change="(aiAccounts) => set({ aiAccounts })" />
             </Section>
 
             <Section v-if="drivesAgents(draft.agents)" :label="t(`sandbox.sandboxAccess.reachSection`)">

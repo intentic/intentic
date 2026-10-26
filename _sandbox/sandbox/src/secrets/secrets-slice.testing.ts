@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CredentialGate, CredentialGateKind, SecretProgramGuard } from "@intentic/sandbox-contract/schemas/secrets";
 import { createCredentialGrants } from "./credential-grants.js";
-import { REACH_ALL } from "./credential-reach.js";
+import { ACCOUNTS_ALL, REACH_ALL } from "./credential-reach.js";
 import { createDeviceSecrets } from "./device/device-secrets.js";
 import { createKeyringNeeds, memoryKeyringNeeds } from "./device/keyring-needs.js";
 import { createKeyringLink, type KeyringDevices } from "./device/keyring-link.js";
@@ -100,6 +100,8 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
         credentialGate: { check: async () => ({ allow: true as const }) },
         // Nobody limited, the state before an owner narrows a member; tested where it lives (credential-reach.test.ts).
         credentialReach: async () => REACH_ALL,
+        // Every AI account, likewise; tested where it lives (credential-reach.test.ts, account-reach.test.ts).
+        accountReach: async () => ACCOUNTS_ALL,
         // Every host guard off until a suite writes one through the store, and no connector declares hosts: a suite that
         // wants a connector's default overrides `hostGuards`.
         secretHostGuards: {

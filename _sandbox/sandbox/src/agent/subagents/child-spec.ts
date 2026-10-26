@@ -28,9 +28,10 @@ export const sameModel = (served: string, asked: string): boolean => {
     return plain(served).includes(plain(asked));
 };
 
-// Refusals no wait soon answers: the account itself refused, a model off the plan, a spent allowance with no re-run booked
-// (none named, or one past the child's horizon, children.ts childRerunHorizonMs).
-const REFUSED_OUTRIGHT: ReadonlySet<string> = new Set(["account-not-entitled", "claude-not-entitled", "model-unavailable", "trial-exhausted"]);
+// Refusals no wait soon answers: the account itself refused, an account the people the child works for may not spend, a
+// model off the plan, a spent allowance with no re-run booked (none named, or one past the child's horizon, children.ts
+// childRerunHorizonMs).
+const REFUSED_OUTRIGHT: ReadonlySet<string> = new Set(["account-not-entitled", "account-not-allowed", "claude-not-entitled", "model-unavailable", "trial-exhausted"]);
 
 // Whether this failure moves the child onto its spawn's next fallback rather than ending it.
 export const movesOn = (kid: ChildRecord, event: Extract<AgentEvent, { kind: "error" }>): boolean =>

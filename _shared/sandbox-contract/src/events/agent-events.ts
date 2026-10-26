@@ -40,6 +40,10 @@ export const AgentErrorCodeSchema = z.enum([
     // Any other provider's account signs in but is refused service outright, for every model (Cursor's
     // `[role_forbidden]` for a non-billable admin): filed against the account, so placement skips it.
     "account-not-entitled",
+    // The person (or one of the people) this conversation works for may not run turns on the account the turn would
+    // spend, or on any account of its provider (Access ▸ People, a person's AI accounts), refused before sending; the
+    // words wait for an account they may use.
+    "account-not-allowed",
     // The provider failed transiently and in-turn retries did not outlast it; the daemon retries on
     // backoff.
     "provider-outage",

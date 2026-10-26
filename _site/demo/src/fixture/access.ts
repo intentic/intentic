@@ -23,6 +23,8 @@ export interface DemoGrant {
     emailSignIn?: boolean;
     // What their assistants may spend; absent is every connected account and secret, as on the real roster.
     credentials?: CredentialReach;
+    // Which AI accounts their turns run on, keyed `provider:account`; absent is every one, as on the real roster.
+    aiAccounts?: string[];
 }
 
 interface DemoMember extends DemoGrant {
@@ -35,13 +37,14 @@ const ago = (days: number): string => new Date(Date.now() - days * 86_400_000).t
 // Three states worth seeing at once: an accepted collaborator, a guest fenced to the one area Maya works in, and an
 // invite still out. A quiet recording (mode.ts `demoQuiet`) is the ordinary team without the fenced guest, whose row
 // carries a fence, an area chip and the persona she talks to: a teammate and an invite are the whole of what sharing is.
-// Jo's assistants are held to the code host and the error tracker: the row says so in its line, and the dialog opens on
-// those two ticked.
+// Jo's assistants are held to the code host and the error tracker, and Jo's turns to the second Claude subscription: the
+// row says so in its line, and the panel opens on those ticked.
 const roster: DemoMember[] = [
     {
         email: `jo@acme.dev`,
         role: `collaborator`,
         credentials: { capabilities: [`github`, `sentry`], secrets: [`SENTRY_DSN`] },
+        aiAccounts: [`claude:acc_claude_demo_2`],
         status: `accepted`,
         invitedAt: ago(26),
     },
@@ -57,7 +60,7 @@ export const inviteRecords = (): InviteRecord[] =>
 
 /** The daemon's copy: the enforced grant, with the areas it is fenced to. */
 export const grants = (): DemoGrant[] =>
-    roster.map(({ email, role, areas, agents, edit, emailSignIn, credentials }) => {
+    roster.map(({ email, role, areas, agents, edit, emailSignIn, credentials, aiAccounts }) => {
         const grant: DemoGrant = { email, role };
         if (emailSignIn === true) {
             grant.emailSignIn = true;
@@ -73,6 +76,9 @@ export const grants = (): DemoGrant[] =>
         }
         if (credentials !== undefined) {
             grant.credentials = credentials;
+        }
+        if (aiAccounts !== undefined) {
+            grant.aiAccounts = [...aiAccounts];
         }
         return grant;
     });
@@ -101,18 +107,25 @@ const answersOf = (
 };
 
 /** Upsert, as both stores do: granting an address that already holds access re-grades it and replaces its fence. A
- *  grant silent about the reach keeps the row's, `all` lifts it, and a maintainer holds none (auth.ts memberRow). */
+ *  grant silent about the reach or the AI accounts keeps the row's, `all` lifts it, and a maintainer holds neither
+ *  (auth.ts memberRow). */
 export const grantAccess = (
     email: string,
     role: GrantedRole,
     areas: readonly string[] | undefined,
     credentials?: CredentialReach | `all`,
-    answers: { readonly agents?: AgentAccess | undefined; readonly edit?: EditScope | undefined; readonly emailSignIn?: boolean | undefined } = {},
+    answers: {
+        readonly agents?: AgentAccess | undefined;
+        readonly edit?: EditScope | undefined;
+        readonly emailSignIn?: boolean | undefined;
+        readonly aiAccounts?: readonly string[] | `all` | undefined;
+    } = {},
 ): void => {
     const address = email.toLowerCase();
     const at = index(address);
     const held = at === -1 ? undefined : roster[at];
     const reach = role === `maintainer` || credentials === `all` ? undefined : (credentials ?? held?.credentials);
+    const aiAccounts = role === `maintainer` || answers.aiAccounts === `all` ? undefined : (answers.aiAccounts ?? held?.aiAccounts);
     const row: DemoMember = {
         email: address,
         role,
@@ -124,6 +137,9 @@ export const grantAccess = (
     }
     if (reach !== undefined) {
         row.credentials = reach;
+    }
+    if (aiAccounts !== undefined) {
+        row.aiAccounts = [...aiAccounts];
     }
     Object.assign(row, answersOf(role, answers, held));
     if (at === -1) {

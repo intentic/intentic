@@ -17,18 +17,27 @@ import { googleMailbox } from "../../../client/auth/signInMethods";
 // What a person's conversations may spend: every connected capability and stored secret, or the ones named.
 export type ReachDraft = `all` | CredentialReach;
 
+// Which AI accounts a person's conversations run on: every one, or the ones named, keyed as the contract's
+// `aiAccountKey` (`provider:account`, or a provider alone for one holding no accounts of its own).
+export type AiAccountsDraft = `all` | readonly string[];
+
 // Whether they manage the sandbox, whether their conversations run agents, where they see and where they edit by hand,
 // how they sign in, and what their agents may spend. Each control in the panel changes one of these, and the whole of it
 // is sent as one grant, so no half-made access ever reaches the daemon.
 export interface AccessDraft extends MemberAccess {
     readonly emailSignIn: boolean;
     readonly credentials: ReachDraft;
+    readonly aiAccounts: AiAccountsDraft;
 }
 
 /** Nothing to spend: what a new person starts with, so turning agents on later never hands over everything unasked. */
 export const NO_REACH: CredentialReach = { capabilities: [], secrets: [] };
 
-/** A new person: sees the workspace, starts nothing, spends nothing, signs in as an address of theirs usually would. */
+/**
+ * A new person: sees the workspace, starts nothing, spends no connection or secret, signs in as an address of theirs
+ * usually would. Runs on every AI account once agents are turned on: an empty list would make turning them on do
+ * nothing, and which accounts pay for their turns is a narrowing the owner makes on purpose.
+ */
 export const newPerson = (email: string): AccessDraft => ({
     manage: false,
     agents: `off`,
@@ -36,6 +45,7 @@ export const newPerson = (email: string): AccessDraft => ({
     edit: `none`,
     emailSignIn: emailSignInByDefault(email),
     credentials: NO_REACH,
+    aiAccounts: `all`,
 });
 
 /** What the daemon holds for a person, or the platform's tier alone for a row the daemon never wrote. */
@@ -43,6 +53,7 @@ export const draftOf = (row: Member | undefined, recorded: GrantedRole): AccessD
     ...memberAccess(row ?? { role: recorded }),
     emailSignIn: row?.emailSignIn === true,
     credentials: row?.credentials ?? `all`,
+    aiAccounts: row?.aiAccounts ?? `all`,
 });
 
 // The daemon's `/members` body. The role is the tier the access makes; a maintainer carries nothing else, since that
@@ -66,12 +77,13 @@ export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
         body.lands = true;
     }
     body.credentials = draft.credentials === `all` ? `all` : { capabilities: [...draft.credentials.capabilities], secrets: [...draft.credentials.secrets] };
+    body.aiAccounts = draft.aiAccounts === `all` ? `all` : [...draft.aiAccounts];
     return body;
 };
 
 // Why the panel holds a draft back instead of saving it, as the key of the line it shows. A guest-like chat needs areas
 // whose assistants it talks to; a narrowed scope with nothing ticked is a fence admitting nothing, which nobody means.
-export type DraftProblem = `pickSeeArea` | `pickEditArea` | `chatNeedsArea` | `chatReachesNobody` | `editOutsideSee`;
+export type DraftProblem = `pickSeeArea` | `pickEditArea` | `chatNeedsArea` | `chatReachesNobody` | `editOutsideSee` | `pickAiAccount`;
 
 export const draftProblem = (draft: AccessDraft, reaches: number): DraftProblem | undefined => {
     if (draft.manage) {
@@ -88,6 +100,10 @@ export const draftProblem = (draft: AccessDraft, reaches: number): DraftProblem 
     }
     if (draft.edit !== `none` && draft.edit !== `all` && draft.edit.length === 0) {
         return `pickEditArea`;
+    }
+    // Agents that may run on no AI account run nothing: held back as a narrowed fence admitting nothing is.
+    if (drivesAgents(draft.agents) && draft.aiAccounts !== `all` && draft.aiAccounts.length === 0) {
+        return `pickAiAccount`;
     }
     return accessRefusal(draft) === undefined ? undefined : `editOutsideSee`;
 };

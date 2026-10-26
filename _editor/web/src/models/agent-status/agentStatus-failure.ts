@@ -52,6 +52,7 @@ const KINDS_BY_CODE = {
     "agent-domain-refused": `held`,
     "claude-not-entitled": `access`,
     "account-not-entitled": `access`,
+    "account-not-allowed": `access`,
     "subscription-required": `access`,
     "claude-reauth": `signedOut`,
     "codex-reauth": `signedOut`,
