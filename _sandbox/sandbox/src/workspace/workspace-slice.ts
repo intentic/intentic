@@ -50,7 +50,8 @@ export interface WorkspaceSlice {
         // Where the file view's deletes go, so Undo can bring them back.
         readonly trash: WorkspaceTrash;
         readonly move: (fromAbs: string, toAbs: string) => Promise<void>;
-        readonly copy: (fromAbs: string, toAbs: string) => Promise<void>;
+        // `keep` answers false for an entry under the source to leave it out of the copy.
+        readonly copy: (fromAbs: string, toAbs: string, keep?: (absPath: string) => boolean) => Promise<void>;
         // Unpacks an archive beside itself, answering with the absolute path of what landed.
         readonly extract: (absArchive: string) => Promise<string>;
     };

@@ -40,7 +40,7 @@ export const useInlineEdit = (exists: (path: string) => boolean) => {
 export interface TreeEditsHost {
     readonly inline: ReturnType<typeof useInlineEdit>;
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
-    readonly rules: Pick<ReturnType<typeof useTreeRules>, "pending" | "refuseIn">;
+    readonly rules: Pick<ReturnType<typeof useTreeRules>, "pending" | "refuseIn" | "refuseKept">;
     readonly targetDir: (path: string | null) => string;
     // Opens the folder a name lands in, and the nest that would fold it (useTreeRows' openLanding).
     readonly openLanding: (dir: string, landed?: readonly LandedEntry[]) => void;
@@ -59,7 +59,13 @@ export const useTreeEdits = (host: TreeEditsHost) => {
     // Neither field opens for a write the backend does not serve (a folder on this computer has no rename, no new
     // folder): a name typed into it could only be refused.
     const beginRename = (path: string): void => {
-        if (!supportsRoute(VERB_ROUTES.rename) || isLockedWorkspacePath(path) || rules.pending(path) || rules.refuseIn(host.targetDir(path))) {
+        if (
+            !supportsRoute(VERB_ROUTES.rename) ||
+            isLockedWorkspacePath(path) ||
+            rules.pending(path) ||
+            rules.refuseIn(host.targetDir(path)) ||
+            rules.refuseKept([path])
+        ) {
             return;
         }
         inline.apply({ kind: `rename`, path });

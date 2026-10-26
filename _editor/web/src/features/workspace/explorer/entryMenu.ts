@@ -65,6 +65,9 @@ export interface EntryMenuInput {
     readonly target: WorkspaceTreeEntry | undefined;
     // Kept private by the sandbox: the menu is just the explanation, since every verb would be refused.
     readonly locked: boolean;
+    // The target, or the selection it sits in, holds `.intentic` or one of its groups, which stay where they are: Rename,
+    // Delete and Cut are left out and a note at the bottom says why. Everything else, writing inside included, stays.
+    readonly kept: boolean;
     // A read-only member: write verbs are dropped, not disabled, and the tier is named once at the bottom.
     readonly canEdit: boolean;
     // The target is an archive's contents. Read verbs only: nothing here repacks a zip, and Extract is how you get
@@ -117,6 +120,7 @@ const keyed = (item: MenuItem, keys: string | undefined): MenuItem => (keys === 
 const lockedNote = (): MenuItem => ({ label: t(`workspace.words.keptPrivateBySandbox`), icon: `lock`, disabled: true });
 const readOnlyNote = (): MenuItem => ({ label: t(`workspace.words.readOnlyChangingFiles`), icon: `lock`, disabled: true });
 const archiveNote = (): MenuItem => ({ label: t(`workspace.words.insideArchiveExtractTo`), icon: `box`, disabled: true });
+const keptNote = (): MenuItem => ({ label: t(`workspace.words.keptInPlaceBySandbox`), icon: `lock`, disabled: true });
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
@@ -167,7 +171,7 @@ const soleVerbs = (target: WorkspaceTreeEntry, input: EntryMenuInput): MenuItem[
     if (target.type === `file` && archiveFormat(target.name) !== undefined && verbs.extract !== undefined && offers(input, VERB_ROUTES.extract)) {
         items.push({ label: t(`workspace.entryMenu.extract`), icon: `box`, command: verbs.extract });
     }
-    if (offers(input, VERB_ROUTES.rename)) {
+    if (offers(input, VERB_ROUTES.rename) && !input.kept) {
         items.push(keyed({ label: t(`ui.action.rename`), icon: `pencil`, command: verbs.rename }, input.keys?.rename));
     }
     // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
@@ -179,13 +183,13 @@ const soleVerbs = (target: WorkspaceTreeEntry, input: EntryMenuInput): MenuItem[
 
 // Two groups, each after a rule: what changes the entry itself, then what carries it elsewhere.
 const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
-    const { target, multi, count, verbs, keys } = input;
+    const { target, multi, count, verbs, keys, kept } = input;
     if (target === undefined) {
         return [];
     }
     const changes: MenuItem[] = [
         ...(multi ? [] : soleVerbs(target, input)),
-        ...(offers(input, VERB_ROUTES.remove)
+        ...(offers(input, VERB_ROUTES.remove) && !kept
             ? [
                   keyed(
                       {
@@ -199,7 +203,7 @@ const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
             : []),
     ];
     const carries: MenuItem[] = [
-        ...(offers(input, VERB_ROUTES.cut)
+        ...(offers(input, VERB_ROUTES.cut) && !kept
             ? [
                   keyed(
                       {
@@ -271,5 +275,6 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
         ...entryVerbs(input),
         ...pasteRows(input),
         ...withSeparator(tail),
+        ...withSeparator(input.kept ? [keptNote()] : []),
     ];
 };

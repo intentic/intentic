@@ -119,10 +119,12 @@ export const moveWorkspacePath = async (fromAbs: string, toAbs: string): Promise
     await rename(fromAbs, toAbs);
 };
 
-// Copies a file or directory recursively, creating the target's parent first.
-export const copyWorkspacePath = async (fromAbs: string, toAbs: string): Promise<void> => {
+// Copies a file or directory recursively, creating the target's parent first. `keep` leaves out any entry under the
+// source it answers false for (and everything below it), so a copy of a folder never carries out what its own path
+// could not be read at.
+export const copyWorkspacePath = async (fromAbs: string, toAbs: string, keep: (absPath: string) => boolean = () => true): Promise<void> => {
     await mkdir(dirname(toAbs), { recursive: true });
-    await cp(fromAbs, toAbs, { recursive: true });
+    await cp(fromAbs, toAbs, { recursive: true, filter: (source) => keep(source) });
 };
 
 // File size, used to refuse an oversized raw read before loading it; undefined when absent.

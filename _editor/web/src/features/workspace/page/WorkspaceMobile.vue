@@ -42,6 +42,7 @@ import type { OpenMode } from "../../../models/workspace/tabs/workspaceTabs";
 import { specialChip } from "../explorer/specialPaths";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
+import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { filesToEntries } from "../../../models/workspace/tree/dropEntries";
@@ -698,7 +699,7 @@ const onPick = (event: Event): void => {
                         {{ sheetEntry.type === "dir" ? t(`workspace.entryMenu.downloadZip`) : t(`ui.action.download`) }}
                     </button>
                     <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
-                    <template v-if="canEditFiles && !archived(sheetEntry.path)">
+                    <template v-if="canEditFiles && !archived(sheetEntry.path) && !holdsLockedWorkspacePath(sheetEntry.path)">
                         <button
                             type="button"
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
@@ -717,6 +718,9 @@ const onPick = (event: Event): void => {
                     </template>
                     <p v-else-if="archived(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
                         <Icon name="box" class="text-base text-subtle" /> {{ t(`workspace.words.insideArchiveExtractTo`) }}
+                    </p>
+                    <p v-else-if="canEditFiles" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
+                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.words.keptInPlaceBySandbox`) }}
                     </p>
                     <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
                         <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.words.readOnlyChangingFiles`) }}

@@ -1,3 +1,4 @@
+import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { t } from "@intentic/ui/i18n";
 import { clipboardOf } from "@intentic/ui";
@@ -31,7 +32,7 @@ export interface TreeTransferHost {
     readonly openLanding: (dir: string, landed?: readonly LandedEntry[]) => void;
     // The nest alone, for a drag onto a folder row, which leaves that folder as it was.
     readonly openNest: (dir: string, landed?: readonly LandedEntry[]) => void;
-    readonly rules: Pick<ReturnType<typeof useTreeRules>, "unlockedOnly" | "archived" | "noDrops" | "refuseIn">;
+    readonly rules: Pick<ReturnType<typeof useTreeRules>, "unlockedOnly" | "archived" | "noDrops" | "refuseIn" | "refuseKept">;
     readonly selecting: Pick<MultiSelect, "selection" | "lead" | "selectLanded">;
     readonly inline: Pick<ReturnType<typeof useInlineEdit>, "edit" | "editing">;
     // The tree element: a clipboard write goes through its window, so a popped-out explorer writes to its own.
@@ -126,8 +127,9 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }
         const led = lead.value;
         const paths = rules.unlockedOnly(selection.value.size > 0 ? [...selection.value] : led !== null ? [led] : []);
-        if (paths.length === 0) {
-            return paths;
+        // A cut is a move made later; refused now, while the reader still has the selection in front of them.
+        if (paths.length === 0 || (mode === `cut` && rules.refuseKept(paths))) {
+            return [];
         }
         clipboard.value = { mode, paths };
         if (system === `async`) {
@@ -166,6 +168,10 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }
         if (clip.mode === `copy` && as !== `move`) {
             await copyInto(clip.paths, dir, t(`workspace.fileVerbs.couldntPaste`));
+            return;
+        }
+        // Move Here takes what was copied, which may hold a folder no move may carry.
+        if (rules.refuseKept(clip.paths)) {
             return;
         }
         const sources = movableInto(clip.paths, dir);
@@ -257,11 +263,14 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         const copies = isMac && event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey;
         const modified = !copies && (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey);
         // A backend that moves nothing (a folder on this computer) has no drag to offer: the press stays a click.
-        const held =
+        const picked =
             modified || (edit.kind === `renaming` && edit.path === path) || !supportsRoute(copies ? VERB_ROUTES.copy : VERB_ROUTES.cut)
                 ? []
                 : // Dragging a selected entry moves the whole selection; otherwise just that entry.
                   rules.unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
+        // A move that would carry `.intentic` or one of its groups never lifts: the press stays a click, quietly, since a
+        // notice on every press of the row would answer a click nobody meant as a drag.
+        const held = copies || !picked.some(holdsLockedWorkspacePath) ? picked : [];
         const onDrop = copies ? (dir: string) => void copyInto(held, dir, t(`workspace.fileVerbs.couldntPaste`)) : (dir: string) => void dragOnto(held, dir);
         beginEntryDrag(event, { paths: held, copies, onDrop });
     };

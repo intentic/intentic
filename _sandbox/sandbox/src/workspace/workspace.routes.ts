@@ -28,11 +28,11 @@ import { behindCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { testCommandOf } from "./layout/test-runner.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
-import { resolveWithin } from "./files/workspace-files-paths.js";
+import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { workspaceReads } from "./workspace-reads.js";
-import { childrenForRead, containedForRead, containedIn, insideArchive, workspaceRootFor } from "./layout/workspace-scope.js";
+import { childrenForRead, containedForRead, containedIn, insideArchive, refuseKeptFolder, workspaceRootFor } from "./layout/workspace-scope.js";
 import {
     fencedChildren,
     fencedClassification,
@@ -287,6 +287,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         // A delete is a move into the trash, answered with the id that takes it back.
         delete: i.delete.handler(async ({ input, context }) => {
             const target = await contained(context, input.path);
+            await refuseKeptFolder(services.workspace.root, target);
             const trashed = await services.files.trash.put(target, input.path);
             wrote(target);
             return trashed === undefined ? ({ ok: true } as const) : ({ ok: true, trashed } as const);
@@ -307,6 +308,8 @@ export const createWorkspaceRoutes = (services: Services) => {
         }),
         move: i.move.handler(async ({ input, context }) => {
             const [from, to] = [await contained(context, input.from), await contained(context, input.to)];
+            await refuseKeptFolder(services.workspace.root, from);
+            await refuseKeptFolder(services.workspace.root, to);
             await services.files.move(from, to);
             wrote(from, to);
             return { ok: true } as const;
@@ -317,7 +320,13 @@ export const createWorkspaceRoutes = (services: Services) => {
             // The source is a read, so it is held to where the caller may look, the target (`contained`) to where it may edit.
             refuseFenced(await fenceFor(context), input.from);
             const to = await contained(context, input.to);
-            await services.files.copy(await containedForRead(services.workspace.root, input.from), to);
+            await refuseKeptFolder(services.workspace.root, to);
+            // A copy of `.intentic` or one of its groups leaves the locked entries in it behind, as a download does.
+            await services.files.copy(
+                await containedForRead(services.workspace.root, input.from),
+                to,
+                (path) => !isControlPlanePath(services.workspace.root, path),
+            );
             wrote(to);
             return { ok: true } as const;
         }),

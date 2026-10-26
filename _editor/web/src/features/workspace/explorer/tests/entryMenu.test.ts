@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import type { MenuItem } from "primevue/menuitem";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
@@ -22,6 +23,7 @@ const verbs = (): EntryVerbs => ({
 const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,
     locked: false,
+    kept: false,
     canEdit: true,
     archived: false,
     multi: false,
@@ -113,6 +115,34 @@ describe(`the entry menu`, () => {
             `Download as ZIP`,
             `—`,
             `Collapse Folders`,
+        ]);
+    });
+
+    it(`never offers to delete, rename or cut a folder the sandbox keeps in place, and says why`, () => {
+        const state: WorkspaceTreeEntry = { name: STATE_DIR, path: STATE_DIR, type: `dir`, children: [] };
+        const items = entryMenuItems(input({ target: state, kept: true, tail: [{ label: `Collapse Folders` }] }));
+        expect(labels(items)).toEqual([
+            `New File`,
+            `New Folder`,
+            `Open Terminal`,
+            `—`,
+            `Copy`,
+            `Download as ZIP`,
+            `—`,
+            `Collapse Folders`,
+            `—`,
+            `Kept in place by the sandbox`,
+        ]);
+        expect(items.at(-1)?.disabled).toBe(true);
+        // A selection it sits in loses the bulk Delete and Cut the same way.
+        expect(labels(entryMenuItems(input({ target: file, kept: true, multi: true, count: 2 })))).toEqual([
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Copy 2 items`,
+            `Download 2 items as ZIP`,
+            `—`,
+            `Kept in place by the sandbox`,
         ]);
     });
 

@@ -1,3 +1,4 @@
+import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { parentDir } from "@intentic/ui/path";
@@ -42,6 +43,15 @@ export interface TreeMenuHost {
     // Asks an agent about this file.
     readonly ask?: (path: string) => void;
 }
+
+// Where a menu opened on `target` acts. A right-click on empty space acts in the tree's OWN root: `` would aim every verb
+// at /work from inside a project.
+const dirOf = (target: WorkspaceTreeEntry | undefined, rootDir: () => string): string => {
+    if (target === undefined) {
+        return rootDir();
+    }
+    return target.type === `dir` ? target.path : parentDir(target.path);
+};
 
 export const useTreeMenu = (host: TreeMenuHost) => {
     const { selection, selectSingle } = host.selecting;
@@ -100,21 +110,14 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             ask: ask === undefined || target === undefined ? undefined : () => ask(target.path),
         };
     };
-    // A right-click on empty space acts in the tree's OWN root: `` would aim every verb at /work from inside a project.
-    const dirOf = (target: WorkspaceTreeEntry | undefined): string => {
-        if (target === undefined) {
-            return host.rootDir();
-        }
-        return target.type === `dir` ? target.path : parentDir(target.path);
-    };
-
     const menuItems = computed<MenuItem[]>(() => {
         const target = menuEntry.value;
         const multi = target !== undefined && selection.value.size > 1 && selection.value.has(target.path);
-        const dir = dirOf(target);
+        const dir = dirOf(target, host.rootDir);
         return entryMenuItems({
             target,
             locked: target !== undefined && isLockedWorkspacePath(target.path),
+            kept: target !== undefined && (multi ? [...selection.value] : [target.path]).some(holdsLockedWorkspacePath),
             canEdit: host.store.canEditFiles.value,
             // The folder the verbs would act in decides it: the archive's own row keeps its verbs, a row inside it does not.
             archived: host.rules.archiveDir(dir),

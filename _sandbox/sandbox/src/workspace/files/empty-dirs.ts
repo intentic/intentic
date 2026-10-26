@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
 import { type DirReads, freshDirReads } from "./dir-reads.js";
@@ -11,7 +12,7 @@ import { type DirReads, freshDirReads } from "./dir-reads.js";
 // - a file, however small
 // - a symlink, never followed, always content
 // - an ignored directory
-// - a locked directory (the daemon's own control plane)
+// - a locked directory (the daemon's own control plane); the folders it sits in are never offered themselves
 // A directory whose children are all barren is itself barren.
 // Fixture exemptions (reference shelf, outbox) are policy in pages/workspace/emptyDirs.ts, not a filesystem fact.
 
@@ -62,8 +63,9 @@ export const scanBarrenDirs = async (root: string, options?: { maxDirs?: number;
             }
             found.push(...result.found);
         }
-        // The directory itself comes first, ahead of the branch it heads, so the output reads as a tree.
-        return all ? { barren: true, found: [rel, ...found] } : { barren: false, found };
+        // The directory itself comes first, ahead of the branch it heads, so the output reads as a tree. A folder the
+        // control plane sits in is never offered, even before its locked entries exist: it stays where it is.
+        return all && !holdsLockedWorkspacePath(rel) ? { barren: true, found: [rel, ...found] } : { barren: false, found };
     };
 
     const { found } = await visit(base, "", createIgnoreScope(reads.matchers));

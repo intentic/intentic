@@ -5,7 +5,7 @@ import type { WorkspaceChildren } from "@intentic/sandbox-contract/schemas/works
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/archive/workspace-archive-browse.js";
-import { isControlPlanePath, resolveWithin, resolveWorkspacePath } from "../files/workspace-files-paths.js";
+import { holdsControlPlane, isControlPlanePath, resolveWithin, resolveWorkspacePath } from "../files/workspace-files-paths.js";
 
 // Resolves where a read really lands, for every file-serving route; downstream just takes the answer. Two questions in
 // one place: whose copy of the workspace it means, and whether it reads through an archive into that archive's
@@ -41,6 +41,14 @@ export const containedIn = async (root: string, relPath: string): Promise<string
         throw new ORPCError("NOT_FOUND", { message: "not found" });
     }
     return resolved.path;
+};
+
+// Refuses a delete, a move or a copy onto a folder the daemon's private state sits in (holdsControlPlane): `.intentic`
+// itself and its groups are opened and written inside like any folder, but stay where they are, for anyone.
+export const refuseKeptFolder = async (root: string, absPath: string): Promise<void> => {
+    if (await holdsControlPlane(root, absPath)) {
+        throw new ORPCError("BAD_REQUEST", { message: "this folder holds the sandbox's own settings and keys, so it stays where it is" });
+    }
 };
 
 // A non-isolated conversation resolves to the shared tree rather than failing; /work genuinely is its tree.

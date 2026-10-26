@@ -59,7 +59,7 @@ export const deleteEntries = (
 export interface TreeDeleteHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
     readonly targetDir: (path: string | null) => string;
-    readonly rules: Pick<ReturnType<typeof useTreeRules>, "refuseIn" | "unlockedOnly">;
+    readonly rules: Pick<ReturnType<typeof useTreeRules>, "refuseIn" | "unlockedOnly" | "refuseKept">;
     readonly emptyDirs: ReturnType<typeof useEmptyDirs>;
     readonly selecting: Pick<MultiSelect, "selection" | "lead" | "clear">;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "removeEntries" | "createFile" | "refuseWrite">;
@@ -89,7 +89,7 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
             return;
         }
         const paths = host.rules.unlockedOnly([...selecting.selection.value]);
-        if (paths.length === 0) {
+        if (paths.length === 0 || host.rules.refuseKept(paths)) {
             return;
         }
         if (paths.every((path) => host.byPath.value.get(path)?.type === `dir` && emptyDirs.isBarren(path))) {

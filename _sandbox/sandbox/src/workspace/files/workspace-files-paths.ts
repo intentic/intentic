@@ -1,5 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import { isLockedWorkspacePath, isReviewableLockedPath } from "@intentic/sandbox-contract/state/workspace-state";
 
 // Resolves a repo-relative path against `dir`, refusing any that climbs outside via `../` or an absolute path.
@@ -118,6 +119,19 @@ export const isUnder = (realRoot: string, real: string): string | undefined =>
 // Whether absPath is under the root's locked paths (.intentic/), per isLockedWorkspacePath in the contract package.
 // Blocks the generic file API from touching them, owner included; root's .git is covered too, as a file entry.
 export const isControlPlanePath = (root: string, absPath: string): boolean => isLockedWorkspacePath(relative(resolve(root), absPath));
+
+// Whether absPath is a folder the locked paths sit in (`.intentic/` and its groups), as spelled, as the entry itself
+// really lands, or as what a final symlink points at: a delete or move would carry the locked bytes with it, and a
+// copy onto it merges over them.
+export const holdsControlPlane = async (root: string, absPath: string): Promise<boolean> => {
+    const realRoot = await realPathOf(resolve(root));
+    const spellings = [
+        relative(resolve(root), absPath),
+        relative(realRoot, join(await realPathOf(dirname(absPath)), basename(absPath))),
+        relative(realRoot, await realPathOf(absPath)),
+    ];
+    return spellings.some(holdsLockedWorkspacePath);
+};
 
 // Diff-only carve-out for a tracked control-plane entry (capabilities.json) whose change is meant to be reviewed.
 // Every other surface still uses isControlPlanePath alone.

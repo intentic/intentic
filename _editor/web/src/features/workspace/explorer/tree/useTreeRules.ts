@@ -1,14 +1,17 @@
 import { t } from "@intentic/ui/i18n";
+import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { noticeOf } from "@intentic/ui/async";
+import { basename } from "@intentic/ui/path";
 import type { Ref } from "vue";
 import { archiveAbove, isArchiveContent } from "../../../../models/workspace/files/archiveEntries";
 import { isLeaving, type Provisional, provisionalAt } from "../../../../models/workspace/files/provisionalEntries";
 import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { deadLink, dropDirOf, type Row } from "./treeRows";
 
-// What any file surface may do to an entry: nothing to a private (children inherit it) or provisional path, no archive write.
+// What any file surface may do to an entry: nothing to a private (children inherit it) or provisional path, no archive
+// write, and no delete, move or rename of a folder the private entries sit in.
 
 export interface TreeRulesHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
@@ -44,5 +47,16 @@ export const useTreeRules = (host: TreeRulesHost) => {
         return host.store.refuseWrite();
     };
 
-    return { pendingRow, pending, unlockedOnly, archiveDir, archived, noDrops, dropTargetOf, refuseIn };
+    // `.intentic` and its groups are opened and written inside like any folder, but stay where they are: deleting one
+    // would take the sandbox's settings, sign-ins and history with it (holdsLockedWorkspacePath). A verb that would carry one
+    // is refused whole, saying why, rather than done to the rest of the selection, so nothing happens that wasn't asked.
+    const refuseKept = (paths: readonly string[]): boolean => {
+        const kept = paths.find(holdsLockedWorkspacePath);
+        if (kept !== undefined) {
+            host.store.actionError.value = noticeOf(t(`workspace.fileVerbs.keptInPlace`, { name: basename(kept) }));
+        }
+        return kept !== undefined;
+    };
+
+    return { pendingRow, pending, unlockedOnly, archiveDir, archived, noDrops, dropTargetOf, refuseIn, refuseKept };
 };

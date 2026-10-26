@@ -91,3 +91,57 @@ describe(`drops`, () => {
         expect([rules.noDrops(`.intentic/secrets/auth`), rules.noDrops(`assets.zip`), rules.noDrops(`.intentic`)]).toEqual([true, true, false]);
     });
 });
+
+// `.intentic` and its groups: deleting one would take the sandbox's settings, sign-ins and history with it.
+describe(`a folder the sandbox keeps in place`, () => {
+    const CONFIG = `${STATE_DIR}/config`;
+    const KEPT = [dir(STATE_DIR, [dir(CONFIG, [file(`${CONFIG}/settings.json`)])]), dir(`src`, [file(`src/main.ts`)])];
+    const said = (name: string) => ({ tone: `danger` as const, title: `"${name}" holds sandbox settings, so it stays put.` });
+    const drain = async (): Promise<void> => {
+        for (let tick = 0; tick < 4; tick += 1) {
+            await Promise.resolve();
+        }
+    };
+
+    it(`is never deleted, nor the rest of a selection it sits in, and the reader is told why`, () => {
+        const { deleting, store, select } = treeSurface(KEPT);
+        select(`src/main.ts`, STATE_DIR);
+        deleting.requestDelete();
+
+        expect([store.removeEntries.mock.calls, store.actionError.value]).toEqual([[], said(STATE_DIR)]);
+    });
+
+    it(`is never renamed or cut, nor carried by Move Here, though it can still be copied`, async () => {
+        const { edits, inline, transfer, store, select, selecting } = treeSurface(KEPT);
+        edits.beginRename(CONFIG);
+        expect([inline.edit.value.kind, store.actionError.value]).toEqual([`idle`, said(`config`)]);
+
+        select(CONFIG);
+        expect([transfer.stage(`cut`, `event`), store.clipboard.value]).toEqual([[], undefined]);
+        expect(transfer.stage(`copy`, `event`)).toEqual([CONFIG]);
+
+        selecting.lead.value = `src/main.ts`;
+        await transfer.moveHere();
+        expect(store.moveIntoMany.mock.calls).toEqual([]);
+    });
+
+    it(`never lifts on a drag that would move it`, () => {
+        const { transfer } = treeSurface(KEPT);
+        transfer.onPointerDown(new PointerEvent(`pointerdown`, { button: 0, clientX: 10, clientY: 10 }), STATE_DIR);
+        window.dispatchEvent(new PointerEvent(`pointermove`, { cancelable: true, clientX: 60, clientY: 60 }));
+
+        expect(transfer.carried(STATE_DIR)).toBe(false);
+        window.dispatchEvent(new PointerEvent(`pointerup`));
+    });
+
+    it(`is written inside like any folder, and what it holds is deleted like anything else`, async () => {
+        const { deleting, edits, inline, store, select } = treeSurface(KEPT);
+        edits.beginCreate(CONFIG, `file`);
+        expect(inline.edit.value.kind).toBe(`creating`);
+
+        select(`${CONFIG}/settings.json`);
+        deleting.requestDelete();
+        await drain();
+        expect([store.removeEntries.mock.calls, store.actionError.value]).toEqual([[[[`${CONFIG}/settings.json`]]], undefined]);
+    });
+});

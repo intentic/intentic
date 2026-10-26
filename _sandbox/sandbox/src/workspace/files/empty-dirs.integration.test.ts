@@ -52,6 +52,13 @@ test("scanBarrenDirs never descends the daemon's locked folders, nor counts one 
     expect(await scanBarrenDirs(root)).toEqual([]);
 });
 
+test("scanBarrenDirs never offers the folders the locked ones sit in, only the empty branches inside them", async () => {
+    const root = await workspace();
+    await mkdir(join(root, STATE_DIR, "local", "cache", "old"), { recursive: true });
+
+    expect(await scanBarrenDirs(root)).toEqual([`${STATE_DIR}/local/cache`, `${STATE_DIR}/local/cache/old`]);
+});
+
 test("scanBarrenDirs treats a symlink as content: deleting one removes the link, not what it points at", async () => {
     const root = await workspace();
     await mkdir(join(root, "skills"), { recursive: true });

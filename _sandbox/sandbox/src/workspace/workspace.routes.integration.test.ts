@@ -28,7 +28,7 @@ import { workspacePaths } from "./workspace.js";
 import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import { UploadTooLargeError, writeWorkspaceFileStream } from "./files/workspace-files-upload.js";
-import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
+import { copyWorkspacePath, moveWorkspacePath, sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 import { createWorkspaceTrash } from "./files/trash/workspace-trash.js";
 
 import { clientFor, errorCode, proven } from "../harness/route-client.testing.js";
@@ -906,6 +906,38 @@ test("workspace.delete sends an entry to the trash, and restore brings it back, 
     // Once restored, the id is spent; a forged one names nothing either.
     expect(await errorCode(client.workspace.restore({ trashed: deleted.trashed ?? "" }))).toBe("NOT_FOUND");
     expect(await errorCode(client.workspace.restore({ trashed: "../../etc" }))).toBe("NOT_FOUND");
+});
+
+test("the folders the control plane sits in stay put: no delete, move or copy onto them, and a copy out leaves it behind", async () => {
+    const workspace = tempWorkspace([]);
+    const trash = createWorkspaceTrash(join(workspace.root, STATE_DIR, "local", "trash"));
+    const client = clientFor(createApp(services({ workspace, files: fakeFiles({ trash, move: moveWorkspacePath, copy: copyWorkspacePath }) })));
+    const owner = join(workspace.root, STATE_DIR, "identity", "owner.json");
+    await mkdir(join(workspace.root, STATE_DIR, "identity"), { recursive: true });
+    await mkdir(join(workspace.root, STATE_DIR, "config", "approvals"), { recursive: true });
+    await writeFile(owner, "real");
+    await writeFile(join(workspace.root, STATE_DIR, "identity", "notes.md"), "mine");
+    await mkdir(join(workspace.root, "evil", "identity"), { recursive: true });
+    await writeFile(join(workspace.root, "evil", "identity", "owner.json"), "forged");
+    await symlink(join(workspace.root, STATE_DIR), join(workspace.root, "state"));
+
+    for (const path of [STATE_DIR, `${STATE_DIR}/identity`, `${STATE_DIR}/local`, `./${STATE_DIR}/`]) {
+        expect([path, await errorCode(client.workspace.delete({ path }))]).toEqual([path, "BAD_REQUEST"]);
+        expect([path, await errorCode(client.workspace.move({ from: path, to: "elsewhere" }))]).toEqual([path, "BAD_REQUEST"]);
+    }
+    // A copy onto one merges into it; through a symlink that leads there just the same.
+    expect(await errorCode(client.workspace.copy({ from: "evil", to: STATE_DIR }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.workspace.copy({ from: "evil", to: "state" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.workspace.move({ from: "evil/identity", to: `${STATE_DIR}/identity` }))).toBe("BAD_REQUEST");
+    expect(await readFile(owner, "utf8")).toBe("real");
+
+    // Copied out, the group arrives without its locked entries; what is inside one stays ordinary content.
+    expect(await client.workspace.copy({ from: `${STATE_DIR}/identity`, to: "backup" })).toEqual({ ok: true });
+    expect([existsSync(join(workspace.root, "backup", "owner.json")), await readFile(join(workspace.root, "backup", "notes.md"), "utf8")]).toEqual([
+        false,
+        "mine",
+    ]);
+    expect((await client.workspace.delete({ path: `${STATE_DIR}/config/approvals` })).trashed).toMatch(/^[a-z0-9]+-[a-f0-9]{8}$/);
 });
 
 test("workspace.extract answers with the path it landed at, and refuses what nothing here unpacks", async () => {
