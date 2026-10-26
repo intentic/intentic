@@ -140,6 +140,15 @@ export const reconcileProvisional = (isListed: (path: string) => boolean): void 
 };
 
 /**
+ * What a confirmed write is still waiting on the listing for: an arrival it has yet to list, a departure it has yet to
+ * drop. Undefined once the listing agreed, and for a write still in flight or one that was taken back.
+ */
+export const awaitingListing = (path: string): "arrival" | "departure" | undefined => {
+    const state = entries.value.get(path)?.state;
+    return state === `landing` ? `arrival` : state === `leaving` ? `departure` : undefined;
+};
+
+/**
  * Drops upload entries for work that is over — a cancel, or the card being dismissed. Settled ones stay: their bytes
  * are on disk and the row is still the only sign of them until the tree catches up. Writes are untouched; they belong
  * to gestures the card knows nothing about.

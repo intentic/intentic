@@ -1,6 +1,7 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import {
+    awaitingListing,
     clearUnsettledUploads,
     dropProvisional,
     isLeaving,
@@ -123,6 +124,27 @@ describe(`provisionalAt`, () => {
 
     it(`says nothing about a path with no entry`, () => {
         expect(provisionalAt(`a.txt`)).toBeUndefined();
+    });
+});
+
+// What the tree's heal reads a moment after a write: only a write the daemon confirmed can be waiting on the listing.
+describe(`awaitingListing`, () => {
+    it(`waits on an arrival only once the daemon confirmed it, and no longer once the listing has it`, () => {
+        noteArriving(`a copy.md`, { kind: `write` });
+        expect(awaitingListing(`a copy.md`)).toBeUndefined();
+        markSettled(`a copy.md`);
+        expect(awaitingListing(`a copy.md`)).toBe(`arrival`);
+        reconcileProvisional((path) => path === `a copy.md`);
+        expect(awaitingListing(`a copy.md`)).toBeUndefined();
+    });
+
+    it(`waits on a departure until it is retired, and on nothing that was taken back`, () => {
+        noteLeaving(`gone.md`);
+        markSettled(`gone.md`);
+        expect(awaitingListing(`gone.md`)).toBe(`departure`);
+        noteArriving(`refused.md`, { kind: `write` });
+        dropProvisional(`refused.md`);
+        expect(awaitingListing(`refused.md`)).toBeUndefined();
     });
 });
 

@@ -136,6 +136,12 @@ export const createWorkspaceRoutes = (services: Services) => {
         refuseFenced(await fenceFor(context), repo);
         return repo;
     };
+    // Every file write below ends here: history hears of it, and the resident tree is asked to re-list what it touched
+    // as the write is answered rather than after the watcher's next batch, so the delta confirming it follows at once.
+    const wrote = (...absPaths: string[]): void => {
+        services.workspaceWritten(absPaths);
+        services.history.notifyUserWrite();
+    };
     return {
         // input.agent picks whose copy to walk, with no fallback; a file the walk misses can still be opened via
         // `file`.
@@ -271,16 +277,18 @@ export const createWorkspaceRoutes = (services: Services) => {
             ),
         ),
         // Direct file management over /work (byte writes go through POST /workspace/upload). Move/copy resolve both
-        // endpoints through `contained`; every mutation pings history.
+        // endpoints through `contained`; every mutation ends in `wrote`.
         mkdir: i.mkdir.handler(async ({ input, context }) => {
-            await services.files.mkdir(await contained(context, input.path));
-            services.history.notifyUserWrite();
+            const dir = await contained(context, input.path);
+            await services.files.mkdir(dir);
+            wrote(dir);
             return { ok: true } as const;
         }),
         // A delete is a move into the trash, answered with the id that takes it back.
         delete: i.delete.handler(async ({ input, context }) => {
-            const trashed = await services.files.trash.put(await contained(context, input.path), input.path);
-            services.history.notifyUserWrite();
+            const target = await contained(context, input.path);
+            const trashed = await services.files.trash.put(target, input.path);
+            wrote(target);
             return trashed === undefined ? ({ ok: true } as const) : ({ ok: true, trashed } as const);
         }),
         // The recorded path is resolved again under the caller's own fence, so a trash id buys nothing a caller could
@@ -288,7 +296,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         restore: i.restore.handler(async ({ input, context }) => {
             try {
                 const landed = await services.files.trash.restore(input.trashed, (relPath) => contained(context, relPath));
-                services.history.notifyUserWrite();
+                wrote(landed);
                 return { path: relative(services.workspace.root, landed) };
             } catch (failure) {
                 if (failure instanceof TrashMissError) {
@@ -298,18 +306,19 @@ export const createWorkspaceRoutes = (services: Services) => {
             }
         }),
         move: i.move.handler(async ({ input, context }) => {
-            await services.files.move(await contained(context, input.from), await contained(context, input.to));
-            services.history.notifyUserWrite();
+            const [from, to] = [await contained(context, input.from), await contained(context, input.to)];
+            await services.files.move(from, to);
+            wrote(from, to);
             return { ok: true } as const;
         }),
         // The one write whose source may sit inside an archive: copying out is how a member reaches the workspace
         // without extracting the whole thing. The destination is a write target like any other.
         copy: i.copy.handler(async ({ input, context }) => {
+            // The source is a read, so it is held to where the caller may look, the target (`contained`) to where it may edit.
             refuseFenced(await fenceFor(context), input.from);
-            // The source is a read, so it is held to where the caller may look, the target to where it may edit.
-            refuseFenced(await fenceFor(context), input.from);
-            await services.files.copy(await containedForRead(services.workspace.root, input.from), await contained(context, input.to));
-            services.history.notifyUserWrite();
+            const to = await contained(context, input.to);
+            await services.files.copy(await containedForRead(services.workspace.root, input.from), to);
+            wrote(to);
             return { ok: true } as const;
         }),
         // Unpacks beside the archive, into a name nothing holds yet; the tool it spawns is picked by suffix, so a
@@ -318,7 +327,7 @@ export const createWorkspaceRoutes = (services: Services) => {
             const archive = await contained(context, input.path);
             try {
                 const landed = await services.files.extract(archive);
-                services.history.notifyUserWrite();
+                wrote(landed);
                 return { path: relative(services.workspace.root, landed) };
             } catch (failure) {
                 if (failure instanceof UnknownArchiveError) {

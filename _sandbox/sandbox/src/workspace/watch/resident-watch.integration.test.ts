@@ -5,7 +5,7 @@ import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/work
 import { waitFor } from "@intentic/testing/bun";
 import pino from "pino";
 import { walkWorkspaceTree } from "../files/workspace-tree.js";
-import { residentWorkspaceTree, startWorkspaceWatch, subscribeTreeChanges } from "./workspace-watch.js";
+import { residentTreeWritten, residentWorkspaceTree, startWorkspaceWatch, subscribeTreeChanges } from "./workspace-watch.js";
 
 // The watcher's thread holding the shared tree, end to end: a real write reaches the thread as a batch, the thread
 // re-lists what it touched, a delta comes out, and the view it answers is still the one a fresh walk would give.
@@ -35,6 +35,30 @@ test("a write becomes a delta, and the tree it leaves is the walk's", async () =
         expect(relisted).toEqual(await walkWorkspaceTree(root));
         // Any other root, a conversation's own checkout, is walked: the thread holds only the one it watches.
         expect(residentWorkspaceTree(join(root, "elsewhere"))).toBeUndefined();
+    } finally {
+        unsubscribe();
+        await stop().finally(() => rmSync(root, { recursive: true, force: true }));
+    }
+});
+
+test("the daemon's own write is re-listed when told, without waiting on the watcher, and announced once", async () => {
+    const root = workspace();
+    const stop = startWorkspaceWatch(root, log);
+    const deltas: WorkspaceTreeDelta[] = [];
+    const unsubscribe = subscribeTreeChanges((delta) => deltas.push(delta));
+    try {
+        await residentWorkspaceTree(root)!;
+        writeFileSync(join(root, "pasted.md"), "copy");
+        // The delta is announced before the ask settles, well inside the watcher's own batch window.
+        await residentTreeWritten([join(root, "pasted.md")]);
+        expect(deltas.filter((delta) => lists(delta, "pasted.md"))).toHaveLength(1);
+        expect((await residentWorkspaceTree(root)!).tree.map((entry) => entry.name)).toContain("pasted.md");
+        // The watcher's batch for the same write finds nothing left to move.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        expect(deltas.filter((delta) => lists(delta, "pasted.md"))).toHaveLength(1);
+        // Nothing outside the watched root, and nothing at all for the root itself.
+        await residentTreeWritten([join(tmpdir(), "elsewhere.md"), root]);
+        expect(deltas.filter((delta) => lists(delta, "pasted.md"))).toHaveLength(1);
     } finally {
         unsubscribe();
         await stop().finally(() => rmSync(root, { recursive: true, force: true }));

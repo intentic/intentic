@@ -1,4 +1,5 @@
 import { realpathSync } from "node:fs";
+import { insideRel } from "@intentic/base/contained";
 import { Coalescer } from "@intentic/base/async";
 import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
@@ -94,7 +95,12 @@ interface ArmedWorkspaceWatch extends WorkspaceWatch {
 }
 
 // What the thread answers: the resident tree's view, readiness, or completion of native watcher cleanup.
-export type WatchAsk = { readonly kind: "view" } | { readonly kind: "ready" } | { readonly kind: "close" };
+export type WatchAsk =
+    | { readonly kind: "view" }
+    | { readonly kind: "ready" }
+    | { readonly kind: "close" }
+    // The daemon's own write, re-listed now rather than when the watcher's batch for it comes round.
+    | { readonly kind: "written"; readonly paths: readonly string[] };
 
 // What the watch's thread says unasked: a batch of changed paths, what that batch moved in the tree, or a failure.
 export type WatchNews =
@@ -107,6 +113,8 @@ export type WatchNews =
 interface IsolatedWorkspaceWatch extends WorkspaceWatch {
     // The tree as it stands after every batch that arrived before the ask.
     readonly view: () => Promise<WorkspaceTree>;
+    // Settles once the tree has re-listed these root-relative paths and announced what moved.
+    readonly written: (paths: readonly string[]) => Promise<void>;
     readonly subscribeTree: (listener: (delta: WorkspaceTreeDelta) => void) => () => void;
 }
 
@@ -142,6 +150,7 @@ const createIsolatedWorkspaceWatch = (root: string, logger: Logger): IsolatedWor
             return () => treeListeners.delete(listener);
         },
         view: () => calls.call<WorkspaceTree>({ kind: "view" }),
+        written: (paths) => calls.call<void>({ kind: "written", paths }),
         // Native callbacks must be released in their owning thread before that thread is terminated.
         close: () => (closing ??= calls.call<void>({ kind: "close" }).finally(() => calls.close())),
     };
@@ -239,6 +248,20 @@ export const startWorkspaceWatch = (root: string, logger: Logger): (() => Promis
 // only answer is a walk.
 export const residentWorkspaceTree = (root: string): Promise<WorkspaceTree> | undefined =>
     instance !== undefined && instance.root === root ? instance.watch.view() : undefined;
+
+// Writes the daemon itself just made, as absolute paths. The watcher would report them too, but only once its batch
+// window closes (DEBOUNCE_MS) and every batch ahead of it is re-listed; told here, the resident tree re-lists them at
+// once, so the delta for a paste is on its way while the paste is still being answered. Re-listing what is already
+// listed moves nothing, so the watcher's own batch for the same write announces no second delta. A path outside the
+// watched root (a conversation's checkout) has no resident tree to tell.
+export const residentTreeWritten = (absPaths: readonly string[]): Promise<void> => {
+    const watched = instance;
+    if (watched === undefined) {
+        return Promise.resolve();
+    }
+    const named = absPaths.map((path) => insideRel(watched.root, path)).filter((path): path is string => path !== undefined && path !== "");
+    return named.length === 0 ? Promise.resolve() : watched.watch.written(named);
+};
 
 // What moved in the watched root's tree, once the resident tree has re-listed each batch.
 export const subscribeTreeChanges = (listener: (delta: WorkspaceTreeDelta) => void): (() => void) => {

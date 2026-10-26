@@ -1,5 +1,6 @@
 import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import type { WorkspaceTree, WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import type { QueryKey } from "@tanstack/vue-query";
 import { parentDir } from "@intentic/ui/path";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -29,6 +30,10 @@ const refreshTree = throttleTrailing(() => {
     }
 }, TREE_REFRESH_MS);
 
+// Deltas patched into a cached tree so far. A fetch that saw this move while it was out may be carrying a tree from
+// before the delta: the daemon answered it first, but a whole tree travels slower than one frame.
+let patches = 0;
+
 /* WHAT MOVED IN THE SHARED TREE: every cached tree holding the generation the change counts from is patched in place;
    one holding another is fetched afresh, which is how a missed change heals. */
 export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
@@ -42,7 +47,34 @@ export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
             void invalidatePushedQueries(queryClient, { queryKey: query.queryKey, exact: true });
             continue;
         }
+        patches += 1;
         queryClient.setQueryData(query.queryKey, patched);
+    }
+};
+
+/* A TREE READ THAT CANNOT TAKE THE TREE BACK. The shared tree's answer is stamped with the generation it reflects; when
+   a delta patched the cached tree past that generation while the read was out, the read is older than what is on
+   screen, and putting it there would undo the delta: a file just pasted vanished until something else moved. The
+   patched tree stands instead. A generation only counts up within one daemon run, and a read cannot outlive the run
+   that answers it, so a smaller number seen this way is always the older tree. */
+export const treeRead =
+    (read: () => Promise<WorkspaceTree>) =>
+    async ({ queryKey }: { readonly queryKey: QueryKey }): Promise<WorkspaceTree> => {
+        const before = patches;
+        const fetched = await read();
+        const held = queryClient.getQueryData<WorkspaceTree>(queryKey);
+        const behind =
+            patches !== before && held?.generation !== undefined && fetched.generation !== undefined && fetched.generation < held.generation;
+        return behind ? held : fetched;
+    };
+
+/* AFTER THE BROWSER'S OWN WRITE: a walked checkout's tree is read again, since no delta will ever patch it. The shared
+   tree is left to the delta the daemon pushes for that very write (useWorkspaceTree's settleEach). */
+export const refreshWalkedTrees = (): void => {
+    for (const query of queryClient.getQueryCache().findAll({ queryKey: rpcPrefix(`workspace.tree`) })) {
+        if (query.state.data === undefined || walkedTree(query.state.data)) {
+            void queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true });
+        }
     }
 };
 const refreshModules = throttleTrailing(() => void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`workspace.modules`) }), MODULES_REFRESH_MS);

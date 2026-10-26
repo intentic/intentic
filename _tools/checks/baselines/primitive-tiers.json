@@ -26,7 +26,6 @@
     "_editor/web/src/models/fleet/useAgents-registry.ts": 2,
     "_editor/web/src/models/sandbox/useSandboxSharedAccess.ts": 2,
     "_editor/web/src/models/terminal/terminalMeta.ts": 2,
-    "_editor/web/src/models/workspace/tree/useWorkspaceTree.ts": 1,
     "_editor/web/src/workbench/push/nativePush.ts": 5,
     "_editor/web/src/workbench/window/floating.ts": 2,
     "_extensions/automations/src/AutomationsView.vue": 2,

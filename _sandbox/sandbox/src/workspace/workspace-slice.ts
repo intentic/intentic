@@ -27,7 +27,7 @@ import {
 import { writeWorkspaceFileStream } from "./files/workspace-files-upload.js";
 import { coalescingWorkspaceTree } from "./files/workspace-tree-coalesce.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./files/workspace-tree.js";
-import { residentWorkspaceTree } from "./watch/workspace-watch.js";
+import { residentTreeWritten, residentWorkspaceTree } from "./watch/workspace-watch.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace.js";
 
 // The workspace tree: its paths, files, derived sidecars, tree reads and the code-search engine.
@@ -66,6 +66,9 @@ export interface WorkspaceSlice {
     // What the watcher saw change under the workspace root, root-relative; empty is an unnamed change. The tree walk holds
     // folder reads between refetches and drops exactly these.
     readonly workspaceTreeChanged: (relPaths: readonly string[]) => void;
+    // A write the daemon itself just made under the workspace, as absolute paths: the resident tree re-lists them now
+    // instead of after the watcher's batch, so a browser's paste is confirmed by the delta as it is answered.
+    readonly workspaceWritten: (absPaths: readonly string[]) => void;
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
     // Resident workspace search: one iq engine, its sweep cached in memory; indexing runs on its own thread.
     readonly iq: ResidentEngine;
@@ -104,6 +107,9 @@ export const createWorkspaceSlice = ({ config, logger }: { readonly config: Conf
         // what that watcher keeps current, and a conversation's own checkout straight from disk.
         workspaceTree: (root: string) => residentWorkspaceTree(root) ?? walkedWorkspaceTree(root),
         workspaceTreeChanged: treeReads.changed,
+        // Not awaited: the watcher reports the same write a moment later, so a re-list that fails costs only that moment.
+        workspaceWritten: (absPaths) =>
+            void residentTreeWritten(absPaths).catch((err: Error) => logger.warn({ err }, "resident tree could not re-list a write")),
         workspaceChildren: listWorkspaceChildren,
         iq: createCodeSearchEngine(config, workspace.root, logger),
     };

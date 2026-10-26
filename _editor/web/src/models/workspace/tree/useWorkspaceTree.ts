@@ -1,22 +1,23 @@
-import type { WorkspaceChildren, WorkspaceTreeEntry, WorkspaceTree } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { type NoticeModel, noticeFrom, noticeOf, useConcurrentActions } from "@intentic/ui/async";
+import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { noticeOf } from "@intentic/ui/async";
 import { mapPool } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
-import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { opensAsFolder } from "../files/archiveEntries";
 import { readFileWindow } from "../files/fileWindow";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
+import { awaitingListing, dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./deleteUndo";
-import { changedDirs } from "../changes/useWorkspaceLive";
+import { changedDirs, refreshWalkedTrees, treeRead } from "../changes/useWorkspaceLive";
+import { clearLoadNotice, failedListing, lazyChildren, lazyHidden, lazyLoading, loadChildren, relist } from "./lazyListings";
+import { actionError, busy, run } from "./treeActions";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../../../app/workspaceScope";
@@ -25,53 +26,13 @@ import { rpcPrefix } from "../../../lib/queryKeys";
 import { workspaceTreeKey } from "./workspaceTreeKey";
 import { t } from "@intentic/ui/i18n";
 
-// Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
-// Concurrent, not mutexed: these are independent writes to different paths, and one runner shared by the tree, the
-// mobile browser and the editor's Ctrl+S must never answer the second of two gestures by doing nothing.
-const actions = useConcurrentActions();
-const { busy, notice: actionError } = actions;
-
-// A write's failure belongs to the sandbox it was made in: one that lands after a switch says nothing in the box
-// switched to, whose tree it was never about. `busy` still counts it until it ends.
-const run = (task: () => Promise<void>, wrote: string): Promise<void> => {
-    const here = sandboxScopeGuard();
-    return actions.run(async () => {
-        try {
-            await task();
-        } catch (failure) {
-            if (here()) {
-                throw failure;
-            }
-        }
-    }, wrote);
-};
+// How long a confirmed write waits for the pushed delta before the listing is read again. The daemon re-lists its own
+// writes as it answers them (the sandbox's workspace.routes.ts `wrote`), so this only runs out when that push was lost.
+const HEAL_AFTER_MS = 3000;
 
 // Writes in flight at once. Bounds a bulk delete against opening one connection per file, while keeping a wave of
 // twenty a single round trip's wait rather than twenty.
 const WRITE_POOL = 6;
-
-// Lazy children for dirs the walk skipped, keyed by path; kept outside the tree query to survive a refetch.
-const lazyChildren = sandboxRef(() => new Map<string, readonly WorkspaceTreeEntry[]>());
-const lazyHidden = sandboxRef(() => new Map<string, number>());
-const lazyLoading = sandboxRef(() => new Set<string>());
-// The notice from a failed lazy load, and its dir; held by identity so it can't erase an unrelated later error. A
-// switch takes the action notice down with it: whatever it named was in the tree being left. `busy` stays, since it
-// counts writes still in flight, and each one decrements itself on the way out.
-const loadNotice = sandboxValue<{ readonly path: string; readonly notice: NoticeModel } | undefined>(
-    () => undefined,
-    () => {
-        actionError.value = undefined;
-    },
-);
-
-// Retires a lazy-load notice if it's still the one showing. Called when its dir loads, or when the scope it named goes
-// away.
-const clearLoadNotice = (): void => {
-    if (loadNotice.value !== undefined && actionError.value === loadNotice.value.notice) {
-        actionError.value = undefined;
-    }
-    loadNotice.value = undefined;
-};
 
 const { activeSandboxId } = useSandbox();
 // Sandbox the open folders belong to, captured at restore rather than read live, to avoid a rescope race.
@@ -96,16 +57,6 @@ const collapseAll = (): void => {
     expanded.value = new Set();
 };
 
-// Lazy subtrees are keyed by path alone, so a scope switch must drop them (the tree query re-keys itself). Expanded
-// folders are kept: the same paths are still correct.
-watch(workspaceAgent, () => {
-    lazyChildren.value = new Map();
-    lazyHidden.value = new Map();
-    lazyLoading.value = new Set();
-    // Also clears any load notice: it could still be naming a directory from the scope just dropped.
-    clearLoadNotice();
-});
-
 // Read-only tree of the full /work filesystem, read directly from the sandbox daemon (workspace.tree), which owns
 // the ignore rules and secret denylist. Backed by vue-query for caching; file reads stay imperative.
 
@@ -128,18 +79,25 @@ const buildMap = (nodes: readonly WorkspaceTreeEntry[]): Map<string, WorkspaceTr
 const canMoveInto = (source: string, targetDir: string): boolean =>
     !(targetDir === parentDir(source) || targetDir === source || targetDir.startsWith(`${source}/`));
 
-// One directory's listing, retried once if the request never reached the daemon. A SandboxHttpError (the daemon refused
-// it) is rethrown immediately, not retried.
-const childrenOf = async (path: string): Promise<WorkspaceChildren> => {
-    const request = (): Promise<WorkspaceChildren> => sandboxRpc.workspace.children({ path, agent: workspaceAgent.value });
-    try {
-        return await request();
-    } catch (failure) {
-        if (failure instanceof SandboxHttpError) {
-            throw failure;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        return await request();
+// Reads again exactly what still disagrees with a write the daemon confirmed (afterWrite): a lazy folder's own listing,
+// or the tree for anything in it. Disagreeing is an arrival missing from a folder whose listing is loaded (one never
+// loaded has nothing to disagree with), or a departure still listed.
+const healWrites = (
+    paths: readonly string[],
+    listed: ReadonlyMap<string, WorkspaceTreeEntry>,
+    listingOf: (dir: string) => readonly WorkspaceTreeEntry[] | undefined,
+    invalidate: () => Promise<void>,
+): void => {
+    const stale = paths.filter((path) => {
+        const awaiting = awaitingListing(path);
+        return awaiting === `arrival` ? !listed.has(path) && listingOf(parentDir(path)) !== undefined : awaiting === `departure` && listed.has(path);
+    });
+    const lazy = new Set(stale.map((path) => parentDir(path)).filter((dir) => lazyChildren.value.has(dir)));
+    for (const dir of lazy) {
+        relist(dir);
+    }
+    if (stale.some((path) => !lazy.has(parentDir(path)))) {
+        void invalidate();
     }
 };
 
@@ -153,7 +111,8 @@ const readFile = async (path: string): Promise<string | undefined> => {
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
 
-export const fetchWorkspaceTree = (): Promise<WorkspaceTree> => sandboxRpc.workspace.tree({ agent: workspaceAgent.value });
+// Never older than the tree a pushed delta already patched in (useWorkspaceLive's treeRead).
+export const fetchWorkspaceTree = treeRead(() => sandboxRpc.workspace.tree({ agent: workspaceAgent.value }));
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
@@ -180,26 +139,48 @@ export function useWorkspaceTree() {
     // Invalidates every scope's tree (the procedure's whole prefix), so every scoped variant refetches, not just the
     // current one.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
-    // Fires the tree refetch without awaiting it, so callers can markSaved before the file-watch echo races it into a
-    // false "changed on disk". `baseHash` 409s the save if the file changed since it was read; omitted for creates.
+    // `baseHash` 409s the save if the file changed since it was read; omitted for creates.
     const uploadText = (path: string, text: string, baseHash?: string): Promise<{ ok: true }> =>
         sandboxRaw(`POST /workspace/upload`, {
             query: { path },
             headers: baseHash === undefined ? undefined : { "x-intentic-base-hash": baseHash },
             input: text,
         });
-    // An editor save: the row is already real, so nothing provisional is involved.
+    // An editor save: the row is already real, so nothing provisional is involved, and the shared tree takes the file's
+    // new size from the delta pushed for it (afterWrite). Nothing is read back here, so callers markSaved before that
+    // echo can race it into a false "changed on disk".
     const saveText = async (path: string, text: string, baseHash?: string): Promise<void> => {
         await uploadText(path, text, baseHash);
-        void invalidate();
+        refreshWalkedTrees();
+    };
+
+    /*
+     * WHAT A WRITE ASKS OF THE LISTING. A walked checkout's tree is read again, since nothing pushes it. The shared tree
+     * is NOT: it is the daemon's resident copy, and the delta that daemon pushes for this very write is what patches it.
+     * Reading the whole tree the moment a write answered cost every paste a fetch of up to 5000 entries (~600 KB), and
+     * that read was answered from before the write; when it landed after the delta it put the tree back the way it was,
+     * so the row just pasted vanished until something else in the workspace moved. Only if the listing still disagrees
+     * a moment later (a frame lost to a reconnect, an event the watcher dropped) is anything read again.
+     */
+    const afterWrite = (paths: readonly string[]): void => {
+        refreshWalkedTrees();
+        if (paths.length === 0) {
+            return;
+        }
+        const here = sandboxScopeGuard();
+        setTimeout(() => {
+            if (here()) {
+                healWrites(paths, entriesByPath.value, listingOf, invalidate);
+            }
+        }, HEAL_AFTER_MS);
     };
 
     /*
      * THE ONE PATH EVERY TREE WRITE TAKES. Each item's provisional rows are already on screen (the callers below note
      * them before the first byte moves), so this confirms or takes back each item's own rows on that item's own answer:
-     * a bulk delete where three paths are refused keeps the seventeen that landed. The refetch is fired, never awaited
-     * — it is a fresh walk of /work costing hundreds of milliseconds, and the rows it will paint are already painted.
-     * The first refusal is rethrown once every write has settled, so `run` reports it without cancelling the rest.
+     * a bulk delete where three paths are refused keeps the seventeen that landed. What retires the rows is the listing
+     * catching up (afterWrite). The first refusal is rethrown once every write has settled, so `run` reports it without
+     * cancelling the rest.
      */
     const settleEach = async <T>(
         items: readonly T[],
@@ -211,11 +192,13 @@ export function useWorkspaceTree() {
         undo?: (item: T) => void,
     ): Promise<void> => {
         let failure: { readonly cause: unknown } | undefined;
+        const landed: string[] = [];
         await mapPool(items, WRITE_POOL, async (item: T) => {
             try {
                 await write(item);
                 for (const path of rows(item)) {
                     markSettled(path);
+                    landed.push(path);
                 }
             } catch (caught) {
                 for (const path of rows(item)) {
@@ -225,7 +208,7 @@ export function useWorkspaceTree() {
                 failure ??= { cause: caught };
             }
         });
-        void invalidate();
+        afterWrite(landed);
         if (failure !== undefined) {
             // Awaiting a rejection is how the daemon's own error leaves here unchanged; `throw` would need it narrowed.
             await Promise.reject(failure.cause);
@@ -388,50 +371,6 @@ export function useWorkspaceTree() {
     // How many of a folder's own entries the daemon's entry budget cut from its listing.
     const hiddenIn = (dir: string): number => (dir === `` ? rootHidden.value : (lazyHidden.value.get(dir) ?? 0));
 
-    // Loads a dir's children if the walk left it unlisted (no-op once loaded or in flight). Used directly by callers
-    // that need real contents without expanding the row (mobile drill-in, paste's name check).
-    const loadChildren = async (path: string): Promise<void> => {
-        if (lazyChildren.value.has(path) || lazyLoading.value.has(path)) {
-            return;
-        }
-        await fetchChildren(path);
-    };
-    const fetchChildren = async (path: string): Promise<void> => {
-        // Captures the scope before the request: a late answer must not land under a different scope's identical path,
-        // whether the checkout or the whole sandbox moved.
-        const asked = workspaceAgent.value;
-        const current = sandboxScopeGuard();
-        lazyLoading.value.add(path);
-        try {
-            const body = await childrenOf(path);
-            if (!current() || workspaceAgent.value !== asked) {
-                return;
-            }
-            lazyChildren.value.set(path, body.entries);
-            if (body.hidden > 0) {
-                lazyHidden.value.set(path, body.hidden);
-            } else {
-                lazyHidden.value.delete(path);
-            }
-            // Retires the notice this same path's own failure raised, once it recovers.
-            if (loadNotice.value?.path === path) {
-                clearLoadNotice();
-            }
-        } catch (loadError) {
-            // A read the user has already navigated away from doesn't get to raise an error for the tree shown now.
-            if (!current() || workspaceAgent.value !== asked) {
-                return;
-            }
-            const notice = noticeFrom(loadError, t(`workspace.useWorkspaceTree.couldntOpen`, { path }));
-            loadNotice.value = { path, notice };
-            actionError.value = notice;
-        } finally {
-            if (current()) {
-                lazyLoading.value.delete(path);
-            }
-        }
-    };
-
     // Keeps the folder `dir` names listed while it is shown: one the walk skipped is asked for the moment it is looked at.
     const keepListed = (dir: () => string | undefined): void => {
         watch(
@@ -464,7 +403,8 @@ export function useWorkspaceTree() {
     // Closing the dir that failed retires its notice: the retry runs only while a dir is open, so a collapsed one would
     // never clear it.
     watch(expanded, (dirs, before) => {
-        if (loadNotice.value !== undefined && before.has(loadNotice.value.path) && !dirs.has(loadNotice.value.path)) {
+        const failed = failedListing();
+        if (failed !== undefined && before.has(failed) && !dirs.has(failed)) {
             clearLoadNotice();
         }
     });
@@ -475,10 +415,10 @@ export function useWorkspaceTree() {
     // under a working agent invalidates this about once a second — re-listing every folder ever opened, each a readdir
     // and a stat per file, is how one open folder of several thousand files became a second of daemon time per second.
     watch(query.data, () => {
-        // Iterating the live keys is safe: fetchChildren only writes this map after its first await.
+        // Iterating the live keys is safe: a read only writes this map after its first await.
         for (const path of lazyChildren.value.keys()) {
-            if (onScreen(path) && !lazyLoading.value.has(path)) {
-                void fetchChildren(path);
+            if (onScreen(path)) {
+                relist(path);
             }
         }
     });
@@ -488,8 +428,8 @@ export function useWorkspaceTree() {
     // the directory, so refetch exactly the loaded ones it touched (an empty batch means "unknown", so all of them).
     watch(changedDirs, ({ dirs }) => {
         for (const path of lazyChildren.value.keys()) {
-            if ((dirs.size === 0 || dirs.has(path)) && !lazyLoading.value.has(path)) {
-                void fetchChildren(path);
+            if (dirs.size === 0 || dirs.has(path)) {
+                relist(path);
             }
         }
     });

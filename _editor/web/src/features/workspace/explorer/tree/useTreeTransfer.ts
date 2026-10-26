@@ -42,6 +42,18 @@ export interface TreeTransferHost {
     readonly say: ReturnType<typeof useNotifications>["say"];
 }
 
+// Names already in the target dir; an unlisted dir is fetched first, so the check isn't made against a placeholder, and
+// opened while it is, so that round trip shows as the folder loading rather than as a paste that did nothing.
+const namesIn = async (host: TreeTransferHost, dir: string): Promise<ReadonlySet<string>> => {
+    const target = dir === host.rootDir() ? undefined : host.byPath.value.get(dir);
+    if (target !== undefined && isUnlisted(target)) {
+        host.openLanding(dir);
+        await host.store.loadChildren(dir);
+    }
+    const siblings = target === undefined ? host.tree() : host.childrenOf(target);
+    return new Set(siblings.map((child) => child.name));
+};
+
 export const useTreeTransfer = (host: TreeTransferHost) => {
     const { store, rules, selecting } = host;
     const { selection, lead } = selecting;
@@ -68,15 +80,6 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         return paths;
     };
 
-    // Names already in the target dir; an unlisted dir is fetched first, so the check isn't made against a placeholder.
-    const namesIn = async (dir: string): Promise<ReadonlySet<string>> => {
-        const target = dir === host.rootDir() ? undefined : host.byPath.value.get(dir);
-        if (target !== undefined && isUnlisted(target)) {
-            await store.loadChildren(dir);
-        }
-        const siblings = target === undefined ? host.tree() : host.childrenOf(target);
-        return new Set(siblings.map((child) => child.name));
-    };
     // What moving or copying `from` to `to` lands: the source's kind, read before the write takes the source away.
     const landedAs = (from: string, to: string): LandedEntry => ({ path: to, type: host.byPath.value.get(from)?.type ?? `file` });
     // Opens the target dir (and the nest folding it) and selects what landed, so a paste into a collapsed folder isn't invisible.
@@ -87,7 +90,7 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // A copy never overwrites, landing under a free name ("<name> copy"). Revealed before the write is awaited: its rows
     // are already on screen, and selecting them after the round trip would make the paste look like nothing happened.
     const copyInto = async (paths: readonly string[], dir: string, whenRefused: string): Promise<void> => {
-        const pairs = pastePairs(paths, dir, await namesIn(dir));
+        const pairs = pastePairs(paths, dir, await namesIn(host, dir));
         if (pairs.length === 0) {
             return;
         }

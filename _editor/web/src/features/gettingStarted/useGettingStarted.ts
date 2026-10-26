@@ -11,6 +11,7 @@ import { acpProviders, endpointProviders } from "../../models/providers/provider
 import { refreshConnections } from "../../models/conversations/accounts/useChat-accounts";
 import { accessKnown, firstReadyProvider, providerReady, trialPhase } from "../../models/providers/access";
 import { sharedWorkspaceTreeKey } from "../../models/workspace/tree/workspaceTreeKey";
+import { treeRead } from "../../models/workspace/changes/useWorkspaceLive";
 import { useGettingStartedChoices } from "./gettingStartedChoices";
 import { startAgent } from "../../models/fleet/agentActions";
 import { offered, type Progress, progress, type StepFacts, type StepId } from "../tour/steps";
@@ -65,7 +66,7 @@ const create = (): GettingStarted => {
     const { choices, heard, hide, show, skip } = useGettingStartedChoices();
     const { canShip } = useRole();
     // The shared tree, under the very entry the explorer reads it through, so this asks nothing the workspace does not.
-    const { query: tree } = useSandboxQuery({ queryKey: sharedWorkspaceTreeKey(), queryFn: () => sandboxRpc.workspace.tree({}) });
+    const { query: tree } = useSandboxQuery({ queryKey: sharedWorkspaceTreeKey(), queryFn: treeRead(() => sandboxRpc.workspace.tree({})) });
 
     const landedHere = (): boolean => workLanded(registry.value);
     const facts = computed<StepFacts>(() => {

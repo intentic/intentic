@@ -39,6 +39,7 @@ export const workspaceSliceFake = ({ iq }: WorkspaceFakeOverrides) =>
         files: fakeFiles(),
         workspaceTree: async () => ({ root: WORKSPACE_ROOT, tree: [], hidden: 0, barren: [] }),
         workspaceTreeChanged: () => undefined,
+        workspaceWritten: () => undefined,
         // Inert resident search, no index, no rg; the search route test overrides `run` with a canned outcome.
         iq: unstubbed<WorkspaceSlice["iq"]>("iq", {
             metrics: () => ({

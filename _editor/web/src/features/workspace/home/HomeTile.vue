@@ -7,6 +7,8 @@ import { focusInput } from "@intentic/ui/inline-rename";
 import { edgeFor, screenScale, thumbnailKind } from "../../../models/workspace/home/thumbnails";
 import { useTileArt } from "./useTileArt";
 import { useT } from "@intentic/ui/i18n";
+import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
+import { provisionalTooltip } from "../explorer/tree/treeRows";
 
 const t = useT();
 
@@ -29,7 +31,8 @@ const {
     selected?: boolean;
     // Kept private by the sandbox: opens its explanation, never its contents.
     locked?: boolean;
-    // Still arriving (an upload in flight): drawn where it will land, inert until the listing has it.
+    // Still arriving (a copy, move or upload in flight, or landed with the listing yet to catch up): drawn where it will
+    // land, turning, and inert until the listing has it.
     pending?: boolean;
     // Ignored by tooling, or a link that goes nowhere.
     dimmed?: boolean;
@@ -90,6 +93,7 @@ const { src, as, shown, failed, onPicture, onVideoMetadata, onVideoFrame, onErro
         :data-drop-dir="dropDir"
         :tabindex="tabindex"
         class="ui-row-select flex w-full flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2 text-center select-none"
+        v-tooltip.bottom="pending ? provisionalTooltip(provisionalAt(entry.path)) : undefined"
         :class="{ 'ui-row-select-on': selected, 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
         @click="emit('select', $event)"
         @dblclick="emit('open')"
@@ -135,6 +139,14 @@ const { src, as, shown, failed, onPicture, onVideoMetadata, onVideoFrame, onErro
             </span>
             <!-- The glyph holds the place until a thumbnail has painted, and stays where none can. -->
             <Icon v-if="!shown" :name="icon" class="text-[2.125rem]" :class="[color, src !== undefined && !failed ? 'absolute' : '']" />
+            <!-- The tree's own sign that it is on its way: a dimmed tile alone reads as disabled, not as working. -->
+            <span
+                v-if="pending"
+                class="pointer-events-none absolute top-0 right-2 flex size-4 items-center justify-center rounded-full bg-card ring-1 ring-line/60"
+                aria-hidden="true"
+            >
+                <Icon name="spinner" :spin="true" class="text-[0.6rem] text-subtle" />
+            </span>
             <!-- A link wears its target's glyph; the small mark says it is one. -->
             <Icon
                 v-if="entry.link !== undefined"

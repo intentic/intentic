@@ -48,6 +48,8 @@ serveCalls<WatchAsk & { readonly id: number }>(port, (ask) => {
             });
         case "ready":
             return queue.settled();
+        case "written":
+            return queue.change(async () => announce(await tree.apply(ask.paths)));
     }
 });
 

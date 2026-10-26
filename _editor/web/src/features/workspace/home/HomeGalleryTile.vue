@@ -8,6 +8,8 @@ import { focusInput } from "@intentic/ui/inline-rename";
 import { mediaBox } from "../../../models/workspace/home/mediaBoxes";
 import { edgeFor, screenScale, thumbnailKind } from "../../../models/workspace/home/thumbnails";
 import { useT } from "@intentic/ui/i18n";
+import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
+import { provisionalTooltip } from "../explorer/tree/treeRows";
 import { clampAspect, edgeNeeded, tooSmallFor } from "./homeGallery";
 import { useTileArt } from "./useTileArt";
 
@@ -136,6 +138,7 @@ const duration = computed(() => {
         :data-drop-dir="dropDir"
         :tabindex="tabindex"
         class="ui-row-select group flex shrink-0 flex-col rounded-lg p-1 select-none"
+        v-tooltip.bottom="pending ? provisionalTooltip(provisionalAt(entry.path)) : undefined"
         :class="{ 'ui-row-select-on': selected, 'ui-row-select-drop': dropTarget, 'opacity-60': pending, 'opacity-40': dragging }"
         @click="emit('select', $event)"
         @dblclick="emit('open')"
@@ -177,6 +180,14 @@ const duration = computed(() => {
             <!-- The glyph holds the place until the picture has painted, and stays where there is none. -->
             <span v-if="!shown" class="absolute inset-0 flex items-center justify-center" aria-hidden="true">
                 <Icon :name="icon" class="text-[2.5rem]" :class="[color, src !== undefined && !failed ? 'opacity-40' : '']" />
+            </span>
+            <!-- On its way in (HomeTile.vue's sign), where the expand button would sit: there is nothing to look at yet. -->
+            <span
+                v-if="pending"
+                class="pointer-events-none absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-card/85 ring-1 ring-line/60 backdrop-blur-sm"
+                aria-hidden="true"
+            >
+                <Icon name="spinner" :spin="true" class="text-[0.65rem] text-subtle" />
             </span>
             <span
                 v-if="kind === 'video'"

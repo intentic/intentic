@@ -1,6 +1,16 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import type { WorkspaceTree, WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged, workspaceChangedSince, workspaceChangeMark } from "./useWorkspaceLive";
+import {
+    applyTreeChanged,
+    changeEpochOf,
+    isRecentlyChanged,
+    markWorkspaceChanged,
+    treeRead,
+    workspaceChangedSince,
+    workspaceChangeMark,
+} from "./useWorkspaceLive";
 
 // Regression guard: the live-refresh invalidation must work with NO component mounted. It used to ride a
 // component-scoped watch behind an install-once flag: the /setup round-trip unmounted the installing shell,
@@ -69,5 +79,53 @@ describe(`markWorkspaceChanged`, () => {
         expect(workspaceChangedSince(mark)).toBe(false);
         markWorkspaceChanged([`c.txt`]);
         expect(workspaceChangedSince(mark)).toBe(true);
+    });
+});
+
+// A whole-tree read answered just before a delta, but landing just after it: the paste it carried vanished from the
+// explorer until something else in the workspace moved.
+describe(`treeRead`, () => {
+    const key = rpcKeyAt(`sb`, `workspace.tree`, { agent: undefined }, UNPERSISTED);
+    const entry = (name: string): WorkspaceTreeEntry => ({ name, path: name, type: `file` });
+    const tree = (generation: number, names: readonly string[]): WorkspaceTree => ({
+        root: WORKSPACE_ROOT,
+        tree: names.map(entry),
+        hidden: 0,
+        barren: [],
+        generation,
+    });
+    // A read held open until the test answers it, as a slow response would be.
+    const heldRead = () => {
+        let answer: (value: WorkspaceTree) => void = () => undefined;
+        const read = treeRead(() => new Promise<WorkspaceTree>((resolve) => (answer = resolve)))({ queryKey: key });
+        return { read, answer: (value: WorkspaceTree) => answer(value) };
+    };
+
+    afterEach(() => queryClient.clear());
+
+    it(`keeps the tree a delta patched in while the read was out over the older tree the read brings back`, async () => {
+        queryClient.setQueryData(key, tree(1, [`a.md`]));
+        const { read, answer } = heldRead();
+        applyTreeChanged({ from: 1, generation: 2, dirs: [{ path: ``, entries: [entry(`a copy.md`), entry(`a.md`)] }] });
+        answer(tree(1, [`a.md`]));
+        const kept = await read;
+        expect(kept.generation).toBe(2);
+        expect(kept.tree.map((listed) => listed.name)).toEqual([`a copy.md`, `a.md`]);
+    });
+
+    it(`takes a read that is newer than the patched tree`, async () => {
+        queryClient.setQueryData(key, tree(1, [`a.md`]));
+        const { read, answer } = heldRead();
+        applyTreeChanged({ from: 1, generation: 2, dirs: [{ path: ``, entries: [entry(`a.md`), entry(`b.md`)] }] });
+        answer(tree(3, [`a.md`, `b.md`, `c.md`]));
+        expect((await read).generation).toBe(3);
+    });
+
+    // A restarted daemon counts generations from zero again; with no delta in between, its smaller number is not older.
+    it(`takes a read with a smaller generation when no delta landed while it was out`, async () => {
+        queryClient.setQueryData(key, tree(40, [`a.md`]));
+        const { read, answer } = heldRead();
+        answer(tree(0, [`a.md`, `b.md`]));
+        expect((await read).generation).toBe(0);
     });
 });
