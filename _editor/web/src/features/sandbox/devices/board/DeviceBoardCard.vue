@@ -15,7 +15,7 @@ import { useT } from "@intentic/ui/i18n";
 //
 // It used to end on three figures (running, synced, ports) and a line per sandbox. Nobody chose a machine by those
 // counts, and the machine's page lists the sandboxes in full, so they went (2026-10-26): what a sandbox has wrong rides
-// the warnings band under its name, and the sandbox you are using is a mark beside the machine's name.
+// the warnings band under its name, and the sandbox you are using is a neutral chip beside the machine's name.
 //
 // The whole surface is one link into the machine's page; nothing on it is a control. Work in flight turns on it the
 // way it does on the page (deviceWork.ts), since the page that started it is usually not on screen any more.
@@ -60,7 +60,7 @@ const sideTip = (side: BoardEnvironment): Tip => ({
     ],
 });
 
-// "Runs the sandbox you're using", as a mark beside the name rather than a badge on a line of its own.
+// "Runs this sandbox", as a chip beside the name rather than a badge on a line of its own; the hover names it.
 const selfTip = computed<Tip | undefined>(() =>
     body.value.self === undefined
         ? undefined
@@ -91,14 +91,15 @@ const selfTip = computed<Tip | undefined>(() =>
                 <div class="flex min-w-0 items-center gap-2">
                     <span class="flex min-w-0 flex-1 items-center gap-1.5">
                         <span :id="titleId" class="min-w-0 truncate text-base font-semibold leading-6 text-content">{{ machine.label }}</span>
-                        <Icon
+                        <!-- Words, not a mark: a pin read as "pinned" (what it means everywhere else in the editor), and its
+                             blue read as one more status beside the verdict. This is identity, not health, so it wears the
+                             environment chips' neutral fill and says what it means. -->
+                        <span
                             v-if="selfTip"
                             v-tooltip.top="selfTip"
-                            name="pin"
-                            :class="toneInk(`info`, `shrink-0 text-sm`)"
-                            role="img"
-                            :aria-label="t(`sandbox.deviceBoardCard.yoursHere`)"
-                        />
+                            class="shrink-0 whitespace-nowrap rounded-md bg-content/5 px-1.5 py-0.5 text-2xs font-medium leading-4 text-muted"
+                            >{{ t(`sandbox.deviceBoardCard.yoursHere`) }}</span
+                        >
                     </span>
                     <StatusBadge :variant="verdict.variant" size="xs" :dot="true" :label="verdict.word" class="shrink-0" />
                 </div>
