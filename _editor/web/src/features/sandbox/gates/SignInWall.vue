@@ -162,12 +162,12 @@ const recover = (): Promise<void> => {
     return ceremony(t(`sandbox.signInWall.recoveryCodeRefused`), () => recoverWithCode(current.target, current.bearer, code.value));
 };
 
-// Opens the platform's sign-in page in the default browser; the deep-link return reloads this SPA, abandoning the
-// mint awaited here, and the adopted credential answers the call that follows instead. Until then the wall says the
-// sign-in is waiting in the browser (browserHandoff.ts).
+// Opens the platform's sign-in page in the default browser; the hand-off comes back to this same view and is taken in
+// place (features/auth/signInDialog.ts `arriveInPlace`), whose adopted credential answers the mint awaited here. Until
+// then the wall says the sign-in is waiting in the browser (browserHandoff.ts).
 const handoff = useBrowserHandoff();
 const waitingInBrowser = computed(() => desktop.value && handoff.waiting.value);
-const signInOutside = (): void => handoff.start();
+const signInOutside = (): void => handoff.start(router.currentRoute.value.fullPath);
 
 // A sandbox that has answered before and was not removed: its reader is at work, not in a setup. "Back to setup" sent
 // them to /setup, where the same wall came up again over a line saying the container was cleaned up.

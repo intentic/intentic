@@ -6,13 +6,16 @@ import type { DaemonSession } from "@intentic/sandbox-contract/schemas/system";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
+import { takeBrowserHandoffDestination } from "../../auth/browserHandoff";
 
 // Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
 const push = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
-    useRouter: () => ({ push, replace: jest.fn() }) as never,
+    // The view the wall stands over, which its hand-off to the browser comes back to.
+    // SAFETY: the wall reads nothing of the router but `push` and the current route's address.
+    useRouter: () => ({ push, replace: jest.fn(), currentRoute: ref({ fullPath: `/agents` }) }) as never,
 }));
 
 // Google's gate is open unless a test closes it: that is the state the overlay exists in.
@@ -270,6 +273,8 @@ it(`shows one browser instruction after handoff, with a quiet browser link and o
     expect([...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).toEqual([`Open browser`, `Not now`]);
     buttonSaying(`Open browser`)?.click();
     expect(signInThroughBrowser).toHaveBeenCalledTimes(2);
+    // The hand-off comes back to the view the wall stood over, not to the bare address (features/auth/signInDialog.ts).
+    expect(takeBrowserHandoffDestination()).toBe(`/agents`);
 
     buttonSaying(`Not now`)?.click();
     await settle();

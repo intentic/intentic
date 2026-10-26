@@ -163,7 +163,8 @@ const ANSWERS: PlatformAnswers = {
     },
     // Plan's on/off answer decides whether Settings shows the Billing tab.
     hostedPlan: { state: () => DEMO_HOSTED_PLAN },
-    me: { get: () => DEMO_USER },
+    // Both ways in, as the live platform offers them: the sign-in screens and the desktop app's dialog draw both.
+    me: { get: () => DEMO_USER, signInOptions: () => ({ google: true, email: true }) },
     invite: {
         list: roster,
         setRole: roster,

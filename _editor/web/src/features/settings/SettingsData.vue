@@ -2,8 +2,8 @@
 import { Button, Notice, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
 import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/analyticsConsent";
+import { leaveAfterSignOut } from "../../app/environments/afterSignOut";
 import { localHost } from "../../app/environments/localHost";
 import { apiClient } from "../../lib/useApi";
 import { useAccount } from "../../client/auth/useAccount";
@@ -19,7 +19,6 @@ const t = useT();
 
 const { deleteAccount } = useAuth();
 const { sandboxes } = useSandbox();
-const router = useRouter();
 
 // A desktop window on a folder knows only its folder, and deleting the account takes this account's access off every
 // sandbox first (useAuth.ts `deleteAccount`). So there it is done from the workspace, which knows them all; the export
@@ -78,11 +77,11 @@ const confirmDelete = async (): Promise<void> => {
     await removal.run({
         what: t(`settings.settingsData.deletingAccount`),
         failed: t(`settings.settingsData.accountDeletionFailed`),
-        // Ends on the login page, which is the answer.
+        // Ends where a sign-out ends (the login page; Home in the desktop app), which is the answer.
         quiet: true,
         task: async () => {
             await deleteAccount(sandboxes.value);
-            await router.push(`/login`);
+            leaveAfterSignOut();
         },
     });
 };

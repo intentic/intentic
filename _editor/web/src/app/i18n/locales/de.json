@@ -1053,6 +1053,14 @@
             "expired": "Diese Anmeldung war bereits abgelaufen. Melden Sie sich erneut in der App an.",
             "couldntFinish": "Die Anmeldung konnte nicht abgeschlossen werden."
         },
+        "signInDialog": {
+            "sessionEnded": "Sitzung beendet",
+            "signInAgain": "Erneut anmelden",
+            "ledeAsked": "Deine Sandboxes und Agenten liegen in deinem Konto.",
+            "ledeNeeded": "Dafür brauchst du dein Konto. Melde dich an, und es öffnet sich genau hier.",
+            "ledeLapsed": "Deine Sitzung ist abgelaufen. Melde dich erneut an und mach dort weiter, wo du warst.",
+            "notNow": "Nicht jetzt"
+        },
         "login": {
             "acceptableUsePolicy": "Richtlinie zur akzeptablen Nutzung",
             "and": "und",

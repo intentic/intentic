@@ -1053,6 +1053,14 @@
             "expired": "Ese inicio de sesión ya había caducado. Vuelve a iniciar sesión desde la app.",
             "couldntFinish": "No se pudo terminar de iniciar sesión."
         },
+        "signInDialog": {
+            "sessionEnded": "Sesión finalizada",
+            "signInAgain": "Vuelve a iniciar sesión",
+            "ledeAsked": "Tus sandboxes y agentes están en tu cuenta.",
+            "ledeNeeded": "Eso necesita tu cuenta. Inicia sesión y se abrirá aquí mismo.",
+            "ledeLapsed": "Tu sesión terminó. Vuelve a iniciar sesión y sigue donde lo dejaste.",
+            "notNow": "Ahora no"
+        },
         "login": {
             "acceptableUsePolicy": "Política de uso aceptable",
             "and": "y",

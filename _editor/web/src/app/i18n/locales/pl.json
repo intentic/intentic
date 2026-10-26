@@ -1053,6 +1053,14 @@
             "expired": "To logowanie już wygasło. Zaloguj się ponownie z aplikacji.",
             "couldntFinish": "Nie udało się dokończyć logowania."
         },
+        "signInDialog": {
+            "sessionEnded": "Sesja wygasła",
+            "signInAgain": "Zaloguj się ponownie",
+            "ledeAsked": "Twoje sandboksy i agenci są na Twoim koncie.",
+            "ledeNeeded": "To wymaga Twojego konta. Zaloguj się, a otworzy się właśnie tutaj.",
+            "ledeLapsed": "Twoja sesja wygasła. Zaloguj się ponownie, by kontynuować w tym samym miejscu.",
+            "notNow": "Nie teraz"
+        },
         "login": {
             "acceptableUsePolicy": "Zasady dopuszczalnego użytkowania",
             "and": "i",

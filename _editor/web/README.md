@@ -41,7 +41,8 @@ flowchart LR
   (`client/endpoint/endpoint.ts`).
 - **Two ways to sign in.** Google (one ID token minted in the browser, spent on the platform and on each daemon), or a
   six-digit code mailed to an address on any domain (Better Auth's email-OTP plugin, `client/auth/useAuth.ts`). One
-  mail carries one code, offered two ways: typed on `/login` (`features/auth/EmailCodeSignIn.vue`), or followed from
+  mail carries one code, offered two ways: typed on `/login` or in the desktop app's sign-in dialog
+  (`features/auth/EmailCodeSignIn.vue`), or followed from
   the mail's link to `/login/confirm`, which names the address and spends the code only on a press, since mail scanners
   fetch links; it clears the code from the address bar on mount and loads nothing from another origin (index.html keeps
   Google's script off it). The login page offers the code only where `GET /me/sign-in-options` says the platform mails
@@ -309,6 +310,12 @@ flowchart LR
   The general Workspace button asks for `/` explicitly, so returning from This computer cannot just reveal an old
   setup page. Before the shell sends an account to setup, it confirms a cached list with no working sandbox against
   a fresh platform list; a sandbox connected while the page was hidden opens through the workspace's connection flow.
+- **The desktop app signs in over the view.** In the app's workspace window (`app/environments/desktopWorkspace.ts`)
+  nothing navigates to a sign-in screen: a router guard (`router/signInPlace.ts`) turns every trip to `/login` into a
+  dialog over the view on screen (`features/auth/SignInDialog.vue`), or over Home when the page has nothing on screen
+  yet. The browser's hand-off coming back to a page already up is redeemed in that dialog, and the sign-in then enters
+  its destination through the shell's own entry guards. A session that lapses keeps its view under the dialog and is
+  entered again by a reload once signed back in. A sign-out lands on Home's first run. Browsers keep `/login`.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup` (`router/shellGates.ts`). The bare address opens
   **Home** (`/home`, the master view below) for everyone but a guest of a box, whose way in is its chat, and the

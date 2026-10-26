@@ -1053,6 +1053,14 @@
             "expired": "Cette connexion avait déjà expiré. Reconnectez-vous depuis l'application.",
             "couldntFinish": "Impossible de terminer la connexion."
         },
+        "signInDialog": {
+            "sessionEnded": "Session terminée",
+            "signInAgain": "Se reconnecter",
+            "ledeAsked": "Vos sandboxes et vos agents se trouvent dans votre compte.",
+            "ledeNeeded": "Il faut votre compte pour cela. Connectez-vous et cela s’ouvre ici même.",
+            "ledeLapsed": "Votre session a expiré. Reconnectez-vous et reprenez là où vous en étiez.",
+            "notNow": "Pas maintenant"
+        },
         "login": {
             "acceptableUsePolicy": "Politique d'usage acceptable",
             "and": "et",

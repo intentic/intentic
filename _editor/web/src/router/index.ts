@@ -15,6 +15,7 @@ import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
 import { setupRoutes } from "./setupRoutes";
 import { installNativeApp } from "./nativeHandoff";
+import { installSignInPlace } from "./signInPlace";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
@@ -506,6 +507,9 @@ router.beforeEach((_to, from) => {
 router.beforeEach((to, from) => (coldStartAtRoot(to, from === START_LOCATION) && installedApp() ? (lastRoute(Date.now()) ?? true) : true));
 // Older removal receipts must reach recovery even from an account page with no active sandbox.
 router.beforeEach((to) => (to.path === DEVICES_PATH && to.hash === `#${DELETED_ANCHOR}` ? DELETED_PATH : true));
+// The desktop app asks for a sign-in over the view, never instead of it (signInPlace.ts). Before every guard that might
+// send the reader somewhere for the screen it replaces.
+installSignInPlace(router);
 // From Home, a sandbox's own view (its Models, today) is shown where Home's chat was, with the way back to it, rather than
 // entered: every door to it is covered at once, so none has to know it was pressed on Home (lib/routes/homeDetour.ts).
 router.beforeEach((to, from) => homeViewGuard(to, from));
@@ -559,9 +563,15 @@ router.onError((error, to) => {
 // health, so clearing here risks a reload loop on a broken deploy. A chunk that loads clears it (`loadChunk`).
 
 // Sets the tab title to `<Page> / intentic` from the route's `title`, falling back to the bare brand when none is
-// declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot.
+// declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot; only for
+// one that landed, since a navigation a guard stopped (the desktop app's sign-in, asked in a dialog over the view) leaves
+// the reader on the page whose title is already up.
 // The tab's mark (what needs you, what finished) is put in front of it by shell/browser-tab/browserTab.ts.
-router.afterEach((to) => setPageTitle(to.meta.title?.()));
+router.afterEach((to, _from, failure) => {
+    if (failure === undefined) {
+        setPageTitle(to.meta.title?.());
+    }
+});
 
 // Last, after the table's own hooks: everything below composition navigates through this registry, and the afterEach
 // hooks it queued run after the ones above, as they did when those modules imported this one.

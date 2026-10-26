@@ -360,9 +360,12 @@ flowchart LR
   while the app runs does nothing. The row's tick is read back from the registry or the file after every press.
 - **Google's sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The
   credential returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`)
-  and opens the workspace at `/desktop-auth/complete`, in the main window's place. An account that signs in by emailed
-  code needs no browser: the code is typed on the app's own `/login`, since the mail's link would open the system
-  browser instead. Its hand-off from the browser, when it signed in there, carries the session alone (no Google token),
+  and opens the workspace at `/desktop-auth/complete`, in the main window's place. The workspace never shows a sign-in
+  screen of its own (2026-10-26): wherever it would have gone to `/login` (Home's Sign in, Add sandbox signed out, a page
+  that needs an account, a session that lapsed), it asks in a dialog over the view it is on, and a completion that
+  reaches a page already showing something is redeemed in that dialog, so the reader stays on that view (the web's
+  `features/auth/signInDialog.ts`). An account that signs in by emailed code needs no browser: the code is typed in that
+  dialog, since the mail's link would open the system browser instead. Its hand-off from the browser, when it signed in there, carries the session alone (no Google token),
   and the workspace's daemon sessions come from the platform's identity assertions.
 - **The last face.** `last-face.json` (`home` or `workspace`) is the face the user was last seen choosing: every
   showing of the workspace writes `workspace`, and the main window shown on purpose (a launch into it, the tray's "This

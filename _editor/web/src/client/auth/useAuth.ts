@@ -32,6 +32,11 @@ const { clearSessions, retireAccountAccess } = useSandboxSession();
 // allow(module-state): the signed-in account, above every sandbox
 const user = ref<User | null>(null);
 let refreshing: Promise<User | null> | undefined;
+// Whether the account is leaving because the reader asked (a sign-out, a deletion) rather than because its session ended:
+// the page goes elsewhere by itself then (afterSignOut.ts), and nothing should ask to sign in again on the way out. Never
+// cleared: a page that signed out on purpose is about to be replaced.
+// allow(module-state): about this page's life, which the sign-out's own navigation ends
+let leaving = false;
 
 // How the account signs in, which the session's own answer does not carry: asked of /me once per account and kept, since
 // it changes only when Google is linked, and linking returns through Google's redirect, which loads the page afresh. A
@@ -179,6 +184,7 @@ const signOut = async (): Promise<void> => {
     if (user.value !== null) {
         forgetAccount(user.value.email);
     }
+    leaving = true;
     await invalidatePlatformAuth();
 };
 
@@ -208,6 +214,7 @@ const deleteAccount = async (sandboxes: readonly SandboxSummary[]): Promise<void
     if (error) {
         throw new Error(error.message ?? t(`auth.useAuth.accountDeletionFailed`));
     }
+    leaving = true;
     await invalidatePlatformAuth();
 };
 
@@ -239,6 +246,7 @@ export function useAuth() {
         updateProfile,
         deleteAccount,
         enterDirect,
+        signingOut: (): boolean => leaving,
     };
 }
 

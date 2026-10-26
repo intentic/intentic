@@ -6,7 +6,7 @@
 
 import { deviceKey, removeStoredValue, storedValue, storeValue } from "./browserStorage";
 
-const REASONS = [`update`, `stale-chunk`, `self-heal`, `opener-fallback`, `sign-out`] as const;
+const REASONS = [`update`, `stale-chunk`, `self-heal`, `opener-fallback`, `sign-out`, `sign-in`] as const;
 export type ReloadReason = (typeof REASONS)[number];
 
 // A device-scope key: the note is about this tab's next load, not about whoever is signed in.

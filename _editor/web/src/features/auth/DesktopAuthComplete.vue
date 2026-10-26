@@ -1,19 +1,16 @@
 <!-- Where the browser's handoff lands, inside the app: the same entry material, at the size of a two-second wait. -->
 <script setup lang="ts">
 import { AppBrand, Button, Notice, type NoticeModel } from "@intentic/ui";
-import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiClient } from "../../lib/useApi";
-import { useAuth } from "../../client/auth/useAuth";
-import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
-import { environment } from "../../app/environments/environment";
 import { openAgentOnThisComputer } from "../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 import { takeBrowserHandoffDestination } from "./browserHandoff";
+import { readDesktopHandoff, redeemDesktopHandoff } from "./redeemHandoff";
 
-// Redeem the browser's single-use row, verify the Better Auth token for a Set-Cookie session, then adopt any Google ID token.
-// Accounts without Google use platform identity assertions from that new session instead.
+// The hand-off's landing in a workspace window that had nothing on screen yet (a sign-in begun on a folder of this
+// computer, before the workspace was ever opened). A window already showing a view takes it there instead, in the
+// sign-in dialog (signInDialog.ts `arriveInPlace`); the redemption is the same (redeemHandoff.ts).
 // Read back=agent before replacing the route; return to the requesting folder first, then mount the workspace to announce the account roster.
 // This link cannot be retried after failure: sign in again rather than reload.
 
@@ -21,45 +18,20 @@ const t = useT();
 
 const route = useRoute();
 const router = useRouter();
-const { refresh } = useAuth();
-const { adoptIdToken } = useGoogleIdentity();
 
 const error = ref<NoticeModel | undefined>(undefined);
 
 const complete = async (): Promise<void> => {
-    const handoff = route.query[`handoff`];
-    const verifier = route.query[`verifier`];
-    const backToFolder = route.query[`back`] === `agent`;
-    if (typeof handoff !== `string` || handoff === `` || typeof verifier !== `string` || verifier === ``) {
-        error.value = noticeOf(t(`auth.desktopAuthComplete.linkIncomplete`));
+    const taken = readDesktopHandoff(route.query);
+    error.value = await redeemDesktopHandoff(taken);
+    if (error.value !== undefined || taken === undefined) {
         return;
     }
-    try {
-        const { ott, idToken } = await apiClient.desktop.redeem({ handoff, verifier });
-        // Called directly, not through oRPC: this lives under /api/auth. Only its Set-Cookie matters, not the body.
-        const verified = await globalThis.fetch(`${environment.api.url}/api/auth/one-time-token/verify`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            credentials: `include`,
-            body: JSON.stringify({ token: ott }),
-        });
-        if (!verified.ok) {
-            error.value = noticeOf(t(`auth.desktopAuthComplete.expired`));
-            return;
-        }
-        if (idToken !== undefined && !adoptIdToken(idToken)) {
-            error.value = noticeOf(t(`auth.desktopAuthComplete.expired`));
-            return;
-        }
-        await refresh();
-        const destination = takeBrowserHandoffDestination();
-        if (backToFolder) {
-            openAgentOnThisComputer();
-        }
-        await router.replace(backToFolder ? `/` : destination);
-    } catch (err) {
-        error.value = noticeFrom(err, t(`auth.desktopAuthComplete.couldntFinish`));
+    const destination = takeBrowserHandoffDestination();
+    if (taken.backToFolder) {
+        openAgentOnThisComputer();
     }
+    await router.replace(taken.backToFolder ? `/` : destination);
 };
 
 onMounted(() => void complete());

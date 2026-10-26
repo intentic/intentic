@@ -1053,6 +1053,14 @@
             "expired": "That sign-in had already expired. Sign in from the app again.",
             "couldntFinish": "Couldn't finish signing in."
         },
+        "signInDialog": {
+            "sessionEnded": "Session ended",
+            "signInAgain": "Sign in again",
+            "ledeAsked": "Your sandboxes and agents live in your account.",
+            "ledeNeeded": "That needs your account. Sign in and it opens right here.",
+            "ledeLapsed": "Your session ended. Sign in again and carry on where you were.",
+            "notNow": "Not now"
+        },
         "login": {
             "acceptableUsePolicy": "Acceptable Use Policy",
             "and": "and",

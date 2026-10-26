@@ -449,8 +449,15 @@ const cancelSignIn = (): void => {
 // For a credential minted elsewhere (the desktop app's webview, which can't run GIS, hands off through the real
 // browser instead). Cached the same way a local mint is, indistinguishable to the daemon; a malformed or expired
 // JWT is refused rather than cached, since a cached dead token is a gate that never resolves.
+// A mint already waiting on this window's Google sign-in (a sandbox's sign-in wall, in the desktop app) is answered by
+// the credential the browser brought back: the hand-off is taken in place now (signInDialog.ts), not by a page load that
+// abandoned the wait, so a wait left open here would hold its sandbox's sign-in for good.
 const adoptIdToken = (credential: string): boolean => {
-    return acceptCredential(credential);
+    if (!acceptCredential(credential)) {
+        return false;
+    }
+    settle?.(credential);
+    return true;
 };
 
 export function useGoogleIdentity() {

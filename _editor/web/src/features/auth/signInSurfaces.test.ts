@@ -12,7 +12,9 @@ import * as actualDesktop from "../../app/environments/desktop";
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
     useRoute: () => ({ query: { state: `nonce`, challenge: `chal` }, params: {} }) as never,
-    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
+    // The view a surface stands over, which a hand-off to the browser comes back to (SignInWall.vue).
+    // SAFETY: the surfaces read nothing of the router but `push`, `replace` and the current route's address.
+    useRouter: () => ({ push: jest.fn(), replace: jest.fn(), currentRoute: ref({ fullPath: `/agents` }) }) as never,
 }));
 
 // renderButton mimics the real mechanism (false in the desktop window, true elsewhere), since what's under test is

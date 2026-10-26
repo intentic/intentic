@@ -11,12 +11,15 @@ import { startNotificationSources } from "./shell/notifications/notificationSour
 import { startRememberingSandboxes } from "./features/sandbox/recovery/rememberSandboxes";
 import NotificationHost from "./workbench/notifications/NotificationHost.vue";
 import SignInWall from "./features/sandbox/gates/SignInWall.vue";
+import SignInDialog from "./features/auth/SignInDialog.vue";
+import { askSignIn } from "./features/auth/signInDialog";
+import { desktopWorkspace } from "./app/environments/desktopWorkspace";
 import WindowControls from "./workbench/window/WindowControls.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
 import LocalRuntime from "./local/LocalRuntime.vue";
 import { localFace } from "./app/environments/local";
 
-const { user } = useAuth();
+const { user, signingOut } = useAuth();
 const { activeSandboxId } = useSandbox();
 const router = useRouter();
 // A window on a folder of the user's own disk keeps only the file stream alive (local/LocalRuntime.vue).
@@ -31,11 +34,23 @@ startNotificationSources();
 // What this device remembers of the account's sandboxes, for when the platform cannot list them (features/sandbox/recovery).
 startRememberingSandboxes();
 
+// The desktop app's workspace asks for a sign-in in a dialog over the view rather than on /login (features/auth/signInDialog.ts).
+const signsInInPlace = desktopWorkspace();
+
 // A confirmed platform 401, server-side expiry, or another tab signing out clears the shared user ref. The
-// runtime above the route unmounts immediately; move the stale shell itself to login as the same global event.
+// runtime above the route unmounts immediately; move the stale shell itself to login as the same global event. In the
+// desktop app the view stays where it was, under the dialog asking for the sign-in again: the window has no address bar
+// to get back to it by. A sign-out the reader asked for leaves by its own road (afterSignOut.ts), with nothing to ask.
 watch(user, (current, previous) => {
-    if (current === null && previous !== null) {
+    if (current !== null || previous === null) {
+        return;
+    }
+    if (!signsInInPlace) {
         void router.replace(`/login`);
+        return;
+    }
+    if (!signingOut()) {
+        askSignIn(route.fullPath, `lapsed`);
     }
 });
 </script>
@@ -45,6 +60,7 @@ watch(user, (current, previous) => {
     <WorkspaceRuntime v-if="user && activeSandboxId && !local && workspaceTab" />
     <LocalRuntime v-if="user && activeSandboxId && local" />
     <SignInWall />
+    <SignInDialog v-if="signsInInPlace" />
     <HostModelPicker />
     <AiLiteracyNotice v-if="user && activeSandboxId && !local && workspaceTab" />
 <!-- THE ONE LANE. -->
