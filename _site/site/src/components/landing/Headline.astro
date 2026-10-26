@@ -1,6 +1,9 @@
 ---
+import SharedAgentEmblem from "./SharedAgentEmblem.astro";
+
 interface Props {
     lines: string[];
+    shared?: boolean;
 }
 
 // Sentence beats retain spaces so assistive text and crawlers read the full headline.
@@ -15,11 +18,34 @@ const beats = Astro.props.lines
         beats.map((beat, index) => (
             <>
                 <span class="headline-line">
-                    <span class="display">{beat}</span>
-                    <span class="stop">.</span>
+                    {Astro.props.shared && index === 0 && beat.includes(" ") ? (
+                        <>
+                            <span class="headline-phrase">
+                                <span class="display">{beat.slice(0, beat.indexOf(" "))}</span>
+                                <SharedAgentEmblem />
+                            </span>{" "}
+                            <span class="headline-phrase">
+                                <span class="display">{beat.slice(beat.indexOf(" ") + 1)}</span>
+                                <span class="stop">.</span>
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <span class="display">{beat}</span>
+                            <span class="stop">.</span>
+                        </>
+                    )}
                 </span>
                 {index < beats.length - 1 && " "}
             </>
         ))
     }
 </h1>
+
+<style>
+    /* Keep the emblem with “Shared” and the final words together when a small screen needs two lines. */
+    .headline-phrase {
+        display: inline-block;
+        white-space: nowrap;
+    }
+</style>
