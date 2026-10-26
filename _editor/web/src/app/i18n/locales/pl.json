@@ -13225,6 +13225,12 @@
                 "refused": "Nie udało się utworzyć",
                 "opening": "Pierwsze uruchomienie"
             }
+        },
+        "otherSandboxes": {
+            "label": "Wszystkie sandboksy: {names}",
+            "needing": "{count} czeka na ciebie | {count} czekają na ciebie | {count} czeka na ciebie",
+            "waiting": "Czekają na ciebie",
+            "quiet": "Nic nie czeka"
         }
     },
     "hostedStart": {

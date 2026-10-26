@@ -13225,6 +13225,12 @@
                 "refused": "Could not be created",
                 "opening": "Starting for the first time"
             }
+        },
+        "otherSandboxes": {
+            "label": "All sandboxes: {names}",
+            "needing": "{count} needs you | {count} need you",
+            "waiting": "Waiting for you",
+            "quiet": "Nothing waiting"
         }
     },
     "hostedStart": {

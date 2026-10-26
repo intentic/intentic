@@ -61,3 +61,34 @@
 .icon-rail-divider {
     width: var(--icon-rail-divider-width);
 }
+
+/* THE OTHER SANDBOXES, under the switcher (OtherSandboxes.vue): three circles folded like the Olympic rings, sized from
+   the tile so they follow the rail's width. The box is the cluster's own (1.78 by 1.68 diameters, the furthest any circle
+   reaches); the press target around it is the tile's width and only as tall as the cluster needs, so it costs the rail
+   about two thirds of a tile. */
+.icon-rail-cluster {
+    --cluster-d: calc(var(--icon-rail-tile-size) * 0.4);
+    width: var(--icon-rail-tile-size);
+    height: calc(var(--cluster-d) * 1.68 + var(--icon-rail-gap));
+}
+
+.icon-rail-cluster-box {
+    width: calc(var(--cluster-d) * 1.78);
+    height: calc(var(--cluster-d) * 1.68);
+}
+
+/* Each circle cut out of the ones beneath by a ring of the rail's own ground, the way a badge's plate is (--ui-tile-ground). */
+.icon-rail-cluster-circle {
+    width: var(--cluster-d);
+    height: var(--cluster-d);
+    font-size: calc(var(--cluster-d) * 0.5);
+    box-shadow: 0 0 0 calc(var(--cluster-d) * 0.09) var(--ui-tile-ground);
+}
+
+.icon-rail-cluster-point {
+    width: calc(var(--cluster-d) * 0.42);
+    height: calc(var(--cluster-d) * 0.42);
+    top: calc(var(--cluster-d) * -0.1);
+    right: calc(var(--cluster-d) * -0.1);
+    box-shadow: 0 0 0 calc(var(--cluster-d) * 0.09) var(--ui-tile-ground);
+}

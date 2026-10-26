@@ -45,6 +45,7 @@ import { appTargetId } from "../models/preview/previewModel";
 import { openPreviewOnFirstVisit } from "../workbench/browsers/browsersSurface";
 import AccountPanel from "./AccountPanel.vue";
 import MasterRail from "./rail/MasterRail.vue";
+import OtherSandboxes from "./rail/OtherSandboxes.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { terminalSlot } from "../workbench/window/panelSlots";
@@ -392,8 +393,10 @@ useGettingStarted();
         <MasterRail v-if="masterRail" />
         <nav v-else ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <!-- Top of the rail: switch between sandboxes, add one, or manage access. No Home tile above it, by the owner's
-                 decision (it came back once already): the way out to Home is the switcher's own header mark and Mod+Alt+H. -->
+                 decision (it came back once already): the way out to Home is the other sandboxes' cluster under it, which
+                 a guest, fenced out of Home, never sees; then the switcher's own header mark and Mod+Alt+H. -->
             <SandboxSwitcher />
+            <OtherSandboxes v-if="!isGuest" />
             <!-- Other members connected right now, live from the daemon's /events roster. -->
             <PresenceAvatars :members="presenceOthers" direction="column" :size="28" />
             <!-- `my-1`, as on the other hairline: with `mb-1` alone this one sat off-centre in its own air. -->

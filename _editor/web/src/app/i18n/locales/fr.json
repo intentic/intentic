@@ -13225,6 +13225,12 @@
                 "refused": "N'a pas pu être créé",
                 "opening": "Premier démarrage"
             }
+        },
+        "otherSandboxes": {
+            "label": "Tous les sandboxes : {names}",
+            "needing": "{count} a besoin de vous | {count} ont besoin de vous",
+            "waiting": "Vous attendent",
+            "quiet": "Rien en attente"
         }
     },
     "hostedStart": {
