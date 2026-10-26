@@ -53,9 +53,10 @@ export const moveTargetOf = (status: EngineStatus): MoveTarget | undefined => {
     }
 };
 
-/** A sandbox's step, as ic names them. */
-export type MoveStep = `begin` | `stopping` | `image` | `volume` | `starting` | `moved`;
-const STEPS: ReadonlySet<string> = new Set<MoveStep>([`begin`, `stopping`, `image`, `volume`, `starting`, `moved`]);
+/** A move's step, as ic names them: `source` (Docker Desktop started to read its sandboxes) before any sandbox, then each
+ *  sandbox's own. */
+export type MoveStep = `source` | `begin` | `stopping` | `image` | `volume` | `starting` | `moved`;
+const STEPS: ReadonlySet<string> = new Set<MoveStep>([`source`, `begin`, `stopping`, `image`, `volume`, `starting`, `moved`]);
 
 /** Who started a move, which decides what ends it on this window's screen. */
 export type MoveSource =

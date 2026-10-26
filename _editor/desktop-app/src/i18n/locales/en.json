@@ -240,6 +240,7 @@
         "whileMoving": "Each sandbox stops while its files are copied. If anything goes wrong, every sandbox is put back as it was.",
         "step": {
             "engine": "Installing Intentic's engine first",
+            "source": "Waiting for Docker Desktop to start",
             "begin": "Getting ready",
             "stopping": "Stopping it",
             "image": "Copying its image",
@@ -585,6 +586,21 @@
         "unknown": "Something stopped Intentic from reading whether this PC can run agents. Check again, or set it up anyway: the setup finds out for itself.",
         "needsYou": "Windows is asking for your permission. Choose Yes to continue.",
         "minutesLeft": "{count} min left",
+        "doing": {
+            "wsl-features": "Turning on the Windows features agents need",
+            "wsl-kernel": "Updating Linux support for Windows",
+            "docker-desktop": "Installing Docker Desktop",
+            "docker-path": "Finding Docker on this PC",
+            "docker-users": "Letting this account use Docker",
+            "docker-running": "Starting Docker Desktop",
+            "docker-linux-containers": "Switching Docker to Linux containers",
+            "engine": "Installing Intentic's engine",
+            "engine-start": "Starting Intentic's engine",
+            "engine-move": "Moving your sandboxes to Intentic's engine"
+        },
+        "moving": {
+            "reading": "Looking at your sandboxes on Docker Desktop"
+        },
         "quiet": {
             "title": "No word from the setup for {count} minutes",
             "body": "Windows may be waiting for an answer in a window behind this one, so look in the taskbar first. If nothing is waiting there, the log shows the last thing the setup did, and you can start it again.",

@@ -100,6 +100,9 @@ const mapSetup = (raw: OnboardingSetup): LocalPcSetup => {
             needsYou: needsYou ? true : undefined,
             quietMinutes:
                 raw.quietSince === undefined ? undefined : Math.max(0, Math.floor((Date.now() / 1000 - raw.quietSince) / 60)),
+            row: raw.row,
+            reading: raw.reading,
+            moving: raw.moving,
         };
     }
     if (raw.state === `waiting`) {

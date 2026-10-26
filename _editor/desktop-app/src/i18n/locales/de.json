@@ -240,6 +240,7 @@
         "whileMoving": "Jede Sandbox stoppt, während ihre Dateien kopiert werden. Wenn etwas schiefgeht, wird jede Sandbox wieder so hergestellt, wie sie war.",
         "step": {
             "engine": "Zuerst wird die Intentic-Engine installiert",
+            "source": "Warten, bis Docker Desktop gestartet ist",
             "begin": "Wird vorbereitet",
             "stopping": "Wird gestoppt",
             "image": "Image wird kopiert",
@@ -585,6 +586,21 @@
         "unknown": "Etwas hat Intentic daran gehindert auszulesen, ob dieser PC Agenten ausführen kann. Prüfen Sie erneut, oder richten Sie ihn trotzdem ein: Die Einrichtung findet es selbst heraus.",
         "needsYou": "Windows bittet um Ihre Erlaubnis. Wählen Sie „Ja“, um fortzufahren.",
         "minutesLeft": "noch {count} Min.",
+        "doing": {
+            "wsl-features": "Die Windows-Funktionen für Agenten werden eingeschaltet",
+            "wsl-kernel": "Die Linux-Unterstützung für Windows wird aktualisiert",
+            "docker-desktop": "Docker Desktop wird installiert",
+            "docker-path": "Docker wird auf diesem PC gesucht",
+            "docker-users": "Dieses Konto erhält Zugriff auf Docker",
+            "docker-running": "Docker Desktop wird gestartet",
+            "docker-linux-containers": "Docker wird auf Linux-Container umgestellt",
+            "engine": "Die Intentic-Engine wird installiert",
+            "engine-start": "Die Intentic-Engine wird gestartet",
+            "engine-move": "Ihre Sandboxes werden auf die Intentic-Engine verschoben"
+        },
+        "moving": {
+            "reading": "Ihre Sandboxes in Docker Desktop werden geprüft"
+        },
         "quiet": {
             "title": "Seit {count} Minuten keine Rückmeldung von der Einrichtung",
             "body": "Windows wartet vielleicht in einem Fenster hinter diesem auf eine Antwort, schauen Sie also zuerst in die Taskleiste. Wartet dort nichts, zeigt das Protokoll, was die Einrichtung zuletzt getan hat, und Sie können sie erneut starten.",

@@ -506,6 +506,8 @@ fn ready_source(from: Kind) -> Result<Target> {
     };
     if !answers(&source) {
         if source == Target::DockerDesktop {
+            // Up to five minutes with nothing else to say: the app's card says what the move waits for meanwhile.
+            say("", "source", json!({ "starting": "dockerDesktop" }));
             start_docker_desktop();
             if wait_answering(&source, Duration::from_secs(300)) {
                 return Ok(source);

@@ -70,6 +70,13 @@ describe(`a move under way`, () => {
         expect(barOf(fold(installing, said(`engine`, { slug: ``, sentence: `Starting it`, percent: null })))).toBeUndefined();
     });
 
+    it(`says it waits for Docker Desktop to start before any sandbox, with a bar that moves on its own`, () => {
+        const waiting = fold(startMove(`intentic`, `ours`), said(`source`, { slug: ``, starting: `dockerDesktop` }));
+        expect(waiting.step).toBe(`source`);
+        expect(waiting.slug).toBeUndefined();
+        expect(barOf(waiting)).toBeUndefined();
+    });
+
     it(`goes sandbox by sandbox, each step in turn, the install over once the first begins`, () => {
         const begun = fold(
             startMove(`intentic`, `ours`),

@@ -240,6 +240,7 @@
         "whileMoving": "Chaque sandbox s'arrête pendant la copie de ses fichiers. En cas de problème, chaque sandbox est remis dans son état d'origine.",
         "step": {
             "engine": "Installation préalable du moteur d'Intentic",
+            "source": "En attente du démarrage de Docker Desktop",
             "begin": "Préparation",
             "stopping": "Arrêt",
             "image": "Copie de son image",
@@ -585,6 +586,21 @@
         "unknown": "Quelque chose a empêché Intentic de déterminer si ce PC peut faire tourner des agents. Vérifiez à nouveau, ou préparez-le quand même : l'installation le découvrira d'elle-même.",
         "needsYou": "Windows demande votre autorisation. Choisissez « Oui » pour continuer.",
         "minutesLeft": "encore {count} min",
+        "doing": {
+            "wsl-features": "Activation des fonctionnalités Windows dont les agents ont besoin",
+            "wsl-kernel": "Mise à jour de la prise en charge de Linux dans Windows",
+            "docker-desktop": "Installation de Docker Desktop",
+            "docker-path": "Recherche de Docker sur ce PC",
+            "docker-users": "Accès à Docker pour ce compte",
+            "docker-running": "Démarrage de Docker Desktop",
+            "docker-linux-containers": "Passage de Docker aux conteneurs Linux",
+            "engine": "Installation du moteur d'Intentic",
+            "engine-start": "Démarrage du moteur d'Intentic",
+            "engine-move": "Déplacement de vos sandboxes vers le moteur d'Intentic"
+        },
+        "moving": {
+            "reading": "Examen de vos sandboxes dans Docker Desktop"
+        },
         "quiet": {
             "title": "Aucune nouvelle de l'installation depuis {count} minutes",
             "body": "Windows attend peut-être une réponse dans une fenêtre derrière celle-ci : regardez d'abord dans la barre des tâches. Si rien n'y attend, le journal montre la dernière chose que l'installation a faite, et vous pouvez la relancer.",

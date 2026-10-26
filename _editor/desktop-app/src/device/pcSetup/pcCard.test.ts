@@ -1,5 +1,5 @@
 import type { LocalCheckRow, LocalFirstTask, LocalPcCheck } from "@intentic/web/local-host";
-import { checksPassed, minutesLeft, movesSandboxes, offersWork, pcCardPhase, type PcCardInput, pcSteps, taskStart, unmetRows } from "./pcCard";
+import { carriesMove, checksPassed, minutesLeft, movesSandboxes, offersWork, pcCardPhase, type PcCardInput, pcSteps, taskStart, unmetRows } from "./pcCard";
 
 // What This computer's card for this PC says, from what the app last said about the PC, its setup, who is signed in,
 // whether a sandbox runs here already, and the first task.
@@ -161,5 +161,18 @@ describe(`the sandbox move a setup includes`, () => {
         expect(movesSandboxes(check(`needsSetup`, [row(`engine`, `ours`), row(`engine-move`, `met`)]))).toBe(false);
         expect(movesSandboxes(check(`needsSetup`, [row(`engine`, `ours`)]))).toBe(false);
         expect(movesSandboxes(undefined)).toBe(false);
+    });
+
+    it(`is the card's to tell while its setup runs or is still to finish, so the engine card stands back`, () => {
+        const moving = check(`needsSetup`, [row(`engine`, `ours`), row(`engine-move`, `ours`)]);
+        for (const phase of [`needsSetup`, `restart`, `admin`, `signOut`, `setupFailed`] as const) {
+            expect(carriesMove(phase, moving)).toBe(true);
+            expect(carriesMove(phase, check(`needsSetup`, [row(`engine`, `ours`)]))).toBe(false);
+        }
+        // A setup under way is changing the engine whatever the check before it said.
+        expect(carriesMove(`settingUp`, undefined)).toBe(true);
+        // A ready PC's card is about the sign-in or a first task: the engine card is the engine's again.
+        expect(carriesMove(`signIn`, moving)).toBe(false);
+        expect(carriesMove(`hidden`, moving)).toBe(false);
     });
 });

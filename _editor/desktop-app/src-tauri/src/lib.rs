@@ -33,6 +33,7 @@ mod resume;
 mod sandbox_wakes;
 mod scripts;
 mod setup_link;
+mod setup_move;
 mod setup_progress;
 mod shell;
 mod shown;

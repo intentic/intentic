@@ -3,7 +3,7 @@ import type { ResourcesForm } from "@intentic/ui";
 import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { LocalFirstTask, LocalFolderCopy, LocalFound } from "@intentic/web/local-host";
+import type { LocalFirstTask, LocalFolderCopy, LocalFound, LocalPcSetupRow } from "@intentic/web/local-host";
 import type { FixEnd } from "./fixReport";
 
 // Typed surface over the Rust commands in src-tauri/src/commands.rs. The native side just runs the shipped scripts
@@ -255,7 +255,7 @@ export interface OnboardingPrefetch {
 }
 
 export type OnboardingSetup =
-    | {
+    | ({
           readonly state: `running`;
           readonly step?: string;
           readonly percent: number;
@@ -266,7 +266,7 @@ export type OnboardingSetup =
           /** It has said nothing since then (seconds since the epoch), for twenty minutes or more; and its transcript. */
           readonly quietSince?: number;
           readonly log?: string;
-      }
+      } & LocalPcSetupRow)
     | { readonly state: `idle` }
     | { readonly state: `waiting`; readonly for: `admin` | `restart` | `signOut`; readonly restartAt?: number }
     | { readonly state: `ready` }

@@ -991,6 +991,21 @@ it waits or failed, and shows a quiet mark while it is offered (`src/device/badg
 > this PC" beside a green check: signed out on a ready PC, its biggest element was a first-task box that could do
 > nothing yet, and the one action that mattered, Sign in, was a small button between two rules.
 
+While the setup runs, step one (`pcSetup/PcSetupRunning.vue`) names the requirement it is on in the app's words
+(`desktop.pcSetup.doing.*`, from the row id the setup's payload carries; `ic`'s own sentence only for an id the catalog
+lacks), with the minutes left and the percent above the bar. Under the bar it says how that row stands
+(`pcSetup/setupLine.ts`). On the `engine-move` row, `ic` moves this PC's sandboxes off Docker Desktop inside the setup
+and prints the same `intentic-move:` lines as the engine card's move. `onboarding.rs` reads them through
+`setup_move.rs`, so the line names the sandbox in hand, which of how many, its step and its bytes. The row's share of
+the bar fills as they copy. Any other row shows `ic`'s latest reading when it differs from the sentence the row opened
+with. While this card carries the move (the setup is running, or still has to finish one that moves sandboxes), the
+engine card stands back (`pcCard.ts` `carriesMove`), so the move appears in one place only.
+
+> 2026-10-26: a reader's setup sat at 50% with "8 min left" for the whole move. The setup counted it as one row with
+> no percent, dropped its lines, and showed `ic`'s English sentence on a Polish screen. A reload brought up the engine
+> card as well, knowing only that some move was running: a full, pulsing bar labelled "Preparation". `?pc=moving` draws
+> the new state in the dev stand-in.
+
 A few seconds after the first launch, on an unmetered connection, the app prefetches what agents need: `ic engine fetch`
 then `ic image prefetch`, parsing both with the same `intentic-prefetch:` markers (`prefetch.rs`). The reader can pause
 it from Devices' card; a metered connection waits until unmetered or the reader starts it anyway. The office editor download

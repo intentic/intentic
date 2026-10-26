@@ -448,6 +448,7 @@ type PcCase =
     | `metered`
     | `prefetchFailed`
     | `settingUp`
+    | `moving`
     | `needsYou`
     | `quiet`
     | `restart`
@@ -465,6 +466,7 @@ const PC_CASES: readonly PcCase[] = [
     `metered`,
     `prefetchFailed`,
     `settingUp`,
+    `moving`,
     `needsYou`,
     `quiet`,
     `restart`,
@@ -481,6 +483,8 @@ const pcCaseOf = (): PcCase => picked(`pc`, PC_KEY, PC_CASES, `ready`);
 
 const FETCHING: OnboardingPrefetch = { state: `running`, done: 1_150_000_000, total: 2_900_000_000, attempt: 1 };
 const LOG = `${HOME}\\.intentic\\logs\\pc-setup.log`;
+// The setup on its row that moves this PC's sandboxes to Intentic's engine, as ic opens it.
+const MOVING = { state: `running`, step: `moving this PC's sandboxes to the intentic engine...`, row: `engine-move` } as const;
 
 const pcSnapshotOf = (kind: PcCase): OnboardingSnapshot => {
     const nowS = Math.floor(Date.now() / 1000);
@@ -504,6 +508,8 @@ const pcSnapshotOf = (kind: PcCase): OnboardingSnapshot => {
             );
         case `settingUp`:
             return needs({ state: `running`, step: `Turning on Windows features for Docker`, percent: 38 });
+        case `moving`:
+            return needs({ ...MOVING, percent: 72, moving: { slug: `shop`, index: 1, count: 3, step: `volume`, done: 1_200_000_000, total: 3_400_000_000 } });
         case `needsYou`:
             return needs({ state: `running`, step: `Turning on Windows features for Docker`, percent: 12, needsYou: true });
         case `quiet`:
@@ -540,10 +546,22 @@ const PC_STEPS: readonly (readonly [string, number])[] = [
     [`Installing the intentic engine`, 64],
     [`Starting the intentic engine`, 88],
 ];
+// Then this PC's sandboxes carried off Docker Desktop, the move's own lines filling its row (onboarding.rs `running_now`).
+const PC_MOVE = [
+    [{}, 88],
+    [{ slug: `shop`, index: 0, count: 1, step: `stopping` }, 89],
+    [{ slug: `shop`, index: 0, count: 1, step: `volume`, done: 400_000_000, total: 1_500_000_000 }, 92],
+    [{ slug: `shop`, index: 0, count: 1, step: `volume`, done: 1_500_000_000, total: 1_500_000_000 }, 98],
+    [{ slug: `shop`, index: 0, count: 1, step: `starting` }, 98],
+] as const;
 const runPcSetup = async (machine: Machine): Promise<void> => {
     for (const [step, percent] of PC_STEPS) {
         await changeOnboarding({ setup: { state: `running`, step, percent } });
         await pause(2000);
+    }
+    for (const [moving, percent] of PC_MOVE) {
+        await changeOnboarding({ setup: { ...MOVING, percent, moving } });
+        await pause(1500);
     }
     await changeOnboarding({ check: CHECK_READY, setup: { state: `ready` } });
     // The folders whose setups waited for this PC's own carry on, as the app's next round would take them.

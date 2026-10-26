@@ -183,17 +183,41 @@ export interface LocalPrefetch {
     readonly retrying?: boolean;
 }
 
+/** How the move of this PC's sandboxes to another engine stands, as ic's `intentic-move:` lines say it. */
+export interface LocalPcMove {
+    /** The sandbox in hand, and which of how many (from 0). */
+    readonly slug?: string;
+    readonly index?: number;
+    readonly count?: number;
+    /** ic's step: `source` (Docker Desktop starting) or `engine` before any sandbox, then `begin`, `stopping`, `image`,
+     *  `volume`, `starting` and `moved` for each one. */
+    readonly step?: string;
+    /** The copy under way: bytes so far, and of how many (ic's estimate, for an image). */
+    readonly done?: number;
+    readonly total?: number;
+}
+
+/** Which requirement a running setup is on, and how it stands. */
+export interface LocalPcSetupRow {
+    /** The requirement (ic's row id), said in the reader's words; ic's own sentence for it is the setup's `step`. */
+    readonly row?: string;
+    /** A later sentence of ic's about that row than the one it opened with: a wait counting down, a window to look for. */
+    readonly reading?: string;
+    /** While the row is the move of this PC's sandboxes: from the row's start, `{}` until ic says more. */
+    readonly moving?: LocalPcMove;
+}
+
 /** The PC's own setup (WSL, the container engine), started by the reader's "Set up this PC", with or without an account. */
 export type LocalPcSetup =
     | { readonly state: `idle` }
-    | {
+    | ({
           readonly state: `running`;
           readonly step: string | undefined;
           readonly percent: number;
           readonly needsYou?: boolean;
           /** It has said nothing for this many minutes (twenty or more): it may be stuck, or waiting on a window. */
           readonly quietMinutes?: number;
-      }
+      } & LocalPcSetupRow)
     | { readonly state: `waiting`; readonly for: `admin` | `restart` | `signOut`; readonly restartAt?: number }
     | { readonly state: `ready` }
     | { readonly state: `failed`; readonly reason: string };

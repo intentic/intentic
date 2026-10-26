@@ -17,6 +17,7 @@ use crate::notice;
 use crate::prefetch;
 use crate::scripts::{self, Heard, Stream};
 use crate::setup_link::{NoticeArgs, NoticeKind};
+use crate::setup_move::SetupMove;
 use crate::state::SessionEnd;
 
 pub const EVENT: &str = "desktop://onboarding";
@@ -248,6 +249,12 @@ struct Store {
     /// When the running setup started (seconds since the epoch), and the requirement it is on: what the ledger keeps.
     setup_started_at: u64,
     setup_row: Option<String>,
+    /// The running setup's newest requirement marker, which the move's own lines refine while its row runs; and the
+    /// sentence that row opened with (ic's for the fix as a whole), so a later reading of it is told as one.
+    setup_marker: Option<Value>,
+    setup_opening: Option<String>,
+    /// The sandboxes' move, from the first line the setup printed of it (setup_move.rs).
+    setup_move: Option<SetupMove>,
     /// The running setup has said nothing since this (seconds since the epoch), for [`SETUP_STALL_AFTER`] or more.
     setup_quiet_since: Option<u64>,
     /// Its transcript, found when it went quiet, for "Show the log".
@@ -407,6 +414,7 @@ fn mark_setup_started(app: &AppHandle, resumed: Option<Option<u64>>) {
         store.setup_parked_at = resumed.flatten();
         store.setup_started_at = started_at;
         store.setup_row = None;
+        forget_setup_lines(store);
         store.setup_quiet_since = None;
         store.setup_log = None;
     });
@@ -475,8 +483,60 @@ fn setup_payload(store: &Store) -> Value {
                 setup["log"] = json!(log);
             }
         }
+        add_running_row(&mut setup, store);
     }
     setup
+}
+
+/// The row a running setup is on, for the page to say in the reader's words (ic's own sentence stays `step`); a later
+/// reading of it that is not the sentence it opened with (a wait counting down, a window to look for); and while the row
+/// is the sandboxes' move, how far that is, from the moment the row begins (`{}` until ic says more). Pure.
+fn add_running_row(setup: &mut Value, store: &Store) {
+    let Some(marker) = store
+        .setup_marker
+        .as_ref()
+        .filter(|marker| marker["state"] == "running")
+    else {
+        return;
+    };
+    let Some(row) = marker["id"].as_str() else {
+        return;
+    };
+    setup["row"] = json!(row);
+    let detail = marker["detail"].as_str();
+    if detail.is_some() && detail != store.setup_opening.as_deref() {
+        setup["reading"] = json!(detail);
+    }
+    if row == MOVE_ROW {
+        setup["moving"] = serde_json::to_value(store.setup_move.clone().unwrap_or_default())
+            .unwrap_or_else(|_| json!({}));
+    }
+}
+
+/// The requirement whose fix moves this PC's sandboxes to Intentic's engine (ic's prepare/plan.rs).
+const MOVE_ROW: &str = "engine-move";
+
+/// What a run of the setup said, gone with it.
+fn forget_setup_lines(store: &mut Store) {
+    store.setup_marker = None;
+    store.setup_opening = None;
+    store.setup_move = None;
+}
+
+/// The setup as it runs now, from its newest marker: while that marker is the move's row and gives no percent of its own,
+/// the move's lines give it one, so the bar fills through the move rather than waiting at the row's start.
+fn running_now(store: &Store) -> Setup {
+    let mut current = store.setup_marker.clone();
+    if let (Some(marker), Some(moving)) = (current.as_mut(), store.setup_move.as_ref()) {
+        if marker["id"] == MOVE_ROW && marker["state"] == "running" && marker["percent"].is_null() {
+            marker["percent"] = json!(moving.percent());
+        }
+    }
+    setup_running_from_marker(
+        &store.setup_track_ids,
+        &store.setup_row_states,
+        current.as_ref(),
+    )
 }
 
 fn snapshot_payload(app: &AppHandle, asked: bool) -> Value {
@@ -1010,6 +1070,7 @@ fn settle_setup(app: &AppHandle, setup: Setup, check_state: Option<String>) {
         store.setup_quiet_since = None;
         store.setup_log = None;
         store.setup_row = None;
+        forget_setup_lines(store);
         if let Some(state) = check_state {
             if let Some(check) = store.check.as_mut() {
                 check.state = state;
@@ -1115,6 +1176,18 @@ fn heard_setup(app: &AppHandle) -> Heard {
             store.setup_log = None;
             store.setup_quiet_since.take().is_some()
         });
+        // A line of the sandboxes' move, which the setup carries as one of its rows: which sandbox, its step, its bytes.
+        if let Some(event) = crate::engine::parse_move_line(line) {
+            lock_store(|store| {
+                store
+                    .setup_move
+                    .get_or_insert_with(SetupMove::default)
+                    .hear(&event);
+                store.setup = running_now(store);
+            });
+            emit(&app);
+            return;
+        }
         let Some(json) = line.trim().strip_prefix(REQUIREMENT_STATE) else {
             if was_quiet {
                 emit(&app);
@@ -1136,6 +1209,7 @@ fn heard_setup(app: &AppHandle) -> Heard {
                     return None;
                 }
                 store.setup_row = Some(id.to_string());
+                store.setup_opening = value["detail"].as_str().map(str::to_string);
                 Some(store.setup_started_at)
             });
             // The ledger says which requirement it was on, for a launch that finds this run left behind.
@@ -1143,14 +1217,10 @@ fn heard_setup(app: &AppHandle) -> Heard {
                 write_running_ledger(started_at, Some(id));
             }
         }
-        let setup = lock_store(|store| {
-            setup_running_from_marker(
-                &store.setup_track_ids,
-                &store.setup_row_states,
-                Some(&value),
-            )
+        lock_store(|store| {
+            store.setup_marker = Some(value);
+            store.setup = running_now(store);
         });
-        lock_store(|store| store.setup = setup);
         emit(&app);
     })
 }
@@ -2449,6 +2519,72 @@ intentic-prefetch: {\"state\":\"failed\",\"done\":0,\"total\":0}
         };
         assert!(setup_payload(&fresh).get("resumed").is_none());
         assert!(setup_payload(&fresh).get("quietSince").is_none());
+    }
+
+    /// A reader's setup, 2026-10-26: two rows to do, the engine done and the move running, sat at 50% and "8 min left" for the
+    /// whole move. The move's own lines now carry its row, and the page is told which row it is and how the move stands.
+    #[test]
+    fn the_move_the_setup_carries_fills_its_row_and_says_how_it_stands() {
+        let marker =
+            |id: &str, detail: &str| json!({ "id": id, "state": "running", "detail": detail });
+        let mut store = Store {
+            setup_track_ids: vec!["engine".into(), MOVE_ROW.into()],
+            setup_row_states: HashMap::from([("engine".into(), "done".into())]),
+            setup_marker: Some(marker(
+                MOVE_ROW,
+                "moving this PC's sandboxes to the intentic engine...",
+            )),
+            setup_opening: Some("moving this PC's sandboxes to the intentic engine...".into()),
+            ..Store::default()
+        };
+        store.setup = running_now(&store);
+        assert!(matches!(store.setup, Setup::Running { percent: 50, .. }));
+        let payload = setup_payload(&store);
+        assert_eq!(payload["row"], json!(MOVE_ROW));
+        assert_eq!(
+            payload["moving"],
+            json!({}),
+            "the row has begun before ic says anything of the move"
+        );
+        assert!(
+            payload.get("reading").is_none(),
+            "the sentence the row opened with is no reading"
+        );
+
+        let mut moving = SetupMove::default();
+        for line in [
+            json!({ "slug": "work", "step": "begin", "index": 0, "count": 1, "bytes": 800 }),
+            json!({ "slug": "work", "step": "volume", "volume": "work-data", "total": 800 }),
+            json!({ "slug": "work", "step": "volume", "done": 350, "total": 800 }),
+        ] {
+            moving.hear(&line);
+        }
+        store.setup_move = Some(moving);
+        store.setup = running_now(&store);
+        // 350 of the one sandbox's 800 bytes: 40% of the move's row, which is the second half of the bar.
+        assert!(matches!(store.setup, Setup::Running { percent: 70, .. }));
+        assert_eq!(
+            setup_payload(&store)["moving"],
+            json!({ "slug": "work", "index": 0, "count": 1, "step": "volume", "done": 350, "total": 800 })
+        );
+
+        // Another row says nothing of the move, and a later sentence of its own is told as a reading.
+        store.setup_marker = Some(marker(
+            "docker-running",
+            "still waiting for Docker's engine (120s before giving up)",
+        ));
+        store.setup_opening = Some("starting Docker Desktop in the system tray...".into());
+        let payload = setup_payload(&store);
+        assert_eq!(payload["row"], json!("docker-running"));
+        assert_eq!(
+            payload["reading"],
+            json!("still waiting for Docker's engine (120s before giving up)")
+        );
+        assert!(payload.get("moving").is_none());
+
+        // A row that is over is no row to say.
+        store.setup_marker = Some(json!({ "id": MOVE_ROW, "state": "done", "detail": null }));
+        assert!(setup_payload(&store).get("row").is_none());
     }
 
     #[test]

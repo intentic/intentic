@@ -4,7 +4,8 @@ import { formatDateLong, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import type { EngineMoveEnd, EngineStatus, MoveTarget } from "../desktopEngine";
-import { barOf, gigabytes, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type MoveProgress } from "../device/engine/engineMove";
+import { barOf, keptCopiesOf, moveTargetOf, offerOf, pcEngineOf, type MoveProgress } from "../device/engine/engineMove";
+import { copiedWords, positionWords, stepWords } from "../device/engine/moveWords";
 
 // WHICH ENGINE THIS PC'S SANDBOXES RUN ON, beside Docker's own card on This device (device/engine/engine.ts holds it, the app's
 // engine.rs runs `ic engine`): Docker Desktop or Intentic's engine, and the move to the other one. On Docker Desktop the
@@ -88,29 +89,11 @@ const stepLabel = computed(() => {
     if (progress.step === undefined) {
         return progress.install === undefined ? t(`desktop.engine.step.begin`) : t(`desktop.engine.step.engine`);
     }
-    const step = t(`desktop.engine.step.${progress.step}`);
+    const step = stepWords(progress.step) ?? ``;
     return progress.slug === undefined ? step : `${props.nameOf(progress.slug)} · ${step}`;
 });
-const position = computed(() => {
-    const progress = props.progress;
-    return progress?.index === undefined || progress.count === undefined || progress.count < 2
-        ? undefined
-        : t(`desktop.engine.position`, { index: progress.index + 1, count: progress.count });
-});
-const bytes = computed(() => {
-    const progress = props.progress;
-    if (progress === undefined || (progress.step !== `image` && progress.step !== `volume`) || progress.done === undefined) {
-        return undefined;
-    }
-    const done = gigabytes(progress.done);
-    if (progress.total === undefined || progress.total === 0) {
-        return t(`desktop.engine.copiedSoFar`, { done });
-    }
-    // An image's size is ic's estimate before it is saved, so it is said as one.
-    return progress.step === `image`
-        ? t(`desktop.engine.copiedAbout`, { done, total: gigabytes(progress.total) })
-        : t(`desktop.engine.copied`, { done, total: gigabytes(progress.total) });
-});
+const position = computed(() => positionWords(props.progress?.index, props.progress?.count));
+const bytes = computed(() => copiedWords(props.progress?.step, props.progress?.done, props.progress?.total));
 
 /* THE COPIES A MOVE LEFT, by the engine that keeps them. */
 const copies = computed(() => keptCopiesOf(props.status));

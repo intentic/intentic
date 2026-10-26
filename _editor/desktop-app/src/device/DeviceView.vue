@@ -35,7 +35,7 @@ import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import AppBuild from "./AppBuild.vue";
 import PasswordsOffer from "../passwords/PasswordsOffer.vue";
-import { pcCardShown } from "./pcSetup/livePcCard";
+import { pcCardShown, pcCarriesMove } from "./pcSetup/livePcCard";
 import { followRoster, signedIn as rosterSignedIn } from "./roster";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 import { engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine/engine";
@@ -181,9 +181,9 @@ const dockerMatters = computed(
     () => facts.value?.hostsSandboxes === true || groups.value.length > 0 || pending.value !== undefined || folderNeedsDocker.value,
 );
 
-// Which engine the sandboxes run on, and the move to the other (engine.ts). It stands back while Docker's own card is up,
-// which is the one thing to act on then, but never from a move: its card is the move's while it runs and just after.
-const engineShown = computed(() => engineState.value !== undefined && !engineQuiet.value && (!dockerCardShown.value || engineEventful.value));
+// Which engine the sandboxes run on, and the move to the other (engine.ts). Back while Docker's own card is up, unless a
+// move of its own runs or just ended; and while this PC's setup carries the move, which that setup's card tells.
+const engineShown = computed(() => engineState.value !== undefined && !engineQuiet.value && !pcCarriesMove.value && (!dockerCardShown.value || engineEventful.value));
 // The engine is down on a computer that has hosted a sandbox: an empty list says nothing about what is here.
 const engineDownWithSandboxes = computed(() => engineListening.value === false && facts.value?.hostsSandboxes === true);
 // A sandbox by the name this app knows it by, else its slug: what a move says it is moving.

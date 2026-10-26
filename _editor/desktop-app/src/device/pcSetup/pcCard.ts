@@ -115,6 +115,17 @@ export const unmetRows = (check: LocalPcCheck | undefined): readonly LocalCheckR
 /** Sandboxes on the PC's current engine will be carried to Intentic's by this setup (plan.rs `engine-move`). */
 export const movesSandboxes = (check: LocalPcCheck | undefined): boolean => unmetRows(check).some((row) => row.id === `engine-move`);
 
+// A setup not running but still to finish: offered, waiting on the reader, or stopped.
+const SETUP_OPEN: ReadonlySet<PcCardPhase> = new Set([`needsSetup`, `restart`, `admin`, `signOut`, `setupFailed`]);
+
+/**
+ * The card carries the move of this PC's sandboxes to Intentic's engine: while its setup runs, and while one that moves
+ * them is still to finish. This computer's engine card stands back meanwhile (DeviceView.vue), so the move is told once,
+ * here, and not offered a second time beside "Set up this PC and move sandboxes".
+ */
+export const carriesMove = (phase: PcCardPhase, check: LocalPcCheck | undefined): boolean =>
+    phase === `settingUp` || (SETUP_OPEN.has(phase) && movesSandboxes(check));
+
 /** How many of the check's rows are met already, for the card's one summary line; undefined for a check with none. */
 export const checksPassed = (check: LocalPcCheck | undefined): { readonly met: number; readonly total: number } | undefined => {
     const rows = check?.rows ?? [];

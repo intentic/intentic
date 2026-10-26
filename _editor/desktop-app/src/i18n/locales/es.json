@@ -240,6 +240,7 @@
         "whileMoving": "Cada sandbox se detiene mientras se copian sus archivos. Si algo sale mal, todos los sandboxes vuelven a quedar como estaban.",
         "step": {
             "engine": "Instalando primero el motor de Intentic",
+            "source": "Esperando a que se inicie Docker Desktop",
             "begin": "Preparando",
             "stopping": "Deteniéndolo",
             "image": "Copiando su imagen",
@@ -585,6 +586,21 @@
         "unknown": "Algo impidió a Intentic comprobar si este PC puede ejecutar agentes. Vuelve a comprobarlo, o prepáralo de todos modos: la preparación lo averigua por sí misma.",
         "needsYou": "Windows te está pidiendo permiso. Elige «Sí» para continuar.",
         "minutesLeft": "quedan {count} min",
+        "doing": {
+            "wsl-features": "Activando las funciones de Windows que necesitan los agentes",
+            "wsl-kernel": "Actualizando la compatibilidad con Linux de Windows",
+            "docker-desktop": "Instalando Docker Desktop",
+            "docker-path": "Buscando Docker en este PC",
+            "docker-users": "Dando a esta cuenta acceso a Docker",
+            "docker-running": "Iniciando Docker Desktop",
+            "docker-linux-containers": "Cambiando Docker a contenedores Linux",
+            "engine": "Instalando el motor de Intentic",
+            "engine-start": "Iniciando el motor de Intentic",
+            "engine-move": "Moviendo tus sandboxes al motor de Intentic"
+        },
+        "moving": {
+            "reading": "Revisando tus sandboxes en Docker Desktop"
+        },
         "quiet": {
             "title": "La preparación lleva {count} minutos sin dar señales",
             "body": "Puede que Windows esté esperando una respuesta en una ventana detrás de esta, así que mira primero en la barra de tareas. Si no hay nada esperando allí, el registro muestra lo último que hizo la preparación, y puedes empezarla de nuevo.",

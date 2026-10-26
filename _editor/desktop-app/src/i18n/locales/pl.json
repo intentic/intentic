@@ -240,6 +240,7 @@
         "whileMoving": "Każdy sandbox zatrzymuje się na czas kopiowania jego plików. Jeśli coś pójdzie nie tak, wszystkie sandboxy wrócą do stanu sprzed przeniesienia.",
         "step": {
             "engine": "Najpierw instalujemy silnik Intentic",
+            "source": "Czekanie na uruchomienie Docker Desktop",
             "begin": "Przygotowanie",
             "stopping": "Zatrzymywanie",
             "image": "Kopiowanie obrazu",
@@ -585,6 +586,21 @@
         "unknown": "Coś przeszkodziło Intentic sprawdzić, czy ten komputer może uruchamiać agentów. Sprawdź ponownie albo i tak go skonfiguruj: konfiguracja sama to sprawdzi.",
         "needsYou": "Windows prosi o Twoją zgodę. Wybierz Tak, aby kontynuować.",
         "minutesLeft": "zostało {count} min",
+        "doing": {
+            "wsl-features": "Włączanie funkcji Windows potrzebnych agentom",
+            "wsl-kernel": "Aktualizowanie obsługi Linuksa w Windows",
+            "docker-desktop": "Instalowanie Docker Desktop",
+            "docker-path": "Szukanie Dockera na tym komputerze",
+            "docker-users": "Nadawanie temu kontu dostępu do Dockera",
+            "docker-running": "Uruchamianie Docker Desktop",
+            "docker-linux-containers": "Przełączanie Dockera na kontenery Linuksa",
+            "engine": "Instalowanie silnika Intentic",
+            "engine-start": "Uruchamianie silnika Intentic",
+            "engine-move": "Przenoszenie sandboxów na silnik Intentic"
+        },
+        "moving": {
+            "reading": "Sprawdzanie Twoich sandboxów w Docker Desktop"
+        },
         "quiet": {
             "title": "Konfiguracja nie odzywa się od {count} min",
             "body": "Windows może czekać na odpowiedź w oknie schowanym za tym, więc najpierw sprawdź pasek zadań. Jeśli nic tam nie czeka, log pokaże, co konfiguracja zrobiła ostatnio, i możesz uruchomić ją od nowa.",

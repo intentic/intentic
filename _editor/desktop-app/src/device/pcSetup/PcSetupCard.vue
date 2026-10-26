@@ -10,6 +10,7 @@ import { draft } from "../../onboarding/firstTask";
 import { signedIn } from "../roster";
 import FirstTaskComposer from "./FirstTaskComposer.vue";
 import PcPrefetch from "./PcPrefetch.vue";
+import PcSetupRunning from "./PcSetupRunning.vue";
 import PcStep from "./PcStep.vue";
 import { pcCard } from "./livePcCard";
 import { checksPassed, minutesLeft, movesSandboxes, offersWork, type PcCardPhase, pcSteps, type TaskKind, taskStart, unmetRows } from "./pcCard";
@@ -182,13 +183,8 @@ const pausePrefetch = (paused: boolean): Promise<void> => ask(`prefetch`, async 
 const retryPrefetch = (): Promise<void> => ask(`prefetch`, async () => onboarding?.retryPrefetch?.());
 const signInNow = (): Promise<void> => ask(`signIn`, signIn);
 
-/* THE SETUP AS IT RUNS: how far, what it is on, and what Windows is waiting for. */
+/* THE SETUP AS IT RUNS (PcSetupRunning.vue draws it), and the restart it may ask for. */
 
-const percent = computed(() => (setup.value.state === `running` ? Math.round(setup.value.percent) : 0));
-const step = computed(() => (setup.value.state === `running` ? setup.value.step : undefined));
-const needsYou = computed(() => setup.value.state === `running` && setup.value.needsYou === true);
-// No line from the setup for twenty minutes or more (onboarding.rs `SETUP_STALL_AFTER`): what it was on, and a way on.
-const quietMinutes = computed(() => (setup.value.state === `running` ? setup.value.quietMinutes : undefined));
 const left = computed(() => minutesLeft(check.value, setup.value));
 
 // A restart the reader put off ten minutes: when, by this computer's clock, in the reader's language.
@@ -438,43 +434,15 @@ const retryTask = (): Promise<void> =>
                     </div>
                 </template>
 
-                <!-- RUNNING: how far, on what, and how long is left; what Windows is asking for, when it is. -->
-                <template v-else-if="phase === `settingUp`">
-                    <div class="flex flex-col gap-1.5">
-                        <div class="flex items-start gap-3 text-xs">
-                            <!-- Windows' own prompt, in place of the step it holds up: said once, as what to do. -->
-                            <span v-if="needsYou" class="flex min-w-0 flex-1 items-start gap-1.5 font-medium text-warning">
-                                <Icon name="exclamation-circle" class="shrink-0" />
-                                <span>{{ t(`desktop.pcSetup.needsYou`) }}</span>
-                            </span>
-                            <span v-else class="min-w-0 flex-1 truncate text-muted" v-tooltip.top="step">{{ step }}</span>
-                            <span class="shrink-0 text-2xs tabular-nums text-subtle">
-                                <template v-if="left !== undefined">{{ t(`desktop.pcSetup.minutesLeft`, { count: left }) }} · </template>{{ t(`desktop.pcSetup.percent`, { percent }) }}
-                            </span>
-                        </div>
-                        <div
-                            class="h-1.5 overflow-hidden rounded-full bg-line"
-                            role="progressbar"
-                            :aria-valuenow="percent"
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                            :aria-label="t(`desktop.pcSetup.pc.title`)"
-                        >
-                            <div class="h-full rounded-full bg-primary-500 transition-[width] duration-700 ease-smooth" :style="{ width: `${percent}%` }"></div>
-                        </div>
-                    </div>
-                    <!-- The step it went quiet on is the line above the bar, which is not said twice. -->
-                    <Notice v-if="quietMinutes !== undefined" tone="warning" class="text-xs">
-                        <span class="block font-medium">{{ t(`desktop.pcSetup.quiet.title`, { count: quietMinutes }) }}</span>
-                        <span class="mt-0.5 block">{{ t(`desktop.pcSetup.quiet.body`) }}</span>
-                        <span class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <Button size="small" tier="boring" :label="t(`desktop.pcSetup.quiet.again`)" @click="startSetup(true)" />
-                            <button v-if="onboarding?.showSetupLog" type="button" :class="ui.textButton({ tone: `quiet` })" @click="showLog">
-                                {{ t(`desktop.pcSetup.showLog`) }}
-                            </button>
-                        </span>
-                    </Notice>
-                </template>
+                <!-- RUNNING: on what, how far, how long is left, and how the requirement in hand stands (PcSetupRunning.vue). -->
+                <PcSetupRunning
+                    v-else-if="phase === `settingUp` && setup.state === `running`"
+                    :setup="setup"
+                    :left="left"
+                    :can-show-log="onboarding?.showSetupLog !== undefined"
+                    @again="startSetup(true)"
+                    @log="showLog"
+                />
 
                 <!-- A RESTART FINISHES IT: now, in ten minutes, or the next time Windows starts. -->
                 <template v-else-if="phase === `restart`">
