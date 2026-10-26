@@ -12,6 +12,9 @@ import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import type { SandboxCallContext } from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
+import { mirrorKey, mirrorKeyOf } from "../transcript/transcriptCache";
+import { snapshotTab } from "../tabs/tabSnapshot";
 import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import { pickUpNext } from "../endings/pickUp";
@@ -100,6 +103,7 @@ afterEach(() => {
     unstubAllGlobals();
     jest.clearAllMocks();
     seedTurnDefaults();
+    activeSandboxId.value = undefined;
 });
 
 // One attach frame as it comes off the wire: parsed afresh, never an object the fixture still holds.
@@ -3099,6 +3103,35 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value.some((message) => message.unsent === true)).toBe(false);
     });
 
+    // A chat outlives a switch: a home kept for the way back, a closed tab whose words are still on the outbox's ladder.
+    // Aimed at "whichever sandbox is active", those words went to the sandbox switched to, which took them as a
+    // conversation of its own, and the old chat stood on the new sandbox's board as if it had started there.
+    it(`sends words still waiting after a sandbox switch to the sandbox they were written in`, async () => {
+        activeSandboxId.value = `sb-old`;
+        const conversation = new Conversation(`c1`);
+        daemon.mockRejectedValue(new TypeError(`Failed to fetch`));
+        await conversation.turn.send(`tidy the docs`, settings);
+        expect(conversation.turn.outbox.entries.value).toHaveLength(1);
+
+        activeSandboxId.value = `sb-new`;
+        daemon.mockReset();
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.run`) {
+                return Promise.resolve({ delivered: `started`, run: `r1` });
+            }
+            if (procedure === `agent.attach`) {
+                return Promise.resolve(chunkStream([frameOf(head({ prompt: `tidy the docs` })), frameOf({ kind: `end` })], `close`));
+            }
+            return Promise.resolve({ ok: true });
+        });
+        await conversation.turn.outbox.flush();
+
+        expect(conversation.turn.outbox.entries.value).toEqual([]);
+        expect(proceduresAimedAt(`sb-old`)).toContain(`agent.run`);
+        // Nothing reached the sandbox switched to, by name or as the active one.
+        expect(daemon.mock.calls.every(([, , options]) => options?.context?.at === `sb-old`)).toBe(true);
+    });
+
     // A Stop on a send that never became a turn must not arm the continue offer: nothing is behind it to resume, and
     // it must not open a fresh session on the bare word "Continue".
     it(`stands the continue offer down when the stopped send never became a turn`, async () => {
@@ -3952,5 +3985,49 @@ describe(`TurnClient.startErrand`, () => {
 
         expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toContain(`No account here can run this.`);
+    });
+});
+
+// Where a conversation's calls go: the sandbox it was placed in, else the one it opened in. That reads as no box at all
+// only while it is the active one, so nothing it does after a switch can land on the sandbox switched to.
+describe(`a conversation's sandbox`, () => {
+    it(`is the active one while the browser points there, and the one it opened in after a switch`, () => {
+        activeSandboxId.value = `sb-old`;
+        const conversation = new Conversation(`c1`);
+        expect(conversation.box.value).toBeUndefined();
+
+        activeSandboxId.value = `sb-new`;
+        expect(conversation.box.value).toBe(`sb-old`);
+
+        activeSandboxId.value = `sb-old`;
+        expect(conversation.box.value).toBeUndefined();
+    });
+
+    it(`is wherever it was placed, and only the placement is what a tab keeps`, () => {
+        activeSandboxId.value = `sb-old`;
+        const conversation = new Conversation(`c1`);
+        conversation.box.value = `sb-elsewhere`;
+        expect(conversation.box.value).toBe(`sb-elsewhere`);
+        expect(snapshotTab(conversation).box).toBe(`sb-elsewhere`);
+
+        // Placed back here, through its own ref: an assignment to `conversation.box.value` would narrow the read below.
+        const { box } = conversation;
+        box.value = undefined;
+        activeSandboxId.value = `sb-new`;
+        // Its calls go home, but the tab it is saved as names no box: restored there, it is that sandbox's own chat.
+        expect(conversation.box.value).toBe(`sb-old`);
+        expect(snapshotTab(conversation).box).toBeUndefined();
+    });
+
+    // A person's home conversation has the same id in every sandbox (ids/conversation-ids.ts homeConversationId).
+    it(`mirrors its transcript under its sandbox, so two sandboxes' chats of one id never paint each other`, () => {
+        activeSandboxId.value = `sb-old`;
+        const old = new Conversation(`home-a1b2c3`);
+        activeSandboxId.value = `sb-new`;
+        const fresh = new Conversation(`home-a1b2c3`);
+
+        expect(mirrorKeyOf(fresh)).not.toBe(mirrorKeyOf(old));
+        expect(mirrorKeyOf(old)).toBe(mirrorKey(`sb-old`, `home-a1b2c3`));
+        expect(mirrorKeyOf(fresh)).toBe(mirrorKey(`sb-new`, `home-a1b2c3`));
     });
 });

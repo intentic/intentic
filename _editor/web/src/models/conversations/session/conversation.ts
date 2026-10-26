@@ -2,7 +2,8 @@ import type { AgentCommand, ContextUsage } from "@intentic/sandbox-contract/even
 import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
 import { newConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
-import { computed, effectScope, ref, shallowRef, watch } from "vue";
+import { computed, effectScope, type Ref, ref, shallowRef, watch } from "vue";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import type { SendLater } from "../drafts/sendLater";
@@ -39,8 +40,24 @@ export class Conversation {
     // Machine this conversation runs on: a paired runner's id, or undefined for this sandbox; latched early.
     readonly runner = ref<string | undefined>();
 
-    // Sandbox this conversation lives in, or undefined for this browser's box; every call is aimed at it.
-    readonly box = ref<string | undefined>();
+    // The sandbox this browser pointed at when the conversation opened, where it lives unless placed somewhere else.
+    private readonly openedIn: string | undefined = activeSandboxId.value;
+
+    // Where it was placed, when that is somewhere other than the sandbox it opened in (placeConversation, a restored tab):
+    // what a tab persists and hands to another window, never the fallback `box` reads.
+    readonly placement = ref<string | undefined>();
+
+    // Sandbox this conversation lives in, or undefined while that is the one this browser points at; every call is aimed
+    // at it. A conversation placed nowhere lives in the sandbox it opened in, and keeps calling there after the browser
+    // points elsewhere. Read as "whichever sandbox is active", one that outlived a switch (a home chat kept for the way
+    // back, a closed chat whose words were still waiting to go) went on talking to the sandbox switched to, which took its
+    // words as a conversation of its own: the old chat stood on the new sandbox's board as if it had started there.
+    readonly box: Ref<string | undefined> = computed({
+        get: () => this.placement.value ?? (this.openedIn === activeSandboxId.value ? undefined : this.openedIn),
+        set: (box) => {
+            this.placement.value = box;
+        },
+    });
 
     // Whether the fleet has ever known this conversation; latches rather than tracks the roster, so a dropped roster
     // can't un-register it. Persisted with the tab.

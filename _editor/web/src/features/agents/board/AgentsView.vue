@@ -49,6 +49,7 @@ import FirstAgentSlot from "./cards/FirstAgentSlot.vue";
 import { markHinted } from "../../tour/tourMarks";
 import ChildRows from "../../../parts/fleet/ChildRows.vue";
 import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
+import { cardKey } from "../../../models/fleet/board/childFold";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import AttentionElsewhere from "./cards/AttentionElsewhere.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
@@ -489,9 +490,10 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     </p>
                     <div v-else-if="!bareLane(lane.key)" class="relative flex flex-col gap-4.5 pb-2.5">
                         <!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
+                        <!-- Keyed by box and id: across sandboxes an id is not a card (a person's home conversation is named alike in every one). -->
                         <Transition
                             v-for="agent in cardsFor(lane.key)"
-                            :key="agent.id"
+                            :key="cardKey(agent)"
                             v-memo="[
                                 agent,
                                 narrow,

@@ -13,7 +13,7 @@ import type { AttachEntry, TurnContext } from "../../../client/sandbox/streams/t
 import { olderTranscriptPage, PHONE_TURNS } from "../transcript/agentTranscript";
 import { type ChatAttachment, type ChatMessage, lastTurns, recordedRows, withCancelledCards } from "../transcript/transcript";
 import { type RecordCursor, recordCursor } from "../transcript/transcriptState";
-import { readTranscript, saveTranscript } from "../transcript/transcriptCache";
+import { mirrorKeyOf, readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
 import { firstWhere, runningTotal } from "../transcript/transcriptScan";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
@@ -128,7 +128,7 @@ export class TranscriptView extends TranscriptClock {
             this.persistAuthoritative = false;
             // Timed: an unconfirmed write may read the mirror back first (transcriptCache.ts).
             void trackPerf(`chat.persist`, { messages: this.messages.value.length, authoritative: confirmed }, () =>
-                saveTranscript(this.host.conversationId, this.messages.value, confirmed),
+                saveTranscript(mirrorKeyOf(this.host), this.messages.value, confirmed),
             );
         });
     }
@@ -139,7 +139,7 @@ export class TranscriptView extends TranscriptClock {
         if (this.messages.value.length > 0 || this.host.turn.streaming.value) {
             return false;
         }
-        const cached = await readTranscript(this.host.conversationId);
+        const cached = await readTranscript(mirrorKeyOf(this.host));
         // Re-checked after the await: a turn or reattach may have landed meanwhile; the live transcript always wins.
         if (cached === undefined || this.messages.value.length > 0 || this.host.turn.streaming.value) {
             return false;

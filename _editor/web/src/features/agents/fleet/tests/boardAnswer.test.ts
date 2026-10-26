@@ -13,7 +13,7 @@ jest.mock("../../../../app/analytics", () => ({ track: jest.fn(), replaySessionI
 jest.mock("../../../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
 }));
-jest.mock("../../../../app/storage/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+jest.mock("../../../../app/storage/activeSandbox", () => ({ activeSandboxId: ref<string | undefined>(undefined), sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 jest.mock("../../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
 jest.mock("../../../../client/sandbox/sandboxClient", () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn() }));
 jest.mock("../../../../app/clientDiagnostics", () => ({ reportClient: jest.fn() }));

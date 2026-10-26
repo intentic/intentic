@@ -79,7 +79,9 @@ export interface StoredTab {
 export const snapshotTab = (conversation: Conversation): StoredTab => ({
     conversationId: conversation.conversationId,
     isolated: conversation.isolated.value,
-    box: conversation.box.value,
+    // Where it was placed, not where its calls go: in the instant a switch takes, a tab's own sandbox already reads as
+    // another box (Conversation.box), and a snapshot written then would bring the tab back as a stranger in its own home.
+    box: conversation.placement.value,
     registered: conversation.registered.value,
     provider: conversation.selection.provider.value,
     movedFrom: conversation.selection.movedFrom.value,

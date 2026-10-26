@@ -11,7 +11,7 @@ import type { Picks } from "../session/selectionReducer";
 import { rememberedModelFor, startingMode } from "../run/turnDefaults";
 import { untouchedDraft } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, type TabSnapshot, writeTabSnapshot } from "./tabSnapshot";
-import { dropTranscript } from "../transcript/transcriptCache";
+import { dropTranscript, mirrorKeyOf } from "../transcript/transcriptCache";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
 const { activeSandboxId } = useSandbox();
@@ -465,7 +465,7 @@ const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
             conversation.turn.abort();
-            void dropTranscript(conversation.conversationId);
+            void dropTranscript(mirrorKeyOf(conversation));
         }
     }
     const remaining = conversations.value.filter((conversation) => !ids.has(conversation.conversationId));

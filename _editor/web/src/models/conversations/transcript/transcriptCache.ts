@@ -1,11 +1,22 @@
 import { fitPageRow } from "@intentic/sandbox-contract/text/transcript-page";
+import type { Ref } from "vue";
 import type { ChatMessage } from "./transcript";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { onAccountCleared, TRANSCRIPT_DATABASE } from "../../../app/storage/browserStorage";
 
 // Local IndexedDB mirror of each conversation's transcript, so reopening paints from disk instead of a sandbox
 // round-trip; the daemon stays authoritative and replaces the cache once it answers, so a stale mirror only costs a
-// repaint. Keyed by conversationId alone: those are UUIDs, so they can't collide across sandboxes. The account's: sign-out
-// deletes the database (lib/browserStorage.ts), which this page's connection gives way to on the version change.
+// repaint. The account's: sign-out deletes the database (lib/browserStorage.ts), which this page's connection gives way
+// to on the version change.
+
+// An entry is one sandbox's conversation, never an id alone: an id can name a conversation in every sandbox at once (a
+// person's home conversation is named after them in each, ids/conversation-ids.ts homeConversationId), and keyed by the id
+// a new sandbox's home painted the transcript of the home in the sandbox before it.
+export const mirrorKey = (sandboxId: string | undefined, conversationId: string): string => `${sandboxId ?? ``}/${conversationId}`;
+
+/** The entry of a conversation as it stands: the sandbox it lives in (Conversation.box, else the active one) and its id. */
+export const mirrorKeyOf = (conversation: { readonly conversationId: string; readonly box: Readonly<Ref<string | undefined>> }): string =>
+    mirrorKey(conversation.box.value ?? activeSandboxId.value, conversation.conversationId);
 
 const DB_NAME = TRANSCRIPT_DATABASE;
 const DB_VERSION = 1;
@@ -84,32 +95,32 @@ onAccountCleared(() => mirroredRows.clear());
 
 // `authoritative` (daemon-confirmed) may shrink the mirror. Any other write only reports what a window happens to show,
 // which can be partial, so it may extend the mirror but never truncate it.
-export const saveTranscript = async (conversationId: string, messages: readonly ChatMessage[], authoritative = false): Promise<void> => {
+export const saveTranscript = async (key: string, messages: readonly ChatMessage[], authoritative = false): Promise<void> => {
     // An empty transcript means no mirror, not a mirror of nothing; writing it would blank a good cache entry.
     if (messages.length === 0) {
         return;
     }
     const kept = persistable(messages);
     if (!authoritative) {
-        const held = mirroredRows.get(conversationId) ?? (await readTranscript(conversationId))?.length;
+        const held = mirroredRows.get(key) ?? (await readTranscript(key))?.length;
         if (held !== undefined && held > kept.length) {
             return;
         }
     }
-    mirroredRows.set(conversationId, kept.length);
-    await run(`readwrite`, (store) => store.put(kept, conversationId));
+    mirroredRows.set(key, kept.length);
+    await run(`readwrite`, (store) => store.put(kept, key));
 };
 
-export const readTranscript = async (conversationId: string): Promise<ChatMessage[] | undefined> => {
-    const cached = await run<ChatMessage[]>(`readonly`, (store) => store.get(conversationId));
+export const readTranscript = async (key: string): Promise<ChatMessage[] | undefined> => {
+    const cached = await run<ChatMessage[]>(`readonly`, (store) => store.get(key));
     const found = Array.isArray(cached) && cached.length > 0 ? cached : undefined;
-    mirroredRows.set(conversationId, found?.length ?? 0);
+    mirroredRows.set(key, found?.length ?? 0);
     return found;
 };
 
 // Closing a tab is the clear signal to drop this entry; without it the store would grow for the life of the profile.
 // Reopening later just re-fetches and re-warms it.
-export const dropTranscript = async (conversationId: string): Promise<void> => {
-    mirroredRows.delete(conversationId);
-    await run(`readwrite`, (store) => store.delete(conversationId));
+export const dropTranscript = async (key: string): Promise<void> => {
+    mirroredRows.delete(key);
+    await run(`readwrite`, (store) => store.delete(key));
 };
