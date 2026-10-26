@@ -61,6 +61,7 @@ export interface ManagedProcessesOptions {
 
 /* THE ENVIRONMENT A MANAGED COMMAND IS TYPED INTO, as one pure function so the switches below can be asserted. */
 export const launchEnv = (spec: ProcessSpec & { port: number }, path: string): Record<string, string> => ({
+    UV_THREADPOOL_SIZE: "4",
     ...spec.env,
     ...Object.fromEntries((spec.portEnv ?? []).map((name) => [name, String(spec.port)])),
     PATH: `${join(spec.cwd, "node_modules", ".bin")}:${path}`,

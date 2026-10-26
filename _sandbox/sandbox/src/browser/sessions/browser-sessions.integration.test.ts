@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import {
-    browserSessionHooks,
     browserServerOfTool,
     closeBrowserSession,
     browserSessionContext,
@@ -13,6 +12,7 @@ import {
     listBrowserSessions,
 } from "./browser-sessions.js";
 import { browserServersOf, prepareBrowserOwner } from "../tools/browser-tools.js";
+import { browserSessionHooks } from "./browser-session-hooks.js";
 import { startScreencast } from "../cast/screencast.js";
 
 test("a browser tool's server and session name are derived the same way everywhere", () => {

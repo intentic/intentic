@@ -633,6 +633,21 @@ flowchart LR
   parent is, a forced reap's SIGKILL follows even after a discard forgot the conversation, an armed watch no longer
   shields a finished turn's processes, and a tmux session an agent made by hand goes with its conversation
   (`system/boot/reaper.ts`). `opencode serve` stops after 30 idle minutes, and with the Cursor runtimes on shutdown.
+- Idle resource policy (2026-10-25): listed workspace previews rest after fifteen minutes without a visit or an open
+  connection, even while editors and agents remain active, and their preview route wakes them with their autostart
+  recipe. Unknown socket state preserves the server. Arbitrary shell jobs have no safe replay recipe and retain
+  their existing lifetime. Browser sessions normally rest after ten idle minutes, shortened to two while the
+  shared memory budget reports sustained pressure; visible streams, in-flight browser tools, help requests and the
+  person's own window are protected. Paused or closed streams release their hold. Child tools use four libuv workers
+  by default; the daemon retains its own pool and explicit child environment settings still win.
+  (2026-10-26) Explicitly restricted child environments keep their boundary; adding daemon variables to them was
+  rejected. Browser calls hold their sessions until completion or failure; Codex stream teardown and aborted Claude
+  hooks also release their holds, so an interrupted tool does not retain a browser indefinitely.
+- Review Git evidence is reused for matching checkout generations and placement/landing metadata, for at most ten
+  seconds and a bounded set of conversations. Ignored outputs and files outside checkouts are read fresh. Chore
+  evidence has the same ten-second generation bound, and each fresh pass shares one workspace-manifest reading.
+  Missing change-feed coverage falls back to fresh readings. Landing expiry retains only the paths a landing can
+  claim, with repository-wide head touches shared once; a path touched and then reverted stays expired.
 - A job an agent kept running for the person survives a restart and never expires (`agent/tools/jobs/background-jobs.ts`
   `keptJobSessions`, adopted by the boot's session sweep), and archiving, purging or discarding a conversation cancels
   the subagents it spawned (`agent/subagents/family-cancel.ts`); a paused child's end is kept in

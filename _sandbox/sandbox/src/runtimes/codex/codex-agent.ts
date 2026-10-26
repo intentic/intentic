@@ -15,9 +15,9 @@ import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } f
 import { isRateLimited } from "../../engines/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { resultContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
-import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
+import { holdBrowserSession } from "../../browser/sessions/browser-sessions.js";
+import { attachBrowserSession, type CodexBrowserContext } from "./codex-browser-sessions.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
-import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { planPhaseOf, toolCard, type TurnCapture } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
@@ -390,42 +390,6 @@ interface ImageArtifactContext {
     readonly codexHome: string;
 }
 
-interface CodexBrowserContext {
-    readonly ports: Readonly<Record<string, number>>;
-    readonly passkeys: Readonly<Record<string, string>>;
-    // Routed browser server's account→owner map; a routed call attributes only when every route shares one owner.
-    readonly accounts: Readonly<Record<string, string>>;
-    readonly owner?: string;
-    // Present only on a resumed invocation; a new thread learns its id from thread.started first.
-    readonly sessionId?: string;
-}
-
-// The one profile a routed call can be pinned to without seeing its arguments; defined only if every account maps to
-// the same owner.
-const soleRoutedOwner = (browser: CodexBrowserContext | undefined): string | undefined => {
-    const owners = new Set(Object.values(browser?.accounts ?? {}));
-    return owners.size === 1 ? [...owners][0] : undefined;
-};
-
-// Ties a browser call to the profile whose session drives it, so opened pages belong to that account. A routed server's
-// calls carry no account in the item, so they attach only when the turn resolves to a single profile.
-const attachBrowserSession = (
-    item: Extract<CodexItem, { type: "mcp_tool_call" }>,
-    threadId: string | undefined,
-    browser: CodexBrowserContext | undefined,
-): void => {
-    if (browser === undefined || !item.tool.startsWith("browser_")) {
-        return;
-    }
-    const profile = item.server === ROUTED_BROWSER_SERVER ? soleRoutedOwner(browser) : item.server;
-    const port = profile === undefined ? undefined : browser.ports[profile];
-    const sessionId = threadId ?? browser.sessionId;
-    if (profile === undefined || port === undefined || sessionId === undefined) {
-        return;
-    }
-    openBrowserSession({ sessionId, server: profile, port, passkeyStore: browser.passkeys[profile], owner: browser.owner });
-};
-
 // Context one Codex turn's stream normalizes against: cwd, where generated images land, the question-card signal and
 // dismissal target. `holdMessages` is the plan phase's one behavioral difference in what it shows; `posture` is how it
 // answers approvals.
@@ -484,6 +448,7 @@ type ItemOf<T extends CodexItem["type"]> = Extract<CodexItem, { type: T }>;
 
 // What one stream has shown of the items still running, so each item's completion adds only what was not yet said.
 interface StreamState {
+    readonly browserHolds: Map<string, () => void>;
     // Text each running message or reasoning item has streamed so far.
     readonly streamed: Map<string, string>;
     // The summary part each reasoning item streamed last, so a new part starts a new paragraph.
@@ -498,7 +463,7 @@ interface StreamState {
     planned: boolean;
 }
 
-const streamState = (): StreamState => ({ streamed: new Map(), parts: new Map(), output: new Map(), patches: new Map(), retries: { count: 0 }, planned: false });
+const streamState = (): StreamState => ({ browserHolds: new Map(), streamed: new Map(), parts: new Map(), output: new Map(), patches: new Map(), retries: { count: 0 }, planned: false });
 
 // What an item's whole text adds to what its deltas already showed. Should the two disagree, the deltas stand, since
 // the reader has them already and a second copy would read as the agent repeating itself.
@@ -658,12 +623,18 @@ function* fileChangeFrames(event: CodexItemEvent, item: ItemOf<"file_change">, c
     yield opened ? { kind: "tool_call_update", id: item.id, ...settled } : { ...opening, ...settled };
 }
 
-function* mcpFrames(event: CodexItemEvent, item: ItemOf<"mcp_tool_call">, context: CodexStreamContext, capture: TurnCapture): Generator<AgentEvent> {
+function* mcpFrames(event: CodexItemEvent, item: ItemOf<"mcp_tool_call">, context: CodexStreamContext, capture: TurnCapture, state: StreamState): Generator<AgentEvent> {
     const name = `${item.server}.${item.tool}`;
     if (event.type === "item.started") {
-        attachBrowserSession(item, capture.sessionId, context.browser);
+        const session = attachBrowserSession(item, capture.sessionId, context.browser);
+        if (session !== undefined) {
+            state.browserHolds.get(item.id)?.();
+            state.browserHolds.set(item.id, holdBrowserSession(session));
+        }
         yield toolCard({ id: item.id, name: `mcp__${item.server}__${item.tool}`, input: item.arguments, cwd: context.cwd });
     } else if (event.type === "item.completed") {
+        state.browserHolds.get(item.id)?.();
+        state.browserHolds.delete(item.id);
         yield { kind: "tool_call_update", id: item.id, status: item.status === "failed" ? "failed" : "completed", content: mcpResultContent(item, name, context) };
     }
 }
@@ -743,7 +714,7 @@ async function* itemFrames(event: CodexItemEvent, context: CodexStreamContext, c
             yield* fileChangeFrames(event, item, context.cwd, state);
             return;
         case "mcp_tool_call":
-            yield* mcpFrames(event, item, context, capture);
+            yield* mcpFrames(event, item, context, capture, state);
             return;
         case "image_generation":
             yield* imageFrames(event, item, context);
@@ -887,6 +858,11 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
         if (context.limitWait?.handedOver() !== true) {
             throw error;
         }
+    } finally {
+        for (const release of state.browserHolds.values()) {
+            release();
+        }
+        state.browserHolds.clear();
     }
     yield* handOver();
     return capture;

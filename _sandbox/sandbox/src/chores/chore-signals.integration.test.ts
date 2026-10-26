@@ -5,6 +5,7 @@ import type { CodebaseHealth, HealthRequest } from "@intentic/iq-engine";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { sharedChoreSignals } from "./chore-signals.js";
+import { useCheckoutFeed } from "../git/feed/checkout-feed.js";
 
 // The rail badge and the panel list at once. A reading of a repo is shared only with a caller that asked before it
 // began, so whatever either is shown was read after it asked; one begun earlier is waited out and read again.
@@ -26,6 +27,27 @@ const heldIq = () => {
 };
 
 const settle = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 1));
+
+afterEach(() => useCheckoutFeed(undefined));
+
+test("unchanged checkout generations retain completed evidence and a write refreshes it", async () => {
+    let generation = 1;
+    useCheckoutFeed({ generation: async () => generation });
+    const { services, begun, release } = heldIq();
+    const shared = sharedChoreSignals(services);
+    const first = shared.of("a", shared.asked());
+    await settle();
+    release();
+    expect((await first).totals.files).toBe(1);
+    expect((await shared.of("a", shared.asked())).totals.files).toBe(1);
+    expect(begun).toEqual(["a"]);
+    generation += 1;
+    const changed = shared.of("a", shared.asked());
+    await settle();
+    release();
+    expect((await changed).totals.files).toBe(2);
+    expect(begun).toEqual(["a", "a"]);
+});
 
 test("a reading begun after a caller asked is shared with it, and one begun before is read again once it is done", async () => {
     const { services, begun, release } = heldIq();

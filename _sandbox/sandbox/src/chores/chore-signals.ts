@@ -4,10 +4,10 @@ import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-c
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { readWorkspaceManifests } from "../workspace/deps/package-graph.js";
 import type { Services } from "../composition.js";
+import { generationMemo } from "../git/feed/generation-memo.js";
 
-// The cheap half of chore evidence: everything answerable without a subprocess or network call, recomputed on every GET
-// /chores since the ingredients (manifest reads, stats, the resident iq index) are already free. probes.ts holds a fact
-// only when it costs a registry call or a shell-out.
+// Local chore evidence is shared by checkout generation. The age bound also refreshes ignored files and lets an index
+// still building catch up. probes.ts holds facts that need a registry call or a shell-out.
 
 // Hotspots and key modules a chore ever needs; the complexity chore only asks if a file outranks this list.
 const RANKING_LIMIT = 12;
@@ -32,8 +32,8 @@ const enginesOf = (manifest: Record<string, unknown>): Record<string, string> | 
 
 // A repo with no pnpm workspace has no packages; that's a true answer, not a gap. The root manifest is deliberately not
 // folded in as a pseudo-package.
-export const packageSignals = (repoDir: string): ChorePackage[] =>
-    readWorkspaceManifests(repoDir).map(({ dir, name, manifest }) => {
+export const packageSignals = (repoDir: string, manifests = readWorkspaceManifests(repoDir)): ChorePackage[] =>
+    manifests.map(({ dir, name, manifest }) => {
         const entry: ChorePackage = {
             dir,
             name,
@@ -101,7 +101,7 @@ const DEP_BLOCKS = ["dependencies", "devDependencies", "peerDependencies", "opti
 
 // Reads the root manifest directly, since a single-package repo has no workspace packages to read otherwise. All four
 // dependency blocks count, since peerDependencies is how a UI framework or component library is declared.
-const declaredDeps = (repoDir: string): string[] => {
+const declaredDeps = (repoDir: string, manifests: ReturnType<typeof readWorkspaceManifests>): string[] => {
     const names = new Set<string>();
     const collect = (manifest: Record<string, unknown>): void => {
         for (const block of DEP_BLOCKS) {
@@ -115,7 +115,7 @@ const declaredDeps = (repoDir: string): string[] => {
     } catch {
         // No root manifest, or one that fails to parse; workspace packages below are still read.
     }
-    for (const { manifest } of readWorkspaceManifests(repoDir)) {
+    for (const { manifest } of manifests) {
         collect(manifest);
     }
     return [...names].toSorted();
@@ -123,7 +123,7 @@ const declaredDeps = (repoDir: string): string[] => {
 
 // Every check is a stat or shallow readdir, cheap enough for a route the rail badge polls. `docs` looks for the
 // repository map itself, not just the directory, since an empty `docs/architecture/` has nothing to gate on.
-export const choreShape = (repoDir: string, workspaceRoot = false): ChoreShape => ({
+export const choreShape = (repoDir: string, workspaceRoot = false, manifests = readWorkspaceManifests(repoDir)): ChoreShape => ({
     docs: findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
     dockerfiles: findFiles(repoDir, isDockerfile, workspaceRoot),
     ci: [
@@ -134,15 +134,16 @@ export const choreShape = (repoDir: string, workspaceRoot = false): ChoreShape =
     ],
     lockfile: ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lockb"].some((file) => existsSync(join(repoDir, file))),
     packageManifest: existsSync(join(repoDir, "package.json")),
-    deps: declaredDeps(repoDir),
+    deps: declaredDeps(repoDir, manifests),
 });
 
 const choreSignals = async (services: Pick<Services, "iq" | "workspace">, repo: string): Promise<ChoreSignals> => {
     const health = await services.iq.health({ scope: { repo }, limit: RANKING_LIMIT });
     const repoDir = join(services.workspace.root, repo);
+    const manifests = readWorkspaceManifests(repoDir);
     return {
-        packages: packageSignals(repoDir),
-        shape: choreShape(repoDir, repo === ""),
+        packages: packageSignals(repoDir, manifests),
+        shape: choreShape(repoDir, repo === "", manifests),
         hotspots: health.hotspots,
         keyModules: health.modules,
         totals: health.totals,
@@ -161,20 +162,22 @@ interface Flight {
 export interface SharedChoreSignals {
     // A caller's place in line, taken as it arrives, before it asks for any repo.
     readonly asked: () => number;
-    // The repo's signals from a reading begun after `asked`: the one under way if it began later than that, else the
-    // one that begins once it is done, shared by everyone who asked meanwhile.
+    // Reuses evidence when its checkout generation matches within the age bound. Without feed coverage, a fresh
+    // reading starts after `asked`, shared with everyone who was already waiting.
     readonly of: (repo: string, asked: number) => Promise<ChoreSignals>;
 }
 
 // The rail badge and the panel ask at once, each walking every repo through one iq engine that answers them one by one,
 // so the second paid for every reading the first had just taken. A reading is shared only with callers that asked before
-// it began, which makes it as fresh for each of them as one of their own: a caller arriving mid-reading waits for the
-// next instead, which begins once that one is done and is shared in turn.
+// it began when no generation can vouch for freshness. A generation-validated completed reading can serve the next
+// caller too, avoiding another index request and another synchronous manifest/shape scan.
 export const sharedChoreSignals = (services: Pick<Services, "iq" | "workspace">): SharedChoreSignals => {
     let clock = 0;
     const flights = new Map<string, Flight>();
+    const memo = generationMemo<ChoreSignals>({ maxAgeMs: 10_000, cacheable: (signals) => signals.indexed });
     const begin = (repo: string): Promise<ChoreSignals> => {
-        const flight: Flight = { begun: (clock += 1), reading: choreSignals(services, repo) };
+        const reading = memo(repo, [join(services.workspace.root, repo)], "", () => choreSignals(services, repo));
+        const flight: Flight = { begun: (clock += 1), reading };
         flights.set(repo, flight);
         // Kept while a next reading is queued behind it, which takes its place as it begins.
         const settled = (): void => {

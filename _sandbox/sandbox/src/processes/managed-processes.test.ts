@@ -361,7 +361,12 @@ test("the launch env carries the assigned port, the run dir's bin, its own histo
     expect(env["PATH"]).toBe("/work/app/operator/node_modules/.bin:/usr/bin");
     expect(env["HISTFILE"]).toBe("/tmp/intentic-panel-4321.zsh_history");
     expect(env["INTENTIC_DAEMON"]).toBe("http://127.0.0.1:8787");
+    expect(env["UV_THREADPOOL_SIZE"]).toBe("4");
     expect(env["PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN"]).toBe("false");
     expect(env["npm_config_verify-deps-before-run"]).toBeUndefined();
     expect(env["npm_config_verify_deps_before_run"]).toBeUndefined();
+});
+
+test("a managed command can explicitly choose its thread pool", () => {
+    expect(launchEnv({ ...SPEC, port: 4321, env: { UV_THREADPOOL_SIZE: "8" } }, "/usr/bin")["UV_THREADPOOL_SIZE"]).toBe("8");
 });

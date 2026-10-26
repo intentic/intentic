@@ -110,3 +110,43 @@ test("the reported text weight is the characters the entries hold, through head 
     tracker.drop("root", heads[0]!);
     expect(tracker.metrics()["pathCharacters"]).toBe(0);
 });
+
+test("a landing retains only paths it can claim, including literal pathspecs", async () => {
+    const { dir, heads } = await repoWithCommits();
+    const calls: string[][] = [];
+    const tracker = createExpiryTracker(countingGit(calls));
+    expect([...(await tracker.committedSince(dir, "root", heads[0]!, heads[3]!, new Set(["b.ts"])))]).toEqual(["b.ts"]);
+    expect(tracker.metrics()["pathCharacters"]).toBe("b.ts".length);
+    expect(calls[0]).toEqual(["diff", "--name-only", "--no-renames", "-z", heads[0]!, heads[3]!, "--", "b.ts"]);
+    expect([...(await tracker.committedSince(dir, "root", heads[0]!, heads[3]!, new Set(["b.ts", "d.ts"])))].toSorted()).toEqual(["b.ts", "d.ts"]);
+    expect(tracker.metrics()["pathCharacters"]).toBe("b.tsd.ts".length);
+    await writeFile(join(dir, "[slug].ts"), "literal filename\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add literal path");
+    const literal = createExpiryTracker();
+    expect([...(await literal.committedSince(dir, "root", heads[3]!, await sh(dir, "rev-parse", "HEAD"), new Set(["[slug].ts"])))]).toEqual(["[slug].ts"]);
+});
+
+test("empty claims spawn no diff, and unrelated changes are shared rather than retained per landing", async () => {
+    const { dir, heads } = await repoWithCommits();
+    const calls: string[][] = [];
+    const tracker = createExpiryTracker(countingGit(calls));
+    expect([...(await tracker.committedSince(dir, "root", heads[0]!, heads[2]!, new Set()))]).toEqual([]);
+    expect(calls).toEqual([]);
+    await tracker.committedSince(dir, "root", heads[1]!, heads[2]!, new Set(["a.ts"]));
+    await tracker.committedSince(dir, "root", heads[0]!, heads[3]!, new Set());
+    expect(tracker.metrics()["pathCharacters"]).toBe(0);
+});
+
+test("a candidate discovered after an observed commit and revert stays expired", async () => {
+    const { dir, heads } = await repoWithCommits();
+    const tracker = createExpiryTracker();
+    await tracker.committedSince(dir, "root", heads[3]!, heads[3]!, new Set(["b.ts"]));
+    await writeFile(join(dir, "a.ts"), "rewritten\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "rewrite");
+    await tracker.committedSince(dir, "root", heads[3]!, await sh(dir, "rev-parse", "HEAD"), new Set(["b.ts"]));
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "revert", "--no-edit", "HEAD");
+    expect([...(await tracker.committedSince(dir, "root", heads[3]!, await sh(dir, "rev-parse", "HEAD"), new Set(["a.ts", "b.ts"]))) ]).toEqual(["a.ts"]);
+    expect(tracker.metrics()["pathCharacters"]).toBe("a.ts".length);
+});

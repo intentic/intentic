@@ -1,12 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract/schemas/terminal";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Dialog, Page } from "playwright";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { releaseDisplay } from "../cast/display.js";
 import { placeWindow } from "../cast/region.js";
-import { ROUTED_BROWSER_SERVER } from "../tools/browser-tools.js";
 import { armPasskeys } from "../tools/passkeys.js";
 
 // Makes the agent's browser (launched and owned by @playwright/mcp) visible to the daemon: it attaches over CDP the
@@ -77,6 +75,22 @@ interface BrowserSessionRecord {
 }
 
 const sessions = new Map<string, BrowserSessionRecord>();
+const consumers = new WeakMap<BrowserSessionRecord, number>();
+const unused = (record: BrowserSessionRecord): boolean => record.help === undefined && (consumers.get(record) ?? 0) === 0;
+
+// A visible stream or an in-flight tool owns a browser until it finishes, even across the shorter pressure window.
+export const holdBrowserSession = (name: string): (() => void) => {
+    const record = sessions.get(name);
+    if (record === undefined) {return () => {};}
+    consumers.set(record, (consumers.get(record) ?? 0) + 1);
+    let released = false;
+    return () => {
+        if (released) {return;}
+        released = true;
+        consumers.set(record, Math.max(0, (consumers.get(record) ?? 1) - 1));
+        record.activityAt = Date.now();
+    };
+};
 
 // No background sweep; every list call prunes expired sessions first.
 const prune = (now: number): void => {
@@ -94,18 +108,6 @@ const prune = (now: number): void => {
 export const browserServerOfTool = (tool: string): string | undefined => {
     const match = /^mcp__(.+)__browser_/.exec(tool);
     return match?.[1];
-};
-
-// Owner of the browser one tool call drives: for the routed server, `account` resolves through the turn's account map;
-// every other server is its own answer.
-// Undefined when a routed call names an account it isn't allowed to act as.
-const ownerOfBrowserCall = (tool: string, toolInput: unknown, accounts: Record<string, string>): string | undefined => {
-    const server = browserServerOfTool(tool);
-    if (server !== ROUTED_BROWSER_SERVER) {
-        return server;
-    }
-    const account = (toolInput as { account?: unknown } | undefined)?.account;
-    return typeof account === "string" ? accounts[account] : undefined;
 };
 
 // Records a page's current url/title and marks it active, this module's stand-in for foreground, since there's no CDP
@@ -573,8 +575,8 @@ export const closeBrowserSession = async (name: string): Promise<void> => {
 
 // Closes every running record a conversation owns (platform/reaper.ts): a backstop for a disconnect that never fired,
 // and the hard stop on archive/discard.
-export const closeBrowserSessionsFor = async (owner: string): Promise<void> => {
-    const mine = [...sessions.values()].filter((record) => record.owner === owner && record.finishedAt === undefined);
+export const closeBrowserSessionsFor = async (owner: string, idleOnly = false): Promise<void> => {
+    const mine = [...sessions.values()].filter((record) => record.owner === owner && record.finishedAt === undefined && (!idleOnly || unused(record)));
     await Promise.all(mine.map((record) => closeBrowserSession(record.name)));
 };
 
@@ -595,55 +597,5 @@ export const runningBrowserOwners = (): string[] => [
 // window: a browser left open on a desktop is still open when its owner comes back to it, and theirs is closed by them.
 export const idleBrowserSessionNames = (now: number, idleMs: number): string[] =>
     [...sessions.values()]
-        .filter((record) => !record.own && record.finishedAt === undefined && record.help === undefined && record.activityAt <= now - idleMs)
+        .filter((record) => !record.own && record.finishedAt === undefined && unused(record) && record.activityAt <= now - idleMs)
         .map((record) => record.name);
-
-// Hooks that register or refresh a browser session: PreToolUse fires before Chromium launches, so the session appears
-// at the start of navigation; PostToolUse stamps activity so a long turn keeps reading as active.
-// ports/passkeys are the per-turn owner-to-port and owner-to-passkey-store maps from browser-tools.ts; accounts is the
-// router's account-to-owner map, needed since a routed tool name alone doesn't say whose browser.
-export const browserSessionHooks = (
-    ports: Record<string, number>,
-    passkeys: Record<string, string> = {},
-    accounts: Record<string, string> = {},
-    // Conversation this turn belongs to; carried on every record so the reaper can close by owner.
-    owner?: string,
-): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    const matcher = "mcp__.+__browser_.+";
-    const touch = async (tool: string, toolInput: unknown, sessionId: string): Promise<void> => {
-        const server = ownerOfBrowserCall(tool, toolInput, accounts);
-        const port = server === undefined ? undefined : ports[server];
-        if (server === undefined || port === undefined) {
-            return;
-        }
-        openBrowserSession({ sessionId, server, port, passkeyStore: passkeys[server], owner });
-    };
-    return {
-        PreToolUse: [
-            {
-                matcher,
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name === "PreToolUse") {
-                            await touch(input.tool_name, input.tool_input, input.session_id);
-                        }
-                        return {};
-                    },
-                ],
-            },
-        ],
-        PostToolUse: [
-            {
-                matcher,
-                hooks: [
-                    async (input) => {
-                        if (input.hook_event_name === "PostToolUse") {
-                            await touch(input.tool_name, input.tool_input, input.session_id);
-                        }
-                        return {};
-                    },
-                ],
-            },
-        ],
-    };
-};

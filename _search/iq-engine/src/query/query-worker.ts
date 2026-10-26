@@ -7,8 +7,8 @@ import { openIndex } from "../store/db.js";
 import type { EngineHit } from "../types.js";
 
 // Answers queries off the host's event loop. index-worker.ts writes the index; this thread only reads, so WAL lets both
-// hold it open at once. Each request is independent; `id` pairs the answer with its question. Models load at startup,
-// overlapping the first index pass instead of the first query.
+// hold it open at once. Each request is independent; `id` pairs the answer with its question. Each model loads only
+// when its stage is requested, so lexical queries and semantic-only callers do not keep a reranker resident.
 
 export interface QueryWorkerData {
     readonly indexDir: string;
@@ -36,13 +36,13 @@ if (port === null) {
 const { indexDir, modelDir } = workerData as QueryWorkerData;
 
 const db = openIndex(indexDir, "read");
-const embedderReady = loadEmbedder(modelDir);
-const rerankerReady = loadReranker(modelDir);
+let embedderReady: ReturnType<typeof loadEmbedder> | undefined;
+let rerankerReady: ReturnType<typeof loadReranker> | undefined;
 
 const answer = async (request: QueryWorkerRequest): Promise<QueryWorkerResponse> => {
     const { id } = request;
     if (request.type === "semantic") {
-        const embedder = await embedderReady;
+        const embedder = await (embedderReady ??= loadEmbedder(modelDir));
         if (embedder === undefined) {
             return { type: "absent", id };
         }
@@ -51,7 +51,7 @@ const answer = async (request: QueryWorkerRequest): Promise<QueryWorkerResponse>
         const hits = semanticSearch(db, await embedder.embedQuery(request.query), new Set(request.allowed));
         return { type: "semantic", id, hits, pending };
     }
-    const reranker = await rerankerReady;
+    const reranker = await (rerankerReady ??= loadReranker(modelDir));
     if (reranker === undefined) {
         return { type: "absent", id };
     }

@@ -52,6 +52,8 @@
             "entry": [
                 "_tools/scripts/**/*.sh",
                 "_tools/checks/*.mjs",
+                // CI runs check suites recursively, including integration tests next to the library they cover.
+                "_tools/checks/**/*.test.mjs",
                 "_tools/scripts/**/*.mjs",
                 "_tools/nav/**/*.mjs",
                 "_tools/oxlint/*.mjs",

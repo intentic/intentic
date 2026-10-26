@@ -243,7 +243,7 @@ export const createLandedPresences = (
                     const applied = new Set(await pathsBetween(dir, `applied ${repo} ${landedHead} ${landedTip}`, landedHead, landedTip));
                     const anchor = await anchorFor(dir, repo, landedTip, base);
                     const own = await pathsBetween(dir, `own ${repo} ${anchor} ${landedTip}`, anchor, landedTip);
-                    const committed = await expiry.committedSince(dir, repo, landedHead, head);
+                    const committed = await expiry.committedSince(dir, repo, landedHead, head, applied);
                     const uncommitted = await dirtyIn(repo, dir);
                     // Every-path-committed is the absorbed condition, but the durable mark is written elsewhere.
                     const { count, here } = tallyLanding(own, applied, committed, uncommitted);

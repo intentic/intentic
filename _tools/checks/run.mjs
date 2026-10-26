@@ -10,6 +10,7 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { CHECKS } from "./manifest.mjs";
+import { checkPool, pooledMap } from "./lib/check-pool.mjs";
 
 const here = dirname(new URL(import.meta.url).pathname);
 const args = process.argv.slice(2);
@@ -49,7 +50,7 @@ const selected = CHECKS.filter(
         (only === undefined || only.includes(check.id)) &&
         !skip.has(check.id) &&
         (gate === undefined || check.gate === gate) &&
-        (paths === undefined || check.scoped === true),
+        (paths === undefined || (check.scoped === true && (check.applies === undefined || paths.some((path) => check.applies.test(path))))),
 );
 // Nothing to say rather than nothing wrong: a per-edit run on a file no scoped check reads must be silent, and it must
 // not print a passing line claiming the tree was measured.
@@ -57,10 +58,12 @@ if (paths !== undefined && (paths.length === 0 || selected.length === 0)) {
     process.exit(0);
 }
 
-const run = (check) =>
+const pool = checkPool();
+const run = (check, slot) =>
     new Promise((resolve) => {
         const started = Date.now();
-        const child = spawn(process.execPath, [join(here, check.file), ...(paths === undefined ? [] : ["--paths", paths.join(",")])], {
+        const [command, argv] = pool.command(slot, process.execPath, [join(here, check.file), ...(paths === undefined ? [] : ["--paths", paths.join(",")])]);
+        const child = spawn(command, argv, {
             stdio: ["ignore", "pipe", "pipe"],
         });
         let stdout = "";
@@ -76,7 +79,7 @@ const run = (check) =>
     });
 
 const started = Date.now();
-const results = await Promise.all(selected.map(run));
+const results = await pooledMap(selected, pool.size, run);
 // A failure that refuses rather than merely reports: every code failure, and a tidy one unless `--tidy=warn`. A check
 // that could not measure refuses where a tidy one does and nowhere else — it is not evidence the tree is broken, so it
 // must not stop a push or a turn, but it cannot be silent either, or the gate quietly stops testing what it was for.

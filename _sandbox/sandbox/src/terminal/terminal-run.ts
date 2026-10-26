@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { keyedLock } from "@intentic/base/async";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { childEnv } from "../workload/child-env.js";
 
 // Every user-triggered shell action runs inside a visible tmux session in the terminals panel, never an invisible
 // child_process; reads, probes, and boot plumbing are exempt. Each run is one window via bin/tmux-run: tee-captured
@@ -83,7 +84,8 @@ export const createTerminalRunner = (): TerminalRunner => {
         // Cancelled while it waited its turn: it never starts, so nothing announces a window that would only be killed.
         options.signal?.throwIfAborted();
         options.onStarted?.();
-        const env = { ...process.env, ...options.env };
+        const forwarded = { UV_THREADPOOL_SIZE: "4", ...options.env };
+        const env = childEnv({ ...process.env, ...forwarded });
         const execOptions = {
             cwd: options.cwd,
             maxBuffer: MAX_BUFFER,
@@ -96,7 +98,7 @@ export const createTerminalRunner = (): TerminalRunner => {
                 ? await execFileAsync(
                       TMUX_RUN_BIN,
                       [
-                          ...Object.keys(options.env ?? {}).flatMap((key) => ["-e", key]),
+                          ...Object.keys(forwarded).flatMap((key) => ["-e", key]),
                           session,
                           `${paneEcho(command)}${command}`,
                           options.window ?? "run",

@@ -18,7 +18,9 @@ import { noIsolation } from "../../worktrees/isolation.testing.js";
 import { workspacePaths } from "../../../workspace/workspace.js";
 import { agentRepoReview, presentInMain } from "../agent-changes.js";
 import { landAgent } from "../land.js";
-import { reviewOf } from "../review.js";
+import { reviewOf } from "../review/review.js";
+import { createReviewReader } from "../review/review-cache.js";
+import { useCheckoutFeed } from "../../../git/feed/checkout-feed.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../../worktrees/worktrees.js";
 
 // Reviews land state against real git: accept moves main's HEAD, discard moves nothing, and the agent branch is
@@ -35,9 +37,29 @@ const edited = (line: number): string => `${LINES.map((text, index) => (index ==
 
 const tempDirs: string[] = [];
 afterEach(async () => {
+    useCheckoutFeed(undefined);
     for (const dir of tempDirs.splice(0)) {
         await rm(dir, { recursive: true, force: true });
     }
+});
+
+test("cached reviews refresh ignored deliverables without a checkout event and tracked rows with a generation change", async () => {
+    const { work, worktrees, conversation } = await setup({ ".gitignore": "out/\n" });
+    const deps = { agentWorktrees: worktrees, agents: unstubbed<Services["agents"]>("agents", {}), logger };
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    let generation = 1;
+    useCheckoutFeed({ generation: async () => generation });
+    const read = createReviewReader(deps);
+    const entry = isolatedAgent(conversation.repos);
+    const paths = (shown: Awaited<ReturnType<typeof read>>): string[] => shown.repos.flatMap((repo) => repo.changes.map((change) => change.path));
+    expect(paths(await read(entry))).toEqual(["app.ts"]);
+    await writeTree(conversation.cwd, { "out/film.mp4": "render" });
+    expect((await read(entry)).ignored).toEqual([{ repo: "root", paths: [{ path: "out/film.mp4", kind: "new", bytes: 6 }] }]);
+    await writeTree(work, { "out/film.mp4": "render" });
+    expect(await read(entry)).not.toHaveProperty("ignored");
+    await writeFile(join(conversation.cwd, "feature.ts"), "export {};\n");
+    generation += 1;
+    expect(paths(await read(entry)).toSorted()).toEqual(["app.ts", "feature.ts"]);
 });
 
 // Writes each file under `root`, making the directories it needs.

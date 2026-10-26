@@ -6,6 +6,7 @@ import {
     browserSessionDisplayKey,
     browserSessionEndpoint,
     browserSessionPage,
+    holdBrowserSession,
 } from "../sessions/browser-sessions.js";
 import { OWN_BROWSER_SESSION } from "../sessions/own-browser.js";
 import { startLiveView, type LiveView } from "./live-view.js";
@@ -17,6 +18,13 @@ import { parseJsonOr } from "@intentic/base/json";
 // The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
 type Socket = WSContext;
 
+
+// The socket as live-view.ts sees it; `backlog` is what it holds unsent, read off the raw ws.
+const sinkOf = (ws: Socket) => ({
+    send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
+    backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
+});
+
 // /system/browser-view: watches the agent's browser, and lets the user take the wheel. Same wire and pictures as
 // /system/browser-profile, pointed at a different browser. Read-only only because the client sends no input until the
 // user takes over; closing the socket stops the picture, not the turn's browser.
@@ -25,6 +33,7 @@ export const createBrowserViewRoute = (services: Services) =>
         let view: LiveView | undefined;
         let closed = false;
         let unregisterAccess: (() => void) | undefined;
+        let releaseBrowser: (() => void) | undefined;
         // The session this socket watches, read once in onOpen and needed again by every `bind` frame.
         let session = "";
         // Settled once onOpen is done, whichever way it went. Hono hands frames over without waiting for onOpen, and the
@@ -49,6 +58,8 @@ export const createBrowserViewRoute = (services: Services) =>
             closed = true;
             unregisterAccess?.();
             unregisterAccess = undefined;
+            releaseBrowser?.();
+            releaseBrowser = undefined;
             await view?.stop();
             if (view !== undefined) {
                 debug({ openMs: Date.now() - openedAt }, "browser-view: closed");
@@ -88,6 +99,8 @@ export const createBrowserViewRoute = (services: Services) =>
                 case "resume":
                     // Nobody is looking: video kills the encoder outright; frames just holds the binding, sending
                     // nothing.
+                    releaseBrowser?.();
+                    releaseBrowser = message.type === "resume" ? holdBrowserSession(session) : undefined;
                     await view?.setPaused(message.type === "pause");
                     return true;
                 case "bind":
@@ -137,12 +150,6 @@ export const createBrowserViewRoute = (services: Services) =>
         const handleControl = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> =>
             (await handleView(message, ws)) || handleSession(message);
 
-        // The socket as live-view.ts sees it; `backlog` is what it holds unsent, read off the raw ws.
-        const sinkOf = (ws: Socket) => ({
-            send: (data: string | Uint8Array<ArrayBuffer>) => ws.send(data),
-            backlog: () => (ws.raw as { bufferedAmount?: number } | undefined)?.bufferedAmount ?? 0,
-        });
-
         // Redeems the ticket and attaches the view: onOpen's whole body, apart so onOpen can settle `attached` on every
         // way out of it.
         const attach = async (ws: Socket): Promise<void> => {
@@ -159,6 +166,7 @@ export const createBrowserViewRoute = (services: Services) =>
                 return;
             }
             session = url.searchParams.get("session") ?? "";
+            releaseBrowser = holdBrowserSession(session);
             // Awaited, not polled: a click can arrive before Chromium's first paint; this resolves once the attach
             // lands.
             const context = await browserSessionContext(session);

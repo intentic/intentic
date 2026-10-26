@@ -5,7 +5,10 @@ import {
     listBrowserSessions,
     openBrowserSession,
     raiseBrowserHelp,
+    holdBrowserSession,
+    closeBrowserSessionsFor,
 } from "./browser-sessions.js";
+import { browserSessionHooks } from "./browser-session-hooks.js";
 
 // The session's OWN idle clock, without a Chromium: openBrowserSession registers the record from the hook alone and
 // stamps activityAt, which is all this question reads. `now` is a parameter precisely so the window can be crossed
@@ -13,11 +16,79 @@ import {
 
 const WINDOW_MS = 10 * 60_000;
 
+test("viewers and in-flight tools hold a browser, and release starts its idle grace again", async () => {
+    const name = open("id1e7777-8888", "web");
+    try {
+        const releaseView = holdBrowserSession(name);
+        const releaseTool = holdBrowserSession(name);
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).not.toContain(name);
+        releaseView();
+        releaseView();
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).not.toContain(name);
+        releaseTool();
+        const last = listBrowserSessions().find((entry) => entry.name === name)!.activityAt;
+        expect(idleBrowserSessionNames(last + WINDOW_MS - 1, WINDOW_MS)).not.toContain(name);
+        expect(idleBrowserSessionNames(last + WINDOW_MS, WINDOW_MS)).toContain(name);
+    } finally {
+        await closeBrowserSession(name);
+    }
+});
+
+test("stopped-owner cleanup preserves viewers, while forced cleanup still closes them", async () => {
+    const owner = "idle-view-owner";
+    const watched = openBrowserSession({ sessionId: "id1e9999-0000", server: "web", port: 1, owner })!;
+    const spare = openBrowserSession({ sessionId: "id1e9999-1111", server: "web", port: 1, owner })!;
+    const release = holdBrowserSession(watched);
+    try {
+        await closeBrowserSessionsFor(owner, true);
+        release();
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS).filter((name) => name === watched || name === spare)).toEqual([watched]);
+        await closeBrowserSessionsFor(owner);
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).not.toContain(watched);
+    } finally {
+        release();
+        await closeBrowserSessionsFor(owner);
+    }
+});
+
+test("overlapping browser tools release their holds on success and failure", async () => {
+    const hooks = browserSessionHooks({ web: 1 });
+    const hook = hooks.PreToolUse[0]!.hooks[0]!;
+    const base = { session_id: "id1e2222-9999", transcript_path: "unused", cwd: ".", tool_name: "mcp__web__browser_navigate", tool_input: {} };
+    const signal = { signal: new AbortController().signal };
+    await hook({ ...base, hook_event_name: "PreToolUse", tool_use_id: "one" }, "one", signal);
+    await hook({ ...base, hook_event_name: "PreToolUse", tool_use_id: "two" }, "two", signal);
+    const name = open(base.session_id, "web");
+    try {
+        await hook({ ...base, hook_event_name: "PostToolUseFailure", tool_use_id: "one", error: "navigation failed" }, "one", signal);
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).not.toContain(name);
+        await hook({ ...base, hook_event_name: "PostToolUse", tool_use_id: "two", tool_response: {} }, "two", signal);
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).toContain(name);
+    } finally {
+        await closeBrowserSession(name);
+    }
+});
+
 const open = (sessionId: string, server: string): string => {
     const name = openBrowserSession({ sessionId, server, port: 1 });
     expect(name).toEqual(expect.any(String));
     return name as string;
 };
+
+test("an aborted browser tool releases its hold even without a completion hook", async () => {
+    const hooks = browserSessionHooks({ web: 1 });
+    const controller = new AbortController();
+    const input = { session_id: "id1e-aborted", transcript_path: "unused", cwd: ".", tool_name: "mcp__web__browser_navigate", tool_input: {}, hook_event_name: "PreToolUse", tool_use_id: "aborted" } as const;
+    await hooks.PreToolUse[0]!.hooks[0]!(input, "aborted", { signal: controller.signal });
+    const name = open(input.session_id, "web");
+    try {
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).not.toContain(name);
+        controller.abort();
+        expect(idleBrowserSessionNames(Date.now() + 10 * WINDOW_MS, WINDOW_MS)).toContain(name);
+    } finally {
+        await closeBrowserSession(name);
+    }
+});
 
 // The measured leak: the reaper's other browser pass closes by OWNER, so a conversation still running turns held a
 // Chromium it had finished with for 21 minutes. This pass asks the session instead, and a live owner is no defence.

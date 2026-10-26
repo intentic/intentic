@@ -9,18 +9,18 @@ import type {
 } from "@intentic/sandbox-contract/schemas/git/git";
 import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { defaultGit } from "@intentic/base/git";
-import type { Services } from "../../composition.js";
-import { opt } from "../../opt.js";
-import { headSha } from "../../git/changes/changes.js";
-import { materializedPaths } from "../../git/changes/changes-porcelain.js";
-import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
-import { outsideCheckout } from "../worktrees/outside-checkout.js";
-import { strayStandings } from "../worktrees/stray-work.js";
-import { NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../git/changes/ignored-outputs.js";
-import { agentIgnoredOutputs, agentRepoChanges, agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
-import { intoOf, landTargetOf } from "./land-target.js";
-import { dirtyPaths, outstandingConflicts } from "./land.js";
-import { commitsCarrying, historySpanStart } from "./landed-history.js";
+import type { Services } from "../../../composition.js";
+import { opt } from "../../../opt.js";
+import { headSha } from "../../../git/changes/changes.js";
+import { materializedPaths } from "../../../git/changes/changes-porcelain.js";
+import type { IsolatedAgent, RepoRecord } from "../../registry/agents-store.js";
+import { outsideCheckout } from "../../worktrees/outside-checkout.js";
+import { strayStandings } from "../../worktrees/stray-work.js";
+import { NO_IGNORED_OUTPUTS, type IgnoredOutputs } from "../../../git/changes/ignored-outputs.js";
+import { agentIgnoredOutputs, agentRepoChanges, agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "../agent-changes.js";
+import { intoOf, landTargetOf } from "../land-target.js";
+import { dirtyPaths, outstandingConflicts } from "../land.js";
+import { commitsCarrying, historySpanStart } from "../landed-history.js";
 
 // What a conversation's review reads, against main as it stands: the rows still its own, what main absorbed, the scratch
 // its live copy keeps, the ignored files it wrote, the conflicts a land would meet, and the commits that carried what
@@ -173,11 +173,8 @@ export const liveConflicts = async (deps: ReviewDeps, entry: IsolatedAgent): Pro
           ? entry.landing.conflicts
           : await outstandingConflicts(deps.agentWorktrees, entry, intoOf(await landTargetOf(deps, entry)));
 // What a conversation's review shows right now, its repos read side by side and kept in composition order.
-export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<AgentChanges> => {
-    const [parts, outputs] = await Promise.all([
-        Promise.all(entry.placement.repos.map((composed) => repoReviewOf(deps, entry, composed))),
-        Promise.all(entry.placement.repos.map(async (composed) => ({ repo: composed.repo, outputs: await ignoredOf(deps, entry, composed) }))),
-    ]);
+const reviewCore = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<AgentChanges> => {
+    const parts = await Promise.all(entry.placement.repos.map((composed) => repoReviewOf(deps, entry, composed)));
     const repos = parts.flatMap((part) => (part.row === undefined ? [] : [part.row]));
     const absorbed = parts.reduce((total, part) => total + part.absorbed, 0);
     const scratch = entry.placement.repos.map((composed, index) => ({ repo: composed.repo, paths: parts[index]?.scratch ?? [] }));
@@ -185,17 +182,27 @@ export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<
     // Asked of the whole composition, not of the repos that produced rows: a conversation that did all its work
     // on a branch of its own leaves `agent/<id>` empty whenever the turn's carry could not copy it over.
     const elsewhere = await strayStandings(deps.agentWorktrees, entry.id, entry.placement.repos);
-    const outside = await outsideOf(deps, entry);
     // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
     return {
         repos,
         absorbed,
         ...scratchField(scratch),
-        ...ignoredField(outputs),
-        ...(conflicts.length > 0 ? { conflicts } : {}),
-        ...(elsewhere.length > 0 ? { elsewhere } : {}),
-        ...opt("outside", outside.length > 0 ? outside : undefined),
+        ...opt("conflicts", conflicts.length > 0 ? conflicts : undefined),
+        ...opt("elsewhere", elsewhere.length > 0 ? elsewhere : undefined),
     };
+};
+
+export const reviewOf = async (
+    deps: ReviewDeps,
+    entry: IsolatedAgent,
+    core: (read: () => Promise<AgentChanges>) => Promise<AgentChanges> = (read) => read(),
+): Promise<AgentChanges> => {
+    const [review, outputs, outside] = await Promise.all([
+        core(() => reviewCore(deps, entry)),
+        Promise.all(entry.placement.repos.map(async (composed) => ({ repo: composed.repo, outputs: await ignoredOf(deps, entry, composed) }))),
+        outsideOf(deps, entry),
+    ]);
+    return { ...review, ...ignoredField(outputs), ...opt("outside", outside.length > 0 ? outside : undefined) };
 };
 
 // Reads the same rows the review filters out to absorbed, from the same pass over the tree, so the two can't disagree.

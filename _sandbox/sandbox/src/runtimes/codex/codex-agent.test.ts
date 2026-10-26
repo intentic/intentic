@@ -16,6 +16,7 @@ import { LIMIT_WAIT_HANDED_OVER } from "./turn/limit-wait.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";
 import { createTurnRelay, type TurnRelay } from "../daemon-tools/turn-relay.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
+import { closeBrowserSession, idleBrowserSessionNames, listBrowserSessions } from "../../browser/sessions/browser-sessions.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -178,6 +179,31 @@ test("a Codex browser screenshot settles its card with the picture its answer na
             ],
         },
     ]);
+});
+
+test.each(["completed", "failed", "interrupted"] as const)("a Codex browser tool holds its session until %s", async (ending) => {
+    const sessionId = `browser-hold-${ending}`;
+    let name = "";
+    const windowMs = 120_000;
+    const runner: CodexRunner = async function* () {
+        yield { type: "thread.started", thread_id: sessionId };
+        const item = { id: "browser-1", type: "mcp_tool_call", server: "web", tool: "browser_navigate", status: "in_progress" } as const;
+        yield { type: "item.started", item };
+        name = listBrowserSessions().find((session) => session.owner === sessionId)!.name;
+        expect(idleBrowserSessionNames(Date.now() + 10 * windowMs, windowMs)).not.toContain(name);
+        if (ending === "interrupted") {
+            throw new Error("stream interrupted before the tool completed");
+        }
+        yield { type: "item.completed", item: { ...item, status: ending } };
+    };
+    try {
+        await collect(createTestAgent(runner), { ...request, spec: { ...request.spec, conversationId: sessionId }, tools: { ...request.tools, browserPorts: { web: 1 } } });
+        const session = listBrowserSessions().find((entry) => entry.name === name)!;
+        expect(idleBrowserSessionNames(session.activityAt + windowMs - 1, windowMs)).not.toContain(name);
+        expect(idleBrowserSessionNames(session.activityAt + windowMs, windowMs)).toContain(name);
+    } finally {
+        await closeBrowserSession(name);
+    }
 });
 
 test("the turn runs full-access with approvals off, resumes the session, and pins CODEX_HOME", async () => {

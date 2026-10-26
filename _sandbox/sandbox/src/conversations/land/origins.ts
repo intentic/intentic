@@ -141,7 +141,7 @@ export const createAgentOrigins = (
     const claim = async (repo: string, dir: string, head: string, landing: Landing, origins: Record<string, string[]>): Promise<void> => {
         try {
             const applied = new Set(await appliedPaths(dir, repo, landing.head, landing.tip));
-            const retired = await expiry.committedSince(dir, repo, landing.head, head);
+            const retired = await expiry.committedSince(dir, repo, landing.head, head, applied);
             const anchor = await checkpointOf(dir, repo, head, landing.tip, landing.base);
             let total = 0;
             let claimed = 0;

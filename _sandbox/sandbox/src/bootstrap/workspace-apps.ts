@@ -25,7 +25,7 @@ const noteStarterReadiness = (logger: Logger, pending: Promise<StarterReadiness>
         .catch((error: unknown) => logger.warn({ err: error }, "autostart: the starter's readiness could not be observed"));
 };
 
-// Fifteen minutes with no editor connected and no visit to its preview: a dev server comes back in seconds, which is
+// Fifteen minutes with no consumer connected and no visit to its preview: a dev server comes back in seconds, which is
 // why this is shorter than the window after which a whole local sandbox sleeps.
 const APP_REST_IDLE_MS = 15 * 60_000;
 
@@ -62,12 +62,12 @@ export const startWorkspaceApps = async ({ logger, traits, role, services, shutd
                         start: async (keys) => {
                             const woken = await runAutostart(services, keys);
                             if (woken.skipped.length > 0) {
-                                logger.warn({ skipped: woken.skipped }, "app rest: some rested apps did not start again");
+                                throw new Error(`rested apps did not start again: ${woken.skipped.map(({ key, why }) => `${key}: ${why}`).join("; ")}`);
                             }
                         },
                         logger,
                     },
-                    { idleMs: APP_REST_IDLE_MS },
+                    { idleMs: APP_REST_IDLE_MS, consumerOnly: true },
                 ),
             ),
         );

@@ -18,6 +18,7 @@ import { HOLDER_SESSION, isNoTmuxServer } from "../../terminal/tmux-server.js";
 import { type ScannedProcess, scanProcesses } from "../resources/process-scan.js";
 import { endProcess, overdueDetached, processAges } from "./generation-sweep.js";
 import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor, type SweptProcess } from "./leftovers.js";
+import { closeIdleBrowsers, type ReaperBrowsers } from "./reaping/browser-reaper.js";
 
 // A signal sent to a process that exited meanwhile (ESRCH), or whose id now names someone else's (EPERM), lost a race
 // the next pass settles; any other refusal is a fault worth surfacing.
@@ -201,12 +202,7 @@ export const reapableAgentSessionNames = (sessions: readonly AgentSessionState[]
 
 // The browser records the reaper closes (browser/sessions/browser-sessions.ts), handed in since browsers sit above
 // system/: the owners with a browser running, the sessions nobody has driven for `idleMs`, and closing either.
-export interface ReaperBrowsers {
-    readonly runningOwners: () => readonly string[];
-    readonly idleNames: (now: number, idleMs: number) => readonly string[];
-    readonly close: (name: string) => Promise<void>;
-    readonly closeFor: (owner: string) => Promise<void>;
-}
+export type { ReaperBrowsers } from "./reaping/browser-reaper.js";
 
 export interface ReaperDeps {
     readonly browsers: ReaperBrowsers;
@@ -233,6 +229,7 @@ export interface ReaperDeps {
     readonly terminalGraceMs?: number;
     readonly terminalIdleMs?: number;
     readonly browserIdleMs?: number;
+    readonly browserUnderPressure?: () => Promise<boolean>;
     readonly intervalMs?: number;
 }
 
@@ -472,12 +469,8 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
                 owners.add(owner);
             }
         }
-        await Promise.all([...owners].map((owner) => deps.browsers.closeFor(owner)));
-        const idle = deps.browsers.idleNames(now, browserIdleMs);
-        if (idle.length > 0) {
-            await Promise.all(idle.map((name) => deps.browsers.close(name)));
-            logger.info({ count: idle.length, sessions: idle.slice(0, 10) }, "reaper: closed idle browsers");
-        }
+        await Promise.all([...owners].map((owner) => deps.browsers.closeFor(owner, true)));
+        await closeIdleBrowsers(deps.browsers, now, browserIdleMs, deps.browserUnderPressure, logger);
     };
 
     // A directory's own mtime freezes at creation, so age is judged by the newest file inside it.

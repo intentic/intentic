@@ -23,7 +23,8 @@ import { pruneEmptiedDirs } from "../git/changes/changes-index.js";
 import { scratchScopeOf } from "../git/changes/scratch.js";
 import { copyIntoMain, ignoredSkipOf, namedIgnoredOutputs } from "../git/changes/ignored-outputs.js";
 import { anchorOf } from "./land/agent-changes.js";
-import { historyOf, liveConflicts, reviewOf } from "./land/review.js";
+import { historyOf, liveConflicts } from "./land/review/review.js";
+import { createReviewReader } from "./land/review/review-cache.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { endingOf } from "./registry/turn-ending.js";
@@ -87,6 +88,7 @@ export const createAgentsRoutes = (services: Services) => {
     };
     // Every tab and panel showing a conversation asks for its review at once; one reading under way serves them all.
     const reviewsUnderway = new Map<string, Promise<AgentChanges>>();
+    const readReview = createReviewReader(services);
     const notRunning = (id: string): void => {
         if (services.conversations.running(id)) {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
@@ -430,7 +432,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (underway !== undefined) {
                 return underway;
             }
-            const reading = reviewOf(services, entry).finally(() => reviewsUnderway.delete(entry.id));
+            const reading = readReview(entry).finally(() => reviewsUnderway.delete(entry.id));
             reviewsUnderway.set(entry.id, reading);
             return reading;
         }),

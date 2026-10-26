@@ -1,11 +1,11 @@
 import type { Logger } from "pino";
 
-// Rests the workspace's autostarted apps (autostart.ts) while nobody is around, and starts them again the moment
-// somebody is: a connected editor, or a visit to one of their previews. An app nobody looks at is still a dev server,
+// Rests the workspace's autostarted apps (autostart.ts) while unused, and starts them again on a preview visit.
+// Legacy callers can also use editor presence to keep them warm. An app nobody looks at is still a dev server,
 // its package manager, its bundler service and its log cleaner, ~500 MB measured idle on 2026-10-10, and a PC holding a
 // dozen sandboxes holds a dozen of them. Only the apps the list names are rested, since the list is also what brings
 // them back exactly as boot would; a server somebody started by hand is theirs.
-// - quiet is a streak: any connected editor resets it, and a visit to one app's preview resets it for that app
+// - consumerOnly uses each app's visits and connections; otherwise editor presence also resets the quiet streak
 // - resting stops the app's session; waking runs the same start the list's boot does
 
 export interface AppRestDeps {
@@ -35,10 +35,12 @@ export interface AppRest {
 
 const CHECK_INTERVAL_MS = 60_000;
 
-export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: number; readonly checkMs?: number }): AppRest => {
+export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: number; readonly checkMs?: number; readonly consumerOnly?: boolean }): AppRest => {
     let quietSince = Date.now();
     const visitedAt = new Map<string, number>();
     const rested = new Set<string>();
+    const stopping = new Map<string, Promise<void>>();
+    let underway: Promise<void> | undefined;
 
     const wake = (keys: ReadonlySet<string>, why: string): void => {
         if (keys.size === 0) {
@@ -49,32 +51,37 @@ export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: numb
             rested.delete(key);
         }
         deps.logger.info({ apps: [...waking], why }, "app rest: starting rested workspace apps again");
-        void deps.start(waking).catch((error: unknown) => deps.logger.warn({ err: error, apps: [...waking] }, "app rest: rested apps could not be started"));
+        const starting = stopping.size === 0 ? deps.start(waking) : Promise.all([...waking].map((key) => stopping.get(key))).then(() => deps.start(waking));
+        void starting.catch((error: unknown) => {
+            for (const key of waking) {
+                if (!deps.running(key)) {rested.add(key);}
+            }
+            deps.logger.warn({ err: error, apps: [...waking] }, "app rest: rested apps could not be started");
+        });
     };
 
-    const check = async (): Promise<void> => {
-        if (deps.connected() > 0) {
+    const used = async (key: string): Promise<void> => {
+        if (!deps.running(key)) {return;}
+        const inUse = await deps.inUse?.(key).catch((error: unknown) => {
+            deps.logger.warn({ err: error, app: key }, "app rest: could not tell whether a workspace app is in use");
+            return true;
+        });
+        if (inUse === true) {visitedAt.set(key, Date.now());}
+    };
+
+    const checkOnce = async (): Promise<void> => {
+        if (options.consumerOnly !== true && deps.connected() > 0) {
             quietSince = Date.now();
             return;
         }
         const listed = await deps.listed();
         // Read again after the await: somebody may have connected while the list was read.
-        if (deps.connected() > 0) {
+        if (options.consumerOnly !== true && deps.connected() > 0) {
             quietSince = Date.now();
             return;
         }
         for (const key of listed) {
-            if (!deps.running(key)) {
-                continue;
-            }
-            // a handful of apps, each a read of the socket tables
-            const inUse = await deps.inUse?.(key).catch((error: unknown) => {
-                deps.logger.warn({ err: error, app: key }, "app rest: could not tell whether a workspace app is in use");
-                return false;
-            });
-            if (inUse === true) {
-                visitedAt.set(key, Date.now());
-            }
+            await used(key);
         }
         const now = Date.now();
         for (const key of listed) {
@@ -85,9 +92,16 @@ export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: numb
             rested.add(key);
             deps.logger.info({ app: key, quietMs: now - lastSeen }, "app rest: nobody around, resting a workspace app until somebody is");
             // a handful of apps, stopped one after another
-            await Promise.resolve(deps.stop(key)).catch((error: unknown) => deps.logger.warn({ err: error, app: key }, "app rest: could not stop a workspace app"));
+            const stopped = Promise.resolve().then(() => deps.stop(key)).catch((error: unknown) => {
+                rested.delete(key);
+                deps.logger.warn({ err: error, app: key }, "app rest: could not stop a workspace app");
+            });
+            stopping.set(key, stopped);
+            await stopped;
+            stopping.delete(key);
         }
     };
+    const check = (): Promise<void> => (underway ??= checkOnce().finally(() => { underway = undefined; }));
 
     const timer = setInterval(
         () => void check().catch((error: unknown) => deps.logger.warn({ err: error }, "app rest: check failed")),
@@ -97,7 +111,7 @@ export const startAppRest = (deps: AppRestDeps, options: { readonly idleMs: numb
     timer.unref();
 
     const unsubscribe = deps.subscribeConnected(() => {
-        if (deps.connected() > 0) {
+        if (options.consumerOnly !== true && deps.connected() > 0) {
             quietSince = Date.now();
             wake(rested, "somebody connected");
         }

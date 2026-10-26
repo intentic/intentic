@@ -135,4 +135,62 @@ describe("startAppRest", () => {
         expect(box.started).toEqual([["site--landing"]]);
         rest.dispose();
     });
+
+    it("consumer lifetimes rest unused previews while an editor stays connected, and wake only on a visit", async () => {
+        const box = workspace();
+        box.people = 1;
+        const rest = startAppRest({ ...box, inUse: async (key) => key === "site--landing" }, { idleMs: 15 * 60_000, consumerOnly: true });
+        await minutes(15);
+        expect(box.stopped).toEqual(["site--docs"]);
+        box.arrive();
+        expect(box.started).toEqual([]);
+        expect(rest.visit("site--docs")).toBe(true);
+        expect(box.started).toEqual([["site--docs"]]);
+        rest.dispose();
+    });
+
+    it("an unreadable connection table preserves previews", async () => {
+        const box = workspace();
+        const rest = startAppRest({ ...box, inUse: async () => { throw new Error("unreadable sockets"); } }, { idleMs: 15 * 60_000, consumerOnly: true });
+        await minutes(30);
+        expect(box.stopped).toEqual([]);
+        rest.dispose();
+    });
+
+    it("a visit during shutdown waits for that shutdown before restarting the preview", async () => {
+        const box = workspace();
+        let finishStop = (): void => {};
+        const stopping = new Promise<void>((resolve) => { finishStop = resolve; });
+        const rest = startAppRest({ ...box, stop: async (key) => { await stopping; box.stop(key); } }, { idleMs: 15 * 60_000, consumerOnly: true });
+        await minutes(15);
+        expect([...rest.rested()]).toEqual(["site--landing"]);
+        const pass = rest.check();
+        expect(rest.check()).toBe(pass);
+        expect(rest.visit("site--landing")).toBe(true);
+        expect(box.started).toEqual([]);
+        finishStop();
+        await pass;
+        expect(box.started).toEqual([["site--landing"]]);
+        expect(box.up.has("site--landing")).toBe(true);
+        rest.dispose();
+    });
+
+    it("a failed wake can be retried by the next visitor", async () => {
+        const box = workspace();
+        let starts = 0;
+        const rest = startAppRest({ ...box, start: async (keys) => {
+            starts += 1;
+            if (starts === 1) {throw new Error("start failed");}
+            await box.start(keys);
+        } }, { idleMs: 15 * 60_000, consumerOnly: true });
+        await minutes(15);
+        expect(rest.visit("site--docs")).toBe(true);
+        await advanceTimersByTimeAsync(0);
+        expect([...rest.rested()].toSorted()).toEqual(["site--docs", "site--landing"]);
+        expect(rest.visit("site--docs")).toBe(true);
+        await advanceTimersByTimeAsync(0);
+        expect(starts).toBe(2);
+        expect(box.up.has("site--docs")).toBe(true);
+        rest.dispose();
+    });
 });

@@ -15,6 +15,12 @@ flowchart LR
 
 - Checks run before `pnpm install`, so they read the tree by shape (regex, `lib/repo.mjs`) instead of importing the
   code they judge, and each runs as its own process.
+- The runner bounds concurrent checks by CPU and memory capacity, up to four. On Linux, `flock` slots in the shared
+  `INTENTIC_QUEUE_DIR` (or the normal temporary queue directory) enforce that budget across invocations and worktrees;
+  other hosts retain the per-invocation bound. Results stay in manifest order. A scoped entry can declare an `applies`
+  regex covering every file kind it reads; unrelated edits then skip its subprocess. Entries without it always run.
+  (2026-10-26) Per-invocation limits alone were rejected because concurrent conversations would multiply the budget.
+  Check suites under this directory run recursively in CI; `knip.json` names the same test glob as entry points.
 - To add one, write `<name>.mjs` and answer through `lib/report.mjs`: `finish` prints problems to stderr and exits
   1, or prints what it vouched for and exits 0; `cannotMeasure` exits 2 when the check could not look. Then add an
   entry to `CHECKS` in `manifest.mjs`.

@@ -365,13 +365,17 @@ const providersSliceOf = (
     });
 
 // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
-const createReaper = ({ conversations, agents, events, logger }: Pick<Services, "conversations" | "agents" | "events" | "logger">): ResourceReaper =>
+const createReaper = ({ conversations, agents, events, logger, resources }: Pick<Services, "conversations" | "agents" | "events" | "logger"> & { readonly resources: () => Services["resources"] }): ResourceReaper =>
     createResourceReaper({
         browsers: {
             runningOwners: runningBrowserOwners,
             idleNames: idleBrowserSessionNames,
             close: closeBrowserSession,
             closeFor: closeBrowserSessionsFor,
+        },
+        browserUnderPressure: async () => {
+            const { reading, stallSustainedLimitPercent } = await resources().snapshot();
+            return (reading.stallSustainedPercent ?? 0) >= stallSustainedLimitPercent;
         },
         ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(conversations, owner),
         // A watch keeps the conversation for its wake; its finished turn's processes go regardless (2026-10-05).
@@ -615,7 +619,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
     const push = filePushStore(join(config.historyRoot, pushDocument.path));
     // A reaction's failure is its own; the announcement it answered has already been made.
     const events = createDomainEvents((name, error) => logger.warn({ err: error, event: name }, "domain event: a reaction failed"));
-    const reaper = createReaper({ conversations, agents, events, logger });
+    const reaper = createReaper({ conversations, agents, events, logger, resources: () => whole().resources });
     // A settled turn's outside-content taint drops with the turn; the registry must be told when that moment is.
     events.subscribe("run.settled", (settled) => clearTurnTaint(settled.conversationId));
     // The free trial lays over the manifest, never into it; routing stays a config constant, not probe timing.

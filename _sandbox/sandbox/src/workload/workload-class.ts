@@ -12,6 +12,7 @@ import { getPriority, setPriority } from "node:os";
 import type { Readable, Writable } from "node:stream";
 import { sleep } from "@intentic/base/async";
 import { forkedExec } from "@intentic/base/git";
+import { childEnv } from "./child-env.js";
 
 // What a process is to this sandbox, decided by whoever spawned it and applied as it starts: its CPU niceness, its IO
 // class and its rank for the kernel's OOM killer. Children inherit all three at fork, so a class set on a runtime, a
@@ -146,7 +147,7 @@ export function spawnAs(
 ): ChildProcessByStdio<null, Readable, Readable>;
 export function spawnAs(workload: Workload, command: string, args: readonly string[], options: SpawnOptions): ChildProcess;
 export function spawnAs(workload: Workload, command: string, args: readonly string[], options: SpawnOptions): ChildProcess {
-    const child = spawn(command, args, options);
+    const child = spawn(command, args, { ...options, env: childEnv(options.env) });
     if (child.pid !== undefined) {
         void applyWorkload(child.pid, workload);
     }

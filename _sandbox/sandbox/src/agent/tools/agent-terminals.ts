@@ -95,7 +95,7 @@ export const POLITE_PREFIX = shellPrefix({ class: "command" });
 // says "terminal prompts disabled": answers an agent can act on. A command that sets either itself keeps its own, and
 // `npx --yes` still installs. Prompts that did not reproduce (pagers: stdout is a pipe; corepack: it did not ask) are
 // left alone; input-wait.ts catches whatever asks anyway.
-export const NO_PROMPTS = "env npm_config_yes=false GIT_TERMINAL_PROMPT=0 ";
+export const NO_PROMPTS = "env npm_config_yes=false GIT_TERMINAL_PROMPT=0 UV_THREADPOOL_SIZE=4 ";
 
 // Leaves the last pipeline's per-stage statuses where bin/tmux-run's pane exports INTENTIC_PIPESTATUS_FILE. An EXIT
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
