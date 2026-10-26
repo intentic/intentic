@@ -239,6 +239,7 @@ jest.mock("../../../../models/conversations/panel/useChat-view", () => {
             // No card says anything about the last turn here: the rows under test say it themselves.
             lastFailure: computed(() => undefined),
             spentReopensAt: computed(() => pane.spentReopensAt),
+            servingState: computed(() => undefined),
         }),
         // The question card injects the pane's view by this key; nothing provides it here, so it reads none.
         PANE_VIEW: Symbol.for(`intentic.chat-pane-view`),
