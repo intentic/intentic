@@ -771,11 +771,13 @@
     color: var(--sanctum-gold-bright);
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
-/* THE READER'S OWN WORDS ARE A STONE A STEP ABOVE THE CARD (chat.css `.chat-surface`), so they take the tooth every such
-   step takes and a plaque's warm lit lip rather than the plain dark scheme's white one. */
+/* THE READER'S OWN WORDS ARE THE PLATE'S OWN STONE (chat.css `.chat-surface`): flat, with the tooth every surface that
+   holds sentences carries here, and the warm lip of light a plaque's top edge catches rather than the dark scheme's
+   white one. No sheen and no drop: those made it a raised button. */
 [data-skin="sanctum"] .chat-surface {
-    --chat-prompt-lift: inset 0 1px 0 rgba(255, 250, 238, 0.05);
-    background-image: var(--sanctum-tooth);
+    --chat-prompt-fill: color-mix(in oklab, var(--color-content) 6%, var(--color-card));
+    --chat-prompt-face: var(--sanctum-tooth);
+    --chat-prompt-lift: inset 0 1px 0 rgba(255, 250, 238, 0.04);
 }
 /* Settled-card selection uses structural metal to mark location. */
 [data-skin="sanctum"] .chat-option-picked {

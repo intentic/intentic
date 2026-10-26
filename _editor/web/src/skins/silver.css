@@ -166,6 +166,19 @@
         background-attachment: fixed;
     }
 
+    /* THE BAND A PINNED PROMPT HIDES THE TRANSCRIPT WITH (chat.css `.chat-prompt-pinned::before`) is the chat pane
+       itself, so it paints the pane's own glass: in the plain colour its veil averages to, it stood out as a flat
+       strip a few grey levels off the glass around it. */
+    [data-skin="silver"] .chat-prompt-pinned::before {
+        background-image:
+            linear-gradient(var(--silver-veil-pane), var(--silver-veil-pane)),
+            var(--silver-ground);
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+
     /* A step above a pane: the composer, the dialog, a menu. A chip or a pill on `bg-overlay` keeps the plain colour
        its veil averages to; glass is for surfaces large enough to show the room through them. */
     [data-skin="silver"] .composer-frame,
@@ -539,6 +552,15 @@
 [data-skin="silver"] .composer-frame:focus-within {
     border-color: var(--ui-field-focus-line);
     --tw-ring-color: rgb(255 255 255 / 0.05);
+}
+
+/* THE PROMPT BUBBLE (chat.css `.chat-surface`) is a pane of the raised glass: the step above a pane in the metal's own
+   tint, with the glint every card here carries. The plain dark scheme's recipe is cut for a near-black card, and this
+   pane is lighter glass. Unlayered, as chat.css is. */
+[data-skin="silver"] .chat-surface {
+    --chat-prompt-fill: color-mix(in oklab, var(--color-primary-500) 8%, var(--color-overlay));
+    --chat-prompt-face: none;
+    --chat-prompt-lift: var(--silver-glint);
 }
 
 [data-skin="silver"] .chat-card-live .chat-card-title,

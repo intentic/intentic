@@ -25,10 +25,18 @@
 }
 /* WHAT A STUCK ROW HIDES THE TRANSCRIPT WITH — and the only thing it may paint. Opaque to the bubble's last pixel, gone
    by the row's, so the answer dissolves as it passes under. A rule across the pane instead of this fade reads as a
-   header's bottom edge, which is the one thing a held message is not. `background-image` alone: a `background-color`
-   would fill the fade back in. */
-.chat-prompt-pinned {
-    background-image: linear-gradient(to bottom, var(--color-card) calc(100% - var(--chat-gap)), transparent);
+   header's bottom edge, which is the one thing a held message is not.
+   A layer of its own under the row's content, faded by a mask rather than drawn as a gradient of one colour, so a look
+   whose pane is more than a colour (Silver's glass, silver.css) can paint the band with the pane's own ground and the
+   band stays part of it instead of a flat patch laid over it. */
+.chat-prompt-pinned::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--color-card);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--chat-gap)), transparent);
+    pointer-events: none;
 }
 /* The bubble, not the band, is what says the prompt is OVER the text rather than in it: it keeps its own edge and
    takes the scale's first float under it. The scale's own shadow, so the tint follows the scheme — a shadow mixed from
@@ -78,8 +86,9 @@
 .chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped .chat-prompt-text {
     mask-image: none;
 }
-/* The open/close control sits on the bubble's own fill, over the faded last line; inset from the corner so it stays
-   inside the bubble's curve. */
+/* The open/close control, inset from the corner so it stays inside the bubble's curve. It paints nothing at rest: in
+   every state the words keep out of its column (the padding-right of each), so a fill of its own would only show as a
+   flat patch on a bubble whose face is more than one colour. */
 .chat-prompt-toggle {
     position: absolute;
     right: 0.5rem;
@@ -87,11 +96,13 @@
     border-radius: var(--radius-md);
     padding: 0.125rem 0.25rem;
     color: var(--color-subtle);
-    background-color: var(--chat-prompt-fill);
-    transition: color var(--motion-hover);
+    transition:
+        color var(--motion-hover),
+        background-color var(--motion-hover);
 }
 .chat-prompt-toggle:hover {
     color: var(--color-content);
+    background-color: color-mix(in srgb, var(--color-content) 8%, transparent);
 }
 /* The open prompt toggle stays clear of the scrollbar thumb. */
 .chat-prompt-open .chat-prompt-toggle {
@@ -106,48 +117,56 @@
 .chat-prompt-clamped .chat-prompt-text {
     mask-image: linear-gradient(to bottom, #000 calc(100% - 0.625rem - 1.25lh), transparent calc(100% - 0.625rem));
     scroll-padding-bottom: 1.75rem;
+    /* The chevron's column, the same as the open box keeps below, so the words keep out from under it and opening the
+       prompt does not re-wrap them. */
+    padding-right: 2.25rem;
 }
 /* Opening a prompt is a deliberate "I want to read this again" — asked, more often than not, while the answer to it is streaming underneath. */
 .chat-prompt-open .chat-prompt-text {
     max-height: 45dvh;
     overflow-y: auto;
     overscroll-behavior: contain;
-    /* THE CHEVRON STAYS ON THE OPEN BOX, opaque over its bottom-right corner, so the words keep out of its column: the
+    /* THE CHEVRON STAYS ON THE OPEN BOX, in its bottom-right corner, so the words keep out of its column: the
        toggle's own 0.75rem inset plus its width. Without it, a prompt that opens to one full line (one that only
        overflowed as a pinned title, under the 34rem cap) ends under the chevron, and opening it shows less than shut. */
     padding-right: 2.25rem;
 }
 /* THE PROMPT BUBBLE: the reader's own words, set off by what they are made of, never by a rim. A 1px outline drew it
-   as a text field, the one thing a sent message is not.
-   - FILL: the accent stirred into the step above the transcript, so the person's voice is warm where everything the
-     agent opened (`--chat-inset`, a neutral ink-on-paper wash) is not. Opaque, so the chevron can wear the same fill.
-   - SHAPE: soft on three corners and tight on the one facing the speaker's edge (and the author's face, which stands
-     at the bubble's top). The radius lives here rather than in a `rounded-*` at the call sites, which this unlayered
-     sheet would beat anyway.
-   - LIFT: in the light, the room's warm shadow at its faintest; in the dark, where what is nearer is lighter, the lit
-     upper lip the dark looks give every raised plate instead. */
+   as a text field, the one thing a sent message is not. Three parts, each a property a look may answer for itself
+   (Sanctum and Silver do, in their own sheets):
+   - FILL (`--chat-prompt-fill`): the colour it is made of.
+   - FACE (`--chat-prompt-face`): what is drawn on the fill, if anything.
+   - LIFT (`--chat-prompt-lift`): a hairline of light or shadow at its edge, never more: it is flat.
+   SHAPE is the same in every look: soft on three corners and tight on the one facing the speaker's edge (and the
+   author's face, which stands at the bubble's top). It lives here rather than in a `rounded-*` at the call sites,
+   which this unlayered sheet would beat anyway.
+   In the light the fill is a sand: the accent stirred into a step of ink on the paper, so the person's voice is warm
+   where everything the agent opened (`--chat-inset`, a plain ink-on-paper wash) is not; the lift is the room's warm
+   shadow at its faintest. */
 .chat-surface {
     --chat-prompt-fill: color-mix(in oklab, var(--color-primary-500) 8%, color-mix(in oklab, var(--color-content) 4%, var(--color-card)));
+    --chat-prompt-face: none;
     --chat-prompt-lift: 0 1px 2px rgb(var(--ui-shadow-tint) / 0.08);
     border-radius: 1.125rem 0.375rem 1.125rem 1.125rem;
     background-color: var(--chat-prompt-fill);
+    background-image: var(--chat-prompt-face);
     box-shadow: var(--chat-prompt-lift);
 }
-/* The light recipe's ink is light here, and laid on a near-black card it lifts too little to read as a surface: the
-   dark scheme's own step above a card (`--color-overlay`) carries the tint instead. */
+/* IN THE DARK THE STEP IS LIGHTNESS ALONE, AND IT IS FLAT. The accent at any weight that shows turns to mud this far
+   down the lightness scale (it was read as a brown slab), and a lift as large as the overlay step made a long prompt
+   the heaviest shape on the screen; a sheen and a drop under it read as a 3D button. So: a small step of the stone's
+   own ink, no more than a card's hover, and the faint glint the dark looks give a pane's top edge. */
 [data-mode="dark"] .chat-surface {
-    --chat-prompt-fill: color-mix(in oklab, var(--color-primary-500) 8%, var(--color-overlay));
+    --chat-prompt-fill: color-mix(in oklab, var(--color-content) 6.5%, var(--color-card));
     --chat-prompt-lift: inset 0 1px 0 rgb(255 255 255 / 0.04);
 }
 /* A PROMPT THAT DID NOT GO OUT (ChatHeldBubble): the same shape, drawn as an outline on a dashed edge with only a
-   trace of the fill, since it has not landed in the conversation yet. Its chevron sits on that thin fill too. */
+   trace of the fill and none of the face or lift, since it has not landed in the conversation yet. */
 .chat-surface-held {
     border: 1px dashed color-mix(in srgb, var(--color-primary-500) 30%, var(--color-line-strong));
     background-color: color-mix(in oklab, var(--chat-prompt-fill) 40%, transparent);
+    background-image: none;
     box-shadow: none;
-}
-.chat-surface-held .chat-prompt-toggle {
-    background-color: transparent;
 }
 /* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. */
 .chat-skeleton {
