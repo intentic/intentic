@@ -42,29 +42,37 @@ export const bm25Rank = <T>(blocks: readonly T[], textOf: (block: T) => string, 
     if (queryTerms.length === 0 || blocks.length === 0) {
         return [];
     }
-    const docs = blocks.map((block) => tokenize(textOf(block)));
-    const avgLen = docs.reduce((sum, doc) => sum + doc.length, 0) / docs.length || 1;
+    const wanted = new Set(queryTerms);
     const docFrequency = new Map<string, number>();
-    for (const term of queryTerms) {
-        docFrequency.set(term, docs.filter((doc) => doc.includes(term)).length);
-    }
-    const scored = blocks.map((block, index) => {
-        const doc = docs[index] ?? [];
+    const docs = blocks.map((block) => {
+        const tokens = tokenize(textOf(block));
         const counts = new Map<string, number>();
-        for (const token of doc) {
-            counts.set(token, (counts.get(token) ?? 0) + 1);
+        for (const token of tokens) {
+            if (wanted.has(token)) {
+                counts.set(token, (counts.get(token) ?? 0) + 1);
+            }
         }
+        // A repeated word still contributes only one document to its document frequency.
+        for (const term of counts.keys()) {
+            docFrequency.set(term, (docFrequency.get(term) ?? 0) + 1);
+        }
+        return { block, length: tokens.length, counts };
+    });
+    const avgLen = docs.reduce((sum, doc) => sum + doc.length, 0) / docs.length || 1;
+    const weights = queryTerms.map((term) => {
+        const df = docFrequency.get(term) ?? 0;
+        return { term, idf: df === 0 ? 0 : Math.log((docs.length - df + 0.5) / (df + 0.5) + 1) };
+    });
+    const scored = docs.map((doc) => {
         let score = 0;
-        for (const term of queryTerms) {
-            const df = docFrequency.get(term) ?? 0;
-            if (df === 0) {
+        for (const { term, idf } of weights) {
+            const tf = doc.counts.get(term) ?? 0;
+            if (tf === 0) {
                 continue;
             }
-            const idf = Math.log((docs.length - df + 0.5) / (df + 0.5) + 1);
-            const tf = counts.get(term) ?? 0;
             score += idf * ((tf * (K1 + 1)) / (tf + K1 * (1 - B + B * (doc.length / avgLen))));
         }
-        return { block, score };
+        return { block: doc.block, score };
     });
     return scored.filter((entry) => entry.score > 0).toSorted((a, b) => b.score - a.score);
 };

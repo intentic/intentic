@@ -86,7 +86,7 @@ export const odtDeriver: Deriver = {
     name: "odt",
     version: 1,
     derive: async (absPath): Promise<DerivedDoc> => {
-        const zip = unzipSync(new Uint8Array(await readFile(absPath)));
+        const zip = unzipSync(new Uint8Array(await readFile(absPath)), { filter: (file) => file.name === "content.xml" || file.name === "meta.xml" });
         const decoder = new TextDecoder();
         const content = zip["content.xml"];
         if (content === undefined) {

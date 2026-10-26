@@ -34,7 +34,7 @@ export const pptxDeriver: Deriver = {
     name: "pptx",
     version: 1,
     derive: async (absPath): Promise<DerivedDoc> => {
-        const zip = unzipSync(new Uint8Array(await readFile(absPath)));
+        const zip = unzipSync(new Uint8Array(await readFile(absPath)), { filter: (file) => SLIDE_PART.test(file.name) || NOTES_PART.test(file.name) });
         const names = Object.keys(zip);
         const decoder = new TextDecoder();
         const xmlOf = (name: string): string => decoder.decode(zip[name]);

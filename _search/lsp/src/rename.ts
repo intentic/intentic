@@ -54,16 +54,12 @@ const LANGUAGE_IDS: Record<string, string> = {
 };
 
 // LSP positions are UTF-16 line/character pairs; JS strings are UTF-16 too, so this is plain counting.
-const offsetOf = (text: string, position: Position): number => {
-    let offset = 0;
-    for (let line = 0; line < position.line; line += 1) {
-        const next = text.indexOf("\n", offset);
-        if (next === -1) {
-            return text.length;
-        }
-        offset = next + 1;
+const lineStartsOf = (text: string): number[] => {
+    const starts = [0];
+    for (let next = text.indexOf("\n"); next !== -1; next = text.indexOf("\n", next + 1)) {
+        starts.push(next + 1);
     }
-    return Math.min(offset + position.character, text.length);
+    return starts;
 };
 
 const positionOf = (text: string, offset: number): Position => {
@@ -121,14 +117,22 @@ const collectEdits = (edit: WorkspaceEdit): Map<string, TextEdit[]> => {
     return byFile;
 };
 
-// Apply one file's edits back-to-front so earlier splices don't shift later offsets.
+// Resolve positions once against the original text, then assemble the result without copying the file per edit.
 const applyToFile = (file: string, edits: readonly TextEdit[]): void => {
-    let text = readFileSync(file, "utf8");
-    const ordered = edits.toSorted((a, b) => offsetOf(text, b.range.start) - offsetOf(text, a.range.start));
+    const text = readFileSync(file, "utf8");
+    const starts = lineStartsOf(text);
+    const offsetOf = (position: Position): number => Math.min((starts[position.line] ?? text.length) + position.character, text.length);
+    const ordered = edits
+        .map((edit) => ({ start: offsetOf(edit.range.start), end: offsetOf(edit.range.end), newText: edit.newText }))
+        .toSorted((a, b) => b.start - a.start);
+    const parts: string[] = [];
+    let end = text.length;
     for (const edit of ordered) {
-        text = `${text.slice(0, offsetOf(text, edit.range.start))}${edit.newText}${text.slice(offsetOf(text, edit.range.end))}`;
+        parts.push(text.slice(edit.end, end), edit.newText);
+        end = edit.start;
     }
-    writeFileSync(file, text);
+    parts.push(text.slice(0, end));
+    writeFileSync(file, parts.toReversed().join(""));
 };
 
 // Renames every usage of `symbol` across its project and writes each touched file.

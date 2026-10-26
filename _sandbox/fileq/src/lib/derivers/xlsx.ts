@@ -44,7 +44,7 @@ export const xlsxDeriver: Deriver = {
         const sections: string[] = [];
         for (const { sheet: sheetName, data } of sheets) {
             const filled = data.filter((row) => !isBlank(row));
-            const columnCap = Math.max(0, ...filled.map((row) => row.length));
+            const columnCap = filled.reduce((width, row) => Math.max(width, row.length), 0);
             const kept = filled.slice(0, MAX_ROWS_PER_SHEET).map((row) => row.slice(0, MAX_COLUMNS).map(cellText));
             if (filled.length > MAX_ROWS_PER_SHEET) {
                 notes.push(`sheet "${sheetName}": showing ${MAX_ROWS_PER_SHEET} of ${filled.length} rows`);

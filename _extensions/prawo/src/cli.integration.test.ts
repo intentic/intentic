@@ -244,3 +244,25 @@ test("a mistake is answered on stdout with exit 2, never as an empty answer", as
     expect((await run("rulings", "search", "x", "--act", "MP/2024/5")).text).toBe("prawo: --act links rulings through Dziennik Ustaw only (DU/<year>/<position>)");
     expect(await run()).toMatchObject({ code: 0, text: expect.stringMatching(/^prawo — Polish acts/u) });
 });
+
+test.each([
+    { flags: ["--from", "35", "--to", "38"], numbers: ["35", "36", "37", "38"] },
+    { flags: ["--from", "39[1]", "--to", "39_4"], numbers: ["39^1", "39^2", "39^3", "39^4"] },
+    { flags: ["--to", "2"], numbers: ["1", "2"] },
+    { flags: ["--from", "268"], numbers: ["268", "268a", "269"] },
+    { flags: ["--from", "38", "--to", "35"], numbers: [] },
+])("text selects an inclusive range in document order: $flags", async ({ flags, numbers }) => {
+    const { run } = harness(root);
+    const result = await run("text", "DU/1960/168", ...flags, "--json");
+    expect(result.code).toBe(0);
+    const { articles } = JSON.parse(result.text);
+    expect(articles.map((article: { number: string }) => article.number)).toEqual(numbers);
+});
+
+test("a missing text range bound is still a usage error", async () => {
+    const { run } = harness(root);
+    expect(await run("text", "DU/1960/168", "--from", "999", "--json")).toEqual({
+        code: 2,
+        text: "prawo: 999 is not an article of DU/2025/1691 (prawo text without --from/--to lists them)",
+    });
+});

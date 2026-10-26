@@ -61,3 +61,17 @@ test("nothing by the requested name is an error, not a guess", async () => {
     writeFileSync(file, "export const x = 1;\n");
     await expect(rename(file, "nosuchthing", "y")).rejects.toThrow('nothing named "nosuchthing"');
 });
+
+test.each(["\n", "\r\n"])("many edits preserve UTF-16 positions and %j line endings", async (newline) => {
+    const dir = fixture();
+    project(dir);
+    const file = join(dir, "src", "many.ts");
+    const declaration = 'export const value = "📚";';
+    const usages = Array.from({ length: 1_000 }, (_, index) => `export const item${index} = "📚" + value + value;`);
+    writeFileSync(file, [declaration, ...usages, ""].join(newline));
+    const result = await rename(file, "value", "renamedValue");
+    expect(result.edits).toBe(1 + usages.length * 2);
+    expect(readFileSync(file, "utf8")).toBe(
+        [declaration.replace("value", "renamedValue"), ...usages.map((line) => line.replaceAll("value", "renamedValue")), ""].join(newline),
+    );
+});

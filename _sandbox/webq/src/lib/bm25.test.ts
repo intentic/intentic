@@ -30,4 +30,20 @@ describe("bm25Rank", () => {
         expect(bm25Rank(blocks, (block) => block, "")).toEqual([]);
         expect(bm25Rank(blocks, (block) => block, "zebra")).toEqual([]);
     });
+
+    it("counts document frequency once per block and folds duplicate query terms", () => {
+        const docs = ["webhook webhook", "webhook other", ""];
+        const ranked = bm25Rank(docs, (block) => block, "webhooks webhook missing");
+        expect(ranked.map((entry) => entry.block)).toEqual(docs.slice(0, 2));
+        const idf = Math.log(1 + 1.5 / 2.5);
+        expect(ranked[0]?.score).toBeCloseTo((idf * 4.4) / (2 + 1.2 * (0.25 + 0.75 * 1.5)), 12);
+        expect(ranked[1]?.score).toBeCloseTo((idf * 2.2) / (1 + 1.2 * (0.25 + 0.75 * 1.5)), 12);
+    });
+
+    it("keeps document order when scores tie and handles blocks with no tokens", () => {
+        const docs = [{ text: "webhook retry" }, { text: "retry webhook" }, { text: "!" }];
+        expect(bm25Rank(docs, (block) => block.text, "webhook").map((entry) => entry.block)).toEqual(docs.slice(0, 2));
+        expect(bm25Rank(["", "!"], (block) => block, "webhook")).toEqual([]);
+        expect(bm25Rank([], (block: string) => block, "webhook")).toEqual([]);
+    });
 });

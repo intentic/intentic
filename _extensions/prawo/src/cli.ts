@@ -18,7 +18,7 @@ import {
 } from "./render.js";
 import { actId } from "./sources/eli.js";
 import type { COURT_TYPES } from "./sources/saos.js";
-import { type Article, articleKey, findArticle, notesFor, parseAddress, selectUnits } from "./text/model.js";
+import { articleKey, findArticle, notesFor, parseAddress, selectUnits } from "./text/model.js";
 
 /* `prawo`: the commands, each a call into Law and a view of its answer. The agent-CLI contract of this repository:
    everything, errors included, goes to stdout (an agent drops stderr and would read a failure as an empty answer);
@@ -98,13 +98,6 @@ const preferOf = (args: Args): "original" | "unified" | undefined => {
     return has(args, "original") ? "original" : has(args, "unified") ? "unified" : undefined;
 };
 
-const inRange = (article: Article, from: string | undefined, to: string | undefined, articles: readonly Article[]): boolean => {
-    const index = articles.indexOf(article);
-    const start = from === undefined ? 0 : articles.findIndex((candidate) => candidate.number === articleKey(from));
-    const end = to === undefined ? articles.length - 1 : articles.findLastIndex((candidate) => candidate.number === articleKey(to));
-    return index >= start && index <= end;
-};
-
 const text = async (args: Args, law: Law): Promise<string> => {
     const result = await law.text(actId(required(args.positional[1], "an act, e.g. DU/1960/168,")), preferOf(args));
     const { articles } = result.parsed;
@@ -115,14 +108,20 @@ const text = async (args: Args, law: Law): Promise<string> => {
             throw new UsageError(`${bound} is not an article of ${result.edition.ELI} (prawo text without --from/--to lists them)`);
         }
     }
-    const chosen = articles.filter((article) => inRange(article, from, to, articles));
-    const whole = textMarkdown(result, chosen);
-    // A whole code is a few hundred thousand characters: unasked, an agent gets its outline and the way to narrow it.
-    const outline = from === undefined && to === undefined && !has(args, "all") && whole.length > WHOLE_TEXT_LIMIT;
+    const fromKey = from === undefined ? undefined : articleKey(from);
+    const toKey = to === undefined ? undefined : articleKey(to);
+    const start = fromKey === undefined ? 0 : articles.findIndex((candidate) => candidate.number === fromKey);
+    const end = toKey === undefined ? articles.length - 1 : articles.findLastIndex((candidate) => candidate.number === toKey);
+    const chosen = articles.slice(start, end + 1);
     return print(
         args,
         () => textJson(result, chosen.map((article) => ({ article, units: article.units, notes: article.notes, marker: article.marker }))),
-        () => (outline ? outlineMarkdown(result, chosen, whole.length) : whole),
+        () => {
+            const whole = textMarkdown(result, chosen);
+            // A whole code is a few hundred thousand characters: unasked, an agent gets its outline and the way to narrow it.
+            const outline = from === undefined && to === undefined && !has(args, "all") && whole.length > WHOLE_TEXT_LIMIT;
+            return outline ? outlineMarkdown(result, chosen, whole.length) : whole;
+        },
     );
 };
 
