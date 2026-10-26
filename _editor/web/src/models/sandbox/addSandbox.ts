@@ -39,6 +39,24 @@ export const closeAddSandbox = (): void => {
     asked.value = false;
 };
 
+// WARMED BEFORE THE PRESS (2026-10-26). The dialog's run is a chunk of its own, fetched the first time it is asked for;
+// on a dev server that is hundreds of module requests, and the owner pressed Add sandbox in a sandbox, landed on Home and
+// saw no dialog for seconds. The shell, which owns the chunk, registers its fetch here; it runs once the shell is idle
+// and again whenever a pointer rests on a way to the press (the switcher, Home's +), so the press finds it loaded.
+// allow(module-state): the shell's fetch of the add's chunk, one per window
+let warmer: (() => Promise<void>) | undefined;
+
+/** The shell names how the add's chunk is fetched; a second call replaces the first. */
+export const setAddSandboxWarmer = (load: () => Promise<void>): void => {
+    warmer = load;
+};
+
+/** Fetches the add's chunk ahead of the press; a failure is the press's to surface, not this. */
+export const warmAddSandbox = (): void => {
+    // allow(silent-catch): a warm that failed changes nothing; the press fetches again and recovers its own failure
+    void warmer?.().catch(() => undefined);
+};
+
 /** Whether a window adds on Home rather than through the dialog: a desktop shell, for anyone who has a Home. */
 export const addsOnHome = (input: { readonly mobile: boolean; readonly isGuest: boolean; readonly homeOnly: boolean }): boolean =>
     !input.mobile && (!input.isGuest || input.homeOnly);

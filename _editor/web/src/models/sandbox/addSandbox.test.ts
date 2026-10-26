@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { ADD_SANDBOX_HOME_PATH, addSandboxAsked, addsOnHome, closeAddSandbox, requestAddSandbox } from "./addSandbox";
+import { ADD_SANDBOX_HOME_PATH, addSandboxAsked, addsOnHome, closeAddSandbox, requestAddSandbox, setAddSandboxWarmer, warmAddSandbox } from "./addSandbox";
 
 afterEach(() => closeAddSandbox());
 
@@ -36,4 +36,16 @@ it(`adds on Home on a desktop for anyone with a Home, and in the dialog on a pho
     expect(addsOnHome({ mobile: false, isGuest: true, homeOnly: true })).toBe(true);
     expect(addsOnHome({ mobile: false, isGuest: true, homeOnly: false })).toBe(false);
     expect(addsOnHome({ mobile: true, isGuest: false, homeOnly: false })).toBe(false);
+});
+
+// The dialog's chunk is fetched before the press, so landing on Home finds it loaded rather than seconds later.
+it(`warms the add's chunk through the shell's fetch, and a failed warm stays quiet`, async () => {
+    warmAddSandbox();
+    const load = jest.fn(() => Promise.reject(new Error(`offline`)));
+    setAddSandboxWarmer(load);
+
+    warmAddSandbox();
+    await Promise.resolve();
+
+    expect(load).toHaveBeenCalledTimes(1);
 });

@@ -35,9 +35,10 @@ const whenIdle = (fallbackMs: number): Promise<void> =>
 // a reload the walk used to take the first idle moment and keep it: a dev server answered ~1,000 module requests for it
 // in the seconds the reader was starting to work, and production evaluated chunk after chunk on the same thread their
 // first presses ran on. Every view is still warmed, so a later navigation is as quick as before.
-const walk = async (): Promise<void> => {
+// Chunks that are not views (a dialog's run, say) follow the views, one idle moment each like them.
+const walk = async (extra: readonly ViewLoader[]): Promise<void> => {
     let fallbackMs = FIRST_FALLBACK_MS;
-    for (const { load } of prefetchOrder(viewLoaders, useDevice().mobile.value)) {
+    for (const { load } of [...prefetchOrder(viewLoaders, useDevice().mobile.value), ...extra]) {
         await whenIdle(fallbackMs);
         fallbackMs = NEXT_FALLBACK_MS;
         try {
@@ -48,11 +49,11 @@ const walk = async (): Promise<void> => {
     }
 };
 
-export const prefetchViewsAtIdle = (): void => {
+export const prefetchViewsAtIdle = (extra: readonly ViewLoader[] = []): void => {
     // The shell remounts on breakpoint crossings; the walk must not restart with it.
     if (started) {
         return;
     }
     started = true;
-    void walk();
+    void walk(extra);
 };

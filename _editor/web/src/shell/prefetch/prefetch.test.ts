@@ -14,8 +14,10 @@ it(`pulls every registered view once, at idle, and survives a loader that fails`
     asyncView(first);
     asyncView(failing);
     asyncView(last);
+    // A chunk that is not a view (the add's dialog run) follows the views.
+    const extra = jest.fn(() => Promise.resolve());
 
-    prefetchViewsAtIdle();
+    prefetchViewsAtIdle([{ load: extra }]);
     // Nothing before idle: the walk must not compete with whatever the mounting view is fetching.
     expect(first).not.toHaveBeenCalled();
 
@@ -28,12 +30,14 @@ it(`pulls every registered view once, at idle, and survives a loader that fails`
     expect(first).toHaveBeenCalledTimes(1);
     expect(failing).toHaveBeenCalledTimes(1);
     expect(last).toHaveBeenCalledTimes(1);
+    expect(extra).toHaveBeenCalledTimes(1);
 
     // A shell remount calls again; the walk is once per window and the loaders stay fetched-once.
     prefetchViewsAtIdle();
     await advanceTimersByTimeAsync(2_000);
     expect(first).toHaveBeenCalledTimes(1);
     expect(last).toHaveBeenCalledTimes(1);
+    expect(extra).toHaveBeenCalledTimes(1);
     jest.useRealTimers();
 });
 

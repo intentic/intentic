@@ -26,7 +26,7 @@ import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { switchableSandboxes } from "../../../models/sandbox/live/roster";
-import { useRequestAddSandbox } from "../../../models/sandbox/addSandbox";
+import { useRequestAddSandbox, warmAddSandbox } from "../../../models/sandbox/addSandbox";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
@@ -112,6 +112,8 @@ watch(
     (wanted) => {
         if (wanted) {
             releaseBoxes ??= watchOtherBoxes();
+            // Its "Add sandbox" lands on a dialog whose chunk is fetched now, not after the press (addSandbox.ts).
+            warmAddSandbox();
             return;
         }
         releaseBoxes?.();

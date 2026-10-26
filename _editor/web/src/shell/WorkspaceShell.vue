@@ -23,6 +23,7 @@ import {
     addSandboxAsked,
     askAddSandbox,
     closeAddSandbox,
+    setAddSandboxWarmer,
     useAddsOnHome,
 } from "../models/sandbox/addSandbox";
 import { newSandboxBusy, newSandboxGeneration, newSandboxShownBy } from "../features/home/newSandbox/newSandbox";
@@ -36,10 +37,13 @@ import { loadShellDesktop, loadShellMobile } from "./shellChunks";
 
 const ShellDesktop = defineAsyncComponent(() => loadChunk(loadShellDesktop));
 const ShellMobile = defineAsyncComponent(() => loadChunk(loadShellMobile));
-// Fetched the first time somebody presses "Add sandbox", not with the shell.
-const AddSandboxDialog = defineAsyncComponent(() => import(`../features/setup/add/AddSandboxDialog.vue`));
-// Home's new sandbox's run, fetched the first time Home is asked for one (features/home/newSandbox/newSandbox.ts).
-const NewSandboxHost = defineAsyncComponent(() => import(`../features/home/newSandbox/NewSandboxHost.vue`));
+// Not fetched with the shell, but warmed ahead of the first "Add sandbox" (models/sandbox/addSandbox.ts `warmAddSandbox`):
+// at idle after the views, and as a pointer rests on a way to the press.
+const loadAddSandboxDialog = () => import(`../features/setup/add/AddSandboxDialog.vue`);
+// Home's new sandbox's run (features/home/newSandbox/newSandbox.ts), which puts its dialog up.
+const loadNewSandboxHost = () => import(`../features/home/newSandbox/NewSandboxHost.vue`);
+const AddSandboxDialog = defineAsyncComponent(loadAddSandboxDialog);
+const NewSandboxHost = defineAsyncComponent(loadNewSandboxHost);
 
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
@@ -50,8 +54,14 @@ useGuestFence();
 watchAgentsScope();
 // Answers an agent update's wait once the machine is read back on its new agent, whichever screen is open by then.
 watchDeviceReturns();
-// Pulls every view's chunk in the background once the shell is up (idempotent); see shell/prefetch/prefetch.ts.
-onMounted(prefetchViewsAtIdle);
+const addsOnHome = useAddsOnHome();
+// The chunk this window's "Add sandbox" will need: Home's run on a desktop, the shell's dialog where there is no Home.
+const loadAddSandbox = async (): Promise<void> => {
+    await (addsOnHome() ? loadNewSandboxHost() : loadAddSandboxDialog());
+};
+setAddSandboxWarmer(loadAddSandbox);
+// Pulls every view's chunk, then the add's, in the background once the shell is up (idempotent); see shell/prefetch/prefetch.ts.
+onMounted(() => prefetchViewsAtIdle([{ load: loadAddSandbox }]));
 onMounted(() => markBoot(`shell`));
 const router = useRouter();
 const route = useRoute();
@@ -89,7 +99,6 @@ watch(mobile, (isMobile) => {
 // to make it on, the dialog opens over the workspace and the address loses its ask, so a reload does not raise it again.
 // Signed out, the ask waits in the address for the sign-in; in the desktop app that sign-in is a dialog over this same
 // view (features/auth/signInDialog.ts), so the account arriving is what answers it, not a navigation.
-const addsOnHome = useAddsOnHome();
 watch(
     () => [route.query[ADD_SANDBOX_QUERY], route.name, mobile.value, user.value !== null] as const,
     ([value, name, _mobile, signedIn]) => {

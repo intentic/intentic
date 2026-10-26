@@ -8,7 +8,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
-import { useRequestAddSandbox } from "../../models/sandbox/addSandbox";
+import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
 import { useAuth } from "../../client/auth/useAuth";
@@ -113,6 +113,8 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 type="button"
                 class="flex min-h-11 flex-1 items-center gap-3 rounded-xl p-2 text-left text-muted hover:bg-content/5 hover:text-content"
                 @click="add"
+                @pointerenter="warmAddSandbox"
+                @focus="warmAddSandbox"
             >
                 <span class="flex size-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-line-strong">
                     <Icon name="plus" aria-hidden="true" />
@@ -150,6 +152,8 @@ const choose = (id: string, input: `click` | `enter`): void => {
                 :aria-label="t(`sandbox.words.addSandbox`)"
                 v-tooltip.right="t(`sandbox.words.addSandbox`)"
                 @click="add"
+                @pointerenter="warmAddSandbox"
+                @focus="warmAddSandbox"
             >
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
             </button>
