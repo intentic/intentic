@@ -24,8 +24,8 @@ interface ModelRoleRow {
     readonly kind: ModelRoleKind;
     // Icon name from the shared icon set; kept here, not in a separate web-side map keyed by id.
     readonly icon: string;
-    // The preset suggested for this job, offered when it is placed: what the work needs, not what it costs today. Only
-    // a suggestion: a job runs on nothing until someone puts it on a setup.
+    // The default preset for this job in a fresh sandbox, also offered when placing it again:
+    // what the work needs, not what it costs today.
     readonly setup: PresetSetup;
 }
 

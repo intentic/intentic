@@ -7,10 +7,9 @@ import { MODEL_ROLE_IDS, MODEL_ROLES, type ModelRole, PRESET_SETUPS, type Preset
 
 // A setup is a named, ordered list of models that any number of jobs run on: edited once, used by every job put there.
 // Every sandbox has three, Low, Medium and High, worked out from the accounts it has connected until the owner edits
-// one; the owner adds any others. A job runs on nothing until someone puts it on a setup: nothing spends an account, and
-// no judge starts holding commands, because an account was connected. Each job's catalog row suggests a preset
-// (model-roles.ts `setup`) for when it is placed. Every reader resolves a job through here, daemon and browser alike, so
-// the settings page shows what will run.
+// one; the owner adds any others. New settings place every job on its catalog preset (model-roles.ts `setup`).
+// Saved assignments stay as written: a job left out runs on nothing. Every reader resolves a job through here,
+// daemon and browser alike, so the settings page shows what will run.
 
 export const MODEL_SETUP_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 

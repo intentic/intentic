@@ -34,8 +34,8 @@ import { useT } from "@intentic/ui/i18n";
 
 // Every model choice the sandbox makes: the jobs that pick a model, and the setups they run on (named, ordered lists of
 // models). Low, Medium and High are always there, worked out from what is connected until edited; the owner makes any
-// others. A job runs on nothing until it is put on a setup, by dragging its chip there or pressing it and picking one;
-// the jobs on none wait in the list at the top, with one press to put each on the setup suggested for it. Nothing is
+// others. A fresh sandbox places each job on its suggested setup. Jobs taken off a setup wait in the list at the top,
+// with one press to put each back on its suggestion, or a drag or press to choose another setup. Nothing is
 // stored per card: the page is read off two settings through the contract's resolver (modelSetups.ts), so it draws what
 // will run.
 

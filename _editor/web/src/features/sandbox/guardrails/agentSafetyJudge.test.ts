@@ -89,11 +89,11 @@ test("moving the switch writes the mode", async () => {
 
 // Which model applies the policy: the account a verdict is billed to, drawn from the judge's setup.
 
-// A sandbox with no models set still runs on the standing rule alone; nothing here should look configured.
-test("says the judge has no model rather than naming one nobody chose", () => {
+// A judge explicitly taken off its setup still runs on the standing rule alone.
+test("says the judge has no model when it is taken off its setup", () => {
+    settings.value = SandboxSettingsSchema.parse({ roleSetups: {} });
     const host = mount();
-    // Reads the empty list off the schema instead of hardcoding it.
-    expect(SandboxSettingsSchema.parse({}).roleSetups[`safety-judge`]).toBeUndefined();
+    expect(settings.value.roleSetups[`safety-judge`]).toBeUndefined();
     expect(host.textContent).toContain(`No model is set for the judge`);
     expect(host.textContent).toContain(`standing rule alone`);
     // Both providers are connected in this fixture; neither should be named without a pin.

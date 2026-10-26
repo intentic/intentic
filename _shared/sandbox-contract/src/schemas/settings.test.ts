@@ -1,5 +1,5 @@
 import { convertDocument } from "../documents/conversions.js";
-import type { ModelRole } from "../models/model-roles.js";
+import { MODEL_ROLES, type ModelRole } from "../models/model-roles.js";
 import { rolePins } from "../models/model-setups.js";
 import { SETTINGS_HISTORY } from "./settings-history.js";
 import { RepoChecksFileSchema, RuleSchema, SandboxSettingsSchema, SandboxSettingsWriteSchema } from "./settings.js";
@@ -243,5 +243,27 @@ describe(`restore points' retention, renamed so a stored zero is the owner's own
 
     test(`a file naming both keeps the new one`, () => {
         expect(read({ restorePointDays: 0, restorePointKeepDays: 5 }).retention.restorePointKeepDays).toBe(5);
+    });
+});
+
+describe(`default job setups`, () => {
+    test(`new settings place every job on its suggested preset`, () => {
+        const settings = SandboxSettingsSchema.parse({});
+        expect(settings.roleSetups).toEqual(Object.fromEntries(MODEL_ROLES.map((role) => [role.id, role.setup])));
+        expect(settings.roleSetups[`commit-message`]).toBe(`low`);
+        expect(settings.roleSetups[`safety-judge`]).toBe(`medium`);
+        expect(settings.roleSetups[`pipeline-fix`]).toBe(`high`);
+        const sources = [{ provider: `claude`, ready: true, models: [`claude-haiku-4-5`, `claude-sonnet-5`, `claude-opus-5`] }] as const;
+        expect(rolePins(settings, `commit-message`, sources)).toEqual([{ provider: `claude`, model: `claude-haiku-4-5` }]);
+        expect(rolePins(settings, `safety-judge`, sources)).toEqual([{ provider: `claude`, model: `claude-sonnet-5` }]);
+        expect(rolePins(settings, `pipeline-fix`, sources)).toEqual([{ provider: `claude`, model: `claude-opus-5` }]);
+        expect(rolePins(settings, `pipeline-fix`, [])).toEqual([]);
+    });
+
+    test(`saved assignments keep their choices and jobs left off`, () => {
+        expect(SandboxSettingsSchema.parse({ roleSetups: {} }).roleSetups).toEqual({});
+        expect(SandboxSettingsSchema.parse({ roleSetups: { "commit-message": `high` } }).roleSetups).toEqual({ "commit-message": `high` });
+        const saved = SandboxSettingsSchema.parse({ roleSetups: {} });
+        expect(SandboxSettingsWriteSchema.parse({ ...saved, commandJudge: `watch` }).roleSetups).toEqual({});
     });
 });

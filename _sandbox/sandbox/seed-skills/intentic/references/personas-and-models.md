@@ -97,9 +97,9 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
 - Which models each job runs on is set on Sandbox ▸ Agent ▸ Jobs, as **setups**: named, ordered lists of models
   (`modelSetups` in settings) that any number of jobs share. **Low**, **Medium** and **High** are always there,
   worked out from the connected accounts (each provider's newest model at that level) until someone edits one;
-  the owner can make more. A job runs on the setup it is put on (`roleSetups`); one on none runs on nothing, so a
-  fresh sandbox spends nothing until its jobs are placed. Drag a job onto a setup, or press it and pick one;
-  "Place on suggested setups" puts every unplaced job on the preset suggested for it. The jobs are helpers
+  the owner can make more. A fresh sandbox places every job on its suggested Low, Medium or High setup
+  (`roleSetups`) by default. Saved assignments stay as written, including jobs taken off a setup. Drag a job
+  onto a setup, or press it and pick one; "Place on suggested setups" restores unplaced jobs to their suggestions. The jobs are helpers
   (**Commit messages**, **Session titles**, **Safety judge**, **Loop verdicts**, **Hand-off summaries**,
   **New chat routing**) and runs (**Pipeline fixes**, **Deployment fixes**, **Maintenance chores**,
   **Refactors**, **Documentation runs**, **Acceptance runs**, **Approvals queue**, **Extension update reviews**,

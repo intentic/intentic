@@ -29,7 +29,7 @@ const applied = (settings: SetupSettings, write: SetupsWrite | undefined): Setup
 const resolved = (settings: SetupSettings): Record<string, readonly ModelPin[]> =>
     Object.fromEntries(MODEL_ROLE_IDS.map((role) => [role, rolePins(settings, role, [CLAUDE])]));
 
-test(`a fresh sandbox is three suggested setups, and every job on none until it is placed`, () => {
+test(`an explicitly empty assignment map leaves every job on none`, () => {
     const { setups, unassigned } = setupsView(FRESH, [CLAUDE]);
 
     expect(setups.map((setup) => [setup.id, setup.derived, setup.pins.map((pin) => pin.model), setup.roles])).toEqual([

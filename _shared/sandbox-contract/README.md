@@ -146,6 +146,10 @@ The cold-session trim settings (`coldTrim`, `coldTrimHoldout`, `coldTrimMinToken
 (`coldTrimArm`, `coldTrimmed`) support comparing eligible Claude Code follow-ups. `SavingsReport.coldTrim` holds
 the reading when either arm has samples.
 
+New sandbox settings place every model job on its suggested Low, Medium or High setup, derived from
+`MODEL_ROLES` (`src/models/model-roles.ts`). Saved `roleSetups` maps stay as written, including jobs left off
+and empty maps; connecting an account fills the preset model lists without requiring a placement step.
+
 ## Imports
 
 Import a name from the module that declares it: `@intentic/sandbox-contract/<path under src, without the extension>`,

@@ -24,7 +24,7 @@ const RUN = `pipeline-fix` as const;
 
 const entry = (provider: string, model: string, rest: Record<string, unknown> = {}): ModelPin => ({ provider, model, ...rest }) as ModelPin;
 
-const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
+const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({ roleSetups: {} }));
 const patch = jest.fn((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
@@ -158,7 +158,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    settings.value = SandboxSettingsSchema.parse({});
+    settings.value = SandboxSettingsSchema.parse({ roleSetups: {} });
     connected.value = [`codex`, `claude`];
     providerModels.value = {};
     opened = undefined;
@@ -231,7 +231,16 @@ const luna = entry(`codex`, `gpt-5.6`);
 
 /* THE SETUPS ON THE PAGE */
 
-test("a fresh sandbox lists every job as not assigned, beside Low, Medium and High with nothing on them", async () => {
+test("a fresh sandbox places every job on its suggested setup without a settings write", async () => {
+    settings.value = SandboxSettingsSchema.parse({});
+    const host = await mountPage();
+    expect(layoutOf(host)).toEqual({ Low: suggestedOn(`low`), Medium: suggestedOn(`medium`), High: suggestedOn(`high`) });
+    expect(host.querySelector(`[data-setup-drop="unassigned"]`)).toBeNull();
+    expect(host.textContent).not.toContain(`Place on suggested setups`);
+    expect(patch).not.toHaveBeenCalled();
+});
+
+test("an explicitly empty assignment map lists every job as not assigned", async () => {
     const host = await mountPage();
 
     expect(jobsOf(tray(host))).toEqual(MODEL_ROLES.map((role) => role.label));
