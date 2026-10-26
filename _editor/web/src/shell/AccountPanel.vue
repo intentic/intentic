@@ -11,10 +11,11 @@ import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useAccount } from "../client/auth/useAccount";
 import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { leaveAfterSignOut } from "../app/environments/afterSignOut";
+import { desktopApp, openThisComputer } from "../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
-// plan) and actions (Settings, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
+// plan) and actions (Settings, This computer in the desktop app, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
 // on it raises the panel, a passing pointer raises nothing, and a press pins it. The rail's two end controls are the
 // same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives on /settings. The same control at
 // the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
@@ -48,6 +49,14 @@ const menu = useHoverMenu(panel);
 const open = menu.open;
 const pressed = menu.pressed;
 const avatarFailed = ref(false);
+
+// Computer tools are an occasional destination, reached here rather than among Home's sandbox tiles. A local window
+// is already on this computer, so it needs no link back to itself.
+const hasThisComputer = desktopApp() !== undefined && !account.local;
+const showThisComputer = (): void => {
+    open.value = false;
+    openThisComputer();
+};
 
 const avatarImage = computed<string | null>(() => (avatarFailed.value ? null : (user.value?.image ?? null)));
 
@@ -217,6 +226,16 @@ const communityPressed = (): void => {
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
                 {{ t(`shared.settings`) }}
             </RouterLink>
+            <button
+                v-if="hasThisComputer"
+                type="button"
+                data-menu-row
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
+                @click="showThisComputer"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="desktop" class="text-base text-muted" /></span>
+                {{ t(`sandbox.sandboxSwitcher.thisComputer`) }}
+            </button>
             <a
                 :href="invite.url"
                 target="_blank"

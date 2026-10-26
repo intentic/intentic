@@ -578,8 +578,9 @@ selected model and runtime support it, and stays hidden under Auto or on the fre
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
-Home also opens from the logo menu in This computer before any sandbox exists. Its rail offers a way back to This
-computer in the desktop app. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
+Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu
+offers This computer beside Settings; the Home rail holds only sandboxes and Add (2026-10-26). Computer tools stay
+available without becoming a primary destination during onboarding. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
 is, three steps, and Create, which opens the Add sandbox dialog over the page; a setup of the reader's own that never
 finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.
 

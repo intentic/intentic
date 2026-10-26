@@ -17,7 +17,6 @@ import { signInAt } from "../../lib/routes/signIn";
 import { goInside } from "../../lib/routes/homeDetour";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
-import { desktopApp, openThisComputer } from "../../app/environments/desktop";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 
 defineOptions({ inheritAttrs: false });
@@ -30,7 +29,6 @@ const { user } = useAuth();
 // The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
 // daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
 const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)));
-const inDesktopApp = desktopApp() !== undefined;
 // Before the first sandbox the + wears getting started's beacon, a quiet second way to the press the page itself leads
 // with (HomeNoSandbox.vue). No coach mark beside it any more: the page says what it would have said, and a popover over
 // a page that already asks for the same press is two voices for one thing.
@@ -116,16 +114,6 @@ const choose = (id: string, input: `click` | `enter`): void => {
          worn like every other tile: the same size, selection and corner chip. Only what needs you is counted; a quiet box
          wears nothing, and one that has not answered is dimmed rather than counted. -->
     <div v-else v-bind="$attrs" :aria-label="t(`home.sandboxes`)" role="group" class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
-        <button
-            v-if="inDesktopApp"
-            type="button"
-            class="icon-rail-tile ui-row-select ui-row-select-horizontal flex shrink-0 items-center justify-center rounded-lg text-muted hover:text-content"
-            :aria-label="t(`sandbox.sandboxSwitcher.thisComputer`)"
-            v-tooltip.right="t(`sandbox.sandboxSwitcher.thisComputer`)"
-            @click="openThisComputer"
-        >
-            <Icon name="desktop" class="icon-rail-glyph" aria-hidden="true" />
-        </button>
         <button
             v-for="box in boxes"
             :key="box.id"
