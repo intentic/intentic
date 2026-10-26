@@ -144,7 +144,7 @@ const memoryLine = computed(() => {
                 </span>
             </div>
             <Notice v-if="memoryShown" tone="warning" icon="pause" size="sm" role="status">
-                {{ memoryLine }}
+                {{ reopen.blockedLine.value === undefined ? memoryLine : `${memoryLine} · ${reopen.blockedLine.value}` }}
                 <template #actions>
                     <Button
                         v-if="reopen.reopenAt.value !== undefined"
@@ -159,8 +159,8 @@ const memoryLine = computed(() => {
                         size="small"
                         thumb
                         :tier="reopen.reopenAt.value === undefined ? undefined : `quiet`"
-                        :disabled="!props.canDrive"
-                        v-tooltip.top="sendAnywayTip()"
+                        :disabled="!props.canDrive || reopen.blockedLine.value !== undefined"
+                        v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()"
                         @click="sendHeld()"
                         >{{ t(`chat.chatHeld.sendAnyway`) }}</Button
                     >

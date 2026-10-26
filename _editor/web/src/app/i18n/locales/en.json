@@ -3711,6 +3711,20 @@
             "thinking": "Thinking",
             "waitingOnSubagents": "Waiting on {count} subagent | Waiting on {count} subagents"
         },
+        "sendAvailability": {
+            "spent": "Allowance exhausted; the reset time is unknown. Choose another account or model, or wait for the allowance to return.",
+            "spentTitle": "Allowance exhausted",
+            "editSpent": "This edit must wait until the allowance returns, or use another account or model. Your draft and existing messages stay here.",
+            "editSpentTitle": "Edit waits for allowance",
+            "reconnect": "Reconnect this account or choose another account or model. Your message stays here.",
+            "reconnectTitle": "Reconnect account",
+            "admin": "An organisation admin must restore this account’s access. Choose another account or model to continue.",
+            "adminTitle": "Account access blocked",
+            "verify": "Verify this account with the provider or choose another account or model. Your message stays here.",
+            "verifyTitle": "Verify account",
+            "wait": "This account is temporarily blocked with no known reopening time. Choose another account or model, or wait.",
+            "waitTitle": "Account temporarily blocked"
+        },
         "composerIntent": {
             "alsoReplaced": "Also replaced",
             "discardsRequest": "Discards request above",

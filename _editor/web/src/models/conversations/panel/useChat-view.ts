@@ -163,6 +163,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // The account the next turn runs on, and when it reopens (epoch s) while it reads spent with a named reset: what turns
     // Send into a scheduled send (composerIntent). Undefined whenever a plain send is the honest press.
     servingAccount: computed(() => conversation.value.selection.servingAccount.value?.id),
+    servingState: computed(() => conversation.value.selection.servingState.value),
     spentReopensAt: computed(() => {
         const state = conversation.value.selection.servingState.value;
         return state !== undefined ? reopensAtOf(state) : undefined;

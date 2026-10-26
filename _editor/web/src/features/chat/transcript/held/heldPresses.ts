@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { atReopenPhrase, pickUpWhen } from "../../../../models/conversations/endings/pickUp";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { sendBlockLine, sendBlockOf, sendBlockTitle } from "../../../../models/providers/sendAvailability";
 import { reopenBooking } from "../../../../models/conversations/drafts/sendLater";
 
 /* WHAT A MESSAGE THAT DID NOT GO OUT OFFERS, DECIDED ONCE. Every surface that draws one (the held line under its words,
@@ -22,9 +23,12 @@ import { reopenBooking } from "../../../../models/conversations/drafts/sendLater
  */
 export const useReopenPress = (active: () => boolean, arm?: () => Promise<void>) => {
     const t = useT();
-    const { conversation, spentReopensAt } = usePaneView();
+    const { conversation, spentReopensAt, servingState } = usePaneView();
     const spentAt = computed(() => (spentReopensAt.value === undefined ? undefined : spentReopensAt.value * 1_000));
     const now = useNow(() => active() && spentAt.value !== undefined);
+    const block = computed(() => sendBlockOf(servingState.value, now.value));
+    const blockedLine = computed(() => block.value === undefined ? undefined : sendBlockLine(block.value));
+    const blockedHint = computed((): Tip | undefined => block.value === undefined ? undefined : ({ title: sendBlockTitle(block.value), note: blockedLine.value }));
     // Only a sandbox that books can hold anything for the reopen.
     const reopenAt = computed(() => {
         const at = spentAt.value;
@@ -68,5 +72,5 @@ export const useReopenPress = (active: () => boolean, arm?: () => Promise<void>)
                   }
               },
     );
-    return { reopenAt, label, hint, sendNowHint, bookWords, bookContinue };
+    return { reopenAt, label, hint, sendNowHint, bookWords, bookContinue, blockedLine, blockedHint };
 };

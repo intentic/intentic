@@ -1,4 +1,4 @@
-import { accessFor, accountServesLoop, isTrialProvider, loopDoors, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { accessFor, accountServesLoop, isTrialProvider, loopDoor, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type AccessKind, NATIVE_PROVIDERS, type ProviderAccess, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
@@ -45,18 +45,25 @@ export const providerReady = (provider: AgentProvider): boolean => {
     return accountsOf(provider).length > 0 || nativeReady.value.includes(provider) || isAcp(provider) || isEndpoint(provider);
 };
 
-// Narrows providerReady to one harness, for the providers whose credential depends on it: Grok (its xAI account under
-// OpenCode, Grok Build's own sign-in on its CLI loop, the translator's SuperGrok subscription under Claude Code) and any
-// whose CLI loop signs in through a door of its own (Kimi CLI beside the translator's Kimi Code subscription). Every
-// other provider's loops share one credential. Read off the loop that would run, which a pick the daemon no longer
-// offers is not.
+// The credential a loop actually spends. CLI doors have their own native login; Grok's OpenCode entry
+// holds xAI OAuth. The other translator loops (including Gemini on OpenCode) share a subscription pool.
+export const subscriptionProviderOn = (provider: AgentProvider, harness: AgentHarness): KeyedProvider | undefined => {
+    const loop = selectedLoop(offeredLoops(provider), harness);
+    if (providerSpec(provider)?.auth.kind !== `translator` || loopDoor(provider, loop) !== undefined || (provider === `grok` && loop === `opencode`)) {
+        return undefined;
+    }
+    const keyed = KeyedProviderSchema.safeParse(provider);
+    return keyed.success ? keyed.data : undefined;
+};
+
 export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness): boolean => {
-    if (provider === `grok` || (providerSpec(provider)?.auth.kind === `translator` && loopDoors(provider).length > 0)) {
+    const subscription = subscriptionProviderOn(provider, harness);
+    if (subscription !== undefined) {
+        return translatorAccounts.value[subscription].length > 0;
+    }
+    if (providerSpec(provider)?.auth.kind === `translator`) {
         const loop = selectedLoop(offeredLoops(provider), harness);
-        const keyed = KeyedProviderSchema.safeParse(provider);
-        return loop === `claude-code`
-            ? keyed.success && translatorAccounts.value[keyed.data].length > 0
-            : accountsOf(provider).some((account) => accountServesLoop(provider, loop, account));
+        return accountsOf(provider).some((account) => accountServesLoop(provider, loop, account));
     }
     return providerReady(provider);
 };

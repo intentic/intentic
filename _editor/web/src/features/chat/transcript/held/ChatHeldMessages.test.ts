@@ -9,7 +9,8 @@ import { conversationView, PANE_VIEW } from "../../../../models/conversations/pa
 import { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import * as useSandboxOriginal from "../../../../client/sandbox/useSandbox";
-import { providerAccounts } from "../../../../models/providers/providerAccounts";
+import { resetSandboxScope } from "@intentic/extension-api";
+import { providerAccounts, translatorAccounts } from "../../../../models/providers/providerAccounts";
 
 // A message the sandbox held is drawn where the reader looks for what they just sent: their own prompt, with its
 // picture, over ONE line that says it did not go out, why, and the one press that sends it. The notice, the bar and
@@ -630,5 +631,46 @@ describe(`messages booked each on its own`, () => {
         ]);
         pressNamed(element, `Send now`)[0]!.click();
         expect(resume.mock.calls).toEqual([[[`m1`]]]);
+    });
+});
+
+// The account list and subscription list feed the real selection, rather than a reset stub on the view.
+describe(`held messages on subscription allowances`, () => {
+    afterEach(() => resetSandboxScope());
+    it(`books a memory-held message by its own id when the Codex subscription is spent`, async () => {
+        const at = Math.floor(Date.now() / 1000) + 3600;
+        translatorAccounts.value = { ...translatorAccounts.value, codex: [{ name: `sub`, label: `ChatGPT`, usage: {
+            measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 100, gates: `all`, resetsAt: at }],
+        } }] };
+        const chat = chatHolding({ items: [held()], paused: `refused` });
+        chat.selection.apply({ kind: `set`, picks: { provider: `codex`, harness: `native` } });
+        const reschedule = jest.spyOn(chat.turn, `reschedule`).mockResolvedValue(true);
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat);
+        await nextTick();
+        const booked = buttons(element).find((button) => button.textContent?.trim().startsWith(`Send in `));
+        expect(booked?.disabled).toBe(false);
+        booked!.click();
+        await settled();
+        expect(reschedule.mock.calls).toEqual([[{ sendAt: at * 1000, sendAtReopen: true }, [held().id]]]);
+        expect(resume).not.toHaveBeenCalled();
+    });
+
+    it.each([`unknown-reset`, `verification`] as const)(`explains %s and disables a memory-held immediate send`, async (kind) => {
+        translatorAccounts.value = { ...translatorAccounts.value, gemini: [{ name: `google`, label: `Google`,
+            ...(kind === `unknown-reset` ? { usage: { measuredAt: Date.now(), windows: [{ kind: `daily`, utilization: 100, gates: `all` as const }] } } : {
+                cooling: { verify: `https://example.com/verify`, reason: `Confirm your account` },
+            }),
+        }] };
+        const chat = chatHolding({ items: [held()], paused: `refused` });
+        chat.selection.apply({ kind: `set`, picks: { provider: `gemini`, harness: `native` } });
+        const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
+        const element = mount(chat);
+        await nextTick();
+        expect(pressNamed(element, `Send anyway`)[0]!.disabled).toBe(true);
+        expect(element.textContent).toContain(kind === `unknown-reset` ? `reset time is unknown` : `Verify this account`);
+        pressNamed(element, `Send anyway`)[0]!.click();
+        await settled();
+        expect(resume).not.toHaveBeenCalled();
     });
 });

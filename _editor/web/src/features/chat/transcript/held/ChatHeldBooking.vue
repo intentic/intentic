@@ -10,6 +10,7 @@ import ComposerSendLater from "../../composer/later/ComposerSendLater.vue";
 import type { BookedGroup } from "../../../../models/conversations/drafts/bookings";
 import { bookingOf, type SendLater } from "../../../../models/conversations/drafts/sendLater";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { useReopenPress } from "./heldPresses";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
 import ChatHeldRouting from "./ChatHeldRouting.vue";
 import ChatHeldStatus from "./ChatHeldStatus.vue";
@@ -28,6 +29,7 @@ const props = defineProps<{
 const t = useT();
 const { conversation, resumeQueue, spentReopensAt, unqueue, accounts, servingAccount } = usePaneView();
 const { agentById } = useAgents();
+const availability = useReopenPress(() => true);
 
 const until = computed(() => (props.group.booking.kind === `at` ? props.group.booking.at : undefined));
 const after = computed(() => (props.group.booking.kind === `after` ? props.group.booking.conversationId : undefined));
@@ -45,6 +47,9 @@ const awaited = computed(() => {
 // Sooner than booked: for a spent allowance, that it may still be spent; for another agent's work, that it goes without
 // it; for a time the reader chose, only that it goes now.
 const hint = computed((): Tip => {
+    if (availability.blockedHint.value !== undefined) {
+        return availability.blockedHint.value;
+    }
     if (after.value !== undefined) {
         return { title: t(`chat.chatHeld.sendNowTitle`), note: t(`chat.chatHeld.sendNowAfterNote`) };
     }
@@ -68,7 +73,7 @@ const waitedOut = computed((): QueuedReopen | undefined =>
 type Outgrown = { readonly kind: `moved`; readonly waited: string; readonly serving: string | undefined } | { readonly kind: `reopened`; readonly waited: string };
 const outgrown = computed((): Outgrown | undefined => {
     const waited = waitedOut.value;
-    if (waited === undefined || spentReopensAt.value !== undefined) {
+    if (waited === undefined || spentReopensAt.value !== undefined || availability.blockedLine.value !== undefined) {
         return undefined;
     }
     const provider = conversation.value.selection.provider.value;
@@ -104,6 +109,9 @@ const retime = (later: SendLater): void => {
     void conversation.value.turn.reschedule(bookingOf(later), props.group.ids);
 };
 const sendNow = (): void => {
+    if (availability.blockedLine.value !== undefined) {
+        return;
+    }
     changing.value = false;
     void resumeQueue(props.group.ids);
 };
@@ -129,9 +137,10 @@ const takeBack = (): void => {
                 }}</Button>
             </span>
             <Button v-if="group.continues" size="small" thumb tier="quiet" @click="takeBack()">{{ t(`chat.chatHeld.takeBack`) }}</Button>
-            <Button size="small" thumb v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+            <Button size="small" thumb :disabled="availability.blockedLine.value !== undefined" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </span>
     </ChatHeldStatus>
+    <p v-if="availability.blockedLine.value" class="text-2xs text-muted" role="status">{{ availability.blockedLine.value }}</p>
     <p v-if="outgrownWords" class="text-2xs text-subtle" :class="compact ? `` : `text-right`" role="note">{{ outgrownWords }}</p>
     <ChatHeldRouting :messages="group.messages" :compact="compact" />
     <ResponsiveOverlay v-model="changing" :anchor="changeAnchor" cross="end" :header="t(`chat.sendLater.reschedule`)" panel-class="w-80 p-1">

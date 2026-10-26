@@ -3711,6 +3711,20 @@
             "thinking": "Myśli",
             "waitingOnSubagents": "Czeka na {count} podagenta | Czeka na {count} podagenty | Czeka na {count} podagentów"
         },
+        "sendAvailability": {
+            "spent": "Limit wyczerpany; czas odnowienia jest nieznany. Wybierz inne konto lub model albo poczekaj na odnowienie limitu.",
+            "spentTitle": "Limit wyczerpany",
+            "editSpent": "Ta edycja musi poczekać na odnowienie limitu albo użyć innego konta lub modelu. Szkic i dotychczasowe wiadomości pozostaną tutaj.",
+            "editSpentTitle": "Edycja czeka na odnowienie limitu",
+            "reconnect": "Połącz to konto ponownie lub wybierz inne konto albo model. Twoja wiadomość pozostanie tutaj.",
+            "reconnectTitle": "Połącz konto ponownie",
+            "admin": "Administrator organizacji musi przywrócić dostęp do tego konta. Aby kontynuować, wybierz inne konto lub model.",
+            "adminTitle": "Dostęp do konta zablokowany",
+            "verify": "Zweryfikuj to konto u dostawcy lub wybierz inne konto albo model. Twoja wiadomość pozostanie tutaj.",
+            "verifyTitle": "Zweryfikuj konto",
+            "wait": "To konto jest tymczasowo zablokowane; czas odblokowania jest nieznany. Wybierz inne konto lub model albo poczekaj.",
+            "waitTitle": "Konto tymczasowo zablokowane"
+        },
         "composerIntent": {
             "alsoReplaced": "Też zastąpione",
             "discardsRequest": "Odrzuca prośbę powyżej",

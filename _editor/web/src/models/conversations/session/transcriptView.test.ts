@@ -1,4 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { computed, ref } from "vue";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -41,6 +42,7 @@ const viewOf = (rows: readonly ChatMessage[] = ROWS) => {
         turn: { streaming: computed(() => false), say: jest.fn<Host["turn"]["say"]>(async () => undefined) },
         // The last turn ended on a failure nothing brings back by itself: the tab reads as failed (TurnFailures.crashed).
         failures: { crashed: ref(true) },
+        selection: { servingState: ref<AccountState | undefined>() },
     };
     const view = new TranscriptView(() => undefined, host);
     view.adopt(rows);

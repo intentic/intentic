@@ -3711,6 +3711,20 @@
             "thinking": "Réfléchit",
             "waitingOnSubagents": "En attente de {count} sous-agent | En attente de {count} sous-agents"
         },
+        "sendAvailability": {
+            "spent": "Quota épuisé ; la date de réinitialisation est inconnue. Choisissez un autre compte ou modèle, ou attendez que le quota soit à nouveau disponible.",
+            "spentTitle": "Quota épuisé",
+            "editSpent": "Cette modification doit attendre que le quota soit à nouveau disponible, ou utiliser un autre compte ou modèle. Votre brouillon et les messages existants sont conservés ici.",
+            "editSpentTitle": "Modification en attente de quota",
+            "reconnect": "Reconnectez ce compte ou choisissez un autre compte ou modèle. Votre message est conservé ici.",
+            "reconnectTitle": "Reconnecter le compte",
+            "admin": "Un administrateur de l’organisation doit rétablir l’accès de ce compte. Choisissez un autre compte ou modèle pour continuer.",
+            "adminTitle": "Accès au compte bloqué",
+            "verify": "Vérifiez ce compte auprès du fournisseur ou choisissez un autre compte ou modèle. Votre message est conservé ici.",
+            "verifyTitle": "Vérifier le compte",
+            "wait": "Ce compte est temporairement bloqué et la date de déblocage est inconnue. Choisissez un autre compte ou modèle, ou attendez.",
+            "waitTitle": "Compte temporairement bloqué"
+        },
         "composerIntent": {
             "alsoReplaced": "Aussi remplacés",
             "discardsRequest": "Abandonne la demande",

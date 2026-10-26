@@ -143,6 +143,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
     };
     const client = new TurnClient(host);
     const transcript = new TranscriptView(() => undefined, {
+        selection: { servingState: computed(() => undefined) },
         conversationId: `c1`,
         box,
         draft,

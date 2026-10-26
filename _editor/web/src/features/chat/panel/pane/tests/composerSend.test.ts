@@ -3,7 +3,12 @@ import { STATE_DIR } from "@intentic/constants";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, createApp, h, nextTick, ref, shallowRef } from "vue";
-import { providerAccounts } from "../../../../../models/providers/providerAccounts";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { advertisedLoops } from "../../../../../models/providers/offeredLoops";
+import { providerAccounts, translatorAccounts, providerRefusals } from "../../../../../models/providers/providerAccounts";
 import { viewerPlaceholder } from "../../../composer/composerIntent";
 import { inputHistoryFor } from "../../../drafts/inputHistory";
 import type { PendingAttachment } from "../../../drafts/useChatAttachments";
@@ -19,13 +24,24 @@ import { runningTurn } from "../../../../../testing/runningTurn";
 const CHIP: PendingAttachment = { id: `u1`, name: `shot.png`, path: `${STATE_DIR}/a/shot.png`, status: `done`, progress: 100 };
 const t = useT();
 
+const allowance = (utilization: number, resetsAt?: number): AccountUsage => {
+    const window: AccountUsage["windows"][number] = { kind: `five_hour`, gates: `all`, utilization };
+    if (resetsAt !== undefined) {
+        window.resetsAt = resetsAt;
+    }
+    return { measuredAt: Date.now(), windows: [window] };
+};
+
 let unmount: (() => void) | undefined;
 // A pane's composer over a real conversation whose sends are caught at the turn; Claude connected, so it can send.
 const composerOf = (spentReopensAt?: number) => {
-    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1`, label: `Claude`, connectedAt: 1 }] };
+    const account: OauthAccount = { id: `a1`, label: `Claude`, connectedAt: 1 };
+    if (spentReopensAt !== undefined) {
+        account.usage = allowance(100, spentReopensAt);
+    }
+    providerAccounts.value = { ...providerAccounts.value, claude: [account] };
     const chat = new Conversation(`c1`);
-    // The account's verdict is the selection's to read (servingState); a test states the answer rather than a usage feed.
-    const view = { ...conversationView(computed(() => chat)), spentReopensAt: computed(() => spentReopensAt) };
+    const view = conversationView(computed(() => chat));
     const say = jest.spyOn(chat.turn, `say`).mockResolvedValue(undefined);
     const host = {
         view,
@@ -546,5 +562,171 @@ describe(`what the composer says`, () => {
         host.canDrive.value = false;
 
         expect(send.composerPlaceholder.value).toBe(viewerPlaceholder());
+    });
+});
+
+// These regressions start at the account stores: stubbing a reset on the view missed the subscription gap.
+describe(`availability through the real selection`, () => {
+    const SUBSCRIPTION_PAIRS: readonly (readonly [AgentProvider, AgentHarness])[] = [
+        [`codex`, `native`], [`codex`, `claude-code`], [`codex`, `opencode`], [`gemini`, `native`],
+        [`kimi`, `native`], [`kimi`, `codex`], [`kimi`, `opencode`], [`grok`, `claude-code`], [`grok`, `codex`],
+    ];
+    const pick = (chat: Conversation, provider: AgentProvider, harness: AgentHarness): void => {
+        advertisedLoops.value = Object.fromEntries([`codex`, `gemini`, `kimi`, `grok`].map((id) => [id, loopsOf(id)]));
+        chat.selection.apply({ kind: `set`, picks: { provider, harness, model: `test-model` } });
+    };
+
+    it.each(SUBSCRIPTION_PAIRS)(`books exhausted %s / %s on its subscription pool`, (provider, harness) => {
+        const { chat, send, say, view } = composerOf();
+        const at = Math.floor(Date.now() / 1000) + 3600;
+        translatorAccounts.value = { ...translatorAccounts.value, [provider]: [{ name: `sub`, label: `Subscription`, usage: allowance(100, at) }] };
+        // Native credentials with the opposite verdict must never lend their allowance to the subscription.
+        providerAccounts.value = { ...providerAccounts.value, [provider]: [{ id: `native`, label: `Native`, connectedAt: 1, usage: allowance(0) }] };
+        pick(chat, provider, harness);
+        chat.draft.value = `follow up`;
+        chat.attachments.value = [CHIP];
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        expect(view.connected.value).toBe(true);
+        expect(view.servingState.value).toEqual({ kind: `spent`, reopensAt: at });
+        expect(send.intent.value).toBe(`scheduled`);
+        send.submit();
+        expect(schedule.mock.calls).toEqual([[`follow up`, { sendAt: at * 1000, sendAtReopen: true }, [{ name: CHIP.name, path: CHIP.path }], undefined]]);
+        expect(say).not.toHaveBeenCalled();
+    });
+
+    it(`keeps a pool usable with any healthy subscription and books the earliest reset when all are spent`, () => {
+        const { chat, send, say, view } = composerOf();
+        const at = Math.floor(Date.now() / 1000) + 3600;
+        const spent = { name: `spent`, label: `Spent`, usage: allowance(100, at) };
+        translatorAccounts.value = { ...translatorAccounts.value, codex: [spent, { name: `ready`, label: `Ready`, usage: allowance(20) }] };
+        pick(chat, `codex`, `native`);
+        // A leftover native account/session pick does not pin translator balancing.
+        chat.selection.state.value = { ...chat.selection.state.value, account: `unrelated-native`, accountPicked: true };
+        chat.draft.value = `first`;
+        expect(view.servingState.value).toEqual({ kind: `ready`, room: 80 });
+        expect(send.intent.value).toBe(`idle`);
+        send.submit();
+        expect(say.mock.calls).toEqual([[`first`, [], undefined]]);
+        translatorAccounts.value = { ...translatorAccounts.value, codex: [spent, { name: `sooner`, label: `Sooner`, usage: allowance(100, at - 900) }] };
+        expect(view.spentReopensAt.value).toBe(at - 900);
+        translatorAccounts.value = { ...translatorAccounts.value, codex: [{ name: `no-clock`, label: `Unknown reset`, usage: allowance(100) }, spent] };
+        expect(view.spentReopensAt.value).toBe(at);
+        translatorAccounts.value = { ...translatorAccounts.value, codex: [spent, { name: `unmeasured`, label: `Unmeasured` }] };
+        expect(view.servingState.value).toEqual({ kind: `unknown` });
+        expect(send.intent.value).toBe(`idle`);
+    });
+
+    it(`ignores exhausted native credentials on a healthy subscription and follows loop switches`, () => {
+        const { chat, send, view } = composerOf();
+        const at = Math.floor(Date.now() / 1000) + 3600;
+        providerAccounts.value = { ...providerAccounts.value, kimi: [{ id: `cli`, label: `CLI`, connectedAt: 1, variant: `kimi-cli`, usage: allowance(100, at) }] };
+        translatorAccounts.value = { ...translatorAccounts.value, kimi: [{ name: `sub`, label: `Sub`, usage: allowance(10) }] };
+        pick(chat, `kimi`, `codex`);
+        chat.draft.value = `keep this draft`;
+        expect(send.intent.value).toBe(`idle`);
+        expect(view.servingState.value).toEqual({ kind: `ready`, room: 90 });
+        chat.selection.apply({ kind: `set`, picks: { harness: `vendor` } });
+        expect(send.intent.value).toBe(`scheduled`);
+        expect(view.spentReopensAt.value).toBe(at);
+        chat.selection.apply({ kind: `set`, picks: { harness: `opencode` } });
+        expect(send.intent.value).toBe(`idle`);
+        expect(chat.draft.value).toBe(`keep this draft`);
+    });
+
+    it(`reads a model-specific subscription refusal without blocking another model`, () => {
+        const { chat, send } = composerOf();
+        const at = Math.floor(Date.now() / 1000) + 3600;
+        translatorAccounts.value = { ...translatorAccounts.value, codex: [{ name: `sub`, label: `Sub`, usage: {
+            measuredAt: Date.now(), windows: [
+                { kind: `model:test`, gates: { models: [`test-model`] }, utilization: 10 },
+                { kind: `model:other`, gates: { models: [`other-model`] }, utilization: 20 },
+            ],
+        } }] };
+        pick(chat, `codex`, `native`);
+        providerRefusals.value = { codex: [{ kind: `limit`, message: `Model pool spent`, account: `sub`, model: `test-model`, at: Date.now(), resetsAt: at }] };
+        chat.draft.value = `keep this draft`;
+        expect(send.intent.value).toBe(`scheduled`);
+        chat.selection.apply({ kind: `set`, picks: { model: `other-model` } });
+        expect(send.intent.value).toBe(`idle`);
+    });
+
+    it.each([`no-reset`, `reauth`, `admin`] as const)(`refuses %s for text, empty continuation, queue and direct edit before rewind`, async (kind) => {
+        const { chat, send, say, view } = composerOf();
+        const entry = { id: `a1`, label: `Claude`, connectedAt: 1 };
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ ...entry,
+            ...(kind === `no-reset` ? { usage: allowance(100) } : kind === `reauth` ? { needsReauth: true } : {
+                seatRefusal: `Seat removed`,
+            }),
+        }] };
+        const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
+        const rewind = jest.spyOn(chat.transcript, `rewindTo`);
+        expect(view.servingState.value?.kind).toBe(kind === `no-reset` ? `spent` : `blocked`);
+        chat.draft.value = `keep my words`;
+        chat.attachments.value = [CHIP];
+        expect(send.canSend.value).toBe(false);
+        expect(send.refusal.value).toBe(kind === `no-reset`
+            ? `Allowance exhausted; the reset time is unknown. Choose another account or model, or wait for the allowance to return.`
+            : kind === `reauth` ? `Reconnect this account or choose another account or model. Your message stays here.`
+            : `An organisation admin must restore this account’s access. Choose another account or model to continue.`);
+        send.submit();
+        send.submit({ now: true });
+        expect(chat.draft.value).toBe(`keep my words`);
+        expect(chat.attachments.value).toEqual([CHIP]);
+        chat.draft.value = ``;
+        chat.attachments.value = [];
+        chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
+        expect(send.continueOffer.value).toBe(false);
+        expect(send.pickUpPressable.value).toBe(false);
+        send.submit();
+        send.continueTurn();
+        chat.queue.value = { revision: 1, paused: `refused`, items: [{ id: `m1`, text: `held`, voice: `person`, queuedAt: 1, revision: 1 }] };
+        expect(send.canSend.value).toBe(false);
+        send.submit();
+        chat.transcript.adopt([{ id: 1, role: `user`, text: `original`, rewindIndex: 0 }, { id: 2, role: `assistant`, text: `answer` }]);
+        chat.transcript.beginEdit(chat.transcript.messages.value[0]!);
+        chat.draft.value = `replacement`;
+        send.submit();
+        expect(await chat.transcript.submitEdit(`replacement`)).toBe(false);
+        expect(chat.transcript.messages.value.map((row) => row.text)).toEqual([`original`, `answer`]);
+        expect(chat.draft.value).toBe(`replacement`);
+        expect(chat.transcript.editing.value?.id).toBe(1);
+        expect(rewind).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
+        expect(continued).not.toHaveBeenCalled();
+    });
+
+    it(`keeps the edit intact with a known reset, even under an explicit later booking`, async () => {
+        const at = Math.floor(Date.now() / 1000) + 3600;
+        const { chat, send, say } = composerOf(at);
+        chat.transcript.adopt([{ id: 1, role: `user`, text: `original`, rewindIndex: 0 }, { id: 2, role: `assistant`, text: `answer` }]);
+        chat.transcript.beginEdit(chat.transcript.messages.value[0]!);
+        chat.draft.value = `replacement`;
+        chat.sendLater.value = { kind: `at`, at: at * 1000 };
+        const rewind = jest.spyOn(chat.transcript, `rewindTo`);
+        expect(send.canSend.value).toBe(false);
+        expect(send.refusal.value).toBe(`This edit must wait until the allowance returns, or use another account or model. Your draft and existing messages stay here.`);
+        send.submit();
+        expect(await chat.transcript.submitEdit(`replacement`)).toBe(false);
+        expect(chat.transcript.messages.value.map((row) => row.text)).toEqual([`original`, `answer`]);
+        expect(chat.draft.value).toBe(`replacement`);
+        expect(rewind).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `fresh`, label: `Fresh`, connectedAt: 1 }] };
+        expect(send.canSend.value).toBe(true);
+    });
+
+    it(`allows deliberate later bookings and live feedback while a fresh immediate turn is blocked`, () => {
+        const { chat, send, say } = composerOf();
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1`, label: `Claude`, connectedAt: 1, needsReauth: true }] };
+        chat.draft.value = `send after I reconnect`;
+        chat.sendLater.value = { kind: `at`, at: Date.now() + 3600000 };
+        const schedule = jest.spyOn(chat.turn, `schedule`).mockResolvedValue(undefined);
+        expect(send.canSend.value).toBe(true);
+        send.submit();
+        expect(schedule).toHaveBeenCalledTimes(1);
+        expect(say).not.toHaveBeenCalled();
+        runningTurn(chat.turn);
+        chat.draft.value = `feedback for the live turn`;
+        expect(send.canSend.value).toBe(true);
     });
 });

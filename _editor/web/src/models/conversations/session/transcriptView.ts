@@ -3,7 +3,7 @@ import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contra
 import { useDevice } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { t } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, ref, type Ref } from "vue";
 import { trackPerf } from "../../../app/perf/perf";
 import { uuid } from "../../../lib/uuid";
 import { whenIdle } from "../../../lib/whenIdle";
@@ -19,6 +19,8 @@ import { firstWhere, runningTotal } from "../transcript/transcriptScan";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import type { TurnFailures } from "../endings/turnFailures";
 import type { Conversation } from "./conversation";
+import { sendBlockLine, sendBlockOf } from "../../providers/sendAvailability";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { TurnClient } from "./turnClient";
 
 // One conversation's transcript as a reader sees it: the rows and their clock (TranscriptClock), the pages above them,
@@ -42,6 +44,7 @@ export type TranscriptRefresh = { readonly kind: `reconnecting` } | { readonly k
 // take back the error line and a crashed turn's failure together: the turn that failed is no longer the last word.
 export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draft" | "attachments" | "error" | "session"> & {
     readonly turn: Pick<TurnClient, "streaming" | "say">;
+    readonly selection: { readonly servingState: Readonly<Ref<AccountState | undefined>> };
     readonly failures: Pick<TurnFailures, "crashed">;
 };
 
@@ -293,6 +296,11 @@ export class TranscriptView extends TranscriptClock {
     async submitEdit(text: string, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<boolean> {
         const edit = this.editing.value;
         if (edit === undefined) {
+            return false;
+        }
+        const block = sendBlockOf(this.host.selection.servingState.value, Date.now(), true);
+        if (block !== undefined) {
+            this.host.error.value = sendBlockLine(block);
             return false;
         }
         const message = this.messages.value.find((candidate) => candidate.id === edit.id);

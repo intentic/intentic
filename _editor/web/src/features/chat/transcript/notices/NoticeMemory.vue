@@ -40,11 +40,12 @@ const atReopen = computed(() => reopen.bookContinue.value);
             <Button v-if="atReopen !== undefined" size="small" thumb v-tooltip.top="reopen.hint.value" @click="atReopen()">
                 <Icon name="clock" class="mr-1 text-2xs" />{{ reopen.label.value }}
             </Button>
-            <Button size="small" thumb :tier="atReopen === undefined ? undefined : `quiet`" v-tooltip.top="sendAnywayTip()" @click="send">{{
+            <Button size="small" thumb :tier="atReopen === undefined ? undefined : `quiet`" :disabled="reopen.blockedLine.value !== undefined" v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()" @click="send">{{
                 t(`chat.chatHeld.sendAnyway`)
             }}</Button>
             <MemoryRaise v-if="message.noticeAction === `sandboxMemory`" />
         </ChatHeldStatus>
+        <p v-if="reopen.blockedLine.value" class="text-2xs text-muted" role="status">{{ reopen.blockedLine.value }}</p>
         <div class="flex flex-col items-end gap-1 text-2xs text-muted">
             <TurnBreakQuestion ending="memory" :conversation-id="conversation.conversationId" :describe="memoryNext" end />
         </div>

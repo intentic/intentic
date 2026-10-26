@@ -87,7 +87,8 @@ const press = computed((): HeldPress => {
                         size="small"
                         thumb
                         :tier="reopenAt === undefined ? undefined : `quiet`"
-                        v-tooltip.top="press.hint"
+                        :disabled="reopen.blockedLine.value !== undefined"
+                        v-tooltip.top="reopen.blockedHint.value ?? press.hint"
                         @click="resumeQueue(heldIds)"
                         >{{ press.label }}</Button
                     >
@@ -98,6 +99,7 @@ const press = computed((): HeldPress => {
                     <MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" />
                 </span>
             </ChatHeldStatus>
+            <p v-if="reopen.blockedLine.value" class="text-2xs text-muted" role="status">{{ reopen.blockedLine.value }}</p>
             <ChatHeldRouting :messages="bubbles" :compact="compact" />
             <!-- What happens next, asked as every wall asks it (a spent allowance's card, ChatContinueStrip): wait for the
                  press, or send it by itself once memory has stayed free for a while. -->

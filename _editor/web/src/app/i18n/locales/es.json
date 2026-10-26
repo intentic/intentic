@@ -3711,6 +3711,20 @@
             "thinking": "Pensando",
             "waitingOnSubagents": "Esperando a {count} subagente | Esperando a {count} subagentes"
         },
+        "sendAvailability": {
+            "spent": "Cupo agotado; se desconoce cuándo se restablecerá. Elige otra cuenta o modelo, o espera a que vuelva a haber cupo.",
+            "spentTitle": "Cupo agotado",
+            "editSpent": "Esta edición debe esperar a que vuelva a haber cupo, o usar otra cuenta o modelo. Tu borrador y los mensajes existentes se conservarán aquí.",
+            "editSpentTitle": "La edición espera a que haya cupo",
+            "reconnect": "Vuelve a conectar esta cuenta o elige otra cuenta o modelo. Tu mensaje se conservará aquí.",
+            "reconnectTitle": "Volver a conectar la cuenta",
+            "admin": "Un administrador de la organización debe restablecer el acceso de esta cuenta. Elige otra cuenta o modelo para continuar.",
+            "adminTitle": "Acceso a la cuenta bloqueado",
+            "verify": "Verifica esta cuenta con el proveedor o elige otra cuenta o modelo. Tu mensaje se conservará aquí.",
+            "verifyTitle": "Verificar la cuenta",
+            "wait": "Esta cuenta está bloqueada temporalmente y se desconoce cuándo se desbloqueará. Elige otra cuenta o modelo, o espera.",
+            "waitTitle": "Cuenta bloqueada temporalmente"
+        },
         "composerIntent": {
             "alsoReplaced": "También reemplazados",
             "discardsRequest": "Descarta la solicitud",

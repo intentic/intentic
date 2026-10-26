@@ -1,11 +1,13 @@
-import { capabilitiesOf, clampMode, fastAllowed, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { accountServesLoop, capabilitiesOf, clampMode, fastAllowed, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { AgentProvider, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
-import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
+import type { AccountState, ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { preferredAccount, reopensAtOf, SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef } from "vue";
-import { providerAccounts } from "../../providers/providerAccounts";
+import { providerAccounts, translatorAccounts } from "../../providers/providerAccounts";
 import { modelLabelFor, providerModels } from "../../providers/providerCatalog";
+import { subscriptionProviderOn } from "../../providers/access";
+import { offeredLoops, selectedLoop } from "../../providers/offeredLoops";
 import { servingAccount } from "../accounts/servingAccount";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { followPick } from "./queueCalls";
@@ -16,7 +18,7 @@ import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
-import { accountFacts, accountState, formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "../../providers/usageStatus";
+import { accountFacts, accountState, routedAccountFacts, formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "../../providers/usageStatus";
 
 // A conversation's selection as the composer binds it: the value `reduceSelection` moves, read one pick at a time, and
 // the one "switched" divider a change of it owes the transcript. Which picks a switch retires is the reducer's rule;
@@ -184,12 +186,30 @@ export class ComposerSelection {
     // without drawing the list (the pane's reconnect notice). The picker ticks the same row by the same rule over the same
     // rows, fed `account` and `accountNamed`, so neither can name an account the turn then does not run on.
     readonly servingAccount = computed(() =>
-        servingAccount(this.provider.value, this.accountRows.value, { account: this.account.value, named: this.accountNamed.value }),
+        this.subscription.value === undefined
+            ? servingAccount(this.provider.value, this.accountRows.value, { account: this.account.value, named: this.accountNamed.value })
+            : undefined,
     );
 
     // That account's verdict for this selection's model, off the same rows: what the composer reads to know a press would
     // only meet a spent allowance (composerIntent's `scheduled`).
-    readonly servingState = computed(() => this.accountRows.value.find((row) => row.id === this.servingAccount.value?.id)?.state);
+    readonly servingState = computed<AccountState | undefined>(() => {
+        const rows = this.accountRows.value;
+        if (this.subscription.value === undefined) {
+            return rows.find((row) => row.id === this.servingAccount.value?.id)?.state;
+        }
+        // The translator balances its subscriptions, independently of a native account/session pick. Any usable
+        // credential keeps the pool runnable. When none can serve, book the earliest reopening, never the first row.
+        const preferred = preferredAccount(rows)?.state;
+        if (preferred?.kind === `ready` || preferred?.kind === `unknown`) {
+            return preferred;
+        }
+        return rows.reduce<AccountState | undefined>((best, row) => {
+            const at = reopensAtOf(row.state);
+            const bestAt = best === undefined ? undefined : reopensAtOf(best);
+            return at !== undefined && (bestAt === undefined || at < bestAt) ? row.state : best;
+        }, preferred);
+    });
 
     // Who the next turn goes on, as a move of words already waiting names it (agent.queueReroute): the runtime, model and
     // effort the composer holds, and the account only where a send would name one (accountIntent), else the daemon's.
@@ -210,10 +230,17 @@ export class ComposerSelection {
         return routing;
     });
 
+    private readonly subscription = computed(() => subscriptionProviderOn(this.provider.value, this.harness.value));
+
     private readonly accountRows = computed(() => {
         const provider = this.provider.value;
         const model = this.model.value === `` ? undefined : { id: this.model.value };
-        return (providerAccounts.value[provider] ?? []).map((entry) => ({
+        const subscription = this.subscription.value;
+        if (subscription !== undefined) {
+            return translatorAccounts.value[subscription].map((entry) => ({ id: entry.name, state: accountState(provider, routedAccountFacts(entry), model) }));
+        }
+        const loop = selectedLoop(offeredLoops(provider), this.harness.value);
+        return (providerAccounts.value[provider] ?? []).filter((entry) => accountServesLoop(provider, loop, entry)).map((entry) => ({
             id: entry.id,
             state: accountState(provider, accountFacts(entry), model),
         }));

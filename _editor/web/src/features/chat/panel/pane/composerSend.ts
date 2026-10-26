@@ -31,6 +31,7 @@ import type { ChatRouting } from "../../routing/chatRoute";
 import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../../../models/providers/usageStatus";
+import { sendBlockOf } from "../../../../models/providers/sendAvailability";
 import { anyProviderReady } from "../../../../models/providers/access";
 import { planFeedback } from "../../../../models/conversations/session/cardReplies";
 import { track } from "../../../../app/analytics";
@@ -205,7 +206,10 @@ const atReopenOf = (pick: PickUp | undefined, limitArmed: boolean): ReopenPress 
 
 // What a bare press does with a stopped turn: continue it now (an account with room, or a caller that just made room
 // itself, ahead of a spent reading the usage feed has not caught up with), continue it at the reopen, or neither.
-const barePressOf = (offered: boolean, press: ReopenPress | undefined, madeRoom: boolean): `now` | `reopen` | undefined => {
+const barePressOf = (offered: boolean, press: ReopenPress | undefined, madeRoom: boolean, refusal: string | undefined): `now` | `reopen` | undefined => {
+    if (refusal !== undefined) {
+        return undefined;
+    }
     if (offered || (press !== undefined && madeRoom)) {
         return `now`;
     }
@@ -261,7 +265,7 @@ const reopenReadings = (on: {
         // What the time-labelled button says on an empty box with a turn to continue: that press, or that it is already set.
         reopenShown: computed(() => (on.intent.value === `scheduled` && continueVisible(on.situation.value) ? atReopen.value : undefined)),
         // Whether the strip's own press would get through now (a held turn always would; it is the account that may not).
-        pressable: computed(() => on.situation.value.pickUp?.ready === true),
+        pressable: computed(() => on.situation.value.pickUp?.ready === true && sendRefusal(on.situation.value) === undefined),
         // What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
         keyHint: computed(() => continueKeyHintOf(on.continueOffer.value, on.spentUntil.value, reopenPress.value, on.now.value)),
     };
@@ -345,6 +349,7 @@ export const useComposerSend = (host: SendHost) => {
         queueScheduled: view.waiting.value.length === 0 && view.bookedGroups.value.length > 0,
         connected: connected.value,
         spentUntil: spentUntil.value,
+        accountBlock: sendBlockOf(view.servingState.value, paneNow.value, editing.value !== undefined),
         later: later.value !== undefined,
     }));
     const intent = computed(() => sendIntentOf(situation.value));
@@ -361,7 +366,7 @@ export const useComposerSend = (host: SendHost) => {
     // Continuing says nothing of the person's (a held turn re-runs, or the daemon carries the session on), so nothing
     // joins the recall ring.
     const continueTurn = (options?: ContinueOptions): void => {
-        if (!host.reachable.value) {
+        if (!host.reachable.value || sendBlockOf(view.servingState.value, paneNow.value) !== undefined) {
             return;
         }
         void view.continueTurn(options);
@@ -476,7 +481,7 @@ export const useComposerSend = (host: SendHost) => {
         // caught up with.
         // On a spent account the same bare press continues at the reopen, as the time-labelled button it sits beside says
         // ("Enter to continue at 02:00"), rather than now, where it would be refused before anything ran.
-        const bare = barePressOf(continueOffer.value, reopenPress.value, options.now === true);
+        const bare = barePressOf(continueOffer.value, reopenPress.value, options.now === true, refusal.value);
         if (bare !== undefined) {
             bareWays[bare]();
             return;

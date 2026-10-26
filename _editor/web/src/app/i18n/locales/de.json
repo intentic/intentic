@@ -3711,6 +3711,20 @@
             "thinking": "Denkt",
             "waitingOnSubagents": "Wartet auf {count} Subagenten | Wartet auf {count} Subagenten"
         },
+        "sendAvailability": {
+            "spent": "Kontingent aufgebraucht; der Zeitpunkt der Zurücksetzung ist unbekannt. Wähle ein anderes Konto oder Modell oder warte, bis wieder Kontingent verfügbar ist.",
+            "spentTitle": "Kontingent aufgebraucht",
+            "editSpent": "Diese Bearbeitung muss warten, bis wieder Kontingent verfügbar ist, oder ein anderes Konto oder Modell verwenden. Dein Entwurf und die bisherigen Nachrichten bleiben erhalten.",
+            "editSpentTitle": "Bearbeitung wartet auf Kontingent",
+            "reconnect": "Verbinde dieses Konto erneut oder wähle ein anderes Konto oder Modell. Deine Nachricht bleibt hier.",
+            "reconnectTitle": "Konto erneut verbinden",
+            "admin": "Ein Organisationsadministrator muss den Zugriff dieses Kontos wiederherstellen. Wähle ein anderes Konto oder Modell, um fortzufahren.",
+            "adminTitle": "Kontozugriff gesperrt",
+            "verify": "Bestätige dieses Konto beim Anbieter oder wähle ein anderes Konto oder Modell. Deine Nachricht bleibt hier.",
+            "verifyTitle": "Konto bestätigen",
+            "wait": "Dieses Konto ist vorübergehend gesperrt; wann die Sperre aufgehoben wird, ist unbekannt. Wähle ein anderes Konto oder Modell oder warte.",
+            "waitTitle": "Konto vorübergehend gesperrt"
+        },
         "composerIntent": {
             "alsoReplaced": "Auch ersetzt",
             "discardsRequest": "Verwirft Anfrage oben",

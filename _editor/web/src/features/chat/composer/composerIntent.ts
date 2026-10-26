@@ -3,6 +3,7 @@
 // daemon, so precedence is testable without mounting a chat.
 import type { TooltipValue } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { type SendBlock, sendBlockLine, sendBlockTitle } from "../../../models/providers/sendAvailability";
 
 // Press precedence: place (agent voice, no turn), edit (rewind), plan (revise), later (explicit booking), scheduled (wait for allowance).
 // Then idle sends; parked queues behind a live question/card, including one known to the roster before this window draws it.
@@ -65,10 +66,11 @@ export interface ComposerSituation {
     readonly later?: boolean;
     /**
      * When the account the next turn runs on reopens (ms), set only while it reads spent with a reopen still ahead, as
-     * the pane resolves it against the clock. Undefined covers every case a plain send is right: room, no reading, a
-     * spent pool with no named reset (nothing to book against), or a reset already passed.
+     * the pane resolves it against the clock. Exhaustion without a reset is carried separately in accountBlock.
      */
     readonly spentUntil: number | undefined;
+    /** A known account block, including exhaustion without a reset; resolved against the pane's clock. */
+    readonly accountBlock?: SendBlock | undefined;
 }
 
 /** The words a sentence needs filling in, whose model answers, and what an armed edit would cost. */
@@ -209,9 +211,28 @@ export const placeholderFor = (intent: SendIntent, words: ComposerWords): string
 export const sendHintFor = (intent: SendIntent, words: ComposerWords): TooltipValue => SEND_HINT[intent](words);
 
 // What stops Send, one name per rule; worded twice below, as the status line's sentence and the button's short label.
-type Refusal = `runningPlace` | `planPending` | `attachedVoice` | `runningEdit` | `uploading` | `uploadFailed`;
+type Refusal = SendBlock | `runningPlace` | `planPending` | `attachedVoice` | `runningEdit` | `uploading` | `uploadFailed`;
+
+// Only an edit or a fresh immediate turn needs the selected account to be available. Live feedback,
+// explicit bookings and words placed as the agent do not start a turn on it.
+const accountRefusalOf = (situation: ComposerSituation): SendBlock | undefined => {
+    if (situation.voiceAgent) {
+        return undefined;
+    }
+    if (situation.editing) {
+        return situation.accountBlock ?? (situation.spentUntil === undefined ? undefined : `editSpent`);
+    }
+    if (situation.streaming || situation.pendingPlan || situation.later === true) {
+        return undefined;
+    }
+    return situation.accountBlock;
+};
 
 const refusalOf = (situation: ComposerSituation): Refusal | undefined => {
+    const account = accountRefusalOf(situation);
+    if (account !== undefined) {
+        return account;
+    }
     if (!situation.staged) {
         // Nothing staged is not a refusal, an empty composer explains itself.
         return undefined;
@@ -243,6 +264,12 @@ const refusalOf = (situation: ComposerSituation): Refusal | undefined => {
 };
 
 const REFUSAL_LINE = {
+    spent: () => sendBlockLine(`spent`),
+    editSpent: () => sendBlockLine(`editSpent`),
+    reconnect: () => sendBlockLine(`reconnect`),
+    admin: () => sendBlockLine(`admin`),
+    verify: () => sendBlockLine(`verify`),
+    wait: () => sendBlockLine(`wait`),
     runningPlace: () => t(`chat.composerIntent.refusalRunningPlace`),
     planPending: () => t(`chat.composerIntent.refusalPlanPending`),
     attachedVoice: () => t(`chat.composerIntent.refusalAttachedVoice`),
@@ -252,6 +279,12 @@ const REFUSAL_LINE = {
 } satisfies Record<Refusal, () => string>;
 
 const REFUSAL_TITLE = {
+    spent: () => sendBlockTitle(`spent`),
+    editSpent: () => sendBlockTitle(`editSpent`),
+    reconnect: () => sendBlockTitle(`reconnect`),
+    admin: () => sendBlockTitle(`admin`),
+    verify: () => sendBlockTitle(`verify`),
+    wait: () => sendBlockTitle(`wait`),
     runningPlace: () => t(`chat.composerIntent.refusedRunning`),
     planPending: () => t(`chat.composerIntent.refusedPlan`),
     attachedVoice: () => t(`chat.composerIntent.refusedAttached`),
@@ -281,7 +314,7 @@ export const continueVisible = (situation: ComposerSituation): boolean =>
     situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
 
 export const continueOffered = (situation: ComposerSituation): boolean =>
-    continueVisible(situation) && situation.pickUp?.ready === true && situation.spentUntil === undefined;
+    continueVisible(situation) && situation.pickUp?.ready === true && situation.spentUntil === undefined && refusalOf(situation) === undefined;
 
 /**
  * What a bare press does for a stopped turn while the account is spent with a reopen ahead: book its continuation for

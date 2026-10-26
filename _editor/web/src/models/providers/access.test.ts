@@ -1,6 +1,6 @@
 // Pins that access.ts treats an endpoint as ready by existing, the trial's readiness as a spendable measurement,
 // and accessKnown as gating both reads landing before either is trusted.
-import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
+import { loopsOf, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
 import { accessKnown, firstReadyProvider, providerReady, providerReadyOn, trialExhausted, trialPhase } from "./access";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "./providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "./providerCatalog";
@@ -122,4 +122,18 @@ describe(`a provider with a CLI loop of its own`, () => {
         expect(providerReadyOn(`grok`, `vendor`)).toBe(true);
         expect(providerReadyOn(`grok`, `native`)).toBe(false);
     });
+});
+
+it(`uses subscriptions on every advertised translator loop, keeping native xAI and vendor CLI doors separate`, () => {
+    advertisedLoops.value = Object.fromEntries([`codex`, `gemini`, `kimi`, `grok`].map((provider) => [provider, loopsOf(provider)]));
+    translatorAccounts.value = {
+        codex: [{ name: `c`, label: `ChatGPT` }], gemini: [{ name: `g`, label: `Google` }],
+        kimi: [{ name: `k`, label: `Kimi` }], grok: [{ name: `x`, label: `SuperGrok` }],
+    };
+    expect(loopsOf(`codex`).map((loop) => providerReadyOn(`codex`, loop))).toEqual([true, true, true]);
+    expect(providerReadyOn(`gemini`, `native`)).toBe(true);
+    const kimiLoops = [`native`, `codex`, `opencode`, `vendor`] as const;
+    expect(kimiLoops.map((loop) => providerReadyOn(`kimi`, loop))).toEqual([true, true, true, false]);
+    expect([providerReadyOn(`grok`, `native`), providerReadyOn(`grok`, `claude-code`), providerReadyOn(`grok`, `codex`), providerReadyOn(`grok`, `vendor`)]).toEqual([false, true, true, false]);
+    advertisedLoops.value = undefined;
 });

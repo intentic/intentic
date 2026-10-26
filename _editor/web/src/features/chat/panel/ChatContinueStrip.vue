@@ -7,6 +7,7 @@ import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../../models/fleet/useAgents";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
+import { sendBlockLine, sendBlockOf, sendBlockTitle } from "../../../models/providers/sendAvailability";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { modelLabelFor, modelOptionsFor } from "../../../models/providers/providerCatalog";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
@@ -51,7 +52,7 @@ const props = defineProps<{
 // Enter do the same.
 const emit = defineEmits<{ (event: "continue", options?: ContinueOptions): void; (event: "continueAtReopen"): void }>();
 
-const { conversation, connected, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff } = usePaneView();
+const { conversation, connected, servingState, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff } = usePaneView();
 const continuing = computed(() => conversation.value.turn.continuing.value);
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
@@ -69,7 +70,8 @@ const counting = computed(
 const now = useNow(() => counting.value);
 
 const ending = computed(() => pickUp.value?.reason);
-const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, now.value, props.spentUntil)));
+const accountBlock = computed(() => sendBlockOf(servingState.value, now.value));
+const status = computed(() => accountBlock.value !== undefined ? sendBlockLine(accountBlock.value) : (pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, now.value, props.spentUntil)));
 
 // The account this would run on is spent until a named reopen: whatever stopped the turn, that is the wall now. A press
 // before it is refused before anything runs, so the card's solid press continues at the reopen and the press that tries
@@ -102,6 +104,9 @@ const continueAtHint = computed((): Tip => ({
 // Press cost, shown to un-hide it: a held turn that ran re-reads its whole context cold; one refused at the door
 // opens a fresh session with a short hand-off (both measured by the daemon at failure, PickUp.held).
 const continueHint = computed((): TooltipValue => {
+    if (accountBlock.value !== undefined) {
+        return { title: sendBlockTitle(accountBlock.value), note: sendBlockLine(accountBlock.value) };
+    }
     const keys = !mobile.value && props.enterContinues === true ? t(`ui.keys.enter`) : undefined;
     // Before a spent account's reopen the press is a try: worth one, since the reopen is an estimate, and said as such.
     const trying = spent.value ? t(`chat.chatContinueStrip.tryNowNote`) : undefined;
