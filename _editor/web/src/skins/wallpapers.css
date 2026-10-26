@@ -1,8 +1,7 @@
-/* WALLPAPERS — a picture behind the agents board and the card pages in WALLPAPERED_EXTENSIONS, worn under any look and scoped to `data-wallpaper` on <html>
+/* WALLPAPERS — a picture behind the agents board, worn under any look and scoped to `data-wallpaper` on <html>
    (useWallpaper.ts), so this whole file is inert until one is picked in Appearance. Each picture has a dark and a
-   light master; the scheme picks between them. It is drawn as backgrounds of the surface itself (`.agents-board`, or
-   the shell's scroller as `.wallpaper-surface`) rather than a layer inside it, so nothing has to be lifted over it and
-   no stacking context changes; on a scroller the picture stays put while the page scrolls. */
+   light master; the scheme picks between them. It is drawn as backgrounds of `.agents-board` itself rather than a
+   layer inside it, so nothing has to be lifted over it and no stacking context changes. */
 
 @layer components {
     /* THE ART, per wallpaper and scheme. 900px is for a small one-density screen; everything else gets the 1600px rung. */
@@ -46,7 +45,7 @@
     }
 
     /* The canvas colour stays under the art, so the board is its usual self for the frame before the picture decodes. */
-    [data-wallpaper] :is(.agents-board, .wallpaper-surface) {
+    [data-wallpaper] .agents-board {
         background-color: var(--color-canvas);
         background-image: var(--wallpaper-scrim), linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)), var(--wallpaper-art);
         background-position: center;
@@ -54,24 +53,9 @@
         background-repeat: no-repeat;
     }
 
-    /* An extension page's own words — its title, its lede, its section labels — stand on the picture as the lanes'
-       do; its cards are their own ground again, and cast onto it. */
-    [data-wallpaper] .wallpaper-surface .ui-page {
-        text-shadow: var(--wallpaper-ink-shadow);
-    }
-    [data-wallpaper] .wallpaper-surface :is(.ui-card, .session-card, .bg-card, .p-dialog, .p-popover, input, textarea) {
-        text-shadow: none;
-    }
-    /* !important: a card's own `shadow-*` utility sits in a later layer and would otherwise keep its flat indoor shadow. */
-    [data-wallpaper] .wallpaper-surface :is(.ui-card, .bg-card) {
-        box-shadow: var(--wallpaper-card-drop) !important;
-    }
-    [data-wallpaper] .wallpaper-surface .session-card {
-        --card-drop: var(--wallpaper-card-drop);
-    }
     /* A dashed card is a place for something and has no fill of its own, which on the picture put its words straight
        onto the trees: frosted instead, still lighter than a card, so it keeps reading as a slot. */
-    [data-wallpaper] :is(.agents-board, .wallpaper-surface) :is(.ui-card-dashed, .border-dashed):not(.bg-card) {
+    [data-wallpaper] .agents-board :is(.ui-card-dashed, .border-dashed):not(.bg-card) {
         background-color: color-mix(in oklab, var(--color-canvas) 62%, transparent);
         -webkit-backdrop-filter: blur(8px);
         backdrop-filter: blur(8px);

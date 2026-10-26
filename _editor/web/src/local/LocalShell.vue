@@ -12,7 +12,6 @@ import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import AccountPanel from "../shell/AccountPanel.vue";
 import SkipToContent from "../shell/SkipToContent.vue";
 import { railFrame } from "../shell/rail/railFrame";
-import { useWallpaperedRoute } from "../skins/useWallpaper";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
@@ -41,10 +40,6 @@ const { user } = useAccount();
 // The folder this window shows, as the editor knows it: the page is drawn anew for each (folderSwitch.ts).
 const { activeSandboxId } = useSandbox();
 const gridStyle = computed(() => railFrame(iconRailSize.value));
-// The pages a wallpaper shows behind, as the sandbox shell paints them (ShellDesktop.vue): Devices is one of them in
-// both, so the page about this computer is the same page in either window. Painted on the scroller, so the picture
-// stays put as the page scrolls.
-const wallpapered = useWallpaperedRoute();
 
 interface Tile {
     readonly section: string;
@@ -186,7 +181,7 @@ onUnmounted(() => stopTaking?.());
         </nav>
 
         <main id="main-content" tabindex="-1" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
-            <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }">
+            <div class="min-h-0 flex-1 overflow-auto">
                 <!-- Keyed by the folder: one pointed at in this window's place gets a page of its own, not the last one's
                      search, selection and layout (folderSwitch.ts). -->
                 <RouterView v-slot="{ Component }">

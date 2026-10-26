@@ -5,7 +5,6 @@ import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
-import { useWallpaperedRoute } from "../skins/useWallpaper";
 import MobileRail from "./MobileRail.vue";
 import { ownsWayBack, PHONE_HOME } from "../lib/routes/phoneScreens";
 import { isHomePath } from "../lib/routes/home";
@@ -75,8 +74,6 @@ useEdgeBack({
     back: () => (inApp ? undefined : (back.value?.go ?? (route.path.startsWith(`/agents/`) ? () => router.push(`/agents`) : undefined))),
     route: () => route.fullPath,
 });
-// The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
-const wallpapered = useWallpaperedRoute();
 // The getting-started checklist, started with the shell so every mark in every feature has an answer to read
 // (features/tour/tourState.ts), whichever screen a first run opens on.
 useGettingStarted();
@@ -109,7 +106,7 @@ useKeybindings();
                 <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
                     <RouterView v-if="onHome" />
                     <SandboxGate v-else>
-                        <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
+                        <div class="min-h-0 flex-1 overflow-auto" style="overscroll-behavior: contain">
                             <RouterView />
                         </div>
                     </SandboxGate>

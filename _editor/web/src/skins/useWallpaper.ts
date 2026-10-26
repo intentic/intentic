@@ -1,8 +1,7 @@
-import { computed, watch, type ComputedRef, type Ref } from "vue";
-import { useRoute } from "vue-router";
+import { watch, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 
-// A wallpaper is a picture behind the agents board and a few full-width extension pages, chosen on its own and worn under any look: it is one
+// A wallpaper is a picture behind the agents board, chosen on its own and worn under any look: it is one
 // `data-wallpaper` attribute on <html>, and wallpapers.css draws it, picking each picture's dark or light master from
 // the scheme. `none` writes no attribute; `mist` is the default when nothing is stored yet.
 
@@ -32,25 +31,4 @@ watch(wallpaper, apply, { immediate: true, flush: `sync` });
 
 export function useWallpaper() {
     return { wallpaper };
-}
-
-/**
- * The extension views a wallpaper also shows behind (`/ext/<id>`): pages whose cards or grouped rows have solid
- * backgrounds, keeping their content readable while the picture shows around them.
- */
-export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `pipelines`, `approvals`]);
-
-// The shell's own routes a wallpaper shows behind, for the same reason: Devices draws every machine as a card of its own.
-// `device` is the same view in a desktop app's local window (its LocalView, named after its path, which the app's own
-// windows.rs opens by): one page about one machine, worn the same way, so the two never look like different screens.
-export const WALLPAPERED_ROUTES: ReadonlySet<string> = new Set([`devices`, `device`]);
-
-/** Whether the shell's main column should wear the wallpaper for the route on screen. The board draws its own. */
-export function useWallpaperedRoute(): ComputedRef<boolean> {
-    const route = useRoute();
-    return computed(
-        () =>
-            wallpaper.value !== `none` &&
-            (WALLPAPERED_ROUTES.has(String(route.name)) || (route.name === `extension` && WALLPAPERED_EXTENSIONS.has(String(route.params[`ext`])))),
-    );
 }

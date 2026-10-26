@@ -10,7 +10,6 @@ import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type Tip, type TipT
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
-import { useWallpaperedRoute } from "../skins/useWallpaper";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { useRole } from "../client/sandbox/useRole";
 import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
@@ -381,8 +380,6 @@ useNavigationCommands();
 useProjectCommands();
 // The single global-shortcut dispatcher: matches any registered command's keybinding to the keystroke.
 useKeybindings();
-// The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
-const wallpapered = useWallpaperedRoute();
 // The getting-started checklist, started with the shell so every mark in every feature has an answer to read
 // (features/tour/tourState.ts), whichever screen a first run opens on.
 useGettingStarted();
@@ -601,7 +598,7 @@ useGettingStarted();
         >
             <RouterView v-if="onHome" />
             <SandboxGate v-else>
-                <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }">
+                <div class="min-h-0 flex-1 overflow-auto">
                     <RouterView />
                 </div>
                 <!-- Inside the gate: a docked terminal stays mounted through a stall, its own recovery keeping scrollback. -->
