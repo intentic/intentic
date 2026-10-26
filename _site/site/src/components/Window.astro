@@ -25,6 +25,7 @@ const Tag = href === undefined ? "div" : "a";
     {finial && <span class="finial"><Lotus size="md" /></span>}
     <div class="window-rail">
         {label && <span class="window-address">{label}</span>}
+        <slot name="rail" />
     </div>
     <slot />
 </Tag>

@@ -62,6 +62,17 @@ const { steps: appSteps, alternatives } = content.connect;
         <main class="flex-1">
             <!-- The first screen remains symmetric with its plate. -->
             <section class="hero" id="hero">
+                {/* The entrance plays once a session (focused-hero.css, THE ENTRANCE). Inline and ahead of the hero, so a
+                    second visit is marked before the first paint and never starts an animation it then cuts. */}
+                <script is:inline>
+                    try {
+                        if (sessionStorage.getItem("intentic:hero-intro")) {
+                            document.documentElement.dataset.heroSeen = "";
+                        } else {
+                            sessionStorage.setItem("intentic:hero-intro", "1");
+                        }
+                    } catch {}
+                </script>
                 <div class="plate" aria-hidden="true">
                     <div class="plate-img"></div>
                 </div>
@@ -93,6 +104,16 @@ const { steps: appSteps, alternatives } = content.connect;
                     <figure class="hero-visual live" data-live data-state="poster" data-src={DEMO_PATH} data-light-variant={DESK_VARIANT}>
                         <div class="hero-stack">
                             <Window class="window-app" finial>
+                                {/* Once the app has drawn: a gold thread runs from the lotus round both sides of the frame and
+                                    meets under it, and the ledge says the frame answers now (focused-hero.css, THE GOLD THREAD). */}
+                                <span class="live-chip" slot="rail">{demo.liveLabel}</span>
+                                <span class="thread" aria-hidden="true">
+                                    <span class="thread-top"></span>
+                                    <span class="thread-left"></span>
+                                    <span class="thread-right"></span>
+                                    <span class="thread-bottom-left"></span>
+                                    <span class="thread-bottom-right"></span>
+                                </span>
                                 <div class="window-crop window-crop-app">
                                     <ProductShot
                                         name={demo.poster.name}

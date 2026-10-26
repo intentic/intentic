@@ -33,6 +33,8 @@ export interface HeroDemo {
     startLabel: string;
     /** Opens the live frame over the whole window, where it keeps its state. */
     expandLabel: string;
+    /** Set in the frame's ledge once the live frame has drawn, as the gold thread closes round it: it answers clicks now. */
+    liveLabel: string;
     /** Puts it back in the page. */
     closeLabel: string;
     /** Passes the frame by for a keyboard reader, who would otherwise tab through the whole app. */
@@ -113,6 +115,7 @@ export const landingContent: LandingContent = {
             frameTitle: "intentic, live: the real app on a recorded workspace",
             startLabel: "Try it live",
             expandLabel: "Full screen",
+            liveLabel: "Live · click anything",
             closeLabel: "Back to the page",
             skipLabel: "Skip the live demo",
             playLabel: "Open the live workspace",

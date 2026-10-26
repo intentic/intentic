@@ -223,3 +223,212 @@ html.live-open {
         transition: none;
     }
 }
+
+/* THE ENTRANCE: the headline settles, the frame rises into its place, and the lotus over it blooms, so the eye ends on
+   the frame. It plays once a session (the inline script in Landing.astro marks `data-hero-seen` before the first paint)
+   and never under reduced motion. The frame only MOVES: the poster in it is the page's LCP, and an element drawn at
+   opacity 0 is not painted for LCP until it shows. Every fill is `backwards`, so nothing holds a transform once it has
+   played: a transformed ancestor would become the containing block of the live stage's fixed position. */
+@keyframes hero-settle {
+    from {
+        opacity: 0;
+        filter: blur(6px);
+        transform: translateY(0.45em);
+    }
+}
+@keyframes hero-fade {
+    from {
+        opacity: 0;
+        transform: translateY(0.4rem);
+    }
+}
+@keyframes hero-rise {
+    from {
+        transform: translateY(3.5rem);
+    }
+}
+@keyframes lotus-bloom {
+    0% {
+        opacity: 0;
+        transform: scale(0) rotate(-40deg);
+    }
+    65% {
+        opacity: 1;
+        transform: scale(1.35) rotate(4deg);
+    }
+}
+@media (prefers-reduced-motion: no-preference) {
+    html:not([data-hero-seen]) .home.home-focused {
+        .headline-line {
+            animation: hero-settle 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+        }
+        .headline-line:nth-child(2) {
+            animation-delay: 0.14s;
+        }
+        .headline-line:nth-child(3) {
+            animation-delay: 0.28s;
+        }
+        .hero-sub {
+            animation: hero-fade 0.7s ease-out 0.4s backwards;
+        }
+        .hero-copy .hero-actions {
+            animation: hero-fade 0.7s ease-out 0.52s backwards;
+        }
+        .hero-cross {
+            animation: hero-fade 0.7s ease-out 0.64s backwards;
+        }
+        .hero-visual {
+            animation: hero-rise 1.3s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s backwards;
+        }
+        .window-app > .finial .lotus {
+            animation: lotus-bloom 0.9s cubic-bezier(0.3, 0.7, 0.3, 1) 1.2s backwards;
+        }
+    }
+}
+
+/* THE GOLD THREAD: when the live frame has drawn (landing/live-demo.ts sets `data-state="live"`), a line in the signal
+   colour runs from the lotus along the top edge both ways, down both sides and meets under the frame, the frame glows
+   once, and the ledge says it answers. The rules first give the finished state, which is all reduced motion and a
+   second visit get; the animations below only draw the way there. A phone never draws the frame in the page, so it gets
+   neither. */
+.home.home-focused .window-app {
+    --thread-color: var(--color-accent);
+    --thread-glow: color-mix(in oklab, var(--color-accent) 70%, transparent);
+    --thread-width: 1.5px;
+}
+.home.home-focused .thread {
+    position: absolute;
+    inset: -1px;
+    z-index: 3;
+    visibility: hidden;
+    pointer-events: none;
+}
+.home.home-focused .thread > span {
+    position: absolute;
+    background: var(--thread-color);
+    box-shadow: 0 0 0.5rem var(--thread-glow);
+}
+.home.home-focused .thread-top {
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--thread-width);
+    transform-origin: 50% 50%;
+}
+.home.home-focused .thread-left,
+.home.home-focused .thread-right {
+    top: 0;
+    bottom: 0;
+    width: var(--thread-width);
+    transform-origin: 50% 0;
+}
+.home.home-focused .thread-left {
+    left: 0;
+}
+.home.home-focused .thread-right {
+    right: 0;
+}
+.home.home-focused .thread-bottom-left,
+.home.home-focused .thread-bottom-right {
+    bottom: 0;
+    width: 50%;
+    height: var(--thread-width);
+}
+.home.home-focused .thread-bottom-left {
+    left: 0;
+    transform-origin: 0 50%;
+}
+.home.home-focused .thread-bottom-right {
+    right: 0;
+    transform-origin: 100% 50%;
+}
+.home.home-focused .live[data-state="live"] .thread {
+    visibility: visible;
+    opacity: 0.6;
+}
+
+/* The ledge was empty; while the frame is live it carries this. */
+.home.home-focused .live-chip {
+    display: inline-flex;
+    gap: 0.45rem;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    line-height: 1;
+    color: var(--color-content);
+    white-space: nowrap;
+    visibility: hidden;
+}
+.home.home-focused .live-chip::before {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--color-success);
+}
+.home.home-focused .live[data-state="live"] .live-chip {
+    visibility: visible;
+}
+
+@keyframes thread-x {
+    from {
+        transform: scaleX(0);
+    }
+}
+@keyframes thread-y {
+    from {
+        transform: scaleY(0);
+    }
+}
+@keyframes thread-settle {
+    from {
+        opacity: 1;
+    }
+}
+@keyframes frame-glow {
+    50% {
+        box-shadow: var(--role-stage-shadow), 0 0 0 1px var(--thread-glow), 0 0 3.5rem var(--thread-glow);
+    }
+}
+@keyframes live-ping {
+    from {
+        box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-success) 60%, transparent);
+    }
+    to {
+        box-shadow: 0 0 0 0.45rem transparent;
+    }
+}
+@media (prefers-reduced-motion: no-preference) {
+    html:not([data-hero-seen]) .home.home-focused .live[data-state="live"] {
+        /* Along the top, 0.5s; down the sides, 0.6s; along the bottom, 0.5s: about one speed the whole way round. */
+        .thread-top {
+            animation: thread-x 0.5s cubic-bezier(0.5, 0, 1, 1) backwards;
+        }
+        .thread-left,
+        .thread-right {
+            animation: thread-y 0.6s linear 0.5s backwards;
+        }
+        .thread-bottom-left,
+        .thread-bottom-right {
+            animation: thread-x 0.5s cubic-bezier(0, 0, 0.5, 1) 1.1s backwards;
+        }
+        .thread {
+            animation: thread-settle 1.2s ease 1.8s backwards;
+        }
+        .window-app {
+            animation: frame-glow 1.6s ease-in-out 1.4s;
+        }
+        .live-chip {
+            animation: hero-fade 0.5s ease-out 1.7s backwards;
+        }
+        .live-chip::before {
+            animation: live-ping 1.8s ease-out 2.2s 3;
+        }
+    }
+}
+@media (max-width: 48rem) {
+    .home.home-focused .thread,
+    .home.home-focused .live-chip {
+        display: none;
+    }
+}
