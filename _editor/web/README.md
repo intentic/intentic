@@ -86,6 +86,11 @@ flowchart LR
   to the account page. Restoring a sandbox reads only the platform and refreshes the account's registry.
 - **Access profiles and services.** Access ▸ Profiles names reusable access for people and service principals, including tool ceilings and guest assistants. Organisation profiles are read-only; only the owner writes sandbox profiles. Profile saves synchronize changed holder tiers with the platform after the daemon rewrite. Programs manages services, stewards and optional profiles; tokens and inbound links choose the service their work runs as. These controls stay hidden on daemons without the corresponding routes. A link already assigned a service cannot return to Owner through the current terms patch API.
 - **AI literacy notice.** When enabled in Sandbox ▸ Access ▸ People, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.
+- **Removing a sandbox.** Each row of the sandbox switcher has a cog that opens that sandbox's settings (switching to
+  it first); the switcher has no trash. Remove, or Leave for a member, is the last card on Sandbox ▸ Overview, and the
+  gates that stand in for a sandbox whose settings cannot open (never came up, refuses this account, too old) offer it at
+  their foot. Every press asks the shell's one dialog (`models/sandbox/removeSandbox.ts`,
+  `features/sandbox/gates/removal/RemoveSandboxHost.vue`), so removing the sandbox on screen keeps its dialog.
 - **Sandbox logo.** The owner presses the logo on Sandbox ▸ Overview to upload an image, stylize it with a preset icon and the Appearance color swatches, or remove it. The styling dialog previews the result and saves only on Save. Presets are ordinary SVG data-URL images, so the same logo appears in every sandbox list and rail; reopening the dialog restores its icon and color.
 - **Keyboard shortcuts per platform.** Every built-in command declares its chord once (`workbench/commands/builtinCommands.ts`),
   with a Mac's own where the shared one is a Windows idiom (`mac`) and a Mac app window's where a browser tab may not
@@ -303,8 +308,8 @@ flowchart LR
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
   `shell/rail/iconRail.css`, holding the workspace's own sandbox switcher standing on the folder (`features/sandbox/gates/SandboxSwitcher.vue`
-  with `switcherPlace.ts`: the account's sandboxes come through the app, so a row is opened, removed or left as in the
-  workspace, and the remove dialog's door is this computer through the app), Files with the folder menu on the folder's
+  with `switcherPlace.ts`: the account's sandboxes come through the app, so a row, or its cog, opens the workspace on
+  that sandbox or on its settings, where it is removed or left), Files with the folder menu on the folder's
   name (`LocalFolderMenu.vue`: open a folder, and the folders opened lately; one opened in the window's place is moved
   to in place by `folderSwitch.ts`, as the editor's own sandbox switch to `local-<id>`, crossfaded with no reload), the views the app adds, and at
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`

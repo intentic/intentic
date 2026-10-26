@@ -26,6 +26,7 @@ import {
     setAddSandboxWarmer,
     useAddsOnHome,
 } from "../models/sandbox/addSandbox";
+import { removeSandboxNeeded } from "../models/sandbox/removeSandbox";
 import { newSandboxBusy, newSandboxGeneration, newSandboxShownBy } from "../features/home/newSandbox/newSandbox";
 import { tellHomeRuns } from "../features/home/homeProcesses";
 import { useAuth } from "../client/auth/useAuth";
@@ -44,6 +45,9 @@ const loadAddSandboxDialog = () => import(`../features/setup/add/AddSandboxDialo
 // Home's new sandbox's run (features/home/newSandbox/newSandbox.ts), which puts its dialog up.
 const loadNewSandboxHost = () => import(`../features/home/newSandbox/NewSandboxHost.vue`);
 const AddSandboxDialog = defineAsyncComponent(loadAddSandboxDialog);
+// The window's one Remove sandbox dialog (models/sandbox/removeSandbox.ts): fetched on the first ask, then kept mounted,
+// so a removal's run and its closing fade outlive the page that asked, which removing the sandbox on screen takes away.
+const RemoveSandboxHost = defineAsyncComponent(() => import(`../features/sandbox/gates/removal/RemoveSandboxHost.vue`));
 const NewSandboxHost = defineAsyncComponent(loadNewSandboxHost);
 
 const { mobile } = useDevice();
@@ -137,5 +141,6 @@ tellHomeRuns();
     <ShellMobile v-if="mobile" />
     <ShellDesktop v-else />
     <AddSandboxDialog v-if="addSandboxAsked" @close="closeAddSandbox" />
+    <RemoveSandboxHost v-if="removeSandboxNeeded" />
     <NewSandboxHost v-if="newSandboxHosted" :key="newSandboxGeneration" />
 </template>

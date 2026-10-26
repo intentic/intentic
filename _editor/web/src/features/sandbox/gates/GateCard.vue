@@ -2,8 +2,9 @@
 import { Icon, type IconName } from "@intentic/ui";
 
 // The full-screen notice for when there's no workspace to show: daemon unreachable, still booting, or refusing
-// this account. `spinner` marks a wait that resolves itself; the unauthorized gate has none. Three slots: the
-// centred sentence, `#actions` for the one button, `#below` full width for a table.
+// this account. `spinner` marks a wait that resolves itself; the unauthorized gate has none. Four slots: the
+// centred sentence, `#actions` for the one button, `#below` full width for a table, and `#foot` for the quiet way out
+// of the sandbox altogether (GateRemoveLink.vue), last because it is the press nobody should make by accident.
 
 defineProps<{ icon: IconName; title: string; spinner?: boolean }>();
 </script>
@@ -25,6 +26,7 @@ defineProps<{ icon: IconName; title: string; spinner?: boolean }>();
             <slot name="actions" />
             <!-- `w-full` is what lets this opt out of the card's own centring without a second card. -->
             <div v-if="$slots['below']" class="flex w-full flex-col gap-4"><slot name="below" /></div>
+            <slot name="foot" />
         </div>
     </div>
 </template>

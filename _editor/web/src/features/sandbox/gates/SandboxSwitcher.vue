@@ -1,18 +1,7 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
 import type { SandboxSummary } from "@intentic/api-contract";
-import {
-    AnchoredOverlay,
-    browserOwnsClick,
-    Button,
-    Modal,
-    Notice,
-    SandboxLogo,
-    SectionHeader,
-    StatusBadge,
-    type Tip,
-    useHoverMenu,
-} from "@intentic/ui";
+import { AnchoredOverlay, Notice, SandboxLogo, SectionHeader, StatusBadge, type Tip, useHoverMenu } from "@intentic/ui";
 import { computed, type ComputedRef, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
@@ -20,7 +9,7 @@ import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
 import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
 import { sandboxHubPath } from "../../../models/sandbox/sandboxNav";
-import { useRole } from "../../../client/sandbox/useRole";
+import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
@@ -31,15 +20,12 @@ import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { operationRunning } from "../../../workbench/operations/operations";
-import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { localFace } from "../../../app/environments/local";
 import { useAuth } from "../../../client/auth/useAuth";
-import { NOTHING_TO_OPEN_PATH } from "../../../app/environments/nothingToOpen";
 import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
 import { removalKey } from "./removal/removalPlan";
-import RemoveSandboxDialog from "./removal/RemoveSandboxDialog.vue";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
 
@@ -61,10 +47,6 @@ const route = useRoute();
 // badge for it would teach the reader to stop reading the badge. A mark of its own, on its own corner, saying only
 // that something is moving. What it will do is said when it does it, by the lane.
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
-
-// A guest's door to the hub names the one section it may open; every other tier opens on the hub's own default.
-const { isGuest } = useRole();
-const hubPath = computed(() => sandboxHubPath(isGuest.value));
 
 // WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. Drawn as one mark with the
 // connection's state — the glyph says which machine, its ink says whether that machine answers — because both are
@@ -100,7 +82,18 @@ const menu = useHoverMenu(panel);
 const open = menu.open;
 const pressed = menu.pressed;
 // The local window's own half (switcherPlace.ts): opening a sandbox through the app, the sign-in, a failure by its row.
-const { folder, local, failure, openFromFolder, openHome, signedOut, signingIn, signIn, addSandbox: addFromFolder } = useFolderPlace(open);
+const {
+    folder,
+    local,
+    failure,
+    openFromFolder,
+    openSettingsFromFolder,
+    openHome,
+    signedOut,
+    signingIn,
+    signIn,
+    addSandbox: addFromFolder,
+} = useFolderPlace(open);
 
 // Reads these counts only while the popover is open, since the control is mounted for the whole session; a second
 // open within the freshness window paints instantly from the store's last read. A pointer resting on the logo starts
@@ -199,11 +192,24 @@ const pick = (option: SandboxSummary): void => {
     sandbox.select(option.id);
 };
 
-// Workspace links keep the browser's Ctrl/⌘-click; a plain click alone closes the popover.
-const dismiss = (event: MouseEvent): void => {
-    if (!browserOwnsClick(event)) {
-        open.value = false;
+// A SANDBOX'S SETTINGS, from its own row: the cog beside it, so the list says whose settings they are, and another
+// sandbox's are one press away instead of a switch and a second trip through this panel. Removing or leaving one is
+// in there, at the foot of its Overview, rather than a trash on the row a pointer sweeps past on its way to switching.
+// A guest's door names the one section it may open (sandboxHubPath); every other tier opens on the hub's own default.
+// Another sandbox's lands there through the switch itself (sandboxScreen.ts), whose landing would replace a push.
+const openSettings = (option: SandboxSummary): void => {
+    const path = sandboxHubPath(option.role === `guest`);
+    if (local) {
+        void openSettingsFromFolder(option.id, path);
+        return;
     }
+    open.value = false;
+    if (isActive(option)) {
+        void router.push(path);
+        return;
+    }
+    landOnAfterSwitch(option.id, path);
+    sandbox.select(option.id);
 };
 
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
@@ -245,41 +251,6 @@ onMounted(() => {
 
 // Alt+0 for this computer inside the app, Alt+1…9 for the sandboxes under it (useSwitchCommands.ts).
 useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
-
-// THE SANDBOX BEING REMOVED OR LEFT, from the question to the end of the work (RemoveSandboxDialog.vue). The run lives in
-// the operations ledger, so this only says which sandbox the dialog is about; opening it on a sandbox whose removal is
-// already under way shows that removal rather than asking again.
-const pending = ref<SandboxSummary | undefined>(undefined);
-
-const askRemove = (option: SandboxSummary): void => {
-    open.value = false;
-    pending.value = option;
-};
-
-// The hosted sandbox whose rollback is being asked about; the platform does it, so any row's can be, down or not.
-const rollingBack = ref<SandboxSummary | undefined>(undefined);
-const askRollBack = (option: SandboxSummary): void => {
-    open.value = false;
-    rollingBack.value = option;
-};
-
-// A sandbox that was left on the account but could not be asked to take this person off its own member list, so it still
-// lists them: said until it is dismissed, since the row it would have been said on is gone.
-const stillListed = ref<{ readonly name: string; readonly reason: string }>();
-
-// Drops the account row (a member first leaves the sandbox's own list); with none left, the reader goes to Home's first
-// run, as the shell's gate has it (app/environments/nothingToOpen.ts).
-const removeRow = async (target: SandboxSummary): Promise<void> => {
-    const outcome = await sandbox.remove(target.id);
-    // Only once the row is really gone: leaving for the setup on the optimistic drop took the reader off the shell, and
-    // the dialog with it, before a refusal could bring the row back and say why.
-    if (!local && sandbox.sandboxes.value.length === 0) {
-        void router.push(NOTHING_TO_OPEN_PATH);
-    }
-    if (outcome?.grant === `kept`) {
-        stillListed.value = { name: target.name, reason: outcome.reason };
-    }
-};
 </script>
 
 <template>
@@ -426,89 +397,88 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
                 <!-- Two lines a row: the name, and where it runs with whatever else is true of it (rowNote). The logo is the
                  row's height, so a reader finds a box by its picture before reading a word. -->
                 <template v-for="(option, at) in switchable" :key="option.id">
-                    <button
-                        type="button"
-                        data-menu-row
-                        :data-current="isActive(option) || undefined"
-                        :aria-current="isActive(option) || undefined"
-                        class="ui-row-select group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
-                        :class="{ 'ui-row-select-on': isActive(option) }"
-                        @click="pick(option)"
-                    >
-                        <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />
-                        <span class="flex min-w-0 flex-1 flex-col">
-                            <span class="truncate font-medium" :class="isActive(option) ? 'text-link' : 'text-content'">{{ option.name }}</span>
-                            <!-- Where that one runs, the reason to switch to a box being often which machine it is on. On the
+                    <!-- The row and its cog are siblings, so the cog is a button of its own a keyboard can reach, laid over
+                         the row's trailing slot rather than nested inside the row's own button. -->
+                    <div class="group relative flex flex-col">
+                        <button
+                            type="button"
+                            data-menu-row
+                            :data-current="isActive(option) || undefined"
+                            :aria-current="isActive(option) || undefined"
+                            class="ui-row-select flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
+                            :class="{ 'ui-row-select-on': isActive(option) }"
+                            @click="pick(option)"
+                        >
+                            <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />
+                            <span class="flex min-w-0 flex-1 flex-col">
+                                <span class="truncate font-medium" :class="isActive(option) ? 'text-link' : 'text-content'">{{ option.name }}</span>
+                                <!-- Where that one runs, the reason to switch to a box being often which machine it is on. On the
                          ACTIVE row the glyph is the tile's mark exactly, the same glyph inked by the connection; on every
                          other row it is the placement alone. While the work replacing it runs, its spinner stands in. -->
-                            <span class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
-                                <Icon
-                                    v-if="isActive(option) && restarting !== undefined"
-                                    name="spinner"
-                                    spin
-                                    class="shrink-0"
-                                    :class="RUNNING_MARK_CLASS"
-                                />
-                                <!-- The hover card is the glyph's alone: on the whole line it rose under every pointer sweeping
+                                <span class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
+                                    <Icon
+                                        v-if="isActive(option) && restarting !== undefined"
+                                        name="spinner"
+                                        spin
+                                        class="shrink-0"
+                                        :class="RUNNING_MARK_CLASS"
+                                    />
+                                    <!-- The hover card is the glyph's alone: on the whole line it rose under every pointer sweeping
                              down the list, over the row above. -->
-                                <Icon
-                                    v-else
-                                    :name="placementFor(option).icon"
-                                    class="shrink-0"
-                                    :class="isActive(option) ? connectionInkClass : undefined"
-                                    v-tooltip.top="placementTip(option)"
-                                    :aria-label="
-                                        isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail
-                                    "
-                                />
-                                <span class="truncate">
-                                    <template v-for="(part, index) in rowNote(option)" :key="index">
-                                        <template v-if="index > 0"> · </template><span :class="part.ink">{{ part.text }}</span>
-                                    </template>
+                                    <Icon
+                                        v-else
+                                        :name="placementFor(option).icon"
+                                        class="shrink-0"
+                                        :class="isActive(option) ? connectionInkClass : undefined"
+                                        v-tooltip.top="placementTip(option)"
+                                        :aria-label="
+                                            isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail
+                                        "
+                                    />
+                                    <span class="truncate">
+                                        <template v-for="(part, index) in rowNote(option)" :key="index">
+                                            <template v-if="index > 0"> · </template><span :class="part.ink">{{ part.text }}</span>
+                                        </template>
+                                    </span>
                                 </span>
                             </span>
-                        </span>
-                        <!-- What's waiting in that sandbox; nothing waiting, or not known yet, draws nothing. The active row is
+                            <!-- What's waiting in that sandbox; nothing waiting, or not known yet, draws nothing. The active row is
                      never either: its own badge is on the logo, so it reports no count to read. -->
-                        <StatusBadge
-                            v-if="(attentionFor(option) ?? 0) > 0"
-                            variant="warning"
-                            size="xs"
-                            class="shrink-0 leading-4"
-                            v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
-                            >{{ attentionFor(option) }}</StatusBadge
-                        >
-                        <!-- Which digit this row is, the only place the chord can be learned, and under it the row's own actions,
-                     which take its place on hover. Laid over the chord rather than beside it, so the second line keeps
-                     the room the actions only need while the pointer is on the row. -->
-                        <span class="relative flex min-w-9 shrink-0 items-center justify-end">
-                            <kbd
-                                v-if="slotChord(at)"
-                                class="rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
-                                >{{ slotChord(at) }}</kbd
+                            <StatusBadge
+                                v-if="(attentionFor(option) ?? 0) > 0"
+                                variant="warning"
+                                size="xs"
+                                class="shrink-0 leading-4"
+                                v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
+                                >{{ attentionFor(option) }}</StatusBadge
                             >
-                            <span class="absolute inset-y-0 right-0 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                                <!-- The platform's way back for a hosted machine, here as well as on the update card because this
-                             list answers while the sandbox itself doesn't. -->
-                                <Icon
-                                    v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
-                                    name="undo"
-                                    @click.stop="askRollBack(option)"
-                                    v-tooltip.top="{
-                                        title: t(`sandbox.sandboxSwitcher.rollBack`),
-                                        note: t(`sandbox.sandboxSwitcher.undoLastUpdate`),
-                                    }"
-                                    class="text-xs text-subtle transition-colors hover:text-content"
-                                />
-                                <Icon
-                                    name="trash"
-                                    @click.stop="askRemove(option)"
-                                    v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-                                    class="text-xs text-subtle transition-colors hover:text-danger"
-                                />
+                            <!-- Which digit this row is, the only place the chord can be learned. The cog below takes its place
+                             while the row is pointed at or has the keyboard, and always on the active row, whose chord
+                             would switch to where the reader already is. -->
+                            <span class="flex min-w-9 shrink-0 items-center justify-end">
+                                <kbd
+                                    v-if="slotChord(at) && !isActive(option)"
+                                    class="rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"
+                                    >{{ slotChord(at) }}</kbd
+                                >
                             </span>
-                        </span>
-                    </button>
+                        </button>
+                        <!-- THE ROW'S SETTINGS, its one action: removing or leaving it is in there (the foot of its Overview),
+                         not a trash a pointer meets on its way to switching. On the row the reader is in it stays in
+                         sight, the way to this sandbox's own settings; on every other row it shows with the row's
+                         attention, and switches there in the same press. -->
+                        <button
+                            v-if="!beingRemoved(option)"
+                            type="button"
+                            class="absolute right-1.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-subtle transition-[opacity,color,background-color] hover:bg-content/10 hover:text-content focus-visible:opacity-100"
+                            :class="isActive(option) ? undefined : 'opacity-0 group-focus-within:opacity-100 group-hover:opacity-100'"
+                            :aria-label="t(`sandbox.sandboxSwitcher.settingsOf`, { name: option.name })"
+                            v-tooltip.top="t(`shared.settings`)"
+                            @click="openSettings(option)"
+                        >
+                            <Icon name="cog" class="text-sm" />
+                        </button>
+                    </div>
                     <!-- A local window opens the workspace on the row, which can fail where the app says why. -->
                     <div v-if="failure?.id === option.id" class="px-2 pb-1">
                         <Notice tone="danger" class="text-2xs">{{ failure.message }}</Notice>
@@ -527,42 +497,9 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
                     </span>
                     <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
                 </button>
-
             </template>
-
-            <!-- The sandbox management hub has no rail tile; this chip is its home. It is the workspace's, so a local
-                 window, which opens the workspace on a sandbox instead, has none. -->
-            <div v-if="!local" class="my-1 border-t border-line-subtle"></div>
-            <RouterLink
-                v-if="!local"
-                :to="hubPath"
-                data-menu-row
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"
-                @click="dismiss"
-            >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center">
-                    <Icon name="cog" class="text-base text-muted" />
-                </span>
-                {{ t(`sandbox.sandboxSwitcher.sandboxSettings`) }}
-            </RouterLink>
         </div>
     </AnchoredOverlay>
-
-    <Modal
-        :open="stillListed !== undefined"
-        size="sm"
-        :header="t(`sandbox.sandboxSwitcher.leftStillListedHeader`)"
-        :description="stillListed === undefined ? undefined : t(`sandbox.sandboxSwitcher.leftStillListed`, stillListed)"
-        @update:open="(open: boolean) => open || (stillListed = undefined)"
-    >
-        <template #footer>
-            <Button :label="t(`ui.action.done`)" tier="accent" @click="stillListed = undefined" />
-        </template>
-    </Modal>
-
-    <RemoveSandboxDialog :target="pending" :remove-row="removeRow" @close="pending = undefined" @reopen="(row) => (pending = row)" />
-
-    <HostedRollbackDialog :sandbox="rollingBack" @close="rollingBack = undefined" />
 </template>
 
 <style scoped>

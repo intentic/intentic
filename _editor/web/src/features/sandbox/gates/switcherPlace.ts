@@ -34,8 +34,8 @@ export const openWorkspacePath = async (router: Router, path: string): Promise<v
 };
 
 /** The workspace on one of the account's sandboxes, from a local window (router/sandboxArrival.ts reads the key). */
-const openSandboxFromFolder = (sandboxId: string): Promise<void> =>
-    localHost().openWorkspace(`/?${new URLSearchParams({ sandbox: sandboxId }).toString()}`);
+const openSandboxFromFolder = (sandboxId: string, path = `/`): Promise<void> =>
+    localHost().openWorkspace(`${path}?${new URLSearchParams({ sandbox: sandboxId }).toString()}`);
 
 /** The local window's half of the switcher: what only a window on a folder does, and nothing in the workspace. */
 export interface FolderPlace {
@@ -46,6 +46,8 @@ export interface FolderPlace {
     /** What went wrong, by the row it is about (a sandbox's id, or `:sign-in`): the app's own sentence. */
     readonly failure: Ref<{ readonly id: string; readonly message: string } | undefined>;
     readonly openFromFolder: (sandboxId: string) => Promise<void>;
+    /** The workspace on one of the account's sandboxes, opened on its settings (`path`, the hub this reader may open). */
+    readonly openSettingsFromFolder: (sandboxId: string, path: string) => Promise<void>;
     /** The account's Home, available even before it has a sandbox. */
     readonly openHome: (event: MouseEvent) => Promise<void>;
     /** Nobody signed in yet: no sandboxes to list, and the sign-in that brings the workspace instead. */
@@ -99,6 +101,7 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         local,
         failure,
         openFromFolder: (sandboxId) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId)),
+        openSettingsFromFolder: (sandboxId, path) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId, path)),
         openHome: async (event) => {
             if (local) {
                 event.preventDefault();

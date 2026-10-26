@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
     AnchoredOverlay,
+    Button,
     Card,
     InlineRename,
     resourcesSummary,
@@ -35,6 +36,7 @@ import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
+import { askRemoveSandbox } from "../../../models/sandbox/removeSandbox";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the
 // non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate badges and panels
@@ -191,6 +193,23 @@ const stylizeLogo = (): void => {
     stylingSandbox.value = sandbox.active.value;
 };
 
+// REMOVING OR LEAVING THIS SANDBOX, at the foot of its own page: where a reader who means it looks for it, and away from
+// the switcher's rows, which a pointer sweeps on its way to switching. The question and the work are the shell's one
+// dialog (models/sandbox/removeSandbox.ts), which outlives this page: removing the sandbox on screen switches to another.
+// The line under the heading is the dialog's own first sentence, so the press holds no surprise.
+const removeLead = computed(() => {
+    if (!isOwner.value) {
+        return t(`sandbox.removeAsk.leadLeave`);
+    }
+    return hosted.value ? t(`sandbox.removeAsk.leadHosted`) : t(`sandbox.removeAsk.leadOwn`);
+});
+const askRemove = (): void => {
+    const row = sandbox.active.value;
+    if (row !== undefined) {
+        askRemoveSandbox(row);
+    }
+};
+
 // The dialog keeps the sandbox it opened for, even if the active sandbox changes during the edit.
 const saveStyledLogo = async (image: string): Promise<void> => {
     const target = stylingSandbox.value;
@@ -250,7 +269,9 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
                                 @click="changeLogo"
                             >
-                                <Icon name="image" class="shrink-0 text-sm text-muted" />{{ logo ? t(`sandbox.sandboxOverview.changeLogo`) : t(`sandbox.logoStyle.upload`) }}
+                                <Icon name="image" class="shrink-0 text-sm text-muted" />{{
+                                    logo ? t(`sandbox.sandboxOverview.changeLogo`) : t(`sandbox.logoStyle.upload`)
+                                }}
                             </button>
                             <button
                                 v-if="logo"
@@ -423,5 +444,24 @@ const saveStyledLogo = async (image: string): Promise<void> => {
         <!-- Names a route gap between this app and the daemon instead of a silent 404; fires in dev too, where versions are all 0.0.0. -->
         <SandboxBehindCard />
         <SandboxManifestCard />
+
+        <!-- Last on the page, and only a press away from its question: the dialog asks, counts down and can be undone. -->
+        <Card
+            v-if="sandbox.active.value"
+            data-setting="overview-remove"
+            class="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between"
+        >
+            <div class="flex min-w-0 flex-col gap-0.5">
+                <h3 class="text-sm font-medium text-content">
+                    {{ isOwner ? t(`sandbox.removeAsk.removeThis`) : t(`sandbox.removeAsk.leaveThis`) }}
+                </h3>
+                <p class="text-xs text-muted">{{ removeLead }}</p>
+            </div>
+            <div class="shrink-0">
+                <Button size="small" tier="quiet" tone="danger" :label="isOwner ? t(`ui.action.remove`) : t(`ui.action.leave`)" @click="askRemove">
+                    <template #icon><Icon :name="isOwner ? `trash` : `sign-out`" /></template>
+                </Button>
+            </div>
+        </Card>
     </div>
 </template>

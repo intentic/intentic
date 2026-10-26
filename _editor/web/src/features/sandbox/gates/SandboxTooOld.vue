@@ -3,6 +3,7 @@ import type { CommandOs } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import RunCommand from "../../../components/RunCommand.vue";
+import GateRemoveLink from "./GateRemoveLink.vue";
 import { daemonVersion, oldestSupportedDaemon } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useServingSlug } from "../../../models/sandbox/environment/servingSlug";
@@ -50,5 +51,6 @@ const reachable = useHostRunning(() => slug.value);
                 <RunCommand v-else class="text-left" :command="command" :explanation="t(`sandbox.sandboxTooOld.manual`)" />
             </template>
         </template>
+        <template #foot><GateRemoveLink /></template>
     </GateCard>
 </template>

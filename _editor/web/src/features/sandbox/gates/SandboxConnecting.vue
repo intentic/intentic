@@ -12,6 +12,7 @@ import { justSetUp } from "../../../models/sandbox/live/justSetUp";
 import { restartExpected } from "../../../models/sandbox/live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
+import GateRemoveLink from "./GateRemoveLink.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";
 import { useOutageDetails } from "../diagnosis/useOutageDetails";
 import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
@@ -59,9 +60,7 @@ const restart = computed(() => restartExpected(active.value?.id)?.quiet);
 
 // Only spans that reached the client's own deadline count, and only from this outage: slowness is not a stall, and a
 // route that timed out before the sandbox went quiet explains nothing about why it is quiet now.
-const stalledPath = computed(() =>
-    connection.value.unavailableSince === undefined ? undefined : stalledPaths(DEADLINE_MS, outageMs.value)[0],
-);
+const stalledPath = computed(() => (connection.value.unavailableSince === undefined ? undefined : stalledPaths(DEADLINE_MS, outageMs.value)[0]));
 
 // What the diagnosis of this silence established, in the gate's own shape. A route this browser watched run out its
 // deadline says more about a busy sandbox than "busy" does, so it keeps its own sentence there.
@@ -112,14 +111,7 @@ const signIn = async (): Promise<void> => {
         <p class="text-sm text-muted">{{ notice.body }}</p>
         <ProgressMeter v-if="notice.waiting && notice.wait" :progress="notice.wait" :details="details" class="mt-3" />
         <template #actions>
-            <Button
-                v-if="notice.action?.kind === `setup`"
-                :as="RouterLink"
-                :to="setupTo"
-                :label="notice.action.label"
-                icon-pos="right"
-                tier="boring"
-            >
+            <Button v-if="notice.action?.kind === `setup`" :as="RouterLink" :to="setupTo" :label="notice.action.label" icon-pos="right" tier="boring">
                 <template #icon><Icon name="arrow-right" /></template>
             </Button>
             <Button v-else-if="notice.action?.kind === `signin`" :label="notice.action.label" icon-pos="right" tier="boring" @click="signIn">
@@ -139,5 +131,7 @@ const signIn = async (): Promise<void> => {
                 <SandboxRecovery />
             </div>
         </template>
+        <!-- Not while it is still expected back by itself: offering to remove a sandbox that is waking reads as "it broke". -->
+        <template v-if="!notice.waiting" #foot><GateRemoveLink /></template>
     </GateCard>
 </template>

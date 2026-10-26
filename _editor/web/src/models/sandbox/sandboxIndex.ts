@@ -67,6 +67,13 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [t(`sandbox.search.overviewDisk`)],
         shown: (reader) => reader.canShip,
     },
+    // Removing it, or leaving it for a member: the page's last card, for anyone who may open the page.
+    {
+        id: `overview-remove`,
+        slug: `overview`,
+        title: () => t(`sandbox.removeAsk.removeThis`),
+        terms: () => [t(`sandbox.removeAsk.leaveThis`), t(`sandbox.search.overviewRemove`)],
+    },
 
     // Agent: one card per setting, under the page's four categories (its `?section=`). Jobs is the page's default
     // category, which writes no param (SandboxAgent.vue), so its card names the category for the trail and no `part`.

@@ -2,6 +2,7 @@
 import { Button } from "@intentic/ui";
 import { EMAIL_SIGN_IN_OFF } from "@intentic/sandbox-contract/schemas/system";
 import GateCard from "./GateCard.vue";
+import GateRemoveLink from "./GateRemoveLink.vue";
 import { computed } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
 import { emailOnly } from "../../../client/auth/signInMethods";
@@ -73,7 +74,13 @@ const switchAccount = async (): Promise<void> => {
                 ><span class="font-medium text-content">{{ user?.email }}</span></template
             >
         </i18n-t>
-        <i18n-t v-else-if="wrongGoogleAccount" keypath="sandbox.sandboxUnauthorized.wrongGoogleAccount" tag="p" class="text-sm text-muted" scope="global">
+        <i18n-t
+            v-else-if="wrongGoogleAccount"
+            keypath="sandbox.sandboxUnauthorized.wrongGoogleAccount"
+            tag="p"
+            class="text-sm text-muted"
+            scope="global"
+        >
             <template #presented
                 ><span class="font-medium text-content">{{ presentedEmail }}</span></template
             >
@@ -94,5 +101,7 @@ const switchAccount = async (): Promise<void> => {
                 <template #icon><Icon name="user" /></template>
             </Button>
         </template>
+        <!-- A sandbox that will not have this account may be one to leave rather than wait on. -->
+        <template #foot><GateRemoveLink /></template>
     </GateCard>
 </template>

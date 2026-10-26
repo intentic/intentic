@@ -134,13 +134,27 @@ describe(`in a local window`, () => {
         const event = new MouseEvent(`click`, { cancelable: true });
         mounted.value.addSandbox(event);
         await nextTick();
-        expect({ opened, closed: !open.value, prevented: event.defaultPrevented, homePrevented: homeEvent.defaultPrevented, stayed: mounted.path() }).toEqual({
+        expect({
+            opened,
+            closed: !open.value,
+            prevented: event.defaultPrevented,
+            homePrevented: homeEvent.defaultPrevented,
+            stayed: mounted.path(),
+        }).toEqual({
             opened: [`/?sandbox=sbx-work`, `/home`, `/?add=sandbox`],
             closed: true,
             prevented: true,
             homePrevented: true,
             stayed: `/`,
         });
+        mounted.unmount();
+    });
+
+    it(`opens a sandbox's settings as the workspace on that sandbox, through the app`, async () => {
+        const open = ref(true);
+        const mounted = mount(() => useFolderPlace(open));
+        await mounted.value.openSettingsFromFolder(`sbx-work`, `/sandbox`);
+        expect({ opened, closed: !open.value }).toEqual({ opened: [`/sandbox?sandbox=sbx-work`], closed: true });
         mounted.unmount();
     });
 
@@ -195,10 +209,20 @@ describe(`in a local window`, () => {
             hosted: null,
         };
         held = [`work`];
-        const holding = mount(() => useRemovalDoor(() => row, () => `work`));
+        const holding = mount(() =>
+            useRemovalDoor(
+                () => row,
+                () => `work`,
+            ),
+        );
         await new Promise((settle) => setTimeout(settle, 0));
         await holding.value.door.value?.carry?.(`work`);
-        const elsewhere = mount(() => useRemovalDoor(() => row, () => `other`));
+        const elsewhere = mount(() =>
+            useRemovalDoor(
+                () => row,
+                () => `other`,
+            ),
+        );
         await new Promise((settle) => setTimeout(settle, 0));
         expect({
             door: holding.value.door.value?.machineLabel,
