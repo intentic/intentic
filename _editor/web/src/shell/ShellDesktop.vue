@@ -579,7 +579,7 @@ useGettingStarted();
             <RouterLink
                 v-else-if="!isGuest"
                 to="/capabilities"
-                :class="[ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isNavActive('/capabilities') }]"
+                :class="[ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isNavActive('/capabilities') }]"
                 :aria-label="t(`shell.words.addCapability`)"
                 v-tooltip.right="t(`shell.words.addCapability`)"
             >
