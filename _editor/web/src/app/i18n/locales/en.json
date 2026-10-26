@@ -3982,21 +3982,17 @@
             "autoPicked": "Auto-picked",
             "byAllowanceLeft": "By allowance left",
             "connectedAgo": "connected {age}",
-            "everyAccount": "Every account",
             "filterSubscriptionAccounts": "Filter subscription accounts",
             "measurePlanLimits": "Measure plan limits",
             "measureFailed": "Couldn't measure plan limits.",
             "measuringPlanLimits": "Measuring plan limits",
             "noAccountsMatch": "No accounts match.",
             "outdatedMissing": "Until it updates, the accounts below can't say whether they can take a turn (a lost sign-in or seat, a spent or benched pool), and picking one only takes effect on the next message.",
-            "remeasureLimits": "Re-measure limits",
-            "remeasurePlanLimits": "Re-measure plan limits, measured {age}",
             "subscription": "Subscription"
         },
         "pickerStatus": {
             "nextMessage": "Applies from your next message",
-            "spread": "{count} accounts, spread automatically",
-            "measured": "measured {age}"
+            "spread": "{count} accounts, spread automatically"
         },
         "pickerRunSettings": {
             "on": "On",

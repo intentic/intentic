@@ -12,11 +12,9 @@ import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import {
     accountFacts,
     accountState,
-    formatAge,
     formatReset,
     lastRefusalOf,
     liveUsage,
-    oldestMovableReading,
     PLAN_LIMIT_BANDS,
     planHeadroom,
     type PlanLimitBand,
@@ -222,21 +220,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     const accountCapacity = computed(() => capacityCounts(provider.value, accountRows.value));
     const routedCapacity = computed(() => capacityCounts(routedProvider.value ?? provider.value, routedRows.value));
 
-    // The oldest reading on screen a re-read can move; a header must not vouch for a fresher row than the stalest one
-    // beneath it, nor be pinned by one whose re-read keeps failing (each row's ring says its own age and why).
-    const measuredAt = computed<number | undefined>(() =>
-        oldestMovableReading([...accountRows.value, ...routedRows.value].flatMap((row) => (row.headroom === undefined ? [] : [row.headroom]))),
-    );
-
-    const { measuring, remeasure } = useRemeasure();
-    // Carries the age too, so a screen-reader user gets the same "worth pressing" signal as the visible label.
-    const remeasureLabel = computed(() =>
-        measuredAt.value === undefined
-            ? t(`chat.pickerAccounts.measurePlanLimits`)
-            : t(`chat.pickerAccounts.remeasurePlanLimits`, { age: formatAge(measuredAt.value) }),
-    );
-
-    // Whether the account rows draw at all: a single account isn't a list. What the footer says (a refusal, the meters' age)
+    // Whether the account rows draw at all: a single account isn't a list. What the footer says (a refusal, a live turn)
     // is PickerStatus's line, and the harness is the toolbar's (PickerRunBar).
     const hasContent = computed(() => accounts.value.length > 1 || routedRows.value.length > 0);
 
@@ -247,10 +231,6 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         routedRows,
         routedCapacity,
         unplacedRefusal,
-        measuredAt,
-        measuring,
-        remeasureLabel,
-        remeasure,
         hasContent,
     };
 };

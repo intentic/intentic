@@ -74,16 +74,12 @@ jest.mock(`@intentic/ui`, () => ({
                 h(`button`, { disabled: props.disabled, onClick: attrs[`onClick`] }, props.label),
     }),
 }));
-// The account rows' composable, as the status line reads it too: nothing refused, nothing measured.
+// The account rows' composable, as the status line reads it too: nothing refused.
 jest.mock(`../../accounts/pickerAccounts`, () => ({
     usePickerAccounts: () => ({
         hasContent: computed(() => true),
         unplacedRefusal: computed(() => undefined),
         routedRows: computed(() => []),
-        measuredAt: computed(() => undefined),
-        measuring: computed(() => false),
-        remeasureLabel: computed(() => ``),
-        remeasure: async () => {},
     }),
 }));
 

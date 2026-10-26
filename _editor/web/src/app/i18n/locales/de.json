@@ -3982,21 +3982,17 @@
             "autoPicked": "Automatisch gewählt",
             "byAllowanceLeft": "Nach Restkontingent",
             "connectedAgo": "verbunden {age}",
-            "everyAccount": "Alle Konten",
             "filterSubscriptionAccounts": "Abo-Konten filtern",
             "measurePlanLimits": "Planlimits messen",
             "measureFailed": "Planlimits konnten nicht gemessen werden.",
             "measuringPlanLimits": "Planlimits werden gemessen",
             "noAccountsMatch": "Keine Konten passen.",
             "outdatedMissing": "Bis zur Aktualisierung können die Konten unten nicht anzeigen, ob sie einen Zug übernehmen können (verlorene Anmeldung oder Lizenz, aufgebrauchtes oder gesperrtes Kontingent), und eine Auswahl wirkt erst ab der nächsten Nachricht.",
-            "remeasureLimits": "Limits neu messen",
-            "remeasurePlanLimits": "Planlimits neu messen, gemessen {age}",
             "subscription": "Abo"
         },
         "pickerStatus": {
             "nextMessage": "Gilt ab deiner nächsten Nachricht",
-            "spread": "{count} Konten, automatisch verteilt",
-            "measured": "gemessen {age}"
+            "spread": "{count} Konten, automatisch verteilt"
         },
         "pickerRunSettings": {
             "on": "An",

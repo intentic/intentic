@@ -23,16 +23,12 @@ jest.mock(`./ModelPicker.vue`, () => ({
 }));
 // Account catalogs live in the shared block; stubbed empty so the footer shows only the runtime's own rows.
 jest.mock(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
-// The account rows' composable, as the status line reads it too: nothing refused, nothing measured.
+// The account rows' composable, as the status line reads it too: nothing refused.
 jest.mock(`../accounts/pickerAccounts`, () => ({
     usePickerAccounts: () => ({
         hasContent: computed(() => false),
         unplacedRefusal: computed(() => undefined),
         routedRows: computed(() => []),
-        measuredAt: computed(() => undefined),
-        measuring: computed(() => false),
-        remeasureLabel: computed(() => ``),
-        remeasure: async () => {},
     }),
 }));
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");

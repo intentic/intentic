@@ -3982,21 +3982,17 @@
             "autoPicked": "Choisi automatiquement",
             "byAllowanceLeft": "Selon le quota restant",
             "connectedAgo": "connecté il y a {age}",
-            "everyAccount": "Tous les comptes",
             "filterSubscriptionAccounts": "Filtrer les comptes d'abonnement",
             "measurePlanLimits": "Mesurer les limites de l'offre",
             "measureFailed": "Impossible de mesurer les limites de l'offre.",
             "measuringPlanLimits": "Mesure des limites de l'offre",
             "noAccountsMatch": "Aucun compte ne correspond.",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, les comptes ci-dessous ne peuvent pas dire s'ils peuvent prendre un tour (connexion ou siège perdu, quota épuisé ou suspendu), et en choisir un ne prend effet qu'au message suivant.",
-            "remeasureLimits": "Remesurer les limites",
-            "remeasurePlanLimits": "Mesurer à nouveau les limites de l'offre, mesurées il y a {age}",
             "subscription": "Abonnement"
         },
         "pickerStatus": {
             "nextMessage": "S'applique à partir de votre prochain message",
-            "spread": "{count} comptes, répartis automatiquement",
-            "measured": "mesuré {age}"
+            "spread": "{count} comptes, répartis automatiquement"
         },
         "pickerRunSettings": {
             "on": "Activé",

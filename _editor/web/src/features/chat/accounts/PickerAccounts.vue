@@ -146,7 +146,7 @@ const pickAccount = (id: string): void => {
 
 <template>
     <!-- The list above browses across providers; this footer configures what's selected. Nothing here but rows: what the
-         footer has to SAY (a refusal, a live turn, how fresh the meters are) is PickerStatus's one line above. -->
+         footer has to SAY (a refusal, a live turn) is PickerStatus's one line above. -->
     <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
     <SandboxOutdatedNotice v-if="accountsOutdated" :missing="t(`chat.pickerAccounts.outdatedMissing`)" />
 

@@ -1,12 +1,10 @@
 <!-- The model picker footer's first line, the same for every provider and every host: one line of what this footer means now
-     on the left, one word of state on the right. Every message the footer has goes here, so none of them stacks as a
+     on the left, a refusal on the right. How fresh the meters are is each meter's own hover card, not a line here. Every message the footer has goes here, so none of them stacks as a
      paragraph above or below the account list, and the list itself stays nothing but its rows. -->
 <script setup lang="ts">
 import { computed, toRef } from "vue";
-import { ui } from "@intentic/ui";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { useT } from "@intentic/ui/i18n";
-import { formatAge } from "../../../models/providers/usageStatus";
 import { usePickerAccounts } from "./pickerAccounts";
 
 const t = useT();
@@ -27,15 +25,7 @@ const {
     accounts?: boolean;
 }>();
 
-const {
-    hasContent: listed,
-    routedRows,
-    unplacedRefusal,
-    measuredAt,
-    measuring,
-    remeasureLabel,
-    remeasure,
-} = usePickerAccounts(
+const { routedRows, unplacedRefusal } = usePickerAccounts(
     toRef(() => provider),
     toRef(() => harness),
     toRef(() => model),
@@ -44,12 +34,9 @@ const {
 // Rows nobody picks between read as a broken list unless something says so; a choosable list needs no caption.
 const spread = computed(() => (accounts && routedRows.value.length > 1 ? routedRows.value.length : undefined));
 const refusal = computed(() => (accounts ? unplacedRefusal.value : undefined));
-// The age doubles as the re-measure control: watching it reset to "now" is the confirmation the press worked. Only over
-// meters someone can see: a lone account draws no row, so an age there would date nothing on screen.
-const age = computed(() => (accounts && listed.value && measuredAt.value !== undefined ? formatAge(measuredAt.value) : undefined));
 
 const left = computed(() => note !== undefined || spread.value !== undefined);
-const right = computed(() => refusal.value !== undefined || age.value !== undefined);
+const right = computed(() => refusal.value !== undefined);
 </script>
 
 <template>
@@ -73,18 +60,5 @@ const right = computed(() => refusal.value !== undefined || age.value !== undefi
             <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
             <span class="truncate">{{ refusal.headline }}</span>
         </span>
-        <button
-            v-else-if="age !== undefined"
-            type="button"
-            :class="ui.textButton({ tone: `subtle`, size: `xs` })"
-            class="shrink-0"
-            :disabled="measuring"
-            v-tooltip.top="{ title: t(`chat.pickerAccounts.remeasureLimits`), note: t(`chat.pickerAccounts.everyAccount`) }"
-            :aria-label="remeasureLabel"
-            @click="remeasure"
-        >
-            <Icon v-if="measuring" name="refresh" class="text-[0.6rem]" spin />
-            <span>{{ t(`chat.pickerStatus.measured`, { age }) }}</span>
-        </button>
     </div>
 </template>

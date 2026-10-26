@@ -3982,21 +3982,17 @@
             "autoPicked": "Elegida sola",
             "byAllowanceLeft": "Por cupo restante",
             "connectedAgo": "conectada {age}",
-            "everyAccount": "Todas las cuentas",
             "filterSubscriptionAccounts": "Filtrar cuentas de suscripción",
             "measurePlanLimits": "Medir los límites del plan",
             "measureFailed": "No se pudieron medir los límites del plan.",
             "measuringPlanLimits": "Midiendo los límites del plan",
             "noAccountsMatch": "Ninguna cuenta coincide.",
             "outdatedMissing": "Hasta que se actualice, las cuentas de abajo no pueden indicar si pueden atender un turno (un inicio de sesión o puesto perdido, un cupo agotado o en pausa), y elegir una solo surte efecto en el siguiente mensaje.",
-            "remeasureLimits": "Volver a medir límites",
-            "remeasurePlanLimits": "Volver a medir los límites del plan, medidos {age}",
             "subscription": "Suscripción"
         },
         "pickerStatus": {
             "nextMessage": "Se aplica desde tu próximo mensaje",
-            "spread": "{count} cuentas, repartidas automáticamente",
-            "measured": "medido {age}"
+            "spread": "{count} cuentas, repartidas automáticamente"
         },
         "pickerRunSettings": {
             "on": "Activado",
