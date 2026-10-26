@@ -573,7 +573,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let manager = MenuItemBuilder::with_id("manager", "This computer").build(app)?;
     let workspace = MenuItemBuilder::with_id("workspace", "Open workspace").build(app)?;
     /* This app spends most of its life as a tray icon with nothing on screen. */
-    let update = MenuItemBuilder::with_id("update", "Checking for updates…")
+    let update = MenuItemBuilder::with_id("update", update::checking_row())
         .enabled(false)
         .build(app)?;
     /* The machine agent has no window because it runs headlessly at logon. */

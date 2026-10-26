@@ -33,6 +33,7 @@ import SecurityCard from "./intenticOs/screen/SecurityCard.vue";
 import ThisComputer from "./intenticOs/ThisComputer.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
+import AppBuild from "./AppBuild.vue";
 import PasswordsOffer from "../passwords/PasswordsOffer.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { followRoster, signedIn as rosterSignedIn } from "./roster";
@@ -190,7 +191,6 @@ const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => 
 
 // Someone signed in now, as the roster says (roster.ts). Not `accountSeen`: the workspace merely shown sets that.
 const signedIn = computed(() => rosterSignedIn.value === true);
-const toSetup = (): Promise<void> => intoWorkspace(`/setup`);
 
 // The masthead's errands, on its own spine as the workspace's page hangs them: what the agent wants, the answer to the
 // last Restart, an agent that did not answer, and the other sides of this computer that keep sandboxes of their own.
@@ -647,7 +647,7 @@ onMounted(() => {
                     size="small"
                     :label="signedIn ? t(`desktop.device.setOneUp`) : t(`desktop.device.signInToSetUp`)"
                     class="ml-12"
-                    @click="toSetup"
+                    @click="void intoWorkspace(`/setup`)"
                 >
                     <template #icon><Icon :name="signedIn ? `plus` : `sign-in`" /></template>
                 </Button>
@@ -655,6 +655,7 @@ onMounted(() => {
 
             <!-- PASSWORDS, offered while this computer has not set it up: it has no rail tile until then. -->
             <PasswordsOffer />
+            <AppBuild />
         </div>
 
         <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails. -->

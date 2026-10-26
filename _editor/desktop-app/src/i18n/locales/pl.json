@@ -197,6 +197,7 @@
         "updateReadyBadge": "aktualizacja jest gotowa",
         "folderSetupBadge": "tworzenie piaskownicy folderu",
         "alsoOnThisComputer": "Także na tym komputerze",
+        "appVersion": "Intentic {version}",
         "agentElsewhere": "Własny agent maszyny",
         "keepsSandboxesThere": "Dba o swoje sandboxy.",
         "open": "Otwórz",

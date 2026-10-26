@@ -197,6 +197,7 @@
         "updateReadyBadge": "hay una actualización lista",
         "folderSetupBadge": "creando el sandbox de una carpeta",
         "alsoOnThisComputer": "También en este ordenador",
+        "appVersion": "Intentic {version}",
         "agentElsewhere": "Agente propio",
         "keepsSandboxesThere": "Cuida sus sandboxes.",
         "open": "Abrir",

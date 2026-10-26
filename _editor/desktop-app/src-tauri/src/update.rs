@@ -8,6 +8,8 @@ use tauri::menu::MenuItem;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+use crate::commands::VERSION;
+
 /* This app is tray-resident by design — the × hides the workspace rather than ending the process (windows.rs) — and `main` cuts a release most days. */
 
 /// Where a user goes when this app cannot update itself — the page that offers every artifact by name.
@@ -66,11 +68,13 @@ pub enum Stage {
 
 impl Stage {
     /// What the tray entry says, and whether it can be clicked. The tray is the backstop surface, so it states
-    /// the same fact the banner does rather than only appearing when there is something to press.
+    /// the same fact the banner does rather than only appearing when there is something to press. While nothing is
+    /// on offer it also names the build running, the first thing asked when helping with a problem, and readable here
+    /// when no window will draw (This device's foot says it too, `AppBuild.vue`).
     fn tray(&self) -> (String, bool) {
         match self {
-            Stage::Idle | Stage::Checking => ("Checking for updates…".into(), false),
-            Stage::Current => ("Intentic is up to date".into(), false),
+            Stage::Idle | Stage::Checking => (checking_row(), false),
+            Stage::Current => (format!("Intentic {VERSION} is up to date"), false),
             Stage::Downloading { version, percent } => {
                 (format!("Downloading {version}… {percent}%"), false)
             }
@@ -113,6 +117,11 @@ pub struct UpdateState {
 struct Staged {
     update: Update,
     file: PathBuf,
+}
+
+/// The update row before anything is known, which lib.rs builds the tray with.
+pub fn checking_row() -> String {
+    format!("Intentic {VERSION} · checking for updates…")
 }
 
 /// The tray's own row, held so its text can follow the state without rebuilding the menu (lib.rs builds it).
@@ -756,6 +765,14 @@ mod tests {
     }
 
     /* WHAT EACH STATE OFFERS. */
+    #[test]
+    fn the_row_names_the_running_build_while_nothing_is_on_offer() {
+        for stage in [Stage::Idle, Stage::Checking, Stage::Current] {
+            let (text, _) = stage.tray();
+            assert!(text.starts_with(&format!("Intentic {VERSION} ")), "{text}");
+        }
+    }
+
     #[test]
     fn only_a_finished_download_is_offered_as_an_action() {
         for stage in [

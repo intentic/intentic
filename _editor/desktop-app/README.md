@@ -154,7 +154,11 @@ flowchart LR
   being made or a Docker start, a warning mark for one that stopped for the reader, a dot for an update). A computer that runs no sandbox is told what
   one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
   for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
-  verbs. The machine is read when the page opens and every 30 seconds while it is on screen.
+  verbs. The machine is read when the page opens and every 30 seconds while it is on screen. At its foot stands which
+  build of the app this is ("Intentic 0.x.y", `src/device/AppBuild.vue`), with a copy of the app's version, its OS and
+  the machine agent's build in one line for a bug report. It is there because this page is the one the main window
+  always has, with no account and no sandbox. The tray's update row names the same build while no update is on offer
+  ("Intentic 0.x.y is up to date", `update.rs`), for a window that will not draw.
 
   On Windows the one Docker engine serves Windows and every WSL distro, and `ic` on either side lists every sandbox on
   it. A sandbox the other side keeps (`keptElsewhere` in `ic sandbox list --json`, named by its distro where `ic`
