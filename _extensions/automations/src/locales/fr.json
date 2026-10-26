@@ -239,7 +239,6 @@
         "copyWebhookUrl": "Copier l'URL du webhook de {id}",
         "delete": "Supprimer {id}",
         "delete2": "Supprimer",
-        "edit": "Modifier {id}",
         "edit2": "Modifier",
         "editToRearm": "Modifier pour réarmer",
         "embedCode": "Code d'intégration",
@@ -573,8 +572,6 @@
     },
     "instructionsSection": {
         "copy": "Copier les instructions",
-        "edit": "Modifier les instructions",
-        "editShort": "Modifier",
         "empty": "Les instructions ne peuvent pas être vides.",
         "instructions": "Instructions",
         "showAll": "Tout afficher",
@@ -582,8 +579,11 @@
     },
     "checkSection": {
         "check": "Vérification",
-        "edit": "Modifier la vérification",
-        "hint": "Une commande shell lancée d'abord. Sortie 0 continue, toute autre saute l'exécution. Vide retire la vérification."
+        "copy": "Copier la vérification",
+        "hint": "Une commande shell lancée d'abord. Sortie 0 continue, toute autre saute l'exécution. Vide retire la vérification.",
+        "keys": "Entrée enregistre, Échap rétablit.",
+        "saved": "Enregistré",
+        "saving": "Enregistrement…"
     },
     "automationEditor": {
         "allSettings": "Tous les réglages",

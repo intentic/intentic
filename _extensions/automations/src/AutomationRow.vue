@@ -163,12 +163,6 @@ const TARGET_ICON = { conversation: `comments`, notify: `mobile` } as const;
 const editing = ref(false);
 const sandboxZone = useSandboxZone();
 
-// The pencil opens the automation, where everything it shows can be changed in place, rather than swapping it for a form.
-const startEdit = (): void => {
-    if (!props.expanded) {
-        emit(`expand`);
-    }
-};
 const openSettings = (): void => {
     editing.value = true;
     if (!props.expanded) {
@@ -185,7 +179,7 @@ const { reach, reachTip } = usePersonaReach(computed(() => props.automation));
 // Who it answers (senderSummary.ts), as a hover card on the row's glyph; the drawer says it in words.
 const answersTip = computed(() => answersCard(props.automation.senders));
 
-// One recipe (kit's icon button plus reveal) for all three verbs; hand-written before, it had no touch hit-area growth
+// One recipe (kit's icon button plus reveal) for the row's verbs; hand-written before, it had no touch hit-area growth
 // or disabled tone.
 const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100`);
 
@@ -195,7 +189,6 @@ const VERB = ui.iconButton(`md:opacity-0 md:group-hover/row:opacity-100 md:focus
 const { mobile } = useDevice();
 const verbs = computed((): ActionItem[] => [
     ...(visitorChat.value === undefined ? [] : [{ id: `install`, label: t(`automationRow.embedCode`), icon: `globe` as const, run: () => emit(`install`) }]),
-    { id: `edit`, label: t(`automationRow.edit2`), icon: `pencil`, run: () => startEdit() },
     { id: `settings`, label: t(`automationDetail.allSettings`), icon: `sliders-h`, run: () => openSettings() },
     ...(trigger.value.kind === `listener`
         ? []
@@ -339,17 +332,8 @@ const verbs = computed((): ActionItem[] => [
                     </button>
                 </span>
 
-                <!-- Place verbs before the switch so the right edge stays fixed. -->
-                <button
-                    type="button"
-                    :class="VERB"
-                    :aria-label="t(`automationRow.edit`, { id: automation.id })"
-                    v-tooltip.top="t(`automationRow.edit2`)"
-                    @click="startEdit"
-                >
-                    <Icon name="pencil" class="text-xs" />
-                </button>
-
+                <!-- Place verbs before the switch so the right edge stays fixed. There is no edit verb: pressing the row opens it, and
+                     everything it shows is changed where it is shown. -->
                 <!-- Lets you test a 3am cron or a webhook without waiting or forging one, even on a disabled row. -->
                 <span class="flex w-6 shrink-0 items-center justify-center">
                     <button

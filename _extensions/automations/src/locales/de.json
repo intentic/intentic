@@ -239,7 +239,6 @@
         "copyWebhookUrl": "Webhook-URL für {id} kopieren",
         "delete": "{id} löschen",
         "delete2": "Löschen",
-        "edit": "{id} bearbeiten",
         "edit2": "Bearbeiten",
         "editToRearm": "Bearbeiten zum Scharfschalten",
         "embedCode": "Einbettungscode",
@@ -573,8 +572,6 @@
     },
     "instructionsSection": {
         "copy": "Anweisungen kopieren",
-        "edit": "Anweisungen bearbeiten",
-        "editShort": "Bearbeiten",
         "empty": "Anweisungen dürfen nicht leer sein.",
         "instructions": "Anweisungen",
         "showAll": "Alles anzeigen",
@@ -582,8 +579,11 @@
     },
     "checkSection": {
         "check": "Prüfung",
-        "edit": "Prüfung bearbeiten",
-        "hint": "Ein Shell-Befehl, der zuerst läuft. Exit 0 geht weiter, alles andere überspringt den Lauf. Leer entfernt die Prüfung."
+        "copy": "Prüfung kopieren",
+        "hint": "Ein Shell-Befehl, der zuerst läuft. Exit 0 geht weiter, alles andere überspringt den Lauf. Leer entfernt die Prüfung.",
+        "keys": "Enter speichert, Esc stellt es wieder her.",
+        "saved": "Gespeichert",
+        "saving": "Wird gespeichert…"
     },
     "automationEditor": {
         "allSettings": "Alle Einstellungen",

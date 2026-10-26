@@ -239,7 +239,6 @@
         "copyWebhookUrl": "Copy webhook URL for {id}",
         "delete": "Delete {id}",
         "delete2": "Delete",
-        "edit": "Edit {id}",
         "edit2": "Edit",
         "editToRearm": "Edit to re-arm",
         "embedCode": "Embed code",
@@ -573,8 +572,6 @@
     },
     "instructionsSection": {
         "copy": "Copy instructions",
-        "edit": "Edit instructions",
-        "editShort": "Edit",
         "empty": "Instructions can't be empty.",
         "instructions": "Instructions",
         "showAll": "Show all",
@@ -582,8 +579,11 @@
     },
     "checkSection": {
         "check": "Check",
-        "edit": "Edit check",
-        "hint": "A shell command run first. Exit 0 goes ahead, anything else skips the run. Blank removes the check."
+        "copy": "Copy check",
+        "hint": "A shell command run first. Exit 0 goes ahead, anything else skips the run. Blank removes the check.",
+        "keys": "Enter saves, Esc puts it back.",
+        "saved": "Saved",
+        "saving": "Saving…"
     },
     "automationEditor": {
         "allSettings": "All settings",

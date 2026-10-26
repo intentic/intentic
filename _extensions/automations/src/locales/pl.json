@@ -241,7 +241,6 @@
         "copyWebhookUrl": "Kopiuj adres webhooka dla {id}",
         "delete": "Usuń {id}",
         "delete2": "Usuń",
-        "edit": "Edytuj {id}",
         "edit2": "Edytuj",
         "editToRearm": "Edytuj, by uzbroić",
         "embedCode": "Kod osadzenia",
@@ -573,8 +572,6 @@
     },
     "instructionsSection": {
         "copy": "Kopiuj instrukcje",
-        "edit": "Edytuj instrukcje",
-        "editShort": "Edytuj",
         "empty": "Instrukcje nie mogą być puste.",
         "instructions": "Instrukcje",
         "showAll": "Pokaż całość",
@@ -582,8 +579,11 @@
     },
     "checkSection": {
         "check": "Sprawdzenie",
-        "edit": "Edytuj sprawdzenie",
-        "hint": "Polecenie powłoki uruchamiane najpierw. Kod 0 idzie dalej, każdy inny pomija uruchomienie. Puste usuwa sprawdzenie."
+        "copy": "Kopiuj sprawdzenie",
+        "hint": "Polecenie powłoki uruchamiane najpierw. Kod 0 idzie dalej, każdy inny pomija uruchomienie. Puste usuwa sprawdzenie.",
+        "keys": "Enter zapisuje, Esc przywraca.",
+        "saved": "Zapisano",
+        "saving": "Zapisywanie…"
     },
     "automationEditor": {
         "allSettings": "Wszystkie ustawienia",
