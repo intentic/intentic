@@ -83,12 +83,17 @@ export const toRightOf = (id: string): ReadonlySet<string> => {
 export const allTabs = (): ReadonlySet<string> => idsOf(sweepable());
 
 // Every chat in one lane, for either surface: the sweep Close Others/Close to the Right can't express. An
-// untouched draft is left out (it goes on its own the moment focus leaves); the active chat is not spared.
+// untouched draft is left out (it goes on its own the moment focus leaves), and so is the focused chat: clearing a lane
+// tidies around what is being read rather than closing it out from under the reader.
 export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
     const { agentById } = useAgents();
+    const focused = useChat().activeId.value;
     return idsOf(
         sweepable().filter(
-            (conversation) => !untouchedDraft(conversation) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
+            (conversation) =>
+                conversation.conversationId !== focused &&
+                !untouchedDraft(conversation) &&
+                laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
         ),
     );
 };

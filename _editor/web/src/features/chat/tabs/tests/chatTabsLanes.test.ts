@@ -222,19 +222,22 @@ it(`pins the chat being read into the window, however far down the lane it is`, 
     expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
 });
 
-it(`clears the whole lane from its header, whatever the window is showing`, async () => {
+it(`clears the whole lane from its header, whatever the window is showing, but keeps the focused chat`, async () => {
     seedFinished(10);
     const el = await mountList();
     openFinished(10);
     await settle();
-    expect(clearButton(el, `Finished`)?.getAttribute(`aria-label`)).toBe(`Close all 10 finished chats`);
+    // done0 is the focused chat, so Clear names the other nine.
+    expect(clearButton(el, `Finished`)?.getAttribute(`aria-label`)).toBe(`Close all 9 finished chats`);
 
     clearButton(el, `Finished`)?.click();
 
     await settle();
-    // Closes every finished chat, not just the six on screen; closeTabs leaves one fresh chat behind.
-    expect(lanesOnScreen(el)).toEqual([`Active`]);
-    expect(cardsOnScreen(el).filter((id) => id.startsWith(`done`))).toEqual([]);
+    // Closes every other finished chat, not just the five others on screen.
+    expect(lanesOnScreen(el)).toEqual([`Finished`]);
+    expect(cardsOnScreen(el)).toEqual([`done0`]);
+    // With only the focused chat left, the lane has nothing to clear.
+    expect(clearButton(el, `Finished`)).toBeUndefined();
 });
 
 // Clear is on every lane, not just Finished: Active and Attention fill up over a long session too, and a
