@@ -67,7 +67,7 @@ const harness = () => {
 
 test("every runtime's base carries the owner's policy, judge mode, outside wake and install rule", async () => {
     const { deps, judged, executions } = harness();
-    const settings = SandboxSettingsSchema.parse({ commandJudge: "watch", projectInstalls: "ask" });
+    const settings = SandboxSettingsSchema.parse({ commandJudge: "watch", projectInstalls: "ask", roleSetups: {} });
     const base = await withTurnSafety(deps, { conversationId: "c1", outsideWake: "discord" }, baseOf(), settings);
 
     expect(base.policy).toEqual({ dependencyInstallAllowed: true, safetyPolicy: "# the owner's policy", judging: "watch", outsideWake: "discord" });

@@ -93,7 +93,8 @@ const EXT_SHIMS = ["vue.js", "extension-api.js", "extension-manifest.js", "exten
 export const DERIVED = [
     {
         id: "contract lock",
-        wants: under(CONTRACT_SOURCES),
+        // Extension manifests are embedded in the wire schemas too. A changed recipe must refresh its output as well.
+        wants: under(CONTRACT_SOURCES, "_shared/extension-manifest/src/", "_shared/sandbox-contract/scripts/write-lock.mjs", "_tools/scripts/verify/fixers.mjs"),
         cwd: "_shared/sandbox-contract",
         argv: [...FROM_SOURCE, "scripts/write-lock.mjs"],
         writes: ["_shared/sandbox-contract/contract.lock.json"],

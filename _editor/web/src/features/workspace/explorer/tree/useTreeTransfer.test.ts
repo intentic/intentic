@@ -117,7 +117,9 @@ describe(`paste`, () => {
 
         await transfer.moveHere();
 
-        expect([store.moveIntoMany.mock.calls, store.copyEntries.mock.calls, store.clipboard.value]).toEqual([[[[`README.md`], `src`]], [], undefined]);
+        expect(store.moveIntoMany.mock.calls).toEqual([[[`README.md`], `src`]]);
+        expect(store.copyEntries.mock.calls).toEqual([]);
+        expect(store.clipboard.value).toBeUndefined();
     });
 
     it(`duplicates each selected entry beside itself under a free name, a Mac's ⌘D`, async () => {

@@ -30,6 +30,14 @@ describe(`a warm wish`, () => {
         expect(queryFn).toHaveBeenCalledTimes(1);
     });
 
+    it(`hands the query its cache key, so a tree read can compare the answer with the entry it will replace`, async () => {
+        const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn: async ({ queryKey }) => ({ readFor: queryKey }) });
+
+        await wish.read();
+
+        expect<unknown>(queryClient.getQueryData(KEY)).toEqual({ readFor: KEY });
+    });
+
     it(`goes cold again the moment its answer is invalidated`, async () => {
         const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn: () => Promise.resolve(`body`) });
         await wish.read();

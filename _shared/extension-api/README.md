@@ -54,6 +54,7 @@ flowchart LR
   version (`uiKitDeprecated`: each deprecated kit name and retired prop or recipe member, `<what> → <use instead>`).
   The package exports the record as `./surface.json`, which the kit's `intentic-kit-check` reads to hold an
   extension's `engines.intentic` floor to the names it imports.
+  From 2.36.0, settings choices can carry `enumItemLabels` and `enumDescriptions` for their labels and explanations.
 - A bundle links by name both this package's runtime exports (`moduleExports`) and the UI kit's, so those two grains
   are held to semver as well: a version that adds a name is at least a minor, and one that drops a name is a major, for
   a name declared deprecated first (the kit's in its `names.mjs`) and at or past the floor that declaration gives. The

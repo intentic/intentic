@@ -1,3 +1,4 @@
+import { t } from "@intentic/ui/i18n";
 import { connectTripNote } from "./connectFlowNotes";
 
 // Every word a note's signs carry, shown and meant, to check what the reader will be told.
@@ -12,8 +13,8 @@ describe(`connectTripNote`, () => {
     });
 
     it(`mentions Devin's token only where its last page shows one`, () => {
-        expect(connectTripNote(`devin`, { redirect: false })?.signs).toHaveLength(2);
-        expect(connectTripNote(`devin`, { redirect: true })?.signs).toHaveLength(1);
+        expect(connectTripNote(`devin`, { redirect: false })?.signs.map((sign) => sign.shows)).toEqual([`Windsurf`, t(`sandbox.connectFlow.tripDevinToken`)]);
+        expect(connectTripNote(`devin`, { redirect: true })?.signs.map((sign) => sign.shows)).toEqual([`Windsurf`]);
         expect(wordsOf(connectTripNote(`devin`, { redirect: true }))).toContain(`Windsurf`);
         expect(connectTripNote(`devin`, { redirect: true })?.offerElsewhere).toBe(false);
     });

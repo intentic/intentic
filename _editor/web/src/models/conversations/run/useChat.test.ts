@@ -78,8 +78,12 @@ activeSandboxId.value = `sb1`;
 // Whether the sandbox reads as reachable; false unless a test says otherwise.
 const sandboxReachable = ref(false);
 jest.mock("../../../client/sandbox/useSandbox", () => {
-    // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined.
-    return { useSandbox: () => ({ activeSandboxId, reachable: sandboxReachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
+    // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined. `active` and
+    // `daemonUrl` too: an attach takes a stream slot, whose capacity useEndpoint reads from the sandbox's address.
+    return {
+        useSandbox: () => ({ activeSandboxId, reachable: sandboxReachable, active: ref(undefined), daemonUrl: ref(undefined) }),
+        sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
+    };
 });
 
 // Node has neither storage; tab snapshots need both (session for a window's tabs, local as the seed for a fresh one).

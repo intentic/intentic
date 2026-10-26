@@ -104,7 +104,8 @@ const harness = async (autoRepair = true) => {
     const logFields: unknown[] = [];
     const reruns: string[] = [];
     const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds" };
-    const settings = { autoRepair };
+    // These runs exercise the unpinned fallback; fresh settings otherwise assign every job a preset.
+    const settings = { autoRepair, roleSetups: {} };
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,

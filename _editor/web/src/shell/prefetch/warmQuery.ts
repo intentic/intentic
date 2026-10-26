@@ -1,4 +1,5 @@
 import { type MaybeRefOrGetter, toValue } from "vue";
+import type { QueryFunction } from "@tanstack/vue-query";
 import { queryClient } from "../../lib/queryPersistence";
 import type { WarmBand, WarmTask } from "./warmPlan";
 
@@ -18,7 +19,7 @@ export const heldInCache = (queryKey: readonly unknown[]): boolean => {
 export interface WarmSpec {
     // A plain key, or the computed one an rpcQuery builds, read when the task runs.
     readonly queryKey: MaybeRefOrGetter<readonly unknown[]>;
-    readonly queryFn: () => Promise<unknown>;
+    readonly queryFn: QueryFunction<unknown>;
     readonly staleTime?: number;
     readonly gcTime?: number;
 }

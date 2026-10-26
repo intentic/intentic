@@ -6,4 +6,5 @@
 // as before; with one, a Mac binds `mac` instead. Whichever is declared, a Mac's text field keeps the chords it answers
 // itself (⌃A, ⌃K, ⌥←, ⌘⌫). Additive: a manifest without `mac` is unchanged. The recorded surface grows the manifest
 // schema.
-export const extensionApiVersion = "2.35.0";
+// 2.36.0 records settings choice labels and explanations alongside the Mac shortcut schema.
+export const extensionApiVersion = "2.36.0";

@@ -67,6 +67,25 @@ test("a derived file is written again only for its own sources, and counts only 
     }
 });
 
+test("extension settings refresh the wire lock, and a changed recipe refreshes it too", () => {
+    const root = mkdtempSync(join(tmpdir(), "derived-contract-"));
+    const contract = join(root, "_shared/sandbox-contract");
+    const out = join(contract, "contract.lock.json");
+    try {
+        spawnSync("git", ["init", "-q"], { cwd: root });
+        mkdirSync(join(contract, "scripts"), { recursive: true });
+        writeFileSync(join(contract, "scripts/write-lock.mjs"), `import { writeFileSync } from "node:fs";\nwriteFileSync("contract.lock.json", "updated\\n");\n`);
+        assert.deepEqual(writeDerived(root, ["_shared/extension-manifest/README.md"]), []);
+        for (const source of ["_shared/extension-manifest/src/points/settings.ts", "_shared/sandbox-contract/scripts/write-lock.mjs", "_tools/scripts/verify/fixers.mjs"]) {
+            rmSync(out, { force: true });
+            assert.deepEqual(writeDerived(root, [source]), ["contract lock"]);
+            assert.equal(readFileSync(out, "utf8"), "updated\n");
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 // The two halves of one declaration: .gitattributes keeps every land and rebase off a derived file, and DERIVED is what
 // writes it again. A marked file nothing writes would never reach a tree again; a written file left unmarked would be
 // merged as text, the conflict this exists to end (contract.lock.json, 21 refused lands in two weeks of October).

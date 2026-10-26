@@ -108,7 +108,7 @@ const treeKeyboard = (host: TreeGesturesHost, activate: (entry: WorkspaceTreeEnt
 };
 
 export const useTreeGestures = (host: TreeGesturesHost) => {
-    const { selection, anchor, lead, selectSingle, extendTo, toggleAt, clear } = host.selecting;
+    const { anchor, selectSingle, extendTo, toggleAt, clear } = host.selecting;
 
     const activate = (entry: WorkspaceTreeEntry, revealManagedDir: boolean, mode: OpenMode): void => {
         // A locked folder opens its explanation like a locked file: there is nothing inside it to expand into.

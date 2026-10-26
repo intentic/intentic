@@ -7,6 +7,7 @@ import { computed, watch } from "vue";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { opensAsFolder } from "../files/archiveEntries";
 import { readFileWindow } from "../files/fileWindow";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
