@@ -5701,8 +5701,8 @@
         },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Appliquer le travail terminé directement à l'espace de travail, en changements non committés.",
-            "heldCheckout": "Libérer les copies de travail des conversations retenues",
-            "heldCheckoutNote": "Après quelques jours d'inactivité, garder le travail sur sa branche et libérer la copie de travail et la couche de dépendances. La carte reste ; son prochain tour restaure la copie de travail. Choisissez Jamais pour conserver les copies de travail.",
+            "heldCheckout": "Libérer l’espace des agents inactifs",
+            "heldCheckoutNote": "Travail gardé ; fichiers remis à la reprise.",
             "held14Days": "14 jours",
             "archiveFinishedAgents": "Archiver les agents terminés",
             "archiveQuietAgentsReclaim": "Archiver les agents silencieux et récupérer leurs worktrees (les diffs et l'historique sont conservés).",

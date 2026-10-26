@@ -5701,8 +5701,8 @@
         },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Aplicar el trabajo terminado directamente al espacio de trabajo como cambios sin commit.",
-            "heldCheckout": "Liberar las copias de trabajo de las conversaciones retenidas",
-            "heldCheckoutNote": "Tras unos días sin actividad, mantiene el trabajo en su rama y libera el checkout y la capa de dependencias. La tarjeta se queda; su próximo turno restaura la copia de trabajo. Elige Nunca para conservar las copias de trabajo.",
+            "heldCheckout": "Liberar espacio de agentes inactivos",
+            "heldCheckoutNote": "Trabajo guardado; archivos al continuar.",
             "held14Days": "14 días",
             "archiveFinishedAgents": "Archivar los agentes terminados",
             "archiveQuietAgentsReclaim": "Archivar los agentes en silencio y recuperar sus worktrees (los diffs y el historial se conservan).",

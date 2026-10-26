@@ -5701,8 +5701,8 @@
         },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Fertige Arbeit direkt als nicht committete Änderungen in den Workspace übernehmen.",
-            "heldCheckout": "Arbeitskopien ruhender Unterhaltungen freigeben",
-            "heldCheckoutNote": "Nach ruhigen Tagen bleibt die Arbeit auf ihrem Branch, und Checkout sowie Abhängigkeits-Overlay werden freigegeben. Die Karte bleibt; ihr nächster Zug stellt die Arbeitskopie wieder her. Wählen Sie „Nie“, um Arbeitskopien zu behalten.",
+            "heldCheckout": "Speicher inaktiver Agenten freigeben",
+            "heldCheckoutNote": "Arbeit bleibt; Fortsetzen lädt Dateien.",
             "held14Days": "14 Tage",
             "archiveFinishedAgents": "Fertige Agenten archivieren",
             "archiveQuietAgentsReclaim": "Stille Agenten archivieren und Worktrees zurückgewinnen (Diffs und Historie bleiben erhalten).",

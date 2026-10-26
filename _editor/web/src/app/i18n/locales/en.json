@@ -5701,8 +5701,8 @@
         },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Apply completed work directly to workspace as uncommitted changes.",
-            "heldCheckout": "Free held conversations’ working copies",
-            "heldCheckoutNote": "After quiet days, keep the work on its branch and free the checkout and dependency overlay. The card stays; its next turn restores the working copy. Choose Never to keep working copies.",
+            "heldCheckout": "Free space from inactive agents",
+            "heldCheckoutNote": "Work stays saved; files return on resume.",
             "held14Days": "14 days",
             "archiveFinishedAgents": "Archive finished agents",
             "archiveQuietAgentsReclaim": "Archive quiet agents and reclaim worktrees (diffs and history are kept).",
