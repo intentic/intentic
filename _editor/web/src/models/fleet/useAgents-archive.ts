@@ -75,7 +75,7 @@ export const dismissNotice = (): void => {
     notice.value = undefined;
 };
 
-// What the daemon refused, said in its own words, on the strip that doesn't expire: releasing a working copy is git
+// What the daemon refused, said in its own words as the board's problem toast: releasing a working copy is git
 // work and can fail for good (a deleted repository, a locked checkout), and those cards stay on the board.
 const refusalNotice = (failed: ProcedureOutput<`agents.archive`>[`failed`]): string => {
     const reason = failed[0]?.reason;
@@ -167,7 +167,7 @@ export const archive = async (ids?: readonly string[], options?: { readonly rece
             settleArchive(answer, restore, sweep);
         }
     } catch (error) {
-        // The press failed, so the cards it took slide back into their lane, under the strip that says why.
+        // The press failed, so the cards it took slide back into their lane, under the toast that says why.
         if (current()) {
             restore();
             notice.value = messageOr(error, t(`agents.useAgentsArchive.couldntArchive`));

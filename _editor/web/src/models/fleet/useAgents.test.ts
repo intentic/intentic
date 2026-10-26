@@ -1781,7 +1781,7 @@ describe("archive", () => {
             expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
         });
 
-        it("slides the card back when the press fails, under the strip that says why", async () => {
+        it("slides the card back when the press fails, under the notice that says why", async () => {
             const { archive, lanes, notice } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
             daemon.archive.mockRejectedValueOnce(new Error(`the agent's turn is running`));
@@ -1894,7 +1894,7 @@ describe("archive", () => {
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         });
 
-        it("sends a card whose restore failed back to its own place in the archive, under the strip that says why", async () => {
+        it("sends a card whose restore failed back to its own place in the archive, under the notice that says why", async () => {
             const { restore, lanes, archived, notice } = useAgents();
             setAgents([], 1);
             archived.value = [`x`, `a`, `y`].map((id) => ({ ...archivedAgent(id), open: false, unread: false, unsent: false }));

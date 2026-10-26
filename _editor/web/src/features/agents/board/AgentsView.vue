@@ -5,7 +5,6 @@ import {
     ConfirmDialog,
     ContextMenu,
     FloatingAction,
-    Notice,
     ProjectChip,
     SearchBar,
     SegmentedControl,
@@ -15,7 +14,7 @@ import {
     ui,
     useDevice,
 } from "@intentic/ui";
-import { computed, onMounted, provide, ref } from "vue";
+import { computed, onMounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { usePanels } from "../../../models/extensions/usePanels";
@@ -72,6 +71,7 @@ import { useRowReveal } from "@intentic/ui/motion";
 import { laneOrder, useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
 import { useWallpaper } from "../../../skins/useWallpaper";
+import { useNotifications } from "../../../workbench/notifications/notifications";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
 // (laneDrop), never assigns status directly. Template and wiring: what the lanes draw and cover, how the board is being
 // read, the selection, the menu, the motion and the commands are the headless modules in `view/`.
@@ -81,6 +81,22 @@ const router = useRouter();
 const { mobile, coarse } = useDevice();
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
+// A refused press (a land, an archive, a restore) is said as a toast in the app's notification lane, not as a strip
+// across the board: a strip pushed the lanes down under the reader and sat there until dismissed. Raising it hands
+// the message over, so the same refusal pressed twice toasts twice. `immediate`: one raised while the board was
+// closed is said when it opens.
+const { warn } = useNotifications();
+watch(
+    notice,
+    (message) => {
+        if (message === undefined) {
+            return;
+        }
+        warn(message);
+        dismissNotice();
+    },
+    { immediate: true },
+);
 // The geek metrics are the desktop's: its shell reads them for its status bar and hands them down to the cards
 // (liveMetrics.ts). A phone reads none, whatever Settings says: its board has no foot to spare from the floating New agent.
 const drag = useAgentDrag();
@@ -340,10 +356,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 </Button>
             </div>
         </div>
-        <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
-        <Notice v-if="notice !== undefined" tone="danger" size="sm" strip :dismiss-label="t(`ui.action.dismiss`)" @dismiss="dismissNotice">
-            {{ notice }}
-        </Notice>
         <!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
         <span class="sr-only" aria-live="polite">{{ foundAnnouncement }}</span>

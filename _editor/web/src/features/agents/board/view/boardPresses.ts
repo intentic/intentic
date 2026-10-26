@@ -63,7 +63,7 @@ export const useBoardPresses = (host: PressesHost) => {
             ),
     );
     // The daemon answers a stop on an ended run as done, so a refusal means the run may still be spending. Its reason
-    // goes on the board's notice strip, which outlives the board, so it waits for a reader who left.
+    // goes in the board's notice, which outlives the board, so it waits for a reader who left and toasts when they're back.
     const stopRun = async (run: WorkflowRun): Promise<void> => {
         if (stoppingRuns.value.has(run.runId)) {
             return;
@@ -93,7 +93,7 @@ export const useBoardPresses = (host: PressesHost) => {
         }
     });
     // Files an ended run away, sessions and all, unasked: archiving is lossless and the archive itself is the way back.
-    // A refusal puts the row back (useWorkflowRuns), so the strip is what says why it moved twice.
+    // A refusal puts the row back (useWorkflowRuns), so the toast is what says why it moved twice.
     const archiveRun = async (run: WorkflowRun): Promise<void> => {
         await workflows.archive.mutateAsync(run.runId).catch((error: unknown) => {
             agents.notice.value = messageOr(error, t(`agents.boardPresses.couldntArchiveRun`));
@@ -139,7 +139,7 @@ export const useBoardPresses = (host: PressesHost) => {
             void agents.refresh();
         }
     };
-    // Opens a draft composed from the chats side by side, never sent; a refusal lands on the notice strip, since a press
+    // Opens a draft composed from the chats side by side, never sent; a refusal is toasted as the board's notice, since a press
     // with no visible effect reads as broken.
     const synthesize = async (): Promise<void> => {
         const result = await synthesizeSessions();

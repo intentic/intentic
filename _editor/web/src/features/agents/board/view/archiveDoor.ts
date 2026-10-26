@@ -32,7 +32,7 @@ export const useArchiveDoor = (host: DoorHost) => {
     // The confirm dialog is open. Bulk only, never per card, where it would sit a pixel from Restore on the same hover row.
     const pendingPurge = ref(false);
     // Kept in the operations ledger, not this board: a board left and opened again while the daemon deletes still
-    // holds Delete all. What it went on to say (its receipt, or a refusal on the notice strip) is purgeArchived's own.
+    // holds Delete all. What it went on to say (its receipt, or a refusal toasted as the board's notice) is purgeArchived's own.
     const purge = useOperation(PURGE_ARCHIVE);
     const purging = purge.busy;
     const pulsing = ref(false);

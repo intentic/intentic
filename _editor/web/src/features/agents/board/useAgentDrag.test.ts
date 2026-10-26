@@ -67,8 +67,8 @@ afterEach(() => {
     mocked(landAgent).mockClear();
 });
 
-// TWO KINDS OF "the turn didn't go", ONE OF WHICH IS GOOD NEWS. The board's notice strip is a red bar that shifts the
-// layout and waits to be dismissed, which is right for a refusal and wrong for a press that found nothing left to do and
+// TWO KINDS OF "the turn didn't go", ONE OF WHICH IS GOOD NEWS. The board's notice is a problem toast that warns,
+// which is right for a refusal and wrong for a press that found nothing left to do and
 // put the card right. That one takes the floating receipt instead, so the reader isn't warned about a repair.
 it("reports a press that repaired the card as an outcome, and a refusal as a failure", async () => {
     const { resolveNow } = useAgentDrag();
@@ -100,9 +100,9 @@ it("says nothing for a press the chat has already answered for", async () => {
 });
 
 // THE THIRD KIND OF "the press didn't do anything", and the one that used to pass for success. Merged-and-nothing-moved
-// refuses nothing, so it takes neither the danger strip nor a throw — and the card carries no trace of it either way, so
+// refuses nothing, so it takes neither the problem notice nor a throw — and the card carries no trace of it either way, so
 // saying nothing left a press that did nothing looking exactly like one that worked.
-it("gives a land that carried nothing the receipt, not silence and not the danger strip", async () => {
+it("gives a land that carried nothing the receipt, not silence and not the problem notice", async () => {
     const { landNow } = useAgentDrag();
 
     const carried = landNow(`a`);
