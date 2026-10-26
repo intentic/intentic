@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { defineConfig, type Plugin } from "vite";
 import { BUILD_ID, shared } from "./vite.shared.ts";
+import { offlinePrecache } from "./vite.offline.ts";
 
 // Resolve a path relative to this config file (which lives at the app root, _editor/web/).
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
@@ -64,7 +65,8 @@ const contractFreshness = (): Plugin => ({
 
 export default defineConfig(({ command }) => ({
     ...shared,
-    plugins: [...shared.plugins, buildStamp(), contractFreshness()],
+    // offlinePrecache: the chunks public/sw.js keeps for when this origin cannot answer (vite.offline.ts).
+    plugins: [...shared.plugins, buildStamp(), contractFreshness(), offlinePrecache(BUILD_ID)],
     server: {
         host: "localhost",
         // Must stay 47145: CORS, Better Auth's WEB_ORIGIN, and Google's OAuth client all trust this exact origin.

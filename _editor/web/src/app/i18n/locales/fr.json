@@ -9027,9 +9027,11 @@
             "offlineTitle": "Vous êtes hors ligne",
             "offlineBody": "Cet appareil a perdu sa connexion Internet. {name} va bien, et l'espace de travail reprend dès que vous êtes de nouveau en ligne.",
             "platformDownTitle": "Impossible de joindre Intentic",
-            "platformDownBody": "Intentic ne répond pas à cet appareil. Cela vient généralement de ce réseau, ou d'une courte panne de notre côté. Nous continuons d'essayer.",
+            "platformDownBody": "Ni Intentic ni l'adresse de {name} ne répondent à cet appareil. Soit Intentic subit une panne, soit ce réseau le bloque. {name} continue de tourner dans tous les cas, et cette page se reconnecte d'elle-même.",
             "unreachableTitle": "Impossible de joindre {name} depuis ce réseau",
-            "unreachableBody": "Intentic répond, mais pas l'adresse de {name}. Un VPN, un pare-feu ou un filtre DNS sur ce réseau bloque peut-être *.sbx.intentic.dev. Essayez un autre réseau, ou autorisez cette adresse.",
+            "unreachableBody": "Intentic répond, mais pas l'adresse de {name}. Un VPN, un pare-feu ou un filtre DNS sur ce réseau bloque peut-être {host}. Essayez un autre réseau, ou autorisez cette adresse.",
+            "loopbackDownTitle": "{name} ne répond pas sur cet ordinateur",
+            "loopbackDownBody": "Rien ne répond à {address}, où il écoute. Son conteneur s'est peut-être arrêté, ou la redirection de port de Docker ou WSL vers cet ordinateur est bloquée ; redémarrer le sandbox ou WSL règle généralement le problème. Cette page se reconnecte d'elle-même.",
             "busyTitle": "{name} est occupé",
             "busyBody": "Il tourne toujours et rattrapera son retard de lui-même. Vous n'avez rien à faire.",
             "busyCpu": "Il utilise en ce moment tout le CPU dont il dispose et rattrapera son retard de lui-même.",
@@ -9065,7 +9067,7 @@
             "notConnectedBody": "Son ordinateur est peut-être éteint, en veille ou hors ligne, ou Docker n'y tourne pas. Vos fichiers sont conservés sur cet ordinateur.",
             "notConnectedHeardBefore": "Nous n'avons pas eu de nouvelles de {machine}. Il est peut-être éteint, en veille ou hors ligne. Vos fichiers y sont conservés.",
             "localOnlyTitle": "{name} tourne ici, mais il est hors ligne",
-            "localOnlyBody": "Il répond sur cet ordinateur mais ne peut pas joindre Intentic. Vérifiez la connexion Internet, le VPN ou le pare-feu de cet ordinateur. Il se reconnecte de lui-même dès qu'il le peut.",
+            "localOnlyBody": "Il répond sur cet ordinateur mais n'est pas connecté à Intentic. Si Internet fonctionne sur cet ordinateur, un VPN ou un pare-feu bloque peut-être, ou Intentic subit une panne. Il se reconnecte de lui-même dès qu'il le peut.",
             "silentTitle": "Connexion à {name} en cours…",
             "silentBody": "Son adresse répond, mais le sandbox n'a pas encore répondu.",
             "stuckTitle": "{name} ne répond pas",
@@ -10860,8 +10862,10 @@
             "sandboxLater": "Un sandbox est l'endroit où les agents travaillent. Configurez-en un quand vous en voulez."
         },
         "platformUnavailable": {
-            "intenticIsntReachable": "Intentic est injoignable",
-            "signInNotChanged": "Votre connexion n'a pas été modifiée. Vérifiez votre réseau et réessayez."
+            "intenticIsntReachable": "Intentic ne répond pas",
+            "signInNotChanged": "Les serveurs d'Intentic ne répondent pas pour l'instant. Votre connexion n'a pas changé et vos sandboxes continuent de tourner ; cette page ouvre votre espace de travail d'elle-même dès qu'Intentic revient.",
+            "useThisComputer": "Utiliser les sandboxes de cet ordinateur",
+            "thisComputerNote": "Les sandboxes qui tournent sur cet ordinateur s'ouvrent sans Intentic."
         },
         "setup": {
             "acceptedNeverAnswered": "Cette adresse a accepté la connexion mais n'a jamais répondu.",

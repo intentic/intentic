@@ -15,7 +15,8 @@ const lookup = jest.fn<(input: { sandboxIds: string[] }) => Promise<SandboxLooku
 jest.mock(`../../../lib/useApi`, () => ({ apiClient: { sandbox: { lookup } } }));
 stubGlobal(`fetch`, async () => new Response(JSON.stringify({ identity: `id-1`, since: `2026-10-01T22:42:40.466Z` }), { status: 200 }));
 
-const { startRememberingSandboxes } = await import(`./rememberSandboxes`);
+const { localIdsOf, startRememberingSandboxes } = await import(`./rememberSandboxes`);
+const { sandboxIdOf } = await import(`../../../client/endpoint/endpoint`);
 const { queryClient } = await import(`../../../lib/queryPersistence`);
 const { SANDBOX_LIST_KEY } = await import(`../../../client/sandbox/useSandbox`);
 const { forgetAccount, rememberedAccount } = await import(`../../../client/directory/deviceDirectory`);
@@ -58,6 +59,20 @@ it(`asks about the sandboxes a list lacks, letting go of the deleted and marking
     answer([intentic]);
     await waitFor(() => expect(remembered()).toEqual([[`s1`, `listed`], [`s3`, `unknown`]]));
     expect(lookup.mock.calls).toEqual([[{ sandboxIds: [`574ea8038415`, `1ea6479e2362`] }]]);
+});
+
+// The loopback id is read off the owner's connect token when the list answers, so the device can dial this computer
+// later without ever keeping the token.
+it(`remembers where an owned sandbox answers on its own computer, read off its token`, async () => {
+    const id = await sandboxIdOf(`token-s1`);
+    answer([intentic]);
+    await waitFor(() => expect(rememberedAccount(owner.email)?.sandboxes[0]?.localId).toBe(id));
+});
+
+it(`reads a loopback id off an owner's row only: none for a member's, none for a machine we run`, async () => {
+    const member = sandboxSummary({ id: `s4`, role: `writer`, token: null, daemonUrl: notes.daemonUrl });
+    const hosted = sandboxSummary({ id: `s5`, hosted: { state: `awake`, region: `ams`, warm: true } });
+    expect([...(await localIdsOf([intentic, member, hosted])).entries()]).toEqual([[`s1`, await sandboxIdOf(`token-s1`)]]);
 });
 
 it(`never remembers a list this window seeded itself while open directly`, async () => {

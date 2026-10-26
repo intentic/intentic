@@ -230,6 +230,7 @@ pub fn run() {
             keyring::keyring_upgrade,
             keyring::keyring_app,
             commands::workspace_open,
+            machine_face::local_sandbox_open,
             commands::home_facts,
             commands::setup_alert,
             commands::setup_progress,

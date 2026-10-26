@@ -1,12 +1,13 @@
 # desktop-smoke-windows
 
-Installs the shipped NSIS installer on a real Windows machine, runs the sandbox setup it ships, drives one `/agents` turn, and runs Intentic's own container engine beside Docker Desktop, one tier per subcommand.
+Installs the shipped NSIS installer on a real Windows machine, holds the installed app to what it shows when intentic is down, runs the sandbox setup it ships, drives one `/agents` turn, and runs Intentic's own container engine beside Docker Desktop, one tier per subcommand.
 
 ```mermaid
 flowchart LR
     wf["windows-smoke.yml<br/>the Windows runner"] --> main(["desktop-smoke-windows<br/>dist/main.js"])
     main --> doctor["doctor<br/>can this machine answer"]
     main --> install["install · tier 1<br/>installer, deep link"]
+    main --> outage["outage · tier 5<br/>intentic down, three ways"]
     main --> setup["setup · tier 2<br/>connect.ps1 on Docker"]
     main --> agents["agents · tier 3<br/>one /agents turn"]
     main --> engine["engine · tier 4<br/>our engine, a sandbox moved"]
@@ -19,6 +20,17 @@ flowchart LR
   faults before any tier runs.
 - Tier 1 needs no Docker and no credentials, so it gates every release. Tiers 2 and 3 need a Windows Docker daemon
   and a shared agent-auth volume, so they run nightly.
+- Tier 5 (`outage`) launches the app tier 1 left installed once per shape an outage takes, and reads which page the
+  workspace window holds from WebView2's DevTools listing (`--remote-debugging-port`), since the frame is titled
+  "Intentic" whichever page it is: nothing resolves (the offline page, `status=host-name-not-resolved`); the address
+  answers a Cloudflare-style 530 (the offline page with `status=http-530`, held there without reloading the 530, and
+  back on the workspace once it answers, which is told `machineFace` only on a computer that hosts sandboxes); and,
+  given `--editor-dist`, only the API down (the editor's own `/platform-unavailable`, left up). Each launch has its own
+  WebView2 profile (`WEBVIEW2_USER_DATA_FOLDER`), the app's decision files and `roster.json` pinned and put back, the
+  Rust side's calls sent to a dead proxy, and the names on `.test`, so nothing reaches intentic. The app's own
+  WebView2 arguments are read from `scripts.rs` and kept ahead of the scenario's, since the variable replaces them
+  (`outage.ts`). It quits any running copy of the app first. Deep runs only; the Linux tier's half is
+  `_tools/desktop-smoke/outage.sh`.
 - Tier 4 installs Intentic's engine (a dockerd in a WSL distro of ours) from the rootfs the build job made, beside the
   runner's Docker Desktop, and checks Windows reaches a port it publishes; on main pushes that much, nightly also a
   sandbox moved onto it and back with its files. It runs `ic` with a home, a disk and a distro of its own
@@ -44,6 +56,7 @@ Build with `pnpm turbo run build --filter=@intentic/desktop-smoke-windows...`, t
 node _tools/desktop-smoke-windows/dist/main.js doctor [--needs-docker]
 node _tools/desktop-smoke-windows/dist/main.js install --installer <Intentic-<version>-x64-setup.exe> \
     [--expected-version <version>] [--app-url <origin>] [--keep-installed]
+node _tools/desktop-smoke-windows/dist/main.js outage [--editor-dist <_editor/web/dist>]
 node _tools/desktop-smoke-windows/dist/main.js setup [--sandbox-image <ref>] [--ic-bin <ic.exe>] [--web-origin <url>]
 node _tools/desktop-smoke-windows/dist/main.js agents [--turn-seconds <n>]
 node _tools/desktop-smoke-windows/dist/main.js engine --ic-bin <ic.exe> --engine-tarball <intentic-engine-*.tar.gz> \
@@ -58,6 +71,7 @@ reads `INTENTIC_AGENT_AUTH_VOLUME` and stands the turn down without it. `teardow
 
 - [src/main.ts](src/main.ts) — one subcommand per tier, and the flags each takes.
 - [src/tier-install.ts](src/tier-install.ts) — tier 1: install, files on disk, `intentic://` before and after launch.
+- [src/tier-outage.ts](src/tier-outage.ts) — tier 5: what the installed app shows when intentic is down.
 - [src/tier-setup.ts](src/tier-setup.ts) — tier 2: the installed `connect.ps1` brings a sandbox up.
 - [src/tier-agents.ts](src/tier-agents.ts) — tier 3: the sandbox is reachable, gated, and runs a turn.
 - [src/tier-engine.ts](src/tier-engine.ts) — tier 4: Intentic's engine installs, publishes to Windows, and carries a

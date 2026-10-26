@@ -67,6 +67,20 @@ describe(`an outage's technical details`, () => {
         expect(lines).toContain(`         → Restart the sandbox.`);
     });
 
+    // The desktop app's offline copy of the editor answers the sandbox list itself: its answer is no word of the platform's.
+    it(`say the platform was not used where this page opened the sandbox without it, never that it answered`, () => {
+        const lines = outageDetails({
+            connection: down,
+            evidence: { at: NOW - 5_000, online: true, platform: `not-used`, netd: { kind: `unreachable` }, loopback: undefined, hosted: undefined },
+            report: undefined,
+            diagnosis: { kind: `loopback-down`, address: `127.0.0.1:30559` },
+            now: NOW,
+        });
+        expect(lines).toContain(`platform: not used (this computer's own sandboxes, opened without Intentic)`);
+        expect(lines).not.toContain(`platform: ok`);
+        expect(lines.at(-1)).toBe(`diagnosis: loopback-down`);
+    });
+
     it(`say whether a diagnosis is still waiting or has given up`, () => {
         const waiting = outageDetails({ connection: down, evidence: undefined, report: undefined, diagnosis: { kind: `silent`, patient: true }, now: NOW });
         const gaveUp = outageDetails({ connection: down, evidence: undefined, report: undefined, diagnosis: { kind: `silent`, patient: false }, now: NOW });

@@ -188,6 +188,13 @@ jobs:
         env:
           KEEP_INSTALLED: ${{ inputs.deep }}
 
+      # TIER 5 — intentic down, in the three shapes an outage takes (nothing resolves; the address answers Cloudflare's
+      # 530; only the API is down), each launch of the app installed above in a profile of its own with the workspace's
+      # address played by a local stub, so nothing reaches intentic. Deep runs only, since it needs the install tier 1
+      # keeps for them. The API-only shape needs an editor build and is skipped without `--editor-dist`.
+      - run: node _tools/desktop-smoke-windows/dist/main.js outage
+        if: ${{ inputs.deep && !inputs.engine-only }}
+
       # THE MACHINE TO ITSELF for the tiers that run containers. This box also hosts the Linux fleet's six worker runners,
       # in the same WSL2 VM as Docker Desktop and the engine tier's distro, and a nightly that ran beside six typechecks
       # starved that VM until it could not open the vsock channel Windows reaches the engine through: `docker stop` hung

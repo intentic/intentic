@@ -33,8 +33,10 @@ export interface Evidence {
     readonly at: number;
     // What the browser says of its own network (`navigator.onLine`); only its `false` is trustworthy.
     readonly online: boolean;
-    // Whether the platform answered the last refresh of the sandbox list.
-    readonly platform: "ok" | "down" | undefined;
+    // Whether the platform answered the last refresh of the sandbox list; `not-used` where this page runs without it (the
+    // desktop app's own copy of the editor on this computer's sandboxes, app/environments/local.ts `sandboxFace`), so a
+    // list it answers itself says nothing of the platform.
+    readonly platform: "ok" | "down" | "not-used" | undefined;
     readonly netd: NetdProbe | undefined;
     // Own machine, probed only where no permission prompt would be raised: the sandbox answered on this computer's own
     // loopback address.
@@ -58,7 +60,28 @@ export interface DiagnosisInput {
     readonly evidence: Evidence | undefined;
     readonly hostReport: HostReport | null | undefined;
     readonly now: number;
+    // Where the sandbox's own address points (`addressOf`), for words that name it rather than a domain it may not use.
+    readonly address?: SandboxAddress | undefined;
 }
+
+// A sandbox's own address as `host[:port]`, and whether that host is this computer itself.
+export interface SandboxAddress {
+    readonly host: string;
+    readonly loopback: boolean;
+}
+
+const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set([`127.0.0.1`, `localhost`, `[::1]`]);
+
+// Where a daemon URL points; undefined for one that does not parse. The desktop app's offline copy of the editor lists
+// this computer's sandboxes at `http://127.0.0.1:<port>` (its local/machineFace.ts), the one place a list row's own
+// address is loopback: nothing stands between this page and such a sandbox, no network, VPN or Intentic.
+export const addressOf = (daemonUrl: string | null | undefined): SandboxAddress | undefined => {
+    if (daemonUrl === null || daemonUrl === undefined || !URL.canParse(daemonUrl)) {
+        return undefined;
+    }
+    const url = new URL(daemonUrl);
+    return { host: url.host, loopback: LOOPBACK_HOSTNAMES.has(url.hostname) };
+};
 
 // How the machine a sandbox runs on is doing, from its own report.
 export type MachineStanding = "working" | "needs-you" | "fixed";
@@ -70,8 +93,12 @@ export type Diagnosis =
     | { readonly kind: "offline" }
     // The platform does not answer this device either.
     | { readonly kind: "platform-down" }
-    // The platform answers and the sandbox's address does not reach anything from here: a network in between.
-    | { readonly kind: "unreachable" }
+    // The platform answers and the sandbox's address does not reach anything from here: a network in between. `host` is
+    // that address's, where it is known.
+    | { readonly kind: "unreachable"; readonly host?: string | undefined }
+    // The sandbox's address is this computer's own loopback and nothing answers there: its container, or the port
+    // forwarding that publishes it here (Docker's, WSL's). No network is involved, so none is blamed.
+    | { readonly kind: "loopback-down"; readonly address: string }
     // Alive and slow. `since` is how long the outage has lasted.
     | { readonly kind: "busy"; readonly vitals: SandboxVitals | undefined; readonly longMs: number }
     | { readonly kind: "restarting"; readonly restarts: number }
@@ -203,7 +230,12 @@ const silent = (input: DiagnosisInput): Diagnosis => {
     return { kind: `silent`, patient: input.outageMs < SILENT_PATIENCE_MS };
 };
 
-const unreachable = (input: DiagnosisInput): Diagnosis => (input.evidence?.platform === `down` ? { kind: `platform-down` } : { kind: `unreachable` });
+const unreachable = (input: DiagnosisInput): Diagnosis => {
+    if (input.address?.loopback === true) {
+        return { kind: `loopback-down`, address: input.address.host };
+    }
+    return input.evidence?.platform === `down` ? { kind: `platform-down` } : { kind: `unreachable`, host: input.address?.host };
+};
 
 const fromNetd = (netd: NetdProbe, input: DiagnosisInput): Diagnosis => {
     switch (netd.kind) {

@@ -9027,9 +9027,11 @@
             "offlineTitle": "Sie sind offline",
             "offlineBody": "Dieses Gerät hat seine Internetverbindung verloren. {name} geht es gut, und der Workspace macht weiter, sobald Sie wieder online sind.",
             "platformDownTitle": "Intentic ist nicht erreichbar",
-            "platformDownBody": "Intentic antwortet diesem Gerät nicht. Meist liegt das an diesem Netzwerk oder an einer kurzen Störung bei uns. Wir versuchen es weiter.",
+            "platformDownBody": "Weder Intentic noch die Adresse von {name} antworten diesem Gerät. Entweder hat Intentic eine Störung, oder dieses Netzwerk blockiert es. {name} läuft so oder so weiter, und diese Seite verbindet sich von selbst wieder.",
             "unreachableTitle": "{name} ist aus diesem Netzwerk nicht erreichbar",
-            "unreachableBody": "Intentic antwortet, aber die Adresse von {name} nicht. Ein VPN, eine Firewall oder ein DNS-Filter in diesem Netzwerk blockiert vielleicht *.sbx.intentic.dev. Versuchen Sie ein anderes Netzwerk oder erlauben Sie diese Adresse.",
+            "unreachableBody": "Intentic antwortet, aber die Adresse von {name} nicht. Ein VPN, eine Firewall oder ein DNS-Filter in diesem Netzwerk blockiert vielleicht {host}. Versuchen Sie ein anderes Netzwerk oder erlauben Sie diese Adresse.",
+            "loopbackDownTitle": "{name} antwortet auf diesem Computer nicht",
+            "loopbackDownBody": "Unter {address}, wo sie lauscht, antwortet nichts. Ihr Container wurde vielleicht beendet, oder die Portweiterleitung von Docker oder WSL zu diesem Computer hängt; ein Neustart der Sandbox oder von WSL hilft meist. Diese Seite verbindet sich von selbst wieder.",
             "busyTitle": "{name} ist ausgelastet",
             "busyBody": "Sie läuft noch und holt von selbst auf. Sie müssen nichts tun.",
             "busyCpu": "Sie nutzt gerade die gesamte verfügbare CPU und holt von selbst auf.",
@@ -9065,7 +9067,7 @@
             "notConnectedBody": "Ihr Computer ist vielleicht aus, im Ruhezustand oder offline, oder Docker läuft dort nicht. Ihre Dateien bleiben auf diesem Computer erhalten.",
             "notConnectedHeardBefore": "Wir haben nichts von {machine} gehört. Er ist vielleicht aus, im Ruhezustand oder offline. Ihre Dateien bleiben dort erhalten.",
             "localOnlyTitle": "{name} läuft hier, ist aber offline",
-            "localOnlyBody": "Sie antwortet auf diesem Computer, erreicht aber Intentic nicht. Prüfen Sie Internetverbindung, VPN oder Firewall dieses Computers. Sie verbindet sich von selbst, sobald sie kann.",
+            "localOnlyBody": "Sie antwortet auf diesem Computer, ist aber nicht mit Intentic verbunden. Funktioniert das Internet dieses Computers, steht vielleicht ein VPN oder eine Firewall im Weg, oder Intentic hat eine Störung. Sie verbindet sich von selbst, sobald sie kann.",
             "silentTitle": "{name} wird noch erreicht…",
             "silentBody": "Ihre Adresse antwortet, aber die Sandbox hat noch nicht reagiert.",
             "stuckTitle": "{name} antwortet nicht",
@@ -10860,8 +10862,10 @@
             "sandboxLater": "In einer Sandbox arbeiten Agenten. Richten Sie eine ein, sobald Sie sie brauchen."
         },
         "platformUnavailable": {
-            "intenticIsntReachable": "Intentic ist nicht erreichbar",
-            "signInNotChanged": "Ihre Anmeldung wurde nicht geändert. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+            "intenticIsntReachable": "Intentic antwortet nicht",
+            "signInNotChanged": "Die Server von Intentic antworten gerade nicht. Ihre Anmeldung ist unverändert und Ihre Sandboxes laufen weiter; diese Seite öffnet Ihren Arbeitsbereich von selbst, sobald Intentic wieder da ist.",
+            "useThisComputer": "Sandboxes dieses Computers verwenden",
+            "thisComputerNote": "Die Sandboxes auf diesem Computer öffnen sich auch ohne Intentic."
         },
         "setup": {
             "acceptedNeverAnswered": "Diese Adresse hat die Verbindung angenommen, aber nie geantwortet.",

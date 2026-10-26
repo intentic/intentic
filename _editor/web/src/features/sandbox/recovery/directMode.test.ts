@@ -65,6 +65,12 @@ describe(`a remembered sandbox as a list row`, () => {
         });
     });
 
+    // Remembered with its certified loopback name: the row carries it, so this computer is tried before the tunnel.
+    it(`carries the certified loopback name the device remembered, and still no token`, () => {
+        const here = summaryOf({ ...intentic, localId: `82789f4106b4`, localHostname: `82789f4106b4.local.example.com` });
+        expect([here.localHostname, here.token]).toEqual([`82789f4106b4.local.example.com`, null]);
+    });
+
     // A row without a last-seen time reads as a setup still to finish (setupGate.ts), which a sandbox opened is not.
     it(`gives a sandbox never seen the epoch as its last-seen time`, () => {
         expect(summaryOf(notes).lastSeenAt).toBe(`1970-01-01T00:00:00.000Z`);

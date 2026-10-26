@@ -31,6 +31,9 @@ export interface Addressing {
     readonly hosted: object | null;
     // Certified loopback hostname as the platform reports it; null or absent means no certified shortcut exists.
     readonly localHostname?: string | null;
+    // The 12-hex id the loopback port derives from, where it is known without the token: a sandbox this device remembers
+    // (deviceDirectory.ts `localId`), opened directly while the platform is down. The token's own id wins when both are.
+    readonly localId?: string | undefined;
 }
 
 // A phone never runs a sandbox (a computer's Docker or the platform does). Android's "desktop site" mode and an iPad
@@ -53,16 +56,21 @@ export const sandboxIdOf = async (connectToken: string): Promise<string> => (awa
 export const certifiedLoopbackUrl = (sandboxId: string, hostname: string | null | undefined): string | undefined =>
     hostname === null || hostname === undefined || hostname === `` ? undefined : `https://${hostname}:${localDaemonPort(sandboxId)}`;
 
+// The id this computer's loopback port for the sandbox derives from: read off the connect token when there is one (as it
+// always was, an empty answer included), else the one remembered for it; undefined when neither says.
+const loopbackIdOf = async (sandbox: Pick<Addressing, "token" | "localId">): Promise<string | undefined> =>
+    sandbox.token === undefined || sandbox.token === `` ? sandbox.localId : await sandboxIdOf(sandbox.token);
+
 // Ranked by what usually multiplexes, not by distance: certified loopback and tunnel (h2 in most browsers) outrank plain
 // HTTP/1.1 (six connections per origin), which is only worth it when DNS or the internet is down entirely. What this
 // browser actually negotiated is measured apart (streamBudget.ts), since WebKitGTK speaks HTTP/1.1 even to the
-// certified name. No token, or a non-local machine, collapses to the tunnel alone.
+// certified name. No loopback id (no token and none remembered), or a non-local machine, collapses to the tunnel alone.
 export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> => {
     const tunnel: Endpoint = { kind: `public`, base: sandbox.daemonUrl };
-    if (sandbox.token === undefined || sandbox.token === `` || !couldBeOnThisMachine(sandbox)) {
+    const id = couldBeOnThisMachine(sandbox) ? await loopbackIdOf(sandbox) : undefined;
+    if (id === undefined) {
         return [tunnel];
     }
-    const id = await sandboxIdOf(sandbox.token);
     // Hostname comes from the platform (Addressing); the port is still derived from the container's publish.
     const secure = certifiedLoopbackUrl(id, sandbox.localHostname);
     return [
@@ -146,7 +154,7 @@ export const shortcutFailedAlone = async (
 // this sandbox. When none answers, the tunnel is the default, marked `unanswered` so it is asked again.
 export const selectEndpoint = async (sandbox: Addressing, fetchImpl: FetchLike = fetch): Promise<Endpoint> => {
     const candidates = await candidatesFor(sandbox);
-    const expected = sandbox.token === undefined || sandbox.token === `` ? `` : await sandboxIdOf(sandbox.token);
+    const expected = (await loopbackIdOf(sandbox)) ?? ``;
     for (const [index, candidate] of candidates.entries()) {
         if (candidate.kind === `public` && index === candidates.length - 1) {
             return candidate;

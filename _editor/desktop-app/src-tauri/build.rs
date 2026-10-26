@@ -68,6 +68,8 @@ const COMMANDS: &[&str] = &[
     "keyring_upgrade",
     "keyring_app",
     "workspace_open",
+    // Devices' Open on a sandbox of this computer: the workspace, or the face while the workspace does not answer.
+    "local_sandbox_open",
     "home_facts",
     "setup_alert",
     "setup_progress",

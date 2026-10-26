@@ -32,4 +32,23 @@ describe(`the rendered nginx config`, () => {
         expect(header, `nginx.conf serves no X-Web-Build`).toEqual(expect.any(String));
         expect(header).toContain(`"\${WEB_BUILD}"`);
     });
+
+    // nginx's first matching regex wins, as here; a URI none matches gets the map's default.
+    const cacheControlOf = (uri: string): string | undefined => {
+        const block = /map \$request_uri \$cache_control \{([^}]*)\}/.exec(nginxConf)?.[1] ?? ``;
+        const rules = [...block.matchAll(/^\s*(\S+)\s+"([^"]*)";/gm)].map((match) => ({ key: match[1] ?? ``, value: match[2] ?? `` }));
+        const hit = rules.find((rule) => rule.key.startsWith(`~`) && new RegExp(rule.key.slice(1)).test(uri));
+        return (hit ?? rules.find((rule) => rule.key === `default`))?.value;
+    };
+
+    it(`serves the service worker revalidated, and the shell and runtime config never cached`, () => {
+        // The worker's update check must see each deploy's precache list (public/sw.js); index.html and env.js change per
+        // deploy and are kept by the worker itself for outages, never by the HTTP cache.
+        expect([cacheControlOf(`/sw.js`), cacheControlOf(`/`), cacheControlOf(`/assets/js/env.js`), cacheControlOf(`/assets/index-a1.js`)]).toEqual([
+            `no-cache`,
+            `no-store`,
+            `no-store`,
+            `public, max-age=31536000, immutable`,
+        ]);
+    });
 });

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
+import type { Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APP_IDENTIFIER } from "./constants.js";
@@ -13,7 +14,8 @@ export interface HermeticDesktop {
     readonly close: () => Promise<void>;
 }
 
-const listen = async (server: Server): Promise<number> =>
+/** Binds `server` to a free loopback port and answers it: the stand-ins this tier and the outage tier serve. */
+export const listen = async (server: Server): Promise<number> =>
     await new Promise<number>((resolve, reject) => {
         server.once(`error`, reject);
         server.listen(0, `127.0.0.1`, () => {
@@ -27,7 +29,8 @@ const listen = async (server: Server): Promise<number> =>
         });
     });
 
-const restore = (key: string, value: string | undefined): void => {
+/** Puts one environment variable back as it was, absent included. */
+export const restore = (key: string, value: string | undefined): void => {
     if (value === undefined) {
         delete process.env[key];
         return;

@@ -55,6 +55,33 @@ it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async
     expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined, ...anywhere })).toEqual([{ kind: `public`, base: TUNNEL }]);
 });
 
+// A sandbox opened directly while the platform is down has no token on its row: the id this device remembered for it
+// (deviceDirectory.ts `localId`) stands in, so this computer is still tried before the tunnel.
+it(`dials this computer by the remembered loopback id when the row has no token, and the token's own id wins`, async () => {
+    const id = await sandboxIdOf(TOKEN);
+    const remembered = await candidatesFor({ daemonUrl: TUNNEL, token: undefined, localId: id, ...anywhere });
+    const secure = certifiedLoopbackUrl(id, CERT_HOST) ?? `no certified address`;
+    expect(remembered).toEqual([
+        { kind: `local`, base: secure },
+        { kind: `public`, base: TUNNEL },
+        { kind: `local-insecure`, base: localDaemonUrlInsecure(id) },
+    ]);
+    const tokenWins = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, localId: `000000000000`, ...anywhere });
+    expect(tokenWins[2]?.base).toBe(localDaemonUrlInsecure(id));
+    // A machine we run is never this computer, remembered id or not.
+    expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined, localId: id, hosted: { state: `started` } })).toEqual([{ kind: `public`, base: TUNNEL }]);
+});
+
+it(`takes a remembered loopback address only when the daemon behind it names the remembered sandbox`, async () => {
+    const id = await sandboxIdOf(TOKEN);
+    const plain = localDaemonUrlInsecure(id);
+    const someoneElse = async (input: RequestInfo | URL): Promise<Response> => (String(input).startsWith(plain) ? health(`ffffffffffff`) : new Response(``, { status: 502 }));
+    const itself = async (input: RequestInfo | URL): Promise<Response> => (String(input).startsWith(plain) ? health(id) : new Response(``, { status: 502 }));
+    const sandbox = { daemonUrl: TUNNEL, token: undefined, localId: id, hosted: null, localHostname: null };
+    expect(await selectEndpoint(sandbox, someoneElse)).toEqual({ kind: `public`, base: TUNNEL, unanswered: true });
+    expect(await selectEndpoint(sandbox, itself)).toEqual({ kind: `local-insecure`, base: plain });
+});
+
 it(`offers no loopback candidate for a machine the platform put somewhere this browser is not`, async () => {
     // Platform-hosted machine (`hosted: { state: "started" }`), which can never be a loopback hop away.
     const hosted = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } });

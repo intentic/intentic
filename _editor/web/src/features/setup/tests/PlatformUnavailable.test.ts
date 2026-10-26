@@ -5,6 +5,7 @@ import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals, waitFor } from 
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as actualVueRouter from "vue-router";
+import * as actualThisComputer from "../../../app/environments/thisComputer";
 
 const replace = jest.fn();
 // Where the reader was headed; an /open link to a sandbox lands here carrying its address.
@@ -18,6 +19,9 @@ jest.mock(`vue-router`, () => ({
 // The shared rule has its own suite (client/auth/platformRetry.test.ts); here it only stands for "the platform answered".
 const platformRetry = jest.fn<() => Promise<string | undefined>>();
 jest.mock(`../../../client/auth/platformRetry`, () => ({ platformRetry: () => platformRetry() }));
+// Whether the app offers this computer's sandboxes is the real module's reading of the window; only the press is watched.
+const openedThisComputer = jest.fn();
+jest.mock(`../../../app/environments/thisComputer`, () => ({ ...actualThisComputer, openThisComputersSandboxes: () => openedThisComputer() }));
 
 const { default: PlatformUnavailable } = await import(`../PlatformUnavailable.vue`);
 // The same module instances the screen reads, to give the device something to remember and to see what opened.
@@ -57,6 +61,7 @@ beforeEach(() => {
     query.returnTo = `/workspace`;
     forgetAccount(owner.email);
     directMode.value = false;
+    openedThisComputer.mockReset();
 });
 
 afterEach(() => {
@@ -65,6 +70,7 @@ afterEach(() => {
     document.body.replaceChildren();
     jest.useRealTimers();
     unstubAllGlobals();
+    Reflect.deleteProperty(window, `__INTENTIC_DESKTOP__`);
 });
 
 it(`takes the reader where they were headed once the platform answers`, async () => {
@@ -86,7 +92,49 @@ it(`stays put when the retry finds the platform still down`, async () => {
     await Promise.resolve();
 
     expect(replace).not.toHaveBeenCalled();
-    expect(el.textContent).toContain(`Intentic isn't reachable`);
+    expect(el.textContent).toContain(`Intentic isn't answering`);
+});
+
+// Intentic being down is not the reader's connection: the screen says whose servers are not answering, and that the
+// sandboxes themselves are fine.
+it(`says Intentic's servers are not answering, not the reader's connection`, async () => {
+    const el = await mount();
+    expect(el.textContent).toContain(`Intentic's servers aren't answering right now. Your sign-in is unchanged and your sandboxes keep running`);
+    expect(el.textContent).not.toContain(`Check your connection`);
+});
+
+// In the desktop app on a computer that runs sandboxes, those open without Intentic (app/environments/thisComputer.ts).
+describe(`this computer's own sandboxes`, () => {
+    const asApp = (desktop: Record<string, unknown>): void => {
+        // Set as the app injects it, with fields this build's type does not name yet.
+        Reflect.set(window, `__INTENTIC_DESKTOP__`, { version: `1.361.0`, installId: `i-1`, update: null, ...desktop });
+    };
+    const useThisComputer = (el: HTMLElement): HTMLButtonElement | undefined =>
+        [...el.querySelectorAll(`button`)].find((entry) => entry.textContent?.trim() === `Use this computer's sandboxes`);
+
+    it(`are offered where the app says it can open them, and a press asks the app to`, async () => {
+        asApp({ machineFace: true });
+        const el = await mount();
+        expect(el.textContent).toContain(`The sandboxes running on this computer open without Intentic.`);
+
+        useThisComputer(el)!.click();
+
+        expect(openedThisComputer).toHaveBeenCalledTimes(1);
+        // The way back stays beside it.
+        expect(tryAgain(el).textContent?.trim()).toBe(`Try again`);
+    });
+
+    it(`are not offered in a browser, nor by an app that does not say it can open them`, async () => {
+        const inBrowser = await mount();
+        expect(useThisComputer(inBrowser)).toBeUndefined();
+        app?.unmount();
+        document.body.replaceChildren();
+
+        asApp({});
+        const olderApp = await mount();
+        expect(useThisComputer(olderApp)).toBeUndefined();
+        expect(olderApp.textContent).not.toContain(`open without Intentic`);
+    });
 });
 
 // The reason the screen can't just wait to be clicked: a reader who leaves the tab open expects to find the app back.

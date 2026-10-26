@@ -33,6 +33,9 @@ pub struct Config {
     /// The certificate as a PEM pair an operator renews (`INGRESS_TLS_CERT_FILE` / `INGRESS_TLS_KEY_FILE`).
     pub tls_cert_file: String,
     pub tls_key_file: String,
+    /// Where the platform's certificate is kept between restarts (`INGRESS_TLS_CACHE_FILE`, default
+    /// [`crate::certificate::DEFAULT_CACHE_FILE`]); `off` keeps it in memory only. Unused with a PEM pair on disk.
+    pub tls_cache_file: String,
     /// What this edge presents to the platform: to fetch the certificate it issued, and to wake a hosted sandbox
     /// (`INGRESS_PLATFORM_TOKEN`).
     pub platform_token: String,
@@ -81,6 +84,8 @@ impl Config {
             },
             tls_cert_file: text("INGRESS_TLS_CERT_FILE"),
             tls_key_file: text("INGRESS_TLS_KEY_FILE"),
+            tls_cache_file: text("INGRESS_TLS_CACHE_FILE")
+                .or(crate::certificate::DEFAULT_CACHE_FILE),
             platform_token: text("INGRESS_PLATFORM_TOKEN"),
             proxy_protocol: flag("INGRESS_PROXY_PROTOCOL"),
             quic_port: match text("INGRESS_QUIC_PORT").as_str() {

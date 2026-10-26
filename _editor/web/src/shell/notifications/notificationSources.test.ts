@@ -5,7 +5,16 @@ import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import OutageWait from "../../features/sandbox/gates/OutageWait.vue";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../models/sandbox/live/sandboxRestart";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
-import { BUSY_CARD_AFTER_MS, diagnosisCard, outageCardShown, restartCard, type UploadState, uploadHeadline, uploadPhase } from "./notificationSources";
+import {
+    BUSY_CARD_AFTER_MS,
+    diagnosisCard,
+    outageCardShown,
+    restartCard,
+    thisComputerCard,
+    type UploadState,
+    uploadHeadline,
+    uploadPhase,
+} from "./notificationSources";
 
 // The lane's one rule about a sandbox going quiet: whether the silence was asked for decides both what is said and
 // how soon. Everything else in this file is wiring; this is the decision.
@@ -111,6 +120,28 @@ describe(`the card for a sandbox that isn't answering`, () => {
         const card = diagnosisCard(notice({ otherActions: [`fix`] }), false, () => undefined);
         expect(card).toMatchObject({ tone: `info`, spin: true, wide: true });
         expect(card.body).toBe(SandboxRecovery);
+    });
+});
+
+// Intentic and the open sandbox both silent, in the desktop app on a computer that runs sandboxes of its own: those still
+// open, without Intentic, and the card says where.
+describe(`the card for this computer's own sandboxes`, () => {
+    const open = jest.fn();
+    const card = (over: Partial<Parameters<typeof thisComputerCard>[0]> = {}) => thisComputerCard({ offered: true, direct: false, platform: `down`, open, ...over });
+
+    it(`offers them, with the one press that opens them, while Intentic does not answer`, () => {
+        const shown = card();
+        expect(shown).toMatchObject({ kind: `condition`, tone: `info`, title: `Intentic isn't answering`, detail: `The sandboxes running on this computer open without Intentic.` });
+        expect(shown?.actions?.map((action) => action.label)).toEqual([`Use this computer's sandboxes`]);
+        void shown?.actions?.[0]?.run();
+        expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it(`says nothing where the app cannot open them, while Intentic answers, or over a window already open without it`, () => {
+        expect(card({ offered: false })).toBeUndefined();
+        expect(card({ platform: `ok` })).toBeUndefined();
+        expect(card({ platform: undefined })).toBeUndefined();
+        expect(card({ direct: true })).toBeUndefined();
     });
 });
 

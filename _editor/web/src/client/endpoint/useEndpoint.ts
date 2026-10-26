@@ -3,6 +3,7 @@ import { couldBeOnThisMachine, type Endpoint, probeEndpoint, shortcutFailedAlone
 import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { measuredProtocol, setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "../../lib/streamBudget";
 import { useSandbox } from "../sandbox/useSandbox";
+import { rememberedLocalId } from "../directory/deviceDirectory";
 
 // Transport half of `useSandbox`: calls resolve through `daemonBase` here, while `daemonUrl` remains the sandbox's
 // identity used elsewhere. Resolution stays off the critical path: the tunnel serves first paint, and a background
@@ -139,6 +140,9 @@ const resolve = async (): Promise<void> => {
             daemonUrl: url,
             // Null on a member's row: no id to derive a loopback candidate from, so the tunnel it is (endpoint.ts).
             token: sandbox.token ?? undefined,
+            // Null too on a row opened directly while the platform is down (directMode.ts): the id this device remembered
+            // for it stands in, so a sandbox on this computer is still dialled here.
+            localId: sandbox.token === null ? rememberedLocalId(id) : undefined,
             hosted: sandbox.hosted,
             // Forwarded, never recomputed: the platform owns the certificate zone (endpoint.ts Addressing).
             localHostname: sandbox.localHostname,

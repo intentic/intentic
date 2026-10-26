@@ -2,8 +2,10 @@ import type { HostReport } from "@intentic/api-contract";
 import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract/state/update-probation";
 import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import {
+    addressOf,
     ASLEEP_WAKE_PATIENCE_MS,
     diagnose,
+    type Diagnosis,
     type DiagnosisInput,
     type Evidence,
     freshReport,
@@ -93,6 +95,33 @@ describe(`this side of the connection`, () => {
     it(`tells a platform that doesn't answer from a network that only blocks the sandbox's address`, () => {
         expect(diagnose(input({ evidence: evidence({ platform: `down`, netd: { kind: `unreachable` } }) }))).toEqual({ kind: `platform-down` });
         expect(diagnose(input({ evidence: evidence({ platform: `ok`, netd: { kind: `unreachable` } }) }))).toEqual({ kind: `unreachable` });
+    });
+
+    it(`names the address that does not answer, the owner's own domain included`, () => {
+        const theirs = addressOf(`https://sandbox-82789f4106b4.radarsu.com`);
+        expect(diagnose(input({ address: theirs, evidence: evidence({ netd: { kind: `unreachable` } }) }))).toEqual({
+            kind: `unreachable`,
+            host: `sandbox-82789f4106b4.radarsu.com`,
+        });
+    });
+
+    // The desktop app's offline copy of the editor dials its sandboxes on this computer's own loopback: nothing between
+    // it and the sandbox is a network, so not reaching one there is never put on a network, a VPN or Intentic.
+    it(`puts a sandbox on this computer's loopback that does not answer on this computer, whatever the platform says`, () => {
+        const here = addressOf(`http://127.0.0.1:30559`);
+        const silentHere: Diagnosis = { kind: `loopback-down`, address: `127.0.0.1:30559` };
+        expect(diagnose(input({ address: here, evidence: evidence({ platform: `not-used`, netd: { kind: `unreachable` } }) }))).toEqual(silentHere);
+        expect(diagnose(input({ address: here, evidence: evidence({ platform: `down`, netd: { kind: `unreachable` } }) }))).toEqual(silentHere);
+    });
+
+    it(`reads which addresses are this computer itself`, () => {
+        expect(addressOf(`http://127.0.0.1:30559`)).toEqual({ host: `127.0.0.1:30559`, loopback: true });
+        expect(addressOf(`http://localhost:8788/`)).toEqual({ host: `localhost:8788`, loopback: true });
+        expect(addressOf(`http://[::1]:30559`)).toEqual({ host: `[::1]:30559`, loopback: true });
+        expect(addressOf(`http://127.0.0.1.example.com`)).toEqual({ host: `127.0.0.1.example.com`, loopback: false });
+        expect(addressOf(`https://sandbox-574ea8038415.sbx.intentic.dev`)).toEqual({ host: `sandbox-574ea8038415.sbx.intentic.dev`, loopback: false });
+        expect(addressOf(`not an address`)).toBeUndefined();
+        expect(addressOf(null)).toBeUndefined();
     });
 
     it(`is still checking before any probe has settled`, () => {

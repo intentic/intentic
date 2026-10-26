@@ -73,10 +73,29 @@ smoke() {
     fi
 }
 
+# What the installed app does when intentic is down (_tools/desktop-smoke/outage.sh): the same image, reached by its
+# own entrypoint, on the deb only, since the fallback is the app's and the same in both kinds, and their installs are
+# what the runs above prove. Opt-in with DESKTOP_SMOKE_OUTAGE=1 (2026-10-26): nightly.yml turns it on, and it stays out of
+# ci.yml's and release.yml's runs until it has passed there, since it had never run against a real build when it landed.
+outage_failed=0
+outage() {
+    local container="intentic-desktop-smoke-outage-${RUN_TAG}"
+    containers+=("$container")
+    echo
+    echo "==> running the outage smoke"
+    docker create --name "$container" --shm-size=1g --entrypoint /usr/local/bin/outage.sh "$IMAGE" deb >/dev/null
+    docker cp "$DIST/." "$container:/artifacts"
+    docker cp "$ROOT/_tools/scripts/lib/desktop-artifacts.sh" "$container:/usr/local/lib/desktop-artifacts.sh"
+    if ! docker start -a "$container"; then
+        outage_failed=1
+    fi
+}
+
 # By kind, not by name — the whole directory is copied into the container either way, and smoke.sh finds the
 # one it was asked for the same way. What is decided here is only whether there is anything to run.
 if [ -n "$(desktop_artifact "$DIST" deb)" ]; then smoke deb; fi
 if [ -n "$(desktop_artifact "$DIST" appimage)" ]; then smoke appimage; fi
+if [ -n "$(desktop_artifact "$DIST" deb)" ] && [ "${DESKTOP_SMOKE_OUTAGE:-0}" = "1" ]; then outage; fi
 
 if [ "$checked" -eq 0 ]; then
     echo "error: no installable artifacts in $DIST (expected $(desktop_artifact_glob deb) and/or $(desktop_artifact_glob appimage))" >&2
@@ -86,6 +105,10 @@ fi
 echo
 if [ "$failures" -gt 0 ]; then
     echo "==> $failures of $checked artifact(s) failed to install and run" >&2
+    exit 1
+fi
+if [ "$outage_failed" -ne 0 ]; then
+    echo "==> the installed app did not fall back when intentic was down (the outage smoke above)" >&2
     exit 1
 fi
 echo "==> $checked artifact(s) install and run"

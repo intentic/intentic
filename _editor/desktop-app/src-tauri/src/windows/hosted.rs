@@ -85,6 +85,8 @@ macro_rules! hosted_page {
                 &install_id,
                 update_told(&crate::update::stage(app), false),
                 label == WORKSPACE,
+                // Read as the page is built: a computer that takes up hosting later tells a workspace built after it.
+                label == WORKSPACE && crate::machine_face::FACE_BUILT && state.hosts_sandboxes(),
             ))
             // The look the reader was last seen in, on whichever of the app's pages: this origin's storage is not
             // theirs, and a first sandbox opened in a profile's daylight under a reader the app had just shown sanctum.

@@ -1,5 +1,6 @@
 import { parseJsonWith } from "@intentic/base/json";
 import { type SandboxSummary, type User, UserSchema } from "@intentic/api-contract";
+import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { MemberRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { ref } from "vue";
 import { z } from "zod";
@@ -31,6 +32,13 @@ const RememberedSandboxSchema = z.object({
     missingSince: z.string().optional(),
     // What the platform answered when asked about it while missing (sandbox.lookup): only `unknown` is offered back.
     standing: z.enum([`unknown`]).optional(),
+    // (2026-10-26) Where it answers on its own computer, so a sandbox opened directly tries this computer before its
+    // tunnel (endpoint.ts `candidatesFor`), as the platform's list would have it: the certified loopback name the list
+    // gave, and the 12-hex id its loopback port is derived from, read off the connect token when it was listed (the token
+    // itself is never kept). Absent on an entry remembered before, on a member's row (no token to read it off) and on a
+    // machine we run, which is never this computer; absent reads as "the tunnel only", as before.
+    localHostname: z.string().nullable().optional(),
+    localId: z.string().regex(SANDBOX_ID).optional(),
 });
 export type RememberedSandbox = z.infer<typeof RememberedSandboxSchema>;
 
@@ -78,15 +86,28 @@ const write = (next: DeviceDirectory): void => {
     storeValue(KEY, JSON.stringify(next));
 };
 
-const rememberedOf = (row: SandboxSummary & { readonly daemonUrl: string }): RememberedSandbox => ({
-    id: row.id,
-    name: row.name,
-    image: row.image,
-    daemonUrl: row.daemonUrl,
-    role: row.role,
-    hosted: row.hosted !== null,
-    lastSeenAt: row.lastSeenAt,
-});
+// The loopback ids of a list's rows, by row id: what `sandboxIdOf` reads off each owner's connect token. Worked out by
+// the caller (it takes WebCrypto), so the memory itself stays a pure function of what it is handed.
+export type LocalIds = ReadonlyMap<string, string>;
+
+const rememberedOf = (row: SandboxSummary & { readonly daemonUrl: string }, localIds: LocalIds): RememberedSandbox => {
+    const entry: RememberedSandbox = {
+        id: row.id,
+        name: row.name,
+        image: row.image,
+        daemonUrl: row.daemonUrl,
+        role: row.role,
+        hosted: row.hosted !== null,
+        lastSeenAt: row.lastSeenAt,
+    };
+    // A machine we run is never this computer: nothing local to remember for it.
+    const localId = row.hosted === null ? localIds.get(row.id) : undefined;
+    if (localId !== undefined && SANDBOX_ID.test(localId)) {
+        entry.localId = localId;
+        entry.localHostname = row.localHostname;
+    }
+    return entry;
+};
 
 // The rows worth remembering, by normalized address: a draft that never got one has nothing to open.
 const addressed = (rows: readonly SandboxSummary[]): (SandboxSummary & { readonly daemonUrl: string })[] =>
@@ -104,8 +125,9 @@ export const mergeListed = (
     rows: readonly SandboxSummary[],
     identity: string | undefined,
     now: Date,
+    localIds: LocalIds = new Map(),
 ): RememberedAccount => {
-    const listed = addressed(rows).map(rememberedOf);
+    const listed = addressed(rows).map((row) => rememberedOf(row, localIds));
     const listedUrls = new Set(listed.map((entry) => entry.daemonUrl));
     const missing = (held?.sandboxes ?? [])
         .filter((entry) => !listedUrls.has(entry.daemonUrl))
@@ -125,10 +147,16 @@ export const mergeListed = (
 };
 
 // Records a list the platform answered for this account; the account becomes the one the outage screen offers.
-export const rememberListed = (user: User, rows: readonly SandboxSummary[], identity: string | undefined, now = new Date()): void => {
+export const rememberListed = (
+    user: User,
+    rows: readonly SandboxSummary[],
+    identity: string | undefined,
+    now = new Date(),
+    localIds: LocalIds = new Map(),
+): void => {
     const key = accountKey(user.email);
     const current = directory.value;
-    write({ ...current, last: key, accounts: { ...current.accounts, [key]: mergeListed(current.accounts[key], user, rows, identity, now) } });
+    write({ ...current, last: key, accounts: { ...current.accounts, [key]: mergeListed(current.accounts[key], user, rows, identity, now, localIds) } });
 };
 
 // The memory of one account, or of the one that last listed when none is named.
@@ -136,6 +164,15 @@ export const rememberedAccount = (email?: string): RememberedAccount | undefined
     const current = directory.value;
     const key = email === undefined ? current.last : accountKey(email);
     return key === undefined ? undefined : current.accounts[key];
+};
+
+// The loopback id a remembered sandbox answers under on its own computer, by its row id: for a row that carries no
+// connect token to read it off (one opened directly, directMode.ts), so endpoint selection can still try this computer.
+// The account that listed last is asked first; the id is the platform's, so no other account's row shares it.
+export const rememberedLocalId = (id: string): string | undefined => {
+    const current = directory.value;
+    const accounts = [current.last === undefined ? undefined : current.accounts[current.last], ...Object.values(current.accounts)];
+    return accounts.flatMap((account) => account?.sandboxes ?? []).find((entry) => entry.id === id)?.localId;
 };
 
 // Every account this device remembers, by its normalized address (client/auth/appAccounts.ts).

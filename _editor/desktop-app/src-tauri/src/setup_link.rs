@@ -719,6 +719,11 @@ pub enum Link {
     /// computer (sandbox_wakes.rs). App-window only, and it carries nothing: `ic` starts only what the platform says
     /// was asked for.
     SandboxWakes,
+    /// `intentic://machine-face`: the hosted page, unable to reach the platform, sending its own window to the app's copy
+    /// of the editor on this computer's sandboxes (machine_face.rs), as the offline page's button does: it offers that
+    /// only where the app told it `machineFace` (windows/scripts.rs). From the workspace window alone, and carrying
+    /// nothing: a floating panel, a local window or a stranger's link has no workspace window to send there.
+    MachineFace,
 }
 
 /// `intentic://first-task?do=sent|failed&id=<id>[&reason=<text>]`: the workspace saying what became of the first task
@@ -957,6 +962,17 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         }
         "fix" => None,
         "sandbox-wakes" => source.is_app().then_some(Link::SandboxWakes),
+        "machine-face"
+            if matches!(
+                source,
+                Source::App {
+                    window: crate::windows::WORKSPACE
+                }
+            ) =>
+        {
+            Some(Link::MachineFace)
+        }
+        "machine-face" => None,
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,
@@ -1281,6 +1297,37 @@ mod tests {
             None
         );
         assert_eq!(parse_link("intentic://sandbox-wakes", FILES), None);
+    }
+
+    /// The hosted page's way to this computer's sandboxes moves the workspace window, so only the workspace window may
+    /// ask: not a floating panel of the same page, not a local window, not a stranger's link. It names nothing.
+    #[test]
+    fn a_machine_face_link_is_heard_only_from_the_workspace_window() {
+        let workspace = Source::App {
+            window: crate::windows::WORKSPACE,
+        };
+        assert_eq!(
+            parse_link("intentic://machine-face", workspace),
+            Some(Link::MachineFace)
+        );
+        assert_eq!(
+            parse_link("intentic://machine-face?sandbox=x", workspace),
+            Some(Link::MachineFace)
+        );
+        assert_eq!(
+            parse_link(
+                "intentic://machine-face",
+                Source::App {
+                    window: "floating-chat"
+                }
+            ),
+            None
+        );
+        assert_eq!(
+            parse_link("intentic://machine-face", Source::External),
+            None
+        );
+        assert_eq!(parse_link("intentic://machine-face", FILES), None);
     }
 
     /// Both values reach `ic`'s command line, so a slug or a code that is not a plain token drops the whole link,

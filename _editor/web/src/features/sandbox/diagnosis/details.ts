@@ -41,10 +41,15 @@ const netdLine = (netd: NetdProbe): string => {
     }
 };
 
+// The page's own copy of the platform (the desktop app's offline editor) answers every list it is asked for, so its
+// "ok" would claim a platform nobody reached.
+const platformLine = (platform: Evidence[`platform`]): string =>
+    platform === `not-used` ? `platform: not used (this computer's own sandboxes, opened without Intentic)` : `platform: ${platform ?? `not asked`}`;
+
 const evidenceLines = (evidence: Evidence, now: number): string[] => [
     `probe: ${ago(evidence.at, now)}`,
     `this device: ${evidence.online ? `online` : `offline`}`,
-    `platform: ${evidence.platform ?? `not asked`}`,
+    platformLine(evidence.platform),
     ...(evidence.netd === undefined ? [] : [netdLine(evidence.netd)]),
     ...(evidence.loopback === undefined ? [] : [`this computer's loopback: ${evidence.loopback ? `the sandbox answers here` : `no answer`}`]),
     ...(evidence.hosted === undefined ? [] : [`hosted machine: ${evidence.hosted}`]),

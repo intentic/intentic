@@ -1,11 +1,16 @@
 <!doctype html>
 <!--
     The workspace that cannot be reached (src-tauri/src/offline.rs sends a page window here when its navigation fails
-    for a network reason). Local content in a window that has no app commands: it can only navigate, so it checks
-    for the workspace by asking for it, goes back the moment it answers, and closes through the same intentic://
-    link the workspace's own title bar uses. The window wears the platform's frame while this is up. Where the app has
-    its own copy of the editor (`face`, src-tauri/src/machine_face.rs) it also offers this computer's own sandboxes,
-    which work with no internet at all.
+    for a network reason, or answers with a dead platform's 5xx: `status` is WebView2's name for the failure, or
+    `http-<code>`). It goes back the moment the workspace answers with something usable, and closes through the same
+    intentic:// link the workspace's own title bar uses. The window wears the platform's frame while this is up. Where
+    the app has its own copy of the editor (`face`, src-tauri/src/machine_face.rs) it also offers this computer's own
+    sandboxes, which work with no internet at all.
+
+    Whether the workspace answers is the app's to say (`machine_face_online`, granted to the workspace window's local
+    pages by capabilities/machine-face.json): a no-cors fetch settles on ANY answer and cannot read its status, so it
+    took Cloudflare's 530 for a dead platform as the workspace being back, went there, and was sent straight back here.
+    The fetch stays only for an app that does not grant the command.
 -->
 <html lang="en">
     <head>
@@ -133,54 +138,59 @@
                 // The reader's language among the app's catalogs; English for the rest.
                 var words = {
                     en: {
-                        title: "Intentic can't reach the internet",
-                        body: "Your workspace lives online, and this computer can't reach it right now. This often happens for a minute after a restart, while Wi-Fi connects.",
+                        title: "Intentic isn't answering right now",
+                        body: "Your workspace lives online, and it isn't answering this computer right now: either this computer has no connection, or Intentic is having trouble. We keep trying.",
                         trying: "Trying again in {s} s",
                         checking: "Checking...",
                         retry: "Try now",
                         close: "Close",
                         face: "Use this computer's sandboxes",
-                        stillHere: "The sandboxes on this computer keep working without it.",
+                        stillHere: "The sandboxes on this computer keep working in the meantime.",
+                        serverError: "Intentic's servers answered with an error ({code}).",
                     },
                     pl: {
-                        title: "Intentic nie ma połączenia z internetem",
-                        body: "Twoje miejsce pracy jest w sieci, a ten komputer nie może się z nim teraz połączyć. Zdarza się to często przez minutę po ponownym uruchomieniu, zanim połączy się Wi-Fi.",
+                        title: "Intentic w tej chwili nie odpowiada",
+                        body: "Twoje miejsce pracy jest w sieci i w tej chwili nie odpowiada temu komputerowi: albo ten komputer nie ma połączenia, albo Intentic ma problemy. Próbujemy dalej.",
                         trying: "Kolejna próba za {s} s",
                         checking: "Sprawdzam...",
                         retry: "Spróbuj teraz",
                         close: "Zamknij",
                         face: "Użyj sandboxów z tego komputera",
-                        stillHere: "Sandboxy na tym komputerze działają dalej bez internetu.",
+                        stillHere: "Sandboxy na tym komputerze w tym czasie działają dalej.",
+                        serverError: "Serwery Intentic odpowiedziały błędem ({code}).",
                     },
                     de: {
-                        title: "Intentic erreicht das Internet nicht",
-                        body: "Dein Arbeitsbereich ist online, und dieser Computer erreicht ihn gerade nicht. Das passiert oft eine Minute nach einem Neustart, solange sich das WLAN verbindet.",
+                        title: "Intentic antwortet gerade nicht",
+                        body: "Dein Arbeitsbereich ist online und antwortet diesem Computer gerade nicht: Entweder hat dieser Computer keine Verbindung, oder Intentic hat Probleme. Wir versuchen es weiter.",
                         trying: "Neuer Versuch in {s} s",
                         checking: "Wird geprüft...",
                         retry: "Jetzt versuchen",
                         close: "Schließen",
                         face: "Sandboxen dieses Computers verwenden",
-                        stillHere: "Die Sandboxen auf diesem Computer funktionieren auch ohne Internet weiter.",
+                        stillHere: "Die Sandboxen auf diesem Computer laufen in der Zwischenzeit weiter.",
+                        serverError: "Die Server von Intentic haben mit einem Fehler geantwortet ({code}).",
                     },
                     fr: {
-                        title: "Intentic n'arrive pas à joindre Internet",
-                        body: "Votre espace de travail est en ligne, et cet ordinateur ne peut pas le joindre pour l'instant. Cela arrive souvent pendant une minute après un redémarrage, le temps que le Wi-Fi se connecte.",
+                        title: "Intentic ne répond pas pour l'instant",
+                        body: "Votre espace de travail est en ligne et ne répond pas à cet ordinateur pour l'instant : soit cet ordinateur n'a pas de connexion, soit Intentic rencontre un problème. Nous continuons d'essayer.",
                         trying: "Nouvel essai dans {s} s",
                         checking: "Vérification...",
                         retry: "Réessayer",
                         close: "Fermer",
                         face: "Utiliser les sandboxes de cet ordinateur",
-                        stillHere: "Les sandboxes de cet ordinateur continuent de fonctionner sans Internet.",
+                        stillHere: "Les sandboxes de cet ordinateur continuent de fonctionner en attendant.",
+                        serverError: "Les serveurs d'Intentic ont répondu par une erreur ({code}).",
                     },
                     es: {
-                        title: "Intentic no puede conectarse a internet",
-                        body: "Tu espacio de trabajo está en línea y este equipo no puede alcanzarlo ahora mismo. Suele pasar durante un minuto después de reiniciar, mientras se conecta el Wi-Fi.",
+                        title: "Intentic no responde ahora mismo",
+                        body: "Tu espacio de trabajo está en línea y ahora mismo no responde a este equipo: o este equipo no tiene conexión, o Intentic tiene problemas. Seguimos intentándolo.",
                         trying: "Nuevo intento en {s} s",
                         checking: "Comprobando...",
                         retry: "Intentar ahora",
                         close: "Cerrar",
-                        face: "Usar los sandboxes de este ordenador",
-                        stillHere: "Los sandboxes de este ordenador siguen funcionando sin internet.",
+                        face: "Usar los sandboxes de este equipo",
+                        stillHere: "Los sandboxes de este equipo siguen funcionando mientras tanto.",
+                        serverError: "Los servidores de Intentic respondieron con un error ({code}).",
                     },
                 };
                 var lang = (navigator.language || "en").slice(0, 2).toLowerCase();
@@ -197,7 +207,10 @@
                 document.getElementById("body").textContent = t.body;
                 document.getElementById("retry").textContent = t.retry;
                 document.getElementById("close").textContent = t.close;
-                document.getElementById("detail").textContent = status;
+                // A dead platform's answer (`http-530`) said in words, its code kept; WebView2's own name for a network
+                // failure stays as it is, for whoever is asked to read it out.
+                var http = /^http-(\d{3})$/.exec(status);
+                document.getElementById("detail").textContent = http ? t.serverError.replace("{code}", http[1]) : status;
 
                 // This computer's own sandboxes, when the app built the page that opens them: only ever a page of this
                 // page's own bundle, so nothing a link put in the address can send the window anywhere else.
@@ -214,8 +227,24 @@
                 }
                 var said = document.getElementById("status");
 
-                // A no-cors request settles when the server answers at all and fails when nothing does: an answer is
-                // all this needs to know, and the page that answers is the one to go back to.
+                // Whether the workspace answers with something usable: the app's answer where it gives one (see the
+                // comment at the top), else a no-cors request, which settles on any answer at all.
+                var internals = window.__TAURI_INTERNALS__;
+                function fetched() {
+                    return fetch(target, { mode: "no-cors", cache: "no-store" }).then(function () {
+                        return true;
+                    });
+                }
+                function answers() {
+                    if (!internals || typeof internals.invoke !== "function") return fetched();
+                    return internals.invoke("machine_face_online").then(
+                        function (usable) {
+                            return usable === true;
+                        },
+                        // Not granted (an app older than this page's grant): the request is all there is to go by.
+                        fetched,
+                    );
+                }
                 var EVERY = 5;
                 var left = EVERY;
                 var checking = false;
@@ -230,11 +259,17 @@
                         left = EVERY;
                         tick();
                     }, 8000);
-                    fetch(target, { mode: "no-cors", cache: "no-store" }).then(
-                        function () {
+                    answers().then(
+                        function (usable) {
                             if (gave) return;
                             clearTimeout(timer);
-                            location.replace(target);
+                            if (usable) {
+                                location.replace(target);
+                                return;
+                            }
+                            checking = false;
+                            left = EVERY;
+                            tick();
                         },
                         function () {
                             if (gave) return;

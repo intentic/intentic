@@ -6,7 +6,9 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { loopbackPermission } from "../../../client/endpoint/loopbackPermission";
 import type { ConnectionFailure } from "../../../client/sandbox/connection";
 import { candidatesFor, couldBeOnThisMachine, probeEndpoint, sandboxIdOf } from "../../../client/endpoint/endpoint";
-import { type Diagnosis, diagnose, type Evidence, type NetdProbe, type HostedMachineState } from "./diagnose";
+import { rememberedLocalId } from "../../../client/directory/deviceDirectory";
+import { sandboxFace } from "../../../app/environments/local";
+import { addressOf, type Diagnosis, diagnose, type Evidence, type NetdProbe, type HostedMachineState } from "./diagnose";
 import { probeNetd } from "./probes";
 
 // THE DIAGNOSIS, gathered while the active sandbox is unreachable and dropped the moment it answers. A module singleton
@@ -66,17 +68,18 @@ const hostedState = async (sandboxId: string): Promise<HostedMachineState | unde
 // endpoint resolver asks the same addresses under the same rule.
 const answersHere = async (): Promise<boolean | undefined> => {
     const box = active.value;
-    if (box === undefined || box.daemonUrl === null || box.token === null || !couldBeOnThisMachine(box)) {
+    // A row opened directly carries no token: the id this device remembered for it stands in (useEndpoint.ts).
+    const localId = box?.token === null ? rememberedLocalId(box.id) : undefined;
+    if (box === undefined || box.daemonUrl === null || (box.token === null && localId === undefined) || !couldBeOnThisMachine(box)) {
         return undefined;
     }
     const permission = await loopbackPermission();
     if (permission !== `granted` && permission !== `ungated`) {
         return undefined;
     }
-    const id = await sandboxIdOf(box.token);
-    const local = (await candidatesFor({ daemonUrl: box.daemonUrl, token: box.token, hosted: box.hosted, localHostname: box.localHostname })).filter(
-        (endpoint) => endpoint.kind !== `public`,
-    );
+    const id = box.token === null ? (localId ?? ``) : await sandboxIdOf(box.token);
+    const addressing = { daemonUrl: box.daemonUrl, token: box.token ?? undefined, localId, hosted: box.hosted, localHostname: box.localHostname };
+    const local = (await candidatesFor(addressing)).filter((endpoint) => endpoint.kind !== `public`);
     const answers = await Promise.all(local.map((endpoint) => probeEndpoint(endpoint, id)));
     return answers.some(Boolean);
 };
@@ -89,7 +92,8 @@ const gather = async (sandboxId: string, daemonUrl: string): Promise<Evidence> =
     const owner = box?.role === `owner`;
     const hosted = (box?.hosted ?? null) !== null;
     const [platform, netd, machine] = await Promise.all([
-        platformAnswers(),
+        // The desktop app's own copy of the editor answers the list itself, so asking it says nothing of the platform.
+        sandboxFace() ? Promise.resolve(`not-used` as const) : platformAnswers(),
         probeNetd(daemonUrl),
         hosted && owner ? hostedState(sandboxId) : Promise.resolve(undefined),
     ]);
@@ -231,6 +235,7 @@ export const useDiagnosis = (clock: { readonly elapsed: ComputedRef<number> }): 
             evidence: diagnosisEvidence.value,
             hostReport: box?.role === `owner` ? box.hostReport : undefined,
             now: now.value,
+            address: addressOf(box?.daemonUrl),
         });
     });
 };

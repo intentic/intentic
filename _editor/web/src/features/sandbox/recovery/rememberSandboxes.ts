@@ -7,7 +7,8 @@ import { apiClient } from "../../../lib/useApi";
 import { useAuth } from "../../../client/auth/useAuth";
 import { SANDBOX_LIST_KEY } from "../../../client/sandbox/useSandbox";
 import { sandboxIdOfDaemonUrl } from "@intentic/sandbox-contract/ids/hostnames";
-import { forgetSandbox, missingSandboxes, noteUnknown, rememberListed } from "../../../client/directory/deviceDirectory";
+import { forgetSandbox, type LocalIds, missingSandboxes, noteUnknown, rememberListed } from "../../../client/directory/deviceDirectory";
+import { sandboxIdOf } from "../../../client/endpoint/endpoint";
 import { directMode } from "../../../client/directory/directState";
 
 // Keeps the device's memory (deviceDirectory.ts) up with every list the platform answers, and asks the platform about
@@ -33,6 +34,16 @@ const askIdentity = async (): Promise<string | undefined> => {
 const platformIdentity = (): Promise<string | undefined> => {
     identity ??= askIdentity();
     return identity;
+};
+
+// The loopback id of each own-machine row the reader owns, read off its connect token, so the device can remember where
+// the sandbox answers on its own computer without keeping the token (deviceDirectory.ts `localId`). A member's row has
+// no token, and a machine we run is never this computer.
+export const localIdsOf = async (rows: readonly SandboxSummary[]): Promise<LocalIds> => {
+    const read = await Promise.all(
+        rows.map(async (row) => (row.token === null || row.token === `` || row.hosted !== null ? undefined : ([row.id, await sandboxIdOf(row.token)] as const))),
+    );
+    return new Map(read.filter((pair): pair is readonly [string, string] => pair !== undefined && pair[1] !== ``));
 };
 
 // What the platform holds of the missing sandboxes it has not been asked about yet; one question per list, never a
@@ -70,8 +81,8 @@ export const startRememberingSandboxes = (): void => {
             return;
         }
         const rows = queryClient.getQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY) ?? [];
-        void platformIdentity().then(async (held) => {
-            rememberListed(account, rows, held);
+        void Promise.all([platformIdentity(), localIdsOf(rows)]).then(async ([held, localIds]) => {
+            rememberListed(account, rows, held, new Date(), localIds);
             await askAboutMissing(account.email);
         });
     });

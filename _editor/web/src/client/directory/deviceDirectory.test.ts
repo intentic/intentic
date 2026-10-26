@@ -76,6 +76,35 @@ describe(`what a list leaves remembered`, () => {
     });
 });
 
+// Where a sandbox answers on its own computer, so one opened directly is dialled there before its tunnel: the loopback
+// id read off its token when listed, and the certified name the list gave; never the token.
+describe(`what a list leaves remembered of a sandbox's own computer`, () => {
+    const ownHere = sandboxSummary({ ...listed, localHostname: `82789f4106b4.local.example.com` });
+    const hostedRow = sandboxSummary({ ...other, hosted: { state: `awake`, region: `ams`, warm: true } });
+    const localIds = new Map([
+        [`s1`, `82789f4106b4`],
+        [`s2`, `574ea8038415`],
+    ]);
+
+    it(`remembers the loopback id and the certified name of a sandbox that may be on a computer of its owner's`, () => {
+        const [entry] = mergeListed(undefined, user, [ownHere], `id-1`, NOW, localIds).sandboxes;
+        expect([entry?.localId, entry?.localHostname]).toEqual([`82789f4106b4`, `82789f4106b4.local.example.com`]);
+    });
+
+    it(`remembers nothing local of a machine we run, of a row with no id, or of an id that is not one`, () => {
+        const sandboxes = mergeListed(undefined, user, [hostedRow], `id-1`, NOW, localIds).sandboxes;
+        expect(sandboxes.map((entry) => [entry.localId, entry.localHostname])).toEqual([[undefined, undefined]]);
+        expect(mergeListed(undefined, user, [ownHere], `id-1`, NOW).sandboxes[0]?.localId).toBeUndefined();
+        expect(mergeListed(undefined, user, [ownHere], `id-1`, NOW, new Map([[`s1`, `not-an-id`]])).sandboxes[0]?.localId).toBeUndefined();
+    });
+
+    it(`keeps a missing sandbox's local route as it was last listed`, () => {
+        const before = mergeListed(undefined, user, [ownHere], `id-1`, NOW, localIds);
+        const missing = mergeListed(before, user, [], `id-1`, at(DAY_MS));
+        expect([missing.sandboxes[0]?.missingSince, missing.sandboxes[0]?.localId]).toEqual([at(DAY_MS).toISOString(), `82789f4106b4`]);
+    });
+});
+
 describe(`the hostname's sandbox id`, () => {
     it(`reads the 12-hex id off an address of ours, and nothing off a domain of the owner's own`, () => {
         expect(sandboxIdOfDaemonUrl(`https://sandbox-82789f4106b4.radarsu.com`)).toBe(`82789f4106b4`);
@@ -142,5 +171,22 @@ describe(`the device's memory`, () => {
     it(`never stores a token`, async () => {
         (await load()).rememberListed(user, [{ ...listed, token: `connect-token-secret` }], `id-1`, NOW);
         expect(localStorage.getItem(`intentic.deviceDirectory`)).not.toContain(`connect-token-secret`);
+    });
+
+    it(`answers the loopback id it remembered for a row, by the row's id, and nothing for a row it never listed`, async () => {
+        const directory = await load();
+        directory.rememberListed(user, [{ ...listed, token: `connect-token-secret` }], `id-1`, NOW, new Map([[`s1`, `82789f4106b4`]]));
+        expect(directory.rememberedLocalId(`s1`)).toBe(`82789f4106b4`);
+        expect(directory.rememberedLocalId(`s9`)).toBeUndefined();
+        expect(localStorage.getItem(`intentic.deviceDirectory`)).not.toContain(`connect-token-secret`);
+    });
+
+    // Remembered by a build from before the local route: read as the tunnel only, never as nothing remembered.
+    it(`reads an entry remembered before the local route as it was`, async () => {
+        const before = { version: 1, last: `owner@example.com`, accounts: { "owner@example.com": mergeListed(undefined, user, [listed], `id-1`, NOW) } };
+        localStorage.setItem(`intentic.deviceDirectory`, JSON.stringify(before));
+        const directory = await load();
+        expect(directory.rememberedAccount()?.sandboxes.map((entry) => entry.id)).toEqual([`s1`]);
+        expect(directory.rememberedLocalId(`s1`)).toBeUndefined();
     });
 });

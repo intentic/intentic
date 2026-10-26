@@ -1,4 +1,4 @@
-// One command per tier (doctor, install, setup, agents, teardown), separate rather than flags since each needs
+// One command per tier (doctor, install, outage, setup, agents, teardown), separate rather than flags since each needs
 // different things (install needs no Docker; agents needs a connected account). The exit code is only the harness's
 // failure count; nothing here catches, so a thrown error and a failed assertion stay distinguishable.
 
@@ -9,6 +9,7 @@ import { nonEmpty, sandboxContainerName } from "./parse.js";
 import { runAgentsTier } from "./tier-agents.js";
 import { runInstallTier } from "./tier-install.js";
 import { runEngineTier } from "./tier-engine.js";
+import { runOutageTier } from "./tier-outage.js";
 import { runSetupTier } from "./tier-setup.js";
 import { runTeardown } from "./teardown.js";
 
@@ -19,7 +20,7 @@ const flag = (argv: readonly string[], name: string): string | undefined => {
 
 const present = (argv: readonly string[], name: string): boolean => argv.includes(`--${name}`);
 
-const USAGE = `usage: main.js doctor|install|setup|agents|engine|teardown [flags], see the package README`;
+const USAGE = `usage: main.js doctor|install|outage|setup|agents|engine|teardown [flags], see the package README`;
 
 const main = async (): Promise<number> => {
     const [command, ...argv] = process.argv.slice(2);
@@ -43,6 +44,11 @@ const main = async (): Promise<number> => {
             keepInstalled: present(argv, `keep-installed`),
         });
         return harness.report(`the Windows installer installs, launches and answers a deep link`);
+    }
+
+    if (command === `outage`) {
+        await runOutageTier(harness, { editorDist: nonEmpty(flag(argv, `editor-dist`)) });
+        return harness.report(`the installed app offers a way on when intentic is down, in each shape an outage takes`);
     }
 
     if (command === `setup`) {

@@ -102,6 +102,16 @@ const chainOf = (states: Links, machineLabel: string): ChainLink[] => [
     { id: `sandbox`, label: t(`sandbox.diagnosis.linkSandbox`), state: states[3] },
 ];
 
+// A sandbox on this computer's own loopback: nothing lies between this page and it but this computer, so the chain is
+// this computer, which is fine (the page runs on it), and the sandbox, which does not answer.
+const localChain = (): ChainLink[] => [
+    { id: `machine`, label: t(`sandbox.diagnosis.thisComputer`), state: `ok` },
+    { id: `sandbox`, label: t(`sandbox.diagnosis.linkSandbox`), state: `down` },
+];
+
+// The edge a sandbox's address usually sits behind, named when the address itself is not known.
+const INTENTIC_EDGE = `*.sbx.intentic.dev`;
+
 // A hosted machine whose power state says nothing about a wake: up already, or not known.
 const HOSTED_RUNNING: ReadonlySet<string> = new Set([`started`, `unknown`]);
 
@@ -337,19 +347,30 @@ export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
             );
         case `platform-down`:
             return notice(
-                { title: t(`sandbox.diagnosis.platformDownTitle`), body: t(`sandbox.diagnosis.platformDownBody`), waiting: true, wait: network },
+                { title: t(`sandbox.diagnosis.platformDownTitle`), body: t(`sandbox.diagnosis.platformDownBody`, { name }), waiting: true, wait: network },
                 chainOf([`ok`, `down`, `unknown`, `unknown`], machine),
             );
         case `unreachable`:
             return notice(
                 {
                     title: t(`sandbox.diagnosis.unreachableTitle`, { name }),
-                    body: t(`sandbox.diagnosis.unreachableBody`),
+                    body: t(`sandbox.diagnosis.unreachableBody`, { name, host: diagnosis.host ?? INTENTIC_EDGE }),
                     waiting: true,
                     tone: `warning`,
                     wait: network,
                 },
                 chainOf([`ok`, `down`, `unknown`, `unknown`], machine),
+            );
+        case `loopback-down`:
+            return notice(
+                {
+                    title: t(`sandbox.diagnosis.loopbackDownTitle`, { name }),
+                    body: t(`sandbox.diagnosis.loopbackDownBody`, { address: diagnosis.address }),
+                    waiting: true,
+                    tone: `warning`,
+                    wait: network,
+                },
+                localChain(),
             );
         case `busy`:
             return busyNotice(input, diagnosis, machine);

@@ -1,10 +1,11 @@
 import type { DeviceSandboxGroup, SandboxMenuVerb } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
-import { intoWorkspace } from "../account";
+import type { SandboxStatus } from "../desktop";
+import { intoLocalSandbox } from "../account";
 import { engineBackShown, engineState, moveEngine } from "./engine/engine";
 import { moveTargetOf } from "./engine/engineMove";
-import { agentPanel, sandboxes } from "./machine";
+import { agentPanel, info, sandboxes } from "./machine";
 import { signedIn } from "./roster";
 
 // WHAT THE DEVICES PAGE PUTS ON ITS FACE, and what it keeps behind a ⋯ (DeviceView.vue).
@@ -37,16 +38,32 @@ export const useMastheadMenu = (restart: () => Promise<void>): ComputedRef<Sandb
     });
 
 // OPEN, the one verb a sandbox card shows: the workspace on that sandbox, by the id the platform knows it by (what its
-// last announce named). Only for one that answers, or wakes when opened; a stopped one shows Start instead.
-const platformIdOf = (group: DeviceSandboxGroup): string | undefined =>
-    sandboxes.value.find((sandbox) => sandbox.slug === group.sandbox?.slug)?.platformId ?? undefined;
+// last announce named). Only for one that answers, or wakes when opened; a stopped one shows Start instead. While the
+// workspace does not answer (the platform down, or no internet), the app opens it in the face instead, its own copy of
+// the editor on this computer's sandboxes (machine_face.rs `local_sandbox_open`). One the platform never named has no
+// workspace row, and the face opens it while it runs and publishes its loopback port (2026-10-26: it used to have no
+// Open at all, so a sandbox running on this very PC could not be reached from the page that lists it).
+const statusOf = (group: DeviceSandboxGroup): SandboxStatus | undefined => sandboxes.value.find((sandbox) => sandbox.slug === group.sandbox?.slug);
 
-export const openable = (group: DeviceSandboxGroup): boolean =>
-    signedIn.value === true && platformIdOf(group) !== undefined && (group.sandbox?.running === true || group.sandbox?.asleep === true);
+// The key the face lists a sandbox by (local/machineFace.ts `sandboxKeyOf`): the platform's id, else this machine's own.
+const faceKeyOf = (sandbox: SandboxStatus): string => sandbox.platformId ?? `machine-${sandbox.sandboxId ?? sandbox.slug}`;
+
+// The face is built where the app watches for a workspace it cannot reach: Windows and Linux (machine_face.rs `FACE_BUILT`).
+const faceBuilt = (): boolean => info.value?.os === `windows` || info.value?.os === `linux`;
+
+export const openable = (group: DeviceSandboxGroup): boolean => {
+    const sandbox = statusOf(group);
+    if ((sandbox?.platformId ?? undefined) !== undefined) {
+        return signedIn.value === true && (group.sandbox?.running === true || group.sandbox?.asleep === true);
+    }
+    return faceBuilt() && group.sandbox?.running === true && (sandbox?.localPort ?? undefined) !== undefined;
+};
 
 export const openSandbox = async (group: DeviceSandboxGroup): Promise<void> => {
-    const id = platformIdOf(group);
-    if (id !== undefined) {
-        await intoWorkspace(`/?${new URLSearchParams({ sandbox: id }).toString()}`);
+    const sandbox = statusOf(group);
+    if (sandbox === undefined) {
+        return;
     }
+    const id = sandbox.platformId ?? undefined;
+    await intoLocalSandbox(id === undefined ? undefined : `/?${new URLSearchParams({ sandbox: id }).toString()}`, faceKeyOf(sandbox));
 };

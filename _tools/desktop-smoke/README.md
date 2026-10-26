@@ -10,6 +10,7 @@ flowchart LR
     install --> launch["Launch<br/>workspace window maps"]
     launch --> link["xdg-open intentic://<br/>running and not running"]
     nightly["verify-desktop-update.sh<br/>nightly"] --> img
+    img --> outage["outage.sh<br/>intentic down: falls back, comes back"]
 ```
 
 - The image carries no GUI libraries, so the `.deb` must pull everything it links against through the `Depends`
@@ -19,6 +20,14 @@ flowchart LR
   app (the single-instance plugin forwards it) and at one that is not running (the link arrives in argv).
 - Hermetic: `INTENTIC_APP_URL` points at a stub page baked into the image and `INTENTIC_DISABLE_UPDATE_CHECK=1`
   keeps the updater off.
+- `outage.sh`, reached the same way and run by `verify-desktop-install.sh` on the deb when `DESKTOP_SMOKE_OUTAGE=1` (the
+  nightly sets it; CI and release leave it out until it has passed there), launches the installed app at a workspace address that does not answer, then at one answering a
+  Cloudflare-style 530, each in config, data and cache directories of its own, with the Rust side's calls sent to a
+  dead proxy and the platform on a `.test` name. WebKitGTK has no debugger in a release build and the frame is titled
+  "Intentic" whatever it shows, so the witness is the address itself (`outage_stub.py` logs every request): the
+  offline page is proved by doing what only it does, going back to the address the moment it answers, and by not
+  loading the 530 again while it still answers 530. The Windows half, which can read the page itself, is
+  `@intentic/desktop-smoke-windows`' `outage` tier.
 - `update.sh`, reached by overriding the entrypoint, runs two AppImages built with a throwaway signing key and a
   loopback release endpoint, and asserts the app replaces itself with the newer release and still starts.
 - The `FROM` tracks `_tools/ci-base`'s Debian release, because the binary needs at least the glibc it is built
@@ -30,6 +39,7 @@ flowchart LR
 - [Dockerfile](Dockerfile) — the bare host and why each package on it is there.
 - [smoke.sh](smoke.sh) — the install, launch and deep-link assertions, per artifact kind.
 - [update.sh](update.sh) — the self-update drill.
+- [outage.sh](outage.sh) — intentic down: the app falls back to its offline page and comes back.
 
 ## Commands
 

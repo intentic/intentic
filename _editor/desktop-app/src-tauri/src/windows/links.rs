@@ -143,6 +143,13 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         Some(Link::Repair(args)) => crate::repair::on_link(app, args),
         // Passwords, opened from the hosted editor's "Manage on this computer" (keyring.rs).
         Some(Link::Passwords { entry }) => crate::keyring::on_link(app, entry.as_deref()),
+        // The hosted page could not reach the platform and offers this computer's sandboxes (machine_face.rs): its
+        // window goes to the app's copy of the editor on them, as the offline page's button sends it. A build without
+        // that copy never told the page `machineFace`, and drops a link that says otherwise.
+        Some(Link::MachineFace) if crate::machine_face::FACE_BUILT => {
+            super::show_machine_face_from(app, None, None);
+        }
+        Some(Link::MachineFace) => {}
         Some(Link::Local(verb)) => {
             if let Source::Files { window } = source {
                 crate::local::act(app, window, verb);

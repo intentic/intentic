@@ -46,7 +46,9 @@ const register = jest.fn(async () => ({ pushManager: manager }));
 const stubBrowser = (permission: NotificationPermission, brave: boolean, desktop = false): void => {
     const notification = { permission, requestPermission: async () => permission };
     stubGlobal(`navigator`, {
-        serviceWorker: { register },
+        // `ready` as the browser has it: the registration once its worker is active, which push subscribes through
+        // (offline/appWorker.ts).
+        serviceWorker: { register, ready: Promise.resolve({ pushManager: manager }) },
         ...(brave ? { brave: { isBrave: async () => true } } : {}),
     });
     stubGlobal(`Notification`, notification);

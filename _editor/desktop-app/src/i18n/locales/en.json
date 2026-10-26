@@ -204,12 +204,12 @@
         "pcSetupBadge": "this PC can be set up for agents"
     },
     "machineFace": {
-        "backOnline": "You're back online.",
+        "backOnline": "Intentic is answering again.",
         "backOnlineBody": "Your full workspace can open again. What you're doing here stays as it is until you switch.",
         "openWorkspace": "Open my workspace",
         "notNow": "Not now",
-        "nothingHere": "No sandbox on this computer can open without the internet yet.",
-        "nothingHereBody": "A sandbox opens here on its own once its owner has signed in to it at least once with the internet."
+        "nothingHere": "No sandbox on this computer can open without Intentic yet.",
+        "nothingHereBody": "A sandbox opens here on its own once its owner has signed in to it at least once while Intentic was reachable."
     },
     "engine": {
         "runsOn": {

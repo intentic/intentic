@@ -389,6 +389,9 @@ jobs:
         run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --linux-only
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: bash _tools/scripts/desktop/verify-desktop-install.sh
+        env:
+          # The outage smoke (intentic down: nothing answers, or a Cloudflare 530): nightly only until it has passed here.
+          DESKTOP_SMOKE_OUTAGE: "1"
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: bash _tools/scripts/desktop/verify-desktop-setup.sh
 

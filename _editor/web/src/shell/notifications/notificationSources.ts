@@ -5,6 +5,7 @@ import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import OutageWait from "../../features/sandbox/gates/OutageWait.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../features/sandbox/gates/useVisibleOutage";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
+import type { Evidence } from "../../features/sandbox/diagnosis/diagnose";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { holdReadAloudNotice } from "../../features/chat/voice/readAloud";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
@@ -29,6 +30,8 @@ import { t } from "@intentic/ui/i18n";
 import { useRouter } from "vue-router";
 import { useDeviceDirectory } from "../../client/directory/deviceDirectory";
 import { directMode } from "../../client/directory/directState";
+import { diagnosisEvidence } from "../../features/sandbox/diagnosis/useDiagnosis";
+import { openThisComputersSandboxes, thisComputerOffered } from "../../app/environments/thisComputer";
 
 // Every standing fact and open question this app floats, declared in one place as pure conditions fed to `hold`;
 // the lane draws them, in this file's registration order. Registered once from the root, above the router and
@@ -224,6 +227,66 @@ const holdTransportNotice = (activeSandboxId: Readonly<Ref<string | undefined>>)
     );
 };
 
+// The open sandbox stopped answering and the platform with it (diagnosis/useDiagnosis.ts): the sandboxes on this very
+// computer still open, without either, in the desktop app's own copy of the editor (app/environments/thisComputer.ts).
+// Offered only where the app can open them, and not over a window already open without the platform, whose own card
+// carries the offer; the recovery panel says the rest.
+export const thisComputerCard = (input: {
+    readonly offered: boolean;
+    readonly direct: boolean;
+    readonly platform: Evidence[`platform`];
+    readonly open: () => void;
+}): NotificationInput | undefined =>
+    input.offered && !input.direct && input.platform === `down`
+        ? {
+              kind: `condition`,
+              tone: `info`,
+              icon: `cloud`,
+              title: t(`setup.platformUnavailable.intenticIsntReachable`),
+              detail: t(`setup.platformUnavailable.thisComputerNote`),
+              actions: [{ label: t(`setup.platformUnavailable.useThisComputer`), tier: `boring`, run: input.open }],
+          }
+        : undefined;
+
+// Intentic itself not answering: the window open on a sandbox directly (features/sandbox/recovery/directMode.ts), and the
+// way to this computer's own sandboxes where the desktop app can open them.
+const holdOutageNotices = (): void => {
+    // Open on a sandbox without the platform (features/sandbox/recovery/directMode.ts): what still works and what waits,
+    // until the next session check the platform answers takes the window back.
+    const { refresh: checkSession } = useAuth();
+    // In the desktop app on a computer that runs sandboxes, the way to those while Intentic is down: the app's own copy
+    // of the editor (app/environments/thisComputer.ts). Read once: the app says it before the page loads.
+    const thisComputer = thisComputerOffered()
+        ? [{ label: t(`setup.platformUnavailable.useThisComputer`), tier: `boring` as const, run: openThisComputersSandboxes }]
+        : [];
+    hold(`direct-mode`, () =>
+        directMode.value
+            ? {
+                  kind: `condition`,
+                  tone: `info`,
+                  icon: `cloud`,
+                  title: t(`shell.notificationSources.connectedDirectly`),
+                  detail: t(`shell.notificationSources.connectedDirectlyDetail`),
+                  actions: [
+                      {
+                          label: t(`ui.action.tryAgain`),
+                          tier: `boring` as const,
+                          run: async () => {
+                              // allow(silent-catch): still down is this card staying up, which says so already.
+                              await checkSession().catch(() => undefined);
+                          },
+                      },
+                      ...thisComputer,
+                  ],
+              }
+            : undefined,
+    );
+    const offered = thisComputer.length > 0;
+    hold(`this-computer`, () =>
+        thisComputerCard({ offered, direct: directMode.value, platform: diagnosisEvidence.value?.platform, open: openThisComputersSandboxes }),
+    );
+};
+
 // Call order is stack order, growing up from the corner: most transient first (upload, seconds) to most permanent
 // last (a new build), so frequent changes never shove a fixed one.
 export const startNotificationSources = (): void => {
@@ -282,30 +345,7 @@ export const startNotificationSources = (): void => {
 
     holdTransportNotice(activeSandboxId);
 
-    // Open on a sandbox without the platform (features/sandbox/recovery/directMode.ts): what still works and what waits,
-    // until the next session check the platform answers takes the window back.
-    const { refresh: checkSession } = useAuth();
-    hold(`direct-mode`, () =>
-        directMode.value
-            ? {
-                  kind: `condition`,
-                  tone: `info`,
-                  icon: `cloud`,
-                  title: t(`shell.notificationSources.connectedDirectly`),
-                  detail: t(`shell.notificationSources.connectedDirectlyDetail`),
-                  actions: [
-                      {
-                          label: t(`ui.action.tryAgain`),
-                          tier: `boring` as const,
-                          run: async () => {
-                              // allow(silent-catch): still down is this card staying up, which says so already.
-                              await checkSession().catch(() => undefined);
-                          },
-                      },
-                  ],
-              }
-            : undefined,
-    );
+    holdOutageNotices();
 
     // Sandboxes of this account's own the platform answered it has no record of while they are missing from its list:
     // a registry that forgot them, not a deletion (that answer drops them, rememberSandboxes.ts). Put away for the page's

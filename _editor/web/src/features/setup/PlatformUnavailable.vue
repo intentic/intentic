@@ -8,8 +8,13 @@ import { platformRetry } from "../../client/auth/platformRetry";
 import DirectSandboxes from "../sandbox/recovery/DirectSandboxes.vue";
 import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 import { onScreen } from "../../workbench/window/onScreen";
+import { openThisComputersSandboxes, thisComputerOffered } from "../../app/environments/thisComputer";
 
 const t = useT();
+
+// In the desktop app on a computer that runs sandboxes: those open without Intentic, in the app's own copy of the
+// editor (app/environments/thisComputer.ts). Read once: the app says it before the page loads.
+const thisComputer = thisComputerOffered();
 
 const route = useRoute();
 const router = useRouter();
@@ -52,7 +57,11 @@ onUnmounted(() => {
                 <h1 class="text-lg font-semibold">{{ t(`setup.platformUnavailable.intenticIsntReachable`) }}</h1>
                 <p class="mt-1 text-xs text-muted">{{ t(`setup.platformUnavailable.signInNotChanged`) }}</p>
             </div>
-            <Button :label="t(`ui.action.tryAgain`)" tier="boring" @click="retry" />
+            <div class="flex flex-wrap justify-center gap-2">
+                <Button :label="t(`ui.action.tryAgain`)" tier="boring" @click="retry" />
+                <Button v-if="thisComputer" :label="t(`setup.platformUnavailable.useThisComputer`)" tier="boring" @click="openThisComputersSandboxes" />
+            </div>
+            <p v-if="thisComputer" class="-mt-2 text-2xs text-subtle">{{ t(`setup.platformUnavailable.thisComputerNote`) }}</p>
             <!-- What still works: the sandboxes themselves, opened without intentic. -->
             <DirectSandboxes :focus-url="focusUrl" />
         </section>

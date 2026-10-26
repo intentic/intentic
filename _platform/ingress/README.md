@@ -16,8 +16,8 @@ flowchart LR
 - A Rust crate that builds the same [tunnel](../../_sandbox/netd/crates/tunnel) and [relay](../../_shared/relay)
   crates as the sandbox's netd, so both ends of a tunnel are one implementation of the wire and of how HTTP crosses
   it.
-- No database and nothing durable: the tunnel registry is an in-memory map, so a restart drops every tunnel and each
-  netd redials. One copy of a sandbox holds it (2026-10-05): a netd names its instance on every tunnel
+- No database, and nothing durable but the certificate kept on disk (below): the tunnel registry is an in-memory map,
+  so a restart drops every tunnel and each netd redials. One copy of a sandbox holds it (2026-10-05): a netd names its instance on every tunnel
   (`x-intentic-instance`, `x-intentic-host`, and in the QUIC hello), and a tunnel from another instance than one
   holding the sandbox whose carrier was heard within the dead window, here or on a peer, is refused: 409 naming the
   holder in `x-intentic-holder`, `Hello::HeldElsewhere` over QUIC, or close code 4009 when the two registered at once.
@@ -127,6 +127,7 @@ fly ips list -a intentic-ingress                           # a dedicated IPv4: F
 | `INGRESS_PUBLIC_KEY` | Public half of the api's `INGRESS_SIGNING_KEY`; the process exits without it. |
 | `PLATFORM_URL` | The api: asked whether a sandbox still exists, and where the certificate is fetched. **Required with the platform token**: without both, the TLS listener refuses to start. |
 | `INGRESS_PLATFORM_TOKEN` | What the edge presents to fetch the certificate; the same value as the api's. |
+| `INGRESS_TLS_CACHE_FILE` | Optional. Where the platform's certificate is kept between restarts; default `/var/lib/intentic-ingress/certificate.json`, `off` for none. Survives a Fly restart only on a volume (below). |
 | `INGRESS_TLS_PORT`, `INGRESS_PROXY_PROTOCOL` | 8443 behind PROXY v2 headers, which is where fly.toml's TCP 443 lands. |
 | `INGRESS_QUIC_PORT`, `INGRESS_QUIC_HOST` | **443**, on `fly-global-services`. Fly rewrites only a UDP packet's address, never its port, so a QUIC door on any other port hears nothing (8443 left HTTP/3 silent at go-live until it became 443). |
 | `INGRESS_ALT_SVC` | Advertises HTTP/3 on TCP answers, naming the public port. |
@@ -159,6 +160,41 @@ curl -sI $EDGE/health | grep -i alt-svc                              # h3=":443"
 docker run --rm ymuski/curl-http3 curl -sI --http3-only $EDGE/health | head -1   # HTTP/3 200
 flyctl logs -a intentic-ingress --no-tail | grep -E '"message":"(QUIC )?tunnel (registered|refused|closed)"' | tail
 ```
+
+## The certificate kept on disk
+
+The platform's certificate is fetched from the api and held in memory, and since 2026-10-26 it is also written to
+`INGRESS_TLS_CACHE_FILE` ([certificate.rs](src/certificate.rs)): one JSON file holding the chain, the key and the api
+it came from, written to a temporary file and renamed over the old one, mode 0600 in a 0700 directory, its contents
+never logged. At start the edge puts that file's certificate in the slot before it opens a listener, when the file is
+from the same `PLATFORM_URL` and the certificate is inside its dates; any other file (another platform's, expired, not
+yet valid, corrupt, a key that is not the certificate's) is passed over with a warning and the edge starts as before.
+It then asks the api every 30 s until the api answers, and hourly after that, and writes what the api issues back to the
+file when it differs. Before this, an edge machine that restarted while the api was down presented no certificate for
+the whole outage, so every sandbox it held was unreachable even though its tunnel was up. A PEM pair named with
+`INGRESS_TLS_CERT_FILE` is on disk already and is not copied.
+
+**On Fly the file needs a volume to outlive a restart.** A machine's root filesystem is rebuilt from the image every
+time the machine starts, so without a volume the file is written and lost, which is exactly the old behaviour: safe to
+deploy, and no help yet. [fly.toml](fly.toml) mounts nothing, because a `[mounts]` section makes every machine need
+a volume of its own, attached only when the machine is created. To turn it on, per region the edge runs in:
+
+```sh
+fly volumes create ingress_state --size 1 --region <region> -a intentic-ingress   # one per machine
+```
+
+then add to `fly.toml`
+
+```toml
+[mounts]
+  source = "ingress_state"
+  destination = "/var/lib/intentic-ingress"
+```
+
+and replace each machine so it is created with its volume (`fly machine clone <id> --attach-volume <vol>:/var/lib/intentic-ingress`
+then destroy the old one, one region at a time), which drops the tunnels that machine held as any roll does. The
+private key then lives on the volume as it lives in the api's database. A deployment whose edge runs in a container on a
+host of its own needs only a volume mounted at the same directory.
 
 ## Terminating TLS at the edge: done
 

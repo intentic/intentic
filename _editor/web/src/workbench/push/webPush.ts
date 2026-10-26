@@ -1,11 +1,10 @@
 import { t } from "@intentic/ui/i18n";
 import type { PushChannel } from "@intentic/sandbox-contract/schemas/push";
 import type { Minted, PushDriver } from "./driver.js";
+import { appWorker } from "../offline/appWorker.js";
 
 // Web push, from the browser's side: the transport for every real browser, including the Android TWA (Chrome). The
 // subscription is per-browser; the endpoint belongs to this browser's push service and is also its id.
-
-const SW_URL = `/sw.js`;
 
 // Push wants the VAPID key as raw bytes; the daemon serves it base64url. Typed as Uint8Array<ArrayBuffer> since
 // applicationServerKey needs a non-shared buffer, which the default ArrayBufferLike does not guarantee.
@@ -43,7 +42,9 @@ const isBrave = async (): Promise<boolean> => {
 const pushServiceAdvice = async (): Promise<string> =>
     (await isBrave()) ? t(`shell.pushNotifications.braveAdvice`) : t(`shell.pushNotifications.pushServiceRefused`);
 
-const registration = async (): Promise<ServiceWorkerRegistration> => navigator.serviceWorker.register(SW_URL);
+// The one app worker (offline/appWorker.ts), which the editor registers on every load anyway; active before push asks
+// it to subscribe, since a subscription needs an active worker.
+const registration = appWorker;
 
 // What the browser currently holds, if anything, distinct from what the daemon holds (a sandbox reset drops the server
 // row while the subscription lives on); the composable's refresh reconciles them.

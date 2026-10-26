@@ -9027,9 +9027,11 @@
             "offlineTitle": "Estás sin conexión",
             "offlineBody": "Este dispositivo ha perdido la conexión a Internet. {name} funciona bien y el espacio de trabajo se recuperará en cuanto vuelvas a conectarte.",
             "platformDownTitle": "No se puede acceder a Intentic",
-            "platformDownBody": "intentic no responde a este dispositivo. Suele deberse a esta red o a una breve interrupción por nuestra parte. Seguimos intentándolo.",
+            "platformDownBody": "Ni Intentic ni la dirección de {name} responden a este dispositivo. O Intentic tiene una caída, o esta red lo está bloqueando. {name} sigue funcionando en cualquier caso, y esta página se reconectará sola.",
             "unreachableTitle": "No se puede acceder a {name} desde esta red",
-            "unreachableBody": "intentic responde, pero la dirección de {name} no. Una VPN, un cortafuegos o un filtro DNS de esta red puede estar bloqueando *.sbx.intentic.dev. Prueba otra red o permite esa dirección.",
+            "unreachableBody": "intentic responde, pero la dirección de {name} no. Una VPN, un cortafuegos o un filtro DNS de esta red puede estar bloqueando {host}. Prueba otra red o permite esa dirección.",
+            "loopbackDownTitle": "{name} no responde en este ordenador",
+            "loopbackDownBody": "Nada responde en {address}, donde escucha. Puede que su contenedor se haya detenido o que el reenvío de puertos de Docker o WSL a este ordenador se haya atascado; reiniciar el sandbox o WSL suele solucionarlo. Esta página se reconectará sola.",
             "busyTitle": "{name} está ocupado",
             "busyBody": "Sigue funcionando y se recuperará por sí solo. No tienes que hacer nada.",
             "busyCpu": "Ahora está usando toda su CPU y se recuperará por sí solo.",
@@ -9065,7 +9067,7 @@
             "notConnectedBody": "Su ordenador puede estar apagado, suspendido o sin conexión, o Docker no se está ejecutando allí. Tus archivos se conservan en ese ordenador.",
             "notConnectedHeardBefore": "No hemos recibido señales de {machine}. Puede estar apagado, suspendido o sin conexión. Tus archivos se conservan allí.",
             "localOnlyTitle": "{name} se ejecuta aquí, pero está sin conexión",
-            "localOnlyBody": "Responde en este ordenador, pero no puede acceder a intentic. Comprueba la conexión a Internet, la VPN o el cortafuegos del ordenador. Se reconectará automáticamente cuando pueda.",
+            "localOnlyBody": "Responde en este ordenador, pero no está conectado a intentic. Si Internet funciona en este ordenador, puede que una VPN o un cortafuegos lo impida, o que intentic tenga una caída. Se reconectará automáticamente cuando pueda.",
             "silentTitle": "Aún intentando acceder a {name}…",
             "silentBody": "Su dirección responde, pero el sandbox aún no ha contestado.",
             "stuckTitle": "{name} no responde",
@@ -10860,8 +10862,10 @@
             "sandboxLater": "Un sandbox es donde trabajan los agentes. Configura uno cuando los quieras."
         },
         "platformUnavailable": {
-            "intenticIsntReachable": "No se puede acceder a Intentic",
-            "signInNotChanged": "Tu sesión no ha cambiado. Comprueba la conexión y vuelve a intentarlo."
+            "intenticIsntReachable": "Intentic no responde",
+            "signInNotChanged": "Los servidores de Intentic no responden ahora mismo. Tu sesión no ha cambiado y tus sandboxes siguen funcionando; esta página abrirá tu espacio de trabajo sola en cuanto Intentic vuelva.",
+            "useThisComputer": "Usar los sandboxes de este ordenador",
+            "thisComputerNote": "Los sandboxes de este ordenador se abren sin Intentic."
         },
         "setup": {
             "acceptedNeverAnswered": "Esa dirección aceptó la conexión pero nunca respondió.",

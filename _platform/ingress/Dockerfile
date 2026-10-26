@@ -15,7 +15,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && cp target/release/intentic-ingress /intentic-ingress
 
 # Distroless rather than debian-slim, because the binary needs glibc and libgcc_s (it unwinds on panic) and nothing
-# else: its TLS roots are compiled in (webpki-roots), it starts no other program, and it writes no file. `cc` is the
+# else: its TLS roots are compiled in (webpki-roots), it starts no other program, and the one file it writes is the
+# certificate it keeps for a restart (/var/lib/intentic-ingress, made at first write; README.md). `cc` is the
 # variant that carries libgcc_s, and debian13 is the trixie the build stage links against. The root variant on
 # purpose: on Fly the QUIC door binds UDP 443, a privileged port. There is no shell, so `fly ssh console` has nothing to
 # open; Fly's checks are TCP (fly.toml) or an HTTP GET (fly.edge-proxy.toml), and neither runs anything in here.

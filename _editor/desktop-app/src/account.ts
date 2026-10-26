@@ -1,6 +1,7 @@
 import type { User } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 import { accountOfSession, refusalOf } from "@intentic/web/local-host";
+import { invoke } from "@tauri-apps/api/core";
 import { type AccountAnswer, type AccountAsk, accountRelay, signIn, workspaceOpen } from "./desktop";
 
 // THE ACCOUNT, AS A LOCAL WINDOW ASKS FOR IT (the web's localHost.ts `account`, `updateAccount`, `signOut`): Better
@@ -46,6 +47,14 @@ export const sessionHolds = async (relay: Relay = accountRelay): Promise<boolean
  *  window that asked back (auth.rs `back=agent`). Nothing to go by (offline) goes in, and the workspace says why. */
 export const intoWorkspace = async (path: string): Promise<void> => {
     await ((await sessionHolds()) === false ? signIn() : workspaceOpen(path));
+};
+
+/** A sandbox of THIS computer, from Devices: as {@link intoWorkspace} while it has a workspace row at `path`, the app
+ *  then opening the face on it (`key`, its key there) rather than the workspace when the workspace does not answer
+ *  (machine_face.rs `local_sandbox_open`). One the platform never named has no row and no sign-in to ask about: it
+ *  opens in the face. */
+export const intoLocalSandbox = async (path: string | undefined, key: string): Promise<void> => {
+    await (path !== undefined && (await sessionHolds()) === false ? signIn() : invoke(`local_sandbox_open`, { path: path ?? null, sandbox: key }));
 };
 
 export const updateAccount = async (change: { readonly name?: string; readonly image?: string }, relay: Relay = accountRelay): Promise<void> => {

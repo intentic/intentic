@@ -188,6 +188,42 @@ pub fn show_workspace(app: &AppHandle) {
     show_workspace_at(app, None);
 }
 
+/// The face (machine_face.rs), the app's own copy of the editor on this computer's sandboxes, in the workspace's place,
+/// on `sandbox` when it names one by its key there: what the offline page's "Use this computer's sandboxes" does, asked
+/// for by the hosted page itself (`intentic://machine-face`) or by Devices' Open while the workspace does not answer
+/// (`local_sandbox_open`). A workspace face already in the frame is sent there; none yet is built there, so the hosted
+/// page is never loaded only to fail. Opened from a folder window, the face takes its place as the workspace would
+/// ([`show_workspace_from`]). It is the workspace face that is in use, so the next launch opens the workspace, which
+/// comes back to the face by itself while the platform is still out of reach (offline.rs).
+pub fn show_machine_face_from(app: &AppHandle, sandbox: Option<&str>, asked_in: Option<&Webview>) {
+    let Ok(url) = crate::machine_face::face_url_for(sandbox).parse::<Url>() else {
+        return;
+    };
+    let replaced = asked_in
+        .filter(|window| is_folder_window(window.label()))
+        .map(|window| window.window());
+    app.state::<AppState>().remember_last_face(Face::Workspace);
+    match crate::frame::face(app, WORKSPACE) {
+        Some(face) => {
+            if let Err(error) = face.navigate(url) {
+                eprintln!("the workspace could not be sent to this computer's sandboxes ({error})");
+                return;
+            }
+        }
+        None => {
+            WARM.lock().unwrap().clear();
+            if build_workspace(app, url).is_none() {
+                return;
+            }
+        }
+    }
+    if let Some(frame) = crate::frame::frame(app) {
+        take_frame(&frame, replaced.as_ref());
+    }
+    swap_in(app, WORKSPACE, Keyboard::Take);
+    close_replaced(replaced);
+}
+
 /* THE WORKSPACE'S PAGE, LOADED WHERE NOBODY SEES IT (2026-10-13) — for the wake word, which it listens for (wake.rs). */
 
 /// Add the workspace to the frame at the app's address, out of sight, when there is none: a launch whose page was

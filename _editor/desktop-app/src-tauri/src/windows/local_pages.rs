@@ -58,6 +58,7 @@ macro_rules! local_page {
                 &state.install_id(),
                 update_told(&crate::update::stage(app), true),
                 false,
+                false,
             ))
             // The look the reader was last seen in, as every hosted page is handed it (`hosted_page`).
             .initialization_script(look_init_script(state.ui_look()))

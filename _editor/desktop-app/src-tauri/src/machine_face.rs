@@ -32,6 +32,30 @@ pub const FACE_URL: &str = "http://tauri.localhost/files/sandbox";
 #[cfg(not(windows))]
 pub const FACE_URL: &str = "tauri://localhost/files/sandbox";
 
+/// Whether this build ships the face: the bundle's copy of the editor is built for, and offline.rs watches on, Windows
+/// and Linux. Elsewhere there is nothing to open, so nothing offers it (the hosted page's `machineFace`, Devices' Open).
+pub const FACE_BUILT: bool = cfg!(any(windows, target_os = "linux"));
+
+/// The face's address, opened on one sandbox when `sandbox` names it by the key the face knows it by (local/machineFace.ts
+/// `sandboxKeyOf`: the platform's id, or `machine-<id>`). It rides as the editor's own `?sandbox=` in the face's route,
+/// which the face keeps in the hash, so the editor selects it as it does any `/?sandbox=` (router/sandboxArrival.ts);
+/// a key out of shape opens the face as it is. Pure.
+pub fn face_url_for(sandbox: Option<&str>) -> String {
+    match sandbox.filter(|key| is_face_key(key)) {
+        Some(key) => format!("{FACE_URL}#/?sandbox={key}"),
+        None => FACE_URL.to_string(),
+    }
+}
+
+/// A key the face lists a sandbox by: a platform id (a cuid) or `machine-` and a 12-hex id or a slug. Letters, digits,
+/// dashes and underscores only, so it can never end the route it rides in. Pure.
+fn is_face_key(key: &str) -> bool {
+    (1..=80).contains(&key.len())
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
 /// Whether `url` is the face: the one page of the bundle the workspace window may show besides the offline page.
 pub fn is_face_page(url: &url::Url) -> bool {
     let Ok(face) = url::Url::parse(FACE_URL) else {
@@ -243,26 +267,71 @@ pub async fn machine_face_online(app: AppHandle) -> bool {
     answers(&app.state::<AppState>().app_url(), PROBE_LIMIT).await
 }
 
+/// Devices' Open on a sandbox of THIS computer (src/device/face.ts `openSandbox`): the workspace on it at `path`
+/// (`/?sandbox=<platform id>`) while the workspace answers usably, as Open always did, and otherwise the face on it
+/// (`sandbox`, its key there), which needs nothing from the internet: loading the hosted page into an outage only to be
+/// sent on to the offline page, and from there to the face, was two screens and a press in the way of a sandbox that
+/// is running on this very computer. A sandbox the platform never named has no workspace row to open, so it opens in
+/// the face whatever the network does. ASYNC for the reason `workspace_open` is (commands.rs).
+#[tauri::command]
+pub async fn local_sandbox_open(
+    app: AppHandle,
+    window: tauri::Webview,
+    path: Option<String>,
+    sandbox: String,
+) {
+    let online = match &path {
+        Some(_) if FACE_BUILT => answers(&app.state::<AppState>().app_url(), PROBE_LIMIT).await,
+        Some(_) => true,
+        None => false,
+    };
+    match path.filter(|_| online) {
+        Some(path) => crate::windows::show_workspace_from(&app, Some(path.as_str()), &window),
+        None if FACE_BUILT => {
+            crate::windows::show_machine_face_from(&app, Some(&sandbox), Some(&window))
+        }
+        None => {}
+    }
+}
+
 /* IS THE WORKSPACE THERE? */
 
 /// A page that has not started answering by now will not open for anyone waiting at a screen.
 pub const PROBE_LIMIT: Duration = Duration::from_secs(4);
 
-/// Whether `url` answers at all: any HTTP status is an answer (a 503 from a platform mid-deploy is still the internet
-/// working), and no answer within `limit` is none. The same question the offline page asks, from the app.
+/// Whether `url` answers with something the workspace can be used through, within `limit`: no answer is none, and
+/// neither is one [`crate::offline::unusable_status`] calls unusable. The same question the offline page asks, from the
+/// app. _(2026-10-26) Any HTTP status used to count, so that a 503 from a platform mid-deploy read as the internet
+/// working. But the platform's editor and API sit behind one Cloudflare tunnel, and a dead platform host answers with
+/// Cloudflare's 530 or 52x: the window was left on that page for good, with no way to this computer's sandboxes and no
+/// retry. A deploy's brief 503 now sends the window to the offline page, which comes back by itself once this answers._
 pub async fn answers(url: &str, limit: Duration) -> bool {
+    status_at(url, limit)
+        .await
+        .is_some_and(|status| !crate::offline::unusable_status(status))
+}
+
+/// Whether anything at all answers at `url` within `limit`, whatever its status: the question offline.rs's start probe
+/// asks, which only cuts short a load that will get no answer. An answer with an unusable status is left to the load
+/// itself, judged as it commits: the hosted editor's service worker serves its cached copy in place of a dead platform's
+/// page (the web's `public/sw.js`), and that copy is a workspace, where the probe's own request saw only the 530.
+pub async fn reached(url: &str, limit: Duration) -> bool {
+    status_at(url, limit).await.is_some()
+}
+
+/// The HTTP status a HEAD of `url` gets within `limit`; none when nothing answers.
+async fn status_at(url: &str, limit: Duration) -> Option<u16> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
-    let Ok(client) = reqwest::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(limit)
         .connect_timeout(limit)
         .user_agent(format!("intentic-desktop/{}", crate::commands::VERSION))
         .build()
-    else {
-        return false;
-    };
-    client.head(url).send().await.is_ok()
+        .ok()?;
+    let answer = client.head(url).send().await.ok()?;
+    Some(answer.status().as_u16())
 }
 
 /// What a workspace window that could not reach its page shows: the face, when this computer may have sandboxes of
@@ -341,6 +410,25 @@ mod tests {
         assert_eq!(minted_from("Nobody has signed in to lab yet."), None);
     }
 
+    /// Opened on one sandbox, by the key the face lists it under, in the face's own route; a key that could end the
+    /// route opens the face as it is.
+    #[test]
+    fn the_face_opens_on_the_sandbox_named_by_its_key() {
+        assert_eq!(
+            face_url_for(Some("cmtu1eqyv0001dawma7zi4n3i")),
+            format!("{FACE_URL}#/?sandbox=cmtu1eqyv0001dawma7zi4n3i")
+        );
+        assert_eq!(
+            face_url_for(Some("machine-82789f4106b4")),
+            format!("{FACE_URL}#/?sandbox=machine-82789f4106b4")
+        );
+        assert_eq!(face_url_for(None), FACE_URL);
+        for bad in ["", "a&b=c", "x#y", "../x", "a b", &"x".repeat(81)] {
+            assert_eq!(face_url_for(Some(bad)), FACE_URL, "{bad}");
+        }
+        assert!(is_face_page(&face_url_for(Some("cm1")).parse().unwrap()));
+    }
+
     #[test]
     fn only_the_face_itself_is_the_face() {
         assert!(is_face_page(&FACE_URL.parse().unwrap()));
@@ -367,6 +455,41 @@ mod tests {
             crate::offline::is_offline_page(&page.parse().unwrap()),
             "{page}"
         );
+    }
+
+    /// A dead platform behind Cloudflare answers, with its 530: that is no workspace, and the face stays offered. A
+    /// working one answers 200.
+    #[test]
+    fn a_dead_platforms_answer_is_not_the_workspace_answering() {
+        fn serving(status: &'static str) -> String {
+            use std::io::{Read, Write};
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            std::thread::spawn(move || {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let mut asked = [0u8; 1024];
+                    let _ = stream.read(&mut asked);
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 {status}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    );
+                }
+            });
+            format!("http://127.0.0.1:{port}/")
+        }
+        assert!(!tauri::async_runtime::block_on(answers(
+            &serving("530 Origin Unreachable"),
+            PROBE_LIMIT
+        )));
+        assert!(tauri::async_runtime::block_on(answers(
+            &serving("200 OK"),
+            PROBE_LIMIT
+        )));
+        // The start probe only asks whether anything answers: a 530 is left to the load, which a cached editor may win.
+        assert!(tauri::async_runtime::block_on(reached(
+            &serving("530 Origin Unreachable"),
+            PROBE_LIMIT
+        )));
     }
 
     /// Nothing listening is no answer, at once rather than at the deadline.

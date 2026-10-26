@@ -36,7 +36,11 @@ COPY smoke.sh /usr/local/bin/smoke.sh
 # reached by overriding the entrypoint rather than as a third `smoke.sh` kind — it stages two builds and a
 # local release endpoint, which shares nothing with the install/deep-link flow but the container around it.
 COPY update.sh /usr/local/bin/update.sh
-RUN chmod +x /usr/local/bin/smoke.sh /usr/local/bin/update.sh
+# The third, reached the same way: what the installed app does when intentic is down (outage.sh), with the stub that
+# plays the workspace's address and keeps the only record of what the window asked it for.
+COPY outage.sh /usr/local/bin/outage.sh
+COPY outage_stub.py /usr/local/bin/outage_stub.py
+RUN chmod +x /usr/local/bin/smoke.sh /usr/local/bin/update.sh /usr/local/bin/outage.sh /usr/local/bin/outage_stub.py
 
 # The artifact under test is copied to /artifacts by the runner rather than baked in, so one image serves every
 # build. Created here so the copy lands in a directory that already exists whichever way the runner fills it.

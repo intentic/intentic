@@ -53,12 +53,25 @@ flowchart LR
   daemon admits the face's origin on the loopback port alone (the sandbox daemon's README). The page is granted
   `machine_face`, `machine_face_renew` and `machine_face_online` (`capabilities/machine-face.json`) as local content
   in the workspace window, which the hosted editor in the same window never is. Every 30 s it asks whether the
-  workspace answers again and then offers it ("You're back online"), never taking the page away. On Linux (so on
-  Intentic OS) `offline.rs` decides: a load of the workspace that fails for a network reason (WebKitGTK's
-  `load-failed`), or a 4 s probe at the start that finds nothing answering while nothing has started to show, sends the
-  window to the face on a computer that hosts sandboxes, else to `offline.html`, which also offers the face. On Windows
-  the offline page offers it after WebView2 says a load failed. Not yet: an agent's preview site on the loopback port
-  (netd routes preview hosts there, the editor does not dial them yet), and a panel floated out of the face.
+  workspace answers again and then offers it ("Intentic is answering again", said of Intentic rather than the
+  internet, since the face is as often up while only the platform is down), never taking the page away. On Linux (so
+  on Intentic OS) `offline.rs` decides: a load of the workspace that fails for a network reason (WebKitGTK's
+  `load-failed`), one that commits with an unusable answer (500 or 502–599, `unusable_status`), or a 4 s probe at the
+  start that finds nothing answering at all while nothing has started to show (`machine_face::reached`: a 530 is left to
+  the load, which the hosted editor's service worker may answer with its cached copy), sends the window to the face on a
+  computer that hosts sandboxes, else to `offline.html`, which also offers the face. On Windows the offline page offers
+  it after WebView2 says a load failed or answered that way (its `status` is then `http-<code>`, said in words). To
+  answer is to answer usably everywhere (`machine_face::answers`), and the offline page asks the app that
+  (`machine_face_online`) rather than fetching the workspace itself. _(2026-10-26) Any HTTP status used to count as the
+  workspace answering. The platform's editor and API sit behind one Cloudflare tunnel, so a dead platform host is
+  Cloudflare's 530 or 52x page: the window stayed on it for good, with no retry and no way to this computer's
+  sandboxes, and the offline page's no-cors check took that page for the workspace being back._ Two more ways in:
+  Devices' Open on a sandbox of this computer (`local_sandbox_open`) opens the face on it directly while the workspace
+  does not answer, and opens one the platform never named in the face at any time; and the hosted page, told
+  `machineFace: true` (only the workspace window, on a build with the face and a computer that hosts sandboxes), offers
+  the face itself when it cannot reach the platform, through `intentic://machine-face`. Not yet: an agent's preview
+  site on the loopback port (netd routes preview hosts there, the editor does not dial them yet), a panel floated out
+  of the face, and a sandbox asleep when the workspace cannot be reached, which the face lists but nothing wakes.
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
   account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
   workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
@@ -735,6 +748,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
 | `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
+| `machine-face` | the workspace window | Sends that window to the face (`files/sandbox`, machine_face.rs), as the offline page's button does: the hosted page's offer of this computer's sandboxes when it cannot reach the platform, made only where the app told it `machineFace: true`. It carries nothing; a build without the face drops it. |
 | `notice?do=open&token=…` | anywhere | A press on one of the app's notifications, as Windows delivers it through the OS: the workspace at that notification's route. A token this run did not issue, letters and digits only, opens the workspace as it is. |
 | `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the rail's foot and the app's own reads (a local window's switcher asks the platform itself, through `account_relay`); `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |

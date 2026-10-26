@@ -9027,9 +9027,11 @@
             "offlineTitle": "You're offline",
             "offlineBody": "This device lost its internet connection. {name} is fine, and the workspace picks up again as soon as you're back online.",
             "platformDownTitle": "Can't reach Intentic",
-            "platformDownBody": "Intentic isn't answering this device. That's usually this network, or a short outage on our side. We keep trying.",
+            "platformDownBody": "Neither Intentic nor {name}'s address answers this device. Either Intentic is having an outage or this network is blocking it. {name} keeps running either way, and this page reconnects by itself.",
             "unreachableTitle": "Can't reach {name} from this network",
-            "unreachableBody": "Intentic answers, but {name}'s address doesn't. A VPN, firewall or DNS filter on this network may be blocking *.sbx.intentic.dev. Try another network, or allow that address.",
+            "unreachableBody": "Intentic answers, but {name}'s address doesn't. A VPN, firewall or DNS filter on this network may be blocking {host}. Try another network, or allow that address.",
+            "loopbackDownTitle": "{name} isn't answering on this computer",
+            "loopbackDownBody": "Nothing answers at {address}, where it listens. Its container may have stopped, or the port forwarding from Docker or WSL to this computer may be stuck; restarting the sandbox or WSL usually brings it back. This page reconnects by itself.",
             "busyTitle": "{name} is busy",
             "busyBody": "It's still running and will catch up by itself. There's nothing you need to do.",
             "busyCpu": "It's using all the CPU it has right now and will catch up by itself.",
@@ -9065,7 +9067,7 @@
             "notConnectedBody": "Its computer may be off, asleep or offline, or Docker isn't running there. Your files are kept on that computer.",
             "notConnectedHeardBefore": "We haven't heard from {machine}. It may be off, asleep or offline. Your files are kept there.",
             "localOnlyTitle": "{name} runs here, but it's offline",
-            "localOnlyBody": "It answers on this computer but can't reach Intentic. Check this computer's internet connection, VPN or firewall. It reconnects by itself once it can.",
+            "localOnlyBody": "It answers on this computer but isn't connected to Intentic. If this computer's internet works, a VPN or firewall may be in the way, or Intentic may be having an outage. It reconnects by itself once it can.",
             "silentTitle": "Still reaching {name}…",
             "silentBody": "Its address answers, but the sandbox hasn't replied yet.",
             "stuckTitle": "{name} isn't answering",
@@ -10860,8 +10862,10 @@
             "sandboxLater": "A sandbox is where agents work. Set one up whenever you want them."
         },
         "platformUnavailable": {
-            "intenticIsntReachable": "Intentic isn't reachable",
-            "signInNotChanged": "Your sign-in has not been changed. Check your connection and try again."
+            "intenticIsntReachable": "Intentic isn't answering",
+            "signInNotChanged": "Intentic's servers aren't answering right now. Your sign-in is unchanged and your sandboxes keep running; this page opens your workspace by itself once Intentic is back.",
+            "useThisComputer": "Use this computer's sandboxes",
+            "thisComputerNote": "The sandboxes running on this computer open without Intentic."
         },
         "setup": {
             "acceptedNeverAnswered": "That address accepted the connection but never answered.",

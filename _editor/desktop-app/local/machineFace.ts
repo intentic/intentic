@@ -85,8 +85,9 @@ const sessionOf = (face: MachineFace, now: Date): LocalSession => {
     return { session: { id: `machine`, userId: user.id, expiresAt: new Date(now.getTime() + 86_400_000).toISOString() }, user };
 };
 
-// What anything that needs the platform answers, in the reader's words: the editor shows a refusal's `message`.
-export const NEEDS_INTERNET = `This needs the internet. Your sandboxes on this computer keep working; this part comes back when the internet does.`;
+// What anything that needs the platform answers, in the reader's words: the editor shows a refusal's `message`. Not "the
+// internet": this face is up as often because Intentic is down as because the network is (2026-10-26).
+export const NEEDS_INTERNET = `This needs Intentic's servers, which this computer can't reach right now. Your sandboxes on this computer keep working; this part comes back when Intentic does.`;
 
 export const machinePlatformAnswer = (face: MachineFace, url: URL, now: Date = new Date()): Response => {
     if (url.pathname.startsWith(`/api/auth/`)) {

@@ -127,6 +127,32 @@ describe(`this side of the connection`, () => {
     it(`points at this network when only the sandbox's address is blocked`, () => {
         expect(present({ kind: `unreachable` }).body).toContain(`*.sbx.intentic.dev`);
     });
+
+    // The sandbox's name was once missing from this sentence ("but 's address doesn't"), and the domain was ours even for
+    // a sandbox on its owner's own.
+    it(`names the sandbox and the address that is blocked`, () => {
+        expect(present({ kind: `unreachable`, host: `sandbox-82789f4106b4.radarsu.com` }).body).toBe(
+            `Intentic answers, but acme's address doesn't. A VPN, firewall or DNS filter on this network may be blocking sandbox-82789f4106b4.radarsu.com. Try another network, or allow that address.`,
+        );
+    });
+
+    it(`says a sandbox on this computer's loopback isn't answering here, and blames no network`, () => {
+        const shown = present({ kind: `loopback-down`, address: `127.0.0.1:30559` });
+        expect(shown).toMatchObject({ title: `acme isn't answering on this computer`, waiting: true, tone: `warning`, action: undefined });
+        expect(shown.body).toBe(
+            `Nothing answers at 127.0.0.1:30559, where it listens. Its container may have stopped, or the port forwarding from Docker or WSL to this computer may be stuck; restarting the sandbox or WSL usually brings it back. This page reconnects by itself.`,
+        );
+        expect(shown.chain.map((link) => [link.label, link.state])).toEqual([
+            [`This computer`, `ok`],
+            [`Sandbox`, `down`],
+        ]);
+    });
+
+    it(`says Intentic may be down without blaming this device's network first`, () => {
+        expect(present({ kind: `platform-down` }).body).toBe(
+            `Neither Intentic nor acme's address answers this device. Either Intentic is having an outage or this network is blocking it. acme keeps running either way, and this page reconnects by itself.`,
+        );
+    });
 });
 
 // Which waits are said the moment they are known, over a workspace that would otherwise show nothing for half a minute:

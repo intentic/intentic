@@ -62,6 +62,25 @@ flowchart LR
   directly, the workspace running unchanged on that remembered list; a list that offers nothing to open while this
   device remembers sandboxes of the account's own goes to `/recover` rather than onboarding; and a sandbox's own
   address opens it through `/open?url=`. [recovery/README.md](src/features/sandbox/recovery/README.md) has the rules.
+- **When this origin is down too.** The editor and the platform api share one host behind one tunnel, so an outage of
+  that host takes app.intentic.dev with it: Cloudflare answers 52x/530, or nothing answers. The app's service worker
+  (`public/sw.js`, registered on every load of a production build by `workbench/offline/appWorker.ts`, never in the
+  desktop app's own bundle) keeps a copy of the editor for that: a navigation goes to the network first and gets the
+  kept `index.html` only when the network fails, answers 500 or 502–599, or keeps it waiting 15 s. A good answer always
+  wins and replaces the copy, so a deploy is never masked. Hashed `/assets/` are served from the cache first and kept
+  on use (400 at most, oldest out first; this build's and the previous build's precache stay whole); `env.js` and
+  `/ext-shims/` are asked every time and kept only for an outage. At install the worker fetches the shell, the
+  stylesheet, the entry and the outage path's views with what they import statically (`vite.offline.ts`
+  `OFFLINE_VIEWS`, written into the built `sw.js`); every other view is kept the first time it opens. Nothing of another
+  origin is touched (the api, every daemon, Google), nor any write, request with credentials, range, `/api/`, `/wire/`
+  or font. So the outage screen still loads, and from it a remembered sandbox opens at its own address with the
+  session, Google sign-in or passkey this browser holds. Limits: a browser that never loaded the editor has no copy; a
+  view never opened before an outage is not kept unless it is on the list; a hosted sandbox that is asleep cannot be
+  woken, since waking it is the platform's; and a sandbox whose only route is Intentic's ingress is unreachable while
+  the ingress is down. The worker takes over as soon as it is installed and never reloads an open tab; it is the same
+  worker web push uses (`workbench/push/webPush.ts`), so it is registered with `updateViaCache: "none"` in both places,
+  and nginx serves it `no-cache` so each deploy's list reaches it on the next update check. A build without the list
+  (the dev server, the demo) gets a worker that caches nothing and answers no fetch.
 - **Deleted sandboxes.** Removal receipts and the palette open `/deleted-sandboxes`, an account page that remains
   available after the last sandbox is removed. Devices also embeds the list; older `/devices#deleted` links redirect
   to the account page. Restoring a sandbox reads only the platform and refreshes the account's registry.
@@ -224,7 +243,11 @@ flowchart LR
   bar drawn from how long that kind of wait usually takes (`USUAL_MS` in `presentation.ts`), how long it has run, and
   when the screen stops waiting, which is the diagnosis's own patience constant, so the time the words promise is the
   time the way back appears. The raw facts behind the sentence (`diagnosis/details.ts`: the failure, the probes, the
-  machine's report check by check) sit behind "Technical details".
+  machine's report check by check) sit behind "Technical details". (2026-10-26) A sandbox whose own address is this
+  computer's loopback (the desktop app's offline copy of the editor lists them at `http://127.0.0.1:<port>`) that does
+  not answer is **loopback-down**: its container or the Docker/WSL port forwarding, never a network, a VPN or
+  `*.sbx.intentic.dev`, and the details say the platform was not used rather than "ok". A blocked address is named as
+  it is, the owner's own domain included.
 - **One progress model.** Everything that shows how far along work is reads `components/progress/progress.ts`: how
   long it has run, how long it should take (`expectedMs`), when the screen gives up (`giveUpMs`), and, where the work
   counts for itself, how much is done (`measured`: docker's layers, the steps a rebuild has passed). The bar is that

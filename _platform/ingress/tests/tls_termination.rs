@@ -252,6 +252,7 @@ async fn a_pem_pair_on_disk_fills_the_slot() {
             chain: dir.join("chain.pem"),
             key: dir.join("key.pem"),
         },
+        None,
     );
     wait_for("the slot to fill", || slot.present()).await;
     keeping.abort();
@@ -325,4 +326,95 @@ async fn a_hosted_sandbox_answers_no_tunnel_until_it_dials_and_is_then_tunnelled
     assert_eq!(tunnelled.status(), 200);
     let answer = tunnelled.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(answer, format!("hosted {}/", daemon_host(HOSTED_ID)));
+}
+
+/* THE CERTIFICATE KEPT ON DISK (src/certificate.rs `Cache`): an edge restarting while the api is down presents the one
+it last held, and what the api issues afterwards replaces it on disk as in the slot. */
+
+fn scratch(name: &str) -> std::path::PathBuf {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "ingress-kept-{name}-{}-{unique}",
+        std::process::id()
+    ))
+}
+
+#[tokio::test]
+async fn a_certificate_kept_on_disk_is_presented_while_the_platform_does_not_answer() {
+    use intentic_ingress::certificate::{Cache, Source, keep};
+
+    let issued = issue();
+    let dir = scratch("silent");
+    // An address nothing listens on: the api is down for the whole test.
+    let closed = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let api = format!("http://127.0.0.1:{}", closed.local_addr().unwrap().port());
+    drop(closed);
+    let cache = Cache::new(dir.join("certificate.json"), &api);
+    cache.store(&issued.chain, &issued.key).unwrap();
+
+    let slot = Arc::new(CertificateSlot::default());
+    let keeping = keep(
+        slot.clone(),
+        Source::Platform {
+            url: api,
+            token: "edge-token".to_owned(),
+        },
+        Some(cache),
+    );
+    // Filled before `keep` returned, with no wait on a platform that never answers.
+    assert!(slot.present());
+    let listening = naming_the_browser(slot, false).await;
+    let tls = browse(listening.address.port(), &[&issued], b"http/1.1", None)
+        .await
+        .unwrap();
+    assert_eq!(tls.get_ref().1.peer_certificates().unwrap()[0], issued.der);
+    keeping.abort();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn the_platforms_certificate_replaces_the_one_kept_on_disk() {
+    use intentic_ingress::certificate::{Cache, Source, keep};
+
+    let (kept, issued) = (issue(), issue());
+    let answer =
+        serde_json::json!({ "certificate": issued.chain, "privateKey": issued.key }).to_string();
+    let platform = platform(std::collections::HashMap::from([(
+        "certificate".to_owned(),
+        (200, answer),
+    )]))
+    .await;
+    let dir = scratch("renewed");
+    let cache = Cache::new(dir.join("certificate.json"), &platform.url);
+    cache.store(&kept.chain, &kept.key).unwrap();
+
+    let slot = Arc::new(CertificateSlot::default());
+    let keeping = keep(
+        slot.clone(),
+        Source::Platform {
+            url: platform.url.clone(),
+            token: "edge-token".to_owned(),
+        },
+        Some(cache.clone()),
+    );
+    let now = std::time::SystemTime::now;
+    wait_for("the platform's certificate to be kept on disk", || {
+        cache.restore(now()).map(|(chain, _)| chain) == Some(issued.chain.clone())
+    })
+    .await;
+    let listening = naming_the_browser(slot, false).await;
+    let tls = browse(
+        listening.address.port(),
+        &[&kept, &issued],
+        b"http/1.1",
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(tls.get_ref().1.peer_certificates().unwrap()[0], issued.der);
+    keeping.abort();
+    let _ = std::fs::remove_dir_all(&dir);
 }

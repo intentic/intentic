@@ -20,13 +20,21 @@ pub(super) const BROWSER_ARGS: &str = concat!(
 /// installId is a non-secret analytics id; update seeds pages loaded after the download event. frameless requests page-drawn controls.
 /// Gate projectSync and sandboxWakes links on build support to avoid unsafe older behavior; notices enables native notifications/badges.
 /// loopbackUngated describes browser behavior, not permission. wake is true only for the microphone-enabled workspace window.
-pub(super) fn workspace_init_script(install_id: &str, update: Option<&str>, wake: bool) -> String {
+/// machineFace is true only for the workspace window, on a build that ships the face (machine_face.rs `FACE_BUILT`) and a
+/// computer that hosts sandboxes: the hosted page then offers this computer's sandboxes when it cannot reach the platform,
+/// through `intentic://machine-face` (setup_link.rs), which only the workspace window is heard on.
+pub(super) fn workspace_init_script(
+    install_id: &str,
+    update: Option<&str>,
+    wake: bool,
+    machine_face: bool,
+) -> String {
     let update = match update {
         Some(version) => format!("\"{}\"", crate::update::escape_js(version)),
         None => "null".to_string(),
     };
     format!(
-        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true }}); }} }})();",
+        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, machineFace: {machine_face} }}); }} }})();",
         launch_id_script(),
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
@@ -78,7 +86,7 @@ mod tests {
 
     #[test]
     fn every_page_gets_the_process_launch_id() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(script.contains(&format!(
             "window.__INTENTIC_LAUNCH_ID__ = \"{}\"",
             crate::launch::id()
@@ -113,7 +121,7 @@ mod tests {
     /// nothing on screen to explain it; one that says so without disabling it costs them the same dialog.
     #[test]
     fn the_page_is_told_the_reach_is_ungated() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(script.contains("loopbackUngated: true"), "{script}");
     }
 
@@ -121,7 +129,7 @@ mod tests {
     /// reports that version so the updater smoke can distinguish it from the old window still being on screen.
     #[test]
     fn the_workspace_reports_the_stamped_release_version() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(
             script.contains(&format!("version: \"{}\"", crate::commands::VERSION)),
             "{script}"
@@ -131,7 +139,7 @@ mod tests {
     /* THE OTHER PAIR THAT HAS TO STAY A PAIR: this window opens with no platform frame, and the page is told so. */
     #[test]
     fn the_page_is_told_the_window_has_no_frame_of_its_own() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(script.contains("frameless: true"), "{script}");
     }
 
@@ -139,7 +147,7 @@ mod tests {
     /// that parses `project=` on a sync link says so, and one that doesn't never reaches that lane.
     #[test]
     fn the_page_is_told_this_build_copies_a_folder_into_its_project() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(script.contains("projectSync: true"), "{script}");
     }
 
@@ -147,10 +155,20 @@ mod tests {
     /// dropped file is: a build anywhere else must not invite a message nothing will answer.
     #[test]
     fn the_page_is_told_whether_this_build_copies_a_drop_itself() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(
             script.contains(&format!("nativeCopy: {}", cfg!(windows))),
             "{script}"
+        );
+    }
+
+    /// The hosted page offers this computer's sandboxes, and sends `intentic://machine-face`, only on this word: told to
+    /// the workspace window of a computer that hosts sandboxes, on a build that ships the face, and to nothing else.
+    #[test]
+    fn the_page_is_told_whether_this_computers_sandboxes_can_open_here() {
+        assert!(workspace_init_script("install-1", None, true, true).contains("machineFace: true"));
+        assert!(
+            workspace_init_script("install-1", None, true, false).contains("machineFace: false")
         );
     }
 
@@ -158,7 +176,7 @@ mod tests {
     /// `desktopNotices`): a build that hears `notice` and `badge` says so.
     #[test]
     fn the_page_is_told_this_build_puts_up_notifications() {
-        let script = workspace_init_script("install-1", None, true);
+        let script = workspace_init_script("install-1", None, true, false);
         assert!(script.contains("notices: true"), "{script}");
     }
 
@@ -166,7 +184,7 @@ mod tests {
     /// (`desktopSandboxWakes` in the SPA): an older one would drop it, and the keeper's poll would be the only wake.
     #[test]
     fn the_page_is_told_this_build_wakes_a_sleeping_sandbox_at_once() {
-        let script = workspace_init_script("install-1", None, false);
+        let script = workspace_init_script("install-1", None, false, false);
         assert!(script.contains("sandboxWakes: true"), "{script}");
     }
 
@@ -174,8 +192,8 @@ mod tests {
     /// the workspace face, never a floating panel or a local window.
     #[test]
     fn only_the_workspace_face_is_told_it_may_listen_for_its_wake_word() {
-        assert!(workspace_init_script("install-1", None, true).contains("wake: true"));
-        assert!(workspace_init_script("install-1", None, false).contains("wake: false"));
+        assert!(workspace_init_script("install-1", None, true, false).contains("wake: true"));
+        assert!(workspace_init_script("install-1", None, false, false).contains("wake: false"));
     }
 
     /// The page's AudioContext resumes with nobody there to click (wake.rs), and the flag rides beside the one list of
@@ -204,11 +222,11 @@ mod tests {
         assert_eq!(update_told(&ready, true), None);
         assert_eq!(update_told(&ready, false), Some("9.9.9"));
         assert!(
-            workspace_init_script("install-1", update_told(&ready, true), false)
+            workspace_init_script("install-1", update_told(&ready, true), false, false)
                 .contains("update: null")
         );
         assert!(
-            workspace_init_script("install-1", update_told(&ready, false), true)
+            workspace_init_script("install-1", update_told(&ready, false), true, false)
                 .contains("update: \"9.9.9\"")
         );
         assert_eq!(update_told(&crate::update::Stage::Current, false), None);

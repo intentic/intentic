@@ -39,6 +39,7 @@ import { openInPage, router } from "./router";
 import { installStartHooks } from "./router/startHooks";
 import { routePatternOf } from "./router/routePattern";
 import { installNotificationTaps } from "./workbench/notifications/notificationTaps";
+import { installOfflineCopy } from "./workbench/offline/appWorker";
 import "./styles.css";
 
 // The bundle has arrived and evaluated: everything above was a static import (boot.ts times the rest of the start).
@@ -172,3 +173,5 @@ installUi(app);
 installChunkRecovery();
 app.mount("#app");
 markBoot(`mount`);
+// The worker that keeps this editor openable while app.intentic.dev is down (public/sw.js), registered once loaded.
+installOfflineCopy();

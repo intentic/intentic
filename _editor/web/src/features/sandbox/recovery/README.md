@@ -7,7 +7,10 @@ What the editor does when the platform is down or has forgotten an account's san
   sandbox the list lacks is kept and marked missing, since a platform that forgot it lists nothing. It is let go of
   when the platform says it was deleted or is someone else's (`rememberSandboxes.ts` asks `sandbox.lookup` after each
   list that lacks one), when its owner deletes it here, after a month missing, or on an explicit sign-out. A refused
-  session's teardown (`lib/authLifecycle.ts`) keeps it, since that is exactly when it is needed.
+  session's teardown (`lib/authLifecycle.ts`) keeps it, since that is exactly when it is needed. (2026-10-26) For an
+  owned sandbox that may run on its owner's computer it also keeps where it answers there: the 12-hex id its loopback
+  port derives from, read off the connect token when listed (`rememberSandboxes.ts` `localIdsOf`; the token itself is
+  still never kept), and the certified loopback name the list gave.
 - **Which database.** Each list is remembered with the platform's identity (`GET /api/identity`). A list from another
   database than the one remembered is a reset, and the recovery screen says so.
 - **Never empty** (`router/index.ts` `requireSetup`): a list that offers nothing to open while this device remembers
@@ -28,7 +31,14 @@ What the editor does when the platform is down or has forgotten an account's san
   with that sandbox. The passkey is the one way in for an account that signs in by email code, since the platform that
   vouches for its address is the thing that is down; its session is kept under the id the window opens the sandbox by. Nothing in the shell changes; what needs the platform (sharing, billing, a hosted machine's power) fails as it
   does offline, and a card says why. The next session check the platform answers ends it, and the list it answers
-  replaces the remembered one.
+  replaces the remembered one. (2026-10-26) A sandbox on this very computer is dialled here before its tunnel, as it is
+  with the platform up: the remembered row carries its certified loopback name, and endpoint selection takes the
+  remembered loopback id where the row has no token (`client/endpoint/useEndpoint.ts`), so an outage of the edge as well
+  as the platform still leaves it open. Before, direct mode reached every sandbox through its tunnel alone.
+- **This computer's own sandboxes** (`app/environments/thisComputer.ts`): in the desktop app on a computer that runs
+  sandboxes (the app says `machineFace`), the outage screen, the direct-mode card and a card over a sandbox that stopped
+  answering with the platform also offer "Use this computer's sandboxes", the link (`intentic://machine-face`) that turns
+  the window into the app's own copy of the editor on them, which needs neither the platform nor the internet.
 - **A sandbox's own address** (`/open?url=`): the daemon sends a browser that opened its address here (its `GET /`).
   A listed sandbox opens; an unlisted one goes to recovery; with the platform down, the outage screen offers it first.
 - (2026-10-02) Before this, the editor trusted whatever the platform answered: an empty list from a database that had

@@ -51,6 +51,7 @@
         "allow-keyring-upgrade",
         "allow-keyring-app",
         "allow-workspace-open",
+        "allow-local-sandbox-open",
         "allow-home-facts",
         "allow-setup-alert",
         "allow-setup-progress",

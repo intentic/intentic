@@ -43,6 +43,8 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = ["h
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 tunnel = { path = "../../_sandbox/netd/crates/tunnel" }
+# Reads the dates of the certificate kept on disk (certificate.rs), the one thing the edge parses that is not a header.
+x509-parser = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 rcgen = "0.14"

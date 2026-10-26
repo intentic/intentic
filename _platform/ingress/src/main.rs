@@ -179,7 +179,11 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
     // One slot, filled once, for both doors that terminate TLS here.
     let slot = if config.tls_port.is_some() || config.quic_port.is_some() {
         let slot = Arc::new(CertificateSlot::default());
-        certificate::keep(slot.clone(), certificate_source(&config)?);
+        certificate::keep(
+            slot.clone(),
+            certificate_source(&config)?,
+            certificate_cache(&config),
+        );
         Some(slot)
     } else {
         None
@@ -289,4 +293,16 @@ fn certificate_source(config: &Config) -> anyhow::Result<Source> {
     anyhow::bail!(
         "INGRESS_TLS_PORT or INGRESS_QUIC_PORT is set but no certificate is: name INGRESS_TLS_CERT_FILE and INGRESS_TLS_KEY_FILE, or INGRESS_PLATFORM_TOKEN with PLATFORM_URL"
     )
+}
+
+// Only the platform's certificate is kept: a PEM pair an operator names is on disk already. `off` keeps none.
+fn certificate_cache(config: &Config) -> Option<certificate::Cache> {
+    let from_files = !config.tls_cert_file.is_empty() && !config.tls_key_file.is_empty();
+    if from_files || config.platform_url.is_empty() || config.tls_cache_file == "off" {
+        return None;
+    }
+    Some(certificate::Cache::new(
+        &config.tls_cache_file,
+        &config.platform_url,
+    ))
 }

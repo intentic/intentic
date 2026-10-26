@@ -13,7 +13,9 @@ import type { RememberedAccount, RememberedSandbox } from "../../../client/direc
 // (notificationSources.ts). The next session check the platform answers ends it.
 
 // A remembered sandbox as a list row: no token (none is remembered; only a first bind spends one), no hosted record (its
-// machine is the platform's to drive), nothing reported. A last-seen time it never had is the epoch, since a row without
+// machine is the platform's to drive), nothing reported. Its certified loopback name rides along where it was remembered,
+// and endpoint selection finds its loopback id in the memory by the row's id (useEndpoint.ts), so a sandbox on this very
+// computer is tried here before its tunnel, as it would be with the platform up. A last-seen time it never had is the epoch, since a row without
 // one reads as a setup still to finish (router/setupGate.ts).
 export const summaryOf = (entry: RememberedSandbox): SandboxSummary => ({
     id: entry.id,
@@ -30,7 +32,7 @@ export const summaryOf = (entry: RememberedSandbox): SandboxSummary => ({
     token: null,
     role: entry.role,
     providedAddress: false,
-    localHostname: null,
+    localHostname: entry.localHostname ?? null,
     hosted: null,
 });
 
