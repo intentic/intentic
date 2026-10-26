@@ -6,9 +6,8 @@
             "add": "Ajouter un profil",
             "profileNote": "Les profils sont transmis à chaque sandbox liée et peuvent être attribués aux personnes et aux services.",
             "empty": "Aucun profil d’organisation.",
-            "id": "ID",
-            "label": "Libellé",
-            "brief": "Description courte",
+            "label": "Nom",
+            "unnamed": "Profil sans nom",
             "agents": "Mode des agents",
             "defaultRun": "Exécuter (par défaut)",
             "off": "Désactivé",
@@ -10435,16 +10434,16 @@
         "accessProfiles": {
             "title": "Profils",
             "add": "Nouveau profil",
-            "id": "ID",
             "label": "Nom",
-            "brief": "Objectif",
+            "namePlaceholder": "p. ex. Stagiaires",
+            "nameTaken": "Un profil nommé {name} existe déjà.",
             "noHolders": "Personne ne détient ce profil",
             "readOnly": "Lecture seule. L’organisation gère ses profils ; le propriétaire, ceux du sandbox.",
             "org": "Géré par l’organisation",
             "saveFailed": "Impossible d’enregistrer le profil ou de synchroniser les rôles. Réenregistrez pour réessayer.",
             "removeFailed": "Impossible de supprimer le profil",
             "empty": "Nommez un accès réutilisable pour les personnes et le travail autonome.",
-            "incomplete": "Choisissez un ID valide et au moins une zone, un assistant et un compte IA si nécessaire.",
+            "incomplete": "Choisissez au moins une zone, un assistant et un compte IA si nécessaire.",
             "ownAnswers": "Réponses propres",
             "noLimit": "Sans limite",
             "unavailable": "Indisponible",
@@ -10479,7 +10478,9 @@
             "runsAsValue": "Agit en tant que {name}",
             "saveFailed": "Impossible d’enregistrer le service",
             "removeFailed": "Impossible de supprimer le service",
-            "empty": "Aucun service pour le moment"
+            "empty": "Aucun service pour le moment",
+            "namePlaceholder": "p. ex. Bot marketing",
+            "nameTaken": "Un service nommé {name} existe déjà."
         }
     },
     "settings": {

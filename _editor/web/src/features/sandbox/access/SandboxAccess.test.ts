@@ -965,6 +965,70 @@ it(`hides profiles and services on older daemons`, async () => {
     expect(shown()).not.toContain(`Runs as`);
 });
 
+// A profile and a service are named, never given an id or a purpose: a new one's id is folded from its name, a name
+// already in the list is held back with the reason, and renaming one keeps the id every holder points at.
+const fill = async (field: HTMLInputElement, value: string): Promise<void> => {
+    field.value = value;
+    field.dispatchEvent(new Event(`input`));
+    await settle();
+};
+const formFields = (): HTMLInputElement[] => [...document.body.querySelectorAll<HTMLInputElement>(`form input:not([type=checkbox]):not([role=switch])`)];
+
+it(`names a new profile, and derives its id from that name`, async () => {
+    saveProfile.mockClear();
+    mount();
+    await openPart(`Profiles`);
+    await waitFor(() => expect(shown()).toContain(`Engineering`));
+    buttonLabelled(`New profile`)?.click();
+    await settle();
+    expect(shown()).not.toContain(`Purpose`);
+    const [name] = formFields();
+    expect(name?.placeholder).toBe(`e.g. Interns`);
+
+    await fill(name!, `engineering`);
+    expect(shown()).toContain(`A profile named engineering already exists.`);
+    expect(buttonLabelled(`Save`)?.disabled).toBe(true);
+
+    await fill(name!, `Księgowość`);
+    buttonLabelled(`Save`)?.click();
+    await waitFor(() => expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ id: `ksiegowosc`, label: `Księgowość` })));
+});
+
+it(`keeps a profile's id when it is renamed, and drops the purpose it carried`, async () => {
+    saveProfile.mockClear();
+    mount();
+    await openPart(`Profiles`);
+    await waitFor(() => expect(shown()).toContain(`Engineering`));
+    expect(shown()).not.toContain(`Build with the team`);
+    buttonLabelled(`Edit`)?.click();
+    await settle();
+    await fill(formFields()[0]!, `Platform team`);
+    buttonLabelled(`Save`)?.click();
+    await waitFor(() => expect(saveProfile).toHaveBeenCalledTimes(1));
+    expect(saveProfile.mock.calls[0]?.[0]).toMatchObject({ id: `engineering`, label: `Platform team` });
+    expect(saveProfile.mock.calls[0]?.[0]).not.toHaveProperty(`brief`);
+});
+
+it(`names a new service, and derives the id automations run as from that name`, async () => {
+    saveService.mockClear();
+    // A service acts for a steward, the owner unless one is picked, so the roster names one.
+    sandboxJson.mockImplementation(async (path: unknown) => {
+        const answer = quiet(path);
+        return `members` in answer ? { ...answer, owner: `owner@example.com` } : answer;
+    });
+    mount();
+    await openPart(`Programs`);
+    await waitFor(() => expect(shown()).toContain(`Nightly review`));
+    buttonLabelled(`New service`)?.click();
+    await settle();
+    const [name] = formFields();
+    await fill(name!, `Nightly review`);
+    expect(shown()).toContain(`A service named Nightly review already exists.`);
+    await fill(name!, `Marketing bot`);
+    buttonLabelled(`Save`)?.click();
+    await waitFor(() => expect(saveService).toHaveBeenCalledWith(expect.objectContaining({ id: `marketing-bot`, label: `Marketing bot` })));
+});
+
 it(`shows profiles, their tier and service holders, then synchronizes changed holder tiers`, async () => {
     list.mockResolvedValue({ members: [{ email: `guest@example.com`, role: `viewer` }] });
     setRole.mockResolvedValue({ members: [] });

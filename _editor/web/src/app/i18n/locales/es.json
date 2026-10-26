@@ -6,9 +6,8 @@
             "add": "Añadir perfil",
             "profileNote": "Los perfiles se entregan a cada sandbox vinculada y pueden asignarse a personas y servicios.",
             "empty": "No hay perfiles de la organización.",
-            "id": "ID",
-            "label": "Etiqueta",
-            "brief": "Descripción breve",
+            "label": "Nombre",
+            "unnamed": "Perfil sin nombre",
             "agents": "Modo de agentes",
             "defaultRun": "Ejecutar (predeterminado)",
             "off": "Desactivado",
@@ -10435,16 +10434,16 @@
         "accessProfiles": {
             "title": "Perfiles",
             "add": "Nuevo perfil",
-            "id": "ID",
             "label": "Nombre",
-            "brief": "Propósito",
+            "namePlaceholder": "p. ej. Becarios",
+            "nameTaken": "Ya existe un perfil llamado {name}.",
             "noHolders": "Nadie tiene este perfil",
             "readOnly": "Solo lectura. La organización gestiona sus perfiles; el propietario, los de la sandbox.",
             "org": "Gestionado por la organización",
             "saveFailed": "No se pudo guardar el perfil o sincronizar los roles. Guarda de nuevo para reintentar.",
             "removeFailed": "No se pudo eliminar el perfil",
             "empty": "Define acceso reutilizable para personas y trabajo desatendido.",
-            "incomplete": "Elige un ID válido y al menos un área, asistente y cuenta de IA cuando sea necesario.",
+            "incomplete": "Elige al menos un área, asistente y cuenta de IA cuando sea necesario.",
             "ownAnswers": "Respuestas propias",
             "noLimit": "Sin límite",
             "unavailable": "No disponible",
@@ -10479,7 +10478,9 @@
             "runsAsValue": "Se ejecuta como {name}",
             "saveFailed": "No se pudo guardar el servicio",
             "removeFailed": "No se pudo eliminar el servicio",
-            "empty": "Aún no hay servicios"
+            "empty": "Aún no hay servicios",
+            "namePlaceholder": "p. ej. Bot de marketing",
+            "nameTaken": "Ya existe un servicio llamado {name}."
         }
     },
     "settings": {

@@ -6,9 +6,8 @@
             "add": "Dodaj profil",
             "profileNote": "Profile trafiają do każdej powiązanej piaskownicy i można je przypisać osobom oraz usługom.",
             "empty": "Brak profili organizacji.",
-            "id": "ID",
             "label": "Nazwa",
-            "brief": "Krótki opis",
+            "unnamed": "Profil bez nazwy",
             "agents": "Tryb agentów",
             "defaultRun": "Wykonywanie (domyślnie)",
             "off": "Wyłączone",
@@ -9842,16 +9841,16 @@
         "accessProfiles": {
             "title": "Profile",
             "add": "Nowy profil",
-            "id": "Identyfikator",
             "label": "Nazwa",
-            "brief": "Przeznaczenie",
+            "namePlaceholder": "np. Stażyści",
+            "nameTaken": "Profil o nazwie {name} już istnieje.",
             "noHolders": "Nikt nie ma tego profilu",
             "readOnly": "Tylko do odczytu. Profilami organizacji zarządza organizacja, a profilami piaskownicy jej właściciel.",
             "org": "Zarządzany przez organizację",
             "saveFailed": "Nie udało się zapisać profilu lub zsynchronizować ról. Zapisz ponownie, aby spróbować jeszcze raz.",
             "removeFailed": "Nie udało się usunąć profilu",
             "empty": "Nazwij dostęp wielokrotnego użytku dla osób i pracy bez nadzoru.",
-            "incomplete": "Wybierz poprawny identyfikator oraz co najmniej jeden obszar, asystenta i konto AI, gdy są wymagane.",
+            "incomplete": "Wybierz co najmniej jeden obszar, asystenta i konto AI, gdy są wymagane.",
             "ownAnswers": "Własne ustawienia",
             "noLimit": "Bez ograniczeń",
             "unavailable": "Niedostępne",
@@ -9886,7 +9885,9 @@
             "runsAsValue": "Działa jako {name}",
             "saveFailed": "Nie udało się zapisać usługi",
             "removeFailed": "Nie udało się usunąć usługi",
-            "empty": "Brak usług"
+            "empty": "Brak usług",
+            "namePlaceholder": "np. Bot marketingowy",
+            "nameTaken": "Usługa o nazwie {name} już istnieje."
         }
     },
     "settings": {

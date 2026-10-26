@@ -6,9 +6,8 @@
             "add": "Add profile",
             "profileNote": "Profiles are delivered to every bound sandbox, where people and services can hold them.",
             "empty": "No organisation profiles.",
-            "id": "ID",
-            "label": "Label",
-            "brief": "Brief",
+            "label": "Name",
+            "unnamed": "Unnamed profile",
             "agents": "Agents mode",
             "defaultRun": "Run (default)",
             "off": "Off",
@@ -10435,16 +10434,16 @@
         "accessProfiles": {
             "title": "Profiles",
             "add": "New profile",
-            "id": "ID",
             "label": "Name",
-            "brief": "Purpose",
+            "namePlaceholder": "e.g. Interns",
+            "nameTaken": "A profile named {name} already exists.",
             "noHolders": "Nobody holds this profile",
             "readOnly": "Read-only. Organisation profiles are managed by the organisation; sandbox profiles by the owner.",
             "org": "Managed by the organisation",
             "saveFailed": "Could not save the profile or sync its holders’ tiers. Save again to retry.",
             "removeFailed": "Could not delete the profile",
             "empty": "Name reusable access for people and unattended work.",
-            "incomplete": "Choose a valid ID and access that reaches at least one area, assistant and AI account when required.",
+            "incomplete": "Give it access that reaches at least one area, assistant and AI account when required.",
             "ownAnswers": "Answers of their own",
             "noLimit": "No limit",
             "unavailable": "Unavailable",
@@ -10479,7 +10478,9 @@
             "runsAsValue": "Runs as {name}",
             "saveFailed": "Could not save the service",
             "removeFailed": "Could not delete the service",
-            "empty": "No services yet"
+            "empty": "No services yet",
+            "namePlaceholder": "e.g. Marketing bot",
+            "nameTaken": "A service named {name} already exists."
         }
     },
     "settings": {

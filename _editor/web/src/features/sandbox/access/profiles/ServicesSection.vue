@@ -6,6 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useMembers } from "../../../../client/sandbox/useMembers";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
+import { idFromName } from "../../../../lib/idFromName";
 import { useServices } from "./useServices";
 import { useAccessProfiles } from "./useAccessProfiles";
 const t = useT();
@@ -24,12 +25,23 @@ const profileOptions = computed(() => [
 const draft = ref<Service>();
 const existing = ref(false);
 const notice = ref<ReturnType<typeof noticeFrom>>();
-const valid = computed(
+// Named, never given an id, as a profile is: a new service's id (what `runAs` names) is folded from its name when it is
+// saved and fixed from then on, so a rename never unhooks the automations that run as it.
+const name = computed(() => draft.value?.label?.trim() ?? ``);
+const candidate = computed<Service | undefined>(() => {
+    if (draft.value === undefined) {
+        return undefined;
+    }
+    const { brief: _brief, ...service } = draft.value;
+    const id = existing.value ? service.id : idFromName(name.value, services.value.map((entry) => entry.id), `service`);
+    return { ...service, id, label: name.value === `` ? undefined : name.value };
+});
+const nameTaken = computed(
     () =>
-        draft.value !== undefined &&
-        ServiceSchema.safeParse(draft.value).success &&
-        (existing.value || !services.value.some((service) => service.id === draft.value?.id)),
+        name.value !== `` &&
+        services.value.some((entry) => entry.id !== candidate.value?.id && (entry.label ?? entry.id).toLowerCase() === name.value.toLowerCase()),
 );
+const valid = computed(() => candidate.value !== undefined && name.value !== `` && !nameTaken.value && ServiceSchema.safeParse(candidate.value).success);
 const busy = computed(() => save.isPending.value || remove.isPending.value);
 const start = (service?: Service): void => {
     existing.value = service !== undefined;
@@ -37,12 +49,12 @@ const start = (service?: Service): void => {
     notice.value = undefined;
 };
 const submit = async (): Promise<void> => {
-    if (busy.value || draft.value === undefined || !valid.value) {
+    if (busy.value || candidate.value === undefined || !valid.value) {
         return;
     }
     notice.value = undefined;
     try {
-        await save.mutateAsync(draft.value);
+        await save.mutateAsync(candidate.value);
         draft.value = undefined;
     } catch (error) {
         notice.value = noticeFrom(error, t(`sandbox.accessServices.saveFailed`));
@@ -79,7 +91,7 @@ const profileName = (id: string | undefined): string =>
             <RowNote v-if="draft" variant="block">
                 <form class="flex flex-col gap-3" @submit.prevent="submit">
                     <div class="flex flex-wrap items-center gap-2">
-                        <strong class="mr-auto text-sm">{{ draft.label || draft.id || t(`sandbox.accessServices.add`) }}</strong
+                        <strong class="mr-auto text-sm">{{ existing ? name || draft.id : t(`sandbox.accessServices.add`) }}</strong
                         ><Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="busy" @click="draft = undefined" /><Button
                             tier="accent"
                             type="submit"
@@ -90,14 +102,15 @@ const profileName = (id: string | undefined): string =>
                         />
                     </div>
                     <label class="flex flex-col gap-1 text-sm"
-                        >{{ t(`sandbox.accessProfiles.id`) }}<input v-model="draft.id" :disabled="existing" required :class="ui.input()"
+                        >{{ t(`sandbox.accessProfiles.label`)
+                        }}<input
+                            v-model="draft.label"
+                            required
+                            maxlength="60"
+                            :placeholder="t(`sandbox.accessServices.namePlaceholder`)"
+                            :class="ui.input()"
                     /></label>
-                    <label class="flex flex-col gap-1 text-sm"
-                        >{{ t(`sandbox.accessProfiles.label`) }}<input v-model="draft.label" maxlength="60" :class="ui.input()"
-                    /></label>
-                    <label class="flex flex-col gap-1 text-sm"
-                        >{{ t(`sandbox.accessProfiles.brief`) }}<input v-model="draft.brief" maxlength="200" :class="ui.input()"
-                    /></label>
+                    <p v-if="nameTaken" class="text-sm text-warning">{{ t(`sandbox.accessServices.nameTaken`, { name }) }}</p>
                     <Picker
                         v-model="draft.steward"
                         :options="stewards"
@@ -120,7 +133,7 @@ const profileName = (id: string | undefined): string =>
                 v-for="service in services"
                 :key="service.id"
                 :title="service.label ?? service.id"
-                :description="[service.brief, service.steward, profileName(service.profile)].filter(Boolean).join(` · `)"
+                :description="[service.steward, profileName(service.profile)].join(` · `)"
             >
                 <template #control
                     ><Button

@@ -6,9 +6,8 @@
             "add": "Profil hinzufügen",
             "profileNote": "Profile werden an jede gebundene Sandbox verteilt und können Personen und Diensten zugewiesen werden.",
             "empty": "Keine Organisationsprofile.",
-            "id": "ID",
-            "label": "Bezeichnung",
-            "brief": "Kurzbeschreibung",
+            "label": "Name",
+            "unnamed": "Profil ohne Namen",
             "agents": "Agentenmodus",
             "defaultRun": "Ausführen (Standard)",
             "off": "Aus",
@@ -10435,16 +10434,16 @@
         "accessProfiles": {
             "title": "Profile",
             "add": "Neues Profil",
-            "id": "ID",
             "label": "Name",
-            "brief": "Zweck",
+            "namePlaceholder": "z. B. Praktikanten",
+            "nameTaken": "Ein Profil namens {name} gibt es schon.",
             "noHolders": "Niemand hat dieses Profil",
             "readOnly": "Schreibgeschützt. Organisationsprofile verwaltet die Organisation, Sandbox-Profile der Eigentümer.",
             "org": "Von der Organisation verwaltet",
             "saveFailed": "Profil oder Rollenabgleich fehlgeschlagen. Zum Wiederholen erneut speichern.",
             "removeFailed": "Profil konnte nicht gelöscht werden",
             "empty": "Wiederverwendbaren Zugriff für Personen und unbeaufsichtigte Arbeit benennen.",
-            "incomplete": "Gültige ID und bei Bedarf mindestens einen Bereich, Assistenten und ein KI-Konto wählen.",
+            "incomplete": "Bei Bedarf mindestens einen Bereich, Assistenten und ein KI-Konto wählen.",
             "ownAnswers": "Eigene Antworten",
             "noLimit": "Unbegrenzt",
             "unavailable": "Nicht verfügbar",
@@ -10479,7 +10478,9 @@
             "runsAsValue": "Läuft als {name}",
             "saveFailed": "Dienst konnte nicht gespeichert werden",
             "removeFailed": "Dienst konnte nicht gelöscht werden",
-            "empty": "Noch keine Dienste"
+            "empty": "Noch keine Dienste",
+            "namePlaceholder": "z. B. Marketing-Bot",
+            "nameTaken": "Einen Dienst namens {name} gibt es schon."
         }
     },
     "settings": {

@@ -8,6 +8,7 @@ import { computed, ref } from "vue";
 import { useMembers } from "../../../../client/sandbox/useMembers";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
+import { idFromName } from "../../../../lib/idFromName";
 import { draftProblem } from "../accessGrant";
 import { usePersonaReach } from "../usePersonaReach";
 import { useAccessProfiles } from "../profiles/useAccessProfiles";
@@ -37,13 +38,27 @@ const start = (profile?: AccessProfileEntry): void => {
     draft.value =
         profile === undefined ? { id: ``, agents: `off`, credentials: { capabilities: [], secrets: [] } } : AccessProfileSchema.parse(profile);
 };
+// A profile is named, never given an id: a new one's id is folded from its name when it is saved and fixed from then on,
+// so renaming it moves what everyone reads and never what a person or a service points at. The one-line purpose it once
+// had is gone with the id field: the name and the access it grants say what it is.
+const name = computed(() => draft.value?.label?.trim() ?? ``);
+const candidate = computed<AccessProfile | undefined>(() => {
+    if (draft.value === undefined) {
+        return undefined;
+    }
+    const { brief: _brief, ...profile } = draft.value;
+    const id = existing.value ? profile.id : idFromName(name.value, profiles.value.map((entry) => entry.id), `profile`);
+    return { ...profile, id, ...(name.value === `` ? { label: undefined } : { label: name.value }) };
+});
+// Two profiles by one name would be one choice in every picker that offers them.
+const nameTaken = computed(
+    () =>
+        name.value !== `` &&
+        profiles.value.some((entry) => entry.id !== candidate.value?.id && (entry.label ?? entry.id).toLowerCase() === name.value.toLowerCase()),
+);
 const valid = computed(() => {
-    const profile = draft.value;
-    if (
-        profile === undefined ||
-        !AccessProfileSchema.safeParse(profile).success ||
-        (!existing.value && profiles.value.some((entry) => entry.id === profile.id))
-    ) {
+    const profile = candidate.value;
+    if (profile === undefined || name.value === `` || nameTaken.value || !AccessProfileSchema.safeParse(profile).success) {
         return false;
     }
     return (
@@ -55,12 +70,12 @@ const valid = computed(() => {
     );
 });
 const submit = async (): Promise<void> => {
-    if (busy.value || !valid.value || readonly.value || draft.value === undefined) {
+    if (busy.value || !valid.value || readonly.value || candidate.value === undefined) {
         return;
     }
     notice.value = undefined;
     try {
-        await save.mutateAsync(draft.value);
+        await save.mutateAsync(candidate.value);
         draft.value = undefined;
     } catch (error) {
         notice.value = noticeFrom(error, t(`sandbox.accessProfiles.saveFailed`));
@@ -94,7 +109,7 @@ const destroy = async (id: string): Promise<void> => {
             <RowNote v-if="draft" variant="block">
                 <form class="flex flex-col gap-4" @submit.prevent="submit">
                     <div class="flex flex-wrap items-center gap-2">
-                        <strong class="mr-auto text-sm">{{ draft.label || draft.id || t(`sandbox.accessProfiles.add`) }}</strong
+                        <strong class="mr-auto text-sm">{{ existing ? name || draft.id : t(`sandbox.accessProfiles.add`) }}</strong
                         ><Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="busy" @click="draft = undefined" /><Button
                             tier="accent"
                             v-if="!readonly"
@@ -107,16 +122,18 @@ const destroy = async (id: string): Promise<void> => {
                     </div>
                     <p v-if="readonly" class="text-sm text-muted">{{ t(`sandbox.accessProfiles.readOnly`) }}</p>
                     <label class="flex flex-col gap-1 text-sm"
-                        >{{ t(`sandbox.accessProfiles.id`) }}<input v-model="draft.id" :disabled="existing || readonly" required :class="ui.input()"
+                        >{{ t(`sandbox.accessProfiles.label`)
+                        }}<input
+                            v-model="draft.label"
+                            :disabled="readonly"
+                            required
+                            maxlength="60"
+                            :placeholder="t(`sandbox.accessProfiles.namePlaceholder`)"
+                            :class="ui.input()"
                     /></label>
-                    <label class="flex flex-col gap-1 text-sm"
-                        >{{ t(`sandbox.accessProfiles.label`) }}<input v-model="draft.label" :disabled="readonly" maxlength="60" :class="ui.input()"
-                    /></label>
-                    <label class="flex flex-col gap-1 text-sm"
-                        >{{ t(`sandbox.accessProfiles.brief`) }}<input v-model="draft.brief" :disabled="readonly" maxlength="200" :class="ui.input()"
-                    /></label>
+                    <p v-if="nameTaken" class="text-sm text-warning">{{ t(`sandbox.accessProfiles.nameTaken`, { name }) }}</p>
                     <ProfileAnswers :profile="draft" :disabled="readonly || busy" @change="draft = $event" />
-                    <p v-if="!valid && !readonly" class="text-sm text-warning">{{ t(`sandbox.accessProfiles.incomplete`) }}</p>
+                    <p v-if="!valid && !readonly && !nameTaken && name !== ``" class="text-sm text-warning">{{ t(`sandbox.accessProfiles.incomplete`) }}</p>
                 </form>
             </RowNote>
             <Row
@@ -125,7 +142,6 @@ const destroy = async (id: string): Promise<void> => {
                 :title="profile.label ?? profile.id"
                 :description="
                     [
-                        profile.brief,
                         t(`sandbox.sandboxAccess.${tierOf(profileAccess(profile))}`),
                         holders(profile.id),
                         profile.origin === `org` ? t(`sandbox.accessProfiles.org`) : undefined,
