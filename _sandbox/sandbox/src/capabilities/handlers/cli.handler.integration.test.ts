@@ -449,6 +449,37 @@ test("git setup (gitlab): host + https user derive from the instance url", async
     expect(readFileSync(join(home, ".git-credentials"), "utf8")).toContain("https://oauth2:gl-tok@gitlab.example.com");
 });
 
+// A self-hosted gitlab on plain http (http://192.168.0.168) got an https:// credential line: git's store matches on the
+// scheme, so every pull and push from the owner's terminal asked for a username (2026-10-26).
+test("git setup (gitlab over http): the credential line and ssh rewrite keep the instance's http scheme", async () => {
+    const home = gitHome();
+    writeFileSync(join(home, ".git-credentials"), "https://oauth2:stale@192.168.0.168\n");
+    const deps: GitAccessDeps = {
+        uploadKey: async () => {
+            throw new Error("GitLab SSH key upload failed (403): Forbidden");
+        },
+        deleteKey: async () => {},
+        keyAuthenticates: async () => false,
+    };
+    const host = gitHostOf({ provider: "gitlab", token: "gl-tok", url: "http://192.168.0.168", git: "on" });
+
+    await setupGitAccess(host, directExec, keyStore(), deps);
+
+    expect(readFileSync(join(home, ".git-credentials"), "utf8")).toBe("http://oauth2:gl-tok@192.168.0.168\n");
+    const { stdout } = await exec("git", ["config", "--global", "--get-all", "url.http://192.168.0.168/.insteadOf"]);
+    expect(stdout.trim().split("\n")).toEqual(["git@192.168.0.168:", "ssh://git@192.168.0.168/"]);
+    expect(await httpsRewrite("192.168.0.168")).toEqual([]);
+    // What git itself answers for an http remote on that host: the token, no prompt.
+    const filled = execFileSync("git", ["credential", "fill"], {
+        input: "protocol=http\nhost=192.168.0.168\npath=group/repo.git\n\n",
+        encoding: "utf8",
+        env: { ...process.env, HOME: home, GIT_TERMINAL_PROMPT: "0" },
+    });
+    expect(filled).toContain("username=oauth2");
+    expect(filled).toContain("password=gl-tok");
+    expect(await gitAccessWired(host, keyStore())).toBe(true);
+});
+
 // An agent's own `git commit` failed "Author identity unknown" and it then committed under a made-up name: a sandbox
 // with no identity takes the connected account's, and one the owner set is never written over.
 test("git setup gives a sandbox with no git identity the account's own, and keeps one the owner set", async () => {

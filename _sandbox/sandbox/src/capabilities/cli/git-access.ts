@@ -25,6 +25,9 @@ export interface GitHost {
     readonly provider: "github" | "gitlab";
     // ssh + https host and the ssh-config alias (github.com or gitlab.example.com).
     readonly host: string;
+    // Scheme git speaks to the host over: https, or http for a self-hosted gitlab served plain. git's credential store
+    // matches on it, so a line written for https never answers an http remote (it prompts for a username instead).
+    readonly scheme: "https" | "http";
     // REST base for the key up/download (https://api.github.com or https://gitlab.example.com/api/v4).
     readonly apiBase: string;
     readonly token: string;
@@ -37,10 +40,12 @@ export const gitHostOf = (config: CliConfig): GitHost => {
     // Fields are validated present at add-time (the connector's field spec), so read positionally.
     const token = config["token"] ?? "";
     if (config.provider === "github") {
-        return { provider: "github", host: "github.com", apiBase: "https://api.github.com", token, httpsUser: "x-access-token" };
+        return { provider: "github", host: "github.com", scheme: "https", apiBase: "https://api.github.com", token, httpsUser: "x-access-token" };
     }
     const url = config["url"] ?? "";
-    return { provider: "gitlab", host: new URL(url).host, apiBase: `${url.replace(/\/+$/, "")}/api/v4`, token, httpsUser: "oauth2" };
+    const parsed = new URL(url);
+    const scheme = parsed.protocol === "http:" ? "http" : "https";
+    return { provider: "gitlab", host: parsed.host, scheme, apiBase: `${url.replace(/\/+$/, "")}/api/v4`, token, httpsUser: "oauth2" };
 };
 
 // Account calls are the only un-testable seam (network plus a live token), so they're injectable; keygen and git-config
@@ -102,7 +107,7 @@ const credentialsFile = (): TextFile => textFile(credentialsPath(), 0o600);
 // write, never a visible command. What the store held before is kept to tell a rotated token from the same one again.
 const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal, log: GitAccessLog = quiet): Promise<void> => {
     await exec("git", ["config", "--global", "credential.helper", "store"]);
-    const line = `https://${host.httpsUser}:${encodeURIComponent(host.token)}@${host.host}`;
+    const line = `${host.scheme}://${host.httpsUser}:${encodeURIComponent(host.token)}@${host.host}`;
     let current = "";
     await credentialsFile().update((held) => {
         current = held;
@@ -121,7 +126,7 @@ const ensureHttpsCredential = async (host: GitHost, exec: ExecInTerminal, log: G
 // The token an existing line for this host carries, to tell a rotated token from the same one written again.
 const storedToken = (credentials: string, host: GitHost): string | undefined => {
     const entry = credentials.split("\n").find((candidate) => candidate.endsWith(`@${host.host}`));
-    const secret = entry === undefined ? undefined : /^https:\/\/[^:]*:(.*)@[^@]*$/u.exec(entry)?.[1];
+    const secret = entry === undefined ? undefined : /^https?:\/\/[^:]*:(.*)@[^@]*$/u.exec(entry)?.[1];
     if (secret === undefined) {
         return undefined;
     }
@@ -355,7 +360,7 @@ export const ensureGitIdentity = async (host: GitHost, exec: ExecInTerminal, dep
 
 // https base every ssh-form remote for this host rewrites onto, keyed so github.com and a self-hosted gitlab don't
 // collide; trailing slash makes both remote forms land on the same URL.
-const rewriteKey = (host: GitHost): string => `url.https://${host.host}/.insteadOf`;
+const rewriteKey = (host: GitHost): string => `url.${host.scheme}://${host.host}/.insteadOf`;
 
 // Asks git itself rather than reading ~/.gitconfig, since the value can arrive through an include; an absent key exits
 // 1, so "no rewrite" is a rejection, not empty output.
@@ -372,7 +377,7 @@ const enableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal, log: GitA
     await exec("git", ["config", "--global", "--replace-all", rewriteKey(host), `git@${host.host}:`]);
     await exec("git", ["config", "--global", "--add", rewriteKey(host), `ssh://git@${host.host}/`]);
     if (!already) {
-        log({ host: host.host, from: [`git@${host.host}:`, `ssh://git@${host.host}/`], to: `https://${host.host}/` }, `git access: ${host.host} ssh-form remotes now routed over https`);
+        log({ host: host.host, from: [`git@${host.host}:`, `ssh://git@${host.host}/`], to: `${host.scheme}://${host.host}/` }, `git access: ${host.host} ssh-form remotes now routed over https`);
     }
 };
 
@@ -383,7 +388,7 @@ const disableHttpsRewrite = async (host: GitHost, exec: ExecInTerminal, log: Git
         return;
     }
     await exec("git", ["config", "--global", "--unset-all", rewriteKey(host)]);
-    log({ host: host.host, from: `https://${host.host}/`, to: `git@${host.host}:` }, `git access: ${host.host} https routing of ssh-form remotes dropped, native ssh in use`);
+    log({ host: host.host, from: `${host.scheme}://${host.host}/`, to: `git@${host.host}:` }, `git access: ${host.host} https routing of ssh-form remotes dropped, native ssh in use`);
 };
 
 // Returns undefined when native ssh is wired, or a warning when the key can't be registered and remotes route over
