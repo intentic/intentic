@@ -276,7 +276,7 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
     expect(append).toContain("EnterPlanMode");
     expect(append).toContain("TaskCreate");
     expect(append).toContain("`refs/`");
-    // Names the exact directory the redirect hook enforces, so a mismatch is a fact the agent is told, not a convention
+    // Names the exact directory the browser router enforces, so a mismatch is a fact the agent is told, not a convention
     // it might miss.
     expect(append).toContain("/work/.intentic/records/artifacts/browser");
     expect(append.endsWith("extra")).toBe(true);

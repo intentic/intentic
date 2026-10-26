@@ -30,7 +30,6 @@ import { PANE_DOOR_PATH } from "../../../workload/domain/agent-domain-view.js";
 import { namespaceTargetOf, nsenterArgv } from "../../../workload/namespace-entry.js";
 import { sandboxEnv } from "../../../conversations/worktrees/turn-sandbox.js";
 import { worktreeRedirectHooks } from "../../../conversations/worktrees/worktree-redirect.js";
-import { browserArtifactHooks } from "../../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../../browser/sessions/browser-session-hooks.js";
 import { depsNoticeHooks } from "../../tools/notices/agent-deps.js";
 import { searchNoticeHooks } from "../../verification/agent-search.js";
@@ -542,8 +541,6 @@ const baseOptions = (
                 request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
                     ? worktreeRedirectHooks(request.spec.isolation.plan)
                     : {},
-                // Rewrites a model-named screenshot path into the tool-owned output directory before the tool sees it.
-                request.tools.browserOutputDir !== undefined ? browserArtifactHooks(request.tools.browserOutputDir) : {},
                 // One-time advisory about rg vs grep and an empty result; never rewrites, since the two regex dialects
                 // disagree.
                 searchNoticeHooks(request.tools.iqAvailable === true),

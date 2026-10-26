@@ -1,5 +1,6 @@
 import { BATCHING_GUIDANCE, CONTEXT_REUSE_GUIDANCE } from "@intentic/agent-context/guidance";
-import { HISTORY_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { statePath } from "../../state-paths.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
@@ -73,6 +74,18 @@ export const SEARCH_GUIDANCE: Record<SearchTool, string> = {
 };
 
 const LANDING = "The owner lands uncommitted work; commit only when asked.";
+
+// What a turn may leave in a repository. Claude Code's own preset says it ("NEVER proactively create documentation
+// files"), so it was never said here, and every other loop went without it: in the three weeks to 2026-10-26, 11 of 112
+// landed Codex conversations added reports nobody asked for (a sandbox-performance report in docs/ beside a 2,097-line
+// .json, dependency audits, onboarding evidence with screenshots) against 6 of 650 Claude ones, several of those asked
+// for. Said for every runtime, since the rule is this product's: a worktree's delta is what lands in the owner's tree.
+const DELIVERABLES =
+    "Only what the task asks for goes into a repository: everything left in your worktree lands in the owner's tree. A " +
+    "report, audit, analysis, plan or review is your reply, not a file, so create no new docs, notes, findings or result " +
+    "files (`.md`, `.json`, `.html`) unless the user asked for one; updating documentation your change makes wrong is part " +
+    "of the change. Screenshots, logs, probe scripts and other evidence you make while working go in `/tmp`, or in " +
+    `\`${statePath(WORKSPACE_ROOT, ".intentic/records/artifacts/")}/\` when the user should be able to open them, never in a repository.`;
 
 // Where the image bakes the product's own guide (Dockerfile: seed-skills → /root/.claude/skills). Named by its file for
 // every runtime: the Claude Code loop loads it as the `intentic` skill, and every other loop reads the same file.
@@ -212,6 +225,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "project content and none of this applies.",
     },
     { id: "landing", text: LANDING },
+    { id: "deliverables", text: DELIVERABLES },
     {
         id: "search",
         // Measured on the ledger: an iq call led straight to the file the turn opened next about 60% of the time, an rg

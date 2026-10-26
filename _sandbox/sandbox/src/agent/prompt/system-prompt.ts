@@ -157,7 +157,7 @@ export interface SdkSystemPromptInput {
     readonly append: string | undefined;
     // Nobody is watching: drop the interactive guidance, which describes widgets such a turn cannot use.
     readonly unattended: boolean;
-    // Enforced screenshot path (browser-artifacts.ts redirects there), stated as fact, not convention.
+    // Enforced screenshot path (the browser router places every written file there), stated as fact, not convention.
     readonly browserOutputDir: string | undefined;
     // Whether an account stands behind the routed browser, so the browser sentence can name it. The `mcp__browser__`
     // schemas are deferred now, so this sentence is what tells a turn they exist.

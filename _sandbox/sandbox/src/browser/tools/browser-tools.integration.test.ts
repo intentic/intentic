@@ -8,6 +8,7 @@ import { createTurnMounts, type TurnLease } from "../../agent/tools/turn-mounts.
 import type { BrowserRouterFactory, RouterManifest } from "./browser-router.js";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, WEBMCP_LAUNCH_ARG, writeBrowserConfig } from "./browser-tools.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
+import { browserOutputDir } from "../cast/browser-artifacts.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessions/session-store.js";
 
@@ -177,6 +178,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
         `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/stealth.js`,
         DISPLAY,
         "/tmp/cfg.json",
+        browserOutputDir(WORKSPACE_ROOT),
     ) as {
         type: string;
         command: string;
@@ -196,13 +198,15 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     // Headed, not the fingerprinted headless shell, rendering to the display this browser was given.
     expect(spec.args).not.toContain("--headless");
     expect(spec.env["DISPLAY"]).toBe(":99");
+    // Its auto-named files go where the credential-free browser's do, never `.playwright-mcp/` in the main tree.
+    expect(spec.args.slice(spec.args.indexOf("--output-dir"), spec.args.indexOf("--output-dir") + 2)).toEqual(["--output-dir", browserOutputDir(WORKSPACE_ROOT)]);
 });
 
 // Bounds a single tool call: browser_evaluate awaits an in-page promise that Playwright never times out on its own.
 // Per-server, not MCP_TOOL_TIMEOUT, since the same process also serves tools that wait on a person.
 test("every browser server bounds a single tool call", () => {
     const specs = [
-        browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", DISPLAY, "/tmp/cfg.json"),
+        browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", DISPLAY, "/tmp/cfg.json", "/out"),
         isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", DISPLAY, "/tmp/cfg.json"),
     ] as { timeout?: number }[];
     for (const spec of specs) {

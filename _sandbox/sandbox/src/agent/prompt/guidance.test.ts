@@ -65,6 +65,8 @@ test("the block carries the rules nothing else in the prompt carries", () => {
     expect(text).toContain("EnterPlanMode");
     expect(text).toContain("TaskCreate");
     expect(text).toContain("commit only when asked");
+    // Claude Code's preset says it; every other loop is told only here (guidance.ts DELIVERABLES).
+    expect(text).toContain("A report, audit, analysis, plan or review is your reply, not a file");
     expect(text).toContain("{{secret:name}}");
     // Asking for what the sandbox lacks, on a card, instead of handing the owner setup steps.
     expect(text).toContain("`capabilities request <entry>");

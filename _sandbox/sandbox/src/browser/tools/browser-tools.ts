@@ -165,6 +165,8 @@ export const writeBrowserConfig = async (
 
 // Points @playwright/mcp at our own installed Chromium via --executable-path, not a pinned dependency version.
 // Headed on Xvfb so it isn't fingerprinted as headless; --no-sandbox since the container is the isolation boundary.
+// --output-dir as the credential-free browser has it: without one, every auto-named screenshot, snapshot and console log
+// went to `.playwright-mcp/` under the daemon's cwd, the owner's main tree (1,870 files there by 2026-10-26).
 export const browserServerSpec = (
     cli: string,
     executablePath: string,
@@ -172,6 +174,7 @@ export const browserServerSpec = (
     stealthPath: string,
     display: Display,
     configPath: string,
+    outputDir: string,
 ): McpServerConfig => ({
     type: "stdio",
     command: process.execPath,
@@ -188,6 +191,8 @@ export const browserServerSpec = (
         userDataDir,
         "--init-script",
         stealthPath,
+        "--output-dir",
+        outputDir,
     ],
     env: { ...process.env, DISPLAY: display.name },
     timeout: BROWSER_CALL_TIMEOUT_MS,
@@ -351,6 +356,7 @@ export const prepareBrowserOwner = async (
             await ensureStealthScript(root, owner, fingerprint),
             display,
             await writeBrowserConfig(owner, port, fingerprint, display, exit),
+            browserOutputDir(root),
         ),
     );
 };

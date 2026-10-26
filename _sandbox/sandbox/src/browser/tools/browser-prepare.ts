@@ -46,5 +46,7 @@ export const createBrowserRouters = (services: () => Pick<Services, "capabilitie
             );
         },
     };
-    return (manifest) => createBrowserRouter(manifest, deps);
+    // The output dir read per router, not once here: the workspace is one of the services still being composed when this
+    // factory is made.
+    return (manifest) => createBrowserRouter(manifest, { ...deps, outputDir: browserOutputDir(services().workspace.root) });
 };

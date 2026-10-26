@@ -190,7 +190,8 @@ export interface TurnTools {
     readonly ownBrowsers?: OwnBrowserReach | undefined;
     // The owner's own phones this turn carries servers for, so the prompt can say one is in their pocket.
     readonly ownPhones?: OwnPhoneReach | undefined;
-    // Directory for browser tool artifacts (the `--output-dir` value); drives the redirect hook and read-back path.
+    // Directory for browser tool artifacts (the `--output-dir` value); the router places every file a browser tool
+    // writes there (browser-router.ts), and the chat reads screenshots back from it.
     readonly browserOutputDir?: string;
     // Each browser profile owner's CDP debugging port, so the first browser call can register a watchable session.
     readonly browserPorts?: Record<string, number>;

@@ -144,6 +144,7 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
                     : { refusal };
             },
             screenshotTaken: (shot) => screenshots.push(shot),
+            outputDir: join(dir, "artifacts"),
         },
     );
     cleanups.push(async () => {
@@ -236,6 +237,37 @@ test("a screenshot is reported with its owner, conversation and request; any oth
     expect(harness.screenshots).toHaveLength(1);
     expect(harness.screenshots[0]).toMatchObject({ owner: "identity-1", conversationId: "conversation-1", params: { _meta: meta } });
     expect(JSON.stringify(harness.screenshots[0]?.answer.result)).toContain("echo:");
+});
+
+// A backend resolves a model's `filename` against its own cwd, the daemon's main tree: a Codex turn's named screenshot
+// landed there instead of anywhere its worktree could see (brisk-arrow-qufn, 2026-10-26).
+test("a file a tool writes is placed in the output dir for every runtime, and the agent is told where", async () => {
+    const harness = await startRouter();
+    await handshake(harness);
+    const answer = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 32,
+        method: "tools/call",
+        params: { name: "browser_take_screenshot", arguments: { account: "standalone", filename: "after.png", type: "png" } },
+    });
+    const placed = join(harness.dir, "artifacts", "after.png");
+    const content = (answer["result"] as ToolResult).content;
+    expect(content[0]?.text).toBe(`echo:${harness.markers["standalone"]}:${JSON.stringify({ filename: placed, type: "png" })}`);
+    expect(content.at(-1)?.text).toContain(`Saved to ${placed}`);
+});
+
+test("a call naming no file it writes reaches the backend as asked", async () => {
+    const harness = await startRouter();
+    await handshake(harness);
+    const answer = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 33,
+        method: "tools/call",
+        params: { name: "browser_run_code_unsafe", arguments: { account: "standalone", filename: "probe.js" } },
+    });
+    const content = (answer["result"] as ToolResult).content;
+    expect(content).toHaveLength(1);
+    expect(content[0]?.text).toBe(`echo:${harness.markers["standalone"]}:${JSON.stringify({ filename: "probe.js" })}`);
 });
 
 test("an account outside the manifest is refused with the granted set named, and no backend pays for it", async () => {

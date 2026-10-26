@@ -7,7 +7,7 @@ import { parsedJsonLines } from "@intentic/base/json-lines";
 import { cacheFile } from "../../store/open-document.js";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
-import { SCREENSHOT_VERB } from "../cast/browser-artifacts.js";
+import { placeArtifact, placedNote, SCREENSHOT_VERB, writesFilename } from "../cast/browser-artifacts.js";
 import { describeBoundedWait, sendBoundingWait } from "./bounded-wait.js";
 import { accountCovering, signedInDoor } from "./account-hosts.js";
 
@@ -68,6 +68,12 @@ export interface RouterDeps {
     readonly prepare: (owner: string, port: number) => Promise<Prepared>;
     // Told of each screenshot once its backend answered, never awaited: what writes the shot's provenance beside it.
     readonly screenshotTaken?: (shot: RoutedScreenshot) => void;
+    // Where a file a tool call names is written (browser-artifacts.ts placeArtifact): a backend resolves a model's
+    // `filename` against its own working directory, the daemon's, which is the owner's main tree. Absent leaves names as
+    // asked, for a router no workspace stands behind.
+    readonly outputDir?: string;
+    // Whether a path is already taken, so a reused name is numbered rather than overwriting; absent asks the disk.
+    readonly taken?: (path: string) => Promise<boolean>;
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -206,6 +212,44 @@ export const withSignedInDoor = (hosts: Readonly<Record<string, string>> | undef
     }
     const note = `WRONG BROWSER: this is the \`web\` browser. ${signedInDoor(covered.account, covered.host)}`;
     return { ...answer, result: { ...result.data, content: [{ type: "text", text: note }, ...result.data.content] } };
+};
+
+// A call naming a file its tool writes (browser-artifacts.ts writesFilename says which do).
+const WritingCallSchema = z.looseObject({ name: z.string().refine(writesFilename), arguments: z.looseObject({ filename: z.string().min(1) }) });
+
+// The call as it goes to the backend, and what the agent is told when its file was moved.
+interface Placement {
+    readonly params: NonNullable<RpcMessage["params"]>;
+    readonly note?: string;
+}
+
+// A written file's name moved into the output dir (placeArtifact); every other call, and every call of a router with no
+// output dir, as it came.
+const placeWrittenFile = async (
+    params: NonNullable<RpcMessage["params"]>,
+    outputDir: string | undefined,
+    taken?: (path: string) => Promise<boolean>,
+): Promise<Placement> => {
+    const writing = outputDir === undefined ? undefined : WritingCallSchema.safeParse(params);
+    if (outputDir === undefined || writing?.success !== true) {
+        return { params };
+    }
+    const asked = writing.data.arguments.filename;
+    const placed = await placeArtifact(outputDir, asked, taken);
+    if (placed === asked) {
+        return { params };
+    }
+    return { params: { ...params, arguments: { ...writing.data.arguments, filename: placed } }, note: placedNote(asked, placed, outputDir) };
+};
+
+// The tool's answer with one more text block saying where its file went; an answer carrying no content list (an error)
+// goes back as it came.
+const withPlacedNote = (answer: RpcMessage, note: string | undefined): RpcMessage => {
+    const result = ContentAnswerSchema.safeParse(answer.result);
+    if (note === undefined || !result.success) {
+        return answer;
+    }
+    return { ...answer, result: { ...result.data, content: [...result.data.content, { type: "text", text: note }] } };
 };
 
 const ACCOUNT_PROPERTY = {
@@ -458,7 +502,9 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         if (webmcp !== undefined && "refusal" in webmcp) {
             return toolRefusal(message.id, webmcp.refusal);
         }
-        const params = webmcp === undefined ? { ...message.params, arguments: rest } : { ...message.params, name: webmcp.backendName, arguments: webmcp.params };
+        const asked = webmcp === undefined ? { ...message.params, arguments: rest } : { ...message.params, name: webmcp.backendName, arguments: webmcp.params };
+        // A file the call writes goes where every runtime's files go, whatever name the model gave it.
+        const { params, note } = await placeWrittenFile(asked, deps.outputDir, deps.taken);
         // Screened here, for every owner, since this is the one place every browser's answer passes (network-redaction.ts
         // says what is cut and why `web` is not exempt). A refused call costs no bring-up.
         const network = networkCallOf(params);
@@ -485,7 +531,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         if (webmcp === undefined && message.params?.["name"] === SCREENSHOT_VERB && answer.error === undefined) {
             deps.screenshotTaken?.({ owner, conversationId: manifest.conversationId, params: message.params, answer });
         }
-        const steered = withSignedInDoor(manifest.coveredHosts, message.params, answer);
+        const steered = withSignedInDoor(manifest.coveredHosts, message.params, withPlacedNote(answer, note));
         return { ...(network === undefined ? steered : redactNetworkAnswer(network, steered)), id: message.id ?? null };
     };
 

@@ -1,112 +1,81 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { join } from "node:path";
-import { syncHookOutput } from "../../agent/run/harness/harness-hooks.testing.js";
-import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
+import { browserOutputDir, placeArtifact, placedNote, screenshotImage, writesFilename } from "./browser-artifacts.js";
 
 const OUTPUT = browserOutputDir(WORKSPACE_ROOT);
 
-// Where the hook places a name inside the output dir, built the way the hook builds it.
+// Where a name lands inside the output dir, built the way placement builds it.
 const inOutput = (name: string): string => join(OUTPUT, name);
 
-// The shots already on disk, as the hook's existence check sees them; empty unless a case says otherwise.
+// The files already on disk, as placement's existence check sees them; empty unless a case says otherwise.
 const onDisk = new Set<string>();
-
-const hooks = browserArtifactHooks(OUTPUT, async (path) => onDisk.has(path));
 
 afterEach(() => onDisk.clear());
 
-const fire = async (toolName: string, toolInput: Record<string, unknown>) => {
-    const [matcher] = hooks.PreToolUse!;
-    // Matcher is a regex the harness applies; the callback sees every call, so a direct test must honor the gate.
-    if (!new RegExp(matcher!.matcher!).test(toolName)) {
-        return {};
-    }
-    const input = { hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput, tool_use_id: "t1" } as unknown as HookInput;
-    return matcher!.hooks[0]!(input, "t1", { signal: new AbortController().signal });
-};
+const place = (filename: string): Promise<string> => placeArtifact(OUTPUT, filename, async (path) => onDisk.has(path));
 
-const rewritten = (result: Awaited<ReturnType<typeof fire>>): string | undefined =>
-    (syncHookOutput(result).hookSpecificOutput as { updatedInput?: { filename?: string } } | undefined)?.updatedInput?.filename;
-
-// The whole point: a bare name resolves against the agent's cwd inside @playwright/mcp, which is the repo.
-test("a model-named screenshot is redirected out of the agent's cwd", async () => {
-    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "tt-viewport.png", type: "png" }))).toBe(
-        "/work/.intentic/records/artifacts/browser/tt-viewport.png",
-    );
-});
-
-test("the rest of the tool input rides along untouched", async () => {
-    const result = await fire("mcp__web__browser_take_screenshot", { filename: "shot.png", type: "png", fullPage: true });
-    expect((syncHookOutput(result).hookSpecificOutput as { updatedInput?: Record<string, unknown> }).updatedInput).toEqual({
-        filename: "/work/.intentic/records/artifacts/browser/shot.png",
-        type: "png",
-        fullPage: true,
-    });
-});
-
-test("the agent is told the absolute path, since the tool answers with a relative one", async () => {
-    const result = await fire("mcp__web__browser_take_screenshot", { filename: "shot.png" });
-    expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toContain(
-        "/work/.intentic/records/artifacts/browser/shot.png",
-    );
-});
-
-test("a capability's own browser is redirected too", async () => {
-    expect(rewritten(await fire("mcp__reddit-main__browser_take_screenshot", { filename: "thread.png" }))).toBe(
-        "/work/.intentic/records/artifacts/browser/thread.png",
-    );
+// The whole point: a bare name resolves against the backend's cwd inside @playwright/mcp, which is the owner's main tree.
+test("a model-named file is placed in the output dir, out of every repository", async () => {
+    expect(await place("tt-viewport.png")).toBe("/work/.intentic/records/artifacts/browser/tt-viewport.png");
 });
 
 test.each([
     ["../../escape.png", `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/escape.png`],
     ["/etc/passwd.png", `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/passwd.png`],
+    // A worktree's absolute path in the agent's namespace is the main tree's in the backend's: it keeps its name only.
+    [`${WORKSPACE_ROOT}/intentic/docs/report.md`, `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/report.md`],
 ])("a name that would escape the output dir keeps only its basename: %s", async (filename, expected) => {
-    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename }))).toBe(expected);
+    expect(await place(filename)).toBe(expected);
 });
 
 test("a subdirectory the agent asked for is honoured inside the output dir", async () => {
-    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "before/nav.png" }))).toBe(
-        "/work/.intentic/records/artifacts/browser/before/nav.png",
-    );
+    expect(await place("before/nav.png")).toBe("/work/.intentic/records/artifacts/browser/before/nav.png");
 });
 
-test("a name already resolved into the output dir is left as it is", async () => {
-    expect(await fire("mcp__web__browser_take_screenshot", { filename: "/work/.intentic/records/artifacts/browser/shot.png" })).toEqual({});
+test("a free name already resolved into the output dir is left as it is", async () => {
+    expect(await place("/work/.intentic/records/artifacts/browser/shot.png")).toBe("/work/.intentic/records/artifacts/browser/shot.png");
 });
 
 // A reused name used to overwrite the earlier shot, so an older transcript showed a newer, unrelated picture.
-test("a name an earlier shot already holds takes the next free number, and the agent is told why", async () => {
+test("a name an earlier file already holds takes the next free number, and the note says why", async () => {
     onDisk.add(inOutput("after.png"));
-    const result = await fire("mcp__web__browser_take_screenshot", { filename: "after.png" });
-    expect(rewritten(result)).toBe(inOutput("after-2.png"));
-    expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toBe(
-        `Screenshot saved to ${inOutput("after-2.png")} (an earlier screenshot already has that name), Read it from that absolute path.`,
+    const placed = await place("after.png");
+    expect(placed).toBe(inOutput("after-2.png"));
+    expect(placedNote("after.png", placed, OUTPUT)).toBe(
+        `Saved to ${inOutput("after-2.png")} (an earlier file already has that name): files a browser tool writes always land in ` +
+            `${OUTPUT}, outside every repository. Read it from that absolute path.`,
     );
+});
+
+test("a note for a file that kept its name says only where it went", () => {
+    expect(placedNote("after.png", inOutput("after.png"), OUTPUT)).toContain(`Saved to ${inOutput("after.png")}: files a browser tool`);
 });
 
 test("numbering skips every name already taken", async () => {
     onDisk.add(inOutput("after.png"));
     onDisk.add(inOutput("after-2.png"));
-    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "after.png" }))).toBe(inOutput("after-3.png"));
+    expect(await place("after.png")).toBe(inOutput("after-3.png"));
 });
 
 test("a taken name already inside the output dir is numbered too, subdirectory kept", async () => {
     onDisk.add(inOutput("before/nav.png"));
-    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: inOutput("before/nav.png") }))).toBe(inOutput("before/nav-2.png"));
+    expect(await place(inOutput("before/nav.png"))).toBe(inOutput("before/nav-2.png"));
 });
 
 test("a name with no extension is numbered at its end", async () => {
     onDisk.add(inOutput("shot"));
-    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "shot" }))).toBe(inOutput("shot-2"));
+    expect(await place("shot")).toBe(inOutput("shot-2"));
 });
 
-test("an unnamed screenshot is not touched", async () => {
-    expect(await fire("mcp__web__browser_take_screenshot", { type: "png" })).toEqual({});
-});
+test.each(["browser_take_screenshot", "browser_snapshot", "browser_console_messages", "browser_network_requests", "browser_pdf_save", "browser_storage_state"])(
+    "%s writes the file it names",
+    (tool) => {
+        expect(writesFilename(tool)).toBe(true);
+    },
+);
 
-test.each(["mcp__web__browser_navigate", "Write", "mcp__web__browser_snapshot"])("%s is not a screenshot tool", async (toolName) => {
-    expect(await fire(toolName, { filename: "shot.png" })).toEqual({});
+test.each(["browser_run_code_unsafe", "browser_set_storage_state", "webmcp_export"])("%s does not write the file it names", (tool) => {
+    expect(writesFilename(tool)).toBe(false);
 });
 
 // screenshotImage: turns the tool's answer, a markdown link relative to the agent's cwd, back into a
