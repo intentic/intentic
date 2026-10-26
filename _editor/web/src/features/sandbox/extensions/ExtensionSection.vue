@@ -1,23 +1,18 @@
 <script setup lang="ts">
-import { useId } from "vue";
+import { Section } from "@intentic/ui";
 
-// One labelled part of an open extension row: its name, and at most one line saying what it is, in a fixed column
-// beside the content on a wide row, above it on a narrow one. The drawer rules them apart; a section draws no box of its
-// own, so five of them read as one record rather than five cards.
+// One part of an installed extension's page: the house section header over its content, stacked at every width. A
+// fixed label column beside the content took a third of a column already capped below the reading measure, and what
+// was left was split again by each control. The page rules the sections apart; a section draws no box of its own.
+// `caption` is the section's legend (how many routes were used), the first line of the content rather than a second
+// line under the header, which takes none.
 
 const { label, caption } = defineProps<{ label: string; caption?: string }>();
-
-const labelId = useId();
 </script>
 
 <template>
-    <section :aria-labelledby="labelId" class="grid gap-x-6 gap-y-2 py-3.5 @2xl:grid-cols-[10rem_minmax(0,1fr)]">
-        <div class="min-w-0">
-            <p :id="labelId" class="text-xs font-medium text-content">{{ label }}</p>
-            <p v-if="caption" class="mt-0.5 text-2xs text-subtle">{{ caption }}</p>
-        </div>
-        <div class="min-w-0">
-            <slot />
-        </div>
-    </section>
+    <Section :label :heading="3" class="py-5">
+        <p v-if="caption" class="mb-2 text-xs text-subtle">{{ caption }}</p>
+        <slot />
+    </Section>
 </template>

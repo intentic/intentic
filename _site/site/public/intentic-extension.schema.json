@@ -380,6 +380,20 @@
                                     "type": "string"
                                 }
                             },
+                            "enumItemLabels": {
+                                "description": "What each choice in `enum` is called on the Settings page, by position. A choice without one shows its value.",
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "enumDescriptions": {
+                                "description": "One line under each choice in `enum`, by position: what picking it means. With these the Settings page lists the choices with their lines instead of a dropdown, so keep `description` for what holds whichever is picked.",
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
                             "secret": {
                                 "description": "Mask the value in the UI and strip it from reads: a set secret round-trips as 'still set', never as its value.",
                                 "type": "boolean"

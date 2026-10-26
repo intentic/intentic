@@ -10,6 +10,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extens
 import type { ExtensionEntry } from "../../extensions/useExtensionList";
 import { publishBrief, tightenBrief } from "../../../models/sandbox/extensionBrief";
 import { devLineOf } from "./extensionDev";
+import ExtensionFacts from "./ExtensionFacts.vue";
 import ExtensionSection from "./ExtensionSection.vue";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
 import ExtensionUpdateOffer from "./ExtensionUpdateOffer.vue";
@@ -20,8 +21,8 @@ import { useT } from "@intentic/ui/i18n";
 // One installed extension, opened where the Installed list stood, the way Capabilities opens a connection: the way back,
 // then its mark, name and state with its switch at the head, since on and off is the verb for the whole of it. Below,
 // it reads top to bottom by how soon the reader has to act: what is wrong or waiting (alerts, the update on offer), what
-// they set (settings, update policy), what it may reach, what it is (one table of the facts nobody opens it for), and
-// last, apart, removing it.
+// they set (settings, update policy), what it may reach, and last, apart, removing it. What it is (version, source,
+// what it adds) is ExtensionFacts, docked beside all that on a wide pane and at the foot on a narrow one.
 
 const t = useT();
 
@@ -129,52 +130,14 @@ const tighten = computed(() => ({
     used: routes.value.filter((route) => route.calls > 0).map(({ route, calls }) => ({ route, calls })),
 }));
 
-// Where it shows up, ordered by facetsOf's visibility ranking: the heading's one line of what it is.
+// Where it shows up, ordered by facetsOf's visibility ranking: the heading's one line of what it is. Settings are not a
+// place, and the page lists them right below.
 const places = computed(() =>
     entry.facets
-        .filter((facet) => facet.surface)
+        .filter((facet) => facet.surface && facet.kind !== `settings`)
         .map((facet) => facet.label)
         .join(` · `),
 );
-// The Details table names what it adds; settings are left out, since the Settings section above renders them better.
-const contributes = computed(() => entry.facets.filter((facet) => facet.kind !== `settings`));
-
-// What flipping the switch doesn't reach immediately; stated under the fold, before the flip, rather than on every
-// closed row.
-const deferredNote = (kind: string): string[] => {
-    switch (kind) {
-        case `agent`:
-            return [t(`sandbox.extensionRow.deferredAgent`)];
-        case `bin`:
-            return [t(`sandbox.extensionRow.deferredBin`)];
-        case `environment`:
-            return [t(`sandbox.extensionRow.deferredEnvironment`)];
-        default:
-            return [];
-    }
-};
-
-const consequences = computed<string[]>(() => {
-    const deferred = Object.keys(manifest.value.contributes ?? {}).flatMap(deferredNote);
-    if (entry.dependents.length === 0) {
-        return deferred;
-    }
-    const named = entry.dependents.map((capability) => capability.id).join(`, `);
-    const count = entry.dependents.length;
-    // Switching off only hides their card; removing takes the entries themselves, which is the dialog's job to say.
-    return [...deferred, t(`sandbox.extensionRow.dependentsLoseCard`, { count, names: named }, count)];
-});
-
-// Where the running code comes from, in words, with the one identifier that pins it down beside them.
-const source = computed<{ words: string; mark?: string }>(() => {
-    if (entry.extension.source === `builtin`) {
-        return { words: t(`sandbox.extensionRow.sourceBuiltin`) };
-    }
-    if (entry.extension.source === `workspace`) {
-        return { words: t(`sandbox.extensionRow.sourceWorkspace`), mark: workspaceDir.value };
-    }
-    return { words: t(`sandbox.extensionRow.sourceInstalled`), mark: entry.extension.commit.slice(0, 12) };
-});
 </script>
 
 <template>
@@ -224,133 +187,109 @@ const source = computed<{ words: string; mark?: string }>(() => {
 
             <ExtensionUpdateOffer v-if="installed" :extension="entry.extension" :anchor="updateAnchor" />
 
-            <!-- The record proper: one section per question, ruled apart, each named in the same left column. -->
-            <div class="divide-y divide-line">
-                <ExtensionSection v-if="settings.length > 0" :label="t(`shared.settings`)">
-                    <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
-                </ExtensionSection>
+            <!-- The record proper: one section per question, ruled apart, each headed the same way. -->
+            <div>
+                <div class="divide-y divide-line">
+                    <ExtensionSection v-if="settings.length > 0" :label="t(`shared.settings`)">
+                        <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
+                    </ExtensionSection>
 
-                <!-- Only git-installed extensions have an update lifecycle to set a policy for. -->
-                <ExtensionUpdatePolicy v-if="installed" :extension="entry.extension" />
+                    <!-- Only git-installed extensions have an update lifecycle to set a policy for. -->
+                    <ExtensionUpdatePolicy v-if="installed" :extension="entry.extension" />
 
-                <!-- The reach approved at install, and whether it was ever used. -->
-                <ExtensionSection v-if="routes.length > 0" :label="t(`sandbox.extensionRow.sandboxAccess`)" :caption="routesCaption">
-                    <div class="flex flex-col gap-2">
-                        <ul class="flex flex-wrap gap-1.5" :aria-label="t(`sandbox.extensionRow.sandboxAccess`)">
-                            <li
-                                v-for="route in routes"
-                                :key="route.route"
-                                v-tooltip.top="
-                                    route.calls > 0
-                                        ? {
-                                              title: t(`sandbox.extensionRow.used`),
-                                              rows: [{ label: t(`sandbox.extensionRow.calls`), value: formatCount(route.calls) }],
-                                          }
-                                        : route.unused
-                                          ? t(`sandbox.extensionRow.neverCalled`)
-                                          : undefined
-                                "
-                                class="flex items-baseline gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-2xs"
-                                :class="route.unused ? `border-dashed border-line-strong text-subtle` : `border-line bg-canvas/60 text-content`"
-                            >
-                                <span class="text-[0.625rem] font-medium" :class="route.unused ? `` : `text-muted`">{{ route.method }}</span>
-                                <span>{{ route.path }}</span>
-                            </li>
-                        </ul>
-                        <!-- A legend, not a lecture: the reasoning behind "never called" waits behind its (i). -->
-                        <div v-if="observed === undefined" class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.notObservedYet`) }}</div>
-                        <div
-                            v-else-if="routes.some((route) => route.unused)"
-                            class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
-                        >
-                            <span class="flex items-center gap-1.5">
-                                <span class="inline-block h-2.5 w-4 rounded-sm border border-dashed border-line-strong" aria-hidden="true" />
-                                {{ t(`sandbox.extensionRow.neverCalled`) }}
-                                <InfoHint :label="t(`sandbox.extensionRow.neverCalledWhyLabel`)">
-                                    <span class="block text-xs text-content">{{ t(`sandbox.extensionRow.neverCalledWhy`) }}</span>
-                                </InfoHint>
-                            </span>
-                            <!-- Maintainer-owned extensions route review to the owner. -->
-                            <button
-                                v-if="tightenable"
-                                type="button"
-                                :class="ui.textButton({ size: `xs` })"
-                                @click="startAgent(tightenBrief(tighten))"
-                            >
-                                {{ t(`sandbox.extensionRow.agentGoThrough`) }}
-                            </button>
-                        </div>
-                    </div>
-                </ExtensionSection>
-
-                <!-- File checks cover only facts answerable without running the extension. -->
-                <ExtensionSection
-                    v-if="entry.extension.source === `workspace`"
-                    :label="t(`sandbox.extensionRow.publishing`)"
-                    :caption="t(`sandbox.extensionRow.publishingCaption`)"
-                >
-                    <div class="flex flex-col gap-2.5">
-                        <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
-                        <ul v-else-if="readiness" class="flex flex-col gap-1">
-                            <li v-for="check in readiness" :key="check.id" class="flex items-start gap-1.5 text-2xs">
-                                <Icon
-                                    :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
-                                    :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
-                                    class="shrink-0"
-                                />
-                                <span class="text-content"
-                                    >{{ check.label }} <span class="text-subtle">· {{ check.detail }}</span></span
+                    <!-- The reach approved at install, and whether it was ever used. -->
+                    <ExtensionSection v-if="routes.length > 0" :label="t(`sandbox.extensionRow.sandboxAccess`)" :caption="routesCaption">
+                        <div class="flex flex-col gap-2">
+                            <ul class="flex flex-wrap gap-1.5" :aria-label="t(`sandbox.extensionRow.sandboxAccess`)">
+                                <li
+                                    v-for="route in routes"
+                                    :key="route.route"
+                                    v-tooltip.top="
+                                        route.calls > 0
+                                            ? {
+                                                  title: t(`sandbox.extensionRow.used`),
+                                                  rows: [{ label: t(`sandbox.extensionRow.calls`), value: formatCount(route.calls) }],
+                                              }
+                                            : route.unused
+                                              ? t(`sandbox.extensionRow.neverCalled`)
+                                              : undefined
+                                    "
+                                    class="flex items-baseline gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-2xs"
+                                    :class="route.unused ? `border-dashed border-line-strong text-subtle` : `border-line bg-canvas/60 text-content`"
                                 >
-                            </li>
-                        </ul>
-                        <!-- Offered only when nothing fails; a warning is the author's call, not a blocker. -->
-                        <div v-if="publishable" class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                            <Button
-                                size="small"
-                                tier="boring"
-                                :label="t(`sandbox.extensionRow.publishWithAgent`)"
-                                @click="startAgent(publishBrief(publish))"
+                                    <span class="text-[0.625rem] font-medium" :class="route.unused ? `` : `text-muted`">{{ route.method }}</span>
+                                    <span>{{ route.path }}</span>
+                                </li>
+                            </ul>
+                            <!-- A legend, not a lecture: the reasoning behind "never called" waits behind its (i). -->
+                            <div v-if="observed === undefined" class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.notObservedYet`) }}</div>
+                            <div
+                                v-else-if="routes.some((route) => route.unused)"
+                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
                             >
-                                <template #icon><Icon name="sparkles" /></template>
-                            </Button>
-                            <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.publishAgentPushesFiles`) }}</span>
+                                <span class="flex items-center gap-1.5">
+                                    <span class="inline-block h-2.5 w-4 rounded-sm border border-dashed border-line-strong" aria-hidden="true" />
+                                    {{ t(`sandbox.extensionRow.neverCalled`) }}
+                                    <InfoHint :label="t(`sandbox.extensionRow.neverCalledWhyLabel`)">
+                                        <span class="block text-xs text-content">{{ t(`sandbox.extensionRow.neverCalledWhy`) }}</span>
+                                    </InfoHint>
+                                </span>
+                                <!-- Maintainer-owned extensions route review to the owner. -->
+                                <button
+                                    v-if="tightenable"
+                                    type="button"
+                                    :class="ui.textButton({ size: `xs` })"
+                                    @click="startAgent(tightenBrief(tighten))"
+                                >
+                                    {{ t(`sandbox.extensionRow.agentGoThrough`) }}
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                </ExtensionSection>
+                    </ExtensionSection>
 
-                <!-- Everything a collapsed row leaves off, as one table: read when needed, skipped otherwise. -->
-                <ExtensionSection :label="t(`sandbox.extensionRow.details`)">
-                    <dl class="grid grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
-                        <dt class="text-subtle">{{ t(`sandbox.extensionRow.detailId`) }}</dt>
-                        <dd class="min-w-0 break-words font-mono text-2xs leading-5 text-content">{{ extensionIdOf(manifest) }}</dd>
-                        <dt class="text-subtle">{{ t(`sandbox.extensionRow.detailVersion`) }}</dt>
-                        <dd class="min-w-0 text-content">v{{ manifest.version }}</dd>
-                        <dt class="text-subtle">{{ t(`sandbox.extensionRow.detailSource`) }}</dt>
-                        <!-- The identifier wraps as one piece onto its own line rather than breaking mid-path. -->
-                        <dd class="flex min-w-0 flex-wrap items-baseline gap-x-2 text-content">
-                            <span>{{ source.words }}</span>
-                            <span v-if="source.mark" class="min-w-0 break-words font-mono text-2xs text-muted">{{ source.mark }}</span>
-                        </dd>
-                        <dt class="text-subtle">{{ t(`sandbox.extensionRow.detailRequires`) }}</dt>
-                        <dd class="min-w-0 text-content">{{ t(`sandbox.extensionRow.requiresApp`, { range: manifest.engines.intentic }) }}</dd>
-                        <template v-for="facet in contributes" :key="`${facet.kind}:${facet.label}`">
-                            <dt class="text-subtle first-letter:uppercase">{{ facet.label }}</dt>
-                            <dd class="min-w-0 break-words text-content">{{ facet.names.join(` · `) || `—` }}</dd>
-                        </template>
-                        <template v-if="entry.extension.enabled && consequences.length > 0">
-                            <dt class="text-subtle">{{ t(`sandbox.extensionRow.whenSwitchedOff`) }}</dt>
-                            <dd class="min-w-0">
-                                <ul class="flex flex-col gap-0.5 text-muted">
-                                    <li v-for="consequence in consequences" :key="consequence" class="first-letter:uppercase">{{ consequence }}.</li>
-                                </ul>
-                            </dd>
-                        </template>
-                    </dl>
-                </ExtensionSection>
+                    <!-- File checks cover only facts answerable without running the extension. -->
+                    <ExtensionSection
+                        v-if="entry.extension.source === `workspace`"
+                        :label="t(`sandbox.extensionRow.publishing`)"
+                        :caption="t(`sandbox.extensionRow.publishingCaption`)"
+                    >
+                        <div class="flex flex-col gap-2.5">
+                            <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
+                            <ul v-else-if="readiness" class="flex flex-col gap-1">
+                                <li v-for="check in readiness" :key="check.id" class="flex items-start gap-1.5 text-2xs">
+                                    <Icon
+                                        :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
+                                        :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
+                                        class="shrink-0"
+                                    />
+                                    <span class="text-content"
+                                        >{{ check.label }} <span class="text-subtle">· {{ check.detail }}</span></span
+                                    >
+                                </li>
+                            </ul>
+                            <!-- Offered only when nothing fails; a warning is the author's call, not a blocker. -->
+                            <div v-if="publishable" class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                <Button
+                                    size="small"
+                                    tier="boring"
+                                    :label="t(`sandbox.extensionRow.publishWithAgent`)"
+                                    @click="startAgent(publishBrief(publish))"
+                                >
+                                    <template #icon><Icon name="sparkles" /></template>
+                                </Button>
+                                <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.publishAgentPushesFiles`) }}</span>
+                            </div>
+                        </div>
+                    </ExtensionSection>
+                </div>
+
+                <!-- What it is: docked beside the page on a wide pane, read here at the foot on a narrow one. Outside the
+                 ruled list above, whose rules would otherwise count the hidden copy as a part and draw a line before it. -->
+                <ExtensionFacts :entry="entry" class="border-t border-line py-5 @3xl:hidden" />
 
                 <!-- Apart and last: uninstalling is not the errand this page is opened for. A real, bordered button, since it
-                     is the one thing here nothing undoes; the dialog it raises spells out the consequences. -->
-                <footer v-if="removable" class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3.5">
+                 is the one thing here nothing undoes; the dialog it raises spells out the consequences. -->
+                <footer v-if="removable" class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-3.5">
                     <div class="min-w-0">
                         <p class="text-xs font-medium text-content">{{ t(`sandbox.extensionRow.removeTitle`) }}</p>
                         <p class="mt-0.5 text-2xs text-subtle">{{ removalHint }}</p>
@@ -361,5 +300,11 @@ const source = computed<{ words: string; mark?: string }>(() => {
                 </footer>
             </div>
         </div>
+
+        <!-- Pushed down by the way back and the heading (102px) and a section's top padding, so its header lines up with
+             the first section's rather than with the extension's name. -->
+        <template #aside>
+            <ExtensionFacts :entry="entry" class="pt-[7.625rem]" />
+        </template>
     </CatalogDetail>
 </template>

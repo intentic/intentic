@@ -98,9 +98,10 @@ const DEMO_TRIAL: TrialStatusResponse = freshEdition && !noModels
 // recording but the fresh one is an established sandbox whose owner put the list away long ago, so screenshots of it
 // carry no beginner's ring; `?mode=fresh` is where the list is seen.
 let gettingStarted: GettingStarted = freshEdition ? {} : { hidden: true };
-// The sandbox's settings as this page load has written them: a press on a settings control sticks until a reload, the
+// The sandbox's settings, and each extension's, as this page load has written them: a press on a settings control sticks until a reload, the
 // way it would against a daemon, rather than being put back by the 404 a refused write gets.
 let settingsNow = DEMO_SETTINGS;
+const extensionSettingsNow = new Map<string, Record<string, string | number | boolean>>();
 const NO_TRANSLATOR_ACCOUNTS = Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])) as unknown as TranslatorAccounts;
 
 const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
@@ -586,8 +587,8 @@ export const procedures = {
         setEnabled: ({ id, enabled }) => okAfter(() => setExtensionEnabled(id, enabled)),
         // Loaded before an extension's activate(), so `api.settings.get` is synchronous; missing here means the
         // extension never activates.
-        settings: () => ({ settings: {}, secretsSet: [] }),
-        setSettings: () => ({ ok: true }),
+        settings: ({ id }) => ({ settings: extensionSettingsNow.get(id) ?? {}, secretsSet: [] }),
+        setSettings: ({ id, settings }) => okAfter(() => extensionSettingsNow.set(id, settings)),
     },
     approvals: {
         list: () => ({ approvals: [...demoApprovals()], invalid: [] }),

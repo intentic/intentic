@@ -9,6 +9,16 @@ export const SettingContributionSchema = z.object({
     description: z.string().optional().describe("The line under the control."),
     default: z.union([z.string(), z.number(), z.boolean()]).optional(),
     enum: z.array(z.string()).optional().describe('The choices, for type "enum". Meaningless otherwise.'),
+    enumItemLabels: z
+        .array(z.string())
+        .optional()
+        .describe("What each choice in `enum` is called on the Settings page, by position. A choice without one shows its value."),
+    enumDescriptions: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "One line under each choice in `enum`, by position: what picking it means. With these the Settings page lists the choices with their lines instead of a dropdown, so keep `description` for what holds whichever is picked.",
+        ),
     secret: z
         .boolean()
         .optional()

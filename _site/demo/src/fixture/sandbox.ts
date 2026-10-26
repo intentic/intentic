@@ -194,6 +194,7 @@ const SHIPPED_MANIFESTS = import.meta.glob<ExtensionSummary["manifest"]>(
         "../../../../_extensions/imap/intentic-extension.json",
         "../../../../_extensions/telegram/intentic-extension.json",
         "../../../../_extensions/whatsapp/intentic-extension.json",
+        "../../../../_extensions/onlyoffice/intentic-extension.json",
     ],
     { eager: true, import: "default" },
 );
@@ -259,6 +260,8 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     ...shipped(`imap`, `0a6f3d8`),
     ...shipped(`telegram`, `b94e215`),
     ...shipped(`whatsapp`, `7c51e0a`),
+    // A settings form with a choice that explains each option and a switch, as the Installed page draws them.
+    ...shipped(`onlyoffice`, `2e8d5f1`),
 ];
 
 // Every first-party extension compiled into this build, read from the app's own registry so it can't drift from what's
