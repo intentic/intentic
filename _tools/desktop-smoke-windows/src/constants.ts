@@ -16,10 +16,9 @@ export const RUNNER_TASK_NAME = `GitHub Actions Runner`;
 // Setup deep-link every tier fires; the code is nonsense since tier 1 points at a failing local stand-in.
 export const SETUP_LINK = `${SCHEME}://setup?code=windows-smoke-code&name=WindowsSmoke`;
 
-// Titles matched on their distinctive half so a copy reword doesn't break these; the confirmation window is checked
-// first since it exists for no other reason, unlike the ambiguous workspace-or-setup case.
+// Titles matched on their distinctive half so a copy reword doesn't break these. A confirmed setup opens no screen of
+// its own: it runs out of sight and the window the reader was on stays (desktop-app windows/links.rs `park_setup`).
 export const CONFIRM_TITLE = `Set up a sandbox on this device`;
-export const SETUP_TITLE = `Setting up`;
 export const WORKSPACE_TITLE = `Intentic`;
 
 // RFC 2606 reserved TLD: resolves for no one, so an accidental reach for the public network fails loudly instead of

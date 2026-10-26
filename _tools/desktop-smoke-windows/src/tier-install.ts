@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninstallSilently } from "./app.js";
-import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
+import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { prepareHermeticDesktop } from "./hermetic.js";
 import { type InstalledApp, ownedBy, pathHolds } from "./parse.js";
@@ -32,9 +32,7 @@ export interface InstallTierOptions {
 
 const WINDOW_SETTLE_SECONDS = 60;
 const LINK_SECONDS = 45;
-// A cold first launch also initializes WebView2's user-data directory, which is slower than a warm one.
-const SCREEN_SECONDS = 60;
-// From the setup screen to the CLI stand-in the app starts powershell.exe and has it load connect.ps1, which on a
+// From the confirmation to the CLI stand-in the app starts powershell.exe and has it load connect.ps1, which on a
 // loaded runner is its own wait: run 38459232153's setup screen took 28 s to appear and the stand-in had not run 10 s
 // later, where every run before it found it already run (the release smoke passed the same build an hour earlier).
 // Measured since: 0.5 to 6 s on a quiet runner, 30.5 s on one release run (2026-10-18) and past 45 s on the next
@@ -59,7 +57,7 @@ const titleList = (desktop: readonly WindowInfo[]): string =>
     desktop.length === 0 ? `(no windows)` : desktop.map((window) => `- ${window.title}`).join(`\n`);
 
 // Never throws: it only describes a failure already recorded. A listing that timed out on a swamped desktop (run
-// 36850369330: every poll of the setup screen had) would otherwise escape as an unhandled rejection, end the tier
+// 36850369330: every poll of the desktop had) would otherwise escape as an unhandled rejection, end the tier
 // mid-way and skip every assertion after it. The first line only: the rest of the message is the script it ran.
 const describeWindows = async (): Promise<string> => {
     try {
@@ -253,10 +251,9 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
                 appWindowTitled(app, CONFIRM_TITLE),
             )
         ) {
+            // No screen of its own to land on: the setup runs out of sight (_(2026-10-26) it swapped This device in),
+            // so the run itself is what answering it is held to.
             answer(harness, await answerConfirm(app, CONFIRM_TITLE));
-            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it landed on the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
-                harness.detail(await describeWindows());
-            }
             await harness.untilTrue(SETUP_START_SECONDS, `the setup ran only the local CLI stand-in`, () => hermetic.setupStarted());
         } else {
             harness.detail(await describeWindows());
@@ -288,6 +285,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
 
         // 6. deep link, app running (the OS handler, exercising registration and the single-instance forward together).
         harness.section(`deep link, app running`);
+        await hermetic.forgetSetup();
         await openLink(SETUP_LINK);
         if (
             await harness.untilTrue(LINK_SECONDS, `the link reached the running app, which asked before running it`, () =>
@@ -296,30 +294,28 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         ) {
             await assertAskedOnce(harness, app);
             answer(harness, await answerConfirm(app, CONFIRM_TITLE));
-            if (!(await harness.untilTrue(SCREEN_SECONDS, `answering it opened the setup screen`, () => appWindowTitled(app, SETUP_TITLE)))) {
-                harness.detail(await describeWindows());
-            }
+            await harness.untilTrue(SETUP_START_SECONDS, `answering it ran the setup`, () => hermetic.setupStarted());
         } else {
             harness.detail(await describeWindows());
         }
 
-        // One window in the workspace's place, not a second one beside it: the actual regression, invisible to every
-        // other assertion here. Counted, not measured (a rectangle match could still pass with an extra window mapped).
+        // The workspace's one window, still the workspace: the setup runs out of sight, so neither a second window nor a
+        // face swapped in over the reader is right. Counted, not measured (a rectangle match could still pass with an
+        // extra window mapped). Checked once the run has started, so a late swap is caught rather than raced.
         const visibleFaces = (desktop: readonly WindowInfo[]): WindowInfo[] =>
             ownedBy(desktop, app).filter((window) => window.title !== SINGLE_INSTANCE_WINDOW);
         // The listing the last poll REJECTED, kept rather than read again afterwards: a swap that lands in the
         // seconds a fresh listing costs would leave the detail describing a desktop that passes.
         let rejected: WindowInfo[] = [];
-        const oneWindowShowingSetup = async (): Promise<boolean> => {
+        const workspaceKept = async (): Promise<boolean> => {
             rejected = await windows();
             const own = visibleFaces(rejected);
-            return own.length === 1 && own[0]!.title.includes(SETUP_TITLE);
+            return own.length === 1 && own[0]!.title.includes(WORKSPACE_TITLE) && !own[0]!.title.includes(CONFIRM_TITLE);
         };
         // 30s, not 15: one listing may run to run()'s 15s timeout on a loaded runner, and a deadline no longer than
         // that gave the check a single try (run 36886462093 failed on exactly that, with no window ever listed).
-        if (!(await harness.untilTrue(30, `the setup screen took the workspace's window rather than opening a second one`, oneWindowShowingSetup))) {
-            // Own windows listed first: two of the app's own and one that isn't the setup screen are different
-            // failures.
+        if (!(await harness.untilTrue(30, `the setup ran out of sight, leaving the workspace its one window`, workspaceKept))) {
+            // Own windows listed first: two of the app's own and one that isn't the workspace are different failures.
             const own = visibleFaces(rejected);
             harness.detail(own.length === 0 ? `the app showed no window` : own.map((window) => `- ${box(window)}`).join(`\n`));
             harness.detail(titleList(rejected));

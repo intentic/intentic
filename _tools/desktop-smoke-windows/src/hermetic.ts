@@ -11,6 +11,8 @@ export interface HermeticDesktop {
     readonly workspaceInspectable: boolean;
     readonly workspaceRequested: () => boolean;
     readonly setupStarted: () => boolean;
+    /** Forgets a setup already run, so the next link's run is its own to show. */
+    readonly forgetSetup: () => Promise<void>;
     readonly close: () => Promise<void>;
 }
 
@@ -131,6 +133,7 @@ export const prepareHermeticDesktop = async (configuredAppUrl: string | undefine
         workspaceInspectable: configuredAppUrl === undefined,
         workspaceRequested: () => workspaceRequested,
         setupStarted: () => existsSync(marker),
+        forgetSetup: () => rm(marker, { force: true }),
         close: async () => {
             restore(pathKey, previous.path);
             restore(`INTENTIC_APP_URL`, previous.appUrl);
