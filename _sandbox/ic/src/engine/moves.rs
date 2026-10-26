@@ -1290,8 +1290,8 @@ fn copy_volume(
     into.extend_from_slice(&["-v", to_mount.as_str(), "--entrypoint", "tar", helper]);
     into.extend_from_slice(TAR_IN);
     let copied = pipe(
-        docker::command_on(source, &out),
-        docker::command_on(target, &into),
+        archive_command(source, &out),
+        archive_command(target, &into),
         slug,
         "volume",
         total,
@@ -1366,6 +1366,19 @@ fn parse_manifest(out: &str) -> Option<(u64, String)> {
     let count = lines.next()?.parse().ok()?;
     let hash = lines.next()?.split_whitespace().next()?.to_string();
     Some((count, hash))
+}
+
+/// Bulk archives use the engine's TLS endpoint directly. The optional pipe relay can end a tar stream early while
+/// docker still exits 0 (nightly 40291565927); file listings and ordinary commands can keep using the faster relay.
+fn archive_command(on: &Target, args: &[&str]) -> Command {
+    match on {
+        Target::Intentic(env) => {
+            let mut direct = env.clone();
+            direct.pipe = None;
+            docker::command_on(&Target::Intentic(direct), args)
+        }
+        Target::DockerDesktop => docker::command_on(on, args),
+    }
 }
 
 /// `from`'s stdout into `to`'s stdin, counted for the progress line, and killed if no byte moves for [`STALL`].
@@ -1530,8 +1543,8 @@ fn carry_images(
     let mut save: Vec<&str> = vec!["save"];
     save.extend(rest.iter().copied());
     pipe(
-        docker::command_on(source, &save),
-        docker::command_on(target, &["load", "-q"]),
+        archive_command(source, &save),
+        archive_command(target, &["load", "-q"]),
         slug,
         "image",
         total,
@@ -2071,6 +2084,107 @@ fn cli_id(kind: Kind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_commands_use_the_tls_endpoint_and_its_credential_even_with_a_relay() {
+        let leaf = format!("intentic-engine-archive-test-{}", std::process::id());
+        let pipe = intentic_docker_host::engine_pipe::host_for(&leaf);
+        #[cfg(windows)]
+        let _relay = test_relay_pipe(&leaf);
+        let on = Target::Intentic(docker::EngineEnv {
+            host: "tcp://127.0.0.1:2378".into(),
+            cert_path: "engine-test-tls".into(),
+            bin: std::path::PathBuf::from("engine-test-bin"),
+            pipe: Some(pipe.clone()),
+        });
+        #[cfg(windows)]
+        {
+            let normal = docker::command_on(&on, &["info"]);
+            let env: std::collections::BTreeMap<_, _> = normal.get_envs().collect();
+            assert_eq!(
+                env[std::ffi::OsStr::new("DOCKER_HOST")],
+                Some(std::ffi::OsStr::new(&pipe))
+            );
+        }
+        for args in [
+            &["run", "--rm", "tar"][..],
+            &["save", "image"],
+            &["load", "-q"],
+        ] {
+            let command = archive_command(&on, args);
+            let env: std::collections::BTreeMap<_, _> = command.get_envs().collect();
+            let value = |name: &str| env[std::ffi::OsStr::new(name)].unwrap();
+            assert_eq!(value("DOCKER_HOST"), "tcp://127.0.0.1:2378");
+            assert_eq!(value("DOCKER_TLS_VERIFY"), "1");
+            assert_eq!(value("DOCKER_CERT_PATH"), "engine-test-tls");
+            assert_eq!(
+                std::env::split_paths(value("PATH")).next(),
+                Some(std::path::PathBuf::from("engine-test-bin"))
+            );
+            assert_eq!(command.get_args().collect::<Vec<_>>(), args);
+        }
+        assert!(matches!(on, Target::Intentic(env) if env.pipe.as_deref() == Some(pipe.as_str())));
+    }
+
+    /// A listening pipe, so the routing test exercises a relay that ordinary commands really would choose.
+    #[cfg(windows)]
+    fn test_relay_pipe(leaf: &str) -> std::os::windows::io::OwnedHandle {
+        use std::ffi::{c_char, c_void, CString};
+        use std::os::windows::io::{FromRawHandle, OwnedHandle};
+        extern "system" {
+            fn CreateNamedPipeA(
+                name: *const c_char,
+                open: u32,
+                mode: u32,
+                instances: u32,
+                out_buffer: u32,
+                in_buffer: u32,
+                timeout: u32,
+                security: *const c_void,
+            ) -> *mut c_void;
+        }
+        let name = CString::new(format!(r"\\.\pipe\{leaf}")).unwrap();
+        // SAFETY: name is NUL-terminated and lives through the call; no security attributes are passed.
+        let handle =
+            unsafe { CreateNamedPipeA(name.as_ptr(), 3, 0, 1, 4096, 4096, 0, std::ptr::null()) };
+        assert_ne!(handle as isize, -1, "{}", std::io::Error::last_os_error());
+        // SAFETY: the call returned a new valid handle; OwnedHandle closes it at the end of the test.
+        unsafe { OwnedHandle::from_raw_handle(handle) }
+    }
+
+    #[test]
+    fn archive_commands_keep_docker_desktop_on_its_own_endpoint() {
+        let command = archive_command(&Target::DockerDesktop, &["load", "-q"]);
+        let env: std::collections::BTreeMap<_, _> = command.get_envs().collect();
+        for name in [
+            "DOCKER_HOST",
+            "DOCKER_TLS_VERIFY",
+            "DOCKER_CERT_PATH",
+            "DOCKER_CONTEXT",
+        ] {
+            assert_eq!(env[std::ffi::OsStr::new(name)], None);
+        }
+    }
+
+    #[test]
+    fn archive_commands_keep_wsl_socket_transfers_without_tls() {
+        let on = Target::Intentic(docker::EngineEnv {
+            host: "unix:///mnt/wsl/intentic-engine/docker.sock".into(),
+            cert_path: String::new(),
+            bin: std::path::PathBuf::new(),
+            pipe: None,
+        });
+        let command = archive_command(&on, &["save", "image"]);
+        let env: std::collections::BTreeMap<_, _> = command.get_envs().collect();
+        assert_eq!(
+            env[std::ffi::OsStr::new("DOCKER_HOST")],
+            Some(std::ffi::OsStr::new(
+                "unix:///mnt/wsl/intentic-engine/docker.sock"
+            ))
+        );
+        assert_eq!(env[std::ffi::OsStr::new("DOCKER_TLS_VERIFY")], None);
+        assert_eq!(env[std::ffi::OsStr::new("DOCKER_CERT_PATH")], None);
+    }
 
     #[test]
     fn a_failed_copy_reports_the_cause_before_tars_final_summary() {
