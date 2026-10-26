@@ -5740,13 +5740,15 @@
             "copyPrompt": "Prompt kopieren",
             "copyPromptIntoChat": "Diesen Prompt in einen Chat mit Ihrem anderen KI-Anbieter kopieren",
             "createFile": "Datei anlegen",
+            "hidePrompt": "Prompt ausblenden",
             "memory": "Gedächtnis",
             "notCreatedYet": " existiert noch nicht. Speichern hier oder „Datei anlegen“ legt sie im Stammverzeichnis des Workspace an.",
             "nothingHereYetWhat": "Noch nichts hier. Was jeder Zug in diesem Workspace wissen sollte.",
             "openFile": "Datei öffnen",
             "pasteMemoryDetailsHere": "Fügen Sie Ihre Gedächtnisinhalte hier ein",
             "pasteResultBelowTo": "Fügen Sie das Ergebnis unten ein, um es in beide Dateien einzuarbeiten",
-            "reading": "{memory_file} wird gelesen…"
+            "reading": "{memory_file} wird gelesen…",
+            "showPrompt": "Prompt anzeigen"
         },
         "agentModels": {
             "addFallback": "Ausweichmodell hinzufügen",
@@ -6201,6 +6203,7 @@
         "agentSkills": {
             "cameWhatInstalledConnected": "{count} kamen mit dem, was Sie installiert und verbunden haben",
             "couldntReadSkill": "Dieser Skill ließ sich nicht lesen.",
+            "couldntSaveSkill": "Dieser Skill ließ sich nicht speichern.",
             "filterSkills": "Skills filtern",
             "nameTriggerOrigin": "Name, Auslöser oder Herkunft…",
             "noSkillsAddedYet": "Noch keine Skills hinzugefügt.",
@@ -8354,7 +8357,6 @@
             "toUse": "Wann er zu verwenden ist",
             "useUserAsksTo": "Zu verwenden, wenn der Benutzer darum bittet, Release-Notes oder einen Änderungsprotokoll-Eintrag für eine Version zu entwerfen.",
             "whatAgentDoesOnce": "Was der Agent tut, sobald er den Skill öffnet: Schritte, Befehle, das einzuhaltende Format, was zu vermeiden ist. Markdown funktioniert.",
-            "whatShouldDo": "Was er tun soll",
             "whatSkillShouldDo": "Was dieser Skill tun soll",
             "writeWhatItDoes": "Schreiben Sie, was er tun soll."
         },
@@ -8365,7 +8367,9 @@
             "instructions": "Anweisungen für {name}",
             "keep": "Behalten",
             "noDescriptionAgentRarely": "Keine Beschreibung — ohne eine wählt der Agent einen Skill selten.",
-            "rawFile": "Rohdatei"
+            "rawFile": "Rohdatei",
+            "showAll": "Alles anzeigen",
+            "showLess": "Weniger anzeigen"
         },
         "spawnPosture": {
             "alwaysAllow": "Immer erlauben",
@@ -8703,7 +8707,6 @@
             "accountName": "Kontoname",
             "all": "Alle",
             "systemPrompt": "Systemprompt",
-            "newSkill": "Neuer Skill",
             "writeSkill": "Einen Skill schreiben",
             "saveChanges": "Änderungen speichern",
             "anywhereInWorkspace": "Überall im Workspace",

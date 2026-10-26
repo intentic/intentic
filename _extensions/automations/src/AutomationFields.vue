@@ -1051,15 +1051,17 @@ const setProvider = (provider: string): void => {
                                     <Icon name="times" />
                                 </button>
                             </div>
-                            <button
-                                :ref="(el) => bindRung(form.models.length, el)"
-                                type="button"
-                                :class="ui.addTile(`self-start px-3 py-2`)"
-                                @click="addRung"
-                            >
-                                <Icon name="plus" />
-                                {{ form.models.length === 0 ? t(`automationFields.pickModel`) : t(`automationFields.addFallback`) }}
-                            </button>
+                            <!-- Adding a rung is a filled button, as every list in the app adds one; the picker anchors to its box. -->
+                            <span :ref="(el) => bindRung(form.models.length, el)" class="flex self-start">
+                                <Button
+                                    size="small"
+                                    tier="boring"
+                                    :label="form.models.length === 0 ? t(`automationFields.pickModel`) : t(`automationFields.addFallback`)"
+                                    @click="addRung"
+                                >
+                                    <template #icon><Icon name="plus" /></template>
+                                </Button>
+                            </span>
                         </div>
                         <!-- Its error is about spending, not syntax, so it's shown here, not only on the disabled save button. -->
                         <p v-if="modelsError !== undefined && touched.has(`models`)" class="text-2xs text-danger">{{ modelsError }}</p>
@@ -1170,10 +1172,15 @@ const setProvider = (provider: string): void => {
                                 </label>
                             </div>
                         </div>
-                        <button type="button" :class="ui.addTile(`self-start px-3 py-2`)" @click="addSenderRule">
-                            <Icon name="plus" />
-                            {{ form.senderRules.length === 0 ? t(`automationFields.nameWhoAnswers`) : t(`automationFields.addMorePeople`) }}
-                        </button>
+                        <Button
+                            size="small"
+                            tier="boring"
+                            class="self-start"
+                            :label="form.senderRules.length === 0 ? t(`automationFields.nameWhoAnswers`) : t(`automationFields.addMorePeople`)"
+                            @click="addSenderRule"
+                        >
+                            <template #icon><Icon name="plus" /></template>
+                        </Button>
                         <p v-if="sendersError !== undefined && touched.has(`senders`)" class="text-2xs text-danger">{{ sendersError }}</p>
                         <div class="flex flex-wrap items-center gap-3 text-xs text-content">
                             <span>{{ t(`automationFields.everyoneElse`) }}</span>

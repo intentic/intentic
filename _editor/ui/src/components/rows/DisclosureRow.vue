@@ -1,6 +1,6 @@
 <!-- A record row, built on <Row>, that opens into its own evidence below. -->
 <script setup lang="ts">
-import { computed, useId } from "vue";
+import { computed, useId, useSlots } from "vue";
 import { FACE_SIZES } from "../brand/personaFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
@@ -107,8 +107,12 @@ const tint = computed(() => {
     return ``;
 });
 
-// Hover wash lives on the wrapper, not <Row>, so it covers the drawer under an open row as well as the row.
-const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
+// Hover wash lives on the wrapper, not <Row>, so it covers a rail's evidence under an open row as well as the row. A
+// drawer is the exception: it is a place of its own, and a press inside it opens nothing, so washing it under the
+// pointer said "press me" over a document or a form that does not answer one. There the wash is the header's alone.
+const slots = useSlots();
+const washesHeaderOnly = computed(() => body === `drawer` && slots[`before`] === undefined);
+const wrapperSelect = computed(() => (disabled || washesHeaderOnly.value ? `` : `ui-row-select`));
 </script>
 
 <template>
@@ -130,6 +134,7 @@ const wrapperSelect = computed(() => (disabled ? `` : `ui-row-select`));
             :title="title"
             :description="description"
             :wide-control="wideControl"
+            :interactive="washesHeaderOnly && !disabled"
             :header-button="hit === `header` && !disabled"
             :header-expanded="disabled ? undefined : open"
             :header-controls="disabled ? undefined : bodyId"

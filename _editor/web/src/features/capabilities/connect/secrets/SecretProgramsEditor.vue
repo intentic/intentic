@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { KEYRING_PACKAGE_RE, KEYRING_PROGRAMS_MAX, KeyringProgramSchema } from "@intentic/sandbox-contract/schemas/keyring";
@@ -173,9 +173,9 @@ const readOnly = computed(() => {
                     :aria-label="t(`capabilities.secretPrograms.addProgram`)"
                     :class="ui.input({ size: `sm` }, `min-w-40 flex-1 font-mono`)"
                 />
-                <button type="submit" :class="ui.textButton({ size: `xs` })" :disabled="typedProgram.trim() === ``">
-                    {{ t(`capabilities.secretPrograms.addProgram`) }}
-                </button>
+                <Button type="submit" size="small" tier="boring" :label="t(`capabilities.secretPrograms.addProgram`)" :disabled="typedProgram.trim() === ``">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
             </form>
             <form class="flex flex-wrap items-center gap-2 pt-1" data-programs="android" @submit.prevent="addPackage">
                 <input
@@ -187,9 +187,9 @@ const readOnly = computed(() => {
                     :aria-label="t(`capabilities.secretPrograms.addPackage`)"
                     :class="ui.input({ size: `sm` }, `min-w-40 flex-1 font-mono`)"
                 />
-                <button type="submit" :class="ui.textButton({ size: `xs` })" :disabled="typedPackage.trim() === ``">
-                    {{ t(`capabilities.secretPrograms.addPackage`) }}
-                </button>
+                <Button type="submit" size="small" tier="boring" :label="t(`capabilities.secretPrograms.addPackage`)" :disabled="typedPackage.trim() === ``">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
             </form>
             <p v-if="typedError" class="pt-1 text-2xs text-warning">{{ typedError }}</p>
 

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
-import { Await, DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
+import { Await, Button, Icon, Row, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../../models/extensions/useExtensions";
 import { useSkills } from "../../environment/useSkills";
-import SkillForm from "./SkillForm.vue";
+import SkillDraftRow from "./SkillDraftRow.vue";
 import SkillRow from "./SkillRow.vue";
 import { bySection, isTunable, matchesSkill } from "./skillList";
 import type { SkillSources } from "./skillVisual";
@@ -13,7 +13,9 @@ import { useT } from "@intentic/ui/i18n";
 
 // Every skill the agent carries, from any source (image, owner, connections, extensions, plugins, loose files),
 // including disabled built-ins and unclaimed files. Split into tunable (this app can enable/delete) and borrowed
-// rows; a row's controls come only from what the daemon reports for it, never a rule restated here.
+// rows; a row's controls come only from what the daemon reports for it, never a rule restated here. Writing a new one is
+// the group's own action, top right where every list keeps it ("New setup", "Add another account"), and the skill being
+// written appears at the top of the list as the open row it will become.
 
 const t = useT();
 
@@ -59,11 +61,15 @@ const adding = ref(false);
 // The open row's text, once fetched; its own ref rather than a suspense boundary since the row is already on screen.
 const openBody = ref<string | undefined>();
 const bodyError = ref<string | undefined>();
+// Why the last save failed; the editor stays open with what was typed, and says it beside its Save.
+const saveError = ref<string | undefined>();
+const saving = computed(() => save.isPending.value);
 
 const close = (): void => {
     openId.value = undefined;
     openBody.value = undefined;
     bodyError.value = undefined;
+    saveError.value = undefined;
     adding.value = false;
 };
 
@@ -79,21 +85,32 @@ const toggle = async (skill: SkillSummary): Promise<void> => {
         close();
         return;
     }
-    adding.value = false;
+    close();
     openId.value = skill.id;
-    openBody.value = undefined;
-    bodyError.value = undefined;
     try {
-        openBody.value = (await readBody(skill.id)).body;
+        const read = (await readBody(skill.id)).body;
+        // A press on another row while this one was still reading has moved on; its answer is not this row's.
+        if (openId.value === skill.id) {
+            openBody.value = read;
+        }
     } catch (failure) {
-        bodyError.value = failure instanceof Error ? failure.message : t(`sandbox.agentSkills.couldntReadSkill`);
+        if (openId.value === skill.id) {
+            bodyError.value = failure instanceof Error ? failure.message : t(`sandbox.agentSkills.couldntReadSkill`);
+        }
     }
 };
 
-const saveDraft = (draft: SkillDraft): void => {
+// Closes only once the daemon has it: a refused save keeps the editor and what was typed in it.
+const saveDraft = async (draft: SkillDraft): Promise<void> => {
+    saveError.value = undefined;
+    try {
+        await save.mutateAsync(draft);
+    } catch (failure) {
+        saveError.value = failure instanceof Error ? failure.message : t(`sandbox.agentSkills.couldntSaveSkill`);
+        return;
+    }
     // Clears the cached body; otherwise reopening the row would show what this edit just replaced.
     forgetBody(draft.name);
-    save.mutate(draft);
     close();
 };
 
@@ -106,13 +123,17 @@ const removeSkill = (skill: SkillSummary): void => {
 <template>
     <Await :of="loaded" imprint="sandbox.agent.skills" :label="t(`sandbox.agentSkills.readingSandboxsSkills`)">
         <template #fallback>
-            <!-- Until it has been seen once: the group as it reads while loading, the outline over the write action. -->
+            <!-- Until it has been seen once: the group as it reads while loading, its action already where it will be. -->
             <RowGroup :label="t(`sandbox.agentSkills.skills`)">
+                <template #actions>
+                    <Button size="small" tier="boring" :label="t(`sandbox.words.writeSkill`)" disabled>
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                </template>
                 <div role="status" aria-busy="true">
                     <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
                     <SkeletonRows :rows="3" description control />
                 </div>
-                <RowNote variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
             </RowGroup>
         </template>
         <template #failed="{ error }">
@@ -122,9 +143,10 @@ const removeSkill = (skill: SkillSummary): void => {
         </template>
         <template #default="{ refreshError }">
             <RowGroup data-setting="agent-skills" :label="t(`sandbox.agentSkills.skills`)">
-                <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
-                <template v-if="filterable" #actions>
+                <template #actions>
+                    <!-- One field beside the one action, not a toolbar: a full bar would look like it belongs to more than this group. -->
                     <SearchBar
+                        v-if="filterable"
                         v-model="query"
                         variant="field"
                         clearable
@@ -132,9 +154,15 @@ const removeSkill = (skill: SkillSummary): void => {
                         :aria-label="t(`sandbox.agentSkills.filterSkills`)"
                         autocapitalize="off"
                         spellcheck="false"
-                        class="w-full max-w-64"
+                        class="w-full max-w-56"
                     />
+                    <Button size="small" tier="boring" :label="t(`sandbox.words.writeSkill`)" :disabled="settings === undefined" @click="startAdd">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
                 </template>
+
+                <!-- First, where the press that made it is: the same head and editor a saved skill opens into. -->
+                <SkillDraftRow v-if="adding" :taken="takenNames" :disabled="settings === undefined" :saving="saving" :error="saveError" @save="saveDraft" @cancel="close" />
 
                 <SkillRow
                     v-for="skill in tunable"
@@ -145,6 +173,8 @@ const removeSkill = (skill: SkillSummary): void => {
                     :body-error="openId === skill.id ? bodyError : undefined"
                     :sources="sources"
                     :disabled="settings === undefined"
+                    :saving="openId === skill.id && saving"
+                    :save-error="openId === skill.id ? saveError : undefined"
                     @toggle="void toggle(skill)"
                     @enable="(value: boolean) => setEnabled(skill, value)"
                     @save="saveDraft"
@@ -152,28 +182,17 @@ const removeSkill = (skill: SkillSummary): void => {
                 />
 
                 <Row v-if="refreshError !== undefined" icon="exclamation-triangle" :description="refreshError" />
-                <Row v-else-if="skills.length === 0 && !adding" icon="book" :description="t(`sandbox.agentSkills.noSkillsAddedYet`)" />
+                <RowNote v-else-if="skills.length === 0 && !adding" variant="empty">{{ t(`sandbox.agentSkills.noSkillsAddedYet`) }}</RowNote>
                 <!-- Distinct from an empty list or from hits hidden inside the closed fold below. -->
                 <Row v-else-if="matches.length === 0" icon="search" :description="t(`sandbox.agentSkills.nothingMatchesFilter`)" />
 
-                <!-- Adding uses the same row surface a written skill is read on. -->
-                <!-- Padding and tint values mirror <DisclosureRow>'s own; keep them in sync if that component's spacing changes. -->
-                <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
-                    <template #below>
-                        <SkillForm :taken="takenNames" :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
-                    </template>
-                </DisclosureRow>
-
-                <!-- Hidden while a row is open, so only one skill is written or read at a time. -->
-                <RowNote v-else-if="openId === undefined" variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
-
                 <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
                 <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">
-                    <!-- Inset and chevron as the skill rows above it: the label starts at their lead, the chevron sits in their chevrons' column. -->
+                    <!-- In the rows' own type and inset: a label for the rows under it, not a heading of a size of its own. -->
                     <summary
-                        class="flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 transition-colors hover:bg-content/4 [&::-webkit-details-marker]:hidden"
+                        class="ui-row-select flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 [&::-webkit-details-marker]:hidden"
                     >
-                        <span class="text-sm text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
+                        <span class="text-xs font-medium text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
                         <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
                         <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">{{ t(`sandbox.agentSkills.toDropOneDrop`) }}</span>
                         <Icon

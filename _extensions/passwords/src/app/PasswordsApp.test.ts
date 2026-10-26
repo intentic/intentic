@@ -293,7 +293,7 @@ describe(`PasswordsApp`, () => {
         const { port } = fakePort({ status: READY, items: [GITHUB], capabilities: { scope: `sandbox`, manage: false, reveal: false } });
         const el = mount(port, { item: `GITHUB_COM` });
         await waitFor(() => expect(el.textContent).toContain(`saved from Brave`));
-        expect(el.querySelector(`[aria-label="New password"]`)).toBeNull();
+        expect(el.textContent).not.toContain(`New password`);
         expect(el.querySelector(`[aria-label="Settings"]`)).toBeNull();
         expect(el.textContent).not.toContain(`Delete password`);
         expect(el.textContent).not.toContain(`Edit`);

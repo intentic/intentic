@@ -452,18 +452,30 @@ const revoke = async (target: string): Promise<void> => {
                 <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
             </Notice>
             <Section data-setting="access-people" :label="t(`sandbox.sandboxAccess.people`)">
-                <!-- One card per person, the signed-in one first, and the next card is where a new one is added: pressed, it
-                     becomes the address field in place, so adding someone grows the group by one card and moves nothing. -->
+                <!-- Adding someone is the group's own action, top right where every list in the app keeps it; offered once the
+                     roster has landed, so the address card it opens lands after the people rather than ahead of them. -->
+                <template v-if="isOwner && !adding" #actions>
+                    <Button
+                        size="small"
+                        tier="boring"
+                        :label="t(`sandbox.sandboxAccess.addPerson`)"
+                        :disabled="busy || listing"
+                        v-tooltip.bottom="t(`sandbox.sandboxAccess.addPersonSub`)"
+                        @click="startAdd"
+                    >
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                </template>
+                <!-- One card per person, the signed-in one first; adding someone grows the group by one card, the address
+                     field, at its end. -->
                 <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1">
                     <PersonCard
                         :email="user?.email ?? ``"
                         :image="user?.image ?? undefined"
                         :line="isOwner ? t(`sandbox.sandboxAccess.wordOwner`) : ownRole"
                     />
-                    <!-- While the roster is read, the cells after the owner's own card are drawn as they last looked (the
-                         people and the add tile, one run of grid items imprinted together), else as one person-shaped
-                         card; the add tile comes with the list, so it lands in its place instead of arriving early and
-                         being pushed along by the people that load ahead of it. -->
+                    <!-- While the roster is read, the cells after the owner's own card are drawn as they last looked (one
+                         run of grid items imprinted together), else as one person-shaped card. -->
                     <Await v-if="isOwner" :of="people" imprint="sandbox.access.people" :label="t(`sandbox.sandboxAccess.readingWhoAccess`)">
                         <template #fallback>
                             <div role="status" aria-busy="true" class="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5">
@@ -522,19 +534,6 @@ const revoke = async (target: string): Promise<void> => {
                                     <template #icon><Icon name="check" /></template>
                                 </Button>
                             </form>
-                            <button
-                                v-else
-                                type="button"
-                                class="ui-row-select flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-left"
-                                :disabled="busy"
-                                @click="startAdd"
-                            >
-                                <span class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted"><Icon name="plus" /></span>
-                                <span class="flex min-w-0 flex-col">
-                                    <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAccess.addPerson`) }}</span>
-                                    <span class="truncate text-xs text-subtle">{{ t(`sandbox.sandboxAccess.addPersonSub`) }}</span>
-                                </span>
-                            </button>
                         </template>
                     </Await>
                 </div>

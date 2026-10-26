@@ -222,8 +222,10 @@ it.each([`rail`, `drawer`] as const)(`keeps the %s header and evidence on one sh
 
     const wrapper = host.firstElementChild as HTMLElement;
     const header = host.querySelector<HTMLElement>(`.group.flex`);
-    expect(wrapper.classList.contains(`ui-row-select`)).toBe(true);
-    expect(header?.classList.contains(`ui-row-select`)).toBe(false);
+    // The hover wash answers a press: a rail is inside the row's press target, a drawer is not, so a drawer's wash is
+    // its header's alone (a document or a form under the pointer is not a thing to press).
+    expect(wrapper.classList.contains(`ui-row-select`)).toBe(body === `rail`);
+    expect(header?.classList.contains(`ui-row-select`)).toBe(body === `drawer`);
     expect(wrapper.classList.contains(`ui-row-open`)).toBe(true);
     expect(header?.closest(`.ui-row-open`)).toBe(wrapper);
     expect(host.querySelector(`.evidence-text`)?.closest(`.ui-row-open`)).toBe(wrapper);
@@ -242,4 +244,5 @@ it.each([`rail`, `drawer`] as const)(`keeps the %s header and evidence on one sh
     await nextTick();
     expect(wrapper.classList.contains(`ui-row-open`)).toBe(false);
     expect(wrapper.classList.contains(`ui-row-select`)).toBe(false);
+    expect(header?.classList.contains(`ui-row-select`)).toBe(false);
 });

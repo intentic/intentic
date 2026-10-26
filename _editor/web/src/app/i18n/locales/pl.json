@@ -5149,13 +5149,15 @@
             "copyPrompt": "Kopiuj prompt",
             "copyPromptIntoChat": "Skopiuj ten prompt do czatu ze swoim innym dostawcą AI",
             "createFile": "Utwórz plik",
+            "hidePrompt": "Ukryj prompt",
             "memory": "Pamięć",
             "notCreatedYet": " jeszcze nie istnieje. Zapisanie tutaj albo Utwórz plik tworzy go w katalogu głównym przestrzeni roboczej.",
             "nothingHereYetWhat": "Nic tu jeszcze nie ma. To, co każda tura w tej przestrzeni roboczej powinna wiedzieć.",
             "openFile": "Otwórz plik",
             "pasteMemoryDetailsHere": "Wklej tutaj zawartość swojej pamięci",
             "pasteResultBelowTo": "Wklej wynik poniżej, żeby scalić go z oboma plikami",
-            "reading": "Odczytywanie {memory_file}…"
+            "reading": "Odczytywanie {memory_file}…",
+            "showPrompt": "Pokaż prompt"
         },
         "agentModels": {
             "addFallback": "Dodaj model zapasowy",
@@ -5610,6 +5612,7 @@
         "agentSkills": {
             "cameWhatInstalledConnected": "Z tym, co zainstalowano i podłączono: {count}",
             "couldntReadSkill": "Nie udało się odczytać tej umiejętności.",
+            "couldntSaveSkill": "Nie udało się zapisać tej umiejętności.",
             "filterSkills": "Filtruj umiejętności",
             "nameTriggerOrigin": "Nazwa, wyzwalacz albo pochodzenie…",
             "noSkillsAddedYet": "Nie dodano jeszcze żadnych umiejętności.",
@@ -7860,7 +7863,6 @@
             "toUse": "Kiedy jej używać",
             "useUserAsksTo": "Użyj, gdy użytkownik prosi o napisanie notatek wydania albo wpisu do dziennika zmian.",
             "whatAgentDoesOnce": "Co agent robi po otwarciu umiejętności: kroki, polecenia, format, którego ma się trzymać, czego unikać. Działa Markdown.",
-            "whatShouldDo": "Co ma robić",
             "whatSkillShouldDo": "Co ma robić ta umiejętność",
             "writeWhatItDoes": "Napisz, co ma robić."
         },
@@ -7871,7 +7873,9 @@
             "instructions": "Instrukcje: {name}",
             "keep": "Zostaw",
             "noDescriptionAgentRarely": "Brak opisu — bez niego agent rzadko wybiera umiejętność.",
-            "rawFile": "Surowy plik"
+            "rawFile": "Surowy plik",
+            "showAll": "Pokaż wszystko",
+            "showLess": "Pokaż mniej"
         },
         "spawnPosture": {
             "alwaysAllow": "Zawsze zezwalaj",
@@ -8113,7 +8117,6 @@
             "accountName": "Nazwa konta",
             "all": "Wszystkie",
             "systemPrompt": "Prompt systemowy",
-            "newSkill": "Nowa umiejętność",
             "writeSkill": "Napisz umiejętność",
             "saveChanges": "Zapisz zmiany",
             "anywhereInWorkspace": "Gdziekolwiek w przestrzeni roboczej",

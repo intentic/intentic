@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PRIVACY_RULES_MAX, type PersonalDataClass, type PrivacyRule, type PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
-import { Icon, Row, ui } from "@intentic/ui";
+import { Button, Icon, Row, ui } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -84,6 +84,12 @@ const undo = (): void => {
 
 <template>
     <Row indent icon="filter" :title="t(`sandbox.agentPrivacyShield.rules`)" :description="t(`sandbox.agentPrivacyShield.rulesDescription`)">
+        <!-- Adding one is the list's own action, top right where every list in the app keeps it. -->
+        <template v-if="draft === undefined && rules.length < PRIVACY_RULES_MAX" #control>
+            <Button size="small" tier="boring" :label="t(`sandbox.agentPrivacyShield.rulesAdd`)" :disabled="!ready" @click="startDraft">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+        </template>
         <template #below>
             <div class="flex flex-col gap-2" :class="{ 'pointer-events-none opacity-60': !ready }">
                 <ul v-if="rows.length > 0 || draft !== undefined" class="flex flex-col divide-y divide-line-subtle">
@@ -150,20 +156,10 @@ const undo = (): void => {
                 </ul>
                 <p v-else class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.rulesEmpty`) }}</p>
 
-                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <button
-                        v-if="draft === undefined && rules.length < PRIVACY_RULES_MAX"
-                        type="button"
-                        :class="ui.textButton({ size: `xs`, flush: true })"
-                        @click="startDraft"
-                    >
-                        <Icon name="plus" class="text-3xs" />{{ t(`sandbox.agentPrivacyShield.rulesAdd`) }}
-                    </button>
-                    <span v-if="removed !== undefined" aria-live="polite" class="flex items-baseline gap-1.5 text-2xs">
-                        <span class="text-muted">{{ t(`sandbox.agentPrivacyShield.rulesRemoved`, { rule: removed.rule.title }) }}</span>
-                        <button type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="undo">{{ t(`ui.action.undo`) }}</button>
-                    </span>
-                </div>
+                <p v-if="removed !== undefined" aria-live="polite" class="flex items-baseline gap-1.5 text-2xs">
+                    <span class="text-muted">{{ t(`sandbox.agentPrivacyShield.rulesRemoved`, { rule: removed.rule.title }) }}</span>
+                    <button type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="undo">{{ t(`ui.action.undo`) }}</button>
+                </p>
             </div>
         </template>
     </Row>

@@ -216,14 +216,9 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
              section is for is its first line, under the header, never words beside it. -->
         <Section v-if="view.unassigned.length > 0 || drag.dragging.value" :label="t(`sandbox.agentModels.notAssigned`)" :heading="2">
             <template v-if="view.unassigned.length > 0" #actions>
-                <Button
-                    size="small"
-                    tier="boring"
-                    icon="sparkles"
-                    :label="t(`sandbox.agentModels.placeSuggested`)"
-                    :disabled="!loaded"
-                    @click="placeSuggested"
-                />
+                <Button size="small" tier="boring" :label="t(`sandbox.agentModels.placeSuggested`)" :disabled="!loaded" @click="placeSuggested">
+                    <template #icon><Icon name="sparkles" /></template>
+                </Button>
             </template>
             <p class="mb-2.5 text-2xs text-subtle">{{ t(`sandbox.agentModels.notAssignedCaption`) }}</p>
             <div
@@ -248,7 +243,9 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
 
         <Section data-setting="agent-model-setups" :label="t(`sandbox.agentModels.setups`)" :heading="2">
             <template #actions>
-                <Button size="small" tier="quiet" icon="plus" :label="t(`sandbox.agentModels.newSetup`)" :disabled="!loaded" @click="makeSetup" />
+                <Button size="small" tier="boring" :label="t(`sandbox.agentModels.newSetup`)" :disabled="!loaded" @click="makeSetup">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
             </template>
             <p class="mb-2.5 text-2xs text-subtle">{{ t(`sandbox.agentModels.setupsCaption`) }}</p>
             <div class="flex flex-col gap-3">

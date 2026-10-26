@@ -7,7 +7,7 @@ import {
     type PrivacyOwnNameList,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { DisclosureRow, FilterBar, Icon, Notice, ui } from "@intentic/ui";
+import { Button, DisclosureRow, FilterBar, Icon, Notice, ui } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -275,9 +275,22 @@ const INERT = `pointer-events-none opacity-60`;
 
                 <!-- The owner's own lists, read beside the built-in ones; each opens in place to be edited. -->
                 <div class="flex flex-col gap-2" :class="{ [INERT]: !ready }">
-                    <div class="flex flex-col gap-0.5">
-                        <p class="text-xs font-medium text-content">{{ t(`sandbox.agentPrivacyShield.ownLists`) }}</p>
-                        <p class="text-2xs text-muted">{{ t(`sandbox.agentPrivacyShield.ownListsNote`) }}</p>
+                    <!-- Adding one is the list's own action, top right of its heading where every list in the app keeps it. -->
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex min-w-0 flex-col gap-0.5">
+                            <p class="text-xs font-medium text-content">{{ t(`sandbox.agentPrivacyShield.ownLists`) }}</p>
+                            <p class="text-2xs text-muted">{{ t(`sandbox.agentPrivacyShield.ownListsNote`) }}</p>
+                        </div>
+                        <Button
+                            v-if="ownLists.length < PRIVACY_OWN_LISTS_MAX"
+                            size="small"
+                            tier="boring"
+                            class="shrink-0"
+                            :label="t(`sandbox.agentPrivacyShield.ownListsAdd`)"
+                            @click="addList"
+                        >
+                            <template #icon><Icon name="plus" /></template>
+                        </Button>
                     </div>
                     <ul v-if="ownRows.length > 0" class="flex flex-col divide-y divide-line-subtle">
                         <li v-for="row in ownRows" :key="row.list.id" class="flex flex-col gap-2 py-1.5">
@@ -326,20 +339,10 @@ const INERT = `pointer-events-none opacity-60`;
                         </li>
                     </ul>
                     <p v-else class="text-2xs text-subtle">{{ t(`sandbox.agentPrivacyShield.ownListsEmpty`) }}</p>
-                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <button
-                            v-if="ownLists.length < PRIVACY_OWN_LISTS_MAX"
-                            type="button"
-                            :class="ui.textButton({ size: `xs`, flush: true })"
-                            @click="addList"
-                        >
-                            <Icon name="plus" class="text-3xs" />{{ t(`sandbox.agentPrivacyShield.ownListsAdd`) }}
-                        </button>
-                        <span v-if="removed !== undefined" aria-live="polite" class="flex items-baseline gap-1.5 text-2xs">
-                            <span class="text-muted">{{ t(`sandbox.agentPrivacyShield.ownListsRemoved`, { list: removed.list.title }) }}</span>
-                            <button type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="undoRemove">{{ t(`ui.action.undo`) }}</button>
-                        </span>
-                    </div>
+                    <p v-if="removed !== undefined" aria-live="polite" class="flex items-baseline gap-1.5 text-2xs">
+                        <span class="text-muted">{{ t(`sandbox.agentPrivacyShield.ownListsRemoved`, { list: removed.list.title }) }}</span>
+                        <button type="button" :class="ui.textButton({ size: `xs`, flush: true })" @click="undoRemove">{{ t(`ui.action.undo`) }}</button>
+                    </p>
                 </div>
 
                 <FilterBar

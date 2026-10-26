@@ -10,6 +10,9 @@
 // 6. A retired spelling: outlined/raised/rounded as props; PrimeVue's own `severity`/`text`/`link`, or a `ui-button-*`
 //    class, where the tier and tone props say it (button.ts is the one place that maps a tier onto PrimeVue).
 // 7. Two <Button> siblings in one element at different sizes.
+// 9. A <Button> that adds (its icon is the plus) drawn in the quiet tier: adding an element is a filled button.
+// 10. A <Button> handed an icon by name in its `icon` prop: PrimeVue reads that prop as a CSS class, so `icon="plus"` draws
+//     nothing. The kit's glyph goes in the `#icon` slot as an <Icon>.
 // Exceptions: `<!-- allow(buttons): <reason> -->` above the element.
 import { at, blank, classesOf, excusedAt, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 
@@ -37,6 +40,24 @@ const TIER_CLASS = /(?:^|[\s`'"])ui-button-(?:loud|gilded|thumb)(?=[\s`'"]|$)/u;
 /** Geometry a call site must not restate on a <Button>: the tier owns all of it. Layout is not geometry. */
 const TIER_GEOMETRY =
     /(?:^|\s)!?(?:[\w@-]+:)*!?(?:p[xytblr]?-\d|h-\d|min-h-\d|text-(?:4xs|3xs|2xs|xs|sm|base|lg|xl)|rounded|border-|bg-|font-(?:medium|semibold|bold)|gap-)/u;
+
+/** An `icon` prop that is a bare glyph name rather than PrimeVue's own `pi pi-*` class string: it draws nothing. */
+const NAMED_ICON_PROP = /(?:^|\s)icon="(?!pi\s)[\w-]+"/u;
+
+/** A plus as the button's own icon: the prop, or an <Icon name="plus"> in its markup before it closes. */
+const PLUS_PROP = /(?:^|\s)icon="plus"/u;
+const PLUS_ICON = /<Icon\b(?:"[^"]*"|'[^']*'|`[^`]*`|[^>"'`])*?\sname="plus"/u;
+const addsWithPlus = (scan, index, attrs, selfClosing) => {
+    if (PLUS_PROP.test(attrs)) {
+        return true;
+    }
+    if (selfClosing !== ``) {
+        return false;
+    }
+    // Buttons don't nest, so the first close after this open is its own.
+    const end = scan.indexOf(`</Button>`, index);
+    return end !== -1 && PLUS_ICON.test(scan.slice(index, end));
+};
 
 /** The dense surfaces: a list row is 26px of room and the compact control is the one that fits it. */
 const DENSE = new Set([`Row`, `RowGroup`, `DisclosureRow`]);
@@ -182,6 +203,22 @@ for (const path of tracked) {
                 findings.push({
                     at: where,
                     why: `\`${retired[0].trim()}\` is retired: say what the button IS with \`tier\` (loud, accent — the default —, boring, quiet) and lay a colour on it with \`tone\` (accent, danger, warning, success). \`severity="secondary"\` is \`tier="boring"\`, \`text\` is \`tier="quiet"\`, \`severity="danger"\` is \`tone="danger"\`; \`outlined\` was the neutral tier's second spelling`,
+                });
+            }
+            // Rule 9: the owner asked for one look for adding (2026-10-26) — "New setup" quiet beside "Add another account"
+            // filled read as two kinds of control. Adding is filled: `tier="boring"` in the section header, accent only for
+            // an empty state's one call to action.
+            if (/(?:^|\s)tier="quiet"/u.test(attrs) && addsWithPlus(scan, index, attrs, selfClosing) && !excused(index)) {
+                findings.push({
+                    at: where,
+                    why: `a <Button> with a plus in the quiet tier: adding an element is a filled button — \`tier="boring"\` (with \`size="small"\`) in the section's \`#actions\`, top right, and accent only for an empty state's one call to action`,
+                });
+            }
+            // Rule 10: New setup's plus was never drawn — `icon="plus"` reached PrimeVue as a class no stylesheet answers.
+            if (NAMED_ICON_PROP.test(attrs) && !excused(index)) {
+                findings.push({
+                    at: where,
+                    why: `\`icon="…"\` on a <Button> is PrimeVue's CSS class, not a glyph name, so this draws no icon: put \`<template #icon><Icon name="…" /></template>\` inside the button`,
                 });
             }
             const tierClass = classes.match(TIER_CLASS);

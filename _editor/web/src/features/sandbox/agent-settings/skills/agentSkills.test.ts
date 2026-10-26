@@ -25,7 +25,7 @@ jest.mock(`../../environment/useSkills`, () => ({
         skills,
         settings,
         loaded: computed(() => ({ state: `ready`, data: [skills.value, settings.value], refreshing: false, refreshError: undefined })),
-        save: { mutate: saveMutate },
+        save: { mutateAsync: saveMutate, isPending: ref(false) },
         remove: { mutate: removeMutate },
         setEnabled,
         readBody: async () => ({ id: `x`, name: `x`, body: `## Body.` }),
@@ -77,7 +77,7 @@ afterEach(() => {
     settings.value = SandboxSettingsSchema.parse({});
     setEnabled.mockClear();
     removeMutate.mockClear();
-    saveMutate.mockClear();
+    saveMutate.mockReset();
 });
 
 // A sandbox with many connections; each account ships its own cheatsheet skill.
@@ -325,4 +325,56 @@ test(`editing a skill asks only for what can change`, async () => {
     expect(button(host, `Save changes`)).toEqual(expect.any(Object));
     expect(host.querySelector(`input.font-mono`)).toBeNull();
     expect(host.textContent).toContain(`When to use it`);
+});
+
+// The list's own action sits where every list keeps one, top right of its header, and what it makes appears first.
+test(`Write a skill is the group's header action, and the skill it starts opens at the top of the list`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    const host = mount();
+
+    // In the header line, the section's first child, not among the rows of its card.
+    const write = button(host, `Write a skill`);
+    const header = host.querySelector(`section`)?.firstElementChild;
+    expect(header?.contains(write ?? null)).toBe(true);
+    write?.click();
+    await nextTick();
+
+    const draft = host.querySelector(`[data-skill-draft]`);
+    const firstRow = rows(host)[0];
+    expect(draft).not.toBeNull();
+    // DOCUMENT_POSITION_FOLLOWING: the saved row comes after the draft.
+    expect(draft!.compareDocumentPosition(firstRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    // The head follows the name being typed, so what is being made is visible before it exists.
+    await type(nameField(host)!, `changelog`);
+    expect(draft!.textContent).toContain(`changelog`);
+});
+
+test(`a refused save keeps the editor and what was typed, and says why beside Save`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    saveMutate.mockRejectedValueOnce(new Error(`disk is full`));
+    const host = mount();
+
+    rows(host)[0]?.click();
+    await settle();
+    const trigger = host.querySelector<HTMLTextAreaElement>(`textarea`)!;
+    trigger.value = `Use when the user asks for meeting notes.`;
+    trigger.dispatchEvent(new Event(`input`));
+    await nextTick();
+
+    button(host, `Save changes`)?.click();
+    await settle();
+    expect(saveMutate).toHaveBeenCalledWith(expect.objectContaining({ name: `notes`, description: `Use when the user asks for meeting notes.` }));
+    expect(host.textContent).toContain(`disk is full`);
+    expect(rows(host)[0]?.getAttribute(`aria-expanded`)).toBe(`true`);
+});
+
+// A rewrite with nothing changed has nothing to send.
+test(`Save changes rests until something changed`, async () => {
+    skills.value = [skill({ id: `notes`, name: `notes` })];
+    const host = mount();
+
+    rows(host)[0]?.click();
+    await settle();
+    expect(button(host, `Save changes`)?.hasAttribute(`disabled`)).toBe(true);
 });

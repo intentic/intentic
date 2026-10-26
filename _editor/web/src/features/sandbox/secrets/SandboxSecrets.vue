@@ -205,7 +205,7 @@ const pushToCi = async (): Promise<void> => {
                     <FilterBar v-if="filterable" v-model="query" :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)" class="min-w-0 flex-1">
                         <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
                     </FilterBar>
-                    <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" :disabled="adding" @click="openAdd">
+                    <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" tier="boring" :disabled="adding" @click="openAdd">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                     <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />

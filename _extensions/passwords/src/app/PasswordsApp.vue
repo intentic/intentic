@@ -254,9 +254,10 @@ watch(item, async (found) => {
                         <Icon v-if="locking" name="spinner" spin />{{ ready.locked ? t(`app.lock.unlock`) : t(`app.lock.lockNow`) }}
                     </button>
                     <template v-if="manage">
-                        <button type="button" :class="ui.iconButton({ size: `lg` })" :aria-label="t(`app.new`)" :title="t(`app.new`)" @click="creating = true">
-                            <Icon name="plus" />
-                        </button>
+                        <!-- Adding one is a labelled, filled button, as every list in the app adds; settings stays an icon. -->
+                        <Button size="small" tier="boring" :label="t(`app.new`)" @click="creating = true">
+                            <template #icon><Icon name="plus" /></template>
+                        </Button>
                         <button
                             type="button"
                             :class="ui.iconButton({ size: `lg`, on: onSettings })"

@@ -5740,13 +5740,15 @@
             "copyPrompt": "Copy prompt",
             "copyPromptIntoChat": "Copy this prompt into a chat with your other AI provider",
             "createFile": "Create file",
+            "hidePrompt": "Hide prompt",
             "memory": "Memory",
             "notCreatedYet": " doesn't exist yet. Saving here, or Create file, makes it at the workspace root.",
             "nothingHereYetWhat": "Nothing here yet. What every turn in this workspace should know.",
             "openFile": "Open file",
             "pasteMemoryDetailsHere": "Paste your memory details here",
             "pasteResultBelowTo": "Paste the result below to merge it into both files",
-            "reading": "Reading {memory_file}…"
+            "reading": "Reading {memory_file}…",
+            "showPrompt": "Show prompt"
         },
         "agentModels": {
             "addFallback": "Add a fallback model",
@@ -6201,6 +6203,7 @@
         "agentSkills": {
             "cameWhatInstalledConnected": "{count} came with what you installed and connected",
             "couldntReadSkill": "Couldn't read this skill.",
+            "couldntSaveSkill": "Couldn't save this skill.",
             "filterSkills": "Filter skills",
             "nameTriggerOrigin": "Name, trigger or origin…",
             "noSkillsAddedYet": "No skills added yet.",
@@ -8354,7 +8357,6 @@
             "toUse": "When to use it",
             "useUserAsksTo": "Use when the user asks to draft release notes or a changelog entry for a version.",
             "whatAgentDoesOnce": "What the agent does once it opens the skill: steps, commands, the format to follow, what to avoid. Markdown works.",
-            "whatShouldDo": "What it should do",
             "whatSkillShouldDo": "What this skill should do",
             "writeWhatItDoes": "Write what it should do."
         },
@@ -8365,7 +8367,9 @@
             "instructions": "{name} instructions",
             "keep": "Keep it",
             "noDescriptionAgentRarely": "No description, the agent rarely picks a skill without one.",
-            "rawFile": "Raw file"
+            "rawFile": "Raw file",
+            "showAll": "Show all",
+            "showLess": "Show less"
         },
         "spawnPosture": {
             "alwaysAllow": "Always allow",
@@ -8703,7 +8707,6 @@
             "accountName": "Account name",
             "all": "All",
             "systemPrompt": "System prompt",
-            "newSkill": "New skill",
             "writeSkill": "Write a skill",
             "saveChanges": "Save changes",
             "anywhereInWorkspace": "Anywhere in the workspace",

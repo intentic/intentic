@@ -5740,13 +5740,15 @@
             "copyPrompt": "Copier la consigne",
             "copyPromptIntoChat": "Copier cette consigne dans un chat avec votre autre fournisseur d'IA",
             "createFile": "Créer le fichier",
+            "hidePrompt": "Masquer le prompt",
             "memory": "Mémoire",
             "notCreatedYet": " n'existe pas encore. Enregistrer ici, ou Créer le fichier, le crée à la racine de l'espace de travail.",
             "nothingHereYetWhat": "Rien ici pour l'instant. Ce que chaque tour dans cet espace de travail devrait savoir.",
             "openFile": "Ouvrir le fichier",
             "pasteMemoryDetailsHere": "Collez ici les détails de votre mémoire",
             "pasteResultBelowTo": "Collez le résultat ci-dessous pour le fusionner dans les deux fichiers",
-            "reading": "Lecture de {memory_file}…"
+            "reading": "Lecture de {memory_file}…",
+            "showPrompt": "Afficher le prompt"
         },
         "agentModels": {
             "addFallback": "Ajouter un modèle de repli",
@@ -6201,6 +6203,7 @@
         "agentSkills": {
             "cameWhatInstalledConnected": "{count} sont venues avec ce que vous avez installé et connecté",
             "couldntReadSkill": "Impossible de lire ce skill.",
+            "couldntSaveSkill": "Impossible d'enregistrer ce skill.",
             "filterSkills": "Filtrer les skills",
             "nameTriggerOrigin": "Nom, déclencheur ou origine…",
             "noSkillsAddedYet": "Aucun skill ajouté pour l'instant.",
@@ -8354,7 +8357,6 @@
             "toUse": "Quand l'utiliser",
             "useUserAsksTo": "À utiliser quand l'utilisateur demande de rédiger des notes de version ou une entrée de journal des changements.",
             "whatAgentDoesOnce": "Ce que fait l'agent une fois le skill ouvert : étapes, commandes, le format à suivre, ce qu'il faut éviter. Markdown accepté.",
-            "whatShouldDo": "Ce qu'il doit faire",
             "whatSkillShouldDo": "Ce que ce skill doit faire",
             "writeWhatItDoes": "Décrivez ce qu'il doit faire."
         },
@@ -8365,7 +8367,9 @@
             "instructions": "Instructions de {name}",
             "keep": "Le garder",
             "noDescriptionAgentRarely": "Pas de description ; l'agent choisit rarement un skill sans elle.",
-            "rawFile": "Fichier brut"
+            "rawFile": "Fichier brut",
+            "showAll": "Tout afficher",
+            "showLess": "Afficher moins"
         },
         "spawnPosture": {
             "alwaysAllow": "Toujours autoriser",
@@ -8703,7 +8707,6 @@
             "accountName": "Nom du compte",
             "all": "Tous",
             "systemPrompt": "Consigne système",
-            "newSkill": "Nouveau skill",
             "writeSkill": "Écrire un skill",
             "saveChanges": "Enregistrer les modifications",
             "anywhereInWorkspace": "N'importe où dans l'espace de travail",

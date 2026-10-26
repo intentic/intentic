@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { type SkillDraft, type SkillSummary, SYSTEM_PROMPT_MAX, type SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
-import { DisclosureRow, Icon, MarkdownDocument, Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, Icon, MarkdownDocument, Notice, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import SkillForm from "../agent-settings/skills/SkillForm.vue";
+import SkillDraftRow from "../agent-settings/skills/SkillDraftRow.vue";
 import SkillRow from "../agent-settings/skills/SkillRow.vue";
 import { usePersonaKit } from "./usePersonaKit";
 import { useTrimmedDraft } from "../../../lib/useDraft";
 import { useT } from "@intentic/ui/i18n";
 
 // What this persona is told: the prompt and its own skills, one tab since they're one folder and one decision. Skills
-// reuse the Skills page's <SkillRow>/<SkillForm>, not a second hand-rolled editor. The mode rides the persona's autosave;
+// reuse the Skills page's <SkillRow>/<SkillDraftRow>, not a second hand-rolled editor. The mode rides the persona's autosave;
 // the prompt text commits on its own, so a keystroke never hits the personas file.
 
 const t = useT();
@@ -76,11 +76,14 @@ const adding = ref(false);
 const openBody = ref<string | undefined>(undefined);
 const bodyError = ref<string | undefined>(undefined);
 const busy = ref(false);
+// Why the last save failed, said beside the editor's Save, which stays open with what was typed.
+const saveError = ref<string | undefined>(undefined);
 
 const close = (): void => {
     openName.value = undefined;
     openBody.value = undefined;
     bodyError.value = undefined;
+    saveError.value = undefined;
     adding.value = false;
 };
 
@@ -118,7 +121,18 @@ const run = async (action: () => Promise<unknown>, whenItFails: string): Promise
     }
 };
 
-const save = (skill: SkillDraft): Promise<void> => run(() => saveSkill.mutateAsync(skill), t(`sandbox.personaKitFields.couldntSaveSkill`));
+const save = async (skill: SkillDraft): Promise<void> => {
+    saveError.value = undefined;
+    busy.value = true;
+    try {
+        await saveSkill.mutateAsync(skill);
+        close();
+    } catch (err) {
+        saveError.value = noticeFrom(err, t(`sandbox.personaKitFields.couldntSaveSkill`)).detail;
+    } finally {
+        busy.value = false;
+    }
+};
 const remove = (name: string): Promise<void> => run(() => removeSkill.mutateAsync(name), t(`sandbox.personaKitFields.couldntRemoveSkill`));
 
 // Switching personas closes whatever was open on the last one, since the accordion reuses this component.
@@ -177,42 +191,43 @@ watch(
             </RowGroup>
         </div>
 
-        <!-- Shown regardless of the prompt setting, since a persona's checklist is independent of which prompt it runs. -->
-        <div class="flex flex-col gap-2">
-            <span class="flex items-center gap-2 text-sm text-content">
-                <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
-                {{ t(`sandbox.personaKitFields.ownSkills`) }}
-            </span>
-            <!-- A real <RowGroup>, so the rows inside don't each have to declare their own size; the group sets `compact` once. -->
-            <RowGroup>
-                <!-- The invitation is a row inside the list, not a paragraph above it, matching the Skills page's shape. -->
-                <Row v-if="kit.skills.length === 0 && !adding" icon="book" :description="t(`sandbox.personaKitFields.noneYetSkillHere`)" />
+        <!-- Shown regardless of the prompt setting, since a persona's checklist is independent of which prompt it runs. Writing
+             one is the list's own action, top right, as on the Skills page. -->
+        <RowGroup :label="t(`sandbox.personaKitFields.ownSkills`)">
+            <template #actions>
+                <Button size="small" tier="boring" :label="t(`sandbox.words.writeSkill`)" :disabled="busy" @click="startAdd">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
+            </template>
 
-                <SkillRow
-                    v-for="skill in kit.skills"
-                    :key="skill.name"
-                    :skill="summaryOf(skill)"
-                    :expanded="openName === skill.name"
-                    :body="openName === skill.name ? openBody : undefined"
-                    :body-error="openName === skill.name ? bodyError : undefined"
-                    :sources="NO_SOURCES"
-                    :disabled="busy"
-                    @toggle="void toggle(skill.name)"
-                    @save="save"
-                    @remove="remove(skill.name)"
-                />
+            <SkillDraftRow
+                v-if="adding"
+                :taken="kit.skills.map((skill) => skill.name)"
+                :disabled="busy"
+                :saving="busy"
+                :error="saveError"
+                @save="save"
+                @cancel="close"
+            />
 
-                <!-- New skills use the same disclosure row as existing skills. -->
-                <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
-                    <template #below>
-                        <SkillForm :taken="kit.skills.map((skill) => skill.name)" :disabled="busy" @save="save" @cancel="close" />
-                    </template>
-                </DisclosureRow>
+            <SkillRow
+                v-for="skill in kit.skills"
+                :key="skill.name"
+                :skill="summaryOf(skill)"
+                :expanded="openName === skill.name"
+                :body="openName === skill.name ? openBody : undefined"
+                :body-error="openName === skill.name ? bodyError : undefined"
+                :sources="NO_SOURCES"
+                :disabled="busy"
+                :saving="openName === skill.name && busy"
+                :save-error="openName === skill.name ? saveError : undefined"
+                @toggle="void toggle(skill.name)"
+                @save="save"
+                @remove="remove(skill.name)"
+            />
 
-                <!-- Hidden while something is open, so only one skill is ever being written or read at a time. -->
-                <RowNote v-else-if="openName === undefined" variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
-            </RowGroup>
-        </div>
+            <RowNote v-if="kit.skills.length === 0 && !adding" variant="empty">{{ t(`sandbox.personaKitFields.noneYetSkillHere`) }}</RowNote>
+        </RowGroup>
 
         <Notice
             v-if="kitError !== undefined"

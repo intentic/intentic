@@ -262,7 +262,7 @@ const dismissWork = (notice: NoticeModel): void => {
             <div v-if="!detailOpen" class="flex shrink-0 items-center gap-1.5 pb-1.5">
                 <!-- A labelled button, not an icon: it creates something, unlike the refresh, which only reads again. -->
                 <template v-if="view === `installed`">
-                    <Button :label="t(`sandbox.words.newExtension`)" size="small" tier="quiet" @click="creating = true">
+                    <Button :label="t(`sandbox.words.newExtension`)" size="small" tier="boring" @click="creating = true">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                     <button

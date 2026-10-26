@@ -553,9 +553,10 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <Button :label="t(`setup.setup.openChat`)" class="w-full justify-center md:w-fit" v-action="openHeld">
                                 <template #icon><Icon name="comments" /></template>
                             </Button>
-                            <button type="button" :class="ui.textButton(`self-center md:self-auto`)" v-action="addAnother">
-                                {{ t(`setup.setup.addAnotherSandbox`) }}
-                            </button>
+                            <!-- Adding is a filled button wherever the app adds something, beside the one call to action rather than under it. -->
+                            <Button :label="t(`setup.setup.addAnotherSandbox`)" tier="boring" class="w-full justify-center md:w-fit" v-action="addAnother">
+                                <template #icon><Icon name="plus" /></template>
+                            </Button>
                         </div>
                     </section>
 

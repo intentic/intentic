@@ -1,4 +1,4 @@
-<!-- A non-record line on a <RowGroup>'s surface: an empty-state sentence, a fallback message, or an "add one" affordance. -->
+<!-- A non-record line on a <RowGroup>'s surface: an empty-state sentence, a fallback message, or a "show more" line. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { FACE_SIZES } from "../brand/personaFace.js";
@@ -8,13 +8,15 @@ import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, ROW_TONES,
 
 const { variant = `note`, lead = `icon`, tone = `default` } = defineProps<{
     // `note`: a sentence in the group's padding. `empty`: centred "nothing here yet", with room for an empty surface.
-    // `action`: a pressable line that adds one. `block`: arbitrary content (a form, a figure), padded like an
-    // open row's drawer; brings no type or colour of its own.
+    // `action`: a pressable line about the list itself (show older, show fewer). NOT how a list adds one: adding is
+    // a filled `<Button size="small" tier="boring">` with a plus in the group's `#actions`, top right, as every list
+    // in the app adds (`_tools/checks/button-tiers.mjs`). `block`: arbitrary content (a form, a figure), padded like
+    // an open row's drawer; brings no type or colour of its own.
     variant?: `note` | `empty` | `action` | `block`;
     // `block` only, and it must match the `lead` of the rows this block previews, or the preview draws a face at
     // a glyph's size and the row it commits to jumps.
     lead?: `icon` | `face`;
-    /** The leading glyph. `action` defaults to `plus`; a note draws none unless asked. */
+    /** The leading glyph. `action` falls back to `plus`, but name the one that says what the press does; a note draws none unless asked. */
     icon?: IconName;
     /** Tints the glyph, for the note that is a warning rather than a remark. */
     tone?: RowTone;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract/policy/secret-hosts";
@@ -153,9 +153,9 @@ const dirty = computed(() => {
                     :aria-label="t(`capabilities.secretHosts.addHost`)"
                     :class="ui.input({ size: `sm` }, `min-w-40 flex-1 font-mono`)"
                 />
-                <button type="submit" :class="ui.textButton({ size: `xs` })" :disabled="typed.trim() === ``">
-                    {{ t(`capabilities.secretHosts.addHost`) }}
-                </button>
+                <Button type="submit" size="small" tier="boring" :label="t(`capabilities.secretHosts.addHost`)" :disabled="typed.trim() === ``">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
             </form>
             <p v-if="typedError" class="pt-1 text-2xs text-warning">{{ typedError }}</p>
             <div class="flex items-center gap-2 pt-2">

@@ -1,6 +1,6 @@
 <!-- One connected office card: EZD RP cases and tasks, or e-Doręczenia deliveries and proofs, as last saved, with a live refresh, a connection test and the office acts the agent took. -->
 <script setup lang="ts">
-import { Button, formatDate, formatDateTime, Notice, noticeOf, Page, PageHeader, Row, RowGroup, Section, StatusBadge } from "@intentic/extension-ui";
+import { Button, formatDate, formatDateTime, Icon, Notice, noticeOf, Page, PageHeader, Row, RowGroup, Section, StatusBadge } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { t } from "../i18n.js";
 import { deliveryTone, instant, type OfficeService } from "./facts.js";
@@ -57,8 +57,12 @@ const deliveryLabel = (row: (typeof deliveries.value)[number]): string => {
         <div class="flex flex-col gap-4">
             <PageHeader :title="title">
                 <template #actions>
-                    <Button :label="t(`test`)" icon="check-circle" tier="boring" :disabled="pending !== undefined" :loading="pending === `test`" @click="test" />
-                    <Button :label="t(`refresh`)" icon="refresh" :disabled="pending !== undefined" :loading="pending === `refresh`" @click="refresh" />
+                    <Button :label="t(`test`)" tier="boring" :disabled="pending !== undefined" :loading="pending === `test`" @click="test">
+                        <template #icon><Icon name="check-circle" /></template>
+                    </Button>
+                    <Button :label="t(`refresh`)" :disabled="pending !== undefined" :loading="pending === `refresh`" @click="refresh">
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
                 </template>
             </PageHeader>
 

@@ -201,7 +201,7 @@ const add = async (): Promise<void> => {
             <Button
                 v-if="!adding"
                 size="small"
-                tier="quiet"
+                tier="boring"
                 :label="t(`sandbox.deviceRunners.addRunner`)"
                 :disabled="busy || door.device.online !== true"
                 @click="adding = true"

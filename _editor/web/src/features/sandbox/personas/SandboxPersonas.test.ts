@@ -868,15 +868,18 @@ it(`adds a persona's own skill through the same row and the same editor as the s
     await openPersona(el, `work`);
     await openTab(el, `What it is told`);
 
+    // The list's own action, a filled button in its header, as on the Skills page: not a line among the rows.
     const add = buttonLabelled(el, `Write a skill`)!;
-    expect(add.className).toContain(`w-full`);
+    expect(add.className).not.toContain(`w-full`);
+    expect(add.closest(`section`)?.firstElementChild?.contains(add)).toBe(true);
 
     add.click();
     await nextTick();
     const rendered = text(el);
     expect(rendered).toContain(`When to use it`);
-    expect(rendered).toContain(`What it should do`);
+    expect(rendered).toContain(`Instructions`);
     expect(rendered).toContain(`Add skill`);
+    expect(el.querySelector(`[data-skill-draft]`)).not.toBeNull();
 });
 
 // The checklist that lets a persona starve a small-context model of everything it does not need. Named with the exact
