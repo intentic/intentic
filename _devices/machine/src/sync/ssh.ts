@@ -86,6 +86,15 @@ export const IGNORES = [
     // `**/` is Mutagen's (doublestar) spelling for "at any depth, the root included"; a path without it is anchored.
     `**/${STATE_DIR}/cache`,
     `**/${STATE_DIR}/local`,
+    // Cargo's build output: a profile folder under `target/`, natively or under a target triple
+    // (`target/x86_64-pc-windows-msvc/release`). Measured on rog, 2026-10-26: three crates' `target/` were 16 of the
+    // workspace's 18 GB and 31,000 of its 44,000 entries, SHA-1 hashed and shipped both ways on every `cargo build`
+    // either side ran, and rescanned every poll. Matched by its profile folders rather than a bare `target`, which is
+    // also an ordinary folder name in source trees; what is left of `target/` (CACHEDIR.TAG, .rustc_info.json) is bytes.
+    "**/target/debug",
+    "**/target/release",
+    "**/target/*/debug",
+    "**/target/*/release",
 ];
 
 // The two entries above that describe the WORKSPACE root rather than any folder: a project pairing syncs one folder

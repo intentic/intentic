@@ -35,17 +35,23 @@ const MUTAGEN_TEMPORARY = ".mutagen-temporary-*";
 
 // One pattern of the spellings a project's ignore list uses (ssh.ts PROJECT_IGNORES), as Mutagen reads it: a single
 // name, `*` matching within it, that matches the name at any depth, or only at the root when it starts with `/`; or
-// `**/` followed by plain names joined by `/` (no `*`), which matches that run of folders at any depth, the root
-// included. A matched directory takes everything under it along. Anything else (`!`, `?`, a bare `**`, `[...]`, any
-// other inner or trailing `/`) is refused rather than approximated: a pattern read too narrowly would offer an ignored
-// file, a secret among them, for bringing back.
+// `**/` followed by names joined by `/`, each with `*` matching within it as above (`**/target/*/debug`), which matches
+// that run of folders at any depth, the root included. A matched directory takes everything under it along. Anything
+// else (`!`, `?`, a `**` past the first, `[...]`, any other inner or trailing `/`) is refused rather than approximated:
+// a pattern read too narrowly would offer an ignored file, a secret among them, for bringing back.
 const PATTERN = /^\/?[^/*?[\]!\\{}]*(?:\*[^/*?[\]!\\{}]*)*$/;
-const DEEP_PATH = /^\*\*\/[^/*?[\]!\\{}]+(?:\/[^/*?[\]!\\{}]+)+$/;
+const SEGMENT = String.raw`(?:[^/*?[\]!\\{}]|\*(?!\*))+`;
+const DEEP_PATH = new RegExp(String.raw`^\*\*\/${SEGMENT}(?:\/${SEGMENT})+$`);
 
 // The pattern as a regular expression over a whole relative path, which the sandbox's walk runs as it is (project-remote.ts).
 export const ignoreExpression = (pattern: string): string => {
     if (DEEP_PATH.test(pattern) && pattern.split("/").slice(1).every((segment) => segment !== "." && segment !== "..")) {
-        return `(?:^|/)${escapeRegExp(pattern.slice("**/".length))}(?:/|$)`;
+        const run = pattern
+            .slice("**/".length)
+            .split("/")
+            .map((segment) => segment.split("*").map(escapeRegExp).join("[^/]*"))
+            .join("/");
+        return `(?:^|/)${run}(?:/|$)`;
     }
     const bare = pattern.replace(/^\//, "");
     if (!PATTERN.test(pattern) || bare === "" || bare.includes("**")) {

@@ -44,6 +44,11 @@ person's own dockerd in another distro flushes them. Docker Desktop keeps its en
 Only one keeper runs per distro (`flock` on `/run/intentic-engine/keeper.lock`): a second ends at once with exit 4, and
 `ic engine start` waits for the first. One that finds a killed keeper's helpers or dockerd still running stops them first.
 
+The keeper caps BuildKit's build cache at 80 GB (GC keeps at least 20 GB) through `/etc/intentic-engine/daemon.json`,
+which it writes and passes as `--config-file`. Without the cap, BuildKit sizes its limit from the distro's sparse disk,
+which reports 1 TB: on rog the cache reached 396 GB and the engine's VHDX 810 GB. When `/etc/docker/daemon.json`
+exists, the keeper leaves it in charge and writes no cap.
+
 A PC where the namespace cannot be set up (no `/dev/net/tun`, no pasta or socat and no network to fetch them on an
 engine imported from 1.0.0) runs `dockerd` in the shared namespace as before 1.1.0 rather than not at all. There the
 keeper leaves Windows' connections to `127.0.0.1` to `docker-proxy` (mirrored networking otherwise loses them), and does

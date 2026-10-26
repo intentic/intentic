@@ -7,11 +7,17 @@
 //   node dev-before-sleep.mjs <slug> [--dry-run]
 // Exit 0: let it sleep. Exit 75 with one line on stdout: keep it awake, for the reason printed. `--dry-run` answers the
 // same and starts nothing.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
-import { DEV_REBUILD_EXIT_MARK, devRebuildHoldPath, devRebuildLogPath, devRebuildPidPath } from "@intentic/sandbox-contract/schemas/devices";
+import {
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_SWAP_MARK,
+    devRebuildHoldPath,
+    devRebuildLogPath,
+    devRebuildPidPath,
+} from "@intentic/sandbox-contract/schemas/devices";
 
 import { REPO_ROOT } from "./dev-baked-packages.mjs";
 import { describeMissing, missingFromImage, readCheckoutLock, readImageLock } from "./dev-image-drift.mjs";
@@ -53,6 +59,54 @@ const rebuildRunning = () => {
     }
     return !readFileSync(log, "utf8").slice(-4096).includes(DEV_REBUILD_EXIT_MARK);
 };
+
+// The session the pid file names, when it is still a rebuild: a session gone since (a slept machine never removes the
+// file) may have handed its number to something else, which is never stopped in its place.
+const liveRebuildSession = () => {
+    const sid = Number(existsSync(pidFile) ? readFileSync(pidFile, "utf8").trim() : "");
+    if (!Number.isInteger(sid) || sid <= 1 || sid === process.pid) {
+        return undefined;
+    }
+    const args = spawnSync("ps", ["-o", "args=", "-p", String(sid)], { encoding: "utf8" }).stdout ?? "";
+    return args.includes("rebuild:sandbox") ? sid : undefined;
+};
+
+// A build quiet past STALLED_MS whose session still runs is HUNG, not over (rog, 2026-10-26: four sat in `docker buildx
+// build` for one to five days, each orphaned by the next one started over it, which took its pid file). It is stopped,
+// whole session, as `dev-rebuild-cancel` would, whether or not another starts after it. Never once its swap has begun:
+// the container is being replaced then, and nothing may stop that halfway.
+const stopHungRebuild = () => {
+    const sid = liveRebuildSession();
+    if (sid === undefined) {
+        return true;
+    }
+    if (existsSync(log) && readFileSync(log, "utf8").includes(`\n${DEV_REBUILD_SWAP_MARK}`)) {
+        return false;
+    }
+    const signal = (name) => {
+        try {
+            process.kill(-sid, name);
+        } catch {
+            try {
+                process.kill(sid, name);
+                // allow(silent-catch): the session ended between the check and the signal, which is what was wanted.
+            } catch {}
+        }
+    };
+    signal("SIGTERM");
+    const until = Date.now() + 10_000;
+    while (liveRebuildSession() !== undefined && Date.now() < until) {
+        spawnSync("sleep", ["1"]);
+    }
+    signal("SIGKILL");
+    rmSync(pidFile, { force: true });
+    return true;
+};
+
+// First, and whatever the image lacks: a hung build is a cost whether or not this sweep would start another.
+if (!dryRun && !rebuildRunning() && !stopHungRebuild()) {
+    keepAwake(`its image rebuild is restarting the sandbox onto the new image`);
+}
 
 const imageLock = readImageLock(`intentic-sandbox-${slug}`);
 if (imageLock === undefined) {

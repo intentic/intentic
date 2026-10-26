@@ -223,6 +223,16 @@ const CANCEL_TIMEOUT_MS = 40_000;
 // The cancel, as the machine runs it. `pkill -s` stops a session (Linux, BSD); `kill -- -sid` the same session's group
 // where pkill is missing; and on a machine with no setsid (macOS), where the build never got a session of its own, its
 // direct children and itself. Whatever is left after ten seconds is killed.
+// ONE REBUILD PER SANDBOX. A second one started while the first still runs (a hung `docker buildx` never ends by itself)
+// overwrites the first's pid file, which leaves the first beyond any cancel: on rog, 2026-10-26, four such builds had
+// sat in `docker buildx build` for one to five days each. So a rebuild whose session still runs refuses the next, in
+// words, and the cancel is what clears the way. The pid file alone is not trusted: a session gone since (a slept
+// machine never removes it) may have handed its number to something else, so only a process that IS a rebuild counts.
+const rebuildRunningGuard = (slug: string): string =>
+    `sid=$(cat ${shellDir(devRebuildPidPath(slug))} 2>/dev/null || true); case "$sid" in ''|*[!0-9]*) sid='' ;; esac; ` +
+    `if [ -n "$sid" ] && ps -o args= -p "$sid" 2>/dev/null | grep -q 'rebuild:sandbox'; then ` +
+    `echo "A rebuild of this sandbox is already running on that device. Let it finish, or cancel it before starting another." >&2; exit 3; fi;`;
+
 const cancelLine = (slug: string): string =>
     [
         `log=${shellDir(devRebuildLogPath(slug))}; pidf=${shellDir(devRebuildPidPath(slug))}; hold=${shellDir(devRebuildHoldPath(slug))};`,
@@ -321,7 +331,7 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `${WITH_PNPM} ${OWN_SESSION} mkdir -p "$HOME/.intentic/logs" && rm -f ${shellDir(devRebuildHoldPath(facts.ownSlug))} && cd ${shellDir(facts.devRoot)} && ` +
+                : `${WITH_PNPM} ${OWN_SESSION} ${rebuildRunningGuard(facts.ownSlug)} mkdir -p "$HOME/.intentic/logs" && rm -f ${shellDir(devRebuildHoldPath(facts.ownSlug))} && cd ${shellDir(facts.devRoot)} && ` +
                   `INTENTIC_SWAP_GATE=${shellDir(devRebuildHoldPath(facts.ownSlug))} INTENTIC_REBUILD_PID=${shellDir(devRebuildPidPath(facts.ownSlug))} ` +
                   `$detach nohup sh -c 'echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 & sleep 1`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",

@@ -21,6 +21,10 @@
         ".pnpm-store",
         ".image-out",
         "**/.intentic/cache",
-        "**/.intentic/local"
+        "**/.intentic/local",
+        "**/target/debug",
+        "**/target/release",
+        "**/target/*/debug",
+        "**/target/*/release"
     ]
 }

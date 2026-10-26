@@ -14,7 +14,7 @@ import {
     readDevRebuildLog,
 } from "@intentic/sandbox-contract/schemas/devices";
 import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -207,6 +207,9 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
     expect(line).toBe(
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
             "detach=$(command -v setsid 2>/dev/null || true); " +
+            `sid=$(cat "$HOME"/.intentic/logs/dev-rebuild-work-abc.pid 2>/dev/null || true); case "$sid" in ''|*[!0-9]*) sid='' ;; esac; ` +
+            `if [ -n "$sid" ] && ps -o args= -p "$sid" 2>/dev/null | grep -q 'rebuild:sandbox'; then ` +
+            `echo "A rebuild of this sandbox is already running on that device. Let it finish, or cancel it before starting another." >&2; exit 3; fi; ` +
             'mkdir -p "$HOME/.intentic/logs" && rm -f "$HOME"/.intentic/logs/dev-rebuild-work-abc.hold && cd /home/ada/intentic && ' +
             'INTENTIC_SWAP_GATE="$HOME"/.intentic/logs/dev-rebuild-work-abc.hold INTENTIC_REBUILD_PID="$HOME"/.intentic/logs/dev-rebuild-work-abc.pid ' +
             `$detach nohup sh -c 'echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"' ` +
@@ -248,6 +251,30 @@ test("arms the swap gate fresh and records the build's session for a cancel", ()
     // Written by the build's own shell, first thing, so it is the session the cancel stops; removed once it ends.
     expect(line).toContain(`sh -c 'echo $$ > "$INTENTIC_REBUILD_PID";`);
     expect(line).toContain(`rm -f "$INTENTIC_REBUILD_PID"'`);
+});
+
+// A hung build never ends by itself, and a second one started over it took its pid file and left it beyond any cancel:
+// four of them sat in `docker buildx build` on rog for up to five days. Run for real, against a live process and a dead one.
+test("refuses a rebuild while the last one's session still runs, and starts over a pid file nothing answers to", async () => {
+    const home = await mkdtemp(join(tmpdir(), "rebuild-guard-"));
+    const pidFile = join(home, devRebuildPidPath("work-abc").replace(/^~\//, ""));
+    await mkdir(dirname(pidFile), { recursive: true });
+    const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/nonexistent-checkout" })) ?? "";
+    const guard = line.slice(line.indexOf("sid="), line.indexOf("mkdir -p"));
+    const run = () => spawnSync("sh", ["-c", `${guard} echo started`], { env: { ...process.env, HOME: home }, encoding: "utf8" });
+    const build = spawn("sh", ["-c", "sleep 30; : pnpm rebuild:sandbox work-abc"], { stdio: "ignore" });
+    try {
+        await writeFile(pidFile, `${build.pid}\n`);
+        const refused = run();
+        expect(refused.status).toBe(3);
+        expect(refused.stderr).toContain("already running");
+        // A number the kernel has since handed to something that is not a rebuild (this test's own process).
+        await writeFile(pidFile, `${process.pid}\n`);
+        expect(run().stdout.trim()).toBe("started");
+    } finally {
+        build.kill("SIGKILL");
+        await rm(home, { recursive: true, force: true });
+    }
 });
 
 // The read side, polled while a rebuild runs. Needs only the slug: reading a log takes the log's name, not the checkout.

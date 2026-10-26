@@ -76,13 +76,23 @@ describe("the project ignore list, as Mutagen reads it", () => {
         }
     });
 
+    // Cargo's profile folders, natively and under a target triple; `*` stands for one folder there and never crosses one.
+    it("leaves out Cargo's build output at any depth, and keeps a folder that is only named target", () => {
+        for (const path of ["target/debug/app", "_sandbox/ic/target/release/ic", "src-tauri/target/x86_64-pc-windows-msvc/release/app.exe"]) {
+            expect([path, ignored(path)]).toEqual([path, true]);
+        }
+        for (const path of ["target/CACHEDIR.TAG", "src/target/index.ts", "target/a/b/debug", "mytarget/debug/x", "target/debugger.ts"]) {
+            expect([path, ignored(path)]).toEqual([path, false]);
+        }
+    });
+
     it("leaves out Mutagen's own scratch files, which it never syncs", () => {
         expect(ignored("src/.mutagen-temporary-cross-device-rename-1")).toBe(true);
     });
 
     // Read too narrowly, a pattern would offer an ignored file (a secret among them) for bringing back.
     it("refuses a pattern it cannot match exactly rather than approximating it", () => {
-        for (const pattern of ["!keep", "src/*.log", "build/", "a?", "[ab]", "**", "/", "**/build", "**/a/*", "**/a/../b", "a/b"]) {
+        for (const pattern of ["!keep", "src/*.log", "build/", "a?", "[ab]", "**", "/", "**/build", "**/a/**/b", "**/a/../b", "a/b"]) {
             expect(() => ignoreExpression(pattern)).toThrow("is not one this agent can match exactly");
         }
     });

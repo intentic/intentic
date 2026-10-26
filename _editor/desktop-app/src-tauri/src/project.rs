@@ -27,7 +27,7 @@ const COUNT_LIMIT: u64 = 60_000;
 /// What a project folder's sync leaves on this computer, at any depth (`PROJECT_IGNORES` in
 /// `_devices/machine/src/sync/ssh.ts`, which is what the sync actually does): skipped by the count as they are by
 /// the sync. Held to that list by `project-ignores.fixture.json`, which both sides' tests read.
-const NOT_SYNCED: [&str; 22] = [
+const NOT_SYNCED: [&str; 26] = [
     "node_modules",
     "dist",
     ".turbo",
@@ -50,19 +50,35 @@ const NOT_SYNCED: [&str; 22] = [
     ".image-out",
     "**/.intentic/cache",
     "**/.intentic/local",
+    "**/target/debug",
+    "**/target/release",
+    "**/target/*/debug",
+    "**/target/*/release",
 ];
 
 /// Whether the file or folder at `relative` (under the project folder, `/`-separated) stays on this computer: a
 /// [`NOT_SYNCED`] pattern names its last segment, where `*` stands for any run of characters, or a `**/a/b` pattern
-/// names the run of folders it ends with, at any depth, as in the sync's own ignore patterns.
+/// names the run of folders it ends with, at any depth, each matched as a segment the same way (`**/target/*/debug`),
+/// as in the sync's own ignore patterns.
 fn not_synced(relative: &str) -> bool {
     let name = relative.rsplit('/').next().unwrap_or(relative);
     NOT_SYNCED
         .iter()
         .any(|pattern| match pattern.strip_prefix("**/") {
-            Some(tail) => relative == tail || relative.ends_with(&format!("/{tail}")),
+            Some(tail) => ends_with_segments(relative, tail),
             None => matches_name(pattern, name),
         })
+}
+
+/// Whether the last segments of `relative` match `tail`'s, one for one.
+fn ends_with_segments(relative: &str, tail: &str) -> bool {
+    let path: Vec<&str> = relative.split('/').collect();
+    let wanted: Vec<&str> = tail.split('/').collect();
+    path.len() >= wanted.len()
+        && path[path.len() - wanted.len()..]
+            .iter()
+            .zip(&wanted)
+            .all(|(segment, pattern)| matches_name(pattern, segment))
 }
 
 fn matches_name(pattern: &str, name: &str) -> bool {
@@ -1807,6 +1823,20 @@ mod tests {
         assert!(!not_synced(".intentic/checks.json"));
         assert!(!not_synced("x.intentic/cache"));
         assert!(not_synced("web/node_modules"));
+    }
+
+    #[test]
+    fn cargo_s_profile_folders_stay_here_at_any_depth_and_under_a_target_triple() {
+        assert!(not_synced("target/debug"));
+        assert!(not_synced("_sandbox/ic/target/release"));
+        assert!(not_synced(
+            "src-tauri/target/x86_64-pc-windows-msvc/release"
+        ));
+        assert!(!not_synced("target"));
+        assert!(!not_synced("src/target"));
+        assert!(!not_synced("target/CACHEDIR.TAG"));
+        assert!(!not_synced("target/x86_64-pc-windows-msvc"));
+        assert!(!not_synced("mytarget/debug"));
     }
 
     #[test]

@@ -214,7 +214,14 @@ starter_args=()
 if [ -n "${STARTER_TEMPLATE_REF:-}" ]; then
     starter_args+=(--build-arg "STARTER_TEMPLATE_REF=$STARTER_TEMPLATE_REF")
 fi
-docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
+# BOUNDED, because this is where a build was seen to hang for good: on rog, 2026-10-26, four rebuilds had sat in this
+# very `docker buildx build` for one to five days, holding their sessions and everything they started. A cold starter is
+# minutes; half an hour is a hang, and it then fails like any other step. Unbounded where there is no `timeout` (macOS).
+starter_bound=()
+if command -v timeout >/dev/null 2>&1; then
+    starter_bound=(timeout --kill-after=30 1800)
+fi
+"${starter_bound[@]}" docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
     "${starter_args[@]}" \
     --output "type=local,dest=$starter_build" _sandbox/sandbox/starter
 [ -f "$starter_build/starter/opt/starter/node_modules/.modules.yaml" ] || { echo "the starter build produced no installed starter" >&2; exit 1; }

@@ -73,6 +73,19 @@ DOCKERD_ARGS="--host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:${PORT} 
   --bip=192.168.239.1/24 --default-address-pool=base=192.168.240.0/20,size=26 \
   --log-opt=max-size=20m --log-opt=max-file=3"
 
+# THE BUILD CACHE'S CEILING. BuildKit sizes its own from the disk it sees, and this distro's disk is a sparse VHDX that
+# reads as 1 TB whatever the PC's drive holds: on rog, 2026-10-26, that let the cache keep 750 GB, it had reached 396 GB,
+# and the engine's ext4.vhdx had grown to 810 GB on a 1.9 TB C: drive (a sparse disk grows on write and never shrinks by
+# itself). Docker Desktop caps the same cache at 20 GB; a sandbox image build keeps more warm than that, so 20 GB is the
+# floor GC leaves and 80 GB the ceiling it brings the cache back under. In a file of the keeper's own rather than
+# /etc/docker/daemon.json, whose keys dockerd would refuse beside the same ones given as flags here; one a person wrote
+# there is left in charge, as before.
+if [ ! -f /etc/docker/daemon.json ]; then
+  printf '%s\n' '{"builder":{"gc":{"enabled":true,"defaultReservedSpace":"20GB","defaultMaxUsedSpace":"80GB"}}}' \
+    >/etc/intentic-engine/daemon.json
+  DOCKERD_ARGS="$DOCKERD_ARGS --config-file=/etc/intentic-engine/daemon.json"
+fi
+
 # ---------------------------------------------------------------------------------------------------------------------
 # OTHER WSL DISTROS (2026-10-10), as Docker Desktop's WSL integration serves them, for a distro `ic engine wsl enable`
 # names (its rootfs/integrate runs there at every start of that distro):
