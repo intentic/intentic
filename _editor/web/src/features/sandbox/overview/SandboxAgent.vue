@@ -177,8 +177,8 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="RETENTION" :label="t(`sandbox.sandboxNav.retention`)" />
                 <AgentChangelog />
                 <AgentRecovery />
-                <!-- Beside the automation failure limit above, which is the other setting that only matters once
-                 something runs on a clock rather than because somebody pressed send. -->
+                <!-- Beside the automation failure limit above (in its Advanced view), which is the other setting that only
+                 matters once something runs on a clock rather than because somebody pressed send. -->
                 <AgentClock />
             </template>
         </Await>

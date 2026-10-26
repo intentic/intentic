@@ -9,14 +9,21 @@ import { breakAnswers, breakLabel } from "../../../../models/conversations/endin
 import { handoffLabel } from "../../../../models/conversations/endings/handoffChoice";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
 
 // The standing answer to each ending's one question, in the same words the chat asks it in (models/conversations/endings/turnBreak.ts).
 // One answer per row, never a set of switches over the same wall: two independent booleans over a spent allowance
 // spelled a fourth posture ("move, else hold") nobody would choose, and left every surface guessing which of them was
 // the one in force. Every ending that ran something starts at `wait`: a re-run spends the owner's allowance on a turn
 // already sent once. Low memory starts at `resend`: nothing ran, so sending it once there is room spends nothing twice.
+// Simple is those questions and the restart switch, one answer each, which is what a reader comes here to set; Advanced
+// adds the tuning behind them (how a held turn is carried and the token lines that suggest it, the turn cap for loops the
+// sandbox drives) and the two automation ceilings. A search answer naming one of those rows opens Advanced (detailLevel.ts).
 
 const t = useT();
+const level = useDetailLevel(`turn-breaks`, [`agent-turn-handoff`, `agent-turn-cap`, `agent-failing-automation`, `agent-automation-threads`]);
+const advanced = computed(() => level.value === `advanced`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 // Keep-warm's rows save through a second instance, so a refused write is said under keep-warm, not the turn breaks.
@@ -144,6 +151,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
     <!-- Its sections stacked here at the page's rhythm, so whatever mounts it cannot leave two headers touching. -->
     <div class="flex flex-col gap-6">
         <RowGroup data-setting="agent-turn-breaks" :label="t(`sandbox.agentRecovery.turnBreaks`)" equal-rows>
+            <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentRecovery.turnBreaks`)" /></template>
             <!-- The default for every conversation; a chat's own control writes an override for that chat alone. -->
             <Row icon="clock" :title="breakLabel(`limit`)" :description="t(`sandbox.agentRecovery.limitPolicyNote`)">
                 <template #control>
@@ -159,7 +167,13 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
 
             <!-- How the held turn continues once its cache is cold: the whole session, a trimmed copy, or a summary. The chat's
                  card asks each time and preselects this; measured in sandbox/bench/handoff-bench.ts. -->
-            <Row icon="history" :title="t(`sandbox.agentRecovery.handoff`)" :description="t(`sandbox.agentRecovery.handoffNote`)">
+            <Row
+                v-if="advanced"
+                data-setting="agent-turn-handoff"
+                icon="history"
+                :title="t(`sandbox.agentRecovery.handoff`)"
+                :description="t(`sandbox.agentRecovery.handoffNote`)"
+            >
                 <template #control>
                     <SegmentedControl
                         v-model="limitHandoff"
@@ -170,7 +184,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                     />
                 </template>
             </Row>
-            <template v-if="limitHandoff === `suggested`">
+            <template v-if="advanced && limitHandoff === `suggested`">
                 <Row icon="history" :title="t(`sandbox.agentRecovery.carryUnder`)" :description="t(`sandbox.agentRecovery.carryUnderNote`)">
                     <template #control>
                         <input
@@ -227,7 +241,13 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
 
             <!-- How long one turn may run on a loop the sandbox drives itself (OpenCode, ACP, Pi, Muse) before it is ended; a
                  subagent that reaches it is carried on rather than failed. -->
-            <Row icon="clock" :title="t(`sandbox.agentRecovery.turnCap`)" :description="t(`sandbox.agentRecovery.turnCapNote`)">
+            <Row
+                v-if="advanced"
+                data-setting="agent-turn-cap"
+                icon="clock"
+                :title="t(`sandbox.agentRecovery.turnCap`)"
+                :description="t(`sandbox.agentRecovery.turnCapNote`)"
+            >
                 <template #control>
                     <input
                         type="number"
@@ -269,6 +289,8 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
 
             <!-- Jobs failing every run stop instead of consuming another scheduled turn. -->
             <Row
+                v-if="advanced"
+                data-setting="agent-failing-automation"
                 icon="stop"
                 :title="t(`sandbox.agentRecovery.stopFailingAutomation`)"
                 :description="t(`sandbox.agentRecovery.disableAutomationAfterConsecutive`)"
@@ -289,7 +311,13 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
 
             <!-- The other automation ceiling: each team-chat thread is its own agent turn, so this bounds how many one busy
                  channel starts at once; a thread past it waits and its channel is told it is queued. -->
-            <Row icon="users" :title="t(`sandbox.agentRecovery.threadsAtOnce`)" :description="t(`sandbox.agentRecovery.threadsAtOnceNote`)">
+            <Row
+                v-if="advanced"
+                data-setting="agent-automation-threads"
+                icon="users"
+                :title="t(`sandbox.agentRecovery.threadsAtOnce`)"
+                :description="t(`sandbox.agentRecovery.threadsAtOnceNote`)"
+            >
                 <template #control>
                     <input
                         type="number"

@@ -5,6 +5,7 @@ import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-c
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { storedValue, storeJson } from "@intentic/ui/storage";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = jest.fn((fields: Partial<SandboxSettings>) => {
@@ -15,6 +16,9 @@ jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, refusal: ref(undefined), dropped: ref(undefined), error: ref(undefined), isLoading: ref(false) }),
 }));
 
+// The threads and turn-cap rows are Advanced's; the section's choice is read once, as its module loads, so it is set
+// before the import.
+storeJson(`intentic:agent-tools-detail`, { "turn-breaks": `advanced` });
 const { default: AgentRecovery } = await import("./AgentRecovery.vue");
 
 let app: App | undefined;
@@ -84,4 +88,25 @@ test("the turn cap row opens on the daemon's default, writes its own key, and ke
     await change(box, `1`);
     expect(patch).toHaveBeenLastCalledWith({ turnCapMinutes: 5 });
     expect(box.value).toBe(`5`);
+});
+
+// Simple keeps the one answer per ending and the restart switch; Advanced adds the hand-off, the turn cap and the
+// automation ceilings, and the choice is kept for this section alone.
+test("Simple keeps each ending's answer, and Advanced adds the tuning and the automation ceilings", async () => {
+    const host = mount();
+    const pick = (label: string): void =>
+        [...host.querySelectorAll<HTMLElement>(`button`)].find((button) => button.textContent?.trim() === label)?.click();
+    const marked = (id: string): boolean => host.querySelector(`[data-setting="${id}"]`) !== null;
+    const advancedRows = [`agent-turn-handoff`, `agent-turn-cap`, `agent-failing-automation`, `agent-automation-threads`];
+
+    pick(`Simple`);
+    await nextTick();
+    expect(advancedRows.filter(marked)).toEqual([]);
+    expect(threadsBox(host)).toBeNull();
+    expect(host.textContent).toContain(`Resume turns after a restart`);
+
+    pick(`Advanced`);
+    await nextTick();
+    expect(advancedRows.filter((id) => !marked(id))).toEqual([]);
+    expect(storedValue(`intentic:agent-tools-detail`)).toBe(JSON.stringify({ "turn-breaks": `advanced` }));
 });
