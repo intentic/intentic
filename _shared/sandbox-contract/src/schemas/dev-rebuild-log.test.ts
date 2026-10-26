@@ -1,4 +1,15 @@
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, readDevRebuildLog } from "./dev-rebuild-log.js";
+import {
+    DEV_REBUILD_CANCEL_MARK,
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_HOLD_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    DEV_REBUILD_SWAP_MARK,
+    DEV_REBUILD_TASKS_MARK,
+    DEV_REBUILD_WAITING_MARK,
+    devRebuildHoldPath,
+    devRebuildLogPath,
+    readDevRebuildLog,
+} from "./dev-rebuild-log.js";
 
 // The one account a detached rebuild gives of itself. The daemon builds the shell that writes this text and the browser
 // draws what it means, so the grammar is pinned here, where both of them read it.
@@ -51,4 +62,38 @@ test("treats an answer with no marks as log text, not as an error", () => {
 
 test("names one log per sandbox, beside the logs ic writes for its own recreates", () => {
     expect(devRebuildLogPath("work-abc")).toBe("~/.intentic/logs/dev-rebuild-work-abc.log");
+});
+
+test("reads the hold file's state and turbo's count, which the read prints before the tail", () => {
+    const log = readDevRebuildLog(answer("3", `${DEV_REBUILD_HOLD_MARK} 1`, `${DEV_REBUILD_TASKS_MARK} 23 -`, "@intentic/sandbox:build: $ tsc"));
+    expect(log).toMatchObject({ hold: true, tasks: { started: 23, total: undefined } });
+    expect(log.lines).toEqual(["@intentic/sandbox:build: $ tsc"]);
+    expect(readDevRebuildLog(answer("3", `${DEV_REBUILD_HOLD_MARK} 0`, `${DEV_REBUILD_TASKS_MARK} 48 48`))).toMatchObject({
+        hold: false,
+        tasks: { started: 48, total: 48 },
+    });
+});
+
+// An older daemon's read says neither, which is "unknown" rather than "not held": the card then offers no choice.
+test("leaves the hold and the count unknown when the read does not print them", () => {
+    expect(readDevRebuildLog(answer("3", "building"))).toMatchObject({ hold: undefined, tasks: undefined });
+});
+
+// The gate's two words, in order: holding, then let through. Whichever came last is where it stands.
+test("reads the gate holding until it says it let the swap through", () => {
+    const holding = readDevRebuildLog(answer("40", "#27 naming to intentic-sandbox:dev", DEV_REBUILD_WAITING_MARK));
+    expect(holding).toMatchObject({ waiting: true, swapping: false });
+    expect(holding.lines).toEqual(["#27 naming to intentic-sandbox:dev"]);
+    const through = readDevRebuildLog(answer("1", DEV_REBUILD_WAITING_MARK, DEV_REBUILD_SWAP_MARK, "intentic: [recreate] starting"));
+    expect(through).toMatchObject({ waiting: false, swapping: true });
+});
+
+test("reads a cancelled build as ended by somebody asking, not as a failure of its own", () => {
+    const log = readDevRebuildLog(answer("0", "#12 [builder 4/9] RUN pnpm install", "", DEV_REBUILD_CANCEL_MARK, `${DEV_REBUILD_EXIT_MARK} 130`));
+    expect(log).toMatchObject({ cancelled: true, exitCode: 130, waiting: false });
+    expect(log.lines).toEqual(["#12 [builder 4/9] RUN pnpm install"]);
+});
+
+test("keeps the gate's hold file beside the log it belongs to", () => {
+    expect(devRebuildHoldPath("work-abc")).toBe("~/.intentic/logs/dev-rebuild-work-abc.hold");
 });

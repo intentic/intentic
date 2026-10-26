@@ -57,7 +57,8 @@ const failureTitle = (run: DevRebuildRun): string => {
  * read off a machine's old log, and announcing that would greet a reader with the result of somebody else's build.
  */
 export const rebuildReceipt = (before: DevRebuildPhase | undefined, run: DevRebuildRun | undefined): Omit<NotificationInput, "kind"> | undefined => {
-    if (run === undefined || before === undefined || !rebuildRunning(before) || rebuildRunning(run.phase) || run.phase === `idle`) {
+    // A cancel is the reader's own doing, said on the card they pressed it on: no receipt finds them for it.
+    if (run === undefined || before === undefined || !rebuildRunning(before) || rebuildRunning(run.phase) || run.phase === `idle` || run.phase === `cancelled`) {
         return undefined;
     }
     // The card keeps the durable record — the log, its path, the dismissal. This is only the sentence that finds
@@ -78,7 +79,7 @@ export const rebuildReceipt = (before: DevRebuildPhase | undefined, run: DevRebu
 
 export const startRestartWatch = (): void => {
     const { activeSandboxId, active, reachable } = useSandbox();
-    const { report } = useNotifications();
+    const { report, hold } = useNotifications();
     const { slug, localImage } = useSandboxVersion();
 
     // The sandbox answered, so whatever restart this browser was waiting on has happened. Immediate as well as on
@@ -102,6 +103,7 @@ export const startRestartWatch = (): void => {
         () => localImage.value?.root,
     );
     const followed = shallowRef<DevRebuildRun | undefined>(undefined);
+    const releaser = shallowRef<((hostId: string) => Promise<string | undefined>) | undefined>(undefined);
     let scope: EffectScope | undefined;
     watch(
         [hostId, slug],
@@ -110,6 +112,7 @@ export const startRestartWatch = (): void => {
             scope?.stop();
             scope = undefined;
             followed.value = undefined;
+            releaser.value = undefined;
             if (id === undefined || name === undefined) {
                 return;
             }
@@ -118,6 +121,7 @@ export const startRestartWatch = (): void => {
                 const follower = useDevRebuild(name);
                 follower.adopt(id);
                 followed.value = follower.run;
+                releaser.value = follower.release;
             });
         },
         { immediate: true },
@@ -131,5 +135,28 @@ export const startRestartWatch = (): void => {
         if (receipt !== undefined && !onTheCard()) {
             report(receipt);
         }
+    });
+
+    // BUILT AND HELD AT THE GATE, said wherever the reader is: a restart held "until I say" is waiting on them, and the
+    // one place it says so is a card they may be nowhere near. True for as long as the gate holds, and nowhere on the
+    // card itself, which says it with its own button.
+    hold(`dev-rebuild:held`, () => {
+        const run = followed.value;
+        const id = hostId.value;
+        const release = releaser.value;
+        if (run === undefined || id === undefined || release === undefined || !rebuildRunning(run.phase) || !run.waiting || onTheCard()) {
+            return undefined;
+        }
+        return {
+            kind: `condition`,
+            tone: `info`,
+            icon: `refresh`,
+            title: t(`sandbox.restartWatch.builtWaiting`),
+            detail: t(`sandbox.restartWatch.builtWaitingDetail`),
+            actions: [
+                { label: t(`sandbox.devRebuildProgress.restartNow`), tier: `accent`, run: () => void release(id) },
+                { label: t(`sandbox.restartWatch.open`), run: openEnvironment },
+            ],
+        };
     });
 };

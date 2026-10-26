@@ -1,6 +1,6 @@
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
 import type { RestartResume } from "../../system/restart-resume.js";
-import { createRebuildWhenIdle, type RebuildWhenIdle } from "../rebuild-when-idle.js";
+import { createRebuildWhenIdle, type RebuildWhenIdle } from "../idle/rebuild-when-idle.js";
 
 // E2: "Rebuild now" cut four agents mid-turn. Asked to wait, the sandbox holds the rebuild until no agent is mid-turn,
 // then hands it to the device exactly as the button would, asking the next boot to resume whatever the restart still

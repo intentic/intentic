@@ -125,6 +125,26 @@ export type EnvironmentRebuildWait = z.infer<typeof EnvironmentRebuildWaitSchema
 // Asks for that rebuild: the approved overlay's hash and the device that rebuilds this sandbox.
 export const EnvironmentRebuildWhenIdleSchema = z.object({ host: z.string().min(1), hash: z.string().min(1) });
 export type EnvironmentRebuildWhenIdle = z.infer<typeof EnvironmentRebuildWhenIdleSchema>;
+// A CHECKOUT REBUILD'S RESTART, LET THROUGH ONCE NO AGENT IS MID-TURN. The rebuild holds at its swap gate (the hold file,
+// dev-rebuild-log.ts) and the sandbox, which is the one that knows who is mid-turn, lets it through when nobody is. Kept
+// by the sandbox for the same reason as the rebuild wait above, and in memory for the same reason: this sandbox
+// restarting for anything else is the interruption it was waiting to spare.
+export const EnvironmentDevSwapWaitSchema = z.object({
+    // The connected device that runs the rebuild, and so holds its gate.
+    host: z.string(),
+    requestedAt: z.number(),
+    // waiting: the gate is held until nobody is mid-turn. released: let through, the restart is under way.
+    // failed: the device could not be told; said until the owner picks again.
+    phase: z.enum(["waiting", "released", "failed"]),
+    // Who it waits on, by the title the board shows them under; empty once it is no longer waiting.
+    waitingOn: z.array(z.string()),
+    // The device's own words for a failed one.
+    message: z.string().optional(),
+});
+export type EnvironmentDevSwapWait = z.infer<typeof EnvironmentDevSwapWaitSchema>;
+// Asks for that wait: the device the rebuild runs on.
+export const EnvironmentDevSwapWhenIdleSchema = z.object({ host: z.string().min(1) });
+export type EnvironmentDevSwapWhenIdle = z.infer<typeof EnvironmentDevSwapWhenIdleSchema>;
 export const EnvironmentSchema = z.object({
     proposal: environmentFileSchema.optional(),
     // The owner-approved agent-written custom section (.intentic/config/environment.custom.Dockerfile).
@@ -142,6 +162,8 @@ export const EnvironmentSchema = z.object({
     localImage: EnvironmentLocalImageSchema.optional(),
     // A rebuild waiting for the agents to be idle, or started or refused once they were; absent when none is asked.
     rebuildWhenIdle: EnvironmentRebuildWaitSchema.optional(),
+    // A checkout rebuild's restart held until no agent is mid-turn; absent when none is asked.
+    devSwapWhenIdle: EnvironmentDevSwapWaitSchema.optional(),
     // This sandbox can hold a rebuild until no agent is mid-turn (POST /environment/rebuild-when-idle), and resume the
     // turns a restart the owner starts cuts when asked (a device swap's `resumeTurns`). Absent from one too old to,
     // where the rebuild dialog offers only "Rebuild now" and the cut turns wait to be continued, as before.

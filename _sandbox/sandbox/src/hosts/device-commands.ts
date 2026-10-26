@@ -3,7 +3,18 @@ import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities
 import type { Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult } from "@intentic/sandbox-contract/schemas/devices";
 import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath, pathReach } from "@intentic/sandbox-contract/schemas/devices";
+import {
+    DEV_REBUILD_CANCEL_MARK,
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_HOLD_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    DEV_REBUILD_SWAP_MARK,
+    DEV_REBUILD_TASKS_MARK,
+    devRebuildHoldPath,
+    devRebuildLogPath,
+    devRebuildPidPath,
+    pathReach,
+} from "@intentic/sandbox-contract/schemas/devices";
 import { HOST_NATIVE_ENVIRONMENT, hostConnectionKey } from "@intentic/sandbox-contract/schemas/hosts";
 import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import { ORPCError } from "@orpc/server";
@@ -200,6 +211,34 @@ const installLine = (facts: DeviceCommandFacts, route: DeviceCommandRoute = {}):
 // where its forwarder runs.
 const pairedFolder = (facts: DeviceCommandFacts): string | undefined => facts.pairedDir;
 
+// TURBO'S OWN COUNT, read off the whole log by `dev-rebuild-log`: one line per task as it starts (`@pkg:build: cache hit,
+// replaying logs …`, `cache miss, executing …`), and its summary at the end (` Tasks:    48 successful, 48 total`).
+// Single-quoted in the line, so neither may hold a quote; ERE, for grep -E and sed -E alike.
+const TURBO_TASK_STARTED = ":build: cache (hit|miss|bypass)";
+const TURBO_TASKS_SUMMARY = "Tasks: +[0-9]+ successful, +[0-9]+ total";
+
+// Room for the ten seconds a cancelled build is given to stop, and the reach to a machine the build is loading.
+const CANCEL_TIMEOUT_MS = 40_000;
+
+// The cancel, as the machine runs it. `pkill -s` stops a session (Linux, BSD); `kill -- -sid` the same session's group
+// where pkill is missing; and on a machine with no setsid (macOS), where the build never got a session of its own, its
+// direct children and itself. Whatever is left after ten seconds is killed.
+const cancelLine = (slug: string): string =>
+    [
+        `log=${shellDir(devRebuildLogPath(slug))}; pidf=${shellDir(devRebuildPidPath(slug))}; hold=${shellDir(devRebuildHoldPath(slug))};`,
+        `if [ -f "$log" ] && grep -q '^${DEV_REBUILD_SWAP_MARK}' "$log"; then echo "The rebuild is already restarting the sandbox onto its new image, and that can't be stopped halfway. It reconnects on its own when it is done." >&2; exit 3; fi;`,
+        `sid=$(cat "$pidf" 2>/dev/null || true); case "$sid" in ''|*[!0-9]*) sid='' ;; esac;`,
+        `if [ -n "$sid" ] && kill -0 "$sid" 2>/dev/null; then`,
+        `pkill -TERM -s "$sid" 2>/dev/null || kill -TERM -- "-$sid" 2>/dev/null || { pkill -TERM -P "$sid" 2>/dev/null; kill -TERM "$sid" 2>/dev/null; };`,
+        `n=0; while kill -0 "$sid" 2>/dev/null && [ "$n" -lt 10 ]; do sleep 1; n=$((n + 1)); done;`,
+        `pkill -KILL -s "$sid" 2>/dev/null || kill -KILL -- "-$sid" 2>/dev/null || kill -KILL "$sid" 2>/dev/null;`,
+        `printf '\\n${DEV_REBUILD_CANCEL_MARK}\\n${DEV_REBUILD_EXIT_MARK} 130\\n' >> "$log"; rm -f "$pidf" "$hold";`,
+        `echo "Cancelled. The sandbox keeps running the image it had.";`,
+        `elif [ -f "$log" ] && grep -q '^${DEV_REBUILD_EXIT_MARK}' "$log"; then rm -f "$pidf" "$hold"; echo "That rebuild had already ended.";`,
+        `elif [ -n "$sid" ]; then printf '\\n${DEV_REBUILD_CANCEL_MARK}\\n${DEV_REBUILD_EXIT_MARK} 130\\n' >> "$log"; rm -f "$pidf" "$hold"; echo "That rebuild was no longer running; it is marked as cancelled.";`,
+        `else echo "This rebuild left no record of its process, so it can't be stopped from here. Stop it on that device, or let it finish." >&2; exit 3; fi`,
+    ].join(" ");
+
 export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>> = {
     "mirror-off": {
         done: "Port mirroring is off on that device. File syncing is untouched.",
@@ -275,10 +314,16 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         // `$detach` is the other half of the same lesson, measured the same way: `nohup` saves a lone `sh` but not a
         // pnpm/node tree, which was killed as the build phase ended — 77 KB of build output and no exit mark, so the
         // card span for as long as anyone watched it. A session of its own is what survives.
+        // THE TWO FILES BESIDE THE LOG, handed to the build as variables rather than spelled inside its single quotes. The
+        // hold file is the swap gate ic waits at (INTENTIC_SWAP_GATE, recreate.rs): one a previous run left behind is
+        // cleared first, so a rebuild holds only when it is asked to now. The pid file is the build's session, written
+        // by its own shell as it starts, which is what `dev-rebuild-cancel` stops.
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `${WITH_PNPM} ${OWN_SESSION} mkdir -p "$HOME/.intentic/logs" && cd ${shellDir(facts.devRoot)} && $detach nohup sh -c 'pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 & sleep 1`,
+                : `${WITH_PNPM} ${OWN_SESSION} mkdir -p "$HOME/.intentic/logs" && rm -f ${shellDir(devRebuildHoldPath(facts.ownSlug))} && cd ${shellDir(facts.devRoot)} && ` +
+                  `INTENTIC_SWAP_GATE=${shellDir(devRebuildHoldPath(facts.ownSlug))} INTENTIC_REBUILD_PID=${shellDir(devRebuildPidPath(facts.ownSlug))} ` +
+                  `$detach nohup sh -c 'echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox ${facts.ownSlug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"' > ${shellDir(devRebuildLogPath(facts.ownSlug))} 2>&1 & sleep 1`,
         needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to rebuild from",
         path: (facts) => facts.devRoot,
     },
@@ -292,11 +337,43 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         line: (facts) =>
             facts.ownSlug === undefined
                 ? undefined
-                : `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,
+                : `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; ` +
+                  `if [ -f ${shellDir(devRebuildHoldPath(facts.ownSlug))} ]; then echo "${DEV_REBUILD_HOLD_MARK} 1"; else echo "${DEV_REBUILD_HOLD_MARK} 0"; fi; ` +
+                  `started=$(grep -cE '${TURBO_TASK_STARTED}' "$log" 2>/dev/null); total=$(grep -E '${TURBO_TASKS_SUMMARY}' "$log" 2>/dev/null | tail -n 1 | sed -E 's/.*, +([0-9]+) total.*/\\1/'); echo "${DEV_REBUILD_TASKS_MARK} \${started:-0} \${total:--}"; ` +
+                  `tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,
         needs: "this sandbox does not know its own name, so it cannot name the log to read",
         timeoutMs: UNDER_LOAD_TIMEOUT_MS,
         // The log, not the checkout: this is the one dev command that needs no checkout, and the log lives in the home
         // of whichever environment ran the build.
+        path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
+    },
+    // THE REBUILD'S THREE LEVERS, each a file beside its log, so whoever asks (the card, or this sandbox once no agent is
+    // mid-turn: dev-swap-when-idle.ts) needs nothing of the build but its slug. Holding before the gate is reached is
+    // how a rebuild is told to wait; releasing a gate that is holding is the restart.
+    "dev-rebuild-hold": {
+        done: "The restart is held: the rebuild stops when its image is built, and waits for you before it touches the sandbox.",
+        line: (facts) =>
+            facts.ownSlug === undefined ? undefined : `mkdir -p "$HOME/.intentic/logs" && touch ${shellDir(devRebuildHoldPath(facts.ownSlug))}`,
+        needs: "this sandbox does not know its own name, so it cannot name the rebuild to hold",
+        path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
+    },
+    "dev-rebuild-release": {
+        done: "The restart is let through: the sandbox restarts onto the new image as soon as it is built.",
+        line: (facts) => (facts.ownSlug === undefined ? undefined : `rm -f ${shellDir(devRebuildHoldPath(facts.ownSlug))}`),
+        needs: "this sandbox does not know its own name, so it cannot name the rebuild to let through",
+        path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
+    },
+    // STOPS THE BUILD'S WHOLE SESSION (pnpm, turbo, docker's client, ic), never a container: past the gate's swap mark
+    // the container is being replaced, and the answer then is a refusal in words, exit 3. A build that already ended is
+    // said so and left as it ended. One with no process record (started before there was one) is refused rather than
+    // guessed at. The log gets the cancel mark and an exit mark of 130 from here, since the build's own shell is stopped
+    // before it could write one.
+    "dev-rebuild-cancel": {
+        done: "The rebuild is cancelled. The sandbox keeps running the image it had.",
+        line: (facts) => (facts.ownSlug === undefined ? undefined : cancelLine(facts.ownSlug)),
+        needs: "this sandbox does not know its own name, so it cannot name the rebuild to cancel",
+        // Up to ten seconds of letting the build stop by itself before the rest is killed.
+        timeoutMs: CANCEL_TIMEOUT_MS,
         path: (facts) => (facts.ownSlug === undefined ? undefined : devRebuildLogPath(facts.ownSlug)),
     },
     // The dev inner loop, run where the checkout is: compile the daemon and restart this very container. The slug is

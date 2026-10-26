@@ -2,7 +2,9 @@ import { parseJsonWith } from "@intentic/base/json";
 import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract/schemas/devices";
 import { computed, type ComputedRef, reactive } from "vue";
 import { z } from "zod";
-import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
+import { compileFraction, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
+import { type DevRebuildPhase, type DevRebuildRun, idleRun, rebuildRunning } from "./devRebuildRun";
+import { keepRebuild, pastRebuild } from "./rebuildHistory";
 import { runDeviceCommand } from "../../../../models/sandbox/devices/useDevices";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
@@ -18,62 +20,8 @@ import { useNow } from "@intentic/ui/async";
 // kept per slug at module scope, marked in localStorage, and re-read from the machine's own log — which is the only
 // place its progress exists at all. Leaving the tab, reloading, and the restart itself all resume the same run.
 
-export type DevRebuildPhase =
-    // Nothing known: no rebuild started here, and the machine's log is old or absent.
-    | "idle"
-    // The command that starts the build is in flight; seconds, not minutes.
-    | "starting"
-    | "building"
-    // The daemon stopped answering, which mid-build is the swap onto the new image rather than a fault.
-    | "restarting"
-    | "done"
-    | "failed"
-    // The log stopped growing and never said how it ended: a machine that slept, or a build someone killed.
-    | "lost";
-
-export interface DevRebuildRun {
-    phase: DevRebuildPhase;
-    // When the build began, by this browser's clock. Undefined for a rebuild found already running on the machine: its
-    // log says when it last printed, never when it started, and a clock started at the wrong moment is worse than none.
-    startedAt: number | undefined;
-    endedAt: number | undefined;
-    /** The machine's log tail, replaced whole on each read rather than accumulated. */
-    lines: readonly string[];
-    exitCode: number | undefined;
-    /** Seconds since the log last grew; a build inside a slow docker layer is quiet for minutes at a time. */
-    quietFor: number | undefined;
-    /** The machine's own sentence when it refused, or why this browser cannot read the log at the moment. */
-    trouble: string | undefined;
-    // When the log was last READ, which is a fact about this browser's contact with the machine and not about the
-    // build: it is what the follow gives up on, since a read that keeps failing leaves `quietFor` frozen at whatever
-    // the last good read said. Set when a follow begins as well as on every read, so contact is dated from the moment
-    // this browser started asking rather than from a marker that may be an hour old — except in the restart step,
-    // whose silence is the sandbox's own and is carried across a reload (see `restartKey`).
-    heardAt: number | undefined;
-    /** A `lost` run ended by nothing being heard for the silence ceiling, rather than by anything the machine said. */
-    unheard: boolean;
-    /** Which of the three things a rebuild does it is on. Only ever advances: see devRebuildStages.ts. */
-    stage: DevRebuildStage;
-    /** When each stage was first seen, so the card can time a step it watched begin. */
-    stageAt: Partial<Record<DevRebuildStage, number>>;
-    /** The stage's own last word — the package turbo is on, the sentence ic printed. */
-    detail: string | undefined;
-    /** Docker's step counter, the one real fraction inside the longest stage. */
-    layers: DevRebuildLayers | undefined;
-    /**
-     * How far along, 0–1, never decreasing: a tail that scrolls must not walk the bar backwards. The one way back is a
-     * restart step a log then shows was only assumed (`settleAssumption`).
-     */
-    fraction: number;
-    /**
-     * The restart step taken from the daemon going quiet (`unread`) before any log showed it. The next log that lands
-     * settles it (`settleAssumption`): confirmed where it shows the swap, and otherwise the run goes back to its build.
-     */
-    swapAssumed: boolean;
-}
-
-const LIVE: ReadonlySet<DevRebuildPhase> = new Set(["starting", "building", "restarting"]);
-export const rebuildRunning = (phase: DevRebuildPhase): boolean => LIVE.has(phase);
+export type { DevRebuildPhase, DevRebuildRun };
+export { rebuildRunning };
 
 // HOW LONG THE RESTART STEP MAY GO UNHEARD-FROM BEFORE THE CARD STOPS PROMISING A RECONNECT. The patience the lane and
 // the gate already give a restart this browser asked for (sandboxRestart.ts), so the card does not keep saying
@@ -166,23 +114,7 @@ const restartOf = (slug: string, startedAt: number): RestartRecord | undefined =
     return { heardAt: record.heardAt, stageAt, assumed: record.assumed ?? false };
 };
 
-const idle = (): DevRebuildRun => ({
-    phase: "idle",
-    startedAt: undefined,
-    endedAt: undefined,
-    lines: [],
-    exitCode: undefined,
-    quietFor: undefined,
-    trouble: undefined,
-    heardAt: undefined,
-    unheard: false,
-    stage: "compile",
-    stageAt: {},
-    detail: undefined,
-    layers: undefined,
-    fraction: 0,
-    swapAssumed: false,
-});
+
 
 const runs = new Map<string, DevRebuildRun>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -235,7 +167,7 @@ const runFor = (slug: string): DevRebuildRun => {
     if (existing !== undefined) {
         return existing;
     }
-    const fresh = reactive(idle());
+    const fresh = reactive(idleRun());
     runs.set(slug, fresh);
     return fresh;
 };
@@ -282,14 +214,40 @@ const noteProgress = (run: DevRebuildRun, lines: readonly string[]): void => {
     fill(run, rebuildFraction(progress));
 };
 
+// THE GATE'S HOLD, timed. It is the owner's wait rather than the build's, so it is kept apart: the image step's clock
+// would otherwise grow by however long somebody left the restart held, and teach the next run that the image takes it.
+const noteWait = (run: DevRebuildRun, waiting: boolean): void => {
+    const now = Date.now();
+    if (waiting && run.waitingSince === undefined) {
+        run.waitingSince = now;
+    }
+    if (!waiting && run.waitingSince !== undefined) {
+        run.waitedMs += now - run.waitingSince;
+        run.waitingSince = undefined;
+    }
+    run.waiting = waiting;
+};
+
+// Turbo's own count fills the compile's share: the one stage with nothing else to count, which only pulsed before.
+// The total is turbo's once its summary says it, and until then the last run's, which is the same graph give or take.
+const noteTasks = (run: DevRebuildRun, slug: string): void => {
+    const total = run.tasks?.total ?? pastRebuild(slug)?.tasks;
+    if (run.stage === `compile` && run.tasks !== undefined && total !== undefined) {
+        fill(run, compileFraction(run.tasks.started, total));
+    }
+};
+
 // A terminal phase ends the follow and drops the marker: what stays on screen from here is an outcome, not a wait.
 const settle = (run: DevRebuildRun, slug: string, phase: DevRebuildPhase, trouble?: string): void => {
     run.phase = phase;
     run.endedAt = Date.now();
     run.trouble = trouble;
+    noteWait(run, false);
     if (phase === "done") {
         reach(run, "swap");
         fill(run, 1);
+        // The next card's measure: this one's steps, each as long as it took here.
+        keepRebuild(slug, { ...run, tasks: run.tasks?.total ?? run.tasks?.started });
     }
     removeStoredValue(markerKey(slug));
     removeStoredValue(restartKey(slug));
@@ -331,22 +289,32 @@ const settleAssumption = (run: DevRebuildRun, slug: string, lines: readonly stri
 // ends a rebuild; everything else is a build still going, however quiet.
 const absorb = (run: DevRebuildRun, slug: string, text: string): void => {
     const log = readDevRebuildLog(text);
-    run.quietFor = log.quietFor;
+    // A gate holding prints nothing for as long as it holds, so its silence is the owner's and not a stalled build's.
+    run.quietFor = log.waiting ? 0 : log.quietFor;
+    run.hold = log.hold ?? run.hold;
+    run.tasks = log.tasks ?? run.tasks;
+    run.swapping ||= log.swapping;
     if (!log.missing) {
         run.lines = log.lines;
         settleAssumption(run, slug, log.lines);
     }
     if (log.exitCode !== undefined) {
         run.exitCode = log.exitCode;
-        settle(run, slug, log.exitCode === 0 ? "done" : "failed");
+        settle(run, slug, log.cancelled ? "cancelled" : log.exitCode === 0 ? "done" : "failed");
         return;
     }
     const vanished = log.missing && Date.now() - (run.startedAt ?? 0) > GRACE_MS;
-    if (vanished || (log.quietFor ?? 0) > ABANDON_S) {
+    if (vanished || (!log.waiting && (log.quietFor ?? 0) > ABANDON_S)) {
         settle(run, slug, "lost");
         return;
     }
     noteProgress(run, log.lines);
+    noteTasks(run, slug);
+    // The gate's word is the swap's own start, where the narration under it may still be ic's last build lines.
+    if (log.swapping && reach(run, `swap`)) {
+        fill(run, stageStart(`swap`));
+    }
+    noteWait(run, log.waiting);
     run.phase = "building";
     run.trouble = undefined;
 };
@@ -454,7 +422,7 @@ const probe = async (slug: string, hostId: string): Promise<void> => {
     }
     // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
     // show no clock than one counting from the wrong moment.
-    Object.assign(run, idle(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
+    Object.assign(run, idleRun(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
     noteProgress(run, log.lines);
     mark(slug);
     follow(slug, hostId);
@@ -470,7 +438,43 @@ export interface DevRebuildFollower {
     adopt: (hostId: string) => void;
     /** Clears a settled run off the card. A live one is left alone — a build doesn't stop because the reader looked away. */
     dismiss: () => void;
+    /** Holds the restart at the swap gate until `release`. Answers the machine's sentence when it refused. */
+    hold: (hostId: string) => Promise<string | undefined>;
+    /** Lets the restart through: at once when the gate is holding, at the gate when the build gets there otherwise. */
+    release: (hostId: string) => Promise<string | undefined>;
+    /** Stops the build, before the swap only. Answers the machine's sentence when it refused (the swap had begun). */
+    cancel: (hostId: string) => Promise<string | undefined>;
 }
+
+// One of the rebuild's levers on the machine: undefined when it took, otherwise the sentence to show beside the lever.
+const pull = async (hostId: string, command: `dev-rebuild-hold` | `dev-rebuild-release` | `dev-rebuild-cancel`): Promise<string | undefined> => {
+    try {
+        const result = await runDeviceCommand(hostId, command);
+        return result.ok ? undefined : result.message;
+    } catch (error) {
+        return error instanceof Error ? error.message : t(`sandbox.useDevRebuild.couldntReachDevice`);
+    }
+};
+
+// Drawn at once, and put back if the machine says no: the log's next read says the same thing a few seconds later.
+const setHold = async (run: DevRebuildRun, hostId: string, held: boolean): Promise<string | undefined> => {
+    const before = run.hold;
+    run.hold = held;
+    const refused = await pull(hostId, held ? `dev-rebuild-hold` : `dev-rebuild-release`);
+    if (refused !== undefined) {
+        run.hold = before;
+    }
+    return refused;
+};
+
+// Read again at once rather than in four seconds: the cancelled mark is the card's answer, and it is already there.
+const cancelRun = async (run: DevRebuildRun, slug: string, hostId: string): Promise<string | undefined> => {
+    const refused = await pull(hostId, `dev-rebuild-cancel`);
+    if (refused === undefined && rebuildRunning(run.phase)) {
+        follow(slug, hostId);
+    }
+    return refused;
+};
 
 export function useDevRebuild(slug: string): DevRebuildFollower {
     const run = runFor(slug);
@@ -482,7 +486,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
     const start = async (hostId: string): Promise<void> => {
         stop(slug);
         // A build this browser started has a first stage it watched begin, which is the one thing an adopted run lacks.
-        Object.assign(run, idle(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now(), stageAt: { compile: Date.now() } });
+        Object.assign(run, idleRun(), { phase: "starting", startedAt: Date.now(), heardAt: Date.now(), stageAt: { compile: Date.now() } });
         mark(slug);
         storeValue(markerKey(slug), String(run.startedAt));
         removeStoredValue(restartKey(slug));
@@ -510,7 +514,7 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
             // A reload in the restart step resumes that step on the clock it already had: the same silence, still
             // counting, rather than a fresh one.
             const restart = restartOf(slug, marker);
-            Object.assign(run, idle(), {
+            Object.assign(run, idleRun(), {
                 phase: "building",
                 startedAt: marker,
                 heardAt: restart?.heardAt ?? Date.now(),
@@ -543,9 +547,12 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         elapsed,
         start,
         adopt,
+        hold: (hostId) => setHold(run, hostId, true),
+        release: (hostId) => setHold(run, hostId, false),
+        cancel: (hostId) => cancelRun(run, slug, hostId),
         dismiss: () => {
             if (!rebuildRunning(run.phase)) {
-                Object.assign(run, idle());
+                Object.assign(run, idleRun());
             }
         },
     };

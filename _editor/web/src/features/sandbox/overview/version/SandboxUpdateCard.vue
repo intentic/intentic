@@ -305,8 +305,8 @@ const quietHeading = computed(() => {
     return planRefused.value ? t(`sandbox.sandboxUpdateCard.updateHeldBack`) : t(`sandbox.sandboxUpdateCard.sandboxImage`);
 });
 
-// Whether the checkout rebuild is drawing a run (progress, outcome) rather than only its button.
-const rebuildFollowing = ref(false);
+// Whether the checkout rebuild is still going, which the group's badge says instead of "up to date" over a card rebuilding.
+const rebuilding = ref(false);
 // "Having trouble?" joins the checkout rebuild's row when nothing would sit between them at the group's foot.
 const troubleBesideRebuild = computed(
     () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !serverManaged.value && !updateAvailable.value,
@@ -561,6 +561,7 @@ const finePrint = computed(
                         :label="`${installed ?? '?'} → ${latest}`"
                         dot
                     />
+                    <StatusBadge v-else-if="rebuilding" variant="info" :label="t(`sandbox.sandboxUpdateCard.rebuildingBadge`)" dot />
                     <StatusBadge v-else-if="plan.skipped" variant="neutral" :label="t(`sandbox.sandboxUpdateCard.skippedBadge`)" />
                     <StatusBadge v-else-if="channel === `stable` && !plan.withdrawn" variant="success" :label="t(`shared.upToDate`)" dot />
                     <StatusBadge v-else-if="channel && !plan.withdrawn" variant="neutral" :label="channel" />
@@ -592,26 +593,26 @@ const finePrint = computed(
                     <div v-if="slug && !serverManaged && (localImage || planRefused)" :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-2">
                         <!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                         <template v-if="localImage">
-                            <!-- One row with "Having trouble?" rather than two while it is only a button; once a rebuild draws its
-                                 progress, the link drops to the foot so the bar keeps the full width and the timer its own edge. -->
-                            <div :class="rebuildFollowing ? `flex flex-col gap-3` : `flex flex-wrap items-start justify-between gap-2`">
-                                <DevRebuild
-                                    v-model:following="rebuildFollowing"
-                                    class="min-w-0 flex-1"
-                                    :slug="slug"
-                                    :base="localImage.base"
-                                    :root="localImage.root"
-                                />
-                                <button
-                                    v-if="troubleBesideRebuild"
-                                    type="button"
-                                    :class="ui.textButton({ tone: `subtle`, size: `xs` }, rebuildFollowing && `self-end`)"
-                                    :aria-expanded="rollbackOpen"
-                                    @click="toggleRollback"
-                                >
-                                    {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
-                                </button>
-                            </div>
+                            <!-- "Having trouble?" rides with the rebuild: beside its button, then on the progress's action row
+                                 once something is wrong or the run has ended (a build going well has nothing to roll back from). -->
+                            <DevRebuild
+                                v-model:rebuilding="rebuilding"
+                                class="min-w-0"
+                                :slug="slug"
+                                :base="localImage.base"
+                                :root="localImage.root"
+                            >
+                                <template v-if="troubleBesideRebuild" #trouble>
+                                    <button
+                                        type="button"
+                                        :class="ui.textButton({ tone: `subtle`, size: `xs` })"
+                                        :aria-expanded="rollbackOpen"
+                                        @click="toggleRollback"
+                                    >
+                                        {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
+                                    </button>
+                                </template>
+                            </DevRebuild>
                             <!-- A command, not a button: taking the published image throws away what a checkout built, which is a thing to mean rather than to click. -->
                             <template v-if="updateAvailable">
                                 <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.publishedNewerThanWhat`, { latest }) }}</p>

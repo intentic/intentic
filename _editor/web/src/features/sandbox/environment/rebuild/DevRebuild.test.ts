@@ -3,7 +3,15 @@
 // talking to — so what is pinned here is that the card keeps saying something the whole way through: while it builds,
 // while the sandbox restarts underneath it, and after a remount that threw the component away mid-build.
 import "@intentic/testing/dom";
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath } from "@intentic/sandbox-contract/schemas/devices";
+import {
+    DEV_REBUILD_CANCEL_MARK,
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_HOLD_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    DEV_REBUILD_TASKS_MARK,
+    DEV_REBUILD_WAITING_MARK,
+    devRebuildLogPath,
+} from "@intentic/sandbox-contract/schemas/devices";
 import PrimeVue from "primevue/config";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, effectScope, h, nextTick, ref } from "vue";
@@ -30,6 +38,12 @@ const fleet = ref<{ status: string }[]>([]);
 jest.mock(`../../../../models/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
 const settings = ref<{ autoResumeOnRestart: boolean } | undefined>(undefined);
 jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+
+// The sandbox's own wait for an idle fleet, read off /environment: driven from here, so no query client is needed.
+const idleWait = ref<{ phase: string; waitingOn: string[] } | undefined>(undefined);
+const askIdle = jest.fn();
+const withdrawIdle = jest.fn();
+jest.mock(`./useDevSwapWhenIdle`, () => ({ useDevSwapWhenIdle: () => ({ wait: idleWait, ask: askIdle, withdraw: withdrawIdle }) }));
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.
@@ -88,6 +102,9 @@ beforeEach(() => {
     // Nothing has rebuilt anything yet: the card's own probe on mount finds no log.
     runDeviceCommand.mockResolvedValue(log(`-`));
     localStorage.clear();
+    idleWait.value = undefined;
+    askIdle.mockReset();
+    withdrawIdle.mockReset();
     jest.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
         top: 100,
         left: 100,
@@ -221,7 +238,9 @@ it(`confirms first, then puts the run where the offer was`, async () => {
     await settleUi();
 
     expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild`);
-    expect(el.textContent).toContain(`Rebuilding from your checkout`);
+    // The group above already says "Built from your checkout": the run's own heading says where it is.
+    expect(el.textContent).toContain(`Rebuilding`);
+    expect(el.textContent).not.toContain(`Rebuilding from your checkout`);
     // ONE WAIT, DRAWN ONCE. The offer leaves while its own run is on screen, so a disabled button can't sit there
     // spinning beside the card that already says the same thing — the single spinner is the running step's.
     expect(buttonSaying(`Rebuild from checkout`)).toBeUndefined();
@@ -541,4 +560,100 @@ it(`paints a reload in the restart step as the silence it already was, not a fre
     expect(el.textContent).toContain(LOST_CONTACT);
     expect(el.textContent).not.toContain(RECONNECTS);
     expect(codeUnder(READ_THERE)).toBe(outcomeLines(reloadedAs));
+});
+
+// WHAT IS LEFT, said only from a run that was measured: the last rebuild this browser watched end to end.
+it(`says how long is left from the last run's own lengths, and how far turbo has got against its last total`, async () => {
+    const slug = nextSlug();
+    localStorage.setItem(`intentic.devRebuild.${slug}.took`, JSON.stringify({ ms: { compile: 60_000, image: 240_000, swap: 30_000 }, tasks: 48, at: 1 }));
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(
+        log(`1`, `${DEV_REBUILD_HOLD_MARK} 0`, `${DEV_REBUILD_TASKS_MARK} 12 -`, `@intentic/sandbox:build: cache miss, executing 1a`),
+    );
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi(POLL_MS);
+
+    expect(el.textContent).toMatch(/about \d+ minutes? left/);
+    expect(el.textContent).toContain(`12 of ~48 packages`);
+    // A step still to come says what it took last time, beside its own name rather than a card's width away.
+    expect(el.textContent).toContain(`~4m`);
+    expect(el.querySelector(`[role="progressbar"]`)?.getAttribute(`aria-valuetext`)).toContain(`Compiling your packages`);
+});
+
+it(`says nothing about time left before any run was measured, only how long it has been going`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#12 [builder 4/9] RUN pnpm install`));
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi(POLL_MS);
+
+    expect(el.textContent).not.toMatch(/left/);
+});
+
+// WHEN THE RESTART LANDS is decided where it is read, and changeable until the build gets to its gate.
+it(`holds the restart when the owner picks "When I say", and lets it through from the strip once it is built`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `${DEV_REBUILD_HOLD_MARK} 0`, `#12 [builder 4/9] RUN pnpm install`));
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi(POLL_MS);
+    expect(el.textContent).toContain(`As soon as it's built`);
+
+    runDeviceCommand.mockResolvedValue(log(`1`, `${DEV_REBUILD_HOLD_MARK} 1`, `#27 naming to intentic-sandbox:dev`, DEV_REBUILD_WAITING_MARK));
+    await settleUi(POLL_MS);
+    expect(el.textContent).toContain(`Built, waiting to restart`);
+    expect(el.textContent).toContain(`keeps running as it is until you restart it`);
+
+    runDeviceCommand.mockClear();
+    buttonSaying(`Restart now`)?.click();
+    await settleUi();
+    expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild-release`);
+});
+
+it(`hands an idle-wait to the sandbox, and names who it is waiting on`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `${DEV_REBUILD_HOLD_MARK} 1`, `#12 [builder 4/9] RUN pnpm install`));
+    idleWait.value = { phase: `waiting`, waitingOn: [`Fix the login bug`] };
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi(POLL_MS);
+
+    expect(el.textContent).toContain(`Once no agent is mid-turn`);
+    expect(el.textContent).toContain(`Fix the login bug`);
+});
+
+it(`cancels after asking, and says the sandbox never left its image`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#12 [builder 4/9] RUN pnpm install`));
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi(POLL_MS);
+
+    buttonSaying(`Cancel rebuild`)?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain(`Cancel the rebuild?`);
+
+    runDeviceCommand.mockResolvedValueOnce({ ok: true, message: `Cancelled.` });
+    runDeviceCommand.mockResolvedValue(log(`0`, DEV_REBUILD_CANCEL_MARK, `${DEV_REBUILD_EXIT_MARK} 130`));
+    const confirm = [...document.querySelectorAll(`[role="dialog"] button`)].find(
+        (button): button is HTMLButtonElement => button instanceof HTMLButtonElement && button.textContent?.includes(`Cancel rebuild`) === true,
+    );
+    confirm?.click();
+    await settleUi();
+    await settleUi();
+
+    expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild-cancel`);
+    expect(el.textContent).toContain(`Rebuild cancelled`);
+    expect(el.textContent).toContain(`still on the image it had`);
+});
+
+it(`offers no cancel once the restart has begun`, async () => {
+    const slug = nextSlug();
+    const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `intentic: [recreate] starting the container`));
+    await useDevRebuild(slug).start(`host-1`);
+    await settleUi(POLL_MS);
+
+    expect(el.textContent).toContain(`Restarting onto the new image`);
+    expect(buttonSaying(`Cancel rebuild`)).toBeUndefined();
 });

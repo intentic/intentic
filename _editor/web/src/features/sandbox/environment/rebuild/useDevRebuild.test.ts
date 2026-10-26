@@ -1,5 +1,13 @@
 import "@intentic/testing/dom";
-import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract/schemas/devices";
+import {
+    DEV_REBUILD_CANCEL_MARK,
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_HOLD_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    DEV_REBUILD_SWAP_MARK,
+    DEV_REBUILD_TASKS_MARK,
+    DEV_REBUILD_WAITING_MARK,
+} from "@intentic/sandbox-contract/schemas/devices";
 import { advanceTimersByTimeAsync, freshImport } from "@intentic/testing/bun";
 import { effectScope } from "vue";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
@@ -15,6 +23,7 @@ jest.mock(`../../../../models/sandbox/devices/useDevices`, () => ({ runDeviceCom
 const { OUT_OF_CONTACT_MS, outOfContact, rebuildRunning, useDevRebuild: followRebuild } = await import("./useDevRebuild");
 // The same module evaluated a second time: the page after a reload, its memory gone and this browser's storage intact.
 // Imported here rather than inside the test that reloads, so the load is not charged to that test's clock.
+const { pastRebuild } = await import("./rebuildHistory");
 const reloaded = await freshImport<typeof import("./useDevRebuild")>(`./useDevRebuild`, import.meta.url);
 
 const HOST = `laptop`;
@@ -600,4 +609,119 @@ it(`dates contact afresh for a reload that comes before the restart step`, async
     expect(after.run.stage).toBe(`compile`);
     expect(after.run.heardAt).toBe(Date.now());
     expect(reloaded.outOfContact(after.run, Date.now())).toBe(false);
+});
+
+// A hold at the swap gate prints nothing for as long as the owner leaves it, so its silence is not a stalled build: the
+// card must neither say "quiet for 20m" nor give the run up as lost while the image sits built and waiting.
+it(`waits through a gate held for longer than any quiet log is allowed, without calling it lost`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`16000`, `${DEV_REBUILD_HOLD_MARK} 1`, `#27 naming to intentic-sandbox:dev`, DEV_REBUILD_WAITING_MARK));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    expect(run.phase).toBe(`building`);
+    expect(run.waiting).toBe(true);
+    expect(run.hold).toBe(true);
+    expect(run.quietFor).toBe(0);
+
+    runDeviceCommand.mockResolvedValue(log(`1`, `${DEV_REBUILD_HOLD_MARK} 0`, DEV_REBUILD_WAITING_MARK, DEV_REBUILD_SWAP_MARK, `intentic: [recreate] starting`));
+    await nextPoll(1);
+    expect(run.waiting).toBe(false);
+    expect(run.swapping).toBe(true);
+    expect(run.stage).toBe(`swap`);
+});
+
+it(`settles a cancelled build as cancelled, not failed`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`0`, `#9 [builder 5/9] RUN cargo build`, DEV_REBUILD_CANCEL_MARK, `${DEV_REBUILD_EXIT_MARK} 130`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    expect(run.phase).toBe(`cancelled`);
+    expect(rebuildRunning(run.phase)).toBe(false);
+});
+
+it(`asks the machine to cancel, and reads the log again at once rather than in four seconds`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `#9 [builder 5/9] RUN cargo build`));
+    const follower = useDevRebuild(slug);
+    await follower.start(HOST);
+    await nextPoll(1);
+
+    runDeviceCommand.mockResolvedValueOnce({ ok: true, refused: false, message: `Cancelled.` });
+    runDeviceCommand.mockResolvedValue(log(`0`, DEV_REBUILD_CANCEL_MARK, `${DEV_REBUILD_EXIT_MARK} 130`));
+    expect(await follower.cancel(HOST)).toBeUndefined();
+    await advanceTimersByTimeAsync(0);
+
+    expect(runDeviceCommand).toHaveBeenCalledWith(HOST, `dev-rebuild-cancel`);
+    expect(follower.run.phase).toBe(`cancelled`);
+});
+
+it(`hands back the machine's sentence when a cancel comes too late, and keeps the run going`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `intentic: [recreate] starting`));
+    const follower = useDevRebuild(slug);
+    await follower.start(HOST);
+    await nextPoll(1);
+
+    const late = `The rebuild is already restarting the sandbox onto its new image.`;
+    runDeviceCommand.mockResolvedValueOnce({ ok: false, refused: false, message: late });
+    expect(await follower.cancel(HOST)).toBe(late);
+    expect(rebuildRunning(follower.run.phase)).toBe(true);
+});
+
+it(`draws a hold at once and puts it back when the machine refuses it`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `${DEV_REBUILD_HOLD_MARK} 0`, `working`));
+    const follower = useDevRebuild(slug);
+    await follower.start(HOST);
+    await nextPoll(1);
+    expect(follower.run.hold).toBe(false);
+
+    runDeviceCommand.mockResolvedValueOnce({ ok: true, refused: false, message: `Held.` });
+    expect(await follower.hold(HOST)).toBeUndefined();
+    expect(follower.run.hold).toBe(true);
+    expect(runDeviceCommand).toHaveBeenCalledWith(HOST, `dev-rebuild-hold`);
+
+    runDeviceCommand.mockResolvedValueOnce({ ok: false, refused: true, message: `Run commands is off.` });
+    expect(await follower.release(HOST)).toBe(`Run commands is off.`);
+    expect(follower.run.hold).toBe(true);
+});
+
+// Turbo's own count is the compile's progress: the step that only ever pulsed. Its total is turbo's own once the summary
+// says it, and the last run's before then.
+it(`fills the compile from turbo's count against the last run's total`, async () => {
+    const slug = nextSlug();
+    localStorage.setItem(`intentic.devRebuild.${slug}.took`, JSON.stringify({ ms: { compile: 60_000, image: 240_000, swap: 30_000 }, tasks: 40, at: 1 }));
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `${DEV_REBUILD_TASKS_MARK} 20 -`, `@intentic/sandbox:build: cache miss, executing 1a`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(1);
+
+    expect(run.stage).toBe(`compile`);
+    expect(run.tasks).toEqual({ started: 20, total: undefined });
+    expect(run.fraction).toBeGreaterThan(0);
+});
+
+// What the next card says "how long is left" from: kept only from a run this browser started and saw through.
+it(`keeps a finished run's step lengths for the next one`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `${DEV_REBUILD_TASKS_MARK} 4 -`, `@intentic/base:build: cache hit, replaying logs 1`));
+    const { run } = useDevRebuild(slug);
+    await useDevRebuild(slug).start(HOST);
+    await nextPoll(2);
+    runDeviceCommand.mockResolvedValue(log(`1`, `#8 [builder 2/9] RUN pnpm install`));
+    await nextPoll(2);
+    runDeviceCommand.mockResolvedValue(log(`1`, `intentic: [recreate] starting`));
+    await nextPoll(2);
+    runDeviceCommand.mockResolvedValue(log(`0`, `${DEV_REBUILD_TASKS_MARK} 48 48`, `intentic: done`, `${DEV_REBUILD_EXIT_MARK} 0`));
+    await nextPoll(1);
+
+    expect(run.phase).toBe(`done`);
+    const kept = pastRebuild(slug);
+    expect(kept?.tasks).toBe(48);
+    expect(kept?.ms.compile).toBeGreaterThan(0);
+    expect(kept?.ms.image).toBeGreaterThan(0);
 });

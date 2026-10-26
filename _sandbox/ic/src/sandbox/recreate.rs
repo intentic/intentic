@@ -51,6 +51,45 @@ const HOST_RUNTIME_ENV: &str = "SANDBOX_RUNTIME";
 const PORT_RELEASE_TRIES: u32 = 3;
 const PORT_RELEASE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
+/* THE SWAP GATE. A checkout rebuild the Sandbox page started names a file here (INTENTIC_SWAP_GATE, set by the daemon's
+`dev-rebuild` line): while it exists, a dev recreate holds with its images built and its container untouched, so the
+owner (or the sandbox, once no agent is mid-turn) decides when the restart happens. The two marks are read back off the
+rebuild's log by the page (dev-rebuild-log.ts in the sandbox contract): holding, and let through. Past the second the
+container is being replaced, and the rebuild may no longer be cancelled. No variable, no gate: every other dev run,
+`ic sandbox dev` typed by hand included, swaps exactly as before. */
+const SWAP_GATE_ENV: &str = "INTENTIC_SWAP_GATE";
+const SWAP_GATE_POLL: std::time::Duration = std::time::Duration::from_secs(2);
+const SWAP_GATE_WAITING: &str = "@intentic-rebuild-waiting";
+const SWAP_GATE_THROUGH: &str = "@intentic-rebuild-swap";
+
+/* The gate's path as the line handed it: a `~/` that arrived quoted, and so unexpanded, is the home it means. */
+fn swap_gate_path(raw: &str, home: Option<&str>) -> std::path::PathBuf {
+    match (raw.strip_prefix("~/"), home) {
+        (Some(rest), Some(home)) => Path::new(home).join(rest),
+        _ => std::path::PathBuf::from(raw),
+    }
+}
+
+/* Holds while the gate's file exists, saying so once, then says the swap is let through. Pure of the clock and the
+filesystem, so the sequence is tested without either. */
+fn hold_at_swap_gate(
+    gate: Option<&Path>,
+    exists: &dyn Fn(&Path) -> bool,
+    pause: &mut dyn FnMut(),
+    say: &mut dyn FnMut(&str),
+) {
+    let Some(gate) = gate else {
+        return;
+    };
+    if exists(gate) {
+        say(SWAP_GATE_WAITING);
+        while exists(gate) {
+            pause();
+        }
+    }
+    say(SWAP_GATE_THROUGH);
+}
+
 /* Did a launch fail because its published port is still taken? */
 fn port_still_held(refusal: &str) -> bool {
     refusal.contains("port is already allocated")
@@ -727,6 +766,27 @@ fn recreate(
             },
             &saved,
             &log,
+        );
+    }
+
+    /* THE SWAP GATE: a checkout rebuild started from the Sandbox page may be told to hold its restart here, with every
+    image built and the container not yet touched (swap_gate). Before the pre-flight, so a long hold is followed by a
+    check of the data as it is when the restart is let through, not as it was when the build finished. */
+    if reach == Reach::Applied && matches!(mode, Mode::Dev) {
+        let gate = std::env::var(SWAP_GATE_ENV)
+            .ok()
+            .filter(|raw| !raw.is_empty())
+            .map(|raw| swap_gate_path(&raw, std::env::var("HOME").ok().as_deref()));
+        hold_at_swap_gate(
+            gate.as_deref(),
+            &|path| path.exists(),
+            &mut || std::thread::sleep(SWAP_GATE_POLL),
+            &mut |mark| {
+                use std::io::Write;
+                // allow(terminal-output): a machine mark the rebuild's log is read back by (dev-rebuild-log.ts), not words for a person.
+                println!("{mark}");
+                let _ = std::io::stdout().flush();
+            },
         );
     }
 
@@ -2056,6 +2116,62 @@ fn follows_registry(current_base: Option<&str>, sandbox_image: Option<&str>) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn swap_gate_is_silent_without_its_variable() {
+        let mut said = Vec::new();
+        super::hold_at_swap_gate(None, &|_| true, &mut || panic!("no wait"), &mut |m| {
+            said.push(m.to_string())
+        });
+        assert!(said.is_empty());
+    }
+
+    #[test]
+    fn swap_gate_lets_an_unheld_swap_straight_through() {
+        let mut said = Vec::new();
+        let gate = std::path::Path::new("/tmp/gate.hold");
+        super::hold_at_swap_gate(
+            Some(gate),
+            &|_| false,
+            &mut || panic!("no wait"),
+            &mut |m| said.push(m.to_string()),
+        );
+        assert_eq!(said, vec!["@intentic-rebuild-swap"]);
+    }
+
+    #[test]
+    fn swap_gate_holds_until_its_file_goes() {
+        let left = std::cell::Cell::new(3);
+        let mut pauses = 0;
+        let mut said = Vec::new();
+        let gate = std::path::Path::new("/tmp/gate.hold");
+        super::hold_at_swap_gate(
+            Some(gate),
+            &|_| left.get() > 0,
+            &mut || {
+                pauses += 1;
+                left.set(left.get() - 1);
+            },
+            &mut |m| said.push(m.to_string()),
+        );
+        assert_eq!(
+            said,
+            vec!["@intentic-rebuild-waiting", "@intentic-rebuild-swap"]
+        );
+        assert_eq!(pauses, 3);
+    }
+
+    #[test]
+    fn swap_gate_path_expands_a_quoted_home() {
+        assert_eq!(
+            super::swap_gate_path("~/.intentic/logs/x.hold", Some("/home/me")),
+            std::path::PathBuf::from("/home/me/.intentic/logs/x.hold")
+        );
+        assert_eq!(
+            super::swap_gate_path("/abs/x.hold", Some("/home/me")),
+            std::path::PathBuf::from("/abs/x.hold")
+        );
+    }
+
     use super::*;
 
     #[test]

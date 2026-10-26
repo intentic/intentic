@@ -4742,7 +4742,9 @@
             "estimate": "Szacowany postęp",
             "details": "Szczegóły techniczne",
             "figureOfUsual": "{elapsed} / ~{usual}",
-            "figureOverdue": "{elapsed}, dłużej niż zwykle"
+            "figureOverdue": "{elapsed}, dłużej niż zwykle",
+            "left": "zostało ok. {left}",
+            "overdue": "dłużej niż zwykle"
         },
         "restartQuiet": {
             "detail": "Ta strona sama połączy się ponownie. Twoje pliki w /work zostają."
@@ -6052,7 +6054,32 @@
             "rebuiltIn": "Przebudowano z Twojego checkoutu w {elapsed}. Działasz już na nowym obrazie.",
             "restartingOnNewImage": "Twój sandbox restartuje się na nowym obrazie. Ta strona połączy się ponownie sama.",
             "showLog": "Pokaż log budowania",
-            "waitingFirstLineDevice": "Czekanie na pierwszą linię z tego urządzenia…"
+            "waitingFirstLineDevice": "Czekanie na pierwszą linię z tego urządzenia…",
+            "headingBuilding": "Przebudowa",
+            "headingWaiting": "Zbudowano, restart czeka",
+            "headingSwapping": "Restart na nowym obrazie",
+            "headingDone": "Przebudowano",
+            "headingFailed": "Przebudowa nie powiodła się",
+            "headingCancelled": "Przebudowa anulowana",
+            "headingLost": "Przebudowa przestała raportować",
+            "packages": "{count} pakiet | {count} pakiety | {count} pakietów",
+            "packagesOf": "{started} z {total} pakietów",
+            "packagesOfAbout": "{started} z ~{total} pakietów",
+            "restartLabel": "Restart",
+            "policyBuilt": "Od razu po zbudowaniu",
+            "policyBuiltHint": "Sandbox restartuje się, gdy tylko obraz będzie gotowy.",
+            "policyIdle": "Gdy żaden agent nie będzie w trakcie tury",
+            "policyIdleHint": "Czeka, aż trwające tury się skończą, i wtedy restartuje. Pilnuje tego sandbox, więc możesz zamknąć tę stronę.",
+            "policyManual": "Gdy powiem",
+            "policyManualHint": "Nowy obraz czeka zbudowany, aż naciśniesz Zrestartuj teraz.",
+            "waitingOn": "Zrestartuje się, gdy skończą: {names}.",
+            "builtWaitingManual": "Nowy obraz jest gotowy. Sandbox działa bez zmian, dopóki go nie zrestartujesz.",
+            "builtWaitingIdle": "Nowy obraz jest gotowy. Sandbox przełączy się na niego, gdy żaden agent nie będzie w trakcie tury.",
+            "restartNow": "Zrestartuj teraz",
+            "cancelRebuild": "Anuluj przebudowę",
+            "cancelHeader": "Anulować przebudowę?",
+            "cancelBody": "Budowanie zatrzyma się w miejscu, w którym jest. Sandbox działa dalej na obecnym obrazie.",
+            "cancelledLine": "Anulowano przed restartem. Sandbox wciąż działa na dotychczasowym obrazie."
         },
         "deviceAgent": {
             "connectToUpdate": "Podłącz, by zaktualizować",
@@ -7012,7 +7039,10 @@
             "rebuiltIn": "Przebudowano z Twojego checkoutu w {took}",
             "rebuiltInFewMinutes": "Przebudowano z Twojego checkoutu w kilka minut",
             "seeLog": "Zobacz dziennik",
-            "youreRunningNewImage": "Działasz na nowym obrazie."
+            "youreRunningNewImage": "Działasz na nowym obrazie.",
+            "builtWaiting": "Obraz z Twojego checkoutu jest zbudowany",
+            "builtWaitingDetail": "Czeka na restart sandboxa na nim. Nic jeszcze nie zostało zrestartowane.",
+            "open": "Otwórz"
         },
         "runtimeInstalls": {
             "addToImage": "Dodaj do obrazu",
@@ -7809,7 +7839,8 @@
             "downloadPulling": "Pobieranie {version} w tle",
             "downloadBuilding": "Budowanie Twojego środowiska na {version}",
             "downloadChecking": "Sprawdzanie Twoich plików pod kątem {version}",
-            "downloadNote": "Twój sandbox dalej działa. Gdy pobieranie się skończy, aktualizacja zajmie około 30 sekund."
+            "downloadNote": "Twój sandbox dalej działa. Gdy pobieranie się skończy, aktualizacja zajmie około 30 sekund.",
+            "rebuildingBadge": "Przebudowa"
         },
         "sandboxHours": {
             "awakeHours": "Godziny czuwania",

@@ -4742,7 +4742,9 @@
             "estimate": "Geschätzter Fortschritt",
             "details": "Technische Details",
             "figureOfUsual": "{elapsed} / ~{usual}",
-            "figureOverdue": "{elapsed}, länger als üblich"
+            "figureOverdue": "{elapsed}, länger als üblich",
+            "left": "noch etwa {left}",
+            "overdue": "länger als üblich"
         },
         "restartQuiet": {
             "detail": "Diese Seite verbindet sich von selbst neu. Ihre Dateien in /work bleiben erhalten."
@@ -7599,7 +7601,10 @@
             "rebuiltIn": "Aus Ihrem Checkout neu gebaut in {took}",
             "rebuiltInFewMinutes": "Aus Ihrem Checkout in wenigen Minuten neu gebaut",
             "seeLog": "Das Protokoll ansehen",
-            "youreRunningNewImage": "Sie laufen auf dem neuen Image."
+            "youreRunningNewImage": "Sie laufen auf dem neuen Image.",
+            "builtWaiting": "Das Image aus deinem Checkout ist gebaut",
+            "builtWaitingDetail": "Es wartet darauf, deine Sandbox darauf neu zu starten. Noch wurde nichts neu gestartet.",
+            "open": "Öffnen"
         },
         "runtimeInstalls": {
             "addToImage": "Zum Image hinzufügen",
@@ -8305,7 +8310,8 @@
             "downloadPulling": "{version} wird im Hintergrund heruntergeladen",
             "downloadBuilding": "Ihre Umgebung wird auf {version} gebaut",
             "downloadChecking": "Ihre Dateien werden gegen {version} geprüft",
-            "downloadNote": "Ihre Sandbox arbeitet weiter. Sobald der Download fertig ist, dauert das Update etwa 30 Sekunden."
+            "downloadNote": "Ihre Sandbox arbeitet weiter. Sobald der Download fertig ist, dauert das Update etwa 30 Sekunden.",
+            "rebuildingBadge": "Wird neu gebaut"
         },
         "sandboxHours": {
             "awakeHours": "Wachstunden",
@@ -8572,7 +8578,32 @@
             "rebuiltIn": "In {elapsed} aus Ihrem Checkout neu gebaut. Sie nutzen jetzt das neue Image.",
             "restartingOnNewImage": "Ihre Sandbox startet mit dem neuen Image neu. Diese Seite verbindet sich von selbst wieder.",
             "showLog": "Build-Log anzeigen",
-            "waitingFirstLineDevice": "Warten auf die erste Zeile von diesem Gerät…"
+            "waitingFirstLineDevice": "Warten auf die erste Zeile von diesem Gerät…",
+            "headingBuilding": "Wird neu gebaut",
+            "headingWaiting": "Gebaut, Neustart wartet",
+            "headingSwapping": "Neustart auf das neue Image",
+            "headingDone": "Neu gebaut",
+            "headingFailed": "Neubau fehlgeschlagen",
+            "headingCancelled": "Neubau abgebrochen",
+            "headingLost": "Neubau meldet sich nicht mehr",
+            "packages": "{count} Paket | {count} Pakete",
+            "packagesOf": "{started} von {total} Paketen",
+            "packagesOfAbout": "{started} von ~{total} Paketen",
+            "restartLabel": "Neustart",
+            "policyBuilt": "Sobald es gebaut ist",
+            "policyBuiltHint": "Die Sandbox startet neu, sobald das Image fertig ist.",
+            "policyIdle": "Wenn kein Agent mehr arbeitet",
+            "policyIdleHint": "Wartet, bis laufende Durchgänge fertig sind, und startet dann neu. Die Sandbox hält das fest, du kannst diese Seite schließen.",
+            "policyManual": "Wenn ich es sage",
+            "policyManualHint": "Das neue Image wartet fertig gebaut, bis du auf „Jetzt neu starten“ drückst.",
+            "waitingOn": "Startet neu, sobald diese fertig sind: {names}.",
+            "builtWaitingManual": "Das neue Image ist fertig. Deine Sandbox läuft unverändert weiter, bis du sie neu startest.",
+            "builtWaitingIdle": "Das neue Image ist fertig. Deine Sandbox startet darauf neu, sobald kein Agent mehr arbeitet.",
+            "restartNow": "Jetzt neu starten",
+            "cancelRebuild": "Neubau abbrechen",
+            "cancelHeader": "Neubau abbrechen?",
+            "cancelBody": "Der Build stoppt, wo er gerade ist. Deine Sandbox läuft weiter auf ihrem jetzigen Image.",
+            "cancelledLine": "Vor dem Neustart abgebrochen. Deine Sandbox läuft noch auf ihrem bisherigen Image."
         },
         "useSandboxStorage": {
             "couldntMeasure": "Der Speicherplatz ließ sich nicht messen",

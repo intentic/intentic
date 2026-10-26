@@ -1,12 +1,24 @@
 import type { DeviceCommandInput } from "@intentic/sandbox-contract/schemas/devices";
 import {
+    DEV_REBUILD_CANCEL_MARK,
     DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_HOLD_MARK,
     DEV_REBUILD_QUIET_MARK,
+    DEV_REBUILD_SWAP_MARK,
+    DEV_REBUILD_TASKS_MARK,
     DeviceCommandInputSchema,
     DeviceLocalDirSchema,
+    devRebuildHoldPath,
     devRebuildLogPath,
+    devRebuildPidPath,
+    readDevRebuildLog,
 } from "@intentic/sandbox-contract/schemas/devices";
 import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { COMMAND_TIMEOUT_MS, type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "../device-commands.js";
 
 // What the daemon knows when it builds a line. Only `sandboxId`, `mode`, `localDir` and `port` ever arrive from a
@@ -161,6 +173,9 @@ test("implements every action the contract names", () => {
         "dev-restart",
         "dev-rebuild",
         "dev-rebuild-log",
+        "dev-rebuild-hold",
+        "dev-rebuild-release",
+        "dev-rebuild-cancel",
     ];
     expect(Object.keys(DEVICE_COMMANDS).toSorted()).toEqual(commands.toSorted());
 });
@@ -192,8 +207,9 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
     expect(line).toBe(
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
             "detach=$(command -v setsid 2>/dev/null || true); " +
-            'mkdir -p "$HOME/.intentic/logs" && cd /home/ada/intentic && ' +
-            `$detach nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
+            'mkdir -p "$HOME/.intentic/logs" && rm -f "$HOME"/.intentic/logs/dev-rebuild-work-abc.hold && cd /home/ada/intentic && ' +
+            'INTENTIC_SWAP_GATE="$HOME"/.intentic/logs/dev-rebuild-work-abc.hold INTENTIC_REBUILD_PID="$HOME"/.intentic/logs/dev-rebuild-work-abc.pid ' +
+            `$detach nohup sh -c 'echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"' ` +
             '> "$HOME"/.intentic/logs/dev-rebuild-work-abc.log 2>&1 & sleep 1',
     );
 });
@@ -217,7 +233,21 @@ test("has the rebuild write its own exit status where the log outlives everythin
     const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" })) ?? "";
     expect(line).toContain(`printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"`);
     // Single-quoted, so `$?` is the inner shell's status when it ends rather than the outer shell's when it starts.
-    expect(line).toContain(`nohup sh -c 'pnpm rebuild:sandbox work-abc;`);
+    expect(line).toContain(`pnpm rebuild:sandbox work-abc;`);
+});
+
+// The gate and the cancel both need the build's files, handed over as variables: a path spelled inside the build's
+// single quotes would be one quote away from ending them.
+test("arms the swap gate fresh and records the build's session for a cancel", () => {
+    const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic" })) ?? "";
+    const hold = devRebuildHoldPath("work-abc").replace("~", '"$HOME"');
+    // A hold a previous run left behind is cleared before this build starts, so it holds only when asked to now.
+    expect(line.indexOf(`rm -f ${hold}`)).toBeLessThan(line.indexOf("nohup"));
+    expect(line).toContain(`INTENTIC_SWAP_GATE=${hold} `);
+    expect(line).toContain(`INTENTIC_REBUILD_PID=${devRebuildPidPath("work-abc").replace("~", '"$HOME"')} `);
+    // Written by the build's own shell, first thing, so it is the session the cancel stops; removed once it ends.
+    expect(line).toContain(`sh -c 'echo $$ > "$INTENTIC_REBUILD_PID";`);
+    expect(line).toContain(`rm -f "$INTENTIC_REBUILD_PID"'`);
 });
 
 // The read side, polled while a rebuild runs. Needs only the slug: reading a log takes the log's name, not the checkout.
@@ -231,6 +261,154 @@ test("reads the rebuild log back with its mtime, bounded in bytes and lines", ()
     expect(line).toContain('tail -c 12000 "$log" | tail -n 80');
     // No log at all is an answer, not an error: nothing has rebuilt this sandbox from a checkout here.
     expect(line).toContain(`echo "${DEV_REBUILD_QUIET_MARK} -"`);
+});
+
+// The gate's state and turbo's count ride the same read, between the quiet mark and the tail, so the page needs no
+// second round trip to a machine the build is loading.
+test("reads the hold and turbo's whole-log count beside the tail", () => {
+    const line = DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "";
+    const hold = devRebuildHoldPath("work-abc").replace("~", '"$HOME"');
+    expect(line).toContain(`if [ -f ${hold} ]; then echo "${DEV_REBUILD_HOLD_MARK} 1"; else echo "${DEV_REBUILD_HOLD_MARK} 0"; fi;`);
+    // Counted over the whole log, not the tail: 80 lines of a log that runs to thousands would miss most of the tasks.
+    expect(line).toContain(`started=$(grep -cE ':build: cache (hit|miss|bypass)' "$log" 2>/dev/null);`);
+    expect(line).toContain(`echo "${DEV_REBUILD_TASKS_MARK} \${started:-0} \${total:--}"`);
+    expect(line.indexOf(DEV_REBUILD_TASKS_MARK)).toBeLessThan(line.indexOf("tail -c 12000"));
+});
+
+// RUN FOR REAL: the lines below are shell, and what they compute is only known by running them. Under a home of the
+// test's own, through the run_command answer shape (exit line, fenced streams) the device sends back.
+const homeOf = (dir: string, path: string): string => path.replace(/^~/, dir);
+const runSh = (line: string, home: string): Promise<{ text: string; refused: boolean }> =>
+    new Promise((resolve) => {
+        const shell = spawn("sh", ["-c", line], { env: { ...process.env, HOME: home }, timeout: 30_000 });
+        let stdout = "";
+        let stderr = "";
+        shell.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+        shell.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+        shell.on("close", (exit) => {
+            const code = exit ?? 1;
+            resolve({
+                text: [`Exit code ${code} (${code === 0 ? "success" : "failed"}).`, `--- stdout ---\n${stdout}`, `--- stderr ---\n${stderr}`].join("\n"),
+                refused: false,
+            });
+        });
+    });
+const readAnswer = (reply: { text: string }): string => streamOf(reply.text, "--- stdout ---");
+const withHome = async (body: (home: string) => Promise<void>): Promise<void> => {
+    const home = await mkdtemp(join(tmpdir(), "dev-rebuild-"));
+    try {
+        await mkdir(dirname(homeOf(home, devRebuildLogPath("work-abc"))), { recursive: true });
+        await body(home);
+    } finally {
+        await rm(home, { recursive: true, force: true });
+    }
+};
+const logIn = (home: string): string => homeOf(home, devRebuildLogPath("work-abc"));
+const holdIn = (home: string): string => homeOf(home, devRebuildHoldPath("work-abc"));
+const pidIn = (home: string): string => homeOf(home, devRebuildPidPath("work-abc"));
+
+// Against a log shaped like rog's own rebuild (2026-10-26): what the page reads back is the count the shell computed,
+// through the contract's own reader.
+test("counts turbo's tasks and takes its summary's total, as the shell computes them", async () => {
+    await withHome(async (home) => {
+        const turbo = [
+            "   • Running build in 12 packages",
+            "@intentic/constants:build: cache hit, replaying logs 179197847fba266c",
+            "@intentic/graph:build: cache hit, replaying logs 249d7cf83df86a7e",
+            "@intentic/issue-sdk:build: cache miss, executing 1a8af8322c1fee00",
+            "@intentic/graph:build: some output that is not a start",
+        ];
+        const read = async (): Promise<ReturnType<typeof readDevRebuildLog>> =>
+            readDevRebuildLog(readAnswer(await runSh(DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "", home)));
+        await writeFile(logIn(home), `${turbo.join("\n")}\n`);
+        expect(await read()).toMatchObject({ tasks: { started: 3, total: undefined }, hold: false });
+
+        await writeFile(logIn(home), `${[...turbo, "", " Tasks:    48 successful, 48 total", "Cached:    41 cached, 48 total"].join("\n")}\n`);
+        await writeFile(holdIn(home), "");
+        expect(await read()).toMatchObject({ tasks: { started: 3, total: 48 }, hold: true });
+    });
+});
+
+// The levers need only the slug, like the read: they are files beside the log, wherever the build ran.
+test("holds and lets through the restart by the gate's file alone", () => {
+    const hold = devRebuildHoldPath("work-abc").replace("~", '"$HOME"');
+    expect(DEVICE_COMMANDS["dev-rebuild-hold"].line(facts())).toBe(`mkdir -p "$HOME/.intentic/logs" && touch ${hold}`);
+    expect(DEVICE_COMMANDS["dev-rebuild-release"].line(facts())).toBe(`rm -f ${hold}`);
+    for (const command of ["dev-rebuild-hold", "dev-rebuild-release", "dev-rebuild-cancel"] as const) {
+        expect(DEVICE_COMMANDS[command].line(facts({ ownSlug: undefined }))).toBeUndefined();
+        expect(DEVICE_COMMANDS[command].line(facts({ devRoot: undefined }))).toEqual(expect.any(String));
+        expect(DEVICE_COMMANDS[command].path?.(facts())).toBe(devRebuildLogPath("work-abc"));
+    }
+});
+
+// THE CANCEL, RUN FOR REAL against a stand-in build: a session of its own that sleeps, recorded the way the build's own
+// shell records it. What comes back is what the card reads: `outcomeOf` over the device's answer.
+describe("cancelling a rebuild", () => {
+    const cancel = async (home: string): Promise<ReturnType<typeof outcomeOf>> =>
+        outcomeOf("dev-rebuild-cancel", await runSh(DEVICE_COMMANDS["dev-rebuild-cancel"].line(facts()) ?? "", home));
+    const alive = (pid: number): boolean => {
+        try {
+            process.kill(pid, 0);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    test("stops the build's whole session and marks the log cancelled", async () => {
+        await withHome(async (home) => {
+            await writeFile(logIn(home), "@intentic/graph:build: cache hit, replaying logs 1\n");
+            await writeFile(holdIn(home), "");
+            // A session of its own, as `$detach` gives the real build: the cancel stops it, child and all.
+            const build = spawn("sh", ["-c", `echo $$ > "${pidIn(home)}"; sleep 60 & wait`], { detached: true, stdio: "ignore" });
+            const exited = new Promise<void>((resolve) => build.once("exit", () => resolve()));
+            for (let tries = 0; tries < 100 && !existsSync(pidIn(home)); tries++) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+            expect(await cancel(home)).toMatchObject({ ok: true, refused: false, message: "Cancelled. The sandbox keeps running the image it had." });
+            await exited;
+            expect(alive(build.pid ?? 0)).toBe(false);
+            expect(readDevRebuildLog(await readFile(logIn(home), "utf8"))).toMatchObject({ cancelled: true, exitCode: 130 });
+            expect([existsSync(pidIn(home)), existsSync(holdIn(home))]).toEqual([false, false]);
+        });
+    });
+
+    test("refuses in words once the swap is under way", async () => {
+        await withHome(async (home) => {
+            await writeFile(logIn(home), `#27 DONE 192.3s\n${DEV_REBUILD_SWAP_MARK}\nintentic: pre-flighting…\n`);
+            const result = await cancel(home);
+            expect(result).toMatchObject({ ok: false, refused: false });
+            expect(result.message).toContain("can't be stopped halfway");
+            expect(await readFile(logIn(home), "utf8")).not.toContain(DEV_REBUILD_CANCEL_MARK);
+        });
+    });
+
+    test("says a build that already ended has ended, and leaves its log as it ended", async () => {
+        await withHome(async (home) => {
+            await writeFile(logIn(home), `done\n${DEV_REBUILD_EXIT_MARK} 0\n`);
+            expect(await cancel(home)).toMatchObject({ ok: true, message: "That rebuild had already ended." });
+            expect(readDevRebuildLog(await readFile(logIn(home), "utf8")).cancelled).toBe(false);
+        });
+    });
+
+    test("marks a build whose process is gone as cancelled, so the card stops following it", async () => {
+        await withHome(async (home) => {
+            await writeFile(logIn(home), "#12 [stage-0 3/23] RUN apt-get update\n");
+            // A pid no process holds: the machine slept, or the build was killed without its exit mark.
+            await writeFile(pidIn(home), "2147483646\n");
+            expect(await cancel(home)).toMatchObject({ ok: true, message: expect.stringContaining("no longer running") });
+            expect(readDevRebuildLog(await readFile(logIn(home), "utf8"))).toMatchObject({ cancelled: true, exitCode: 130 });
+        });
+    });
+
+    test("refuses a build that left no record of its process rather than guessing at one", async () => {
+        await withHome(async (home) => {
+            await writeFile(logIn(home), "#12 [stage-0 3/23] RUN apt-get update\n");
+            const result = await cancel(home);
+            expect(result).toMatchObject({ ok: false, refused: false });
+            expect(result.message).toContain("no record of its process");
+        });
+    });
 });
 
 test("cannot name a log for a sandbox that does not know its own name", () => {

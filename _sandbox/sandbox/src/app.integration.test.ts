@@ -1491,6 +1491,8 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     expect((await postJson(memberApp, "/environment/remove", { block: "" })).status).toBe(403);
     expect((await postJson(memberApp, "/environment/rebuild-when-idle", { host: "rog", hash })).status).toBe(403);
     expect((await memberApp.request("/environment/rebuild-when-idle", { method: "DELETE" })).status).toBe(403);
+    expect((await postJson(memberApp, "/environment/dev-swap-when-idle", { host: "rog" })).status).toBe(403);
+    expect((await memberApp.request("/environment/dev-swap-when-idle", { method: "DELETE" })).status).toBe(403);
 
     // Loopback (no auth) is the owner, like every other route.
     const ownerApp = createApp(services({ files: memoryFiles }));
@@ -1515,6 +1517,12 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     expect(withdrawn.status).toBe(200);
     // SAFETY: every environment route answers the Environment schema; only the field under test is read.
     expect(((await withdrawn.json()) as { rebuildWhenIdle?: unknown }).rebuildWhenIdle).toBeUndefined();
+    // A checkout rebuild's restart held until idle names the device that runs it; stopping a wait nobody asked for is a no-op.
+    expect((await postJson(ownerApp, "/environment/dev-swap-when-idle", {})).status).toBe(400);
+    const unswapped = await ownerApp.request("/environment/dev-swap-when-idle", { method: "DELETE" });
+    expect(unswapped.status).toBe(200);
+    // SAFETY: every environment route answers the Environment schema; only the field under test is read.
+    expect(((await unswapped.json()) as { devSwapWhenIdle?: unknown }).devSwapWhenIdle).toBeUndefined();
 
     // Remove names the block it takes out; the unnamed section an older release wrote is the block "".
     expect((await postJson(ownerApp, "/environment/remove")).status).toBe(400);

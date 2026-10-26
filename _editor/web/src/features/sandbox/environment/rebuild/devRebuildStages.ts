@@ -65,8 +65,13 @@ const weightOf = (stage: DevRebuildStage): number => DEV_REBUILD_STEPS.find((ste
 
 // Every line of a BuildKit build in a pipe opens with its step number; `=> ` is the classic renderer's form.
 const IMAGE_LINE = /^(?:#\d+(?:\s|$)|\s*=>[ >])/;
-// ic, recreate.sh and dev-sandbox.sh all narrate under this one prefix, and nothing before the swap prints it.
+// ic, recreate.sh and dev-sandbox.sh all narrate under this one prefix.
 const SWAP_LINE = /^intentic: /;
+// …but not all of it is the swap. Before ic touches the container it still builds: dev-sandbox.sh mounts the compiled
+// trees and compiles the checkout's own ic, and ic builds the environment's overlay on top of the image (minutes of
+// docker on rog, 2026-10-26). Read as the swap, those minutes drew "Restarting onto it" while the sandbox had not even
+// begun to restart. They are the image step's tail; the swap is what ic says after them.
+const PREP_LINE = /^intentic: (?:mounting|building)\b/;
 // The prepare script's last word: the only marker for the gap between the compile ending and docker's first line.
 const TREES_READY = /image trees ready in/;
 // BuildKit's own step counter — the one honest fraction anything in this build reports.
@@ -97,6 +102,9 @@ const layersIn = (line: string): DevRebuildLayers | undefined => {
 };
 
 const classify = (line: string): DevRebuildProgress | undefined => {
+    if (PREP_LINE.test(line)) {
+        return { stage: `image`, detail: line.slice(`intentic: `.length).trim(), layers: undefined };
+    }
     if (SWAP_LINE.test(line)) {
         const said = line.slice(`intentic: `.length).trim();
         return { stage: `swap`, detail: said === `` ? undefined : said, layers: undefined };
@@ -140,4 +148,19 @@ export const readRebuildProgress = (lines: readonly string[]): DevRebuildProgres
 export const rebuildFraction = (progress: DevRebuildProgress): number => {
     const within = progress.stage === `image` && progress.layers !== undefined ? progress.layers.done / progress.layers.total : 0;
     return Math.min(1, stageStart(progress.stage) + weightOf(progress.stage) * within);
+};
+
+/** How far along the compile is, 0–1 of the whole rebuild, from turbo's own count of the tasks it has started. */
+export const compileFraction = (started: number, total: number): number => (total > 0 ? weightOf(`compile`) * Math.min(1, started / total) : 0);
+
+/**
+ * The run's fraction, which is kept in this file's fixed shares, redrawn in another set of shares (the last run's own
+ * lengths): the same place inside the same step, so a bar cut by different weights still fills the step it is on.
+ */
+export const reweigh = (fraction: number, stage: DevRebuildStage, weights: Readonly<Record<DevRebuildStage, number>>): number => {
+    const own = weightOf(stage);
+    const within = own > 0 ? Math.min(1, Math.max(0, (fraction - stageStart(stage)) / own)) : 0;
+    const before = DEV_REBUILD_STAGES.slice(0, rank(stage)).reduce((sum, key) => sum + weights[key], 0);
+    const whole = DEV_REBUILD_STAGES.reduce((sum, key) => sum + weights[key], 0);
+    return whole > 0 ? Math.min(1, (before + weights[stage] * within) / whole) : fraction;
 };

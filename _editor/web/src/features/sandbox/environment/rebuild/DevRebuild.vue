@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { errorMessage } from "@intentic/base/errors";
 import { devRebuildLogPath } from "@intentic/sandbox-contract/schemas/devices";
-import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice, Section, useHoverIntent } from "@intentic/ui";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, formatElapsed, type IconName, Notice, Picker, Section, useHoverIntent } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
-import DevRebuildProgress from "./DevRebuildProgress.vue";
+import DevRebuildProgress, { type SwapPolicy } from "./DevRebuildProgress.vue";
+import { pastRebuild, timedSteps } from "./rebuildHistory";
+import { useDevSwapWhenIdle } from "./useDevSwapWhenIdle";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
@@ -39,7 +42,7 @@ const hostId = useHostHolding(
     () => props.slug,
     () => props.root,
 );
-const { run, elapsed, start, adopt, dismiss } = useDevRebuild(props.slug);
+const { run, elapsed, start, adopt, dismiss, hold, release, cancel } = useDevRebuild(props.slug);
 
 // The card is drawn from the machine's log, not from having clicked the button: a rebuild started in a terminal, in
 // another tab, or by this tab before the restart wiped it all land here the same way.
@@ -57,6 +60,18 @@ const confirming = ref(false);
 const anchorRef = ref<HTMLElement>();
 
 const live = computed(() => rebuildRunning(run.phase));
+// Told to the parent, whose badge says "Rebuilding" while it is, rather than "up to date" over a card rebuilding.
+const rebuilding = defineModel<boolean>(`rebuilding`, { default: false });
+watch(live, (now) => (rebuilding.value = now), { immediate: true });
+
+// THE LAST RUN'S LENGTHS, which size the steps and say how long is left. Re-read when a run settles, since that is
+// when the record changes; storage is not reactive by itself.
+const past = ref(pastRebuild(props.slug));
+watch(
+    () => run.phase,
+    () => (past.value = pastRebuild(props.slug)),
+);
+const steps = computed(() => timedSteps(past.value));
 
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
 const cost = computed(() => t(`sandbox.devRebuild.cost`));
@@ -98,11 +113,93 @@ const onButtonClick = (): void => {
 // reader is sent to is the path something actually writes.
 const logPath = computed(() => devRebuildLogPath(props.slug));
 
+// WHEN THE RESTART LANDS. Read off the machine (the hold file) and the sandbox (an idle-wait it keeps), so every tab and
+// every reload says the same thing; a choice on its way is drawn at once. No hold mark at all is a daemon with no gate
+// to hold a restart at, where the card says what it always said instead of offering a choice it cannot keep.
+const idleSwap = useDevSwapWhenIdle();
+const choosing = ref<SwapPolicy>();
+const policyBusy = ref(false);
+const policyTrouble = ref<string>();
+const policy = computed((): SwapPolicy | undefined => {
+    if (choosing.value !== undefined) {
+        return choosing.value;
+    }
+    if (idleSwap.wait.value?.phase === `waiting`) {
+        return `idle`;
+    }
+    if (run.hold === undefined) {
+        return undefined;
+    }
+    return run.hold ? `manual` : `built`;
+});
+const waitingOn = computed(() => idleSwap.wait.value?.waitingOn ?? []);
+
+// The sandbox's wait owns the hold while it is asked for, so leaving "once no agent is mid-turn" withdraws it first; the
+// machine's file is then set to what was picked.
+const setPolicy = async (next: SwapPolicy): Promise<void> => {
+    const id = hostId.value;
+    if (id === undefined) {
+        return;
+    }
+    choosing.value = next;
+    policyBusy.value = true;
+    policyTrouble.value = undefined;
+    try {
+        if (next === `idle`) {
+            await idleSwap.ask(id);
+            return;
+        }
+        if (idleSwap.wait.value !== undefined) {
+            await idleSwap.withdraw();
+        }
+        policyTrouble.value = next === `manual` ? await hold(id) : await release(id);
+    } catch (error) {
+        policyTrouble.value = errorMessage(error);
+    } finally {
+        policyBusy.value = false;
+        choosing.value = undefined;
+    }
+};
+
+const cancelling = ref(false);
+const cancelTrouble = ref<string>();
+const onCancel = async (): Promise<void> => {
+    const id = hostId.value;
+    if (id === undefined) {
+        return;
+    }
+    cancelling.value = true;
+    cancelTrouble.value = undefined;
+    try {
+        if (idleSwap.wait.value !== undefined) {
+            await idleSwap.withdraw();
+        }
+        cancelTrouble.value = await cancel(id);
+    } catch (error) {
+        cancelTrouble.value = errorMessage(error);
+    } finally {
+        cancelling.value = false;
+    }
+};
+
+// The restart's timing, picked at the moment of asking, beside the count of who it would cut.
+const startPolicy = ref<SwapPolicy>(`built`);
+const START_POLICY_OPTIONS = computed(() => [
+    { value: `built` as const, label: t(`sandbox.devRebuildProgress.policyBuilt`), icon: `bolt` as const },
+    { value: `idle` as const, label: t(`sandbox.devRebuildProgress.policyIdle`), icon: `users` as const },
+    { value: `manual` as const, label: t(`sandbox.devRebuildProgress.policyManual`), icon: `pause` as const },
+]);
+
 const execute = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
-    if (id !== undefined && !live.value) {
-        await start(id);
+    if (id === undefined || live.value) {
+        return;
+    }
+    await start(id);
+    // The hold is laid after the start, which clears whatever an earlier run left: the build is minutes from its gate.
+    if (startPolicy.value !== `built` && rebuildRunning(run.phase)) {
+        await setPolicy(startPolicy.value);
     }
 };
 
@@ -129,11 +226,24 @@ const interrupted = computed(() => {
 });
 
 // The two costs as two steps, in the order they land: run through one sentence, the minutes that interrupt nothing
-// read as the half-minute that does.
-const STEPS = computed((): readonly { icon: IconName; label: string; note: string; takes: string }[] => [
-    { icon: `hammer`, label: t(`sandbox.devRebuild.buildsImage`), note: t(`sandbox.devRebuild.keepWorking`), takes: t(`sandbox.devRebuild.minutes`) },
-    { icon: `refresh`, label: t(`sandbox.devRebuild.restartsSandbox`), note: t(`sandbox.devRebuild.reconnectsOnOwn`), takes: `~30s` },
-]);
+// read as the half-minute that does. Each one's length is the last run's where this browser watched one, and the usual words where it has not.
+const STEPS = computed((): readonly { icon: IconName; label: string; note: string; takes: string }[] => {
+    const took = past.value?.ms;
+    return [
+        {
+            icon: `hammer`,
+            label: t(`sandbox.devRebuild.buildsImage`),
+            note: t(`sandbox.devRebuild.keepWorking`),
+            takes: took === undefined ? t(`sandbox.devRebuild.minutes`) : `~${formatElapsed(Math.round((took.compile + took.image) / 1000))}`,
+        },
+        {
+            icon: `refresh`,
+            label: t(`sandbox.devRebuild.restartsSandbox`),
+            note: t(`sandbox.devRebuild.reconnectsOnOwn`),
+            takes: took === undefined ? `~30s` : `~${formatElapsed(Math.round(took.swap / 1000))}`,
+        },
+    ];
+});
 
 // The last segment is what tells two checkouts apart, so it never truncates; the parent stays, dimmed, to be checkable.
 const checkout = computed(() => {
@@ -147,19 +257,22 @@ const checkout = computed(() => {
     <div class="flex flex-col gap-2">
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
-            <div
-                v-if="!live"
-                ref="anchorRef"
-                class="inline-flex self-start"
-                @pointerenter="onEnter"
-                @pointerleave="onLeave"
-                @focusin="onFocus"
-                @focusout="onBlur"
-            >
-                <!-- A hammer, not the bolt a swap onto an image that already exists wears: this one builds it first. -->
-                <Button :label="t(`sandbox.devRebuild.rebuildCheckout`)" size="small" :tier="secondary ? `boring` : `accent`" @click="onButtonClick">
-                    <template #icon><Icon name="hammer" /></template>
-                </Button>
+            <!-- The button, and beside it the way back while there is no run below to carry it. -->
+            <div v-if="!live" class="flex flex-wrap items-start justify-between gap-2">
+                <div
+                    ref="anchorRef"
+                    class="inline-flex"
+                    @pointerenter="onEnter"
+                    @pointerleave="onLeave"
+                    @focusin="onFocus"
+                    @focusout="onBlur"
+                >
+                    <!-- A hammer, not the bolt a swap onto an image that already exists wears: this one builds it first. -->
+                    <Button :label="t(`sandbox.devRebuild.rebuildCheckout`)" size="small" :tier="secondary ? `boring` : `accent`" @click="onButtonClick">
+                        <template #icon><Icon name="hammer" /></template>
+                    </Button>
+                </div>
+                <slot v-if="!following" name="trouble" />
             </div>
 
             <AnchoredOverlay v-model="overlayOpen" :anchor="anchorRef" side="right" cross="start">
@@ -183,7 +296,29 @@ const checkout = computed(() => {
 
             <!-- The whole state of a detached build, drawn as the three things it does; the log lives inside it,
                  behind a toggle, because for most of a rebuild it is the one thing nobody needs. -->
-            <DevRebuildProgress v-if="following" :run="run" :elapsed="elapsed" :log-path="logPath" :slug="slug" @dismiss="dismiss" />
+            <DevRebuildProgress
+                v-if="following"
+                :run="run"
+                :elapsed="elapsed"
+                :log-path="logPath"
+                :slug="slug"
+                :steps="steps"
+                :past-tasks="past?.tasks"
+                :policy="policy"
+                :policy-busy="policyBusy"
+                :policy-trouble="policyTrouble"
+                :waiting-on="waitingOn"
+                :mid-turn="midTurn"
+                :auto-resume="autoResume"
+                :cancelling="cancelling"
+                :cancel-trouble="cancelTrouble"
+                @update:policy="setPolicy"
+                @restart-now="setPolicy(`built`)"
+                @cancel="onCancel"
+                @dismiss="dismiss"
+            >
+                <template #trouble><slot name="trouble" /></template>
+            </DevRebuildProgress>
 
             <ConfirmDialog
                 :open="confirming"
@@ -216,6 +351,18 @@ const checkout = computed(() => {
                             <span class="mt-px shrink-0 font-mono text-2xs tabular-nums text-muted">{{ step.takes }}</span>
                         </li>
                     </ol>
+
+                    <!-- When the restart lands, decided here where the mid-turn count below says what it would cut. -->
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 pl-8">
+                        <span class="text-2xs text-muted">{{ t(`sandbox.devRebuildProgress.restartLabel`) }}</span>
+                        <Picker
+                            v-model="startPolicy"
+                            :options="START_POLICY_OPTIONS"
+                            variant="ghost"
+                            :aria-label="t(`sandbox.devRebuildProgress.restartLabel`)"
+                            class="text-2xs"
+                        />
+                    </div>
 
                     <p class="flex items-center gap-2 text-2xs text-muted">
                         <Icon name="check" class="shrink-0 text-success" />

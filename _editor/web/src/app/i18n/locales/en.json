@@ -4742,7 +4742,9 @@
             "estimate": "Estimated progress",
             "details": "Technical details",
             "figureOfUsual": "{elapsed} / ~{usual}",
-            "figureOverdue": "{elapsed}, longer than usual"
+            "figureOverdue": "{elapsed}, longer than usual",
+            "left": "about {left} left",
+            "overdue": "longer than usual"
         },
         "restartQuiet": {
             "detail": "This page reconnects by itself. Your files in /work are kept."
@@ -7599,7 +7601,10 @@
             "rebuiltIn": "Rebuilt from your checkout in {took}",
             "rebuiltInFewMinutes": "Rebuilt from your checkout in a few minutes",
             "seeLog": "See the log",
-            "youreRunningNewImage": "You're running the new image."
+            "youreRunningNewImage": "You're running the new image.",
+            "builtWaiting": "Your checkout's image is built",
+            "builtWaitingDetail": "It's waiting to restart your sandbox onto it. Nothing has restarted yet.",
+            "open": "Open"
         },
         "runtimeInstalls": {
             "addToImage": "Add to the image",
@@ -8305,7 +8310,8 @@
             "downloadPulling": "Downloading {version} in the background",
             "downloadBuilding": "Building your environment on {version}",
             "downloadChecking": "Checking your files against {version}",
-            "downloadNote": "Your sandbox keeps working. Once it's in, updating takes about 30 seconds."
+            "downloadNote": "Your sandbox keeps working. Once it's in, updating takes about 30 seconds.",
+            "rebuildingBadge": "Rebuilding"
         },
         "sandboxHours": {
             "awakeHours": "Awake hours",
@@ -8572,7 +8578,32 @@
             "rebuiltIn": "Rebuilt from your checkout in {elapsed}. You're running the new image.",
             "restartingOnNewImage": "Your sandbox is restarting on the new image. This page reconnects on its own.",
             "showLog": "Show the build log",
-            "waitingFirstLineDevice": "Waiting for the first line from that device…"
+            "waitingFirstLineDevice": "Waiting for the first line from that device…",
+            "headingBuilding": "Rebuilding",
+            "headingWaiting": "Built, waiting to restart",
+            "headingSwapping": "Restarting onto the new image",
+            "headingDone": "Rebuilt",
+            "headingFailed": "Rebuild failed",
+            "headingCancelled": "Rebuild cancelled",
+            "headingLost": "Rebuild stopped reporting",
+            "packages": "{count} package | {count} packages",
+            "packagesOf": "{started} of {total} packages",
+            "packagesOfAbout": "{started} of ~{total} packages",
+            "restartLabel": "Restart",
+            "policyBuilt": "As soon as it's built",
+            "policyBuiltHint": "The sandbox restarts the moment the image is ready.",
+            "policyIdle": "Once no agent is mid-turn",
+            "policyIdleHint": "Waits for running turns to finish, then restarts. Kept by the sandbox, so you can close this page.",
+            "policyManual": "When I say",
+            "policyManualHint": "The new image waits, built, until you press Restart now.",
+            "waitingOn": "Restarts once these finish: {names}.",
+            "builtWaitingManual": "The new image is ready. Your sandbox keeps running as it is until you restart it.",
+            "builtWaitingIdle": "The new image is ready. Your sandbox restarts onto it once no agent is mid-turn.",
+            "restartNow": "Restart now",
+            "cancelRebuild": "Cancel rebuild",
+            "cancelHeader": "Cancel the rebuild?",
+            "cancelBody": "The build stops where it is. Your sandbox keeps running on the image it has now.",
+            "cancelledLine": "Cancelled before the restart. Your sandbox is still on the image it had."
         },
         "useSandboxStorage": {
             "couldntMeasure": "Couldn't measure the disk",

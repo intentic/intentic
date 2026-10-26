@@ -1,5 +1,6 @@
 import {
     type Environment,
+    EnvironmentDevSwapWhenIdleSchema,
     EnvironmentRebuildWhenIdleSchema,
     EnvironmentRemoveSchema,
     EnvironmentRuntimeDecisionSchema,
@@ -8,7 +9,9 @@ import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import type { RebuildWhenIdle } from "../hosts/rebuild-when-idle.js";
+import type { RebuildWhenIdle } from "../hosts/idle/rebuild-when-idle.js";
+import { createDevSwapWhenIdle, type DevSwapWhenIdle } from "../hosts/idle/dev-swap-when-idle.js";
+import { runDeviceCommand } from "../hosts/device-commands.js";
 import { readEnvironmentContents } from "./contents.js";
 import { approveEnvironment, decideRuntimeInstall, readEnvironment, rejectEnvironment, removeFromEnvironment } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";
@@ -16,7 +19,7 @@ import { defineRawRoutes } from "../http/raw-route-server.js";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { workingNames } from "../bootstrap/working-now.js";
 import { manageDeviceSandbox } from "../hosts/device-reports.js";
-import { createRebuildWhenIdle } from "../hosts/rebuild-when-idle.js";
+import { createRebuildWhenIdle } from "../hosts/idle/rebuild-when-idle.js";
 import { fileRestartResume } from "../system/restart-resume.js";
 
 // The agent-proposed overlay Dockerfile (.intentic/config/environment.Dockerfile): members read it, only the owner
@@ -27,15 +30,24 @@ import { fileRestartResume } from "../system/restart-resume.js";
 // `waiter` is the one rebuild waiting for this sandbox's agents to be idle; every answer below carries it, so the card
 // that asked, or any other page, sees it waiting, starting, or refused. Built by app.ts from the hosts' own verbs, since
 // hosts reach environment and importing them here would close a cycle.
-const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenIdle) => {
-    const environmentNow = async (): Promise<Environment> => {
+// `swapWaiter` is its counterpart for a rebuild from the checkout: that build's restart, held at its gate until no agent
+// is mid-turn (dev-swap-when-idle.ts), carried on every answer the same way.
+const environmentReader =
+    (services: Services, waiter: RebuildWhenIdle, swapWaiter: DevSwapWhenIdle) =>
+    async (): Promise<Environment> => {
         const environment: Environment = { ...(await readEnvironment(services)), waitsForAgents: true };
         const wait = waiter.state();
         if (wait !== undefined) {
             environment.rebuildWhenIdle = wait;
         }
+        const swap = swapWaiter.state();
+        if (swap !== undefined) {
+            environment.devSwapWhenIdle = swap;
+        }
         return environment;
     };
+
+const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenIdle, environmentNow: () => Promise<Environment>) => {
     return {
         /** GET /environment */
         read: async (c: Context<AppEnv>): Promise<Response> => c.json(await environmentNow()),
@@ -153,19 +165,55 @@ const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenIdle) =>
     };
 };
 
+const createDevSwapRoutes = (services: Services, swapWaiter: DevSwapWhenIdle, environmentNow: () => Promise<Environment>) => {
+    return {
+        // A checkout rebuild's restart, held at its gate and let through once nobody is mid-turn, by this sandbox. The
+        // same owner floor as the device commands that hold and release it by hand. A device that would not take the
+        // hold is said in the answer's own `devSwapWhenIdle` (failed, in its words), not as an error: the ask was heard.
+        devSwapWhenIdle: async (c: Context<AppEnv>): Promise<Response> => {
+            const denied = await ownerDenied(services, c);
+            if (denied !== undefined) {
+                return denied;
+            }
+            // allow(silent-catch): Unreadable JSON is refused by the swap schema below.
+            const body = EnvironmentDevSwapWhenIdleSchema.safeParse(await c.req.json().catch(() => undefined));
+            if (!body.success) {
+                return c.json({ error: "host required" }, 400);
+            }
+            await swapWaiter.ask(body.data);
+            return c.json(await environmentNow());
+        },
+        /** DELETE /environment/dev-swap-when-idle: stops waiting; the hold itself is left for the page's next choice. */
+        cancelDevSwapWhenIdle: async (c: Context<AppEnv>): Promise<Response> => {
+            const denied = await ownerDenied(services, c);
+            if (denied !== undefined) {
+                return denied;
+            }
+            swapWaiter.cancel();
+            return c.json(await environmentNow());
+        },
+    };
+};
+
 // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, runtime-installs a line, takes
 // one tool out, or has the rebuild wait until nothing a restart would cut is in flight.
 export const environmentRawRoutes = defineRawRoutes((services: Services) => {
-    const environment = createEnvironmentRoutes(
-        services,
-        createRebuildWhenIdle({
-            working: () => workingNames(services, "restart"),
-            relay: (host, flow) => manageDeviceSandbox(services, host, flow),
-            restartResume: fileRestartResume(services.config.historyRoot),
-            slug: () => sandboxSlugOf(services.config.sandbox.name),
-            logger: services.logger,
-        }),
-    );
+    const waiter = createRebuildWhenIdle({
+        working: () => workingNames(services, "restart"),
+        relay: (host, flow) => manageDeviceSandbox(services, host, flow),
+        restartResume: fileRestartResume(services.config.historyRoot),
+        slug: () => sandboxSlugOf(services.config.sandbox.name),
+        logger: services.logger,
+    });
+    const swapWaiter = createDevSwapWhenIdle({
+        working: () => workingNames(services, "restart"),
+        run: (host, command) => runDeviceCommand(services, { id: host, command }),
+        restartResume: fileRestartResume(services.config.historyRoot),
+        logger: services.logger,
+    });
+    const environmentNow = environmentReader(services, waiter, swapWaiter);
+    const environment = createEnvironmentRoutes(services, waiter, environmentNow);
+    const swap = createDevSwapRoutes(services, swapWaiter, environmentNow);
     return {
         "GET /environment": environment.read,
         "GET /environment/contents": environment.contents,
@@ -175,5 +223,7 @@ export const environmentRawRoutes = defineRawRoutes((services: Services) => {
         "POST /environment/remove": environment.remove,
         "POST /environment/rebuild-when-idle": environment.rebuildWhenIdle,
         "DELETE /environment/rebuild-when-idle": environment.cancelRebuildWhenIdle,
+        "POST /environment/dev-swap-when-idle": swap.devSwapWhenIdle,
+        "DELETE /environment/dev-swap-when-idle": swap.cancelDevSwapWhenIdle,
     };
 });

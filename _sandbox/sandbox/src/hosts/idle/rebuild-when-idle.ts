@@ -1,7 +1,7 @@
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
 import type { EnvironmentRebuildWait } from "@intentic/sandbox-contract/schemas/environment";
-import { askedRestart, type RestartResume } from "../system/restart-resume.js";
-import type { Services } from "../composition.js";
+import { askedRestart, type RestartResume } from "../../system/restart-resume.js";
+import type { Services } from "../../composition.js";
 import { errorMessage } from "@intentic/base/errors";
 
 // "REBUILD WHEN THEY'RE IDLE". A rebuild restarts the container every turn here runs in, and the owner pressing Rebuild

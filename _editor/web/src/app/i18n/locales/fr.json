@@ -4742,7 +4742,9 @@
             "estimate": "Progression estimée",
             "details": "Détails techniques",
             "figureOfUsual": "{elapsed} / ~{usual}",
-            "figureOverdue": "{elapsed}, plus long que d'habitude"
+            "figureOverdue": "{elapsed}, plus long que d'habitude",
+            "left": "encore environ {left}",
+            "overdue": "plus long que d'habitude"
         },
         "restartQuiet": {
             "detail": "Cette page se reconnecte d'elle-même. Vos fichiers dans /work sont conservés."
@@ -7599,7 +7601,10 @@
             "rebuiltIn": "Reconstruit depuis votre copie en {took}",
             "rebuiltInFewMinutes": "Reconstruit depuis votre copie en quelques minutes",
             "seeLog": "Voir le journal",
-            "youreRunningNewImage": "Vous tournez sur la nouvelle image."
+            "youreRunningNewImage": "Vous tournez sur la nouvelle image.",
+            "builtWaiting": "L'image de votre checkout est construite",
+            "builtWaitingDetail": "Elle attend pour redémarrer votre sandbox dessus. Rien n'a encore redémarré.",
+            "open": "Ouvrir"
         },
         "runtimeInstalls": {
             "addToImage": "Ajouter à l'image",
@@ -8305,7 +8310,8 @@
             "downloadPulling": "Téléchargement de {version} en arrière-plan",
             "downloadBuilding": "Construction de votre environnement sur {version}",
             "downloadChecking": "Vérification de vos fichiers avec {version}",
-            "downloadNote": "Votre sandbox continue de fonctionner. Une fois le téléchargement fini, la mise à jour prend environ 30 secondes."
+            "downloadNote": "Votre sandbox continue de fonctionner. Une fois le téléchargement fini, la mise à jour prend environ 30 secondes.",
+            "rebuildingBadge": "Reconstruction"
         },
         "sandboxHours": {
             "awakeHours": "Heures d'éveil",
@@ -8572,7 +8578,32 @@
             "rebuiltIn": "Reconstruit depuis votre copie en {elapsed}. Vous utilisez la nouvelle image.",
             "restartingOnNewImage": "Votre sandbox redémarre sur la nouvelle image. Cette page se reconnecte d'elle-même.",
             "showLog": "Afficher le journal de construction",
-            "waitingFirstLineDevice": "En attente de la première ligne de cet appareil…"
+            "waitingFirstLineDevice": "En attente de la première ligne de cet appareil…",
+            "headingBuilding": "Reconstruction en cours",
+            "headingWaiting": "Construite, redémarrage en attente",
+            "headingSwapping": "Redémarrage sur la nouvelle image",
+            "headingDone": "Reconstruite",
+            "headingFailed": "La reconstruction a échoué",
+            "headingCancelled": "Reconstruction annulée",
+            "headingLost": "La reconstruction ne répond plus",
+            "packages": "{count} paquet | {count} paquets",
+            "packagesOf": "{started} sur {total} paquets",
+            "packagesOfAbout": "{started} sur ~{total} paquets",
+            "restartLabel": "Redémarrage",
+            "policyBuilt": "Dès qu'elle est construite",
+            "policyBuiltHint": "Le sandbox redémarre dès que l'image est prête.",
+            "policyIdle": "Quand aucun agent n'est en plein tour",
+            "policyIdleHint": "Attend la fin des tours en cours, puis redémarre. Le sandbox s'en charge : vous pouvez fermer cette page.",
+            "policyManual": "Quand je le dis",
+            "policyManualHint": "La nouvelle image attend, construite, jusqu'à ce que vous appuyiez sur Redémarrer maintenant.",
+            "waitingOn": "Redémarre quand ceux-ci ont fini : {names}.",
+            "builtWaitingManual": "La nouvelle image est prête. Votre sandbox continue tel quel jusqu'à ce que vous le redémarriez.",
+            "builtWaitingIdle": "La nouvelle image est prête. Votre sandbox redémarrera dessus quand aucun agent ne sera en plein tour.",
+            "restartNow": "Redémarrer maintenant",
+            "cancelRebuild": "Annuler la reconstruction",
+            "cancelHeader": "Annuler la reconstruction ?",
+            "cancelBody": "La construction s'arrête là où elle en est. Votre sandbox continue sur son image actuelle.",
+            "cancelledLine": "Annulée avant le redémarrage. Votre sandbox est toujours sur son image précédente."
         },
         "useSandboxStorage": {
             "couldntMeasure": "Impossible de mesurer le disque",

@@ -26,10 +26,21 @@ const run = (over: Partial<DevRebuildRun> = {}): DevRebuildRun => ({
     layers: undefined,
     fraction: 1,
     swapAssumed: false,
+    hold: undefined,
+    waiting: false,
+    swapping: false,
+    tasks: undefined,
+    waitingSince: undefined,
+    waitedMs: 0,
     ...over,
 });
 
 describe(`what a settled rebuild is worth saying`, () => {
+    // The reader pressed Cancel on the card; a receipt finding them elsewhere would tell them what they just did.
+    it(`says nothing of a rebuild somebody cancelled`, () => {
+        expect(rebuildReceipt(`building`, run({ phase: `cancelled`, exitCode: 130 }))).toBeUndefined();
+    });
+
     it(`reports the build it just finished, and how long it took`, () => {
         const receipt = rebuildReceipt(`restarting`, run());
         expect(receipt?.title).toBe(`Rebuilt from your checkout in 3m 36s`);

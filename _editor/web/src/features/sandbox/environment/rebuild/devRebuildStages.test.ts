@@ -1,6 +1,6 @@
 // The stage is read off a BOUNDED tail, so every case here is a window onto the middle of a build: never the first
 // line, and often with the previous stage's last lines still in it.
-import { readRebuildProgress, rebuildFraction, stageStart } from "./devRebuildStages";
+import { compileFraction, readRebuildProgress, rebuildFraction, reweigh, stageStart } from "./devRebuildStages";
 
 it(`reads turbo's task prefix as the compile, naming the package it is on`, () => {
     const read = readRebuildProgress([
@@ -68,4 +68,39 @@ it(`counts a finished stage in full and docker's layers inside the running one`,
     expect(halfway).toBeCloseTo(stageStart(`image`) + 0.3, 5);
     expect(swap).toBeCloseTo(0.9, 5);
     expect(rebuildFraction({ stage: `image`, detail: undefined, layers: { done: 10, total: 10 } })).toBeCloseTo(0.9, 5);
+});
+
+// What dev-sandbox.sh and ic print BEFORE they touch the container is still building: the compiled trees mounted, the
+// checkout's ic compiled, the environment's overlay built on the image. Read as the swap, rog's card said "Restarting
+// onto it" through minutes of docker while the sandbox had not begun to restart.
+it(`reads the build that comes before the swap as the image step, not the restart`, () => {
+    const read = readRebuildProgress([
+        `#27 naming to docker.io/library/intentic-sandbox:dev`,
+        `intentic: mounting 31 compiled tree(s) from the working tree — daemon edits restart with dev-restart.sh.`,
+        `intentic: building the checkout's ic CLI…`,
+        `intentic: building intentic-sandbox-dev-env-box:ed2b8c577113 — the overlay's tooling on top of intentic-sandbox:dev…`,
+        `#21 [stage-0 18/23] RUN apt-get install -y valgrind`,
+    ]);
+
+    expect(read?.stage).toBe(`image`);
+    expect(read?.layers).toEqual({ done: 18, total: 23 });
+    expect(read?.detail).toContain(`building intentic-sandbox-dev-env-box`);
+});
+
+it(`fills the compile's share from turbo's own count of the tasks it has started`, () => {
+    expect(compileFraction(0, 48)).toBe(0);
+    expect(compileFraction(24, 48)).toBeCloseTo(stageStart(`image`) / 2, 5);
+    // A count past the total (a task that started twice) never spills into the next step.
+    expect(compileFraction(60, 48)).toBeCloseTo(stageStart(`image`), 5);
+    expect(compileFraction(5, 0)).toBe(0);
+});
+
+// The follower keeps its fraction in fixed shares; the card cuts the bar by the last run's lengths. Halfway through the
+// image is halfway through the image's segment either way.
+it(`redraws a fraction in other shares at the same place inside the same step`, () => {
+    const halfwayImage = rebuildFraction({ stage: `image`, detail: undefined, layers: { done: 5, total: 10 } });
+    const measured = { compile: 0.1, image: 0.5, swap: 0.4 };
+
+    expect(reweigh(halfwayImage, `image`, measured)).toBeCloseTo(0.1 + 0.25, 5);
+    expect(reweigh(stageStart(`swap`), `swap`, measured)).toBeCloseTo(0.6, 5);
 });

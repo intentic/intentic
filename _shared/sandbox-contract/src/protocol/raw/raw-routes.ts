@@ -101,6 +101,8 @@ export const RAW_ROUTES = {
     "POST /environment/remove": {},
     "POST /environment/rebuild-when-idle": {},
     "DELETE /environment/rebuild-when-idle": {},
+    "POST /environment/dev-swap-when-idle": {},
+    "DELETE /environment/dev-swap-when-idle": {},
     "GET /engines": {},
     "POST /engines/channel": {},
     "POST /engines/update": {},

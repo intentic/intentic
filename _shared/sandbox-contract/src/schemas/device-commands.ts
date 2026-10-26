@@ -16,17 +16,45 @@ export const DeviceCommandSchema = z.enum([
     "dev-restart",
     "dev-rebuild",
     "dev-rebuild-log",
+    // The rebuild's three levers, each a file beside its log on the machine (dev-rebuild-log.ts): hold the restart at
+    // the swap gate, let it through, or stop the build before the gate is passed.
+    "dev-rebuild-hold",
+    "dev-rebuild-release",
+    "dev-rebuild-cancel",
     "sync-install",
 ]);
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 // The reversible sync switches: the subset a device's own row drives with a pair of buttons, as opposed to the two
 // commands a card elsewhere issues once. Its own type so those button tables stay total without carrying entries for
 // commands they can never send.
-export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-restart", "dev-rebuild", "dev-rebuild-log", "sync-install", "sync-clean"]);
+export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude([
+    "dev-restart",
+    "dev-rebuild",
+    "dev-rebuild-log",
+    "dev-rebuild-hold",
+    "dev-rebuild-release",
+    "dev-rebuild-cancel",
+    "sync-install",
+    "sync-clean",
+]);
 export type DeviceSyncSwitch = z.infer<typeof DeviceSyncSwitchSchema>;
 
 // Where a detached rebuild reports itself, and the reader of that report (dev-rebuild-log.ts).
-export { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, type DevRebuildLog, devRebuildLogPath, readDevRebuildLog } from "./dev-rebuild-log.js";
+export {
+    DEV_REBUILD_CANCEL_MARK,
+    DEV_REBUILD_EXIT_MARK,
+    DEV_REBUILD_HOLD_MARK,
+    DEV_REBUILD_QUIET_MARK,
+    DEV_REBUILD_SWAP_MARK,
+    DEV_REBUILD_TASKS_MARK,
+    DEV_REBUILD_WAITING_MARK,
+    type DevRebuildLog,
+    type DevRebuildTasks,
+    devRebuildHoldPath,
+    devRebuildLogPath,
+    devRebuildPidPath,
+    readDevRebuildLog,
+} from "./dev-rebuild-log.js";
 
 // Machine's sandbox id (absent = every paired sandbox); must start alphanumeric, else it parses as a CLI flag.
 export const DeviceSandboxIdSchema = z

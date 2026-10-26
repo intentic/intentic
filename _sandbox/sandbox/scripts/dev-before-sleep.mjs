@@ -11,7 +11,7 @@ import { spawn } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
-import { DEV_REBUILD_EXIT_MARK, devRebuildLogPath } from "@intentic/sandbox-contract/schemas/devices";
+import { DEV_REBUILD_EXIT_MARK, devRebuildHoldPath, devRebuildLogPath, devRebuildPidPath } from "@intentic/sandbox-contract/schemas/devices";
 
 import { REPO_ROOT } from "./dev-baked-packages.mjs";
 import { describeMissing, missingFromImage, readCheckoutLock, readImageLock } from "./dev-image-drift.mjs";
@@ -34,6 +34,11 @@ const keepAwake = (why) => {
 };
 
 const log = devRebuildLogPath(slug).replace(/^~/, homedir());
+// The two files beside it the page's own rebuild keeps (device-commands.ts, `dev-rebuild`): the build's process, so the
+// page can cancel this one too, and the swap gate's hold, cleared rather than armed — nobody is using this sandbox, so
+// its restart waits for nobody, and a hold a previous run left behind must not make the page say otherwise.
+const pidFile = devRebuildPidPath(slug).replace(/^~/, homedir());
+const holdFile = devRebuildHoldPath(slug).replace(/^~/, homedir());
 // Which drift the last rebuild started here was for: one that ended and left the same drift behind failed, and is not
 // started again every sweep. A person's rebuild, or a new drift, is what tries again.
 const attempted = `${log.replace(/\.log$/, "")}.before-sleep`;
@@ -78,13 +83,24 @@ mkdirSync(dirname(log), { recursive: true });
 writeFileSync(attempted, drift);
 // The device command's line (device-commands.ts, `dev-rebuild`), so the page reads this build like its own: a session
 // of its own to outlive whoever asked, pnpm found where a login shell keeps it, and the exit mark appended at the end.
+rmSync(holdFile, { force: true });
 const out = openSync(log, "w");
 const pnpmHome = process.env.PNPM_HOME ?? `${homedir()}/.local/share/pnpm`;
-spawn("sh", ["-c", `pnpm rebuild:sandbox ${slug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"`], {
-    cwd: REPO_ROOT,
-    detached: true,
-    stdio: ["ignore", out, out],
-    env: { ...process.env, PNPM_HOME: pnpmHome, PATH: `${pnpmHome}:${pnpmHome}/bin:${process.env.PATH ?? ""}` },
-}).unref();
+// `detached` gives the shell a session of its own, so `$$` is the session `dev-rebuild-cancel` stops. No gate variable:
+// ic swaps the moment the image is built, as this script always has.
+const { INTENTIC_SWAP_GATE: _noGate, ...inherited } = process.env;
+spawn(
+    "sh",
+    [
+        "-c",
+        `echo $$ > "$INTENTIC_REBUILD_PID"; pnpm rebuild:sandbox ${slug}; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"; rm -f "$INTENTIC_REBUILD_PID"`,
+    ],
+    {
+        cwd: REPO_ROOT,
+        detached: true,
+        stdio: ["ignore", out, out],
+        env: { ...inherited, INTENTIC_REBUILD_PID: pidFile, PNPM_HOME: pnpmHome, PATH: `${pnpmHome}:${pnpmHome}/bin:${process.env.PATH ?? ""}` },
+    },
+).unref();
 closeSync(out);
 keepAwake(`its image lacks ${drift}, which the checkout's daemon needs; rebuilding it while nobody uses it`);

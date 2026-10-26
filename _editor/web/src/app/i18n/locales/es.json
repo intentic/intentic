@@ -4742,7 +4742,9 @@
             "estimate": "Progreso estimado",
             "details": "Detalles técnicos",
             "figureOfUsual": "{elapsed} / ~{usual}",
-            "figureOverdue": "{elapsed}, más de lo habitual"
+            "figureOverdue": "{elapsed}, más de lo habitual",
+            "left": "faltan unos {left}",
+            "overdue": "más de lo habitual"
         },
         "restartQuiet": {
             "detail": "Esta página se reconecta sola. Tus archivos en /work se conservan."
@@ -7599,7 +7601,10 @@
             "rebuiltIn": "Reconstruido desde tu checkout en {took}",
             "rebuiltInFewMinutes": "Reconstruido desde tu checkout en unos minutos",
             "seeLog": "Ver el registro",
-            "youreRunningNewImage": "Estás usando la imagen nueva."
+            "youreRunningNewImage": "Estás usando la imagen nueva.",
+            "builtWaiting": "La imagen de tu checkout está construida",
+            "builtWaitingDetail": "Está esperando para reiniciar tu sandbox con ella. Todavía no se ha reiniciado nada.",
+            "open": "Abrir"
         },
         "runtimeInstalls": {
             "addToImage": "Añadir a la imagen",
@@ -8305,7 +8310,8 @@
             "downloadPulling": "Descargando {version} en segundo plano",
             "downloadBuilding": "Construyendo tu entorno sobre {version}",
             "downloadChecking": "Comprobando tus archivos con {version}",
-            "downloadNote": "Tu sandbox sigue funcionando. Cuando termine, actualizar lleva unos 30 segundos."
+            "downloadNote": "Tu sandbox sigue funcionando. Cuando termine, actualizar lleva unos 30 segundos.",
+            "rebuildingBadge": "Reconstruyendo"
         },
         "sandboxHours": {
             "awakeHours": "Horas despierto",
@@ -8572,7 +8578,32 @@
             "rebuiltIn": "Reconstruido desde tu copia del repositorio en {elapsed}. Estás usando la nueva imagen.",
             "restartingOnNewImage": "Tu sandbox se está reiniciando con la nueva imagen. Esta página se reconecta automáticamente.",
             "showLog": "Mostrar el registro de compilación",
-            "waitingFirstLineDevice": "Esperando la primera línea de ese dispositivo…"
+            "waitingFirstLineDevice": "Esperando la primera línea de ese dispositivo…",
+            "headingBuilding": "Reconstruyendo",
+            "headingWaiting": "Construida, esperando para reiniciar",
+            "headingSwapping": "Reiniciando con la nueva imagen",
+            "headingDone": "Reconstruida",
+            "headingFailed": "La reconstrucción falló",
+            "headingCancelled": "Reconstrucción cancelada",
+            "headingLost": "La reconstrucción dejó de informar",
+            "packages": "{count} paquete | {count} paquetes",
+            "packagesOf": "{started} de {total} paquetes",
+            "packagesOfAbout": "{started} de ~{total} paquetes",
+            "restartLabel": "Reinicio",
+            "policyBuilt": "En cuanto esté construida",
+            "policyBuiltHint": "El sandbox se reinicia en cuanto la imagen está lista.",
+            "policyIdle": "Cuando ningún agente esté a mitad de turno",
+            "policyIdleHint": "Espera a que terminen los turnos en curso y luego reinicia. Lo guarda el sandbox, así que puedes cerrar esta página.",
+            "policyManual": "Cuando yo lo diga",
+            "policyManualHint": "La nueva imagen espera, ya construida, hasta que pulses Reiniciar ahora.",
+            "waitingOn": "Se reinicia cuando terminen: {names}.",
+            "builtWaitingManual": "La nueva imagen está lista. Tu sandbox sigue funcionando tal cual hasta que lo reinicies.",
+            "builtWaitingIdle": "La nueva imagen está lista. Tu sandbox se reiniciará con ella cuando ningún agente esté a mitad de turno.",
+            "restartNow": "Reiniciar ahora",
+            "cancelRebuild": "Cancelar reconstrucción",
+            "cancelHeader": "¿Cancelar la reconstrucción?",
+            "cancelBody": "La construcción se detiene donde está. Tu sandbox sigue con la imagen que tiene ahora.",
+            "cancelledLine": "Cancelada antes del reinicio. Tu sandbox sigue con la imagen que tenía."
         },
         "useSandboxStorage": {
             "couldntMeasure": "No se pudo medir el disco",

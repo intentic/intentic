@@ -8,15 +8,18 @@ export interface ProgressStep<Key extends string = string> {
     readonly note: string;
     /** Share of the whole run, so the bar's segments are sized by time rather than by count. */
     readonly weight: number;
+    /** How long this step took the last time it ran here; absent where nothing measured one. */
+    readonly expectedMs?: number | undefined;
 }
 
 /**
  * Where the run stands as a whole. `stopped` is where it got to and ended without finishing; `unheard` is a step this
  * page lost sight of, neither known to be going nor known to have stopped.
  */
-export type ProgressStatus = "running" | "done" | "stopped" | "unheard";
+export type ProgressStatus = "running" | "done" | "stopped" | "unheard" | "held";
 
-export type StepState = "done" | "running" | "pending" | "stopped" | "unheard";
+/** `held`: the step is reached and deliberately not begun, waiting on a person (a restart held until they say). */
+export type StepState = "done" | "running" | "pending" | "stopped" | "unheard" | "held";
 
 const rankIn = (steps: readonly ProgressStep[], key: string): number => steps.findIndex((step) => step.key === key);
 
@@ -68,4 +71,25 @@ export const stepSeconds = (
 export const stepFill = (steps: readonly ProgressStep[], key: string, fraction: number): number => {
     const weight = stepWeight(steps, key);
     return weight === 0 ? 0 : Math.min(1, Math.max(0, (fraction - stepStart(steps, key)) / weight));
+};
+
+/**
+ * How long the run has left, from what each step took last time: the steps still to come in full, and what the running
+ * one has left of its own length. Undefined unless every step has a measured length (a guess is not a promise), and
+ * `overdue` once the running step has outlasted its own, where a number counting down to nothing would be a lie.
+ */
+export const remainingMs = (
+    steps: readonly ProgressStep[],
+    at: string,
+    runningMs: number | undefined,
+): { readonly ms: number; readonly overdue: boolean } | undefined => {
+    const lengths = steps.map((step) => step.expectedMs);
+    const here = rankIn(steps, at);
+    if (here < 0 || lengths.some((length) => length === undefined)) {
+        return undefined;
+    }
+    const own = lengths[here] ?? 0;
+    const later = lengths.slice(here + 1).reduce<number>((sum, length) => sum + (length ?? 0), 0);
+    const into = runningMs ?? 0;
+    return { ms: later + Math.max(0, own - into), overdue: into > own };
 };
