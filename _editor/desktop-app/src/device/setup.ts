@@ -18,7 +18,6 @@ import {
     resumableSetup,
     revealLog,
     runStop,
-    setupAlert,
     setupProgress,
     setupRun,
     signOutForSetup,
@@ -57,12 +56,14 @@ import {
 import { dockerReady, info } from "./machine";
 import { parkedWaitingFor, pcGate, type PcGate } from "./pcSetup/pcGate";
 import { activeRun, eventsOf, linesOf, running, runOutcome, start } from "./runs";
+import { newSandboxHosted } from "../desktopProcesses";
+import { finishedSetup, handedToHosted, setupProcessId, setupProcessOf } from "./processes/setupProcess";
 import { sleep, within } from "@intentic/base/async";
 
-// A SANDBOX'S SETUP ON THIS MACHINE, handed over from the workspace's /setup page (`intentic://setup`, parked by the
-// app for the main window, windows.rs `park_setup`). It runs on arrival, unasked: installing and signing in to run a
-// sandbox here already is the consent; administrator is still asked, on the requirements card. It leads This device
-// while it is here, and reports its progress back to the workspace's page (`setup_progress`), which shows the same bar.
+// A SANDBOX'S SETUP ON THIS MACHINE, handed over by a page (`intentic://setup`, parked for the main window, windows/links.rs
+// `park_setup`) or made here (new_sandbox.rs). It runs on arrival, out of sight: asking for it is the consent; administrator
+// is still asked, on the requirements card. It reports to the workspace's bar (`setup_progress`) and, as a process, to both
+// faces' rails (setupAsProcess.ts).
 // A folder's own sandbox is not one of these: the app makes it by itself on the folder's press (folderSetups.ts, the
 // app's folder_setup.rs), whichever window is open.
 
@@ -550,10 +551,8 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
         if (!stopping.value && claimExpired(linesOf(`setup`)) && (await rerunOnFreshCode(args))) {
             return;
         }
-        // Stopped because the setup page took this sandbox to a machine of ours: the reader is on that page, watching it
-        // start, and This device swapped in over it would take them off it.
-        // Its card goes with it: the sandbox is the machine's now, and the card's "Try again" would set it up on this PC
-        // as well. The page hears `stopped` first, so its button is handed back if the machine of ours falls through.
+        // Stopped because a machine of ours took this sandbox over: its card goes with it, since "Try again" would set it
+        // up here as well. The page hears `stopped` first, so its button comes back if that machine falls through.
         if (stopping.value && stopReason === `hosted`) {
             tell({ ...nameOf(args), state: `stopped`, percent: Math.round(progress.value?.percent ?? 0) });
             pending.value = undefined;
@@ -561,20 +560,17 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
             tell({ ...nameOf(args), state: `closed`, percent: 0 });
             return;
         }
-        // The main window is never topmost, so a run that stops while it is hidden would otherwise go unnoticed; `setupAlert`
-        // brings it forward in the workspace's place, or only points at a run Home draws itself (windows/setup.rs).
-        await setupAlert(true);
+        // A run that stops is its process's news, on both faces' rails (processes.rs `attend`): nobody is moved.
         return;
     }
     // The last word the workspace page hears about this run, sent while there is still a setup to report on: the page
     // draws nothing for it (the workspace is about to open), and a strip left saying "97%" is what a later setup would
     // open on for its first second.
     tell({ ...nameOf(args), state: `done`, percent: 100 });
+    // Done stays on both faces' rails, with its Open, until opened or put away. _(2026-10-26) It opened the workspace._
+    finishedSetup.value = setupProcessOf({ args, report: { ...nameOf(args), state: `done`, percent: 100 }, requirements: [], requirementsShown: false, expired: false, failure: undefined });
     pending.value = undefined;
     setupOpen.value = false;
-    // Brings the workspace back without navigating it: the page waiting on `/setup` opens the workspace by itself the
-    // moment the sandbox reports in (useRegistryWatch.ts), usually before this run's last checks end.
-    await workspaceOpen();
 };
 
 /** `stopping` is set before the kill so the exit code it produces reads as an answer, not a failure. */
@@ -597,11 +593,9 @@ const stopRun = async (reason: StopReason): Promise<void> => {
 /** The card's Stop. Takes no argument: the press hands its handler the click. */
 export const stopSetup = (): Promise<void> => stopRun(`card`);
 
-/* THE PAGE CALLING THE INSTALL OFF (2026-10-12, 2026-10-21): `intentic://setup-stop` (windows.rs), sent as the setup page
-   takes the sandbox to a machine of ours (a download left going ends in a refused announce) and by its Cancel. A run
-   stops as the card's Stop stops it, told as `stopped`, never as a failure; a setup with no run whose card still asks
-   this PC something is given up as dismissing that card gives it up, and no restart brings it back. The reader is on
-   that page either way, so This device is not brought up over it; the page's events say which it was. */
+/* THE PAGE CALLING THE INSTALL OFF (2026-10-12, 2026-10-21): `intentic://setup-stop`, sent as a page takes the sandbox to
+   a machine of ours, or by its Cancel. A run stops as the card's Stop stops it (`stopped`, never a failure); a setup with
+   no run whose card still asks something is given up as dismissing the card gives it up. */
 export const stopForPage = async (sandboxId: string): Promise<void> => {
     if (stopping.value || pending.value?.sandboxId !== sandboxId) {
         return;
@@ -729,7 +723,7 @@ export const setupState = computed<SetupReport[`state`]>(() => {
     }
     return progress.value?.ended === `ok` ? `done` : `failed`;
 });
-const report = computed((): SetupReport | undefined => {
+export const report = computed((): SetupReport | undefined => {
     if (setupMode.value && pcParked.value && !running.value) {
         // No run to report from: where the bar stood, and what the park waits on (pcGate.ts).
         const waitingFor = parkedWaitingFor(pcFollowed.value?.host.check.value?.state, pcSetup.value);
@@ -787,13 +781,9 @@ watch(
         }
     },
 );
-/* THE HEARTBEAT (2026-10-12). The page took ten seconds without a report for an app that was gone, and the app sent one
-   only when something in it changed: a pull whose bar sat still for minutes went quiet, and the page told the reader to
-   start the app again, which started a second install beside the first. Every report now says when it was sent (`at`),
-   and while the setup runs or waits it is sent again every HEARTBEAT_MS whether or not anything changed, so silence
-   means the app is gone and nothing else does. This window is hidden whenever the workspace holds the frame, where its
-   timers slow to one a minute, so the app also repeats the last report itself in this window's silence (windows.rs
-   `keep_heartbeat`). */
+/* THE HEARTBEAT (2026-10-12): every report says when it was sent (`at`), and is sent again every HEARTBEAT_MS while the
+   setup runs or waits, so a page's silence means the app is gone (a still bar once read as that, and a second install
+   started). A hidden window's timers slow, so the app repeats the last report itself too (windows/setup.rs). */
 const HEARTBEAT_MS = 4_000;
 
 // Stamped as it goes: `at` is when the app sent it, never part of what makes two reports different.
@@ -825,25 +815,24 @@ watch(
     },
 );
 
-/* THE WAY OUT THAT IS NOT "GIVE UP": offered by a machine that cannot meet the requirements, and by one that met them
-   all and then stopped anyway. Both are the same question: run this sandbox somewhere else. */
+/* THE WAY OUT THAT IS NOT "GIVE UP": run this sandbox somewhere else, answered where the reader is: the install here
+   stops and a machine of ours starts for the same row, its wait on the same tile (new_sandbox.rs). _(2026-10-26) This
+   opened the workspace's setup page._ */
 export const setUpElsewhere = async (from: `requirements` | `stopped`): Promise<void> => {
     track(`desktop_install_elsewhere`, { from, requirements: requirements.value.map((requirement) => requirement.id) });
-    if (pcParked.value) {
-        unpark();
-        void forgetResumableSetup();
+    const args = pending.value;
+    if (args?.sandboxId === undefined || args.sandboxId === ``) {
+        return;
     }
-    setupOpen.value = false;
-    // The sandbox runs elsewhere now: the restart or sign-out this PC was waiting for is nobody's next step any more.
+    if (activeRun.value === `setup`) {
+        await stopRun(`hosted`);
+    }
+    // The machine tells the same tile from here on, a refusal included (new_sandbox.rs `new_sandbox_hosted`).
+    handedToHosted.add(setupProcessId(args));
+    closeSetup();
     requirements.value = [];
-    // `elsewhere=1` is what stops /setup acting on arrival: the hosted rung is preselected, and it is the reader's click
-    // on it that spends their allowance, never this handover. `sandbox` names the row this install was for.
-    const query = new URLSearchParams({ elsewhere: `1`, machine: `hosted` });
-    const sandboxId = pending.value?.sandboxId;
-    if (sandboxId !== undefined && sandboxId !== ``) {
-        query.set(`sandbox`, sandboxId);
-    }
-    await workspaceOpen(`/setup?${query.toString()}`);
+    pending.value = undefined;
+    await newSandboxHosted(args.sandboxId, args.name ?? ``);
 };
 
 /**
@@ -961,10 +950,14 @@ export const loadResumable = async (): Promise<void> => {
     await runSetup(`resume`);
 };
 
-/** The way on from a code that ran out: the setup page mints a fresh one and, inside this app, hands it straight back. */
+/** The way on from a code that ran out: a fresh one minted here and the setup run again on it, where the reader is.
+ *  _(2026-10-26) This opened the workspace's setup page to mint one and hand it back._ */
 export const freshCode = async (): Promise<void> => {
     track(`desktop_install_fresh_code`, {});
-    await workspaceOpen(`/setup`);
+    const args = pending.value;
+    if (args !== undefined && !running.value) {
+        await rerunOnFreshCode(args);
+    }
 };
 
 /** The setup the app parked for this window, taken (never read: two callers race for it) and run on arrival. */
@@ -973,6 +966,7 @@ export const loadPending = async (): Promise<void> => {
     if (taken === null) {
         return;
     }
+    finishedSetup.value = undefined;
     pending.value = taken;
     setupOpen.value = true;
     // A fresh link is a fresh conversation: nothing about an earlier session's ending applies to it.

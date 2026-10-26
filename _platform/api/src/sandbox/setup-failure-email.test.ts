@@ -143,12 +143,12 @@ describe(`the mail`, () => {
     it(`says where it stopped, what stopped it, the generic retry when the report has no fix, and the way back`, () => {
         const mail = mailFor(failedReport());
         expect(mail.subject).toBe(`Your intentic setup stopped at the download`);
-        expect(mail.link).toBe(`https://app.test/setup?sandbox=s1`);
+        expect(mail.link).toBe(`https://app.test/home?add=sandbox&finish=s1`);
         expect(mail.html).toContain(`did not finish downloading in 3 attempts`);
         expect(mail.html).toContain(FALLBACK_REMEDY.replaceAll(`"`, `&quot;`));
-        expect(mail.html).toContain(`href="https://app.test/setup?sandbox=s1"`);
+        expect(mail.html).toContain(`href="https://app.test/home?add=sandbox&finish=s1"`);
         expect(mail.html).toContain(`Or start instantly on our servers`);
-        expect(mail.html).toContain(`href="https://app.test/setup?sandbox=s1&amp;machine=hosted"`);
+        expect(mail.html).toContain(`href="https://app.test/home?add=sandbox&finish=s1&amp;machine=hosted"`);
         // No tracking: the existing frame has no pixel, and this one adds no image of its own.
         expect(mail.html).not.toContain(`<img`);
     });

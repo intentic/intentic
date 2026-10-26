@@ -1,9 +1,10 @@
 use super::bounds::fit_width;
 use super::close::request_close;
 use super::mode::announced;
+use super::present::{Asked, Press};
 use super::unsaved::{is_local_window, UNSAVED};
 use super::warmth::workspace_shown;
-use super::{raise, show_home_at, show_workspace, Keyboard, HOME, WORKSPACE};
+use super::{raise, show_home, show_workspace, HOME, WORKSPACE};
 use crate::setup_link::WindowVerb;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -222,9 +223,9 @@ pub(super) fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
             let _ = window.start_dragging();
         }
         // A face comes back the way the tray brings it back, in the other face's place.
-        WindowVerb::Raise if label == WORKSPACE => show_workspace(app),
-        WindowVerb::Raise if label == HOME => show_home_at(app, None, Keyboard::Take),
-        WindowVerb::Raise => raise(&page),
+        WindowVerb::Raise if label == WORKSPACE => show_workspace(app, Press::by(Asked::Page)),
+        WindowVerb::Raise if label == HOME => show_home(app, Press::by(Asked::Page)),
+        WindowVerb::Raise => raise(Press::by(Asked::Page), &page),
         WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
         // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
         WindowVerb::Mode(mode, look) => announced(app, mode, look),

@@ -159,7 +159,10 @@ pub fn with_found(app: &AppHandle, path: &str) -> String {
 }
 
 fn path_with_found(path: &str, providers: &[FoundProvider]) -> String {
-    let is_setup = path == "/setup" || path.starts_with("/setup?");
+    // A new sandbox is made on Home (`/home?add=sandbox…`) since 2026-10-26; `/setup` is what an older page still opens.
+    let is_setup = path == "/setup"
+        || path.starts_with("/setup?")
+        || (path.starts_with("/home?") && path.contains("add=sandbox"));
     let is_project = path.starts_with("/?") && path.contains("project=");
     if !(is_setup || is_project) || providers.is_empty() || path.contains("found=") {
         return path.to_string();
@@ -1506,6 +1509,11 @@ mod tests {
             "/setup?project=app&machine=mine&found=claude,codex"
         );
         assert_eq!(path_with_found("/setup", &[]), "/setup");
+        assert_eq!(
+            path_with_found("/home?add=sandbox&finish=sbx_7", &providers),
+            "/home?add=sandbox&finish=sbx_7&found=claude,codex"
+        );
+        assert_eq!(path_with_found("/home", &providers), "/home");
         assert_eq!(
             path_with_found("/?sandbox=sbx_1", &providers),
             "/?sandbox=sbx_1"

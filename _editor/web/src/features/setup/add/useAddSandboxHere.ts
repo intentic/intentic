@@ -1,3 +1,4 @@
+import type { HostedTierId } from "@intentic/constants";
 import { useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
@@ -9,6 +10,7 @@ import { apiClient } from "../../../lib/useApi";
 import { markJustSetUp } from "../../../models/sandbox/live/justSetUp";
 import { useDesktopSetup } from "../desktopSetup";
 import { platformUrlOf } from "../flow/installCommand";
+import { probeDaemon } from "../setupAttach";
 import { useAddSandbox } from "./useAddSandbox";
 
 // THE ADD SANDBOX RUN AS THIS WINDOW STARTS IT: the platform, this computer's app, the connected machines and the
@@ -28,6 +30,8 @@ export interface AddSandboxHereOptions {
     readonly selects: () => boolean;
     /** The row reported in, and was selected when `selects` said so. */
     readonly reportedIn: (sandboxId: string) => void;
+    /** The tier a machine of ours is asked for, where the address named one (the pricing page's). */
+    readonly tier?: HostedTierId | undefined;
 }
 
 export const useAddSandboxHere = (options: AddSandboxHereOptions) => {
@@ -53,6 +57,9 @@ export const useAddSandboxHere = (options: AddSandboxHereOptions) => {
         appStays: options.appStays,
         mobile,
         openDesktopLink,
+        tier: options.tier,
+        getIdToken: () => getIdToken(),
+        probe: probeDaemon,
         warmCredential: async () => {
             await warmIdToken();
             if ((await getIdToken({ interactive: false })) === undefined) {

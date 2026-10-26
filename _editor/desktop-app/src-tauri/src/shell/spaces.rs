@@ -132,7 +132,10 @@ fn activate(app: &AppHandle, number: usize, agents: bool, chat: bool) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         if number == 0 {
-            crate::windows::show_device(&handle);
+            crate::windows::show_device(
+                &handle,
+                crate::windows::present::Press::by(crate::windows::present::Asked::Shell),
+            );
         } else if let Some(sandbox) = roster.sandboxes.get(number - 1) {
             let path = if chat {
                 format!(
@@ -147,7 +150,11 @@ fn activate(app: &AppHandle, number: usize, agents: bool, chat: bool) {
                     sandbox.id
                 )
             };
-            crate::windows::show_workspace_at(&handle, Some(&path));
+            crate::windows::show_workspace_at(
+                &handle,
+                crate::windows::present::Press::by(crate::windows::present::Asked::Shell),
+                Some(&path),
+            );
         }
     });
 }

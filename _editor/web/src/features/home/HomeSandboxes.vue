@@ -10,6 +10,7 @@ import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useRequestAddSandbox, warmAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
+import { processAskedBy } from "../../models/processes/processAddress";
 import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
@@ -48,10 +49,13 @@ const badgeOf = (id: string): ViewBadge | undefined => {
 const noteOf = (id: string): string => (readySandboxes.value.has(id) ? t(`home.newSandbox.ready`) : t(`home.doubleClickToEnter`));
 // The tile of the sandbox whose chat the page shows; on a page of the person's own (settings), none is.
 const route = useRoute();
-// While the new sandbox's page stands in the chat's place, its tile is the selected one; its dialog over the chat leaves
-// the chat's own tile selected.
+// While the new sandbox's page, or a process's, stands in the chat's place, its tile is the selected one; the new
+// sandbox's dialog over the chat leaves the chat's own tile selected.
 const selected = (id: string): boolean =>
-    route.name === `home` && sandbox.activeSandboxId.value === id && !newSandboxPageShown(route, newSandbox.value);
+    route.name === `home` &&
+    sandbox.activeSandboxId.value === id &&
+    !newSandboxPageShown(route, newSandbox.value) &&
+    processAskedBy(route) === undefined;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
 // The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
 const add = useRequestAddSandbox();

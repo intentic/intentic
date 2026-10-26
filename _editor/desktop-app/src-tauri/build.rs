@@ -19,6 +19,14 @@ fn main() {
 
 const COMMANDS: &[&str] = &[
     "sign_in",
+    // The app's processes, one list for both faces (src/processes.rs), and a new sandbox made from a local window.
+    "process_report",
+    "process_clear",
+    "processes_list",
+    "process_act",
+    "new_sandbox_offers",
+    "new_sandbox_create",
+    "new_sandbox_hosted",
     "desktop_info",
     // The sandbox face's own three, granted to the workspace window's bundled page alone (capabilities/machine-face.json).
     "machine_face",
@@ -29,7 +37,6 @@ const COMMANDS: &[&str] = &[
     "docker_start",
     "docker_open",
     "hosts_sandboxes",
-    "take_pending_docker",
     "take_pending_setup",
     "take_pending_recreate",
     "take_pending_fix",
@@ -71,7 +78,6 @@ const COMMANDS: &[&str] = &[
     // Devices' Open on a sandbox of this computer: the workspace, or the face while the workspace does not answer.
     "local_sandbox_open",
     "home_facts",
-    "setup_alert",
     "setup_progress",
     "fit_to_content",
     "close_workspace",
@@ -105,7 +111,6 @@ const COMMANDS: &[&str] = &[
     "onboarding_pause",
     "onboarding_restart",
     "onboarding_sign_out",
-    "onboarding_use_cloud",
     // The first task (first_task.rs).
     "first_task_read",
     "first_task_queue",

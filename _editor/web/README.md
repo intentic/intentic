@@ -344,16 +344,17 @@ flowchart LR
   check, the folder's page and the folder's setup all go by the platform's own answer. A sandbox picked
   there reaches a workspace page already loaded without a reload: the app calls the opener the page registered
   (`installDesktopOpener`), and `openInPage` (`router/index.ts`) selects the sandbox the path names and routes there.
-  The general Workspace button asks for `/` explicitly, so returning from This computer cannot just reveal an old
-  setup page. Before the shell sends an account to setup, it confirms a cached list with no working sandbox against
-  a fresh platform list; a sandbox connected while the page was hidden opens through the workspace's connection flow.
+  The general Workspace button asks for `/` explicitly. Before the shell puts an account on Home's first run, it confirms
+  a cached list with no working sandbox against a fresh platform list; a sandbox connected while the page was hidden
+  opens through the workspace's connection flow.
 - **The desktop app signs in over the view.** In the app's workspace window (`app/environments/desktopWorkspace.ts`)
   nothing navigates to a sign-in screen: a router guard (`router/signInPlace.ts`) turns every trip to `/login` into a
   dialog over the view on screen (`features/auth/SignInDialog.vue`), or over Home when the page has nothing on screen
   yet. The browser's hand-off coming back to a page already up is redeemed in that dialog, and the sign-in then enters
   its destination through the shell's own entry guards. A session that lapses keeps its view under the dialog and is
   entered again by a reload once signed back in. A sign-out lands on Home's first run. Browsers keep `/login`.
-- **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
+- **Routes.** `/login` sits outside the shell; `/setup` and `/start/hosted` are only redirects to Home's ask for a new
+  sandbox (`router/setupRoutes.ts`, below), kept for old links. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup` (`router/shellGates.ts`). The bare address opens
   **Home** (`/home`, the master view below) for everyone but a guest of a box, whose way in is its chat, and the
   Android app's WebView, which keeps the board it draws itself (`lib/routes/firstScreens.ts` `rootLanding`). `/home` alone
@@ -361,9 +362,8 @@ flowchart LR
   sign-in and returns to `/home?add=sandbox`, the address of Home's new sandbox (below). The shell renders `ShellDesktop.vue`
   (rail, side panel, terminal and status bar) or `ShellMobile.vue` (one screen at a time). An account with nothing to
   open lands on Home's first run rather than on setup (which used to start a machine the moment it arrived), in the
-  desktop app too (`app/environments/nothingToOpen.ts`). A browser resumes an unfinished setup of the reader's own on
-  `/setup`; the desktop app stays on Home, whose first run offers that setup by name and runs it in place, in a tile of
-  Home's rail. A link naming a sandbox (`/?sandbox=<id>`, the
+  desktop app too (`app/environments/nothingToOpen.ts`). An unfinished setup of the reader's own is offered by name on
+  that first run and finished in place, in a tile of Home's rail, in a browser and the desktop app alike. A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell inside it, on
   the screen it was last left on or its board (`sandboxEntry`), if the account lists it, and otherwise says that
   sandbox is not on the account any more; the id leaves the address either way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
@@ -619,9 +619,14 @@ home conversation once it is up; one who went elsewhere is not moved, and finds 
 platform refuses stays in the dialog with the reason. Picked to run on
 this computer, the desktop app runs the install out of sight (`intentic://setup?…&stay=1`, the app's `park_setup`)
 instead of swapping its window over to This device, and keeps it there when the run waits on the reader or stops: the
-tile wears the mark, and the run's page opens the app's card on the reader's press. In the desktop app a setup of the
-reader's own left unfinished is finished the same way, from the first run's "Finish setting up": `/home?add=sandbox&finish=<id>`
-puts up its tile and its run's page with no dialog, on a fresh code for the row it has. A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
+tile wears the mark, and the run's page answers what it asks (the go-ahead, a restart, a sign-out, a retry) in place,
+by `intentic://process-act`; only an app from before that opens its card on the reader's press. The dialog's "More
+ways" are in the same form, never another page: a command for a server (the reader's own Cloudflare zone riding it if
+they like), or the address of a sandbox already running, probed before anything is made. A setup of the reader's own left
+unfinished is finished the same way, from the first run's "Finish setting up" or any other: `/home?add=sandbox&finish=<id>`
+puts up its tile and its run's page with no dialog, on the row it has: a machine of ours already on it waited on, the
+app's run on this computer, or its command shown again. `machine=hosted` (and `tier=`) picks a machine of ours; the old
+`/setup` and `/start/hosted` addresses land on these (`router/setupRoutes.ts`; `features/setup/README.md`). A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
 **Home shows a sandbox's own view in place** (2026-10-25, `lib/routes/homeDetour.ts`): a navigation from Home to a view
 it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<view>`, drawn where the chat was
 (`HomeDetour.vue`) under a labelled "Back to chat"; Esc and the browser's Back return too. The chat stays mounted,
@@ -637,7 +642,7 @@ The desktop status bar stays hidden in the master view, including personal setti
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu
-offers This computer beside Settings; the Home rail holds only sandboxes and Add (2026-10-26). Computer tools stay
+offers This computer beside Settings; the Home rail holds the sandboxes, Add and the processes under way (below; 2026-10-26). Computer tools stay
 available without becoming a primary destination during onboarding. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
 is, three steps, and Create, which opens the new sandbox's dialog and then its tile and run in its place; a setup of the reader's own that never
 finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.
@@ -648,6 +653,48 @@ settings and their access card, and the rail and command palette offer no chat o
 work" switch decides both whether their home lands by itself and whether they may press Land on it. `useRole`
 `canLandHome` reads that answer from `/members/self`, and the home view shows the Land press on held work only to
 whoever has it. Anyone else sees a line saying the work waits for a maintainer.
+
+## Processes under way: one rail group, both faces
+
+**Nobody is moved out of the view they are in** (2026-10-26). A sign-in, this PC's own setup, a sandbox's setup, a
+folder's, a Docker start, a recreate, a fix, a sync and Repair each run where the reader is. On Home they are tiles of
+the rail's temporary group and a page in the chat's place. On This computer they are the same tiles on its rail and the
+same page in its shell. Only a press that names a destination changes the face or the route: "Open <sandbox>", the
+tray's rows, "This computer", or a notification's click. _(Before, a setup that waited on the reader, a sign-in coming
+back, a launch with a parked setup or a sleeping engine, and a folder whose sandbox was ready each swapped the desktop
+app's window to another face, or sent the workspace to `/setup`.)_
+
+- **One list.** The desktop app keeps one list of its processes (its `processes.rs`) and tells both faces
+  (`app/environments/processes/processReport.ts`):
+  - the workspace by the `intentic-processes` event, after the page's `intentic://process?hello=1`;
+  - a local window by its host (`localHost().processes`, `app/environments/processes/localProcessHost.ts`).
+
+  A report carries ids and the owner's own text only (a name, "Step 4 of 10", a requirement's label), and the page
+  words the rest (`models/processes/processWords.ts`). Runs only the workspace holds (a machine of ours or a connected
+  machine started from Home) are told to the app by `intentic://process?report=…`, so This computer draws them too
+  (`features/home/homeProcesses.ts`).
+- **The rail group.** `parts/processes/ProcessTiles.vue` is drawn by Home's rail and the sandbox rail
+  (`shell/rail/RailProcesses.vue`) and by This computer's rail (`local/LocalShell.vue`).
+  - `models/processes/processTiles.ts` decides the tiles and their marks: spinning while a run works, a warning while it
+    waits on the reader, danger when it failed, a check when it is done; a run the reader stopped goes at once.
+  - The sandbox Home is making keeps its own tile among the sandboxes. This folder's own way to a sandbox and Repair
+    keep theirs on This computer.
+- **The page.** `parts/processes/ProcessPage.vue` is the same page in both faces:
+  - On Home it is `/home?process=<id>` (`features/home/HomeProcess.vue`, in `MasterHomeView`), where "Open" selects the
+    sandbox in place.
+  - On This computer it is `/process/:id` (`local/process/LocalProcess.vue`), where "Open" is the press that takes the
+    window to the workspace.
+
+  A run's answers go back to whoever runs it (`models/processes/faceProcesses.ts`): the app by
+  `intentic://process-act` or its host, or the page that holds it. An app from before the list
+  (`__INTENTIC_DESKTOP__.processes` unset) hears none of this, and its card on This computer stays the place to answer.
+- **A new sandbox from This computer** (`/sandbox-new`, `local/newSandbox/LocalNewSandbox.vue`): Devices' "Set one up"
+  and the switcher's "Add a sandbox" make it in that window (`localHost().newSandbox`), on this computer or a machine of
+  ours, rather than in the workspace.
+- **Sign-in begun on This computer** is redeemed by the app in the workspace's page, out of sight. That page stays on the
+  view it shows and tells the app it is done (`tellSignedInOnThisComputer`); nobody is put back on a folder.
+- **A folder whose sandbox is in, or already has one,** offers "Open" and opens nothing by itself
+  (`local/useLocalProject.ts`).
 
 ## Local shell: Repair
 

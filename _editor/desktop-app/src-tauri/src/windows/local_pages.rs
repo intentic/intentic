@@ -3,9 +3,10 @@ use super::chrome::{announce_frame, arm_frame_fallback, forget_chrome};
 use super::close::quit_with_last_window;
 use super::hosted::open_in_browser;
 use super::mode::{face_background, look_init_script, settle_face_background};
+use super::present::Press;
 use super::scripts::{update_told, workspace_init_script, BROWSER_ARGS};
 use super::unsaved::{ask_here, ask_page, forget_unsaved, page_started, CloseTurn, UNSAVED};
-use super::{raise, swap_in, Keyboard, HOME};
+use super::{raise, swap_in, HOME};
 use crate::setup_link::Source;
 use crate::state::AppState;
 use std::time::Instant;
@@ -164,7 +165,9 @@ pub fn show_files_window(
                     match turn {
                         CloseTurn::AskPage(id) => ask_page(&handle, &page, id),
                         CloseTurn::AskHere => ask_here(&handle, &page),
-                        CloseTurn::Wait | CloseTurn::Close => raise(&page),
+                        CloseTurn::Wait | CloseTurn::Close => {
+                            raise(Press::by(super::present::Asked::Window), &page)
+                        }
                     }
                 }
             }
@@ -198,7 +201,7 @@ pub fn show_home_face(
     app: &AppHandle,
     title: &str,
     init: &str,
-    shown: bool,
+    shown: Option<Press>,
 ) -> Result<Webview, String> {
     let builder = local_page!(
         WebviewBuilder::new(HOME, WebviewUrl::App("files/local".into())),
@@ -212,8 +215,8 @@ pub fn show_home_face(
     settle_face_background(&face, app.state::<AppState>().ui_mode());
     arm_frame_fallback(app, HOME);
     // Built for work it runs out of sight (local.rs `open_home_hidden_later`), it stays where `add_face` put it.
-    if shown {
-        swap_in(app, HOME, Keyboard::Take);
+    if let Some(press) = shown {
+        swap_in(app, HOME, press);
     }
     Ok(face)
 }

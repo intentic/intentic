@@ -256,7 +256,10 @@ pub fn listen_pressed(app: &AppHandle) {
 pub fn pause_pressed(app: &AppHandle) {
     match pause_action(app.state::<Wake>().state()) {
         PauseAction::Tell(command) => send(app, command),
-        PauseAction::ShowWorkspace => crate::windows::show_workspace(app),
+        PauseAction::ShowWorkspace => crate::windows::show_workspace(
+            app,
+            crate::windows::present::Press::by(crate::windows::present::Asked::Tray),
+        ),
         PauseAction::Nothing => {}
     }
 }

@@ -4,16 +4,16 @@ import type { LocationQuery, LocationQueryValue, RouteLocationRaw } from "vue-ro
 import { z } from "zod";
 import { modelsPath } from "./routes/modelsPath";
 import { HOME_PATH } from "./routes/firstScreens";
-import { PHONE_HOME } from "./routes/phoneScreens";
 
-// THE AI TOOLS ALREADY SIGNED IN ON THIS COMPUTER, as the desktop app found them. The app opens setup as
-// `/setup?found=claude,codex` (provider ids, comma-separated); a finished setup lands on Sandbox ▸ Models (`?found=…`), where each
-// one is a single "Connect" press: the sandbox signs in afresh, and the browser that is already signed in answers it.
-// Nothing is copied: a login's refresh token is single-use, so a copy would sign one side out.
+// THE AI TOOLS ALREADY SIGNED IN ON THIS COMPUTER, as the desktop app found them. The app opens the new sandbox as
+// `/home?add=sandbox&found=claude,codex` (provider ids, comma-separated; an older app's `/setup?found=…` lands there,
+// router/setupRoutes.ts); a finished setup lands on Sandbox ▸ Models (`?found=…`), where each one is a single "Connect"
+// press: the sandbox signs in afresh, and the browser that is already signed in answers it. Nothing is copied: a login's
+// refresh token is single-use, so a copy would sign one side out.
 //
-// The list has to outlive the setup page's own navigations: a signed-out app sends the reader to the browser to sign in
-// and comes back at `/`, which the setup gate sends to `/setup` without the query. So the router keeps it in this tab's
-// session storage the moment it is seen (noteFound), and the landing takes it back (foundAfterSetup).
+// The list has to outlive the new sandbox's own navigations: a signed-out app sends the reader to sign in and comes back
+// at Home without the query, and Home's own address loses the ask once the press went somewhere. So the router keeps it
+// in this tab's session storage the moment it is seen (noteFound), and the landing takes it back (foundAfterSetup).
 
 export const FOUND_QUERY = `found`;
 export const FOUND_KEY = `intentic.foundOnComputer`;
@@ -110,15 +110,19 @@ export const foundToOffer = (value: QueryValue, now: number = Date.now()): Nativ
     return named.length > 0 ? named : rememberedOffer(now);
 };
 
+/** Whether an address asks for a new sandbox: Home's (`/home?add=sandbox`), or the setup page's old one that lands there. */
+const asksForSandbox = (to: { readonly path: string; readonly query: LocationQuery }): boolean =>
+    to.path === `/setup` || (to.path === HOME_PATH && to.query[`add`] === `sandbox`);
+
 /**
- * The router's half, for every navigation: a `?found=` on the way into setup is kept for the landing, and any address
- * that names one is remembered as the offer. Only setup's is kept for the landing, since Sandbox ▸ Models carries the same
- * query once setup has handed it over, and keeping it again there would steer the next setup this tab runs.
+ * The router's half, for every navigation: a `?found=` on the way to a new sandbox is kept for the landing, and any address
+ * that names one is remembered as the offer. Only the new sandbox's is kept for the landing, since Sandbox ▸ Models carries
+ * the same query once setup has handed it over, and keeping it again there would steer the next setup this tab runs.
  */
 export const noteFound = (to: { readonly path: string; readonly query: LocationQuery }): true => {
     const found = nativeProvidersIn(to.query[FOUND_QUERY]);
     rememberOffer(found);
-    if (to.path === `/setup`) {
+    if (asksForSandbox(to)) {
         keepFound(found);
     }
     return true;
@@ -132,18 +136,8 @@ export const foundAfterSetup = (value: QueryValue, now: number = Date.now()): Na
 };
 
 /**
- * Where a finished setup opens the workspace: Sandbox ▸ Models with what was found, else Home, the first screen, with the
- * new sandbox selected and its home conversation ready for a first message (lib/routes/firstScreens.ts). A folder's project
- * was opened from the folder's own window, which asked for that sandbox: it opens inside it, on the full-screen chat (a
- * phone on its board).
+ * Where a new sandbox, once open, leaves its reader: Sandbox ▸ Models with what was found, else Home, the first screen, with
+ * the new sandbox selected and its home conversation ready for a first message (lib/routes/firstScreens.ts).
  */
-export const landingAfterSetup = (found: readonly NativeProvider[], mobile = false, project = false): RouteLocationRaw => {
-    if (found.length > 0) {
-        return modelsPath({ [FOUND_QUERY]: found.join(`,`) });
-    }
-    if (project) {
-        return mobile ? PHONE_HOME : `/chat`;
-    }
-    return HOME_PATH;
-};
-
+export const landingAfterSetup = (found: readonly NativeProvider[]): RouteLocationRaw =>
+    found.length > 0 ? modelsPath({ [FOUND_QUERY]: found.join(`,`) }) : HOME_PATH;

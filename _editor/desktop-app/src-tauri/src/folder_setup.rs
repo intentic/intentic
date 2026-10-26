@@ -793,11 +793,166 @@ pub fn known_rows(app: &AppHandle) -> Vec<crate::bindings::Row> {
         .collect()
 }
 
-/// Every window told every record.
+/// Every window told every record, and both faces' rails each folder on its way (processes.rs).
 fn emit(app: &AppHandle, records: &[Record]) {
     if let Err(error) = app.emit(EVENT, records) {
         eprintln!("intentic: the windows could not be told about the folders' sandboxes: {error}");
     }
+    report_processes(app, records);
+}
+
+/* A FOLDER ON ITS WAY TO ITS SANDBOX IS A PROCESS (2026-10-26), on both faces' rails, answered where the reader is: its
+ * Open, its go-ahead, its restart. A folder whose sandbox is ready stays on them as done until the reader opens it or
+ * puts it away, and only if it got there while the app watched: one ready since a launch ago is a sandbox like any. */
+
+/// The process a folder's record is, or none for one that is not on its way: ready before this run saw it on its way
+/// (`known` is the process this run already holds for it, if any). Pure.
+pub(crate) fn process_of(
+    record: &Record,
+    known: Option<&crate::processes::ProcessReport>,
+) -> Option<crate::processes::ProcessReport> {
+    let (state, waiting_for, actions): (&str, Option<&str>, &[&str]) = match &record.standing {
+        Standing::Queued { .. } | Standing::SignedIn | Standing::Interrupted => {
+            ("running", None, &[])
+        }
+        Standing::Creating { .. } | Standing::Copying => ("running", None, &[]),
+        Standing::SignedOut => ("waiting", Some("answer"), &["sign-in-again", "dismiss"]),
+        Standing::NeedsDocker { .. } => ("waiting", Some("answer"), &["retry", "dismiss"]),
+        Standing::Waiting { waiting_for } => match waiting_for {
+            WaitingFor::Consent => ("waiting", Some("consent"), &["consent", "dismiss"]),
+            WaitingFor::Restart => ("waiting", Some("restart"), &["restart-now", "dismiss"]),
+            WaitingFor::SignOut => ("waiting", Some("signOut"), &["sign-out", "dismiss"]),
+        },
+        Standing::Failed { .. } => ("failed", None, &["retry", "dismiss"]),
+        Standing::Ready
+            if known.is_some_and(|known| {
+                known.state != "done" || known.actions.iter().any(|act| act == "open")
+            }) =>
+        {
+            ("done", None, &["open", "dismiss"])
+        }
+        Standing::Ready => return None,
+    };
+    let mut report =
+        crate::processes::ProcessReport::of("folder-setup", &key_of(&record.path), state);
+    report.subject = Some(
+        record
+            .sandbox_name
+            .clone()
+            .unwrap_or_else(|| record.name.clone()),
+    );
+    report.folder = Some(record.path.clone());
+    report.sandbox_id = record.sandbox_id.clone();
+    report.waiting_for = waiting_for.map(str::to_string);
+    report.actions = actions.iter().map(|act| (*act).to_string()).collect();
+    report.started_at = record
+        .started_at
+        .or(Some(record.asked_at))
+        .map(|at| at as f64);
+    report.at = Some(record.updated_at as f64);
+    match &record.standing {
+        Standing::Creating {
+            phase,
+            step,
+            percent,
+            ..
+        } => {
+            report.percent = Some(f64::from(*percent));
+            report.step = phase.clone();
+            report.line = step.clone();
+        }
+        Standing::Copying => report.step = Some("copying".into()),
+        Standing::Failed { reason } => report.failure = Some(reason.chars().take(600).collect()),
+        _ => {}
+    }
+    if matches!(record.standing, Standing::Waiting { .. }) {
+        report.needs = record
+            .requirements
+            .iter()
+            .filter_map(|requirement| {
+                let id = requirement.get("id")?.as_str()?;
+                let label = requirement.get("title")?.as_str()?;
+                crate::processes::is_need_id(id).then(|| crate::processes::ProcessNeed {
+                    id: id.to_string(),
+                    label: label.chars().take(200).collect(),
+                    detail: requirement
+                        .get("problem")
+                        .and_then(serde_json::Value::as_str)
+                        .map(|problem| problem.chars().take(600).collect()),
+                    actions: Vec::new(),
+                })
+            })
+            .collect();
+    }
+    Some(report)
+}
+
+/// Every folder's process, told; a folder gone, or ready since a launch ago, cleared.
+fn report_processes(app: &AppHandle, records: &[Record]) {
+    let mut kept = Vec::new();
+    for record in records {
+        let id = format!("folder-setup:{}", key_of(&record.path));
+        let known = crate::processes::get(app, &id);
+        if let Some(report) = process_of(record, known.as_ref()) {
+            kept.push(report.id.clone());
+            crate::processes::report(app, report);
+        }
+    }
+    crate::processes::keep_only(app, "folder-setup", &kept);
+}
+
+/// The reader's answer on a folder's tile, given in either face (processes.rs `act`). The Open of a folder whose sandbox
+/// is ready answers where it goes, for the press to take the reader there; everything else is done here.
+pub fn act(app: &AppHandle, path: &str, act: &str) -> Option<String> {
+    let record = all(app).into_iter().find(|record| record.path == path)?;
+    let id = format!("folder-setup:{}", key_of(path));
+    match act {
+        "open" => {
+            let sandbox = record.sandbox_id.as_deref()?;
+            crate::processes::clear(app, &id);
+            return Some(crate::project::project_path(sandbox, &record.name));
+        }
+        "retry" => ask(path, Ask::Retry { consent: false }),
+        "consent" => ask(path, Ask::Retry { consent: true }),
+        "sign-in-again" => {
+            if let Err(error) = crate::auth::start(app, false, None) {
+                eprintln!("{error}");
+            }
+        }
+        "restart-now" | "sign-out" => {
+            let how = if act == "restart-now" {
+                SessionEnd::Restart
+            } else {
+                SessionEnd::SignOut
+            };
+            update(app, path, |record| {
+                record.resume_on_launch = true;
+                record.consented = true;
+            });
+            if let Err(error) = crate::commands::end_session(how) {
+                eprintln!("intentic: Windows could not be asked to end the session: {error}");
+                update(app, path, |record| record.resume_on_launch = false);
+            }
+        }
+        "dismiss" if record.standing == Standing::Ready => crate::processes::clear(app, &id),
+        "dismiss"
+            if !matches!(
+                record.standing,
+                Standing::Creating { .. } | Standing::Copying | Standing::Interrupted
+            ) =>
+        {
+            let app = app.clone();
+            let path = path.to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Some(session) = any_window(&app) {
+                    discard_unannounced(&app, &session, &path);
+                }
+                forget(&app, &path);
+            });
+        }
+        _ => {}
+    }
+    None
 }
 
 /// One change to a folder's record: written, sent to every window, and a notification put up when it is news.

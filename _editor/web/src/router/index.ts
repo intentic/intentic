@@ -1,6 +1,5 @@
 import { overlayBackSettled, useDevice } from "@intentic/ui";
 import { isStaleChunkError, recoverStaleChunk } from "@intentic/ui/chunk";
-import { type FunctionalComponent, h } from "vue";
 import {
     createRouter,
     createWebHashHistory,
@@ -14,12 +13,12 @@ import { asyncView } from "../components/asyncView";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
 import { setupRoutes } from "./setupRoutes";
+import { hubOutline, settingsPartRoutes } from "./routeParts";
+import { localRoutes } from "./localRoutes";
 import { installNativeApp } from "./nativeHandoff";
 import { installSignInPlace } from "./signInPlace";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
-import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
-import { useAccount } from "../client/auth/useAccount";
 import { useAuth } from "../client/auth/useAuth";
 import { useGoogleIdentity } from "../client/auth/useGoogleIdentity";
 import { mintsOnArrival } from "../features/auth/handoffSpent";
@@ -28,14 +27,11 @@ import { useRole } from "../client/sandbox/useRole";
 import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
 import { NOTHING_TO_OPEN_PATH } from "../app/environments/nothingToOpen";
-import { openNamedSandbox, requireSetup, settleGate } from "./shellGates";
-import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/settings/settingsNav";
+import { openNamedSandbox, settleGate } from "./shellGates";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../workbench/views/vocabulary";
 import { localFace, sandboxFace } from "../app/environments/local";
-import { localHost } from "../app/environments/localHost";
-import { SANDBOX_SETUP_PATH } from "../local/setup/setupPath";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
@@ -129,10 +125,6 @@ const chatEntry = async (): Promise<boolean | RouteLocationRaw> => (useDevice().
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
 // setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
 // next tap goes (an agent's page from the board, the menu), `skip` for the two surfaces a phone never draws.
-// Words read when the outline draws, not when the routes are built, so a language switch reaches them.
-const hubOutline = (title: () => string, description: () => string, railRows: number): FunctionalComponent => {
-    return () => h(SplitViewOutline, { title: title(), description: description(), railRows });
-};
 
 const routes: RouteRecordRaw[] = [
     ...setupRoutes,
@@ -199,7 +191,8 @@ const routes: RouteRecordRaw[] = [
         // like the shell; the path enumerates the three panels, an unknown one falls through.
         path: `/floating/:panel(chat|terminal|browsers)`,
         name: `floating`,
-        beforeEnter: [requireAuth, requireSetup],
+        // The shell's own gate, settled as the shell settles it: nothing to open is Home, never a setup page.
+        beforeEnter: [requireAuth, settleGate],
         component: () => import(`../shell/window/FloatingSection.vue`),
     },
     // The live app's own window until it became a tab of Browsers (2026-10-08); a desktop app that remembers one still
@@ -207,8 +200,8 @@ const routes: RouteRecordRaw[] = [
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Home, recovery and settings need only an account; other pages need a sandbox;
-        // otherwise requireSetup sends the reader to Home's first run, or in a browser to /setup to resume an unfinished
-        // one of their own (app/environments/nothingToOpen.ts).
+        // otherwise the gate sends the reader to Home's first run, which offers a setup of their own left unfinished
+        // (app/environments/nothingToOpen.ts).
         path: `/`,
         beforeEnter: [requireAuth, settleGate, openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
@@ -395,87 +388,6 @@ const routes: RouteRecordRaw[] = [
         : []),
     { path: `/:pathMatch(.*)*`, redirect: `/` },
 ];
-
-// The account's Settings in a desktop window on a folder: only while there is an account (useAccount.ts), since every
-// section but the look is about one. Waits on one ask of the platform at most, which the app gives up on in seconds.
-const requireAccount = async (): Promise<true | RouteLocationRaw> => {
-    const account = useAccount();
-    await account.settled();
-    return account.user.value === null ? `/workspace` : true;
-};
-
-// A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER (app/environments/local.ts) has a shell of its own, not a sandbox's: the
-// same rail, holding what needs no sandbox (local/LocalShell.vue). Files is the folder; every other tile is a view the app
-// adds (localHost.ts), This device first; the account's Settings open from the rail's foot, as in the sandbox shell.
-// Guarded like the sandbox shell: the window's bootstrap seeds what both guards read, so neither waits on a server.
-// Anything else leads back to the folder, since every other screen reads a sandbox.
-const localRoutes = (): RouteRecordRaw[] => [
-    {
-        path: `/`,
-        beforeEnter: [requireAuth, requireSetup],
-        component: () => import(`../local/LocalShell.vue`),
-        children: [
-            { path: ``, redirect: `/workspace` },
-            {
-                // The folder's tree and its documents. The path is the tree's, not the window's: the window is one folder.
-                path: `workspace/:path(.*)*`,
-                name: `workspace`,
-                meta: { title: () => localFace()?.name ?? t(`shared.files`) },
-                component: asyncView(() => import(`../local/LocalFiles.vue`)),
-            },
-            // The folder's way to a sandbox of its own (local/setup/LocalSandboxSetup.vue): its tile is on the rail while the
-            // folder is on its way (LocalShell.vue), and "Work on this with an agent" in Files opens it.
-            ...(localHost().project === undefined
-                ? []
-                : [
-                      {
-                          path: SANDBOX_SETUP_PATH.slice(1),
-                          name: `local-sandbox-setup`,
-                          meta: { title: () => t(`local.sandboxSetup.tile`, { name: localFace()?.name ?? `` }) },
-                          component: asyncView(() => import(`../local/setup/LocalSandboxSetup.vue`)),
-                      } satisfies RouteRecordRaw,
-                  ]),
-            // Repair, the agent that runs on this computer outside every sandbox: its tile is on the rail while it is open or at work (LocalShell.vue). (This PC's
-            // own first-run setup is the app's This computer view since 2026-10-12, not a route of the shell's.)
-            ...(localHost().repair === undefined
-                ? []
-                : [
-                      {
-                          path: `repair`,
-                          name: `local-repair`,
-                          meta: { title: () => t(`local.repair.title`) },
-                          component: asyncView(() => import(`../local/repair/LocalRepair.vue`)),
-                      } satisfies RouteRecordRaw,
-                  ]),
-            ...localHost().views.map(
-                (view): RouteRecordRaw => ({
-                    path: view.path,
-                    name: view.path,
-                    meta: { title: view.title },
-                    component: asyncView(view.load),
-                }),
-            ),
-            ...settingsPartRoutes(),
-            {
-                path: `settings/:tab?`,
-                name: `settings`,
-                meta: { title: () => t(`shared.settings`) },
-                beforeEnter: requireAccount,
-                component: asyncView(() => import(`../features/settings/SettingsHub.vue`), hubOutline(() => t(`shared.settings`), () => ``, 5)),
-            },
-        ],
-    },
-    { path: `/:pathMatch(.*)*`, redirect: `/workspace` },
-];
-
-// Voice and Data were Settings rows of their own until 2026-10-17; each is drawn at the foot of another section now
-// (settingsNav.ts `within`), so its old address opens that section at the part's anchor.
-function settingsPartRoutes(): RouteRecordRaw[] {
-    return settingsPartHosts().map(({ part, host }) => ({
-        path: `settings/${part}`,
-        redirect: (to) => ({ name: `settings`, params: { tab: host === SETTINGS_DEFAULT_SECTION ? undefined : host }, query: to.query, hash: `#${part}` }),
-    }));
-}
 
 export const router = createRouter({
     // The build's own base, not vue-router's default (`<base href>` or `/`): otherwise a path-prefixed build resolves

@@ -741,18 +741,6 @@ pub fn onboarding_sign_out() -> Result<(), String> {
     crate::commands::end_session(SessionEnd::SignOut)
 }
 
-/// A machine we host instead, for a PC that cannot run a sandbox.
-#[tauri::command]
-pub async fn onboarding_use_cloud(app: AppHandle, window: tauri::Webview) -> Result<(), String> {
-    crate::commands::workspace_open(
-        app,
-        window,
-        Some("/setup?elsewhere=1&machine=hosted".into()),
-    )
-    .await;
-    Ok(())
-}
-
 #[cfg(windows)]
 fn restart_now(_app: &AppHandle) -> Result<(), String> {
     park_pc_setup();

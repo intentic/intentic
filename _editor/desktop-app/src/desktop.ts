@@ -181,9 +181,6 @@ export const dockerOpen = (): Promise<void> => invoke(`docker_open`);
 /** Whether a sandbox has ever run on this machine: the licence to start its Docker at all. */
 export const hostsSandboxes = (): Promise<boolean> => invoke(`hosts_sandboxes`);
 
-// Taken, not read: only the launch that opened this face BECAUSE the engine was asleep hands over to the
-// workspace by itself. A window opened from the tray was asked for, and stays where it was put.
-export const takePendingDocker = (): Promise<boolean> => invoke(`take_pending_docker`);
 // Taken, not read: two callers race for a parked setup (the arrival event, and this window's read on mount), and
 // only one may have it.
 export const takePendingSetup = (): Promise<SetupArgs | null> => invoke(`take_pending_setup`);
@@ -289,7 +286,6 @@ export const onboardingSetUp = (again = false): Promise<void> => invoke(`onboard
 export const onboardingPause = (paused: boolean): Promise<void> => invoke(`onboarding_pause`, { paused });
 export const onboardingSignOut = (): Promise<void> => invoke(`onboarding_sign_out`);
 export const onboardingRestart = (when: `now` | `in10Minutes` | `later`): Promise<void> => invoke(`onboarding_restart`, { when });
-export const onboardingUseCloud = (): Promise<void> => invoke(`onboarding_use_cloud`);
 export const onOnboarding = (handler: (snapshot: OnboardingSnapshot) => void): Promise<UnlistenFn> =>
     listen(`desktop://onboarding`, (event) => handler(event.payload as OnboardingSnapshot));
 export const sandboxList = (): Promise<SandboxStatus[]> => invoke(`sandbox_list`);
@@ -332,9 +328,6 @@ export interface FirstTaskDraft {
 }
 /** The draft "Ask about this" left for This computer's card, taken (first_task.rs `first_task_take_draft`): once. */
 export const firstTaskTakeDraft = (): Promise<FirstTaskDraft | null> => invoke(`first_task_take_draft`);
-// This device brought forward in the workspace's place, for a run that stopped unwatched; a setup `handedOver` that Home
-// draws in its own tile is only pointed at, never swapped in over it (windows/setup.rs `alert_for`).
-export const setupAlert = (handedOver = false): Promise<void> => invoke(`setup_alert`, { handedOver });
 /* Setup progress is shared with the workspace bar. */
 /** What a setup stopped on a question is waiting for: the reader's go-ahead, or a session Windows has to end. */
 export type SetupWaitingFor = `consent` | `restart` | `signOut`;

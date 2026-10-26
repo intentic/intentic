@@ -1,11 +1,12 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { type HostedTierId, isHostedTierId } from "@intentic/constants";
 import { t } from "@intentic/ui/i18n";
 import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import { ref, shallowRef, type Ref } from "vue";
 import type { LocationQuery } from "vue-router";
 import { z } from "zod";
-import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE } from "../../../models/sandbox/addSandbox";
+import { FINISH_QUERY } from "../../../models/sandbox/finishOnHome";
 import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 
 // A NEW SANDBOX IS MADE ON HOME, IN A TILE OF ITS OWN (2026-10-26). The + on Home's rail, its first-run page, and every
@@ -27,18 +28,20 @@ import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 // The run outlives its dialog and its page: NewSandboxHost.vue holds it, mounted by the shell while Home asks for the new
 // sandbox or a run is under way, and publishes it here for the dialog, the page and the tile (NewSandboxTile.vue) to draw.
 //
-// A SETUP LEFT UNFINISHED IS FINISHED THE SAME WAY, in the desktop app (2026-10-26): Home's first run offers it by name, and
-// its press asks Home to finish that row (`?finish=<id>`), which puts up its tile and its page with no dialog, its run on
-// this computer. It used to go to /setup, which handed the install to the app, and the app swapped This computer in over
-// the workspace for as long as it ran.
+// A SETUP LEFT UNFINISHED IS FINISHED THE SAME WAY (2026-10-26): Home's first run offers it by name, and its press asks
+// Home to finish that row (`?finish=<id>`), which puts up its tile and its page with no dialog: a machine of ours already
+// on it waited on, the app's run on this computer, or its command again. It used to go to /setup, which handed the install
+// to the app, and the app swapped This computer in over the workspace for as long as it ran; /setup is gone since, and
+// every address of it lands here (router/setupRoutes.ts).
+//
+// HOME'S ADDRESS FOR IT: `/home?add=sandbox` asks for the dialog; `finish=<id>` finishes that row instead; `machine=hosted`
+// picks a machine of ours (`tier=<id>` names its tier, the pricing page's); `found=<ids>` names the AI tools the desktop app
+// found signed in here, offered once the sandbox is open (lib/foundOnComputer.ts).
 
 type HomeAddress = { readonly name?: unknown; readonly query: LocationQuery };
 
 /** Whether an address of Home asks for the new sandbox: `/home?add=sandbox`, its dialog or its run's page. */
 export const newSandboxShownBy = (route: HomeAddress): boolean => route.name === `home` && route.query[ADD_SANDBOX_QUERY] === ADD_SANDBOX_VALUE;
-
-/** The query naming a setup of the reader's own that Home is asked to finish in place, beside the new sandbox's ask. */
-const FINISH_QUERY = `finish`;
 
 const RowId = z.string().min(1);
 
@@ -48,8 +51,13 @@ export const finishAskedBy = (route: HomeAddress): string | undefined => {
     return newSandboxShownBy(route) && asked.success ? asked.data : undefined;
 };
 
-/** Home's address asking to finish `sandboxId` in place: its tile and its page, no dialog. */
-export const finishOnHome = (sandboxId: string) => ({ path: HOME_PATH, query: { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, [FINISH_QUERY]: sandboxId } });
+/** The rung Home's address asks for (`machine=hosted`), and the tier asked of it (`tier=`); undefined where none is named. */
+export const machineAskedBy = (route: HomeAddress): `hosted` | undefined => (route.query[`machine`] === `hosted` ? `hosted` : undefined);
+export const tierAskedBy = (route: HomeAddress): HostedTierId | undefined => {
+    const tier = route.query[`tier`];
+    return isHostedTierId(tier) ? tier : undefined;
+};
+
 
 /** The new sandbox as its host publishes it. */
 export interface NewSandboxRun {
@@ -62,8 +70,8 @@ export interface NewSandboxRun {
     readonly resumed: Readonly<Ref<boolean>>;
     /** The press, so the tile stands from it. */
     readonly create: () => Promise<void>;
-    /** The press on a setup left unfinished, finished on this computer; the tile stands from it as from Create. */
-    readonly resume: (row: SandboxSummary) => Promise<void>;
+    /** The press on a setup left unfinished, finished in place (on a machine of ours where `asked`); the tile stands from it as from Create. */
+    readonly resume: (row: SandboxSummary, asked?: `hosted`) => Promise<void>;
     /** The same press again after it failed: a code the platform would not give, or a run on a machine that stopped. */
     readonly retry: () => void;
     /** Its first start is on screen: the page gives way to its home conversation. */
@@ -125,10 +133,12 @@ export type NewSandboxPhase = `draft` | `running` | `asking` | `failed` | `openi
 export interface NewSandboxFacts {
     readonly pressed: boolean;
     readonly opening: boolean;
-    readonly started: `here` | `machine` | `hosted` | undefined;
+    readonly started: `here` | `machine` | `hosted` | `command` | `attach` | undefined;
     readonly refused: boolean;
     readonly machineFailed: boolean;
     readonly hostedFailed: boolean;
+    /** The machine running the command said what broke. */
+    readonly commandFailed?: boolean;
     readonly report: Pick<DesktopSetupReport, `state` | `percent` | `waitingFor`> | undefined;
 }
 
@@ -144,7 +154,12 @@ export const newSandboxPhase = (facts: NewSandboxFacts): NewSandboxPhase => {
     if (facts.opening) {
         return `opening`;
     }
-    if (facts.refused || (facts.started === `machine` && facts.machineFailed) || (facts.started === `hosted` && facts.hostedFailed)) {
+    if (
+        facts.refused ||
+        (facts.started === `machine` && facts.machineFailed) ||
+        (facts.started === `hosted` && facts.hostedFailed) ||
+        (facts.started === `command` && facts.commandFailed === true)
+    ) {
         return `failed`;
     }
     const report = facts.report;
@@ -200,6 +215,7 @@ export const readNewSandbox = (run: NewSandboxRun | undefined): NewSandboxReadin
         refused: add.error.value !== null && started === undefined,
         machineFailed: add.onMachine.run.failure.value !== undefined,
         hostedFailed: add.hostedRow.value !== null && add.hostedWait.value.failure !== undefined,
+        commandFailed: add.command.wait.reportFailures.value !== null,
         report: desktopReport.value,
     };
     const phase = newSandboxPhase(facts);

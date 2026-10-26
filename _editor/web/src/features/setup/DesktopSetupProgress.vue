@@ -3,7 +3,8 @@
 import { Button, Notice, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, watch } from "vue";
-import { DESKTOP_LAUNCHER_LINK, openDesktopLink } from "../../app/environments/desktop";
+import { DESKTOP_LAUNCHER_LINK, desktopTakesProcesses, openDesktopLink } from "../../app/environments/desktop";
+import { desktopProcessActLink, type ProcessAction } from "../../app/environments/processes/processReport";
 import type { DesktopSetupReport } from "../../app/environments/desktopSetupReport";
 import { useT } from "@intentic/ui/i18n";
 import { appSilence, downloadFigures, minutesLeft, slowDownload } from "./desktopRun";
@@ -22,6 +23,7 @@ const {
     stepSince = undefined,
     hostedOffered = false,
     inPlace = false,
+    sandboxId = undefined,
 } = defineProps<{
     report: DesktopSetupReport;
     heardAt: number | undefined;
@@ -30,6 +32,8 @@ const {
     hostedOffered?: boolean;
     // Drawn on Home's new sandbox, whose page says for itself that the run goes on without it: no card to close here.
     inPlace?: boolean;
+    // The sandbox the run is for: with an app that takes answers from this page, what the run asks is answered here.
+    sandboxId?: string | undefined;
 }>();
 const emit = defineEmits<{ reopen: []; elsewhere: []; hosted: [] }>();
 
@@ -65,6 +69,15 @@ watch(
 
 const what = computed(() => (report.name === undefined ? t(`setup.desktopSetupProgress.yourSandbox`) : report.name));
 const showSetup = (): void => (putAway ? emit(`reopen`) : openDesktopLink(DESKTOP_LAUNCHER_LINK));
+// ANSWERED HERE (2026-10-26): an app that takes answers from this page (`processes`) is told the reader's press on the run
+// it holds for this sandbox (processReport.ts), so the reader is never sent to This computer to give it. An older app
+// keeps its card, and the press that opens it.
+const inPlaceAnswers = computed(() => sandboxId !== undefined && !putAway && desktopTakesProcesses());
+const answer = (act: ProcessAction): void => {
+    if (sandboxId !== undefined) {
+        openDesktopLink(desktopProcessActLink(`sandbox-setup:${sandboxId}`, act));
+    }
+};
 // A restart and a sign-out are answered away from both windows, so they are named as themselves rather than as "answer
 // it", and offer the hosted machine beside them: a restart in the first minutes is the moment a reader leaves.
 const sessionEnd = computed(() => (report.state === `waiting` && (report.waitingFor === `restart` || report.waitingFor === `signOut`) ? report.waitingFor : undefined));
@@ -118,12 +131,14 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                     <!-- Never "restart the app": a restarted app started a second install beside the first (2026-10-12). -->
                     <template v-else-if="silence === `quiet`">{{ t(`setup.desktopSetupProgress.stillWorkingNoReport`) }}</template>
                     <template v-else-if="pcSetup">{{ t(`setup.desktopSetupProgress.settingUpPcFirst`) }}</template>
+                    <template v-else-if="asking && inPlaceAnswers">{{ t(`setup.desktopSetupProgress.pcNeedsGoAhead`) }}</template>
                     <template v-else-if="asking">
                         {{ t(`setup.desktopSetupProgress.foundThingsPcNeeds`) }}
                     </template>
                     <template v-else-if="!inPlace">{{ t(`setup.desktopSetupProgress.closingSetupCardDidnt`) }}</template>
                 </span>
                 <Button
+                    v-if="!inPlaceAnswers || silence === `gone`"
                     size="small"
                     tier="boring"
                     :label="
@@ -136,8 +151,22 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                     class="shrink-0"
                     @click="showSetup"
                 />
+                <Button v-else-if="!sessionEnd && !asking" size="small" tier="quiet" :label="t(`setup.desktopSetupProgress.stop`)" class="shrink-0" @click="answer(`stop`)" />
             </div>
-            <button v-if="sessionEnd !== undefined" type="button" :class="ui.textButton({ size: `xs` }, `self-start`)" @click="emit(`elsewhere`)">
+            <!-- What the run asks, answered on this page: the go-ahead, or when Windows ends the session it waits on. -->
+            <div v-if="inPlaceAnswers && silence !== `gone` && (asking || sessionEnd !== undefined)" class="flex flex-wrap items-center gap-2" data-setup-answers>
+                <template v-if="asking">
+                    <Button size="small" :label="t(`setup.desktopSetupProgress.goAhead`)" @click="answer(`consent`)" />
+                    <Button size="small" tier="quiet" :label="t(`setup.desktopSetupProgress.stop`)" @click="answer(`stop`)" />
+                </template>
+                <template v-else-if="sessionEnd === `restart`">
+                    <Button size="small" :label="t(`setup.desktopSetupProgress.restartNow`)" @click="answer(`restart-now`)" />
+                    <Button size="small" tier="boring" :label="t(`setup.desktopSetupProgress.restartIn10`)" @click="answer(`restart-in-10`)" />
+                    <Button size="small" tier="quiet" :label="t(`setup.desktopSetupProgress.restartLater`)" @click="answer(`restart-later`)" />
+                </template>
+                <Button v-else size="small" :label="t(`setup.desktopSetupProgress.signOutNow`)" @click="answer(`sign-out`)" />
+            </div>
+            <button v-if="sessionEnd !== undefined && hostedOffered" type="button" :class="ui.textButton({ size: `xs` }, `self-start`)" @click="emit(`elsewhere`)">
                 {{ t(`setup.desktopSetupProgress.useHostedInstead`) }}
             </button>
             <!-- A calm offer, not a warning: the download is fine, only slow. Taking it stops the download on this PC (Setup.vue),
@@ -160,7 +189,17 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                     <template v-if="report.state === `failed`">{{ t(`setup.desktopSetupProgress.settingUpOnDevice`, { what }) }}</template>
                     <template v-else>{{ t(`setup.desktopSetupProgress.stoppedSettingUpOn`, { what }) }}</template>
                 </span>
+                <!-- Run again from here where the app takes answers from this page; else its card says why and runs it again. -->
                 <Button
+                    v-if="inPlaceAnswers"
+                    size="small"
+                    tier="boring"
+                    :label="report.state === `failed` ? t(`ui.action.tryAgain`) : t(`setup.desktopSetupProgress.startAgain`)"
+                    class="ml-2 shrink-0"
+                    @click="answer(`retry`)"
+                />
+                <Button
+                    v-else
                     size="small"
                     tier="boring"
                     :label="report.state === `failed` ? t(`setup.desktopSetupProgress.seeWhy`) : t(`setup.desktopSetupProgress.openSetup`)"

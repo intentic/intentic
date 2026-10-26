@@ -285,10 +285,14 @@ pub async fn local_sandbox_open(
         Some(_) => true,
         None => false,
     };
+    // Devices' Open, the reader's press on one sandbox.
+    let press = crate::windows::present::Press::by(crate::windows::present::Asked::Page);
     match path.filter(|_| online) {
-        Some(path) => crate::windows::show_workspace_from(&app, Some(path.as_str()), &window),
+        Some(path) => {
+            crate::windows::show_workspace_from(&app, press, Some(path.as_str()), &window)
+        }
         None if FACE_BUILT => {
-            crate::windows::show_machine_face_from(&app, Some(&sandbox), Some(&window))
+            crate::windows::show_machine_face_from(&app, press, Some(&sandbox), Some(&window))
         }
         None => {}
     }

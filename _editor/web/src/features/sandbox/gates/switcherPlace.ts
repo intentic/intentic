@@ -6,7 +6,7 @@ import { localFace } from "../../../app/environments/local";
 import { localHost } from "../../../app/environments/localHost";
 import { useAccount } from "../../../client/auth/useAccount";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { ADD_SANDBOX_PATH } from "../../../models/sandbox/addSandbox";
+import { ADD_SANDBOX_PATH, LOCAL_ADD_SANDBOX_PATH } from "../../../models/sandbox/addSandbox";
 
 // WHERE THE SANDBOX SWITCHER STANDS, the one thing about it that differs between the two windows that draw it. In the
 // workspace it stands on a sandbox and moves by selecting another, a route of its own. In the desktop app's window on a
@@ -24,7 +24,7 @@ const shownFolder = (): ShownFolder | undefined => {
     return face === undefined ? undefined : { name: face.name, path: face.path };
 };
 
-/** A workspace path (`/setup`, the recently deleted): this window's own route, or the workspace opened on it. */
+/** A workspace path (Home, the recently deleted): this window's own route, or the workspace opened on it. */
 export const openWorkspacePath = async (router: Router, path: string): Promise<void> => {
     if (localFace() === undefined) {
         await router.push(path);
@@ -110,11 +110,15 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         signedOut: computed(() => local && user.value === null),
         signingIn,
         signIn: () => attempt(`:sign-in`, () => localHost().signIn()),
-        // The workspace window opens the Add sandbox dialog on this address (SandboxSwitcher.vue): this window cannot
-        // read the owner's connected machines, which the dialog offers.
+        // Made in this window where the app makes one from here (LocalNewSandbox.vue), the reader staying on This
+        // computer; an app from before that hands the ask to the workspace window, which opens its own dialog on it.
         addSandbox: (event) => {
             event.preventDefault();
             open.value = false;
+            if (local && localHost().newSandbox !== undefined) {
+                void router.push(LOCAL_ADD_SANDBOX_PATH);
+                return;
+            }
             void openWorkspacePath(router, ADD_SANDBOX_PATH);
         },
     };

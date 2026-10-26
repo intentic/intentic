@@ -40,7 +40,10 @@ pub fn open(app: &tauri::AppHandle, target: crate::setup_link::ShellTarget) {
         return;
     }
     match target {
-        crate::setup_link::ShellTarget::Device => crate::windows::show_device(app),
+        crate::setup_link::ShellTarget::Device => crate::windows::show_device(
+            app,
+            crate::windows::present::Press::by(crate::windows::present::Asked::Shell),
+        ),
         crate::setup_link::ShellTarget::Sandbox { id, agents } => {
             use tauri::Manager;
             // A stale bar cannot take the account somewhere it no longer lists.
@@ -53,6 +56,7 @@ pub fn open(app: &tauri::AppHandle, target: crate::setup_link::ShellTarget) {
             {
                 crate::windows::show_workspace_at(
                     app,
+                    crate::windows::present::Press::by(crate::windows::present::Asked::Shell),
                     Some(&format!(
                         "/{}?sandbox={id}",
                         if agents { "agents" } else { "" }

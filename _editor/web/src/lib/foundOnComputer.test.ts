@@ -22,21 +22,14 @@ beforeEach(() => {
     localStorage.clear();
 });
 
-test("a finished setup lands on Sandbox ▸ Models with what was found, else on Home", () => {
+test("a new sandbox, once open, lands on Sandbox ▸ Models with what was found, else on Home", () => {
     expect(landingAfterSetup([`claude`, `codex`])).toEqual({ path: `/sandbox/models`, query: { found: `claude,codex` } });
-    expect(landingAfterSetup([`claude`], true)).toEqual({ path: `/sandbox/models`, query: { found: `claude` } });
     expect(landingAfterSetup([])).toBe(`/home`);
-    expect(landingAfterSetup([], true)).toBe(`/home`);
 });
 
-test("a folder's project opens inside its sandbox, which the folder's window asked for", () => {
-    expect(landingAfterSetup([], false, true)).toBe(`/chat`);
-    expect(landingAfterSetup([], true, true)).toBe(`/agents`);
-});
-
-test("the list survives the sign-in detour: kept on the way into setup, taken once at the landing", () => {
-    noteFound({ path: `/setup`, query: { found: `claude,codex`, project: `My App` } });
-    // Back from the browser's sign-in at `/setup` with no query: the kept list answers.
+test("the list survives the sign-in detour: kept on the way to a new sandbox, taken once at the landing", () => {
+    noteFound({ path: `/home`, query: { add: `sandbox`, found: `claude,codex` } });
+    // Back from the browser's sign-in at Home with no query: the kept list answers.
     expect(foundAfterSetup(undefined)).toEqual([`claude`, `codex`]);
     // Taken, not read: the next setup in this tab is not steered by it.
     expect(foundAfterSetup(undefined)).toEqual([]);
@@ -49,9 +42,13 @@ test("the address wins over the kept list, and the kept one is dropped either wa
     expect(sessionStorage.getItem(FOUND_KEY)).toBeNull();
 });
 
-test("only setup's address is kept: Sandbox ▸ Models carries the same query once setup handed it over", () => {
+test("only the new sandbox's address is kept: Sandbox ▸ Models carries the same query once setup handed it over", () => {
     noteFound({ path: `/sandbox/models`, query: { found: `claude` } });
+    noteFound({ path: `/home`, query: { found: `claude` } });
     expect(sessionStorage.getItem(FOUND_KEY)).toBeNull();
+    // An older app's `/setup?found=` is kept as it lands on Home.
+    noteFound({ path: `/setup`, query: { found: `gemini` } });
+    expect(takeFound()).toEqual([`gemini`]);
     // A setup visit with nothing found keeps nothing, and leaves what was kept alone.
     keepFound([`codex`]);
     noteFound({ path: `/setup`, query: {} });

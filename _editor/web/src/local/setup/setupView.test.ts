@@ -32,9 +32,13 @@ const viewOf = (setup: LocalFolderSetup | undefined, more: { preview?: LocalProj
     setupViewOf({ setup, preview: more.preview, name: `shop`, path: `C:\\code\\shop`, signingIn: more.signingIn });
 
 describe(`the page before the press`, () => {
-    it(`says nothing while the app weighs the folder, nor for one that has its sandbox already`, () => {
+    it(`says nothing while the app weighs the folder`, () => {
         expect(viewOf(undefined)).toBeUndefined();
-        expect(viewOf(undefined, { preview: { kind: `existing` } })).toBeUndefined();
+    });
+
+    // Opened on the reader's press, never unasked (2026-10-26).
+    it(`offers the sandbox a folder already has, one press away`, () => {
+        expect(viewOf(undefined, { preview: { kind: `existing` } })).toMatchObject({ tone: `ready`, title: `shop has its sandbox`, actions: [`open`] });
     });
 
     it(`asks once, with the steps that follow, the sign-in among them only where nobody is signed in`, () => {

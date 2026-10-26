@@ -139,6 +139,95 @@ fn home_path() -> String {
 
 fn emit(app: &AppHandle, session: &Session) {
     let _ = app.emit(EVENT, json!(session));
+    report_process(app, session);
+}
+
+/* REPAIR IS A PROCESS ON BOTH FACES' RAILS (2026-10-26), its approvals answered where the reader is (processes.rs). The
+ * workspace's Repair starts it out of sight rather than putting This computer in front ([`on_link`]); its page here is
+ * still where the whole conversation is, one press away. */
+const PROCESS: &str = "repair:this";
+
+/// The process a session is, or none for a session at rest that this run never showed working. Pure.
+fn process_of(session: &Session, shown: bool) -> Option<crate::processes::ProcessReport> {
+    let (state, waiting_for, actions): (&str, Option<&str>, &[&str]) = match session.state.as_str()
+    {
+        "thinking" => ("running", None, &["open"]),
+        "waiting" if session.pending.is_some() => ("waiting", Some("answer"), &["open"]),
+        "waiting" => ("running", None, &["open"]),
+        "signedOut" => (
+            "waiting",
+            Some("answer"),
+            &["sign-in-again", "open", "dismiss"],
+        ),
+        "offline" => ("failed", None, &["open", "dismiss"]),
+        _ if shown && !session.messages.is_empty() => ("done", None, &["open", "dismiss"]),
+        _ => return None,
+    };
+    let mut report = crate::processes::ProcessReport::of("repair", "this", state);
+    report.subject = session
+        .context
+        .as_ref()
+        .and_then(|context| context.get("slug"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    report.waiting_for = waiting_for.map(str::to_string);
+    report.actions = actions.iter().map(|act| (*act).to_string()).collect();
+    if state == "failed" {
+        report.failure = Some("Repair could not reach its model.".into());
+    }
+    if let Some(pending) = &session.pending {
+        let label = session
+            .messages
+            .iter()
+            .find(|message| message.id == pending.message_id)
+            .and_then(|message| message.tool.as_ref())
+            .map(|tool| tool.summary.clone())
+            .filter(|summary| !summary.trim().is_empty())
+            .unwrap_or_else(|| pending.call.name.clone());
+        if crate::processes::is_need_id(&pending.approval_id) {
+            report.needs = vec![crate::processes::ProcessNeed {
+                id: pending.approval_id.clone(),
+                label: label.chars().take(200).collect(),
+                detail: None,
+                actions: vec!["allow".into(), "deny".into()],
+            }];
+        }
+    }
+    Some(report)
+}
+
+fn report_process(app: &AppHandle, session: &Session) {
+    let shown = crate::processes::get(app, PROCESS).is_some();
+    match process_of(session, shown) {
+        Some(report) => crate::processes::report(app, report),
+        None => crate::processes::clear(app, PROCESS),
+    }
+}
+
+/// The reader's answer on Repair's tile, from either face: an approval given or refused, a sign-in, the tile put away.
+/// True when they asked for Repair's own page (Open), which the press that answered takes them to (processes.rs).
+pub fn act(app: &AppHandle, act: &str, need: Option<&str>) -> bool {
+    match (act, need) {
+        ("open", _) => return true,
+        ("allow" | "deny", Some(approval)) => {
+            let app = app.clone();
+            let approval = approval.to_string();
+            let allow = act == "allow";
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = repair_answer(app, approval, allow).await {
+                    eprintln!("intentic: Repair's approval could not be answered: {error}");
+                }
+            });
+        }
+        ("sign-in-again", _) => {
+            if let Err(error) = crate::auth::start(app, false, None) {
+                eprintln!("{error}");
+            }
+        }
+        ("dismiss", _) => crate::processes::clear(app, PROCESS),
+        _ => {}
+    }
+    false
 }
 
 fn with_session<F>(app: &AppHandle, f: F)
@@ -891,24 +980,32 @@ pub fn repair_reset(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// The workspace's Repair (its recovery panel, a page, the system): Repair started on this computer out of sight, about
+/// the sandbox the reader was trying to reach, a process on both faces' rails from then on. Nobody is moved: the reader
+/// is on the page they pressed in, and Repair's tile there says what it does and asks for their OK where it needs it.
+/// Repair asks the platform with the main window's session, so a main window not built yet is built where nobody sees
+/// it first. _(2026-10-26) The main window came up in front on Repair's page._
 pub fn on_link(app: &AppHandle, link: RepairLink) {
-    let mut route = url::form_urlencoded::Serializer::new(String::new());
-    for (key, value) in [
-        ("slug", &link.slug),
-        ("from", &link.from),
-        ("reason", &link.reason),
-    ] {
-        if let Some(value) = value {
-            route.append_pair(key, value);
-        }
+    let context = json!({ "slug": link.slug, "from": link.from, "reason": link.reason });
+    let mut starting = crate::processes::ProcessReport::of("repair", "this", "running");
+    starting.subject = link.slug.clone();
+    starting.actions = vec!["open".into()];
+    crate::processes::report(app, starting);
+    if crate::frame::face(app, HOME).is_none() {
+        crate::local::open_home_hidden_later(app);
     }
-    let query = route.finish();
-    let target = if query.is_empty() {
-        "/repair".to_string()
-    } else {
-        format!("/repair?{query}")
-    };
-    crate::windows::show_home_route(app, &target);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        for _ in 0..60 {
+            if crate::frame::face(&app, HOME).is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        if let Err(error) = repair_start(app.clone(), Some(context)).await {
+            eprintln!("intentic: Repair did not start: {error}");
+        }
+    });
 }
 
 #[cfg(test)]

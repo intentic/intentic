@@ -22,6 +22,12 @@ export const ADD_SANDBOX_QUERY = `add`;
 export const ADD_SANDBOX_VALUE = `sandbox`;
 export const ADD_SANDBOX_PATH = `/?${ADD_SANDBOX_QUERY}=${ADD_SANDBOX_VALUE}`;
 export const ADD_SANDBOX_HOME_PATH = `/home?${ADD_SANDBOX_QUERY}=${ADD_SANDBOX_VALUE}`;
+/**
+ * The same ask in a desktop window on a folder of this computer (local/newSandbox/LocalNewSandbox.vue): made in that
+ * window, as Home makes one in the workspace, rather than sending the reader to the workspace for it. `?on=hosted` picks
+ * a machine of ours.
+ */
+export const LOCAL_ADD_SANDBOX_PATH = `/sandbox-new`;
 
 // allow(module-state): one Add sandbox dialog for the window, asked for from wherever its press is
 const asked = ref(false);

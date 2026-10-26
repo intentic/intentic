@@ -1,15 +1,20 @@
 use super::chrome::work_the_window;
 use super::mode::announced;
-use super::{show_device, show_folder_that_asked, show_home_at, Keyboard, FILES_ROUTE};
-use crate::setup_link::{parse_link, LauncherTo, Link, NoticeVerb, SetupArgs, Source, WindowVerb};
-use crate::state::{AppState, Face};
+use super::present::{Asked, Press};
+use super::{show_device, show_home_at, FILES_ROUTE, HOME};
+use crate::setup_link::{
+    parse_link, LauncherTo, Link, NoticeVerb, ProcessLink, SetupArgs, Source, WindowVerb,
+};
+use crate::state::AppState;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 /// Links land here from three directions: the workspace webview's intercepted navigation, the second-instance
-/// argv, and the OS handler. A setup parks its request for This device to pick up and run, in the main window, in
-/// the frame the workspace was just occupying; an auth handoff goes straight back into the workspace face, which is
-/// the only place it means anything.
+/// argv, and the OS handler. A setup, a recreate, a fix or a sync parks its request for the main window to pick up and
+/// run out of sight, and the run is a process both faces draw where the reader already is (processes.rs); an auth
+/// handoff is told to the workspace's page, the only place it means anything, without putting it in the frame. Only
+/// the three links that name where the reader asked to go (This computer, This device, this computer's sandboxes)
+/// change what is on screen (present.rs).
 ///
 /// `source` separates the first direction from the other two: only the webview's own navigation is a link
 /// this app watched its own window ask for. See [`Source`] for what an external one loses, and
@@ -17,9 +22,10 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     match parse_link(link, source) {
         Some(Link::Shell(target)) => crate::shell::open(app, target),
-        Some(Link::Setup { args, stay }) => match source {
+        // `stay` (Home drawing the run itself) is every setup's way now, so it is read and needs nothing more.
+        Some(Link::Setup { args, stay: _ }) => match source {
             // A project's setup gets the folder this app parked for it, and only here (project.rs).
-            Source::App { .. } => park_setup(app, crate::project::bind(app, *args), stay),
+            Source::App { .. } => park_setup(app, crate::project::bind(app, *args)),
             Source::External => confirm_setup(app, *args),
             // Never parsed from a local window (setup_link.rs); named so a new source is a decision here too.
             Source::Files { .. } => {}
@@ -29,8 +35,7 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
                 .pending_recreate
                 .lock()
                 .unwrap() = Some(args);
-            show_device(app);
-            let _ = tauri::Emitter::emit(app, "desktop://pending-recreate", ());
+            to_main_window(app, "desktop://pending-recreate");
         }
         // The recovery panel's button: `ic sandbox fix`, run and drawn on This device (fix.rs). A link while one
         // runs brings that run forward instead of starting a second.
@@ -52,8 +57,7 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
                 .pending_sync
                 .lock()
                 .unwrap() = Some(args);
-            show_device(app);
-            let _ = tauri::Emitter::emit(app, "desktop://pending-sync", ());
+            to_main_window(app, "desktop://pending-sync");
         }
         // Asked for by link rather than by a window's press: the workspace's own road back in, so it ends there.
         Some(Link::SignIn { switch_account }) => {
@@ -74,23 +78,28 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // a sandbox's "restart in the app"), or the folder itself (the sandbox switcher's "This computer").
         Some(Link::Launcher {
             to: LauncherTo::Files,
-        }) => {
-            app.state::<AppState>().remember_last_face(Face::Home);
-            show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
-        }
+        }) => show_home_at(app, Press::by(Asked::Page), Some(FILES_ROUTE)),
         Some(Link::Launcher {
             to: LauncherTo::Device,
-        }) => show_device(app),
-        // The way back from a sign-in that began on a folder (auth.rs `complete_path`): the folder asked for an agent,
-        // so the reader is put back on it, its own sandbox's setup starting by itself and its card saying how far, or
-        // what it waits for.
+        }) => show_device(app, Press::by(Asked::Page)),
+        // A sign-in that began on a folder, redeemed (auth.rs `complete_path`): a folder waiting on the sign-in finds it
+        // now. The reader stays where they are: the folder's own card and both faces' rails say what its setup does next.
+        // _(2026-10-26) This put the main window back in front on its folder's way to a sandbox, whatever the reader was
+        // looking at, and a folder window over it._
         Some(Link::Launcher {
             to: LauncherTo::Agent,
-        }) => {
-            let asked_in = crate::auth::take_asked_in();
-            show_folder_that_asked(app, asked_in.as_deref());
-            // The page redeemed the session just before saying so: a folder waiting on the sign-in finds it now.
-            crate::folder_setup::kick();
+        }) => crate::folder_setup::kick(),
+        // The workspace's own runs and answers (processes.rs): runs only it holds, told so This computer draws them too,
+        // and the reader's answer to a run, given on the page it is drawn on.
+        Some(Link::Process(ProcessLink::Report(report))) => {
+            crate::processes::report_from_workspace(app, *report)
+        }
+        Some(Link::Process(ProcessLink::Clear(id))) => {
+            crate::processes::clear_from_workspace(app, &id)
+        }
+        Some(Link::Process(ProcessLink::Hello)) => crate::processes::hello(app),
+        Some(Link::ProcessAct { id, act, need }) => {
+            crate::processes::act(app, &id, &act, need.as_deref())
         }
         // The setup page took this sandbox to a machine of ours, or its reader called the install off there: the main
         // window stops the install it runs for it as the card's own Stop does, or gives up the setup waiting on this PC
@@ -147,7 +156,7 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // window goes to the app's copy of the editor on them, as the offline page's button sends it. A build without
         // that copy never told the page `machineFace`, and drops a link that says otherwise.
         Some(Link::MachineFace) if crate::machine_face::FACE_BUILT => {
-            super::show_machine_face_from(app, None, None);
+            super::show_machine_face_from(app, Press::by(Asked::Page), None, None);
         }
         Some(Link::MachineFace) => {}
         Some(Link::Local(verb)) => {
@@ -159,17 +168,14 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     }
 }
 
-/// Hand a setup to This device, which runs it on arrival (src/device/useDevice.ts says why), in the main window, in
-/// the frame the workspace that asked for it was occupying: the same handover every other screen of this app makes.
-/// A link does not say when its code was minted, so its arrival stands in for that (`SetupArgs::minted_at`).
+/// Hand a setup to the main window, which runs it on arrival (src/device/useDevice.ts says why), out of sight: the
+/// run is a process both faces draw, on their rails and pages, from what the main window reports (processes.rs), so the
+/// reader stays on whatever they were looking at, Home's new sandbox included. A link does not say when its code was
+/// minted, so its arrival stands in for that (`SetupArgs::minted_at`).
 ///
-/// `stay` (2026-10-26): the workspace's Home asked, and it draws the run on its own page, in a tile of its own rail,
-/// from the reports this app sends it (setup.rs `announce_setup`). Swapping This device in over it took the reader
-/// out of Home into another part of the app to watch a bar Home already shows. So the main window takes the run out
-/// of sight: the page it already has hears the parked setup, and one not built yet is built hidden and finds it on
-/// its start. A run that stops, or waits on the reader, does not bring the card forward either (setup.rs `alert_for`):
-/// Home's tile wears the mark, and its page opens the card on the reader's press.
-fn park_setup(app: &AppHandle, mut args: SetupArgs, stay: bool) {
+/// _(2026-10-26) A setup brought This device in over the workspace that asked for it, unless Home said it drew the run
+/// itself (`stay`); and a run that stopped, or asked something, brought it in later anyway (setup.rs `alert_setup`)._
+pub(crate) fn park_setup(app: &AppHandle, mut args: SetupArgs) {
     args.minted_at = args.minted_at.or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -180,15 +186,17 @@ fn park_setup(app: &AppHandle, mut args: SetupArgs, stay: bool) {
         .pending
         .lock()
         .unwrap() = Some(args);
-    super::setup::handed_over(stay);
-    if !stay {
-        show_device(app);
-    } else if crate::frame::face(app, super::HOME).is_none() {
-        // Its page takes the parked setup as it starts (useDevice.ts `takeParkedWork`), so no event is needed.
+    to_main_window(app, "desktop://pending-setup");
+}
+
+/// Work parked for the main window, which takes it: told now when its page is up, else that page built where nobody
+/// sees it, which takes what is parked as it starts (useDevice.ts `takeParkedWork`).
+fn to_main_window(app: &AppHandle, event: &str) {
+    if crate::frame::face(app, HOME).is_none() {
         crate::local::open_home_hidden_later(app);
         return;
     }
-    let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
+    let _ = tauri::Emitter::emit(app, event, ());
 }
 
 /* A SETUP THIS APP NEVER SAW ITS OWN WINDOW ASK FOR — so ask, before anything runs. */
@@ -216,7 +224,7 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
         ))
         .show(move |confirmed| {
             if confirmed {
-                park_setup(&handle, args, false);
+                park_setup(&handle, args);
             }
         });
 }

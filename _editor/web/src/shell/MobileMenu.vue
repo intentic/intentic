@@ -20,6 +20,7 @@ import MenuRow from "./MenuRow.vue";
 import GettingStartedList from "../features/gettingStarted/GettingStartedList.vue";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import { useT } from "@intentic/ui/i18n";
+import { finishOnHome } from "../models/sandbox/finishOnHome";
 
 // The phone's Menu: what the desktop rail's sandbox switcher holds, as one page — what the sandbox needs, sandbox
 // switching, the presence roster. Opened from the sandbox's logo atop the phone's rail (MobileRail.vue), which holds
@@ -63,7 +64,7 @@ const placementFor = (option: SandboxSummary): SandboxPlacement =>
     isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
 
 // A place, so a link; switching sandboxes re-points the daemon, so that stays a button.
-const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
+const resumeSetup = (id: string) => finishOnHome(id);
 </script>
 
 <template>

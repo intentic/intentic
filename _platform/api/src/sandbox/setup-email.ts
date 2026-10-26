@@ -3,16 +3,18 @@ import type { Logger } from "pino";
 import { linkEmail, sendMail } from "../mail.js";
 
 // Mails the setup link to bounce a phone user to a laptop that can run the install command. Carries no credential: just
-// a session-gated URL that resumes this sandbox (sandboxId in the query, Setup.vue's onMounted), worth nothing to
-// anyone but the signed-in owner.
+// a session-gated URL that finishes this sandbox on Home (`finish=<id>`, the editor's features/home/newSandbox/), worth
+// nothing to anyone but the signed-in owner.
 export interface SetupLinkEmail {
     to: string;
     sandboxName: string;
     sandboxId: string;
 }
 
-// The setup page resumed on one sandbox; also where the mail about a failed setup run sends its owner back to.
-export const setupLink = (config: Config, sandboxId: string): string => `${config.webOrigin}/setup?sandbox=${encodeURIComponent(sandboxId)}`;
+// Home, finishing one sandbox's setup in place; also where the mail about a failed setup run sends its owner back to. The
+// editor's old `/setup?sandbox=<id>` lands there too, for a mail sent before this changed.
+export const setupLink = (config: Config, sandboxId: string): string =>
+    `${config.webOrigin}/home?add=sandbox&finish=${encodeURIComponent(sandboxId)}`;
 
 export const sendSetupLinkEmail = async (config: Config, logger: Logger, setup: SetupLinkEmail): Promise<void> => {
     const link = setupLink(config, setup.sandboxId);

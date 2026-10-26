@@ -27,6 +27,7 @@ import {
     useAddsOnHome,
 } from "../models/sandbox/addSandbox";
 import { newSandboxBusy, newSandboxGeneration, newSandboxShownBy } from "../features/home/newSandbox/newSandbox";
+import { tellHomeRuns } from "../features/home/homeProcesses";
 import { useAuth } from "../client/auth/useAuth";
 import { signInAt } from "../lib/routes/signIn";
 import { loadShellDesktop, loadShellMobile } from "./shellChunks";
@@ -124,6 +125,8 @@ watch(
 // The new sandbox's run is held here, above Home, so another tile pressed or a sandbox entered meanwhile leaves it going;
 // a fresh host for each run, and none once a run has ended and Home no longer asks for one.
 const newSandboxHosted = computed(() => user.value !== null && (newSandboxBusy.value || (!mobile.value && newSandboxShownBy(route))));
+// Home's own runs, told to the desktop app so This computer draws them beside its own (features/home/homeProcesses.ts).
+tellHomeRuns();
 
 // A dead sandbox no longer bounces the shell to /setup, which now only creates a new one.
 // SandboxSwitcher and the liveness probe handle switching or adding one instead.

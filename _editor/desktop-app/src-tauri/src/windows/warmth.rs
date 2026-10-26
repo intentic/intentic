@@ -1,4 +1,3 @@
-use super::scripts::open_in_place;
 use super::{build_workspace, WORKSPACE};
 use crate::state::AppState;
 use std::sync::{LazyLock, Mutex};
@@ -67,47 +66,22 @@ pub fn warmth(sandbox: &str) -> Warmth {
     }
 }
 
-/// Put the workspace's page up out of sight at `path` (a folder's sandbox, project.rs `project_path`), for `sandbox`:
-/// built there when the frame has none, told to go there when it has one nobody is looking at. A page on screen is the
-/// reader's and is left alone, and so is one already put up for the same address. Whether it was put up.
-pub fn warm_workspace(app: &AppHandle, sandbox: &str, path: &str) -> bool {
-    let path = crate::found::with_found(app, path);
-    {
-        let held = WARM.lock().unwrap();
-        if held.sandbox.as_deref() == Some(sandbox) && held.path.as_deref() == Some(path.as_str()) {
-            return true;
-        }
+/// The workspace's page put up out of sight for a folder's sandbox that is nearly ready, so its Open is a page already
+/// drawn: built at Home, the reader's first screen, when the frame has none, and never sent anywhere when it has one,
+/// on screen or not, since a page the reader left is theirs to come back to where they left it (windows/present.rs).
+/// Never put up for `sandbox` itself, then: the Open that names it routes the page there (`show_workspace_over`), and
+/// the folder waits for no page to say it shows it. _(2026-10-22 to 2026-10-26) A page out of sight was sent to the
+/// folder's sandbox ahead of its Open, so a reader who came back to the workspace by the tray found it moved._
+pub fn warm_workspace(app: &AppHandle, _sandbox: &str, _path: &str) -> bool {
+    if crate::frame::face(app, WORKSPACE).is_some() {
+        return false;
     }
-    let state = app.state::<AppState>();
-    let base = state.app_url();
-    let origin = url::Url::parse(&base)
-        .map(|url| url.origin().ascii_serialization())
-        .unwrap_or_default();
-    let target = format!("{}{path}", base.trim_end_matches('/'));
-    match crate::frame::face(app, WORKSPACE) {
-        Some(_) if crate::frame::shown() == Some(WORKSPACE) && crate::frame::on_screen(app) => {
-            return false
-        }
-        Some(face) => {
-            if face.eval(open_in_place(&origin, &path, &target)).is_err() {
-                return false;
-            }
-        }
-        None => {
-            let Ok(url) = target.parse::<Url>() else {
-                return false;
-            };
-            if build_workspace(app, url).is_none() {
-                return false;
-            }
-        }
+    let base = app.state::<AppState>().app_url();
+    let target = format!("{}/home", base.trim_end_matches('/'));
+    if let Ok(url) = target.parse::<Url>() {
+        let _ = build_workspace(app, url);
     }
-    *WARM.lock().unwrap() = Warm {
-        sandbox: Some(sandbox.to_string()),
-        path: Some(path),
-        shown: None,
-    };
-    true
+    false
 }
 
 /// The workspace's page says it shows `sandbox`, connected and drawn: a folder whose setup waited on it is ready.

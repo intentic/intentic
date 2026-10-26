@@ -668,13 +668,21 @@ fn open_path(app: &AppHandle, path: &Path) -> Result<(), Trouble> {
     match destination {
         Destination::Shown(label) => {
             if let Some(window) = app.get_webview(&label) {
-                crate::windows::raise_window(app, &window);
+                crate::windows::raise_window(
+                    app,
+                    crate::windows::present::Press::by(crate::windows::present::Asked::Window),
+                    &window,
+                );
             }
             Ok(())
         }
         Destination::Inside { label, path } => {
             if let Some(window) = app.get_webview(&label) {
-                crate::windows::raise_window(app, &window);
+                crate::windows::raise_window(
+                    app,
+                    crate::windows::present::Press::by(crate::windows::present::Asked::Window),
+                    &window,
+                );
                 let _ = window.eval(open_in_window(&path));
                 app.state::<AppState>().remember_recent(&asked, false);
             }
@@ -795,17 +803,25 @@ fn home_folder(state: &AppState) -> Result<PathBuf, Trouble> {
 
 /// [`open_home`], off the calling thread: it may wait on the sidecar's first start, and the thread asking is often the
 /// one that draws every window (a launch, the tray). What fails is said in a dialog.
-pub fn open_home_later(app: &AppHandle, route: Option<String>) {
-    open_home_off_thread(app, route, true);
+pub fn open_home_later(
+    app: &AppHandle,
+    press: crate::windows::present::Press,
+    route: Option<String>,
+) {
+    open_home_off_thread(app, route, Some(press));
 }
 
 /// The main window built where nobody sees it, for work it runs out of sight: a setup the workspace draws on its own
 /// page (windows/links.rs `park_setup`). Showing it later is the swap every other road takes, onto a page already up.
 pub fn open_home_hidden_later(app: &AppHandle) {
-    open_home_off_thread(app, None, false);
+    open_home_off_thread(app, None, None);
 }
 
-fn open_home_off_thread(app: &AppHandle, route: Option<String>, shown: bool) {
+fn open_home_off_thread(
+    app: &AppHandle,
+    route: Option<String>,
+    shown: Option<crate::windows::present::Press>,
+) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(trouble) = open_home(&app, route.as_deref(), shown) {
@@ -821,7 +837,11 @@ fn open_home_off_thread(app: &AppHandle, route: Option<String>, shown: bool) {
 
 /// Build the main window on its folder, at `route` when given, in the frame the workspace holds when it is on
 /// screen (windows.rs). Never twice: a second caller while the first is still building finds it being built.
-fn open_home(app: &AppHandle, route: Option<&str>, shown: bool) -> Result<(), Trouble> {
+fn open_home(
+    app: &AppHandle,
+    route: Option<&str>,
+    shown: Option<crate::windows::present::Press>,
+) -> Result<(), Trouble> {
     let files = app.state::<LocalFiles>();
     if files.home_opening.swap(true, Ordering::SeqCst) {
         return Ok(());
@@ -831,7 +851,11 @@ fn open_home(app: &AppHandle, route: Option<&str>, shown: bool) -> Result<(), Tr
     opened
 }
 
-fn build_home(app: &AppHandle, route: Option<&str>, shown: bool) -> Result<(), Trouble> {
+fn build_home(
+    app: &AppHandle,
+    route: Option<&str>,
+    shown: Option<crate::windows::present::Press>,
+) -> Result<(), Trouble> {
     if crate::frame::face(app, crate::windows::HOME).is_some() {
         return Ok(());
     }
@@ -923,7 +947,11 @@ pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
     if let Some(shows) = shown {
         if shows != label {
             if let Some(window) = app.get_webview(&shows) {
-                crate::windows::raise_window(app, &window);
+                crate::windows::raise_window(
+                    app,
+                    crate::windows::present::Press::by(crate::windows::present::Asked::Window),
+                    &window,
+                );
             }
         }
         return Ok(());
@@ -1362,7 +1390,12 @@ fn hand_off(app: &AppHandle, file: &Path) -> Result<(), Trouble> {
         .ok_or_else(|| Trouble::Failed("a handoff expired before it was granted".to_string()))?;
     let granted = crate::sidecar::grant(app, &handoff.token, &line)?;
     files.handoffs.lock().unwrap().push(handoff.clone());
-    crate::windows::show_workspace_at(app, Some(&handoff_path(port, &handoff.token, &granted)));
+    // The reader's own "Ask about this", which names the workspace's agent.
+    crate::windows::show_workspace_at(
+        app,
+        crate::windows::present::Press::by(crate::windows::present::Asked::Page),
+        Some(&handoff_path(port, &handoff.token, &granted)),
+    );
     Ok(())
 }
 

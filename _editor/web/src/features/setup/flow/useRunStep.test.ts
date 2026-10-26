@@ -7,7 +7,8 @@ import { desktopSetupLink } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
 import { bashCommand } from "../../../app/environments/scriptCommand";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
-import { type SetupProject, setupProjectOf } from "../setupArrival";
+import { projectDirNameFor } from "@intentic/sandbox-contract/ids/project-dir";
+import type { SetupProject } from "../setupArrival";
 import { useRunStep } from "./useRunStep";
 
 // Pins step 2 on the reader's own machine: the compose tab never overwrites the shell preference, the command folds
@@ -152,7 +153,7 @@ describe(`the handoff to the app`, () => {
 // The app opened this page for a folder the reader picked, and kept the folder's path to itself: the page hands over
 // only where the folder lands in the sandbox, and never makes up a folder to sync /work into.
 describe(`a project setup`, () => {
-    const project = setupProjectOf(`My App`)!;
+    const project: SetupProject = { name: `My App`, dirName: projectDirNameFor(`My App`) };
 
     it(`hands the app the folder's place in the sandbox, and no sync folder of its own`, () => {
         const { openDesktopLink, step, ready } = stage({ inApp: true, project });

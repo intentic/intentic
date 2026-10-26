@@ -37,13 +37,9 @@ const folderName = computed(() => face.value?.name ?? setup.value?.name ?? ``);
 // Back to the folder's files: a link wherever the reader presses for it.
 const FILES = `/workspace`;
 
-// The first look, when nothing has been asked yet: a folder that has its sandbox already is opened, and the page goes.
-// Looked at again when a setup is put away, since who is signed in may have changed meanwhile.
-const look = async (): Promise<void> => {
-    if ((await weigh()) === `opened`) {
-        void router.push(FILES);
-    }
-};
+// The first look, when nothing has been asked yet: a folder that has its sandbox already says so, with the press that
+// opens it. Looked at again when a setup is put away, since who is signed in may have changed meanwhile.
+const look = (): Promise<void> => weigh();
 onMounted(look);
 watch(
     () => setup.value === undefined,

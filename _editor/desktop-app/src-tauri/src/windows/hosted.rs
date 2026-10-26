@@ -1,5 +1,6 @@
 use super::chrome::{announce_frame, arm_frame_fallback, forget_chrome};
 use super::mode::{face_background, look_init_script};
+use super::present::{Asked, Press};
 use super::scripts::{update_told, workspace_init_script, BROWSER_ARGS};
 use super::{raise, WORKSPACE};
 use crate::setup_link::Source;
@@ -223,7 +224,7 @@ fn show_floating(
 ) {
     let label = floating_label(panel);
     if let Some(window) = app.get_webview_window(&label) {
-        raise(window.as_ref());
+        raise(Press::by(Asked::Page), window.as_ref());
         return;
     }
     let size = size.unwrap_or_else(|| LogicalSize::new(FLOATING_SIZE.0, FLOATING_SIZE.1));

@@ -27,9 +27,9 @@ const emit = defineEmits<{ checkout: [tier: string] }>();
 
 const maxHours = computed(() => Math.max(...props.ladder.map((rung) => rung.hours)));
 
-// Setup always names the platform's machine from here: unnamed, the app would install one on this computer instead.
-const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
-const OWN_SETUP = { name: `setup`, query: { machine: `mine` } } as const;
+// Home's new sandbox, with the machine picked: the platform's from here, and this computer's for the other door.
+const HOSTED_SETUP = { path: `/home`, query: { add: `sandbox`, machine: `hosted` } } as const;
+const OWN_SETUP = { path: `/home`, query: { add: `sandbox` } } as const;
 
 const assurances = computed(() => [
     { icon: `undo` as const, title: t(`settings.hostedPlanOffer.cancelAnyTime`), body: t(`settings.hostedPlanOffer.cancelAnyTimeBody`) },

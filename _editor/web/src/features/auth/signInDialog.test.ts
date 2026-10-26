@@ -9,8 +9,8 @@ import type { LocationQuery } from "vue-router";
 
 let inApp = true;
 jest.mock(`../../app/environments/desktopWorkspace`, () => ({ desktopWorkspace: () => inApp }));
-const openAgentOnThisComputer = jest.fn();
-jest.mock(`../../app/environments/desktop`, () => ({ openAgentOnThisComputer: () => openAgentOnThisComputer(), signInThroughBrowser: jest.fn() }));
+const tellSignedInOnThisComputer = jest.fn();
+jest.mock(`../../app/environments/desktop`, () => ({ tellSignedInOnThisComputer: () => tellSignedInOnThisComputer(), signInThroughBrowser: jest.fn() }));
 const user = ref<{ id: string } | null>(null);
 jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
 
@@ -56,7 +56,7 @@ beforeEach(() => {
     refusal = undefined;
     enter.mockClear();
     reload.mockClear();
-    openAgentOnThisComputer.mockClear();
+    tellSignedInOnThisComputer.mockClear();
     sessionStorage.clear();
 });
 
@@ -187,12 +187,13 @@ describe(`the browser's hand-off coming back`, () => {
         expect(enter).not.toHaveBeenCalled();
     });
 
-    it(`hands the reader back to the folder a sign-in began on`, async () => {
+    // Begun on This computer, redeemed out of sight: the app hears it is done, and this page stays on the view it shows.
+    it(`tells the app a sign-in begun on This computer is done, and moves nobody`, async () => {
         const { signInInPlace } = await load();
-        signInInPlace(completion({ ...handoff, back: `agent` }), shellRoute(`/home`));
+        signInInPlace(completion({ ...handoff, back: `agent` }), shellRoute(`/agents`));
         await settled();
-        expect(openAgentOnThisComputer).toHaveBeenCalledTimes(1);
-        expect(enter).toHaveBeenCalledWith(`/`);
+        expect(tellSignedInOnThisComputer).toHaveBeenCalledTimes(1);
+        expect(enter).toHaveBeenCalledWith(`/agents`);
     });
 
     // A sandbox's own sign-in wall sent the reader to the browser for a Google proof: the account is the same, the wall's

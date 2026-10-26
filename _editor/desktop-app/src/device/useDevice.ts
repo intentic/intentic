@@ -33,6 +33,10 @@ import * as sandboxes from "./sandboxes";
 import * as setup from "./setup";
 import * as sync from "./sync";
 import { titleTheSetup } from "./title";
+import { listenForAnswers } from "../processes";
+import { tellPcSetup } from "../onboarding/pcProcess";
+import { tellDeviceWork } from "./processes/deviceProcesses";
+import { tellSetups } from "./processes/setupAsProcess";
 
 // THIS COMPUTER, AS THE APP ITSELF SEES IT: its sandboxes, its machine agent, its Docker engine, and the work the app runs
 // on it (a sandbox's setup handed over from the workspace, a sync enrollment, a sandbox recreated, resized or fixed).
@@ -43,9 +47,10 @@ import { titleTheSetup } from "./title";
 // sandboxes' verbs (sandboxes.ts), a sync enrollment (sync.ts), the recovery panel's fix (fix.ts) and, on Intentic OS,
 // the system itself and the changes made to it (intenticOs/system.ts). This one starts them.
 //
-// Only the app's main window TAKES WORK (`takesWork`): a setup, a recreate, a sync or a fix the app parked for its own
-// face, and the Docker start a launch asked for. Every other local window draws the same view of the machine and runs
-// its verbs, but leaves parked work to the main window, which the app shows for it (windows.rs `show_home`).
+// Only the app's main window TAKES WORK (`takesWork`): a setup, a recreate, a sync or a fix the app parked for it, and the
+// Docker start a launch asked for. Every other local window draws the same view of the machine and runs its verbs, but
+// leaves parked work to the main window, which runs it whether or not it is on screen: each run is a process on both
+// faces' rails, answered from either (src/processes.ts), and the app shows nobody anything for it (windows/present.rs).
 
 export interface DeviceOptions {
     /** This is the app's main window, which the app parks setups, recreates, syncs, fixes and a sleeping engine for. */
@@ -142,6 +147,17 @@ const takeParkedWork = async (): Promise<void> => {
     }
 };
 
+// The main window's runs told to the app's one list as they change, and answered from either face.
+const tellRuns = (): void => {
+    void listenForAnswers();
+    tellSetups();
+    fixing.tellFixes();
+    sync.answerSyncs();
+    sandboxes.answerRecreates();
+    tellDeviceWork();
+    tellPcSetup();
+};
+
 const startOnce = async (options: DeviceOptions): Promise<void> => {
     // Awaited, and safe to await, because it asks this process what it is and nothing else (desktop.ts).
     machine.info.value = await desktopInfo();
@@ -184,6 +200,7 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
     );
     if (options.takesWork) {
         titleTheSetup();
+        tellRuns();
         await takeParkedWork();
     }
 };

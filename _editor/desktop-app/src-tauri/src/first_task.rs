@@ -206,15 +206,58 @@ fn draft_from_ask(folder: &Path, file_name: &str) -> Draft {
     }
 }
 
-/// "Ask about this" while no sandbox can answer yet: This computer, its first-task box filled with a draft rather than a
-/// task queued. Every window open hears it at once; a main window still being built takes it when it asks.
+/// "Ask about this" while no sandbox can answer yet: This computer's first-task box filled with a draft rather than a
+/// task queued. Every window open hears it at once; a main window still being built takes it when it asks. Nobody is
+/// taken there (windows/present.rs): a tile on both faces' rails says the draft is waiting, and its Open is the way.
 pub fn prefill_from_ask(app: &AppHandle, folder: &Path, file_name: &str) {
     let draft = draft_from_ask(folder, file_name);
     *DRAFT.lock().unwrap_or_else(PoisonError::into_inner) = Some(draft.clone());
     if let Err(error) = app.emit(DRAFT_EVENT, &draft) {
         eprintln!("intentic: the windows could not be told about the draft task: {error}");
     }
-    windows::show_device(app);
+    let mut report = crate::processes::ProcessReport::of("first-task", DRAFT_ABOUT, "waiting");
+    report.subject = Some(file_name.to_string());
+    report.folder = Some(draft.folder.clone());
+    report.waiting_for = Some("answer".into());
+    report.actions = vec!["open".into(), "dismiss".into()];
+    crate::processes::report(app, report);
+}
+
+/// What a first task's process is about: the draft "Ask about this" left, or the task kept on disk.
+const DRAFT_ABOUT: &str = "draft";
+const TASK_ABOUT: &str = "task";
+
+/// Where a press on a first task's Open goes (processes.rs makes the press): This computer's card for a draft, the
+/// workspace on the task's folder for a task whose folder is in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Opens {
+    Device,
+    Workspace(String),
+}
+
+/// The reader's answer on a first task's tile. `about` is the process's own part of its id.
+pub fn act(app: &AppHandle, about: &str, act: &str) -> Option<Opens> {
+    match (about, act) {
+        (DRAFT_ABOUT, "open") => Some(Opens::Device),
+        (DRAFT_ABOUT, "dismiss") => {
+            DRAFT.lock().unwrap_or_else(PoisonError::into_inner).take();
+            crate::processes::clear(app, &format!("first-task:{DRAFT_ABOUT}"));
+            None
+        }
+        (TASK_ABOUT, "open") => {
+            let task = read(app)?;
+            let (sandbox_id, dir) = folder_in(app, Path::new(&task.folder))?;
+            let path = opened(app, &task, &sandbox_id, &dir)?;
+            crate::processes::clear(app, &format!("first-task:{TASK_ABOUT}"));
+            Some(Opens::Workspace(path))
+        }
+        (TASK_ABOUT, "dismiss") => {
+            let _ = first_task_clear(app.clone());
+            crate::processes::clear(app, &format!("first-task:{TASK_ABOUT}"));
+            None
+        }
+        _ => None,
+    }
 }
 
 /// The draft "Ask about this" left for This computer's card, taken: the next window to ask gets none.
@@ -318,7 +361,7 @@ pub fn folder_changed(app: &AppHandle, record: &Record) {
     }
     drop(_gate);
     if let Some(sandbox_id) = record.sandbox_id.as_deref() {
-        open(app, &task, sandbox_id, &record.name);
+        offer(app, &task, sandbox_id, &record.name);
     }
 }
 
@@ -344,7 +387,7 @@ fn try_send(app: &AppHandle) {
             TaskStep::Open => {
                 drop(_gate);
                 if let Some((sandbox_id, dir)) = found {
-                    open(app, &task, &sandbox_id, &dir);
+                    offer(app, &task, &sandbox_id, &dir);
                 }
                 return;
             }
@@ -377,46 +420,57 @@ fn try_send(app: &AppHandle) {
             task.reason = Some(reason);
             save(app, &task);
         }
-        // The folder had its sandbox already: the workspace goes up on it now.
+        // The folder had its sandbox already: the task is ready for the reader's Open.
         Ok(project::Created::Opened) => {
             drop(_gate);
             if let Some((sandbox_id, dir)) = folder_in(app, &folder_path) {
-                open(app, &task, &sandbox_id, &dir);
+                offer(app, &task, &sandbox_id, &dir);
             }
         }
         Ok(project::Created::Started { .. }) => {}
     }
 }
 
-/// The workspace opened on the task's folder in its sandbox, with the task handed to it, once.
-fn open(app: &AppHandle, task: &StoredTask, sandbox_id: &str, dir: &str) {
-    let Some(path) = workspace_path(sandbox_id, dir, task) else {
-        return;
-    };
-    let _gate = GATE.lock().unwrap();
-    let Some(mut opened) = read(app) else {
-        return;
-    };
-    if opened.id != task.id || opened.opened_at.is_some() {
-        return;
-    }
-    opened.opened_at = Some(now());
-    save(app, &opened);
-    drop(_gate);
-    windows::show_workspace_at(app, Some(&path));
-    if !reader_here(app) {
+/// The task's folder is in: the task is ready to start, on both faces' rails with an Open, and the system's notification
+/// says so while nobody is looking. It goes when the reader opens it (windows/present.rs). _(2026-10-26) The workspace
+/// went up on it by itself, whatever the reader was doing._
+fn offer(app: &AppHandle, task: &StoredTask, sandbox_id: &str, dir: &str) {
+    let fresh = crate::processes::get(app, &format!("first-task:{TASK_ABOUT}")).is_none();
+    let mut report = crate::processes::ProcessReport::of("first-task", TASK_ABOUT, "waiting");
+    report.subject = Some(dir.to_string());
+    report.sandbox_id = Some(sandbox_id.to_string());
+    report.folder = Some(task.folder.clone());
+    report.waiting_for = Some("answer".into());
+    report.actions = vec!["open".into(), "dismiss".into()];
+    crate::processes::report(app, report);
+    if fresh && !reader_here(app) {
         notice::show(
             app,
             NoticeArgs {
                 key: "first-task".to_string(),
                 kind: NoticeKind::Finished,
-                title: "Your first task started".to_string(),
-                body: Some("Intentic opened your workspace and sent it to an agent.".to_string()),
-                path: Some(path.clone()),
+                title: "Your first task is ready".to_string(),
+                body: Some(format!(
+                    "{dir} is in its sandbox. Open it to hand the task to an agent."
+                )),
+                path: Some(format!("{}first-task:{TASK_ABOUT}", notice::PROCESS)),
                 silent: false,
             },
         );
     }
+}
+
+/// The workspace's address with the task handed to it, once: marked opened, so a later record change offers nothing.
+fn opened(app: &AppHandle, task: &StoredTask, sandbox_id: &str, dir: &str) -> Option<String> {
+    let path = workspace_path(sandbox_id, dir, task)?;
+    let _gate = GATE.lock().unwrap();
+    let mut opened = read(app)?;
+    if opened.id != task.id || opened.opened_at.is_some() {
+        return None;
+    }
+    opened.opened_at = Some(now());
+    save(app, &opened);
+    Some(path)
 }
 
 fn workspace_path(sandbox_id: &str, project_dir: &str, task: &StoredTask) -> Option<String> {

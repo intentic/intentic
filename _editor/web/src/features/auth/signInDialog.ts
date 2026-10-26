@@ -1,7 +1,7 @@
 import type { NoticeModel } from "@intentic/ui";
 import { readonly, ref } from "vue";
 import type { LocationQuery, RouteLocationNormalized, RouteLocationRaw } from "vue-router";
-import { openAgentOnThisComputer } from "../../app/environments/desktop";
+import { tellSignedInOnThisComputer } from "../../app/environments/desktop";
 import { desktopWorkspace } from "../../app/environments/desktopWorkspace";
 import { useAuth } from "../../client/auth/useAuth";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
@@ -119,7 +119,7 @@ export const signedIn = async (destination: string): Promise<void> => {
  * fresh Google proof for a sandbox's own sign-in (SignInWall.vue), which the redemption hands to the wait it was for: it
  * says nothing unless that fails, and nobody moves.
  */
-const arriveInPlace = async (query: LocationQuery): Promise<void> => {
+const arriveInPlace = async (query: LocationQuery, here: string): Promise<void> => {
     const before = asked.value;
     const heldBefore = useAuth().user.value?.id;
     heldWhenAsked = heldBefore ?? heldWhenAsked;
@@ -136,10 +136,12 @@ const arriveInPlace = async (query: LocationQuery): Promise<void> => {
     }
     // Read whether or not it is used, so a later hand-off does not find this one's.
     const stored = takeBrowserHandoffDestination();
-    const destination = taken.backToFolder ? `/` : stored;
-    // Begun on a folder of this computer: the reader is handed back to it, which asked for the account (auth.rs `complete_path`).
+    // Begun on This computer: the app redeemed it here out of sight (auth.rs `complete_path`), and the reader is still
+    // there. This page stays on the view it shows, now signed in, and tells the app, whose folder waiting on the account
+    // carries on. Nobody is moved: not to the folder, not to this page's root.
+    const destination = taken.backToFolder ? here : stored;
     if (taken.backToFolder) {
-        openAgentOnThisComputer();
+        tellSignedInOnThisComputer();
     }
     if (before === undefined && heldBefore !== undefined && !staleAccount()) {
         useBrowserHandoff().cancel();
@@ -179,7 +181,7 @@ export const signInInPlace = (to: AskedRoute, from: ShownRoute | undefined): boo
         return from !== undefined && insideShell(from) ? false : HOME_PATH;
     }
     if (to.name === `desktop-auth-complete` && from !== undefined) {
-        void arriveInPlace(to.query);
+        void arriveInPlace(to.query, from.fullPath);
         return false;
     }
     return true;

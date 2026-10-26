@@ -32,6 +32,8 @@ import { followRoster } from "./device/roster";
 import { folderSetupFor, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
 import { followPasswords, passwordsBadge, passwordsInRail } from "./passwords/passwordsState";
+import { newSandboxCreate, newSandboxOffers } from "./desktopProcesses";
+import { processesHost } from "./processes";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
 // computer, answered by the app's own commands, the account the workspace signed in with (account.ts), and the views the
@@ -168,6 +170,13 @@ export const nativeHost = (): LocalHost => ({
     machine: {
         holds: async (slug) => (await sandboxList()).some((row) => row.slug === slug),
         remove: (slug) => sandboxRemove(slug),
+    },
+    // The app's processes, the one list both faces draw on their rails (src/processes.ts), and a new sandbox made in this
+    // window rather than in the workspace (src-tauri/src/new_sandbox.rs).
+    processes: processesHost(),
+    newSandbox: {
+        offers: () => newSandboxOffers(),
+        create: (name, on) => newSandboxCreate(name, on),
     },
 });
 

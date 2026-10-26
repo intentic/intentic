@@ -9,6 +9,8 @@
             "@intentic/web/main": ["./local/editor-entry.d.ts"],
             "@intentic/web/local": ["../../_editor/web/src/app/environments/local.ts"],
             "@intentic/web/local-host": ["../../_editor/web/src/app/environments/localHost.ts"],
+            // The process list both faces draw (src/processes.ts mirrors it to the app).
+            "@intentic/web/process-report": ["../../_editor/web/src/app/environments/processes/processReport.ts"],
             "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"],
             // This app's half of the shell (src/host.ts, This device) is drawn in the kit, read from source as src/ reads it.
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],

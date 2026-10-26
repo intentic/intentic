@@ -105,6 +105,8 @@ export default defineConfig({
             "@intentic/web/local": fromRoot(`_editor/web/src/app/environments/local.ts`),
             // The seam this app's half of the shell is written against (src/host.ts).
             "@intentic/web/local-host": fromRoot(`_editor/web/src/app/environments/localHost.ts`),
+            // The process list both faces draw (src/processes.ts).
+            "@intentic/web/process-report": fromRoot(`_editor/web/src/app/environments/processes/processReport.ts`),
         },
     },
     base: `/files/`,

@@ -4,11 +4,10 @@
      one's place, which stays until its home conversation is on screen here (newSandbox/newSandbox.ts; a phone's dialog,
      features/setup/add/). It used to be a disabled composer and a coach
      mark pointing at the rail's +, and before that a setup page that started a machine the moment it arrived.
-     - A setup of the person's own that never finished is offered first, by name. In the desktop app it is finished here,
-       on this computer, in the new sandbox's tile and page (newSandbox/newSandbox.ts `finishOnHome`); in a browser, and
-       for a row a machine of ours waits on, it resumes on /setup. Never the one Home is making right now, whose run is
-       its tile's: offered here, it read as a setup left unfinished and sent its reader to /setup to "finish" a sandbox
-       already starting (2026-10-26).
+     - A setup of the person's own that never finished is offered first, by name, and finished here, in the new sandbox's
+       tile and page (models/sandbox/finishOnHome.ts): a machine of ours on it waited on, this computer's app
+       running it, or its command shown again. Never the one Home is making right now, whose run is its tile's: offered
+       here, it read as a setup left unfinished and sent its reader to "finish" a sandbox already starting (2026-10-26).
      - Signed out (anonymous Home), Create signs in first and comes back to the same ask (models/sandbox/addSandbox.ts),
        and a returning person whose session ended is told plainly that signing in brings their sandboxes back. -->
 <script setup lang="ts">
@@ -17,15 +16,14 @@ import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { desktopWorkspace } from "../../app/environments/desktopWorkspace";
 import { useAuth } from "../../client/auth/useAuth";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
 import { useRequestAddSandbox } from "../../models/sandbox/addSandbox";
 import { unfinishedSandboxes } from "../../models/sandbox/live/roster";
-import { hostedIdle } from "../setup/setupArrival";
-import { finishOnHome, newSandbox } from "./newSandbox/newSandbox";
+import { finishOnHome } from "../../models/sandbox/finishOnHome";
+import { newSandbox } from "./newSandbox/newSandbox";
 
 // Under the phone list's own heading the page is a section of it; on a desktop it is the page.
 const { nested = false } = defineProps<{ nested?: boolean }>();
@@ -35,14 +33,8 @@ const { user } = useAuth();
 const sandbox = useSandbox();
 const signedOut = computed(() => user.value === null);
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value).find((box) => box.id !== newSandbox.value?.here.add.created.value?.id));
-// Where finishing it goes: Home's own tile in the desktop app, which runs it on this computer; /setup otherwise.
-const finish = computed(() => {
-    const row = unfinished.value;
-    if (row === undefined) {
-        return undefined;
-    }
-    return desktopWorkspace() && !hostedIdle(row) ? finishOnHome(row.id) : { path: `/setup`, query: { sandbox: row.id } };
-});
+// Finishing it is Home's own tile and page, wherever this is.
+const finish = computed(() => (unfinished.value === undefined ? undefined : finishOnHome(unfinished.value.id)));
 const add = useRequestAddSandbox();
 const STEPS = [`create`, `ask`, `open`] as const;
 </script>

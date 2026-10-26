@@ -1,4 +1,5 @@
 import type { LocalOnboardingHost, LocalPcCheck, LocalPcSetup, LocalPrefetch, LocalRestartWhen } from "@intentic/web/local-host";
+import { LOCAL_NAVIGATE_EVENT } from "@intentic/web/local";
 import { computed, shallowRef, watch, type Ref } from "vue";
 import { t } from "@intentic/ui/i18n";
 import { track } from "../analytics";
@@ -10,7 +11,6 @@ import {
     onboardingSetUp,
     onboardingSignOut,
     onboardingState,
-    onboardingUseCloud,
     revealLog,
     type OnboardingCheck,
     type OnboardingCheckRow,
@@ -31,6 +31,9 @@ import {
 } from "./pcEvents";
 
 export type PcParts = Omit<LocalOnboardingHost, `firstTask` | `pickFolder` | `queueFirstTask` | `clearFirstTask`>;
+
+/** Where This computer makes a sandbox on a machine of ours, a page of its own shell (the web's local routes). */
+export const NEW_SANDBOX_HOSTED_PATH = `/sandbox-new?on=hosted`;
 
 // What the app last said, as it said it; the page's shapes are computed from these.
 const rawCheck = shallowRef<OnboardingCheck | undefined>(undefined);
@@ -323,10 +326,12 @@ export const pcParts = (): PcParts => {
             track(`onboarding_setup`, { action: `signOut` });
             await onboardingSignOut();
         },
-        useCloud: async () => {
-            await ensureListening();
+        // A machine of ours instead, made in this window (the web's local new sandbox page): the press stays in This
+        // computer. _(2026-10-26) It opened the workspace's setup page._
+        useCloud: () => {
             track(`onboarding_cloud`, { action: `chosen` });
-            await onboardingUseCloud();
+            window.dispatchEvent(new CustomEvent(LOCAL_NAVIGATE_EVENT, { detail: { path: NEW_SANDBOX_HOSTED_PATH } }));
+            return Promise.resolve();
         },
         track: (event, properties) => {
             if (event.startsWith(`onboarding_`)) {

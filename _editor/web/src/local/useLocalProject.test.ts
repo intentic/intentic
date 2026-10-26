@@ -109,10 +109,12 @@ it(`takes the reader to the folder's own page, where the app says what it found 
     });
 });
 
-it(`opens the sandbox a folder already has, asking nothing`, async () => {
-    fakeProject({ kind: `existing` });
+// The reader stays where they are: a folder that has its sandbox already says so, with the press that opens it.
+it(`offers the sandbox a folder already has, rather than opening it unasked`, async () => {
+    const { open } = fakeProject({ kind: `existing` });
     const flow = (await load()).useLocalProject();
-    expect({ weighed: await flow.weigh(), links: links() }).toEqual({ weighed: `opened`, links: [`intentic://local?do=sandbox`] });
+    await flow.weigh();
+    expect({ links: links(), actions: flow.view.value?.actions, opened: open.mock.calls.length }).toEqual({ links: [], actions: [`open`], opened: 0 });
 });
 
 it(`asks the app by link where there is no app behind the page to answer`, async () => {
@@ -245,7 +247,9 @@ it(`asks to sign in again once the sign-in has run out`, async () => {
     expect(flow.view.value?.actions).toEqual([`signIn`, `dismiss`]);
 });
 
-it(`takes the reader into the folder's sandbox once the folder this window asked for is in`, async () => {
+// Nobody is moved (2026-10-26): even the reader looking at the window that asked keeps their screen, and the page offers
+// the way in.
+it(`leaves the reader where they are once the folder this window asked for is in, and offers the way in`, async () => {
     const { open } = fakeProject(NEW);
     const flow = (await load()).useLocalProject();
     await flow.weigh();
@@ -255,7 +259,8 @@ it(`takes the reader into the folder's sandbox once the folder this window asked
     lookingHere(true);
     setup.value = setupOf({ state: `ready` }, { made: true });
     await nextTick();
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+    expect(flow.view.value?.actions).toEqual([`open`]);
 });
 
 it(`leaves the ready page up, rather than moving a reader who is elsewhere`, async () => {

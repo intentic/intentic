@@ -34,6 +34,7 @@ import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { useT } from "@intentic/ui/i18n";
+import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the
 // non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate badges and panels
@@ -410,7 +411,7 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                 <span class="text-content">{{ t(`sandbox.sandboxOverview.ownDevice`) }}</span
                 >{{ t(`sandbox.sandboxOverview.noHourLimitNothing`) }}
             </p>
-            <RouterLink to="/setup" class="text-xs text-link hover:underline">{{ t(`sandbox.sandboxOverview.setUp`) }}</RouterLink>
+            <RouterLink :to="ADD_SANDBOX_HOME_PATH" class="text-xs text-link hover:underline">{{ t(`sandbox.sandboxOverview.setUp`) }}</RouterLink>
         </Card>
 
         <!-- The files here exist nowhere else and the reader is at a computer that could change that; self-hides otherwise. -->

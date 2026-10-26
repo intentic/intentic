@@ -38,10 +38,6 @@ let signingInUntil: ReturnType<typeof setTimeout> | undefined;
 // no longer on its way (journey.ts).
 // allow(module-state): the one folder this window follows.
 const signedInHere = ref(false);
-// This window's own page asked for its folder's sandbox: once the folder is in, the window takes the reader into it,
-// which is what they asked for, rather than leaving them to find the way there (2026-10-17).
-// allow(module-state): one folder per window, so one ask about it.
-const askedHere = ref(false);
 
 const host = () => localHost().project;
 
@@ -73,10 +69,6 @@ const recheckAccount = async (): Promise<void> => {
         console.warn(`[local] who signed in could not be asked yet:`, error);
     }
 };
-
-// The reader is looking at this window: the one a move into the sandbox can be made in without taking them from
-// something else.
-const readerHere = (): boolean => document.visibilityState === `visible` && document.hasFocus();
 
 let watching = false;
 // Watched once per window, from the first reader of this module on.
@@ -113,38 +105,31 @@ const watchSetup = (): void => {
             if (now !== `ready` || before === undefined || before === `ready`) {
                 return;
             }
-            const asked = askedHere.value;
-            askedHere.value = false;
+            // In: its tile says so until the reader has seen it, and its page offers the way into it. Nobody is taken
+            // there (2026-10-26): a reader who asked from this window may be on another screen of it by now, and the
+            // workspace is a press away. (2026-10-17 to 10-26 the window took the reader into the sandbox by itself.)
             justReady.value = true;
-            if (asked && readerHere()) {
-                void open();
-            }
         },
     );
 };
 
 /**
  * What the app says about the folder, asked afresh: the page's own first look, before anything was pressed. A folder
- * with a record (on its way, stopped, or just in) has that to say it instead; one that has its sandbox already is opened.
+ * with a record (on its way, stopped, or just in) has that to say it instead; one that has its sandbox already says so,
+ * with the press that opens it (setupView.ts), rather than opening it unasked.
  */
-const weigh = async (): Promise<`opened` | undefined> => {
+const weigh = async (): Promise<void> => {
     const project = host();
     if (project === undefined || setup.value !== undefined) {
-        return undefined;
+        return;
     }
     failure.value = undefined;
     preview.value = undefined;
     try {
-        const answer = await project.preview();
-        if (answer.kind === `existing`) {
-            askLocalApp(`sandbox`);
-            return `opened`;
-        }
-        preview.value = answer;
+        preview.value = await project.preview();
     } catch (error) {
         failure.value = errorMessage(error);
     }
-    return undefined;
 };
 
 /**
@@ -173,8 +158,7 @@ const create = async (): Promise<void> => {
     creating.value = true;
     failure.value = undefined;
     try {
-        const started = await project.create(projectDirNameFor(asked.name));
-        askedHere.value = started === `started`;
+        await project.create(projectDirNameFor(asked.name));
         if (!asked.signedIn) {
             await signInFor(project);
         }

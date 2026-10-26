@@ -138,7 +138,7 @@ export const setupFailureMail = (config: Config, input: SetupFailureMailInput): 
         <p style="${TEXT} background: #f5f5f7; padding: 0.6rem 0.8rem; border-radius: 0.5rem; font-size: 0.9rem;">${escapeHtml(clip(input.first.problem.trim(), PROBLEM_CHARS))}</p>
         <p style="${LABEL}">What to do</p>
         <p style="${TEXT}">${escapeHtml(remedy)}${more}</p>`;
-    // Opens the same sandbox with our servers already picked (the setup page's `?machine=`), so nothing is redone.
+    // Finishes the same sandbox on our servers (Home's `?machine=`), so nothing is redone.
     const aside = input.offerHosted
         ? `
         <p style="color: #555; line-height: 1.5;">Or start instantly on our servers, with nothing to download: <a href="${link}&amp;machine=hosted" style="color: #4f46e5;">start "${name}" on our servers</a>.</p>`

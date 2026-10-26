@@ -1,7 +1,8 @@
 import { ref } from "vue";
+import { finishOnHome } from "../../../models/sandbox/finishOnHome";
 import {
     finishAskedBy,
-    finishOnHome,
+    machineAskedBy,
     markReady,
     newSandboxDialogShown,
     newSandboxNote,
@@ -11,6 +12,7 @@ import {
     newSandboxTileShown,
     readySandboxes,
     seenReady,
+    tierAskedBy,
     type NewSandboxFacts,
 } from "./newSandbox";
 
@@ -77,7 +79,7 @@ describe(`what Home shows of the new sandbox`, () => {
     });
 });
 
-// A setup left unfinished, finished on Home in the desktop app: no dialog, its page and its tile from the press on.
+// A setup left unfinished, finished on Home: no dialog, its page and its tile from the press on.
 describe(`finishing a setup left unfinished on Home`, () => {
     const finish = { name: `home`, query: finishOnHome(`row1`).query };
 
@@ -87,6 +89,13 @@ describe(`finishing a setup left unfinished on Home`, () => {
         expect(finishAskedBy({ name: `home`, query: { add: `sandbox` } })).toBeUndefined();
         expect(finishAskedBy({ name: `home`, query: { finish: `row1` } })).toBeUndefined();
         expect(finishAskedBy({ name: `home`, query: { add: `sandbox`, finish: `` } })).toBeUndefined();
+    });
+
+    it(`names a machine of ours, and its tier, only where the address does`, () => {
+        expect(machineAskedBy({ name: `home`, query: { add: `sandbox`, machine: `hosted` } })).toBe(`hosted`);
+        expect(machineAskedBy({ name: `home`, query: { add: `sandbox`, machine: `mine` } })).toBeUndefined();
+        expect(tierAskedBy({ name: `home`, query: { tier: `standard` } })).toBe(`standard`);
+        expect(tierAskedBy({ name: `home`, query: { tier: `gold` } })).toBeUndefined();
     });
 
     it(`shows its page and never the dialog, before its code is minted and after it was refused`, () => {
@@ -125,6 +134,12 @@ describe(`where the new sandbox stands`, () => {
         expect(newSandboxPhase(facts({ started: `hosted`, hostedFailed: true }))).toBe(`failed`);
         expect(newSandboxPhase(facts({ report: { state: `failed`, percent: 60 } }))).toBe(`failed`);
         expect(newSandboxPhase(facts({ report: { state: `stopped`, percent: 60 } }))).toBe(`failed`);
+    });
+
+    it(`has failed when the machine running its command said what broke`, () => {
+        expect(newSandboxPhase(facts({ started: `command`, commandFailed: true }))).toBe(`failed`);
+        expect(newSandboxPhase(facts({ started: `command`, commandFailed: false }))).toBe(`running`);
+        expect(newSandboxPhase(facts({ started: `attach` }))).toBe(`running`);
     });
 
     it(`reads a failure only off the run that was started`, () => {

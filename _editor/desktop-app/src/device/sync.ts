@@ -2,12 +2,15 @@ import { t } from "@intentic/ui/i18n";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, ref } from "vue";
 import { track } from "../analytics";
-import { folderEntries, setupAlert, syncRun, takePendingSync, workspaceOpen, type SyncArgs } from "../desktop";
+import { folderEntries, syncRun, takePendingSync, type SyncArgs } from "../desktop";
+import { answering, clearProcess, processOf, reportProcess } from "../processes";
 import { linesOf, running, runOutcome, start } from "./runs";
 
 // DESKTOP SYNC, ENABLED FROM A SYSTEM DIALOG: the workspace's Desktop sync card hands its enrollment over
 // (`intentic://sync`), since a webview can't pick a folder itself, and this runs the same sync.sh or sync.ps1 the card's
-// one-liner does. The card polls, and flips to "Enabled" once this finishes.
+// one-liner does. The card polls, and flips to "Enabled" once this finishes. The run is a process on both faces' rails
+// (`sync:enrollment`); the reader stays where they pressed, the system's folder dialog over it. _(2026-10-26) Its start, its
+// end and a cancelled dialog each brought a face forward._
 
 /** An enrollment on This device: what it was handed, the folder picked, and what stopped it, if anything did. */
 export interface SyncEnrollment {
@@ -24,21 +27,30 @@ const enrollment = (args: SyncArgs, dir: string | undefined, error?: string): Sy
     return error === undefined ? held : { ...held, error };
 };
 
+const SYNC = `enrollment`;
+const told = (state: `running` | `done` | `failed`, args: SyncArgs, failure?: string): void =>
+    reportProcess({
+        ...processOf(`sync`, SYNC, state),
+        subject: args.name,
+        failure,
+        actions: state === `failed` ? [`retry`, `dismiss`] : state === `done` ? [`dismiss`] : [],
+    });
+
 const runSync = async (args: SyncArgs, dir: string | undefined): Promise<void> => {
     syncSetup.value = enrollment(args, dir);
+    told(`running`, args);
     const startedAt = Date.now();
     track(`desktop_sync_started`, { mirror: args.mirror, takeover: args.takeover });
     const failure = await start(`sync-setup`, () => syncRun(args, dir));
     track(`desktop_sync_finished`, { mirror: args.mirror, takeover: args.takeover, ...runOutcome(`sync-setup`, failure === undefined, startedAt) });
     if (failure === undefined) {
         syncSetup.value = undefined;
-        // Returns to the page whose card is already polling for this enrollment.
-        await workspaceOpen();
+        // The page whose card asked is already polling for this enrollment.
+        told(`done`, args);
         return;
     }
     syncSetup.value = enrollment(args, dir, failure);
-    // Same courtesy as a failed install: a stopped run must not go unnoticed in an unwatched window.
-    await setupAlert();
+    told(`failed`, args, failure);
 };
 
 // What the folder already holds, for the warning: a folder that couldn't be read is said as unread, never as empty,
@@ -81,7 +93,6 @@ export const drainSync = async (): Promise<void> => {
             okLabel: t(`desktop.device.startSyncing`),
         }));
     if (!agreed) {
-        await workspaceOpen();
         return;
     }
     await runSync(args, picked);
@@ -100,4 +111,15 @@ export const retrySync = async (): Promise<void> => {
 
 export const dismissSync = (): void => {
     syncSetup.value = undefined;
+    clearProcess(`sync:${SYNC}`);
 };
+
+/** Answered from either face (useDevice.ts starts it in the main window, which runs it). */
+export const answerSyncs = (): void =>
+    answering(`sync`, async (act) => {
+        if (act === `retry`) {
+            await retrySync();
+        } else if (act === `dismiss`) {
+            dismissSync();
+        }
+    });

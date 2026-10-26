@@ -14,6 +14,8 @@ import { useSignInPrompt } from "../../../client/session/signInPrompt";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { desktopVersion } from "../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
+import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
+import { finishOnHome } from "../../../models/sandbox/finishOnHome";
 
 // The sign-in overlay, in its three states. CHOOSE: useGoogleIdentity raised `needsSignIn`, so Google's button is
 // up, and a passkey is offered beside it when the daemon has one for this origin. An account that signs in by email has
@@ -169,7 +171,7 @@ const waitingInBrowser = computed(() => desktop.value && handoff.waiting.value);
 const signInOutside = (): void => handoff.start(router.currentRoute.value.fullPath);
 
 // A sandbox that has answered before and was not removed: its reader is at work, not in a setup. "Back to setup" sent
-// them to /setup, where the same wall came up again over a line saying the container was cleaned up.
+// them to the setup page, where the same wall came up again over a line saying the container was cleaned up.
 const working = computed(() => {
     const active = sandbox.active.value;
     return active !== undefined && (active.lastSeenAt ?? null) !== null && (active.removedAt ?? null) === null;
@@ -182,13 +184,13 @@ const notNow = (): void => {
     dismissSignIn();
 };
 
-// Settles the awaiting mint and returns to setup instead of signing in; nothing needs severing.
+// Settles the awaiting mint and returns to its setup, finished on Home, instead of signing in; nothing needs severing.
 const backToSetup = async (): Promise<void> => {
     handoff.cancel();
     cancelSignIn();
     dismissSignIn();
     const active = sandbox.activeSandboxId.value;
-    await router.push(active === undefined ? `/setup` : { path: `/setup`, query: { sandbox: active } });
+    await router.push(active === undefined ? ADD_SANDBOX_HOME_PATH : finishOnHome(active));
 };
 </script>
 
@@ -330,7 +332,7 @@ const backToSetup = async (): Promise<void> => {
                 </template>
 
                 <!-- A working sandbox's reader stays where they are; only a setup has a setup to go back to, and only the
-                     owner's: /setup on a sandbox a member doesn't own starts a new one on their account instead. -->
+                     owner's: finishing a sandbox a member doesn't own would start a new one on their account instead. -->
                 <div class="mt-2 flex w-full items-center justify-center gap-6">
                     <button v-if="waitingInBrowser && !stepUp" type="button" :class="ui.textButton()" @click="signInOutside">
                         {{ t(`sandbox.signInWall.openBrowser`) }}

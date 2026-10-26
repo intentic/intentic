@@ -235,7 +235,7 @@ const draftOf = (setup: LocalFolderSetup, signingIn: boolean, preview: LocalProj
 const askDraft = (preview: LocalProjectPreview, facts: SetupFacts): Draft | undefined => {
     switch (preview.kind) {
         case `existing`:
-            return undefined;
+            return { tone: `ready`, hero: house(`home`), title: t(`local.project.existingTitle`, { name: facts.name }), detail: t(`local.project.existing`), actions: [`open`] };
         case `document`:
             return { tone: `failed`, hero: house(`plan`), title: t(`local.project.documentTitle`), detail: t(`local.project.document`), actions: [] };
         case `refused`:

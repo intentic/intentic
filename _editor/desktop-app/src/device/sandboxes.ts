@@ -4,6 +4,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { ref } from "vue";
 import { track } from "../analytics";
 import { sandboxLogs, sandboxPower, sandboxRecreate, sandboxRemove, sandboxResize, takePendingRecreate } from "../desktop";
+import { answering, clearProcess, processOf, reportProcess } from "../processes";
 import { linesOf, running, runOutcome, start } from "./runs";
 
 // WHAT THIS DEVICE DOES TO ITS SANDBOXES: the verbs the kit draws on each row (SandboxVerbs), done here by the app's own
@@ -54,9 +55,15 @@ const recreate = async (slug: string, hash: string | undefined, rollback: boolea
     // Mode mirrors the script's argument shape: a hash means the approved overlay, rollback the pre-update image.
     const mode = rollback ? `rollback` : hash === undefined ? `update` : `rebuild`;
     track(`desktop_recreate_started`, { mode, source });
+    // A process on both faces' rails while it runs and once it has ended, whoever asked (deviceProcesses.ts says why).
+    reportProcess({ ...processOf(`recreate`, slug, `running`), subject: slug });
     const failure = await onRow(slug, rollback ? `rollback` : `update`, `recreate:${slug}`, () => sandboxRecreate(slug, hash, rollback));
     track(`desktop_recreate_finished`, { mode, source, ...runOutcome(`recreate:${slug}`, failure === undefined, startedAt) });
+    reportProcess({ ...processOf(`recreate`, slug, failure === undefined ? `done` : `failed`), subject: slug, failure, actions: [`dismiss`] });
 };
+
+/** A recreate's tile put away, from either face (useDevice.ts starts it in the main window, which runs them). */
+export const answerRecreates = (): void => answering(`recreate`, (act, asked) => (act === `dismiss` ? clearProcess(asked.id) : undefined));
 
 // The form's whole share through `ic sandbox shape`: applied now (the same recreate, a different share; reported as
 // `mode: "reshape"` so restart-counting funnels include it), or saved for the next restart through ic, or forgotten

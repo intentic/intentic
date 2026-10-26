@@ -142,17 +142,26 @@ pub const THIS_DEVICE: &str = "intentic-app:device";
 /// brought back, with the folder's path after the prefix. The app's own, as [`THIS_DEVICE`] is: never a page's.
 pub const FOLDER: &str = "intentic-app:folder:";
 
-/// A press on one of the app's notifications: the workspace, at the route it was about, or This device for one about
-/// this computer. A token this run did not issue, or one already pressed, is the workspace as it stands.
+/// Where a press on a notification about one of the app's processes goes (processes.rs `attend`): that process's page,
+/// in the face the reader last used, with the process's id after the prefix. The app's own, as [`THIS_DEVICE`] is.
+pub const PROCESS: &str = "intentic-app:process:";
+
+/// A press on one of the app's notifications: the workspace, at the route it was about, This device for one about
+/// this computer, or a process's own page. A token this run did not issue, or one already pressed, is the workspace as
+/// it stands. The press is the reader's: it is what brings a face forward (windows/present.rs).
 pub fn open(app: &AppHandle, token: &str) {
+    let press = crate::windows::present::Press::by(crate::windows::present::Asked::Notification);
     let posted = app.state::<Notices>().0.lock().unwrap().take_token(token);
     match posted.and_then(|posted| posted.path) {
-        Some(path) if path == THIS_DEVICE => crate::windows::show_device(app),
+        Some(path) if path == THIS_DEVICE => crate::windows::show_device(app, press),
         Some(path) if path.starts_with(FOLDER) => {
             crate::local::open_later(app, std::path::PathBuf::from(&path[FOLDER.len()..]));
         }
-        Some(path) => crate::windows::show_workspace_at(app, Some(&path)),
-        None => crate::windows::show_workspace(app),
+        Some(path) if path.starts_with(PROCESS) => {
+            crate::processes::open_page(app, press, &path[PROCESS.len()..]);
+        }
+        Some(path) => crate::windows::show_workspace_at(app, press, Some(&path)),
+        None => crate::windows::show_workspace(app, press),
     }
 }
 

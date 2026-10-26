@@ -46,6 +46,7 @@ import { openPreviewOnFirstVisit } from "../workbench/browsers/browsersSurface";
 import AccountPanel from "./AccountPanel.vue";
 import MasterRail from "./rail/MasterRail.vue";
 import OtherSandboxes from "./rail/OtherSandboxes.vue";
+import RailProcesses from "./rail/RailProcesses.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
 import ChatQuickBar from "../features/chat/panel/ChatQuickBar.vue";
 import { terminalSlot } from "../workbench/window/panelSlots";
@@ -475,6 +476,8 @@ useGettingStarted();
                  means there is nothing to put there and never will be, so the door itself goes. -->
             <!-- A first run's checklist, until it is done or put away, and what the sandbox needs or is worth knowing for as
                  long as any of that is left (gettingStarted/). -->
+            <!-- What runs for the reader meanwhile (a sign-in, this PC's setup, a sandbox's): Home holds their pages. -->
+            <RailProcesses v-if="!isGuest" />
             <GettingStartedRing v-if="!isGuest" />
             <button
                 v-if="!isGuest"

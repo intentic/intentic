@@ -2,6 +2,7 @@ use self::bounds::{take_frame, window_on_screen};
 use self::chrome::{arm_frame_fallback, fit_decorations};
 use self::hosted::{app_origin, page_webview};
 use self::mode::settle_face_background;
+use self::present::Press;
 use self::scripts::open_in_place;
 use self::warmth::WARM;
 use crate::state::{AppState, Face};
@@ -14,6 +15,7 @@ pub(crate) mod hosted;
 pub(crate) mod links;
 pub(crate) mod local_pages;
 pub(crate) mod mode;
+pub(crate) mod present;
 pub(crate) mod quit;
 pub(crate) mod scripts;
 pub(crate) mod setup;
@@ -31,20 +33,19 @@ pub const WORKSPACE: &str = "workspace";
 pub const HOME: &str = "home";
 
 /// Draw the face `label` in the frame, the other stepping aside in the same turn (frame.rs `show`), with the platform's
-/// title bar on the frame only while that face's page has none of its own ([`fit_decorations`]). The face, when there
-/// is one to draw.
-fn swap_in(app: &AppHandle, label: &'static str, keyboard: Keyboard) -> Option<Webview> {
-    let face = crate::frame::show(app, label, keyboard == Keyboard::Take)?;
+/// title bar on the frame only while that face's page has none of its own ([`fit_decorations`]), and remember it as the
+/// face the app is used through: only a reader's press draws a face (present.rs), so whatever it draws is the reader's
+/// choice. The face, when there is one to draw.
+fn swap_in(app: &AppHandle, label: &'static str, press: Press) -> Option<Webview> {
+    let face = crate::frame::show(app, label, press)?;
     fit_decorations(app);
+    app.state::<AppState>()
+        .remember_last_face(if label == HOME {
+            Face::Home
+        } else {
+            Face::Workspace
+        });
     Some(face)
-}
-
-/// Whether the keyboard comes with the face being raised: a face taking over a window somebody is reading has
-/// to take it, one raising itself behind the user's back must not.
-#[derive(Clone, Copy, PartialEq)]
-enum Keyboard {
-    Take,
-    Leave,
 }
 
 /// The page the reader is typing into, by label: the face the frame draws while the frame has the focus, or the page of
@@ -72,8 +73,8 @@ fn shown_face(app: &AppHandle) -> Option<Window> {
 /// Google refuses OAuth from an embedded webview — a workaround that only ever held until Google's next
 /// heuristic. Sign-in now happens in the real browser (auth.rs), so nothing in this window ever talks to
 /// Google and the webview can present itself honestly.
-pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
-    show_workspace_over(app, path, None);
+pub fn show_workspace_at(app: &AppHandle, press: Press, path: Option<&str>) {
+    show_workspace_over(app, press, path, None);
 }
 
 /// The workspace opened by a press in `asked_in`, a local window's place chip (a sandbox, "Add a sandbox", the way to
@@ -83,9 +84,9 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
 /// pressed in change what it shows. _(2026-10-16) The workspace only ever took the main window's frame: a sandbox picked
 /// in a window `intentic .` opened came up as a second window beside it, and the × of that one, answered "Quit", took
 /// both down._
-pub fn show_workspace_from(app: &AppHandle, path: Option<&str>, asked_in: &Webview) {
+pub fn show_workspace_from(app: &AppHandle, press: Press, path: Option<&str>, asked_in: &Webview) {
     let replaced = is_folder_window(asked_in.label()).then(|| asked_in.window());
-    show_workspace_over(app, path, replaced);
+    show_workspace_over(app, press, path, replaced);
 }
 
 /// A folder or document window (local.rs `FILES`): a window of the app's own beside its one window of two faces. The
@@ -117,12 +118,14 @@ fn close_replaced(window: Option<Window>) {
 }
 
 /// [`show_workspace_at`], in the place of `replaced` when it is given (`show_workspace_from`), else where the frame is.
-fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<Window>) {
+fn show_workspace_over(
+    app: &AppHandle,
+    press: Press,
+    path: Option<&str>,
+    replaced: Option<Window>,
+) {
     let state = app.state::<AppState>();
     state.remember_workspace_seen();
-    // Whatever brought it up, the workspace is now the face this app is being used through: the next launch and
-    // the tray's "Open Intentic" open it (lib.rs `opening`).
-    state.remember_last_face(Face::Workspace);
     crate::offer_workspace(app);
     let base = state.app_url();
     let origin = url::Url::parse(&base)
@@ -155,7 +158,7 @@ fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<Win
     if let Some(frame) = crate::frame::frame(app) {
         take_frame(&frame, replaced.as_ref());
     }
-    swap_in(app, WORKSPACE, Keyboard::Take);
+    swap_in(app, WORKSPACE, press);
     close_replaced(replaced);
     if loaded.is_none() {
         return;
@@ -184,8 +187,8 @@ fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<Win
     }
 }
 
-pub fn show_workspace(app: &AppHandle) {
-    show_workspace_at(app, None);
+pub fn show_workspace(app: &AppHandle, press: Press) {
+    show_workspace_at(app, press, None);
 }
 
 /// The face (machine_face.rs), the app's own copy of the editor on this computer's sandboxes, in the workspace's place,
@@ -195,14 +198,18 @@ pub fn show_workspace(app: &AppHandle) {
 /// page is never loaded only to fail. Opened from a folder window, the face takes its place as the workspace would
 /// ([`show_workspace_from`]). It is the workspace face that is in use, so the next launch opens the workspace, which
 /// comes back to the face by itself while the platform is still out of reach (offline.rs).
-pub fn show_machine_face_from(app: &AppHandle, sandbox: Option<&str>, asked_in: Option<&Webview>) {
+pub fn show_machine_face_from(
+    app: &AppHandle,
+    press: Press,
+    sandbox: Option<&str>,
+    asked_in: Option<&Webview>,
+) {
     let Ok(url) = crate::machine_face::face_url_for(sandbox).parse::<Url>() else {
         return;
     };
     let replaced = asked_in
         .filter(|window| is_folder_window(window.label()))
         .map(|window| window.window());
-    app.state::<AppState>().remember_last_face(Face::Workspace);
     match crate::frame::face(app, WORKSPACE) {
         Some(face) => {
             if let Err(error) = face.navigate(url) {
@@ -220,7 +227,7 @@ pub fn show_machine_face_from(app: &AppHandle, sandbox: Option<&str>, asked_in: 
     if let Some(frame) = crate::frame::frame(app) {
         take_frame(&frame, replaced.as_ref());
     }
-    swap_in(app, WORKSPACE, Keyboard::Take);
+    swap_in(app, WORKSPACE, press);
     close_replaced(replaced);
 }
 
@@ -259,19 +266,16 @@ fn build_workspace(app: &AppHandle, url: Url) -> Option<Webview> {
     Some(face)
 }
 
-/// This computer, because the user asked for it (a launch into it, the tray's "This computer", "Open Intentic" on an
-/// install last used through it, the workspace's own way back): the main local window, remembered as the face this app
-/// is being used through. Shown for work of the app's own (a setup, a recreate, an engine asleep: `show_device`), it
-/// changes nothing about what opens next.
-pub fn show_home(app: &AppHandle) {
-    app.state::<AppState>().remember_last_face(Face::Home);
-    show_home_at(app, None, Keyboard::Take);
+/// This computer, because the reader asked for it (a launch into it, the tray's "This computer", "Open Intentic" on an
+/// install last used through it, the workspace's own way back), on whichever screen it was left on.
+pub fn show_home(app: &AppHandle, press: Press) {
+    show_home_at(app, press, None);
 }
 
-/// This device, in the main window: where the app shows its own work on this machine (a setup handed over, a
-/// recreate, a sync enrollment, the recovery panel's fix, a sleeping engine), whichever face was in use.
-pub fn show_device(app: &AppHandle) {
-    show_home_at(app, Some(DEVICE_ROUTE), Keyboard::Take);
+/// Devices, in the main window: the tray's agent row, Intentic OS's key for this computer, a notification about this
+/// computer, a page's way back to the work it handed over. Asked for by name, as every face is.
+pub fn show_device(app: &AppHandle, press: Press) {
+    show_home_at(app, press, Some(DEVICE_ROUTE));
 }
 
 /// The route of This device in the local shell (the web's router, from the app's host view `device`).
@@ -280,24 +284,25 @@ pub const DEVICE_ROUTE: &str = "/device";
 /// The route of the folder itself.
 pub const FILES_ROUTE: &str = "/workspace";
 
-/// The route of a folder's way to its own sandbox (the web's local/setup/setupPath.ts `SANDBOX_SETUP_PATH`).
-pub const SANDBOX_SETUP_ROUTE: &str = "/sandbox-setup";
+/// The route of a process's own page in the local shell (the web's local routes, shell/rail/processes/), which hands a
+/// process with a page of its own (a folder's setup, Repair, Devices' runs) to that page.
+pub const PROCESS_ROUTE: &str = "/process";
 
-/// The main window in front, at a route of its own shell (`/repair?from=tray`): the way a link, the tray or a
-/// notification opens one of the local shell's views.
-pub(crate) fn show_home_route(app: &AppHandle, route: &str) {
-    app.state::<AppState>().remember_last_face(Face::Home);
-    show_home_at(app, Some(route), Keyboard::Take);
+/// The main window in front, at a route of its own shell (`/repair?from=tray`): the way the tray, a page's "Manage on
+/// this computer" or a notification opens one of the local shell's views.
+pub(crate) fn show_home_route(app: &AppHandle, press: Press, route: &str) {
+    show_home_at(app, press, Some(route));
 }
 
 /// The main window in the workspace's place, at `route` when given: added to the frame on its folder the first time
-/// (local.rs `open_home`, which draws it once it is up), drawn and taken there every time after.
-fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
+/// (local.rs `open_home`, which draws it once it is up), drawn and taken there every time after. Only a press takes it
+/// anywhere: a process says what it needs on its tile and leaves the screen the reader is on alone (present.rs).
+fn show_home_at(app: &AppHandle, press: Press, route: Option<&str>) {
     if crate::frame::face(app, HOME).is_none() {
-        crate::local::open_home_later(app, route.map(str::to_string));
+        crate::local::open_home_later(app, press, route.map(str::to_string));
         return;
     }
-    let Some(face) = swap_in(app, HOME, keyboard) else {
+    let Some(face) = swap_in(app, HOME, press) else {
         return;
     };
     if let Some(route) = route {
@@ -305,50 +310,38 @@ fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
     }
 }
 
-/// The window a sign-in begun on a folder was asked from, in front again (auth.rs `take_asked_in`), in the place of
-/// the workspace that sign-in put up to redeem the session: the main window at its folder, or a folder window of its
-/// own raised, with the main window's face back where the workspace stood. A window gone since, or none named, is the
-/// main window's folder, which is where this way back always went (2026-10-17: a folder window that asked was left
-/// behind the workspace, and the main window came forward on a different folder).
-///
-/// The main window comes back on its folder's way to a sandbox ([`return_route`]), where the sign-in was asked and
-/// where the sandbox's making now shows: it used to come back on the folder's files, so a reader who had just signed in
-/// had to find their way back to see anything happen (2026-10-21).
-fn show_folder_that_asked(app: &AppHandle, asked_in: Option<&str>) {
-    app.state::<AppState>().remember_last_face(Face::Home);
-    let asked = asked_in
-        .filter(|label| is_folder_window(label))
-        .and_then(|label| app.get_webview_window(label));
-    let Some(asked) = asked else {
-        show_home_at(app, Some(return_route(asked_in)), Keyboard::Take);
-        return;
-    };
-    match crate::frame::face(app, HOME) {
-        Some(_) => show_home_at(app, None, Keyboard::Leave),
-        // No main window to draw in the workspace's place: the frame steps aside.
-        None => crate::frame::hide(app),
-    }
-    let _ = asked.unminimize();
-    let _ = asked.show();
-    let _ = asked.set_focus();
-}
-
-/// Where the main window comes back after a sign-in begun on a folder: the folder's way to its sandbox when the main
-/// window itself asked (the page the reader pressed on), its files when the window that asked is gone or none was
-/// named, since nothing then says that folder is the main window's. Pure.
-pub(crate) fn return_route(asked_in: Option<&str>) -> &'static str {
-    if asked_in == Some(HOME) {
-        SANDBOX_SETUP_ROUTE
-    } else {
-        FILES_ROUTE
-    }
-}
-
 /// The face this app was last used through, as a bare launch and the tray's "Open Intentic" open it.
-pub fn show_last_face(app: &AppHandle) {
+pub fn show_last_face(app: &AppHandle, press: Press) {
     match app.state::<AppState>().last_face() {
-        Face::Home => show_home(app),
-        Face::Workspace => show_workspace(app),
+        Face::Home => show_home(app, press),
+        Face::Workspace => show_workspace(app, press),
+    }
+}
+
+/// The workspace's page told to go to `path` where nobody sees it, the face in the frame left as it is: a sign-in's
+/// completion (auth.rs), which only that page can redeem, since its session cookie is set on that page's origin. A page
+/// already up is told in place (its own sign-in dialog redeems it there, the web's signInDialog.ts) and routes there
+/// itself; none yet is built there, out of sight. Nothing is shown, focused or remembered (present.rs).
+pub fn tell_workspace(app: &AppHandle, path: &str) {
+    let state = app.state::<AppState>();
+    let base = state.app_url();
+    let origin = url::Url::parse(&base)
+        .map(|url| url.origin().ascii_serialization())
+        .unwrap_or_default();
+    let target = format!("{}{path}", base.trim_end_matches('/'));
+    match crate::frame::face(app, WORKSPACE) {
+        Some(face) => {
+            WARM.lock().unwrap().clear();
+            if let Err(error) = face.eval(open_in_place(&origin, path, &target)) {
+                eprintln!("the workspace could not be told where to go ({error})");
+            }
+        }
+        None => {
+            let Ok(url) = target.parse::<Url>() else {
+                return;
+            };
+            let _ = build_workspace(app, url);
+        }
     }
 }
 
@@ -356,19 +349,19 @@ pub fn show_last_face(app: &AppHandle) {
 /// main window is a face, so it comes up in the workspace's place, as the tray's "This computer" brings it (2026-10-12:
 /// raised on its own, it stood beside the workspace). Shown by the reader's own doing, so it is the face in use from
 /// then.
-pub fn raise_window(app: &AppHandle, window: &Webview) {
+pub fn raise_window(app: &AppHandle, press: Press, window: &Webview) {
     if window.label() == HOME {
-        show_home(app);
+        show_home(app, press);
         return;
     }
-    raise(window);
+    raise(press, window);
 }
 
 /// In front of the reader, whatever it was doing: hidden, minimised, or under the window that asked. A face is drawn
 /// in the frame as well, since a frame raised over the other face would show the reader the wrong one.
-fn raise(page: &Webview) {
+fn raise(press: Press, page: &Webview) {
     if let Some(face) = crate::frame::face_label(page.label()) {
-        swap_in(page.app_handle(), face, Keyboard::Take);
+        swap_in(page.app_handle(), face, press);
         return;
     }
     let window = page.window();
@@ -383,14 +376,6 @@ fn raise(page: &Webview) {
 mod tests {
     use super::close::CONFIRM_CLOSE;
     use super::*;
-
-    /// A sign-in pressed on the main window's way to a sandbox comes back to that page, not to the folder's files.
-    #[test]
-    fn a_sign_in_asked_from_the_main_window_comes_back_to_its_folders_way_to_a_sandbox() {
-        assert_eq!(return_route(Some(HOME)), SANDBOX_SETUP_ROUTE);
-        assert_eq!(return_route(None), FILES_ROUTE);
-        assert_eq!(return_route(Some("files-gone")), FILES_ROUTE);
-    }
 
     /// A sandbox picked in a folder or document window opens the workspace in that window's place; picked in the main
     /// window, it is the usual swap of the two faces.

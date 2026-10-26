@@ -416,6 +416,7 @@ type Answer =
     | Promise<void>
     | Promise<string>
     | { memoryBytes: number; cpus: number }
+    | { readonly here: boolean; readonly hosted: boolean } | { readonly sandboxId: string }
     | {
           folder: string;
           text: string;
@@ -671,7 +672,11 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`machine_agents`, (machine) => (machine === `host` ? ENVIRONMENTS : [])],
     [`machine_report`, reportOf],
     [`take_pending_setup`, (machine) => (machine === `setup` ? { code: `dev`, name: `shop` } : null)],
-    [`take_pending_docker`, () => false],
+    // The app's process list (src/processes.ts): nothing running here, and every report or answer taken.
+    ...[`process_report`, `process_clear`, `process_act`].map((command): [string, (machine: Machine) => Answer] => [command, () => null]),
+    [`processes_list`, () => []],
+    [`new_sandbox_offers`, (machine) => ({ here: signedIn(machine), hosted: signedIn(machine) })],
+    [`new_sandbox_create`, () => ({ sandboxId: `sbx_dev` })],
     [`take_pending_recreate`, () => null],
     [`take_pending_sync`, () => null],
     [`take_pending_fix`, () => null],

@@ -1,4 +1,5 @@
 use super::close::quit_with_last_window;
+use super::present::{Asked, Press};
 use super::{raise, HOME};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -167,7 +168,7 @@ pub(super) fn forget_unsaved(label: &str) {
 /// it runs only if the page's script does, so a page that has died or hung never sends one, and the app asks in its
 /// place ([`ask_here`]).
 pub(super) fn ask_page(app: &AppHandle, window: &Webview, id: u64) {
-    raise(window);
+    raise(Press::by(Asked::Window), window);
     let label = window.label().to_string();
     let receipt = label.clone();
     if let Err(error) = window.eval_with_callback(CLOSE_REQUESTED, move |_| {
@@ -192,7 +193,7 @@ pub(super) fn ask_page(app: &AppHandle, window: &Webview, id: u64) {
 /// The page's question, asked by the app, over the window, for a page that never took it: "Close anyway" closes
 /// the window with its edits, "Cancel" keeps it, and the next close hands the question to the page again.
 pub(super) fn ask_here(app: &AppHandle, window: &Webview) {
-    raise(window);
+    raise(Press::by(Asked::Window), window);
     let label = window.label().to_string();
     let handle = app.clone();
     app.dialog()

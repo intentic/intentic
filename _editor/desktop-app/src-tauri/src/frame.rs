@@ -202,8 +202,13 @@ pub fn add_face(
 }
 
 /// Draw the face `label` in the frame and put the other out of sight, then the frame on screen, out of the taskbar,
-/// and with the keyboard when `focus`. The face, when there is one to show.
-pub fn show(app: &AppHandle, label: &'static str, focus: bool) -> Option<Webview> {
+/// and with the keyboard: a reader's press asked for it (windows/present.rs), and nothing else may. The face, when
+/// there is one to show.
+pub fn show(
+    app: &AppHandle,
+    label: &'static str,
+    _press: crate::windows::present::Press,
+) -> Option<Webview> {
     let frame = frame(app)?;
     let face = face(app, label)?;
     let others: Vec<Webview> = faces(app)
@@ -230,10 +235,8 @@ pub fn show(app: &AppHandle, label: &'static str, focus: bool) -> Option<Webview
         // nothing to a minimised one (2026-10-12).
         let _ = held.unminimize();
         let _ = held.show();
-        if focus {
-            let _ = held.set_focus();
-            let _ = shown_face.set_focus();
-        }
+        let _ = held.set_focus();
+        let _ = shown_face.set_focus();
     })?;
     crate::webview_sync::shown(&face);
     for each in faces(app) {

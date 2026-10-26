@@ -246,9 +246,6 @@ pub struct AppState {
     /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for This device to ask for the
     /// folder and run it. Same taken-not-read contract as the two above.
     pub pending_sync: Mutex<Option<SyncArgs>>,
-    /// This launch opened the app's own face because the engine was asleep (lib.rs), so this launch is the one
-    /// that hands over to the workspace once it wakes. In-process only: a launch is not a thing to remember.
-    pub pending_docker: Mutex<bool>,
     /// slug → display name, ours to remember: docker knows only container names, and the name the user typed
     /// into the SPA never reaches the machine any other way.
     names: Mutex<BTreeMap<String, String>>,
@@ -354,7 +351,6 @@ impl AppState {
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
             pending_sync: Mutex::new(None),
-            pending_docker: Mutex::new(false),
             names: Mutex::new(names),
             install_id: Mutex::new(None),
             ui_mode: Mutex::new(ui_mode),
@@ -819,7 +815,6 @@ mod tests {
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
             pending_sync: Mutex::new(None),
-            pending_docker: Mutex::new(false),
             names: Mutex::new(BTreeMap::new()),
             install_id: Mutex::new(None),
             // Read the way `load` reads it: the test below is about what survives a launch.

@@ -15,6 +15,7 @@ import { expectRestart } from "../../../../models/sandbox/live/sandboxRestart";
 import { doorsHolding, type MachineDoor } from "../../live/sandboxDoors";
 import { useDeviceRelays } from "../../live/useDeviceRelays";
 import { useT } from "@intentic/ui/i18n";
+import { finishOnHome } from "../../../../models/sandbox/finishOnHome";
 
 const t = useT();
 
@@ -194,12 +195,12 @@ const repair = async (): Promise<void> => {
                         />
                         <Button v-if="!busy" :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="confirming = false" />
                     </template>
-                    <!-- The same repair by hand, for the owner with no machine connected. Never a member's: /setup on a sandbox
-                         they do not own starts a new one on their own account (setupArrival.ts `rowToOpen`). -->
+                    <!-- The same repair by hand, for the owner with no machine connected: its setup finished again on Home. Never
+                         a member's, whose setup is not theirs to run. -->
                     <Button
-                        v-else-if="isOwner"
+                        v-else-if="isOwner && active"
                         :as="RouterLink"
-                        :to="{ path: `/setup`, query: { sandbox: active?.id } }"
+                        :to="finishOnHome(active.id)"
                         size="small"
                         tier="boring"
                         :label="t(`sandbox.containerHealthCard.openSetupScreen`)"

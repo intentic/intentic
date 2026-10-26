@@ -7,9 +7,11 @@ import { computed, type EffectScope, effectScope, ref } from "vue";
 import { listedDevice } from "../../../testing/listedDevice";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
 import { forgetOperations } from "../../../workbench/operations/operations";
+import type { AttachOutcome } from "../setupAttach";
 
-// Adding a sandbox from the dialog: it offers only what starts in one press (this computer in the app, a connected
-// machine, a machine of ours with room), makes the row only on the press, hands it where it was picked with a fresh
+// Adding a sandbox from the dialog: it offers what starts in one press (this computer in the app, a connected machine, a
+// machine of ours with room) and, under "More ways", a command for a server and an address already answering; makes the
+// row only on the press (an address's only once it let this account in), hands it where it was picked with a fresh
 // code, deletes a row whose start was refused before reaching a machine, and keeps one a machine already has.
 
 const relays = ref<{ sandboxId: string; devices: Device[] }[]>([]);
@@ -20,7 +22,7 @@ const manageDeviceSandbox = jest.fn(async (..._args: unknown[]) => `Set up.`);
 jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ manageDeviceSandbox }));
 jest.mock(`../../../app/analytics`, () => ({ track: jest.fn() }));
 
-const { HOSTED, nameProblem, pickOf, useAddSandbox } = await import("./useAddSandbox");
+const { ATTACH, COMMAND, HOSTED, nameProblem, pickOf, useAddSandbox } = await import("./useAddSandbox");
 const { HERE } = await import("../flow/useSetupOnMachine");
 
 interface World {
@@ -31,6 +33,7 @@ interface World {
     readonly machines?: readonly Device[];
     readonly setupCode?: Error;
     readonly provision?: Error;
+    readonly probe?: AttachOutcome;
 }
 
 const scopes: EffectScope[] = [];
@@ -60,6 +63,8 @@ const stage = (world: World = {}) => {
     };
     const openDesktopLink = jest.fn((_link: string) => undefined);
     const enter = jest.fn(async () => undefined);
+    const attach = jest.fn(async (_id: string, _url: string) => undefined);
+    const probe = jest.fn(async (): Promise<AttachOutcome> => world.probe ?? { kind: `ok` });
     const scope = effectScope();
     scopes.push(scope);
     const add = scope.run(() =>
@@ -72,6 +77,7 @@ const stage = (world: World = {}) => {
                 hostedProvision,
                 hostedRelease: jest.fn(),
                 refresh: jest.fn(async () => sandboxes.value),
+                attach,
             }),
             platform: unstubbed<Parameters<typeof useAddSandbox>[0][`platform`]>(`platform`, platform),
             inApp: () => world.inApp ?? false,
@@ -82,9 +88,11 @@ const stage = (world: World = {}) => {
             openDesktopLink,
             warmCredential: jest.fn(async () => undefined),
             enter,
+            getIdToken: jest.fn(async () => `id-token`),
+            probe,
         }),
     )!;
-    return { add, create, remove, hostedProvision, platform, openDesktopLink, enter, sandboxes };
+    return { add, create, remove, hostedProvision, platform, openDesktopLink, enter, sandboxes, attach, probe };
 };
 
 const rog = listedDevice({ key: `rog`, label: `rog`, hostId: `rog`, online: true, sandboxes: [] });
@@ -109,10 +117,33 @@ describe(`what it offers`, () => {
         });
     });
 
-    it(`offers no this computer in a browser, and no machine of ours once the account has none left`, async () => {
+    it(`offers no this computer in a browser, and no machine of ours once the account has none left, saying why`, async () => {
         const { add } = stage({ machines: [rog], hosted: { enabled: true, remaining: 0 } });
         await add.read();
-        expect(add.options.value.map((option) => option.value)).toEqual([`rog`]);
+        expect({ offered: add.options.value.map((option) => option.value), why: add.hostedProblem.value }).toEqual({ offered: [`rog`], why: `occupied` });
+    });
+
+    it(`says a machine of ours waits on a Google sign-in rather than offering one that would be refused`, async () => {
+        const { add } = stage({ hosted: { enabled: true, remaining: 1, needsGoogle: true } });
+        await add.read();
+        expect({ offered: add.options.value.map((option) => option.value), why: add.hostedProblem.value }).toEqual({ offered: [], why: `google` });
+    });
+
+    it(`offers more ways beside them: a command where the platform mints addresses, and an address always`, async () => {
+        const minted = stage();
+        await minted.add.read();
+        const none = stage({ address: { enabled: false } });
+        await none.add.read();
+        expect([minted.add.moreOptions.value.map((option) => option.value), none.add.moreOptions.value.map((option) => option.value)]).toEqual([
+            [COMMAND, ATTACH],
+            [ATTACH],
+        ]);
+    });
+
+    it(`picks a more way when nothing starts in one press`, async () => {
+        const { add } = stage({ hosted: { enabled: false, remaining: 0 } });
+        await add.read();
+        expect(add.pick.value).toBe(COMMAND);
     });
 
     it(`offers nothing that needs a code where the platform mints no addresses`, async () => {
@@ -258,6 +289,90 @@ describe(`finishing a setup left unfinished`, () => {
             removed: 0,
             error: true,
             created: `old`,
+        });
+    });
+});
+
+describe(`a command for a server`, () => {
+    it(`makes the row under the typed name, mints its code and shows the command, handing nothing to the app`, async () => {
+        const { add, create, openDesktopLink } = stage({ inApp: true });
+        await add.read();
+        add.name.value = `rack`;
+        add.pick.value = COMMAND;
+        await add.create();
+        expect({
+            made: create.mock.calls.map(([name]) => name),
+            started: add.started.value?.kind,
+            ready: add.command.commandReady.value,
+            command: add.command.step.selectedCommand.value.includes(`code-new`),
+            handed: openDesktopLink.mock.calls.length,
+        }).toEqual({ made: [`rack`], started: `command`, ready: true, command: true, handed: 0 });
+    });
+});
+
+describe(`an address already answering`, () => {
+    it(`probes it first and makes the row only once the sandbox there let this account in`, async () => {
+        const { add, create, attach, enter } = stage();
+        await add.read();
+        add.name.value = `lab`;
+        add.pick.value = ATTACH;
+        add.attach.domain.value = `lab.example.com`;
+        await add.create();
+        expect({
+            made: create.mock.calls.map(([name]) => name),
+            recorded: attach.mock.calls.map(([id, url]) => [id, url]),
+            started: add.started.value?.kind,
+            entered: enter.mock.calls.length,
+        }).toEqual({ made: [`lab`], recorded: [[`new`, `https://lab.example.com`]], started: `attach`, entered: 1 });
+    });
+
+    it(`makes nothing for one that does not answer, and says so`, async () => {
+        const { add, create } = stage({ probe: { kind: `unreachable` } });
+        await add.read();
+        add.pick.value = ATTACH;
+        add.attach.domain.value = `nowhere.example.com`;
+        await add.create();
+        expect({ made: create.mock.calls.length, started: add.started.value, outcome: add.attach.outcome.value?.kind }).toEqual({
+            made: 0,
+            started: undefined,
+            outcome: `unreachable`,
+        });
+    });
+
+    it(`cannot be pressed without an address`, async () => {
+        const { add } = stage();
+        await add.read();
+        add.pick.value = ATTACH;
+        expect(add.blocked.value).toBe(true);
+    });
+});
+
+describe(`finishing a setup left unfinished, anywhere`, () => {
+    const unfinished = sandboxSummary({ id: `old`, name: `targowisko`, token: `tok`, lastSeenAt: null });
+
+    it(`shows its command again in a browser`, async () => {
+        const { add, openDesktopLink } = stage({ rows: [unfinished] });
+        await add.resume(unfinished);
+        expect({ started: add.started.value?.kind, handed: openDesktopLink.mock.calls.length, created: add.created.value?.id }).toEqual({
+            started: `command`,
+            handed: 0,
+            created: `old`,
+        });
+    });
+
+    it(`waits on the machine of ours already on its row, starting no other`, async () => {
+        const hostedRow = sandboxSummary({ id: `old`, name: `targowisko`, token: `tok`, lastSeenAt: null, hosted: { region: `iad`, warm: true } });
+        const { add, hostedProvision } = stage({ rows: [hostedRow] });
+        await add.resume(hostedRow);
+        expect({ started: add.started.value?.kind, provisioned: hostedProvision.mock.calls.length }).toEqual({ started: `hosted`, provisioned: 0 });
+    });
+
+    it(`starts a machine of ours on it where the address asked for one`, async () => {
+        const { add, hostedProvision } = stage({ inApp: true, rows: [unfinished] });
+        await add.resume(unfinished, `hosted`);
+        expect({ started: add.started.value?.kind, provisioned: hostedProvision.mock.calls.map(([id]) => id) }).toEqual({
+            started: `hosted`,
+            provisioned: [`old`],
         });
     });
 });

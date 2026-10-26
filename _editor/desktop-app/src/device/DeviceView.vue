@@ -18,13 +18,14 @@ import {
 import { useT } from "@intentic/ui/i18n";
 import { usePoll } from "@intentic/ui/async";
 import { computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import DockerCard from "../components/DockerCard.vue";
 import EngineCard from "../components/EngineCard.vue";
 import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
 import { intoWorkspace } from "../account";
-import { openUrl } from "../desktop";
+import { openUrl, signIn } from "../desktop";
 import { folderSetups } from "./folderSetups";
 import SystemCard from "./intenticOs/SystemCard.vue";
 import { showOsLog } from "./intenticOs/system";
@@ -49,9 +50,8 @@ import { agentSettled, openable, openSandbox, useMastheadMenu } from "./face";
 // the workspace's. Between the masthead and the list sits what only the app on this computer can do: the recovery
 // panel's fix and a setup handed over from the workspace, which lead for as long as they are here, this PC's own setup
 // (pcSetup/PcSetupCard.vue), and the Docker engine the sandboxes run in. A folder's own sandbox being made is said in
-// that folder's window, not here. A computer that runs no sandbox is told what one is for and offered the way to one,
-// and nothing about Docker: somebody here for their files has no business with it. Until 2026-10-20 this page was "This computer", headed and laid out on its own, and had
-// drifted from the workspace's page about the very same machine.
+// that folder's window, not here. A computer that runs no sandbox is told what one is for and offered one, made here
+// (2026-10-26), and nothing about Docker. Until 2026-10-20 this page was "This computer", drifted from the workspace's.
 
 const t = useT();
 const device = useDevice();
@@ -191,9 +191,9 @@ const sandboxName = (slug: string): string => sandboxes.value.find((sandbox) => 
 
 // Someone signed in now, as the roster says (roster.ts). Not `accountSeen`: the workspace merely shown sets that.
 const signedIn = computed(() => rosterSignedIn.value === true);
+const router = useRouter();
 
-// The masthead's errands, on its own spine as the workspace's page hangs them: what the agent wants, the answer to the
-// last Restart, an agent that did not answer, and the other sides of this computer that keep sandboxes of their own.
+// The masthead's errands as the workspace hangs them: the agent's wants, Restart's answer, other sides' sandboxes.
 const agentNotes = computed(() => (agentPanel.value === undefined ? [] : agentLines(agentPanel.value)));
 const mastheadErrands = computed(
     () =>
@@ -647,7 +647,7 @@ onMounted(() => {
                     size="small"
                     :label="signedIn ? t(`desktop.device.setOneUp`) : t(`desktop.device.signInToSetUp`)"
                     class="ml-12"
-                    @click="void intoWorkspace(`/setup`)"
+                    @click="void (signedIn ? router.push(`/sandbox-new`) : signIn())"
                 >
                     <template #icon><Icon :name="signedIn ? `plus` : `sign-in`" /></template>
                 </Button>

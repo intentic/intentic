@@ -184,14 +184,6 @@ pub fn hosts_sandboxes(state: State<'_, AppState>) -> bool {
     state.hosts_sandboxes()
 }
 
-/// Taken, not read: the launch that opened this face because the engine was asleep is the one launch that
-/// should hand over to the workspace on its own once the engine answers. A window opened from the tray was
-/// asked for, and must stay where the user put it.
-#[tauri::command]
-pub fn take_pending_docker(state: State<'_, AppState>) -> bool {
-    std::mem::take(&mut *state.pending_docker.lock().unwrap())
-}
-
 /* TAKEN, NOT READ — the same rule [`take_pending_recreate`] has always had, and for a sharper reason here. */
 #[tauri::command]
 pub fn take_pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
@@ -1104,7 +1096,14 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 /// to the event loop like any other. The answer arrives once the workspace is up, which is what the press waits on.
 #[tauri::command]
 pub async fn workspace_open(app: AppHandle, window: tauri::Webview, path: Option<String>) {
-    crate::windows::show_workspace_from(&app, path.as_deref(), &window);
+    // A local window's own press that names the workspace: a sandbox on its switcher, Back to the workspace, Devices'
+    // All devices, Settings' way to what only the workspace does. Nothing the app runs calls this (windows/present.rs).
+    crate::windows::show_workspace_from(
+        &app,
+        crate::windows::present::Press::by(crate::windows::present::Asked::Page),
+        path.as_deref(),
+        &window,
+    );
 }
 
 /// What the local shell and This device need to know about this install to decide what they offer: whether there is
@@ -1128,15 +1127,6 @@ pub fn home_facts(state: State<'_, AppState>) -> HomeFacts {
         hosts_sandboxes: state.hosts_sandboxes(),
         home_folder: state.home_folder().display().to_string(),
     }
-}
-
-/// Ask the OS to point at the main window, brought back to the front at This device first — a stopped setup that
-/// nobody is looking at is a stopped setup nobody finds out about. `handed_over`: the run is a setup handed over from
-/// the workspace, which the workspace may be drawing itself, and then only the reader's eye is asked for
-/// (windows/setup.rs `alert_for`).
-#[tauri::command]
-pub fn setup_alert(app: AppHandle, handed_over: Option<bool>) {
-    crate::windows::setup::alert_setup(&app, handed_over.unwrap_or(false));
 }
 
 /* WHERE THE INSTALL HAS GOT TO, as This device draws it (src/device/useDevice.ts `progressShown`). The web's

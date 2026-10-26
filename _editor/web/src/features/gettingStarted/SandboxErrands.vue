@@ -10,6 +10,7 @@ import { nextTick } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import type { SandboxAttentionItem } from "../sandbox/overview/sandboxAttention";
 import { useSandboxErrands } from "./useSandboxErrands";
+import { finishOnHome } from "../../models/sandbox/finishOnHome";
 
 const t = useT();
 const router = useRouter();
@@ -46,8 +47,8 @@ const followRow = async (event: MouseEvent, to: string): Promise<void> => {
     target?.querySelector<HTMLElement>(`button:not([disabled])`)?.focus({ preventScroll: true });
 };
 
-// Resumes that row's setup rather than offering a blank create form.
-const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sandbox: option.id } });
+// Finishes that row's setup on Home, in its tile and page, rather than offering a blank create form.
+const resumeSetup = (option: SandboxSummary) => finishOnHome(option.id);
 
 </script>
 

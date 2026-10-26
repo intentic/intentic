@@ -354,8 +354,8 @@ describe(`a sandbox taken to a machine of ours`, () => {
         expect(reports().map((said) => said.state).slice(-2)).toEqual([`stopped`, `closed`]);
         expect(lastReport()).toMatchObject({ state: `closed`, name: `work` });
         expect(setup.setupMode.value).toBe(false);
-        // The reader is watching the machine of ours start: This device is not swapped in over that page.
-        expect(asked(`setup_alert`)).toBe(0);
+        // The reader is watching the machine of ours start: nothing is put in front of that page.
+        expect(asked(`workspace_open`)).toBe(0);
     });
 
     it(`does nothing for another sandbox, nor with no install running`, async () => {
@@ -395,15 +395,16 @@ describe(`a sandbox taken to a machine of ours`, () => {
         pc.check.value = check(`ready`);
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(codesRun()).toEqual([]);
-        expect(asked(`setup_alert`)).toBe(0);
+        expect(asked(`workspace_open`)).toBe(0);
     });
 
-    it(`leaves the card's own Stop as it was: said to be the card's, and This device brought back with the run`, async () => {
+    // A run that stops is its process's news, on both faces' rails: nothing is brought forward for it (2026-10-26).
+    it(`leaves the card's own Stop as it was: said to be the card's, and nothing put in front of the reader for it`, async () => {
         const { setup, run } = await pulling();
         await setup.stopSetup();
         await run;
         expect(told(`desktop_install_stopped`)).toEqual([{ percent: expect.any(Number), reason: `card` }]);
         expect(told(`desktop_install_finished`)[0]).toMatchObject({ stopped: `card` });
-        expect(asked(`setup_alert`)).toBe(1);
+        expect(asked(`workspace_open`)).toBe(0);
     });
 });

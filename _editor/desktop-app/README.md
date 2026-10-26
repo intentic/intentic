@@ -40,6 +40,37 @@ flowchart LR
   switch swapped the two in one place. The first switch after a launch built the second window on the spot and showed
   it before its page had drawn, so the reader saw their window close and an empty one open where it had been; every
   later switch still made and dropped a taskbar button and played Windows' open and close animations._
+- **Only a press moves the reader** (2026-10-26, `src-tauri/src/windows/present.rs`). Nothing the app or a page does
+  on its own puts a face in the frame, takes a face to another of its screens, or brings the frame or a window forward:
+  not a sign-in coming back, this PC's own setup, a sandbox's setup, a folder's, a Docker start, a recreate, a fix, a
+  sync, a repair, a first task. Every function that does any of that (`swap_in`, `show_*`, `raise_window`,
+  `local.rs` `open_home_later`, `frame::show`) takes a `Press`, which says who pressed: the tray's rows, a launch, a
+  second launch, a page's own press that names where it goes (This computer, Back to the workspace, Manage on this
+  computer, a process's Open), a notification, the shell's keys, a window opened again. A face is remembered as the
+  one in use only when a press draws it. The modules that run processes are held to it by a test that reads their
+  source (`present.rs` `a_process_never_moves_the_reader`). _(Until 2026-10-26) The app swapped Devices in over the
+  workspace for a setup handed over, a sign-in begun on a folder, a run that stopped or asked something, a parked
+  setup or a sleeping engine at launch, a recreate, a fix and a sync; and the workspace in for a sign-in's return, a
+  finished setup, a Docker that woke, a folder's first task. A reader who signed in on Home was taken off it to a card
+  about preparing their PC._
+- **One list of processes, drawn in both faces** (2026-10-26, `src-tauri/src/processes.rs`, `src/processes.ts`; the
+  web's `processReport.ts` holds the shape and its rules). Every run on this computer or for it is one report in one
+  list: what it is (`kind`, an `id` of `<kind>:<what>`), how it stands (`running`, `waiting` and on what, `failed` and
+  why, `stopped`, `done`), how far, what it asks of the reader (`needs`), and what can be done about it (`actions`). The
+  workspace hears the whole list as the `intentic-processes` event (again every few seconds while anything runs, and at
+  once when its page says `intentic://process?hello=1`); a local window by `desktop://processes` and `processes_list`.
+  Both draw each process as a tile in their own rail and a page in their own place, so the reader follows and answers
+  it where they are. Writers: the main window's page for the runs it drives (`process_report`: a setup, this PC's own,
+  a Docker start, a sync, a fix, a recreate, a move between engines), the app itself for its own (`auth.rs` a sign-in
+  waiting in the browser, `folder_setup.rs` each folder on its way, `first_task.rs`, Repair), and the workspace's page
+  for the runs only it holds (`intentic://process?report=…|clear=…`: a machine of ours, a connected machine), which
+  This computer draws too. An answer (`intentic://process-act?id=…&act=…[&need=…]` from the workspace, `process_act`
+  from a local window) goes to the run's owner: the workspace's page by `intentic-process-act`, the app for its own,
+  the main window's page by `desktop://process-act`. An Open on a finished run is the reader's press, the one press made
+  there. A run that starts asking something asks for the reader's eye and never moves them (`attend`): nothing while
+  they look at the app, the taskbar's flash while it is on screen behind something, the system's notification while it
+  is not on screen, whose press opens that process's page in the face last used (`/home?process=<id>` in the
+  workspace, `/process/<id>` in a local window).
 - **No internet: this computer's own sandboxes** (2026-10-16, `src-tauri/src/machine_face.rs`, `local/sandbox.ts`).
   When the workspace's address does not answer, the workspace window shows the sandbox face instead of WebKitGTK's
   error page: the same editor built into this bundle (`files/sandbox`, `dist/files/sandbox.html`), whole (every route
@@ -88,7 +119,9 @@ flowchart LR
   given its folder's own sandbox, and opened in the workspace with `?task=` once the folder is in; the workspace answers
   on `intentic://first-task?do=sent|failed&id=…`. "Ask about this" while no sandbox can answer leaves a draft of one
   (`first_task.rs` `prefill_from_ask`: announced on `desktop://first-task-draft`, and kept in memory for a main window
-  still being built, which takes it with `first_task_take_draft`) and opens Devices on it. Settings open in the window itself (`#/settings`), and
+  still being built, which takes it with `first_task_take_draft`), a process on both faces' rails whose Open is the way to
+  Devices' card. A task whose folder is in is a process too, ready for the reader's Open, which hands it to the
+  workspace; nothing opens by itself (2026-10-26). Settings open in the window itself (`#/settings`), and
   signing out leaves it on its folder. The sandboxes are what the workspace last told the app, and the account what the
   platform last answered (below): the workspace's switcher hands both over on `intentic://roster` whenever either
   changes, a sign-out empties them, and the app keeps them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
@@ -152,7 +185,9 @@ flowchart LR
   (`src/device/useDevice.ts`) rather than the page's, so a setup keeps running and reporting while the reader is on
   their files, and the rail's tile carries it (`src/device/badge.ts`: the running mark for a setup, a folder's sandbox
   being made or a Docker start, a warning mark for one that stopped for the reader, a dot for an update). A computer that runs no sandbox is told what
-  one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
+  one is for and offered one, made in this window (its "Set one up" opens the local shell's `/sandbox-new`, which asks
+  `new_sandbox_offers` and `new_sandbox_create`: this computer, or a machine of ours followed until it reports in,
+  `src-tauri/src/new_sandbox.rs`; until 2026-10-26 it opened the workspace's setup page), and nothing about Docker. Only the main window takes the work the app parks
   for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
   verbs. The machine is read when the page opens and every 30 seconds while it is on screen. At its foot stands which
   build of the app this is ("Intentic 0.x.y", `src/device/AppBuild.vue`), with a copy of the app's version, its OS and
@@ -391,11 +426,13 @@ flowchart LR
 - **The last face.** `last-face.json` (`home` or `workspace`) is the face the user was last seen choosing: every
   showing of the workspace writes `workspace`, and the main window shown on purpose (a launch into it, the tray's "This
   computer", the workspace's way back) writes `home`. An install without the file reads `workspace` if it ever showed the
-  workspace (`workspace-seen.json`) and `home` otherwise. A launch opens Devices for a setup parked across a Windows
-  restart, then for a machine that hosts a sandbox and has no Docker engine listening (handing over to the workspace
-  once the engine wakes, when the workspace is the last face), and otherwise the last face (`opening` in
-  `src-tauri/src/lib.rs`). A launch at sign-in (`--background`, above) opens only the parked setup, if any. A bare
-  second launch opens the last face too. `home_facts` hands the shell `accountSeen` (a
+  workspace (`workspace-seen.json`) and `home` otherwise. A launch opens the last face, whatever else is going on
+  (`opening` in `src-tauri/src/lib.rs`): a setup parked across a Windows restart and an engine asleep under a sandbox of
+  this computer are the main window's work, built out of sight for it when the launch opens the workspace, and are
+  processes on both faces' rails (`work_for_main_window`). A launch at sign-in (`--background`, above) shows nothing;
+  a parked setup it resumes is a process like any other, and so is the resume entry's launch finding the app already up.
+  A bare second launch opens the last face too. _(Until 2026-10-26) A parked setup or a sleeping engine opened Devices
+  instead, and an engine that woke handed over to the workspace by itself._ `home_facts` hands the shell `accountSeen` (a
   sign-in, or the workspace ever shown), `lastFace`, `hostsSandboxes` and `homeFolder`.
 - **Local windows.** The main window, and a folder or a document opened from the tray, the folder menu, a
   double-click ("Open with Intentic" on documents, folders, the space inside one and a drive root) or a second launch
@@ -550,13 +587,14 @@ flowchart LR
   up without asking the release channel and every WSL side first (the machine agent's `install.ts` `meetsFloor`).
 
   **Ready means Open shows a drawn page** (2026-10-22). Once the sandbox answers end to end (its `connecting-machine`
-  phase), the app puts the workspace's page up out of sight at the folder's address (`windows.rs` `warm_workspace`):
-  built there when the frame has no workspace, routed there when it has one nobody is looking at, and left alone when
-  the reader is looking at it. The folder stays `copying` with `status: opening` until that page says it shows the
-  sandbox, connected and drawn (`intentic://window?do=shown&sandbox=<id>`, the web's `SandboxGate.vue`), or for
-  `WARM_FOR` (25 s) after the sandbox was made, so a page older than the verb never holds a folder for good. Open then
-  swaps that page in without telling it anything, and skips `ic sandbox list` for it. Before, Open built the page from
-  nothing after the folder was called ready, and the reader watched seconds of the workspace loading.
+  phase), the app puts the workspace's page up out of sight (`windows/warmth.rs` `warm_workspace`), built at Home when
+  the frame has none, so Open routes a page already drawn. A workspace already in the frame is never sent anywhere,
+  on screen or not: a page the reader left is theirs to come back to where they left it (2026-10-26). The folder stays
+  `copying` with `status: opening` until a page says it shows the sandbox (`intentic://window?do=shown&sandbox=<id>`,
+  the web's `SandboxGate.vue`), and is ready at once otherwise, since no page was put up for it. Nothing opens it: its
+  tile on both faces' rails says it is ready, and the reader's Open goes there. _(2026-10-22 to 2026-10-26) The page out
+  of sight was routed to the folder's sandbox ahead of its Open, and a reader who came back to it by the tray found it
+  moved._
 
   _(2026-10-21) **One sandbox per computer went.** From 2026-10-05 the app made one sandbox for the whole computer after
   sign-in ("Local", `machine_sandbox.rs`), with `SYNC_PROJECTS_HOST=1` and no folder of its own, and attached every
@@ -743,16 +781,18 @@ every link and drops what an outside sender may not ask for. The editor builds t
 
 | Link | Accepted from | Does |
 | --- | --- | --- |
-| `setup?code=…[&sandbox=…][&name=…][&syncDir=…][&stay=1]` | anywhere; outside asks first | Devices, in the main window, runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. `stay=1`, also only from the app, is the workspace's Home drawing the run itself: the main window runs it out of sight (built hidden when it is not up yet) rather than swapping in over the page, and stays out of sight when the run waits on the reader or stops: the window asks for attention, Home's tile wears the mark, and its page's button opens the card on the reader's press (`windows/links.rs` `park_setup`, `windows/setup.rs` `alert_for`). A run parked behind this PC's own setup tells the page `consent` while that setup waits on the reader's press, and `pcSetup` only while it runs by itself (`pcSetup/pcGate.ts` `parkedWaitingFor`). |
+| `setup?code=…[&sandbox=…][&name=…][&syncDir=…][&stay=1]` | anywhere; outside asks first | The main window runs that sandbox's setup here, out of sight (built hidden when it is not up yet): the run is `sandbox-setup:<id>` on both faces' rails, answered there (`windows/links.rs` `park_setup`). `cfToken`, `platform` and `project` count only from the app. `stay=1` is read and changes nothing since 2026-10-26: every setup stays out of sight. A run parked behind this PC's own setup tells the page `consent` while that setup waits on the reader's press, and `pcSetup` only while it runs by itself (`pcSetup/pcGate.ts` `parkedWaitingFor`). |
 | `signin[?switch=1]` | anywhere | Opens platform sign-in in the default browser; `switch` asks for the account chooser. |
-| `auth?handoff=…&state=…[&profile=…]` | anywhere | Completes a sign-in this app started and opens the workspace at `/desktop-auth/complete`. A sign-in pressed in a local window carries `back=agent` on that path, and the page sends `launcher?to=agent` once it is redeemed and before it opens a sandbox of its own, so a folder's "Work on this with an agent" ends on that folder rather than on the account's sandbox list. The app remembers which local window pressed it, for the way back. |
-| `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync from Devices; the folder is picked in a system dialog. |
+| `auth?handoff=…&state=…[&profile=…]` | anywhere | Completes a sign-in this app started: the workspace's page is told `/desktop-auth/complete` where it stands, in place when it is up, built out of sight when it is not, and nothing is put in front of the reader (`windows.rs` `tell_workspace`). A sign-in pressed in a local window carries `back=agent` on that path, and the page sends `launcher?to=agent` once it is redeemed. While it waits in the browser it is `sign-in:app` on both faces' rails. |
+| `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync: the folder is picked in a system dialog over the window the reader pressed in, and the run is `sync:enrollment` on both faces' rails. |
 | `sync?url=…&pair=…&project=<name>[&sandbox=<id>]` | app windows | A hosted sandbox's project: syncs the parked folder with `/work/<name>` and remembers it with that sandbox. |
-| `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image, from Devices. |
-| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on Devices; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
+| `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image, run by the main window out of sight as `recreate:<slug>`. |
+| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here, out of sight, as `fix:<slug>` (a check `ic` can close on a yes is one of its needs); `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `setup-stop?sandbox=<id>` | app windows | Stops the setup Devices runs for that sandbox, as its card's Stop does, and shows nothing: the setup page sends it when the reader takes a slow download's offer of a machine of ours, which takes over the sandbox's address. A setup for another sandbox, or none running, is left alone; an id that is not a plain token drops the link. |
-| `launcher[?to=files\|agent]` | app windows | Brings the main window back in the workspace's place: at Devices (a setup's way back to its run, a sandbox's restart), at its folder with `to=files` (the sandbox switcher's "This computer"), or with `to=agent` at the folder window the sign-in was pressed in, whose own sandbox's setup starts by itself once the workspace says who signed in, its card saying how far or what it waits for. An app that predates a `to` reads the bare link, which is Devices. |
+| `launcher[?to=files\|agent]` | app windows | The reader's press that names This computer: the main window in the workspace's place, at Devices, or at its folder with `to=files` (the sandbox switcher's "This computer"). `to=agent` moves nobody: it is the page saying a sign-in begun in a local window is redeemed, so a folder waiting on it goes on (2026-10-26; until then it brought that window forward on its folder's way to a sandbox). An app that predates a `to` reads the bare link, which is Devices. |
+| `process?report=<JSON>\|clear=<id>\|hello=1` | the workspace window | A run only the workspace's page holds (a machine of ours, a connected machine), kept as the workspace's so This computer draws it too; that run gone; the page starting to listen, answered with the whole list at once (`processes.rs`). A report out of shape drops the link; one under the id of a run of the app's own is ignored. |
+| `process-act?id=…&act=…[&need=…]` | the workspace window | The reader's answer to a run, given on the page it is drawn on, sent to the run's owner (`processes.rs` `act`). An id, act or need out of shape drops the link. |
 | `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
 | `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
@@ -797,7 +837,9 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 A local window also hears the app's Tauri events, which Devices listens on: `desktop://run` (a script run's
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://setup-stop` (a sandbox id),
 `desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, `desktop://folder-setups` (every folder's
-own sandbox's setup, the whole list on every change), `desktop://roster` (who is signed in), and on Intentic OS `desktop://os-run` (a change to the
+own sandbox's setup, the whole list on every change), `desktop://roster` (who is signed in), `desktop://processes` (the
+whole process list on every change) and, in the main window, `desktop://process-act` (`{ id, act, need }`, an answer to
+one of its runs), and on Intentic OS `desktop://os-run` (a change to the
 system's `started`, each `line` and its `exit`), `desktop://os-drives` (the drives plugged in, `{ drives, fresh }`,
 whenever that changes) and `desktop://os-drive-import` (a copy off a drive: `started`, `progress` with `bytes` and
 `total`, and its `exit`).

@@ -212,9 +212,9 @@ const moveTo = async (sandboxId: string, tier: string): Promise<void> => {
 // A plan with nothing under it: the one state in which cancelling is the advice rather than the door.
 const planWithoutMachine = computed(() => paying.value && hosted.value !== undefined && machines.value.length === 0);
 
-// Every door out of this page wants the platform's machine, never this computer's: without the rung named, setup in
-// the app installs one here instead (setupArrival.ts), which is the opposite of what a page about hosting offers.
-const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
+// Every door out of this page wants the platform's machine, never this computer's: Home's new sandbox, with a machine
+// of ours picked, which is what a page about hosting offers.
+const HOSTED_SETUP = { path: `/home`, query: { add: `sandbox`, machine: `hosted` } } as const;
 </script>
 
 <template>

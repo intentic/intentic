@@ -19,6 +19,8 @@ pub(super) const BROWSER_ARGS: &str = concat!(
 /// Advertises desktop/window capabilities without exposing IPC; handoffs use intercepted intentic:// links.
 /// installId is a non-secret analytics id; update seeds pages loaded after the download event. frameless requests page-drawn controls.
 /// Gate projectSync and sandboxWakes links on build support to avoid unsafe older behavior; notices enables native notifications/badges.
+/// processes says this build keeps one list of its processes for both faces and takes answers to them from the page
+/// (processes.rs): the page listens for it and answers a run where it is drawn, never sending the reader to This computer.
 /// loopbackUngated describes browser behavior, not permission. wake is true only for the microphone-enabled workspace window.
 /// machineFace is true only for the workspace window, on a build that ships the face (machine_face.rs `FACE_BUILT`) and a
 /// computer that hosts sandboxes: the hosted page then offers this computer's sandboxes when it cannot reach the platform,
@@ -34,7 +36,7 @@ pub(super) fn workspace_init_script(
         None => "null".to_string(),
     };
     format!(
-        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, machineFace: {machine_face} }}); }} }})();",
+        "{}(function () {{ if (!window.__INTENTIC_DESKTOP__) {{ window.__INTENTIC_DESKTOP__ = Object.freeze({{ version: \"{}\", installId: \"{install_id}\", update: {update}, loopbackUngated: true, frameless: true, projectSync: true, notices: true, nativeCopy: {}, wake: {wake}, sandboxWakes: true, processes: true, machineFace: {machine_face} }}); }} }})();",
         launch_id_script(),
         crate::commands::VERSION,
         // Only where the page's message reaches drop_copy.rs: WebView2 is what says where a dropped file is.
@@ -186,6 +188,14 @@ mod tests {
     fn the_page_is_told_this_build_wakes_a_sleeping_sandbox_at_once() {
         let script = workspace_init_script("install-1", None, false, false);
         assert!(script.contains("sandboxWakes: true"), "{script}");
+    }
+
+    /// The page follows and answers the app's processes only where the app says it keeps them (processes.rs): an older
+    /// one would drop its hello and its answers, and the page keeps sending the reader to This computer's card instead.
+    #[test]
+    fn the_page_is_told_this_build_keeps_its_processes_for_it() {
+        let script = workspace_init_script("install-1", None, false, false);
+        assert!(script.contains("processes: true"), "{script}");
     }
 
     /// The page listens for its wake word in the app only where the app gave it a microphone and a tray to say so:

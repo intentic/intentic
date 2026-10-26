@@ -13,6 +13,10 @@ import AccountPanel from "../shell/AccountPanel.vue";
 import SkipToContent from "../shell/SkipToContent.vue";
 import { railFrame } from "../shell/rail/railFrame";
 import RailTile from "../shell/rail/RailTile.vue";
+import { useFaceProcesses } from "../models/processes/faceProcesses";
+import { LOCAL_PROCESS_PATH, processOnThisComputer } from "../models/processes/processAddress";
+import { type ProcessTile, processTilesOf } from "../models/processes/processTiles";
+import ProcessTiles from "../parts/processes/ProcessTiles.vue";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
@@ -92,6 +96,22 @@ const tiles = computed<readonly Tile[]>(() => [
     ...(repairTile.value === undefined ? [] : [repairTile.value]),
     ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),
 ]);
+// THE PROCESSES UNDER WAY, the same group Home's rail wears (parts/processes/ProcessTiles.vue): this PC's setup, a sandbox's,
+// a sign-in, Docker, another folder's sandbox, a machine of ours started from Home. Each opens its page here, in this window
+// (local/process/LocalProcess.vue), and is answered here. This folder's own way to a sandbox and Repair keep the tiles above,
+// whose pages say more than the shared one.
+const processes = useFaceProcesses();
+const processTiles = computed(() =>
+    processTilesOf(processes.list.value, (report) => report.kind === `repair` || (report.kind === `folder-setup` && report.folder === localFace()?.path)),
+);
+const processShown = computed(() =>
+    route.path.startsWith(`${LOCAL_PROCESS_PATH}/`) ? decodeURIComponent(route.path.slice(LOCAL_PROCESS_PATH.length + 1)) : undefined,
+);
+const openProcess = (tile: ProcessTile): void => {
+    if (processShown.value !== tile.id) {
+        void router.push(processOnThisComputer(tile.id));
+    }
+};
 const tileLabel = (tile: Tile): string => [tile.label, tile.badge?.tooltip, tile.badge?.running].filter((part) => part !== undefined && part !== ``).join(` · `);
 
 // THE KEYBOARD, the workspace's own: one dispatcher over the one command registry (useKeybindings.ts), so every chord
@@ -172,6 +192,9 @@ onUnmounted(() => stopTaking?.());
                     :active="isActive(tile.to)"
                 />
             </div>
+
+            <!-- What runs meanwhile, the group Home's rail wears too; each opens its page in this window. -->
+            <ProcessTiles :tiles="processTiles" :selected="processShown" @open="openProcess" />
 
             <!-- At the foot, where the sandbox shell keeps the account: the same control, or the sign-in that brings one. -->
             <div class="mt-auto flex flex-col items-center">

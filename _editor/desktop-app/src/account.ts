@@ -43,8 +43,9 @@ export const sessionHolds = async (relay: Relay = accountRelay): Promise<boolean
 };
 
 /** Into the workspace at `path`, or a sign-in first when the session is gone, asked at the press: the roster can be
- *  behind a session that lapsed since, and the workspace would only open on its sign-in wall. The sign-in brings the
- *  window that asked back (auth.rs `back=agent`). Nothing to go by (offline) goes in, and the workspace says why. */
+ *  behind a session that lapsed since, and the workspace would only open on its sign-in wall. The sign-in moves nobody
+ *  when it returns (auth.rs): the reader presses again once its tile says it is done. Nothing to go by (offline) goes
+ *  in, and the workspace says why. */
 export const intoWorkspace = async (path: string): Promise<void> => {
     await ((await sessionHolds()) === false ? signIn() : workspaceOpen(path));
 };

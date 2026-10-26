@@ -16,6 +16,7 @@ import GettingStartedList from "./GettingStartedList.vue";
 import SandboxErrands from "./SandboxErrands.vue";
 import { useGettingStarted } from "./useGettingStarted";
 import { useSandboxErrands } from "./useSandboxErrands";
+import { HOME_PATH } from "../../lib/routes/firstScreens";
 
 const t = useT();
 const tour = useGettingStarted();
@@ -43,7 +44,7 @@ const label = computed(() =>
 
 // AN UNFINISHED SETUP BEING REMOVED (SandboxErrands' trash). Held here, outside the panel, because the panel closes as
 // the question is asked. It is the reader's own row (unfinishedSandboxes keeps owners only), so removing it is a plain
-// drop with no member list to leave first; with nothing left on the account, the setup is where the reader goes next.
+// drop with no member list to leave first; with nothing left on the account, Home's first run is where the reader goes next.
 const router = useRouter();
 const sandbox = useSandbox();
 const removing = ref<SandboxSummary | undefined>(undefined);
@@ -54,7 +55,7 @@ const askRemove = (option: SandboxSummary): void => {
 const removeRow = async (target: SandboxSummary): Promise<void> => {
     await sandbox.remove(target.id);
     if (sandbox.sandboxes.value.length === 0) {
-        void router.push(`/setup`);
+        void router.push(HOME_PATH);
     }
 };
 

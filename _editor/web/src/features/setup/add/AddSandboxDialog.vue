@@ -1,18 +1,23 @@
 <!-- ADD A SANDBOX WHERE THERE IS NO HOME TO DO IT ON: a phone, and a guest's window (models/sandbox/addSandbox.ts says who
-     gets this and who gets Home's new sandbox in place). A name, where it runs, one press (useAddSandbox.ts says why it is
-     not /setup). Mounted once by the shell, and only while asked for, so the registry watch and the offers it reads live no
-     longer than it. Once the new sandbox reports in, the setup row selects it, which re-points the workspace there behind
+     gets this and who gets Home's new sandbox in place). A name, where it runs (its "More ways" included), one press
+     (useAddSandbox.ts). Mounted once by the shell, and only while asked for, so the registry watch and the offers it reads
+     live no longer than it. Home's address asking for it keeps what it named once the shell took its ask: a row to finish
+     (`finish=<id>`), a machine of ours (`machine=hosted`, `tier=`); it is taken from the address here, as the press. Once the new sandbox reports in, the setup row selects it, which re-points the workspace there behind
      the dialog; the dialog stays up through its first start (AddSandboxOpening.vue) and closes onto a workspace ready to
      use. -->
 <script setup lang="ts">
+import { isHostedTierId } from "@intentic/constants";
 import { Button, Modal, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { unfinishedSandboxes } from "../../../models/sandbox/live/roster";
 import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import { masterRail } from "../../../models/home/masterRail";
 import AddSandboxForm from "./AddSandboxForm.vue";
 import AddSandboxRun from "./AddSandboxRun.vue";
+import { ATTACH, HOSTED } from "./useAddSandbox";
 import { useAddSandboxHere } from "./useAddSandboxHere";
 
 const emit = defineEmits<{ close: [] }>();
@@ -22,15 +27,34 @@ const { mobile } = useDevice();
 // Set once the new sandbox reported in and was selected: the dialog then waits on its first start, not on its setup.
 const opening = ref(false);
 
+const route = useRoute();
+const router = useRouter();
+const { sandboxes } = useSandbox();
+const asked = { finish: route.query[`finish`], machine: route.query[`machine`], tier: route.query[`tier`] };
 const here = useAddSandboxHere({
     appStays: false,
+    tier: isHostedTierId(asked.tier) ? asked.tier : undefined,
     selects: () => true,
     reportedIn: () => {
         opening.value = true;
     },
 });
-const { problem, pick, creating, started, created, onMachine } = here.add;
-onMounted(() => void here.add.read());
+const { blocked, pick, busy, started, created, onMachine } = here.add;
+if (asked.machine === `hosted`) {
+    pick.value = HOSTED;
+}
+onMounted(async () => {
+    // What the address named is taken from it, so a reload asks nothing again.
+    if (asked.finish !== undefined || asked.machine !== undefined || asked.tier !== undefined) {
+        const { finish: _finish, machine: _machine, tier: _tier, ...rest } = route.query;
+        void router.replace({ query: rest });
+    }
+    await here.add.read();
+    const row = unfinishedSandboxes(sandboxes.value).find((entry) => entry.id === asked.finish);
+    if (row !== undefined) {
+        await here.add.resume(row);
+    }
+});
 // Added from inside a sandbox, the new one opens on the full-screen chat, where its first session starts, rather than on
 // the shell's default (the file tree with the chat docked). Recorded the moment the row exists: the switch lands on it
 // once the row is selected. A phone keeps its own landing, a conversation already.
@@ -64,21 +88,13 @@ const machineFailed = computed(() => started.value?.kind === `machine` && onMach
 
         <template #footer>
             <div class="flex w-full flex-wrap items-center justify-end gap-2">
-                <!-- Every other way (the command, the installer, an own domain) is /setup's, with its picker open. -->
-                <RouterLink
-                    v-if="started === undefined"
-                    :to="{ path: `/setup`, query: { elsewhere: `1` } }"
-                    class="mr-auto text-xs text-link hover:underline"
-                    @click="emit(`close`)"
-                    >{{ t(`setup.addSandbox.moreWays`) }}</RouterLink
-                >
                 <template v-if="started === undefined">
                     <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`close`)" />
                     <Button
-                        :label="t(`ui.action.create`)"
+                        :label="pick === ATTACH ? t(`ui.action.connect`) : t(`ui.action.create`)"
                         tier="accent"
-                        :loading="creating"
-                        :disabled="problem !== undefined || pick === undefined"
+                        :loading="busy"
+                        :disabled="blocked"
                         @click="here.add.create"
                     />
                 </template>

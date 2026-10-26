@@ -652,7 +652,7 @@ fn shell_target(url: &url::Url) -> Option<ShellTarget> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Link {
     Shell(ShellTarget),
     AnalyticsConsent(bool),
@@ -724,6 +724,26 @@ pub enum Link {
     /// only where the app told it `machineFace` (windows/scripts.rs). From the workspace window alone, and carrying
     /// nothing: a floating panel, a local window or a stranger's link has no workspace window to send there.
     MachineFace,
+    /// See [`ProcessLink`]: the workspace's own runs, for both faces to draw.
+    Process(ProcessLink),
+    /// `intentic://process-act?id=<id>&act=<action>[&need=<id>]`: the reader's answer to a run, given on the workspace's
+    /// page where it is drawn (processes.rs `act`). From the workspace window alone: it starts, stops and consents.
+    ProcessAct {
+        id: String,
+        act: String,
+        need: Option<String>,
+    },
+}
+
+/// `intentic://process?report=<JSON>|clear=<id>|hello=1`: a run only the workspace's page holds (a machine of ours, a
+/// connected machine), told to the app so This computer draws it too; that run gone; and the page starting to listen,
+/// which the app answers with the whole list (processes.rs). From the workspace window alone: anything else could fill
+/// both faces' rails with what it chose.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProcessLink {
+    Report(Box<crate::processes::ProcessReport>),
+    Clear(String),
+    Hello,
 }
 
 /// `intentic://first-task?do=sent|failed&id=<id>[&reason=<text>]`: the workspace saying what became of the first task
@@ -760,6 +780,26 @@ fn is_task_id(id: &str) -> bool {
 /// Words a link carries for the reader to see: control characters out, and no more than a sentence or two.
 fn plain_words(text: &str) -> String {
     text.chars().filter(|c| !c.is_control()).take(300).collect()
+}
+
+/// The workspace's own page, and no other: a floating panel is the same page, and holds no run of its own.
+fn from_workspace(source: Source) -> bool {
+    matches!(
+        source,
+        Source::App {
+            window: crate::windows::WORKSPACE
+        }
+    )
+}
+
+impl ProcessLink {
+    /// A clear that names no run's id is no request.
+    fn filter_id(self) -> Option<Self> {
+        match &self {
+            ProcessLink::Clear(id) if !crate::processes::is_id(id) => None,
+            _ => Some(self),
+        }
+    }
 }
 
 pub fn parse_link(url: &str, source: Source) -> Option<Link> {
@@ -973,6 +1013,26 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             Some(Link::MachineFace)
         }
         "machine-face" => None,
+        "process" if from_workspace(source) => Some(Link::Process(if get("hello").is_some() {
+            ProcessLink::Hello
+        } else if let Some(id) = get("clear") {
+            ProcessLink::Clear(id).filter_id()?
+        } else {
+            let raw: serde_json::Value = serde_json::from_str(&get("report")?).ok()?;
+            ProcessLink::Report(Box::new(crate::processes::read(&raw)?))
+        })),
+        "process" => None,
+        "process-act" if from_workspace(source) => {
+            let id = get("id").filter(|id| crate::processes::is_id(id))?;
+            let act = get("act").filter(|act| crate::processes::is_action(act))?;
+            let need = match get("need") {
+                Some(need) if crate::processes::is_need_id(&need) => Some(need),
+                Some(_) => return None,
+                None => None,
+            };
+            Some(Link::ProcessAct { id, act, need })
+        }
+        "process-act" => None,
         "auth" => Some(Link::Auth(AuthArgs {
             handoff: get("handoff")?,
             state: get("state")?,

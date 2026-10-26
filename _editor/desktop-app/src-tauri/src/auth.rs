@@ -60,14 +60,68 @@ impl PendingAuth {
     }
 }
 
-/// The local window the last completed sign-in was asked from, kept for the page's way back to it
-/// (`intentic://launcher?to=agent`, windows.rs), which arrives once the page has redeemed the session. Without it the
-/// way back was always the main window, whichever folder window had asked.
-static ASKED_IN: Mutex<Option<String>> = Mutex::new(None);
+/* A SIGN-IN IN THE BROWSER IS A PROCESS (2026-10-26): the reader pressed sign-in somewhere, the browser has the page,
+ * and both faces show a tile saying so (processes.rs), with the browser's page again a press away and a way to call it
+ * off. Its end moves nobody: the session is redeemed by the workspace's page where it stands (`complete`). */
+const SIGN_IN: &str = "sign-in:app";
 
-/// The window the last completed sign-in was asked from, once: the way back takes it.
-pub fn take_asked_in() -> Option<String> {
-    ASKED_IN.lock().unwrap().take()
+fn report_waiting(app: &AppHandle) {
+    let mut report = crate::processes::ProcessReport::of("sign-in", "app", "waiting");
+    report.waiting_for = Some("browser".into());
+    report.actions = vec!["sign-in-again".into(), "cancel".into()];
+    crate::processes::report(app, report);
+}
+
+/// The tile goes once the attempt can no longer come back: answered, called off, or past its lifetime.
+fn clear_after_ttl(app: &AppHandle, state: String) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(ATTEMPT_TTL);
+        let gone = app
+            .state::<PendingAuth>()
+            .0
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_none_or(|attempt| {
+                attempt.state != state || attempt.started_at.elapsed() >= ATTEMPT_TTL
+            });
+        if gone {
+            crate::processes::clear(&app, SIGN_IN);
+        }
+    });
+}
+
+/// The reader's answer on the sign-in's tile: the browser's page again, or the attempt called off.
+pub fn act(app: &AppHandle, act: &str) {
+    match act {
+        "sign-in-again" => {
+            let pending = app.state::<PendingAuth>();
+            let again = pending
+                .0
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|attempt| attempt.url.clone());
+            match again {
+                Some(url) => {
+                    if let Err(error) = open_browser(app, &url) {
+                        eprintln!("{error}");
+                    }
+                }
+                None => {
+                    if let Err(error) = start(app, false, None) {
+                        eprintln!("{error}");
+                    }
+                }
+            }
+        }
+        "cancel" | "dismiss" => {
+            *app.state::<PendingAuth>().0.lock().unwrap() = None;
+            crate::processes::clear(app, SIGN_IN);
+        }
+        _ => {}
+    }
 }
 
 fn open_browser(app: &AppHandle, url: &str) -> Result<(), String> {
@@ -85,6 +139,7 @@ pub fn start(
     let pending = app.state::<PendingAuth>();
     if let Some(url) = pending.live_url(switch_account) {
         pending.came_from(asked_in);
+        report_waiting(app);
         return open_browser(app, &url);
     }
     let mut slot = pending.0.lock().unwrap();
@@ -103,7 +158,7 @@ pub fn start(
         base.trim_end_matches('/')
     );
     *slot = Some(PendingAttempt {
-        state,
+        state: state.clone(),
         verifier,
         url: url.clone(),
         switch_account,
@@ -114,7 +169,10 @@ pub fn start(
     let opened = open_browser(app, &url);
     if opened.is_err() {
         *pending.0.lock().unwrap() = None;
+        return opened;
     }
+    report_waiting(app);
+    clear_after_ttl(app, state);
     opened
 }
 
@@ -130,6 +188,7 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     }
     let attempt = slot.take().unwrap();
     drop(slot);
+    crate::processes::clear(app, SIGN_IN);
     // An account now exists for this install to go back to: Home says so, and the tray offers the workspace.
     app.state::<crate::state::AppState>()
         .remember_account_seen();
@@ -143,7 +202,6 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
         args.profile.as_deref(),
         attempt.asked_in.is_some(),
     );
-    *ASKED_IN.lock().unwrap() = attempt.asked_in;
     // The profile decides the page's scheme before it paints (web index.html), so the app's own faces can
     // be drawn in that light from here on rather than waiting for the page to announce it. Unless the app has seen
     // the reader's look: the page adopts that one over the profile's (windows.rs `look_init_script`).
@@ -151,18 +209,20 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     if let Some(mode) = early_mode(args.profile.as_deref(), look) {
         crate::windows::mode::apply_mode(app, mode);
     }
-    crate::windows::show_workspace_at(app, Some(&path));
+    // Redeemed by the workspace's page where it stands, the frame left as the reader has it: on screen, its own sign-in
+    // dialog takes it in place (the web's signInDialog.ts); out of sight, it routes there out of sight. _(2026-10-26)
+    // This put the workspace in the frame whatever the reader was doing, and remembered it as the face in use._
+    crate::windows::tell_workspace(app, &path);
 }
 
 /// The page the webview redeems the handoff at. The profile rides along verbatim (setup_link.rs has already
 /// reduced it to a known name), and the page consumes it off its query string before its router looks.
 ///
-/// `back=agent` is how a sign-in that began in a folder's window gets the reader back there. The redemption itself
-/// has to happen in the WORKSPACE window — the platform sets its session cookie over an ordinary HTTP round trip on
-/// that origin — so the page is told to send `intentic://launcher?to=agent` once it is done, which brings the local
-/// window forward on whatever that folder is waiting for. Without it the workspace simply stayed, and a reader who
-/// pressed "Work on this with an agent" on a folder ended up looking at the account's sandbox list instead, with
-/// nothing on screen that had anything to do with the folder they asked about.
+/// `back=agent` says the sign-in began in a local window. The redemption itself has to happen in the WORKSPACE's page
+/// (the platform sets its session cookie over an ordinary HTTP round trip on that origin), which then sends
+/// `intentic://launcher?to=agent`, the app's word that a folder waiting on the sign-in can go on (windows/links.rs).
+/// Nobody is moved by it: the reader is still in the window they pressed in. _(2026-10-17 to 2026-10-26) It brought
+/// the local window that asked forward, on its folder's way to a sandbox._
 ///
 /// The sign-in gate (_tools/e2e/signin/desktop.ts, `e2e-signin` in ci.yml) plays this file's half of the sign-in
 /// in TypeScript, `start`'s page and this path included, since it runs the web app without Tauri: a change to

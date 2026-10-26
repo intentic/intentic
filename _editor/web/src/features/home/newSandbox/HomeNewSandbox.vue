@@ -45,7 +45,7 @@ const retried = computed(() => machineFailed.value || (resumed.value && refusal.
                     <Notice v-else-if="refusal" :of="refusal" />
                     <p v-else class="flex items-center gap-2 text-xs text-muted">
                         <Icon name="spinner" spin class="text-xs" />
-                        {{ t(`setup.setup.appSettingUp`) }}
+                        {{ t(`home.newSandbox.preparing`) }}
                     </p>
                     <div v-if="phase === `failed`" class="flex flex-wrap items-center gap-2">
                         <Button v-if="retried" :label="t(`ui.action.tryAgain`)" @click="run.retry" />

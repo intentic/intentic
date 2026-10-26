@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { track } from "../analytics";
-import { dockerListening, dockerOpen, dockerStart, folderSetupCheck, hostsSandboxes, takePendingDocker, workspaceOpen, type DockerStart } from "../desktop";
+import { dockerListening, dockerOpen, dockerStart, folderSetupCheck, hostsSandboxes, type DockerStart } from "../desktop";
 import { dockerEndingLine } from "../components/dockerWords";
 import { dockerReasonOf } from "./dockerReason";
 import { onOurEngine } from "./engine/engine";
@@ -14,9 +14,6 @@ import { dockerReady, dockerStarting, engineListening, info, refresh } from "./m
 export const dockerReport = ref<DockerStart | undefined>(undefined);
 /** When the running start began, in epoch ms: the card's clock. */
 export const dockerStartedAt = ref<number | undefined>(undefined);
-// This launch showed the main window BECAUSE the engine was asleep (lib.rs), so it is the one that hands over to the
-// workspace once it wakes. A window opened from the tray was asked for and stays put.
-const wokeForDocker = ref(false);
 /** The card is up while a start runs and after one ends in anything but an engine: `ready` is the list coming back. */
 export const dockerCardShown = computed(() => dockerStarting.value || (dockerReport.value !== undefined && dockerReport.value.outcome !== `ready`));
 
@@ -34,7 +31,7 @@ const heard = (report: DockerStart, startedAt: number, trigger: DockerTrigger): 
         ...dockerReasonOf(report),
         trigger,
         seconds: Math.round((Date.now() - startedAt) / 1000),
-        atLaunch: wokeForDocker.value,
+        atLaunch: trigger === `launch`,
     });
     dockerReady.value = report.outcome === `ready`;
     engineListening.value = report.outcome === `ready` || report.outcome === `notAllowed`;
@@ -63,12 +60,6 @@ export const startDocker = async (trigger: DockerTrigger = `card`): Promise<void
     // A folder's own sandbox may be waiting on exactly this engine: the app looks again now rather than at its next round.
     folderSetupCheck().catch((error: unknown) => console.error(`[device] the folders' setups were not told Docker is up:`, error));
     await refresh();
-    // The launch that showed this window for the engine hands over to the workspace it was going to open, once, and
-    // only that launch (desktop.ts `takePendingDocker`).
-    if (wokeForDocker.value) {
-        wokeForDocker.value = false;
-        void workspaceOpen();
-    }
 };
 
 /**
@@ -101,14 +92,13 @@ export const openDocker = async (): Promise<void> => {
  * two things starting it would draw two cards about one wait.
  */
 export const wakeDockerIfNeeded = async (settingUp: boolean): Promise<void> => {
-    // Taken whatever happens next: it is a one-shot fact about THIS launch (lib.rs).
-    wokeForDocker.value = await takePendingDocker();
     if (settingUp || dockerStarting.value || (await dockerListening())) {
         return;
     }
     // A machine no sandbox has ever run on is nobody's to wake: somebody using this app for their files, or as a window
-    // onto a sandbox we host, has a perfectly good reason for their Docker to be off (state.rs).
-    if (!wokeForDocker.value && !(await hostsSandboxes())) {
+    // onto a sandbox we host, has a perfectly good reason for their Docker to be off (state.rs). The start is a process on
+    // both faces' rails (deviceProcesses.ts), out of sight; nothing hands over anywhere when it ends.
+    if (!(await hostsSandboxes())) {
         return;
     }
     await startDocker(`launch`);

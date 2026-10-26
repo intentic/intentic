@@ -35,6 +35,10 @@ interface DesktopWebview {
     /* THIS BUILD STARTS A SANDBOX ASLEEP ON THIS COMPUTER THE MOMENT THE PAGE ASKS (`intentic://sandbox-wakes`, the
      * app's sandbox_wakes.rs). An older one drops the link, and the wake waits for the keeper's next poll as before. */
     sandboxWakes?: boolean;
+    /* THIS BUILD KEEPS ONE LIST OF ITS PROCESSES FOR BOTH FACES AND TAKES ANSWERS TO THEM FROM THIS PAGE (the app's
+     * processes.rs; processReport.ts): a run that asks the reader something is answered on the page it is drawn on. An
+     * older one moves the reader to This computer for that, so the page offers that press only then. */
+    processes?: boolean;
 }
 
 declare global {
@@ -62,6 +66,10 @@ export const desktopVersion = (): string | undefined => desktopApp()?.version;
 // and in a build from before it.
 export const desktopTakesProjects = (): boolean => desktopApp()?.projectSync === true;
 
+// Whether this app answers a run's questions from this page (`intentic://process-act`); false in a browser and in a
+// build from before it, where the run's card on This computer is the one place to answer.
+export const desktopTakesProcesses = (): boolean => desktopApp()?.processes === true;
+
 // The app announcing, mid-session, that an update finished downloading (update.rs). A plain DOM event: no
 // handshake, and a browser with no app simply never fires it.
 export const DESKTOP_UPDATE_EVENT = `intentic-desktop-update`;
@@ -84,12 +92,12 @@ export const DESKTOP_LAUNCHER_LINK = `intentic://launcher`;
    bare link, which is this computer too. */
 export const openThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=files`);
 
-/* THE WAY BACK FROM A SIGN-IN THAT BEGAN ON A FOLDER (auth.rs `complete_path`, which writes `back=agent` onto the
-   completion this page is). The redemption has to happen here, in the workspace window, because that is where the
-   platform's session cookie is set; this hands the reader back to the folder they actually asked about, whose own
-   sandbox's setup starts by itself once the workspace says who signed in. An app that predates `to=agent` reads the
-   bare link, which is This device. */
-export const openAgentOnThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=agent`);
+/* A SIGN-IN THAT BEGAN ON THIS COMPUTER IS DONE (auth.rs `complete_path`, which writes `back=agent` onto the completion
+   this page is). The redemption has to happen here, in the workspace's page, because that is where the platform's
+   session cookie is set, which the app does out of sight when the reader is on This computer; this tells the app it is
+   done, so a folder waiting on the account carries on. Nobody moves (2026-10-26): the reader stays wherever they are,
+   This computer included. The link is the one an app before that answered by putting the folder back in front. */
+export const tellSignedInOnThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=agent`);
 
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag" | "raise";

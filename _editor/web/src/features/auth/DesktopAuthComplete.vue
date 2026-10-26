@@ -3,15 +3,16 @@
 import { AppBrand, Button, Notice, type NoticeModel } from "@intentic/ui";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { openAgentOnThisComputer } from "../../app/environments/desktop";
+import { tellSignedInOnThisComputer } from "../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 import { takeBrowserHandoffDestination } from "./browserHandoff";
 import { readDesktopHandoff, redeemDesktopHandoff } from "./redeemHandoff";
 
-// The hand-off's landing in a workspace window that had nothing on screen yet (a sign-in begun on a folder of this
-// computer, before the workspace was ever opened). A window already showing a view takes it there instead, in the
-// sign-in dialog (signInDialog.ts `arriveInPlace`); the redemption is the same (redeemHandoff.ts).
-// Read back=agent before replacing the route; return to the requesting folder first, then mount the workspace to announce the account roster.
+// The hand-off's landing in a workspace page that had nothing on screen yet: a sign-in begun on This computer before the
+// workspace was ever opened, which the app loads out of sight to redeem it (auth.rs), so the reader stays on This
+// computer. A page already showing a view takes it there instead, in the sign-in dialog (signInDialog.ts
+// `arriveInPlace`); the redemption is the same (redeemHandoff.ts). Done, the page tells the app (a folder waiting on the
+// account carries on) and goes to its own first screen, Home, where it waits until the reader opens it.
 // This link cannot be retried after failure: sign in again rather than reload.
 
 const t = useT();
@@ -29,7 +30,7 @@ const complete = async (): Promise<void> => {
     }
     const destination = takeBrowserHandoffDestination();
     if (taken.backToFolder) {
-        openAgentOnThisComputer();
+        tellSignedInOnThisComputer();
     }
     await router.replace(taken.backToFolder ? `/` : destination);
 };

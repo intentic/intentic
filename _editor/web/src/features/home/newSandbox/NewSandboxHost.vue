@@ -4,16 +4,29 @@
      publishes. Once the press has gone somewhere it closes the dialog by taking the ask out of Home's address, so the
      reader is back on the chat they were in; a first sandbox, with no chat to go back to, keeps its page. An address
      asking to finish a setup left unfinished (`?finish=<id>`) is that press, made for the reader: no dialog, the row's
-     own run on this computer. -->
+     own run. `?machine=hosted` (and its `tier=`) picks a machine of ours in the dialog; `?found=` is where its reader
+     lands once it is open (lib/foundOnComputer.ts). -->
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { FOUND_QUERY, foundAfterSetup, landingAfterSetup } from "../../../lib/foundOnComputer";
 import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import { switchableSandboxes, unfinishedSandboxes } from "../../../models/sandbox/live/roster";
+import { HOSTED } from "../../setup/add/useAddSandbox";
 import { useAddSandboxHere } from "../../setup/add/useAddSandboxHere";
-import { finishAskedBy, markReady, newSandbox, newSandboxBusy, newSandboxGeneration, newSandboxShownBy, type NewSandboxRun } from "./newSandbox";
+import {
+    finishAskedBy,
+    machineAskedBy,
+    markReady,
+    newSandbox,
+    newSandboxBusy,
+    newSandboxGeneration,
+    newSandboxShownBy,
+    type NewSandboxRun,
+    tierAskedBy,
+} from "./newSandbox";
 
 const route = useRoute();
 const router = useRouter();
@@ -33,10 +46,14 @@ const end = (): void => {
     newSandboxGeneration.value += 1;
 };
 
-// Home's own chat again, where the new sandbox is selected (opened) or the one the reader had is (dismissed).
-const leave = async (): Promise<void> => {
+// What the desktop app found signed in on this computer, named by the address that asked: offered once it is open.
+const found = route.query[FOUND_QUERY];
+
+// Home's own chat again, where the new sandbox is selected (opened) or the one the reader had is (dismissed); Sandbox ▸
+// Models instead for an opened one when the app found AI tools signed in here.
+const leave = async (opened: boolean): Promise<void> => {
     if (watching.value) {
-        await router.replace(HOME_PATH);
+        await router.replace(opened ? landingAfterSetup(foundAfterSetup(found)) : HOME_PATH);
     }
     end();
 };
@@ -53,6 +70,7 @@ const readyUnseen = (sandboxId: string): void => {
 
 const here = useAddSandboxHere({
     appStays: true,
+    tier: tierAskedBy(route),
     // Only a reader looking at it is moved onto it; one back in another sandbox's chat stays there.
     selects: () => watching.value,
     reportedIn: (sandboxId) => {
@@ -64,6 +82,10 @@ const here = useAddSandboxHere({
     },
 });
 onMounted(() => void here.add.read());
+// A machine of ours asked for by the address is the dialog's pick, while one can start; the form says why when not.
+if (machineAskedBy(route) === `hosted`) {
+    here.add.pick.value = HOSTED;
+}
 
 // Left while its first start was still on screen: it is ready enough to be a tile, and the reader chose another.
 watch(watching, (now) => {
@@ -87,7 +109,7 @@ watch(
     },
 );
 
-const { problem, pick, creating } = here.add;
+const { blocked, busy } = here.add;
 const run: NewSandboxRun = {
     here,
     pressed,
@@ -95,22 +117,22 @@ const run: NewSandboxRun = {
     resumed,
     create: async () => {
         // A press the form would not take starts nothing, and puts up no tile that would stand for nothing.
-        if (problem.value !== undefined || pick.value === undefined || creating.value) {
+        if (blocked.value || busy.value) {
             return;
         }
         pressed.value = true;
         newSandboxBusy.value = true;
         await here.add.create();
     },
-    resume: async (row) => {
-        if (creating.value || here.add.started.value !== undefined) {
+    resume: async (row, asked) => {
+        if (busy.value || here.add.started.value !== undefined) {
             return;
         }
         finished = row;
         resumed.value = true;
         pressed.value = true;
         newSandboxBusy.value = true;
-        await here.add.resume(row);
+        await here.add.resume(row, asked);
     },
     retry: () => {
         if (resumed.value && here.add.started.value === undefined && finished !== undefined) {
@@ -124,14 +146,14 @@ const run: NewSandboxRun = {
             return;
         }
         settled = true;
-        void leave();
+        void leave(true);
     },
     dismiss: () => {
         if (settled) {
             return;
         }
         settled = true;
-        void leave();
+        void leave(false);
     },
 };
 newSandbox.value = run;
@@ -146,7 +168,7 @@ watch(
         }
         const row = unfinishedSandboxes(rows).find((entry) => entry.id === asked);
         if (row !== undefined) {
-            void run.resume(row);
+            void run.resume(row, machineAskedBy(route));
         } else {
             void router.replace(HOME_PATH);
         }

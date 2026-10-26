@@ -404,9 +404,13 @@ fn show_project(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
         .as_deref()
         .map(|id| project_path(id, &project.dir));
     tell_opening(app, asked_in, "shown");
+    // Every way here is the reader's press on the folder: its window's "Open this folder's sandbox", its dialog's "Work
+    // on this with an agent" for a folder that has one, a first task sent for one. Nothing opens it by itself
+    // (windows/present.rs).
+    let press = crate::windows::present::Press::by(crate::windows::present::Asked::Page);
     match asked_in.and_then(|label| app.get_webview(label)) {
-        Some(window) => crate::windows::show_workspace_from(app, path.as_deref(), &window),
-        None => crate::windows::show_workspace_at(app, path.as_deref()),
+        Some(window) => crate::windows::show_workspace_from(app, press, path.as_deref(), &window),
+        None => crate::windows::show_workspace_at(app, press, path.as_deref()),
     }
 }
 
@@ -1324,7 +1328,7 @@ pub(crate) fn minted_code(answered: Answered) -> Minted {
 }
 
 /// The platform's own reason for a refusal, as its errors say it (`message`), or its status where it gave none.
-fn refused_by(status: u16, body: &serde_json::Value) -> String {
+pub(crate) fn refused_by(status: u16, body: &serde_json::Value) -> String {
     match body["message"]
         .as_str()
         .map(str::trim)

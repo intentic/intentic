@@ -231,7 +231,11 @@ pub fn passwords_route(entry: Option<&str>) -> String {
 
 /// The hosted editor's "Manage on this computer": the main window in front, on Passwords.
 pub fn on_link(app: &tauri::AppHandle, entry: Option<&str>) {
-    crate::windows::show_home_route(app, &passwords_route(entry));
+    crate::windows::show_home_route(
+        app,
+        crate::windows::present::Press::by(crate::windows::present::Asked::Page),
+        &passwords_route(entry),
+    );
 }
 
 /// What one run printed, and how it ended.

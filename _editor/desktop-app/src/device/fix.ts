@@ -1,8 +1,10 @@
+import type { ProcessAction, ProcessReport } from "@intentic/web/process-report";
 import { computed, ref, watch } from "vue";
 import { track } from "../analytics";
 import { sandboxFix, takePendingFix, type FixArgs, type RunEvent } from "../desktop";
 import { endFix, type FixEnd, foldFixLine, startFix, type FixView, verdictOf } from "../fixReport";
 import { info, sandboxes } from "./machine";
+import { answering, tellProcess } from "../processes";
 import { activeRun, running, start } from "./runs";
 
 // THE RECOVERY PANEL'S "FIX IT" (intentic://fix, src-tauri/src/fix.rs): `ic sandbox fix` for a sandbox on this machine,
@@ -99,4 +101,58 @@ export const drainFix = async (): Promise<void> => {
 
 export const dismissFix = (): void => {
     fix.value = undefined;
+};
+
+/* THE FIX AS A PROCESS (src-tauri/src/processes.rs): on both faces' rails while it runs and once it has said how it
+   ended, a check that `ic` can close once someone says yes asked there as a need. The panel that asked follows it as
+   before; nobody is brought to This device for it. */
+const FIX_ACTIONS: readonly ProcessAction[] = [`dismiss`];
+
+/** The fix as a process, or nothing while there is none. Pure. */
+const fixProcessOf = (asked: SandboxFix | undefined, name: string): ProcessReport | undefined => {
+    if (asked === undefined) {
+        return undefined;
+    }
+    const verdict = verdictOf(asked.view);
+    const going = asked.failure === undefined && verdict.kind === `running`;
+    const needs = asked.view.checks
+        .filter((check) => check.fix === `consent` && (check.state === `warn` || check.state === `fail`))
+        .map((check) => ({ id: check.id, label: check.label, detail: check.problem, actions: [`allow`] satisfies ProcessAction[] }));
+    const failed = asked.failure !== undefined || verdict.kind === `unsupported` || verdict.kind === `stopped` || (verdict.kind === `ended` && verdict.outcome === `failed`);
+    return {
+        id: `fix:${asked.args.slug}`,
+        kind: `fix`,
+        state: going ? `running` : failed ? `failed` : needs.length > 0 ? `waiting` : `done`,
+        origin: `app`,
+        subject: name,
+        line: asked.view.doing,
+        failure: asked.failure,
+        needs,
+        waitingFor: !going && needs.length > 0 ? `answer` : undefined,
+        actions: going ? [] : FIX_ACTIONS,
+    } satisfies ProcessReport;
+};
+
+/** The fix told and answered from now on: the main window's, which runs it (useDevice.ts). */
+export const tellFixes = (): void => {
+    let toldAs: string | undefined;
+    watch(
+        () => fixProcessOf(fix.value, fixName.value),
+        (current) => {
+            const id = current?.id ?? toldAs;
+            if (id !== undefined) {
+                tellProcess(id, current);
+            }
+            toldAs = current?.id;
+        },
+        { immediate: true },
+    );
+    answering(`fix`, async (act, answer) => {
+        const check = answer.need ?? undefined;
+        if (act === `allow` && check !== undefined) {
+            await runFix([check]);
+        } else if (act === `dismiss`) {
+            dismissFix();
+        }
+    });
 };

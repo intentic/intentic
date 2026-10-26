@@ -10,6 +10,7 @@ import { rememberedAccount } from "../../../client/directory/deviceDirectory";
 import { NOTHING_TO_OPEN_PATH } from "../../../app/environments/nothingToOpen";
 import { liveRecoveryDeps } from "./recoveryDeps";
 import { type Candidate, useRecovery } from "./useRecovery";
+import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
 
 // /recover: the sandboxes this device remembers and the account's list lacks, each checked and offered back with one
 // press (useRecovery.ts). Reached instead of onboarding when a list offers nothing to open but this device remembers
@@ -137,7 +138,7 @@ onMounted(async () => {
                 <Button v-if="checked && anyOffline" :label="t(`sandbox.recover.checkAgain`)" tier="boring" :disabled="busy" @click="check" />
             </div>
 
-            <RouterLink to="/setup" :class="ui.textButton({ tone: `quiet` }, `self-start`)">{{ t(`sandbox.recover.setUpNew`) }}</RouterLink>
+            <RouterLink :to="ADD_SANDBOX_HOME_PATH" :class="ui.textButton({ tone: `quiet` }, `self-start`)">{{ t(`sandbox.recover.setUpNew`) }}</RouterLink>
         </section>
     </main>
 </template>

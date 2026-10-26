@@ -4,6 +4,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import type { Component, Ref } from "vue";
 import { z } from "zod";
 import { askLocalApp } from "./local";
+import type { LocalNewSandboxHost, LocalProcessesHost } from "./processes/localProcessHost";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL. The editor draws the shell around a folder of this computer (local/LocalShell.vue):
 // its rail, its Files view, the place chip and the way to agents. What only the desktop app can answer comes from here:
@@ -512,7 +513,15 @@ export interface LocalHost {
     readonly repair?: LocalRepairHost;
     /** This computer's own sandboxes; absent where no app is behind the page. */
     readonly machine?: LocalMachineHost;
+    /**
+     * The app's processes, the one list both faces draw (processReport.ts): this window's rail tiles and pages, answered
+     * here. Absent where no app is behind the page, or one from before the list.
+     */
+    readonly processes?: LocalProcessesHost;
+    /** A new sandbox made from this window, as Home makes one in the workspace; absent where no app is behind the page. */
+    readonly newSandbox?: LocalNewSandboxHost;
 }
+
 
 /* THE ACCOUNT'S ANSWERS, as the app hands their text over (its src/account.ts): Better Auth's, read as useAuth.ts reads
    them. Text that is not JSON (a proxy's error page) says nothing, as an answer out of shape says nothing. */

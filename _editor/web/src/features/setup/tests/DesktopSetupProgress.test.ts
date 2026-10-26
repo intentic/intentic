@@ -9,6 +9,14 @@ import type { DesktopSetupReport } from "../../../app/environments/desktopSetupR
 
 const track = jest.fn();
 jest.mock(`../../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));
+// What the app says it takes from this page, and the links handed to it.
+let takesProcesses = false;
+const opened = jest.fn((_link: string) => undefined);
+jest.mock(`../../../app/environments/desktop`, () => ({
+    DESKTOP_LAUNCHER_LINK: `intentic://launcher`,
+    desktopTakesProcesses: () => takesProcesses,
+    openDesktopLink: opened,
+}));
 
 const { default: DesktopSetupProgress } = await import(`../DesktopSetupProgress.vue`);
 
@@ -17,6 +25,7 @@ interface Shown {
     heardAt: number | undefined;
     stepSince?: number | undefined;
     hostedOffered?: boolean;
+    sandboxId?: string;
 }
 
 let app: App | undefined;
@@ -147,5 +156,38 @@ describe(`a setup parked behind this PC's own`, () => {
         expect(text()).toContain(`The app is setting up this PC first (Docker). Follow it in the Intentic window`);
         expect(text()).not.toContain(`0%`);
         expect(text()).not.toContain(`Waiting for your answer`);
+    });
+});
+
+// An app that takes answers from the page it is drawn on (2026-10-26): the reader answers the run here, never sent to This
+// computer for it; an older app keeps the press that opens its card.
+describe(`a run that asks the reader, answered in place`, () => {
+    const asking: DesktopSetupReport = { name: `work`, state: `waiting`, percent: 20, waitingFor: `consent` };
+
+    beforeEach(() => {
+        takesProcesses = true;
+        opened.mockClear();
+    });
+
+    afterEach(() => {
+        takesProcesses = false;
+    });
+
+    it(`sends the go-ahead to the run for this sandbox`, async () => {
+        const { button } = await mount({ report: asking, heardAt: Date.now(), sandboxId: `sbx_7` });
+        expect(button(`Answer it`)).toBeUndefined();
+        button(`Go ahead`)?.click();
+        expect(opened.mock.calls.map(([link]) => link)).toEqual([`intentic://process-act?id=sandbox-setup%3Asbx_7&act=consent`]);
+    });
+
+    it(`offers the restart's three answers where it waits on Windows`, async () => {
+        const { button } = await mount({ report: { ...asking, waitingFor: `restart` }, heardAt: Date.now(), sandboxId: `sbx_7` });
+        expect([`Restart now`, `In 10 minutes`, `Later`].map((label) => button(label) !== undefined)).toEqual([true, true, true]);
+    });
+
+    it(`keeps the card's press for an app from before the answers`, async () => {
+        takesProcesses = false;
+        const { button } = await mount({ report: asking, heardAt: Date.now(), sandboxId: `sbx_7` });
+        expect({ answer: button(`Answer it`) !== undefined, goAhead: button(`Go ahead`) }).toEqual({ answer: true, goAhead: undefined });
     });
 });

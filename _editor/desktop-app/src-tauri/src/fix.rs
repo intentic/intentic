@@ -71,17 +71,20 @@ pub fn fix_args(slug: &str, code: Option<&str>, accept: &[String]) -> Result<Vec
     Ok(args)
 }
 
-/// The link landing (windows.rs `handle_link`): park it and bring This device forward. While a fix runs, a second
-/// link only brings This device forward, onto the run already going.
+/// The link landing (windows.rs `handle_link`): parked for the main window, which runs it out of sight; the fix is a
+/// process on both faces' rails from then on (src/device/fix.ts reports it), the panel that asked following it as before.
+/// While a fix runs, a second link changes nothing: that run's tile already says how it stands. _(2026-10-26) Both
+/// brought This device forward._
 pub fn requested(app: &AppHandle, args: FixArgs) {
-    let parked = !RUNNING.load(Ordering::SeqCst);
-    if parked {
-        *PENDING.lock().unwrap_or_else(PoisonError::into_inner) = Some(args);
+    if RUNNING.load(Ordering::SeqCst) {
+        return;
     }
-    crate::windows::show_device(app);
-    if parked {
-        let _ = app.emit(PENDING_EVENT, ());
+    *PENDING.lock().unwrap_or_else(PoisonError::into_inner) = Some(args);
+    if crate::frame::face(app, crate::windows::HOME).is_none() {
+        crate::local::open_home_hidden_later(app);
+        return;
     }
+    let _ = app.emit(PENDING_EVENT, ());
 }
 
 /// Taken, not read: a request is run by whichever read of the main window's picks it up first (the event or its mount's
