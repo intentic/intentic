@@ -13,11 +13,11 @@ const emit = defineEmits<{ connect: []; disconnect: [] }>();
 <template>
     <Row>
         <template #title>
-            <span class="flex flex-wrap items-center gap-2">
+            <span class="flex min-w-0 items-center gap-2">
                 <!-- Mono, and the machine's own name: the string its tools and skills are named after. -->
-                <span class="truncate font-mono">{{ device.title }}</span>
+                <span class="min-w-0 truncate font-mono">{{ device.title }}</span>
                 <!-- The same word and colour the Devices board gives this machine; one list, read twice. -->
-                <StatusBadge size="xs" :dot="true" :variant="device.tone" :label="device.state" />
+                <StatusBadge size="xs" :dot="true" :variant="device.tone" :label="device.state" class="shrink-0" />
             </span>
         </template>
         <template #description>

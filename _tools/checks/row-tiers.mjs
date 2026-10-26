@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Enforce row.ts tiers through RowGroup/SectionHeader: group-owned density, mark size and row height; RowNote owns padded notes.
 // Reject redundant compact density, retired header props, ungrouped rows, nested groups, missing section gaps and per-row heights.
-// Ground decides card fill; equal-rows is the settings floor. Hand-drawn headers belong to kit-substitutes.mjs.
+// Ground decides card fill; a group's rows share one height by themselves, so `equal-rows` is retired. Hand-drawn headers belong to kit-substitutes.mjs.
 // Shared sectionFindings in extension-ui/check/kit-decisions.mjs also enforces section rules in published extension checks.
 import { sectionFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
@@ -57,6 +57,14 @@ for (const path of tracked) {
             findings.push({
                 at: where,
                 why: `<${name}> declares its own \`density\` inside a <RowGroup> that already publishes one: move the tier to the group, or keep it here only for a \`flush\` masthead, which outranks the rows under it`,
+            });
+        }
+
+        // ── 3 · a group asking for the one height its rows already share (row.ts `useRowLines`)
+        if (name === `RowGroup` && /(?:^|\s):?equal-rows(?:[\s=>]|$)/u.test(attrs)) {
+            findings.push({
+                at: where,
+                why: `<RowGroup equal-rows> asks for what every group already does: its rows share one height, the described one once any of them is described (row.ts \`useRowLines\`), so drop the prop`,
             });
         }
 

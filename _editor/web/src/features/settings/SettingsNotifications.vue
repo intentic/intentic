@@ -127,7 +127,7 @@ const status = computed(() => {
 <template>
     <div class="flex flex-col gap-6">
         <div v-if="inApp" class="flex flex-col gap-2">
-            <RowGroup data-setting="desktop-notifications" :label="t(`settings.settingsNotifications.desktopNotices`)" equal-rows>
+            <RowGroup data-setting="desktop-notifications" :label="t(`settings.settingsNotifications.desktopNotices`)">
                 <Row
                     as="label"
                     icon="exclamation-circle"
@@ -157,7 +157,7 @@ const status = computed(() => {
         </div>
 
         <div class="flex flex-col gap-2">
-            <RowGroup data-setting="push-notifications" :label="t(`settings.settingsNotifications.pushNotifications`)" equal-rows>
+            <RowGroup data-setting="push-notifications" :label="t(`settings.settingsNotifications.pushNotifications`)">
                 <Row icon="bolt" :title="t(`settings.settingsNotifications.notifyDevice`)" :description="status">
                     <template #control><ToggleSwitch :model-value="shown" :disabled="!canToggle" @update:model-value="toggle" /></template>
                 </Row>
@@ -189,7 +189,7 @@ const status = computed(() => {
         </RowGroup>
 
         <div class="flex flex-col gap-2">
-            <RowGroup data-setting="sounds" :label="t(`settings.settingsNotifications.sounds`)" equal-rows>
+            <RowGroup data-setting="sounds" :label="t(`settings.settingsNotifications.sounds`)">
                 <Row
                     as="label"
                     icon="exclamation-circle"

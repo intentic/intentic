@@ -73,11 +73,7 @@ const restore = async (trashId: string): Promise<void> => {
     <section v-if="shows !== `hidden`" :id="DELETED_ANCHOR" ref="section" class="flex scroll-mt-4 flex-col gap-3">
         <Notice v-if="notice" :of="notice" />
 
-        <RowGroup
-            v-if="shows !== `error`"
-            :label="t(`sandbox.words.recentlyDeleted`)"
-            :equal-rows="shows === `rows`"
-        >
+        <RowGroup v-if="shows !== `error`" :label="t(`sandbox.words.recentlyDeleted`)">
             <div v-if="shows === `reading`" role="status" aria-busy="true">
                 <span class="sr-only">{{ t(`sandbox.recentlyDeleted.reading`) }}</span>
                 <SkeletonRows :rows="1" description control />

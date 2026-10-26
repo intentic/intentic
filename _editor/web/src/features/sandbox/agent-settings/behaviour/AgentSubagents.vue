@@ -39,7 +39,7 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
 </script>
 
 <template>
-    <RowGroup data-setting="agent-subagents" :label="t(`shared.subagents`)" equal-rows>
+    <RowGroup data-setting="agent-subagents" :label="t(`shared.subagents`)">
         <template #info><SubagentsExplainer /></template>
         <template #actions><DetailSwitch v-model="level" :label="t(`shared.subagents`)" /></template>
         <RowNote>

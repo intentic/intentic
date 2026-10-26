@@ -390,14 +390,15 @@ const openStartOver = (): void => {
         </template>
 
         <template #description>
-            <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-subtle">
-                <span v-if="run.authorName" class="truncate font-medium text-muted">{{ run.authorName }}</span>
-                <span class="inline-flex items-center gap-1">
-                    <Icon name="code" class="text-2xs" />
-                    <span class="font-mono">{{ run.branch }}</span>
+            <!-- One line: the author and the branch give way first, the short sha and the duration keep their width. -->
+            <span class="flex min-w-0 items-center gap-x-2 text-subtle">
+                <span v-if="run.authorName" class="min-w-0 truncate font-medium text-muted">{{ run.authorName }}</span>
+                <span class="inline-flex min-w-0 items-center gap-1">
+                    <Icon name="code" class="shrink-0 text-2xs" />
+                    <span class="min-w-0 truncate font-mono">{{ run.branch }}</span>
                 </span>
-                <span class="font-mono text-subtle/70">{{ run.sha.slice(0, 7) }}</span>
-                <span v-if="duration" class="inline-flex items-center gap-1">
+                <span class="shrink-0 font-mono text-subtle/70">{{ run.sha.slice(0, 7) }}</span>
+                <span v-if="duration" class="inline-flex shrink-0 items-center gap-1">
                     <Icon name="clock" class="text-2xs" />
                     {{ duration }}
                 </span>

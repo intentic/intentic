@@ -1253,7 +1253,7 @@ it(`shows the runners section and add control on a machine that has none`, async
 // Scoped to the runner's own row: the agent group above carries a standing "Update agent", so a search of
 // the whole page can no longer say whose update button it found.
 const runnerRow = (el: HTMLElement, id: string): HTMLElement => {
-    const found = [...el.querySelectorAll(`li`)].find((line) => (line.textContent ?? ``).includes(id));
+    const found = [...el.querySelectorAll(`[data-runner]`)].find((line) => (line.textContent ?? ``).includes(id));
     expect(found).toBeInstanceOf(HTMLElement);
     return found as HTMLElement;
 };

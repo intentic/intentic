@@ -114,18 +114,21 @@ const items = computed<MenuItem[]>(() => {
         <!-- Tinted while the form below is over this connection, so a pre-filled live gateway isn't mistaken for the tile's defaults. -->
         <Row :selected="editing">
             <template #title>
-                <span class="flex flex-wrap items-center gap-2">
+                <span class="flex min-w-0 items-center gap-2">
                     <!-- Mono: an identifier the agent's skill/tools/env vars are named after, compared character by character. -->
-                    <span class="truncate font-mono">{{ instance.id }}</span>
-                    <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" />
+                    <span class="min-w-0 truncate font-mono">{{ instance.id }}</span>
+                    <StatusBadge size="xs" :dot="true" :variant="state.tone" :label="state.label" class="shrink-0" />
                 </span>
             </template>
             <!-- What tells this connection apart, given its own line and the full width rather than a capped trailing cluster. -->
-            <template v-if="facts || needsRebuild" #description>
+            <template v-if="facts" #description>
                 <!-- `block`: an inline span can't ellipsise, so a long value would run under the row's button; the full value is one hover away. -->
-                <span v-if="facts" class="block truncate font-mono" v-tooltip.top.overflow="facts">{{ facts }}</span>
-                <!-- Wraps where the address truncates: the tail is the way out of the state it describes, so it must stay visible. -->
-                <RouterLink v-if="needsRebuild" to="/sandbox/environment" class="block text-warning hover:underline">
+                <span class="block truncate font-mono" v-tooltip.top.overflow="facts">{{ facts }}</span>
+            </template>
+            <!-- A line of its own under the row, never clamped into the description: the tail is the way out of the state it
+                 describes, so it must stay visible. -->
+            <template v-if="needsRebuild" #below>
+                <RouterLink to="/sandbox/environment" class="text-2xs text-warning hover:underline">
                     {{
                         t(`capabilities.capabilityInstanceRow.finishSetup`, {
                             detail: instance.status.detail ?? t(`capabilities.words.needsSandboxRebuild`),

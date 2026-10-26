@@ -67,9 +67,9 @@ test(`sections side by side need a stack that spaces them`, () => {
 });
 
 test(`a row is as tall as its tier: a height of its own is refused`, () => {
-    assert.match(sections(`<RowGroup><Row title="Theme" class="md:min-h-14" /></RowGroup>`)[0], /equal-rows/u);
+    assert.match(sections(`<RowGroup><Row title="Theme" class="md:min-h-14" /></RowGroup>`)[0], /as tall as its tier/u);
     assert.match(sections(`<RowGroup><Row title="a" :class="[x ? 'h-12' : '']" /></RowGroup>`)[0], /height of its own/u);
-    assert.deepEqual(sections(`<RowGroup equal-rows><Row title="Theme" class="rounded-md" /></RowGroup>`), []);
+    assert.deepEqual(sections(`<RowGroup><Row title="Theme" class="rounded-md" /></RowGroup>`), []);
 });
 
 test(`an icon nudged onto its line by hand is refused; a positioned one is placement, not a nudge`, () => {

@@ -1,9 +1,10 @@
 <!-- One row inside a <RowGroup> or <NavRail>: `#lead`, title + description, a `#meta` cluster of facts, and a `#control` cluster of actions. -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useSlots } from "vue";
 import { FACE_SIZES } from "../brand/personaFace.js";
 import type { IconName } from "../../icons/iconSets.js";
 import Icon from "../primitives/Icon.vue";
+import { vTooltip } from "../../lib/tooltip.js";
 import {
     ROW_TIERS as TIERS,
     ROW_TONES as TONES,
@@ -13,6 +14,7 @@ import {
     type RowTone,
     useRowDensity,
     useRowFlushInline,
+    useRowLines,
 } from "./row.js";
 
 const {
@@ -28,6 +30,7 @@ const {
     headerButton = false,
     headlineGuard = false,
     href,
+    description,
 } = defineProps<{
     icon?: IconName;
     title?: string;
@@ -80,6 +83,9 @@ const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
 
 // The tier in force: this row's own `density` if given, else the enclosing <RowGroup>'s.
 const tier = useRowDensity(() => density);
+// Which of the tier's two heights it stands at: described, or in a group where some row is (row.ts `useRowLines`).
+const slots = useSlots();
+const described = useRowLines(() => (description !== undefined && description !== ``) || slots[`description`] !== undefined);
 // On a group with no surface of its own (a dialog's), the row keeps its height and gives up its side inset.
 const flushInline = useRowFlushInline();
 
@@ -132,9 +138,10 @@ const washes = computed(() => interactive || selected || href !== undefined || a
         :rel="href !== undefined ? `noopener` : undefined"
         :type="as === `button` && href === undefined ? `button` : undefined"
         :aria-current="selected ? `true` : undefined"
-        class="group flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 text-left"
+        class="group flex w-full flex-wrap content-center items-center justify-between gap-x-4 gap-y-2 text-left"
         :class="[
-            flush ? `` : pad,
+            // The tier's height for a bare or a described row (row.ts), which a flush row leaves to the container padding it.
+            flush ? `` : [pad, described ? TIERS[tier].heightDescribed : TIERS[tier].heightBare],
             flushInline ? (washes ? ROW_WASH_BLEED_FULL : `!px-0`) : ``,
             // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
             // its own `hover:bg-content/5`: the same 5% by luck rather than by reference.
@@ -152,10 +159,10 @@ const washes = computed(() => interactive || selected || href !== undefined || a
             class="flex min-w-0 grow items-center"
             :class="[
                 TIERS[tier].gap,
-                // A title alone can't be squeezed into one word per line by its own max-content, so it claims only
-                // the room it needs: a one-word title then keeps its control beside it on a phone instead of
-                // reserving the tier's floor and pushing the control onto a line of its own.
-                description === undefined && !$slots[`description`] ? `basis-auto` : TIERS[tier].headline,
+                // A title alone claims only the room it needs on a phone, so a one-word title keeps its control beside it
+                // instead of reserving the tier's floor and pushing the control onto a line of its own. From `md` up every
+                // headline reserves the floor, so a long title takes an ellipsis rather than a second line for the cluster.
+                description === undefined && !$slots[`description`] ? [`basis-auto`, TIERS[tier].headlineWide] : TIERS[tier].headline,
                 headerButton
                     ? `cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
                     : ``,
@@ -173,11 +180,17 @@ const washes = computed(() => interactive || selected || href !== undefined || a
             />
             <!-- `break-words` so an address, a path or an id breaks instead of running out of its box and painting over the `#meta` cluster beside it. -->
             <div class="min-w-0 flex-1 break-words" @click="onHeadlineClick">
+                <!-- One line, whatever the title says: a name that runs long takes an ellipsis (and the whole of it on hover), never a
+                     second line that makes this row taller than the ones beside it. A `#title` slot keeps to one line itself
+                     (`min-w-0 truncate` on its text): clipping it here would also clip the hover wash, focus ring and touch
+                     target of a link or a rename field inside it. -->
                 <component
                     :is="heading === undefined ? `div` : `h${heading}`"
                     v-if="title !== undefined || $slots[`title`]"
+                    v-tooltip.overflow="$slots[`title`] ? undefined : title"
                     class="min-w-0"
                     :class="[
+                        $slots[`title`] ? `` : `truncate`,
                         TIERS[tier].title,
                         heading === undefined ? `` : `text-lg`,
                         picked && !selected ? `text-muted group-hover:text-content` : `text-content`,
@@ -185,7 +198,15 @@ const washes = computed(() => interactive || selected || href !== undefined || a
                 >
                     <slot name="title">{{ title }}</slot>
                 </component>
-                <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[tier].description">
+                <!-- One line from `md` up and two on a phone, where the text column is a third as wide: the rest is on hover. A
+                     `#description` slot keeps to one line itself, for the title's reason, and puts what needs a line of its own
+                     (a state's way out, a failure) in `#below`. -->
+                <p
+                    v-if="description !== undefined || $slots[`description`]"
+                    v-tooltip.overflow="$slots[`description`] ? undefined : description"
+                    class="min-w-0 text-muted"
+                    :class="[$slots[`description`] ? `` : `line-clamp-2 md:line-clamp-1`, TIERS[tier].description]"
+                >
                     <slot name="description">{{ description }}</slot>
                 </p>
             </div>

@@ -64,14 +64,20 @@ flowchart LR
   its inks. `text-accent` is the accent as an ink (a tick, a selected glyph, a filling ring). It stays legible on
   paper, where the `primary-500` it replaced was 2.4:1. `<Button>` takes `tier` (`loud`,
   `accent`, `boring`, `quiet`) and `tone` rather than PrimeVue's `severity`/`text` (`src/components/primitives/button.ts`).
-  `RowGroup equal-rows` gives a settings group's rows one floor height on desktop (the tier's `floor`); a row never
-  states a height of its own. Leave it off groups with drawers or below-row content.
+  **A row has two heights per tier, and its group picks one** (`row.ts`: `heightBare` for a one-line row,
+  `heightDescribed` for a row with a description under its name; compact 48px / 64px, comfortable 56px / 72px, the
+  dense rail 32px / 48px). Once any row of a `RowGroup` is described, every row in it stands at the described height,
+  so a bare row beside described ones matches them and a list of bare rows stays tight. A row never states a height of
+  its own. Text cannot raise it: a plain title keeps to one line and a plain description to one from `md` up (two on a
+  phone), each ending in an ellipsis with the rest on hover; a `#title` or `#description` slot keeps to one line itself
+  and puts anything longer in `#below`. Only a row that draws more than a row (a `#below` block, an open drawer, a
+  control that takes a line of its own on a phone) is taller.
 - **One section header.** `SectionHeader` is the label over a part of a view, sized by its tier (`row.ts`: a page's,
   or a rail's under `dense`), with `#info` beside the label and `#actions` at the line's end. `RowGroup` is it over the
   rows' card, `Section` is it over anything else (cards, a grid, a form), and `NavRail` draws it per group. None can
   carry a count, a caption or a fill, and the room under it is the tier's. A sentence a reader needs goes on the
   group's surface as a `RowNote`. `ui.sectionLabel()` is its look, called by nothing else in this repository. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
-  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
+  Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. `ColorPicker size="sm"` fits a settings row.
   `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details, and nothing else wears it:
   an expanding row is a `DisclosureRow`. `ui-row-select-on` is reserved for selection, the icon rail's current tile
   included (with `ui-row-select-horizontal`, which keeps a tile's or a strip's mark to its tint). The translucent `--ui-row-open-wash` token uses

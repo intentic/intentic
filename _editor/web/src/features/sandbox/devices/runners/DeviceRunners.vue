@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Button, ConfirmDialog, DeviceRunLog, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, DeviceRunLog, Icon, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useOperation, useOperations } from "../../../../workbench/operations/operations";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
@@ -230,30 +230,27 @@ const add = async (): Promise<void> => {
             <span class="text-2xs text-danger">{{ t(`sandbox.deviceRunners.unread`, { reason: unread }) }}</span>
         </RowNote>
 
-        <ul v-if="mine.length > 0" class="flex flex-col">
-            <li v-for="runner in mine" :key="runner.id" class="flex items-center gap-2 px-4 py-2.5">
-                <Icon name="desktop" class="text-xs" :class="runner.online ? 'text-accent' : 'text-subtle'" />
-                <span class="flex min-w-0 flex-col">
-                    <span class="truncate text-xs text-content">{{ runner.id }}</span>
-                    <!-- Which side it was built through, only where a PC has more than one. -->
-                    <span class="text-2xs text-subtle"
-                        >{{ facts(runner) }}<template v-if="builtOn(runner.host)"> · {{ builtOn(runner.host) }}</template></span
-                    >
-                    <!-- What this sandbox sends here, set under Agent → Tools → Where heavy work runs. -->
-                    <span v-if="sentHere(runner.id).length > 0" class="truncate text-2xs text-muted">{{
-                        t(`sandbox.agentOffload.sentHere`, { kinds: sentHere(runner.id).join(`, `) })
-                    }}</span>
-                    <span v-if="lastHere(runner.id)" class="truncate text-2xs text-subtle">{{ lastHere(runner.id) }}</span>
-                    <!-- Detail rides the tooltip so the row stays one glance. -->
-                    <span v-if="driftSummary(runner)" class="truncate text-2xs text-warning" v-tooltip.top.lines="driftDetail(runner)">
-                        {{ driftSummary(runner) }}
-                    </span>
-                </span>
+        <!-- One row each at the list's own height: what it is under its name, its state and its verbs at the edge, and only
+             what needs a second look (what is sent here, the last run, drift) on a line of its own under the name. -->
+        <Row
+            v-for="runner in mine"
+            :key="runner.id"
+            :title="runner.id"
+            :description="builtOn(runner.host) ? `${facts(runner)} · ${builtOn(runner.host)}` : facts(runner)"
+            :data-runner="runner.id"
+            indent
+        >
+            <template #lead="{ iconClass }">
+                <Icon name="desktop" class="shrink-0" :class="[iconClass, runner.online ? 'text-accent' : 'text-subtle']" />
+            </template>
+            <template v-if="!runner.online || runner.parity === `outdated`" #meta>
                 <StatusBadge v-if="!runner.online" variant="neutral" size="xs" :label="t(`sandbox.deviceRunners.offline`)" />
                 <!-- A runner behind the parent runs fine until it doesn't, then fails as a link error rather than an old machine; drift is said here instead. -->
-                <StatusBadge v-else-if="runner.parity === `outdated`" variant="warning" size="xs" :label="t(`sandbox.deviceRunners.outdated`)" />
-                <!-- Update rebuilds an outdated container; Sync pushes the fixable half over the runner's live link. -->
-                <span class="ml-auto flex items-center gap-1">
+                <StatusBadge v-else variant="warning" size="xs" :label="t(`sandbox.deviceRunners.outdated`)" />
+            </template>
+            <!-- Update rebuilds an outdated container; Sync pushes the fixable half over the runner's live link. -->
+            <template #control>
+                <span class="flex items-center gap-1">
                     <Button
                         v-if="runner.parity === `outdated` && runner.online"
                         size="small"
@@ -272,14 +269,28 @@ const add = async (): Promise<void> => {
                     />
                     <Button
                         size="small"
-                        tier="quiet" tone="danger"
+                        tier="quiet"
+                        tone="danger"
                         :label="t(`ui.action.remove`)"
                         :disabled="busy || door.device.online !== true"
                         @click="run(`remove`, runner.id)"
                     />
                 </span>
-            </li>
-        </ul>
+            </template>
+            <template v-if="sentHere(runner.id).length > 0 || lastHere(runner.id) || driftSummary(runner)" #below>
+                <span class="flex min-w-0 flex-col text-2xs">
+                    <!-- What this sandbox sends here, set under Agent → Tools → Where heavy work runs. -->
+                    <span v-if="sentHere(runner.id).length > 0" class="truncate text-muted">{{
+                        t(`sandbox.agentOffload.sentHere`, { kinds: sentHere(runner.id).join(`, `) })
+                    }}</span>
+                    <span v-if="lastHere(runner.id)" class="truncate text-subtle">{{ lastHere(runner.id) }}</span>
+                    <!-- Detail rides the tooltip so the row stays one glance. -->
+                    <span v-if="driftSummary(runner)" class="truncate text-warning" v-tooltip.top.lines="driftDetail(runner)">
+                        {{ driftSummary(runner) }}
+                    </span>
+                </span>
+            </template>
+        </Row>
 
         <!-- Said where the list would be, since an empty surface with a heading reads as a failure to load. -->
         <RowNote v-if="mine.length === 0 && !adding" variant="empty">{{

@@ -224,7 +224,7 @@ const pickFolder = async (): Promise<void> => {
                         <button
                             type="button"
                             data-found-row
-                            class="ui-row-select group flex w-full items-center gap-3 px-4 py-2.5 text-left disabled:cursor-default"
+                            class="ui-row-select group flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left disabled:cursor-default"
                             :disabled="opening !== undefined && opening !== project.path"
                             :aria-expanded="project.holder === `other` ? expanded === project.path : undefined"
                             v-tooltip.bottom="tipOf(project)"

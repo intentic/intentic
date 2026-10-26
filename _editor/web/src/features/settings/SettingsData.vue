@@ -96,7 +96,7 @@ const confirmDelete = async (): Promise<void> => {
                 </template>
             </Row>
         </RowGroup>
-        <RowGroup :label="t(`settings.settingsData.dataPrivacy`)" :equal-rows="!confirmingDelete && !deleting && !deleteError && !exportError">
+        <RowGroup :label="t(`settings.settingsData.dataPrivacy`)">
             <Row data-setting="export-data" icon="download" :title="t(`settings.settingsData.exportMyData`)">
                 <template #control>
                     <Button

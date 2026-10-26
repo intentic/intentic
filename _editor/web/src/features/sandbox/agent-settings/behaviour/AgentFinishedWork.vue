@@ -55,7 +55,7 @@ const HELD_RETENTION_OPTIONS = computed(() => [
 </script>
 
 <template>
-    <RowGroup data-setting="agent-finished-work" :label="t(`sandbox.agentFinishedWork.finishedWork`)" equal-rows>
+    <RowGroup data-setting="agent-finished-work" :label="t(`sandbox.agentFinishedWork.finishedWork`)">
         <!-- Daemon-side, not a browser preference, since automation-opened agents (Discord, webhooks, email) finish with no browser present. -->
         <Row
             icon="download"

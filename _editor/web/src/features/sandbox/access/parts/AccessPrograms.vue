@@ -84,11 +84,11 @@ const doors = computed(() => {
         <!-- Machine access other than sign-ins and tokens. The whole group stands in while it is read, drawn as it last
              looked in this sandbox: its rows sit straight in it. -->
         <Await :of="loaded" imprint="sandbox.access.other-ways-in">
-            <RowGroup v-if="doors.length > 0" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
+            <RowGroup v-if="doors.length > 0" :label="t(`sandbox.sandboxAccess.otherWaysIn`)">
                 <Row v-for="door in doors" :key="door.key" :icon="door.icon" :title="door.title" :description="door.description" />
             </RowGroup>
             <template #fallback>
-                <RowGroup :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
+                <RowGroup :label="t(`sandbox.sandboxAccess.otherWaysIn`)">
                     <div role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
                 </RowGroup>
             </template>

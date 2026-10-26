@@ -1,4 +1,4 @@
-import { computed, inject, provide, type ComputedRef, type InjectionKey } from "vue";
+import { computed, inject, onBeforeUnmount, onUpdated, provide, shallowReactive, type ComputedRef, type InjectionKey } from "vue";
 import { toneInk } from "../../lib/tone.js";
 
 // Row geometry as data, so <DisclosureRow> can build its header mirror from the same numbers the visible
@@ -21,41 +21,55 @@ export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
 // between the header and what it heads. The list or section owns the last two, not the header: a header alone in a
 // toolbar or a label column is the line and nothing else. A view never states any of the three, which is what let a dozen views each
 // grow a count, a caption or a band behind their header before the header had one owner.
-// `floor` is the one height a settings group's rows share (<RowGroup equal-rows>): a floor, not the tallest row, so a
-// row that wraps a wide control is the only tall one rather than the reason every row is.
+// TWO HEIGHTS PER TIER, AND THE GROUP PICKS ONE. `heightBare` holds a row that is one line (a name, its facts, its
+// verbs); `heightDescribed` a row with a line of description under its name. Both leave the same air above and below the
+// text, so a bare list reads as tight as it is and a described one as calm. A group is one height: once any row on its
+// surface is described, every row there stands at `heightDescribed`, so a bare "Theme" beside a described "Wallpaper" is
+// as tall as it (useRowLines below). The heights are floors that hold a face, a small button or a segmented control
+// inside the tier's padding; text never raises them, since the title keeps to one line and the description to one (two on
+// a phone), so only a row that draws more than a row (a `#below` block, an open drawer, a control that needs a line of
+// its own) is taller. `headlineWide` is the headline's basis from `md` up, title-only rows included, so a long title gives
+// way to an ellipsis instead of pushing the trailing cluster onto a second line.
+// 2026-10-26: the owner found the rows dense and their heights uneven (40px to 71px in one view, a 56px floor only where a
+// group asked for one with `equal-rows`). Rejected after trying it: one height for every row (64px), which left bare lists
+// (Environment, Secrets, Extensions) a row's worth of empty air per line.
 /* A tier is read in one place rather than reassembled from five ternaries down a template. */
 export const ROW_TIERS = {
     comfortable: {
         pad: `px-4.5 py-3.5`,
         facePad: `px-4.5 py-2.5`,
+        heightBare: `min-h-14`,
+        heightDescribed: `min-h-18`,
         gap: `gap-3`,
         icon: `text-xl`,
         title: `font-semibold leading-tight`,
         description: `text-xs`,
         headline: `basis-56`,
+        headlineWide: `md:basis-56`,
         mark: 28,
         heading: `sm`,
         headingLine: `gap-x-2.5 gap-y-1`,
         headingLabel: `min-w-0`,
         headingInset: `px-1`,
         headingGap: `mb-2.5`,
-        floor: `md:*:min-h-16`,
     },
     compact: {
         pad: `px-4 py-2.5`,
         facePad: `px-4 py-1`,
+        heightBare: `min-h-12`,
+        heightDescribed: `min-h-16`,
         gap: `gap-3`,
         icon: `text-lg`,
         title: `text-sm font-medium leading-tight`,
         description: `text-2xs`,
         headline: `basis-44`,
+        headlineWide: `md:basis-44`,
         mark: 22,
         heading: `sm`,
         headingLine: `gap-x-2.5 gap-y-1`,
         headingLabel: `min-w-0`,
         headingInset: `px-1`,
         headingGap: `mb-2.5`,
-        floor: `md:*:min-h-14`,
     },
     // Lowest of the three on purpose: the nav rail is a fixed 16rem and its rows carry a chip at most, so a
     // wrap there would be the tier reflowing a column that was never short of room. Its heading truncates for the same
@@ -63,18 +77,20 @@ export const ROW_TIERS = {
     dense: {
         pad: `px-2.5 py-2`,
         facePad: `px-2.5 py-0.5`,
+        heightBare: `min-h-8`,
+        heightDescribed: `min-h-12`,
         gap: `gap-2.5`,
         icon: `text-base`,
         title: `text-xs font-medium leading-tight`,
         description: `text-2xs`,
         headline: `basis-24`,
+        headlineWide: `md:basis-24`,
         mark: 18,
         heading: `xs`,
         headingLine: `gap-x-2 gap-y-0.5`,
         headingLabel: `min-w-0 truncate`,
         headingInset: `pl-2 pr-1`,
         headingGap: `mb-1`,
-        floor: `md:*:min-h-12`,
     },
 } as const satisfies Record<RowDensity, Record<string, string | number>>;
 
@@ -123,6 +139,46 @@ export const provideRowDensity = (density: ComputedRef<RowDensity>): void => pro
 export const useRowDensity = (own: () => RowDensity | undefined): ComputedRef<RowDensity> => {
     const group = inject(ROW_DENSITY, undefined);
     return computed(() => own() ?? group?.value ?? `comfortable`);
+};
+
+// WHICH OF ITS TWO HEIGHTS A ROW STANDS AT (`heightBare` / `heightDescribed`). <RowGroup> keeps the set of its described
+// rows; each <Row> enters it while it carries a description and reads back whether anyone has, so a group whose rows
+// disagree stands at the taller height together. A set rather than a flag, so a row that loses its description, or
+// leaves, takes its vote with it. Read after every render as well as at setup: a `#description` slot coming or going is
+// not a reactive read, but it always re-renders the row.
+interface RowLines {
+    readonly described: ComputedRef<boolean>;
+    readonly vote: (row: symbol, described: boolean) => void;
+}
+const ROW_LINES: InjectionKey<RowLines> = Symbol(`ui.row.lines`);
+
+/** Published by <RowGroup>: its rows stand at one height, the described one once any of them is described. */
+export const provideRowLines = (): void => {
+    const described = shallowReactive(new Set<symbol>());
+    provide(ROW_LINES, {
+        described: computed(() => described.size > 0),
+        vote: (row, on) => {
+            if (on) {
+                described.add(row);
+            } else {
+                described.delete(row);
+            }
+        },
+    });
+};
+
+/** Whether this row stands at its tier's described height: it is described itself, or a row of its group is. */
+export const useRowLines = (own: () => boolean): ComputedRef<boolean> => {
+    const group = inject(ROW_LINES, undefined);
+    if (group === undefined) {
+        return computed(own);
+    }
+    const row = Symbol(`row`);
+    const vote = (): void => group.vote(row, own());
+    vote();
+    onUpdated(vote);
+    onBeforeUnmount(() => group.vote(row, false));
+    return computed(() => own() || group.described.value);
 };
 
 // WHERE A ROW'S TEXT STARTS. A group on a surface of its own insets its rows by the tier's padding; a group on a dialog

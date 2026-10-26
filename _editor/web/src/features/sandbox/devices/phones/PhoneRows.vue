@@ -20,7 +20,7 @@ const rows = computed(() => peers.value.map(phoneRowOf));
     <RowGroup v-if="rows.length > 0" :label="t(`sandbox.phoneRows.phones`)">
         <Row v-for="row in rows" :key="row.id">
             <template #title>
-                <span class="flex flex-wrap items-center gap-2">
+                <span class="flex min-w-0 items-center gap-2">
                     <!-- The phone's own OS mark, as a machine's tile wears its own; a platform drawn by nobody keeps the handset. -->
                     <BrandMark
                         :size="16"
@@ -30,8 +30,8 @@ const rows = computed(() => peers.value.map(phoneRowOf));
                         :plain="true"
                         :idle="row.tone === `neutral`"
                     />
-                    <span class="truncate font-mono">{{ row.id }}</span>
-                    <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="phoneStateWord(row.state)" />
+                    <span class="min-w-0 truncate font-mono">{{ row.id }}</span>
+                    <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="phoneStateWord(row.state)" class="shrink-0" />
                 </span>
             </template>
             <template v-if="row.detail" #description>

@@ -3,7 +3,7 @@
 import { computed } from "vue";
 import type { SectionLabelVariants } from "../../lib/ui.js";
 import { SurfaceGround, useSurfaceGround } from "../overlays/surfaceGround.js";
-import { provideRowDensity, provideRowFlushInline, ROW_TIERS, type RowDensity } from "./row.js";
+import { provideRowDensity, provideRowFlushInline, provideRowLines, ROW_TIERS, type RowDensity } from "./row.js";
 import SectionHeader from "./SectionHeader.vue";
 
 // Replaces the text label for a group drawn as a loading skeleton, whose heading is a bar like the rows under it.
@@ -17,18 +17,22 @@ import SectionHeader from "./SectionHeader.vue";
 // the rows sliding under it show through its own text.
 // WHETHER IT DRAWS A CARD IS NOT ITS CALLER'S CALL: on a surface (a dialog, a <Card>, another group's card) it is its
 // rows and their hairlines (surfaceGround.ts). A label over things that are not rows is a <Section>.
-const { density = `compact`, equalRows } = defineProps<{
+const { density = `compact` } = defineProps<{
     label?: string;
     /** A group that IS a state ("Failed", "Needs you") heads itself in that state's ink. */
     tone?: NonNullable<SectionLabelVariants[`tone`]>;
     undivided?: boolean;
-    /** One floor height for simple settings rows on desktop (the tier's `floor`). Keep off groups with drawers or below-row content. */
+    // Retired 2026-10-26 and ignored: every group's rows now share one height by themselves, the described one once any of
+    // them is described (row.ts `useRowLines`), so there is nothing left to ask for. Still declared so an installed
+    // extension passing it is not handed a stray attribute; nothing in this repository passes it (`_tools/checks/row-tiers.mjs`).
     equalRows?: boolean;
     /** Leave alone: a group is a list and a list is `compact`. See the note above before overriding. */
     density?: RowDensity;
 }>();
 
 provideRowDensity(computed(() => density));
+// One height for the whole group: the described one once any row on it is described (row.ts `useRowLines`).
+provideRowLines();
 
 const onGround = useSurfaceGround();
 provideRowFlushInline(onGround);
@@ -51,13 +55,10 @@ provideRowFlushInline(onGround);
         <div v-if="$slots[`lead`]" class="mb-3 flex flex-col gap-3">
             <slot name="lead" />
         </div>
-        <!-- Equal rows: a floor every row reaches, centring what it holds by `align-content`, which a <Row> (a wrapping
-             flex line) and a plain block child (a note, a skeleton) both answer. -->
         <div
             :class="[
                 undivided === true ? `` : `divide-y divide-line-subtle`,
                 onGround ? `` : `overflow-hidden rounded-xl bg-card shadow-sm`,
-                equalRows ? [ROW_TIERS[density].floor, `*:content-center`] : ``,
             ]"
         >
             <SurfaceGround><slot /></SurfaceGround>

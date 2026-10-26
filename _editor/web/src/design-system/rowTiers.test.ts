@@ -7,7 +7,7 @@
 // a <RowNote> pads from the same tier.
 import "@intentic/testing/dom";
 import { DisclosureRow, ROW_TIERS, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 
 const mounted: { app: App; host: HTMLElement }[] = [];
 
@@ -186,4 +186,70 @@ it(`gives the empty state the group's left edge and more vertical room than a ro
     expect(note?.className).toContain(`px-4`);
     expect(note?.className).not.toContain(ROW_TIERS.compact.pad);
     expect(note?.className).toContain(`text-center`);
+});
+
+// Two heights per tier, and the group picks one: the owner found a settings view stacking 40px, 54px and 70px rows, then
+// found one height for all (64px) left bare lists a row's worth of air per line.
+it(`stands a bare list at the tier's bare height, and a flush row at none`, async () => {
+    const host = await mount(undefined, () => [
+        h(Row, { title: `ffmpeg` }),
+        h(Row, { title: `Maya`, lead: `face` }, { lead: () => h(`span`, { class: `face` }) }),
+        h(Row, { title: `Masthead`, flush: true }),
+    ]);
+    const rows = [...host.querySelectorAll<HTMLElement>(`.group`)];
+    expect(rows.slice(0, 2).map((row) => row.classList.contains(ROW_TIERS.compact.heightBare))).toEqual([true, true]);
+    expect(rows.some((row) => row.classList.contains(ROW_TIERS.compact.heightDescribed)), `nothing here is described`).toBe(false);
+    expect(rows[2]?.classList.contains(ROW_TIERS.compact.heightBare), `a flush row leaves its height to the container padding it`).toBe(false);
+});
+
+it(`raises every row of a group to the described height once one of them is described, and lowers it when that row goes`, async () => {
+    const wallpaper = ref(true);
+    const host = await mount(undefined, () => [
+        h(Row, { title: `Theme` }),
+        wallpaper.value ? h(Row, { title: `Wallpaper`, description: `A picture behind the agents board.` }) : null,
+        h(Row, { title: `Text size` }, { control: () => h(`button`, null, `Compact`) }),
+    ]);
+    const heights = (): boolean[] => [...host.querySelectorAll<HTMLElement>(`.group`)].map((row) => row.classList.contains(ROW_TIERS.compact.heightDescribed));
+    await nextTick();
+    expect(heights(), `a bare row beside a described one matches it`).toEqual([true, true, true]);
+    wallpaper.value = false;
+    await nextTick();
+    await nextTick();
+    expect(heights(), `with no described row left, the group is bare again`).toEqual([false, false]);
+});
+
+// A group is the unit, not the page: a bare group under a described one keeps its own height.
+it(`keeps each group's height to itself`, async () => {
+    const described = await mount(undefined, () => h(Row, { title: `Language`, description: `The language this interface is written in.` }));
+    const bare = await mount(undefined, () => h(Row, { title: `bun` }));
+    expect(described.querySelector(`.group`)?.classList.contains(ROW_TIERS.compact.heightDescribed)).toBe(true);
+    expect(bare.querySelector(`.group`)?.classList.contains(ROW_TIERS.compact.heightBare)).toBe(true);
+});
+
+// Text never raises a row: a plain title is one line and a plain description one from `md` up, each ending in an
+// ellipsis. A slot is left alone, since clipping it would also clip the link, rename field or touch target inside it.
+it(`keeps a plain title and description to one line, and leaves a slot's own layout to the slot`, async () => {
+    const host = await mount(undefined, () => [
+        h(Row, { title: `Language`, description: `The language this interface is written in. Your files are untouched.` }),
+        h(Row, null, { title: () => h(`a`, { class: `slot-title`, href: `#` }, `Rename me`), description: () => h(`span`, { class: `slot-description` }, `x`) }),
+    ]);
+    const [plain, slotted] = [...host.querySelectorAll<HTMLElement>(`.group`)];
+    const title = plain?.querySelector<HTMLElement>(`.font-medium`);
+    const description = plain?.querySelector<HTMLElement>(`p`);
+    expect(title?.textContent).toBe(`Language`);
+    expect(title?.classList.contains(`truncate`)).toBe(true);
+    expect(description?.classList.contains(`md:line-clamp-1`)).toBe(true);
+    expect(slotted?.querySelector(`.slot-title`)?.parentElement?.classList.contains(`truncate`)).toBe(false);
+    expect(slotted?.querySelector(`.slot-description`)?.parentElement?.classList.contains(`md:line-clamp-1`)).toBe(false);
+});
+
+// A bare title used to claim its whole width, so a long one pushed the trailing cluster onto a second line of its own.
+// From `md` up it reserves the tier's floor like a described row does, and the title takes the ellipsis instead.
+it(`gives a bare title the tier's headline floor from md up, so a long one cannot push the cluster down a line`, async () => {
+    const host = await mount(undefined, () =>
+        h(Row, { title: `Finish the framework migrations across every package` }, { control: () => h(`button`, null, `Run`) }),
+    );
+    const headline = host.querySelector<HTMLElement>(`.group > div`);
+    expect(headline?.classList.contains(`basis-auto`)).toBe(true);
+    expect(headline?.classList.contains(ROW_TIERS.compact.headlineWide)).toBe(true);
 });

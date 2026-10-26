@@ -274,15 +274,16 @@ const rungs = computed(() => {
                             <Icon :name="rung.icon" class="shrink-0" :class="[iconClass, rung.iconClass]" />
                         </template>
                         <template #title>
-                            <span class="flex flex-wrap items-center gap-2">
-                                {{ optionOf(rung.model)?.label }}
-                                <StatusBadge :variant="rung.badgeVariant" :label="rung.badge" size="xs" />
+                            <span class="flex min-w-0 items-center gap-2">
+                                <span class="min-w-0 truncate">{{ optionOf(rung.model)?.label }}</span>
+                                <StatusBadge :variant="rung.badgeVariant" :label="rung.badge" size="xs" class="shrink-0" />
                             </span>
                         </template>
-                        <!-- What it is for, then what it costs as short facts, read as one block under the name. -->
-                        <template #description>
-                            <span class="block">{{ rung.pitch }}</span>
-                            <span class="mt-0.5 block text-2xs tabular-nums text-subtle">{{ rung.facts.join(` · `) }}</span>
+                        <!-- What it is for under the name; what it costs as short facts in the row's facts column, so the row stays one
+                             height whatever the pitch says. -->
+                        <template #description>{{ rung.pitch }}</template>
+                        <template #meta>
+                            <span>{{ rung.facts.join(` · `) }}</span>
                         </template>
                         <template #control>
                             <!-- Taken: where it has got to, in place of a button whose second press would write a second entry and

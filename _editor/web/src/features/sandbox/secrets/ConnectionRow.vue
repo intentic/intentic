@@ -61,7 +61,7 @@ const DOT_TONE: Record<string, string> = {
 
 <template>
     <!-- Every connection row stands at one height, two lines or one, so a list of them reads as a column rather than a staircase:
-         that height is the group's (`equal-rows` on the <RowGroup> holding them), never the row's own.
+         that height is the tier's (row.ts `height`), never the row's own.
          A warning row takes the tint's fill only: the hairline under it is the group's, so it keeps the group's colour. -->
     <Row :interactive="interactive" :class="tone === `warning` ? toneFill(`warning`) : ``">
         <!-- One column as wide as the tier's mark, so a dot, a meter and a plus all centre on the same line and every name starts at the same x. -->

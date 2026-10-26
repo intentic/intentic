@@ -22,9 +22,9 @@ const stateWord = (state: (typeof rows.value)[number][`state`]): string =>
     <RowGroup v-if="rows.length > 0" :label="t(`sandbox.linkedSandboxRows.title`)">
         <Row v-for="row in rows" :key="row.id" icon="link">
             <template #title>
-                <span class="flex flex-wrap items-center gap-2">
-                    <span class="truncate font-mono">{{ row.name }}</span>
-                    <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="stateWord(row.state)" />
+                <span class="flex min-w-0 items-center gap-2">
+                    <span class="min-w-0 truncate font-mono">{{ row.name }}</span>
+                    <StatusBadge size="xs" :dot="true" :variant="row.tone" :label="stateWord(row.state)" class="shrink-0" />
                 </span>
             </template>
             <template v-if="row.detail" #description>

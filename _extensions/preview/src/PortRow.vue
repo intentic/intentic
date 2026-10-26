@@ -53,8 +53,8 @@ const details = computed<string[][]>(() => [
 
         <!-- What it is for, and the terminal it lives in when there is one. -->
         <template #description>
-            <span class="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                <span>{{ entry.purpose }}</span>
+            <span class="flex min-w-0 items-baseline gap-x-2">
+                <span class="min-w-0 truncate">{{ entry.purpose }}</span>
                 <button
                     v-if="entry.session"
                     type="button"

@@ -119,14 +119,21 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                     <BrandMark plain :size="mark" :name="engine.label" :logo="engineVisual(engine.id).logo" :icon="engineVisual(engine.id).icon" />
                 </template>
                 <template #title>
-                    <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <span class="text-xs">{{ engine.label }}</span>
-                        <StatusBadge v-if="engine.running.source === `store`" variant="info" size="xs" :label="t(`sandbox.enginesCard.installed`)" />
-                        <StatusBadge v-else-if="engine.running.version" variant="neutral" size="xs" :label="t(`sandbox.enginesCard.image`)" />
+                    <span class="flex min-w-0 items-center gap-x-2">
+                        <span class="min-w-0 truncate text-xs">{{ engine.label }}</span>
+                        <StatusBadge
+                            v-if="engine.running.source === `store`"
+                            variant="info"
+                            size="xs"
+                            class="shrink-0"
+                            :label="t(`sandbox.enginesCard.installed`)"
+                        />
+                        <StatusBadge v-else-if="engine.running.version" variant="neutral" size="xs" class="shrink-0" :label="t(`sandbox.enginesCard.image`)" />
                         <StatusBadge
                             v-if="engine.running.version && engine.blessed && engine.running.version !== engine.blessed"
                             variant="warning"
                             size="xs"
+                            class="shrink-0"
                             :label="t(`sandbox.enginesCard.notRecommended`)"
                         />
                     </span>

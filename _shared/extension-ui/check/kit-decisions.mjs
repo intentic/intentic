@@ -74,7 +74,7 @@ const redecidedLooks = (name, words, parent) => [
         : []),
     ...((name === `Row` || name === `DisclosureRow`) && ROW_HEIGHT.test(words)
         ? [
-              `<${name}> is given a height of its own, so it stands taller or shorter than the rows beside it: a row is as tall as its tier, and a settings group whose rows share one height says so once with \`equal-rows\``,
+              `<${name}> is given a height of its own, so it stands taller or shorter than the rows beside it: a row is as tall as its tier and its group (one line, or described once any row of the group is), and its text is clamped so it cannot raise it`,
           ]
         : []),
 ];

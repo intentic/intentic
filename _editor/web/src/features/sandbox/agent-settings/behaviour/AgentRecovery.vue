@@ -150,7 +150,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
 <template>
     <!-- Its sections stacked here at the page's rhythm, so whatever mounts it cannot leave two headers touching. -->
     <div class="flex flex-col gap-6">
-        <RowGroup data-setting="agent-turn-breaks" :label="t(`sandbox.agentRecovery.turnBreaks`)" equal-rows>
+        <RowGroup data-setting="agent-turn-breaks" :label="t(`sandbox.agentRecovery.turnBreaks`)">
             <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentRecovery.turnBreaks`)" /></template>
             <!-- The default for every conversation; a chat's own control writes an override for that chat alone. -->
             <Row icon="clock" :title="breakLabel(`limit`)" :description="t(`sandbox.agentRecovery.limitPolicyNote`)">
@@ -334,7 +334,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
             <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
         </RowGroup>
         <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
-        <RowGroup data-setting="agent-idle-chats" :label="t(`sandbox.agentRecovery.keepWarmGroup`)" equal-rows>
+        <RowGroup data-setting="agent-idle-chats" :label="t(`sandbox.agentRecovery.keepWarmGroup`)">
             <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
                 <template #control>
                     <ToggleSwitch

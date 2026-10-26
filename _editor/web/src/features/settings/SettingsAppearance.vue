@@ -189,9 +189,8 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- Look: whole-workspace appearance choices. The group's floor (`equal-rows`) keeps title-only rows at the settings
-             baseline; descriptions and wrapped controls grow naturally without setting every other row's height. -->
-        <RowGroup :label="t(`settings.appearance.look.group`)" equal-rows>
+        <!-- Look: whole-workspace appearance choices, every row at the tier's one height whether it is described or not. -->
+        <RowGroup :label="t(`settings.appearance.look.group`)">
             <!-- First in the group: it decides what every other row on this page is written in. -->
             <Row
                 data-setting="language"

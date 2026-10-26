@@ -260,33 +260,25 @@ const items = computed<MenuItem[]>(() => {
         <RowNote v-if="spec.caption(links) !== undefined" :label="spec.caption(links)" />
         <!-- The links stay listed: this says the live half is missing, not the capabilities. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
-        <Row v-for="row in rows" :key="row.id" :icon="spec.icon(row.link)" :selected="editingId === row.id">
+        <Row v-for="row in rows" :key="row.id" :icon="spec.icon(row.link)" :selected="editingId === row.id" indent>
             <!-- Status rides the name, as elsewhere in the app, not beside the controls, which have the least space to spare. -->
             <template #title>
-                <span class="flex flex-wrap items-center gap-2">
-                    <span class="truncate">{{ row.id }}</span>
+                <span class="flex min-w-0 items-center gap-2">
+                    <span class="min-w-0 truncate">{{ row.id }}</span>
                     <StatusBadge
                         v-if="row.link"
                         size="xs"
                         dot
+                        class="shrink-0"
                         :variant="spec.variant(row.link)"
                         :label="row.link.state"
                         v-tooltip.top="row.link.detail"
                     />
                 </span>
             </template>
-            <template #description>
+            <template v-if="row.facts" #description>
                 <!-- `block truncate`: an inline span can't ellipsise, so three routes would wrap under the row's button instead. -->
-                <span v-if="row.facts" class="block truncate font-mono" v-tooltip.top.overflow="row.facts">{{ row.facts }}</span>
-                <!-- Wraps rather than truncates: the tail here is the way out of the state, not text an ellipsis should hide. -->
-                <span v-if="row.note === 'rebuild'" class="block text-warning">
-                    {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}
-                    <RouterLink to="/sandbox/environment" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
-                </span>
-                <span v-else-if="row.note === 'drifted'" class="block text-danger">{{
-                    t(`common.netdiskMounts.mountedWritableThoughReadOnly`)
-                }}</span>
-                <span v-else-if="row.note === 'auto'" class="block">{{ spec.autoNote() }}</span>
+                <span class="block truncate font-mono" v-tooltip.top.overflow="row.facts">{{ row.facts }}</span>
             </template>
             <template #control>
                 <!-- No button until the link arrives; guessing open vs close from stored config risks the wrong link. -->
@@ -313,8 +305,16 @@ const items = computed<MenuItem[]>(() => {
                     </button>
                 </div>
             </template>
-            <template v-if="progressOf(row.id) || failureOf(row.id) || otpFor === row.id" #below>
-                <div class="mt-2 flex flex-col gap-2">
+            <template v-if="row.note !== undefined || progressOf(row.id) || failureOf(row.id) || otpFor === row.id" #below>
+                <div class="flex flex-col gap-2">
+                    <!-- A line of its own under the name, never clamped into the description: the tail here is the way out of the
+                         state, not text an ellipsis should hide. -->
+                    <p v-if="row.note === 'rebuild'" class="text-2xs text-warning">
+                        {{ t(`common.vpnConnections.needsSandboxRebuildTo`) }}
+                        <RouterLink to="/sandbox/environment" class="text-link hover:underline">{{ t(`common.vpnConnections.finishSetup`) }}</RouterLink>
+                    </p>
+                    <p v-else-if="row.note === 'drifted'" class="text-2xs text-danger">{{ t(`common.netdiskMounts.mountedWritableThoughReadOnly`) }}</p>
+                    <p v-else-if="row.note === 'auto'" class="text-2xs text-muted">{{ spec.autoNote() }}</p>
                     <p v-if="progressOf(row.id)" class="font-mono text-2xs text-subtle">{{ progressOf(row.id) }}</p>
                     <!-- The client's own text (a --servercert digest, mount.cifs's advice); preserved verbatim and wrapped, not truncated. -->
                     <Notice v-if="failureOf(row.id)" tone="danger">

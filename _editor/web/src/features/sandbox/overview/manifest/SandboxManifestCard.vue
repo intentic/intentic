@@ -59,17 +59,17 @@ const applyRepair = async (path: string, action: ManifestRepairAction): Promise<
             @update:open="toggle(notice.path, $event)"
         >
             <template #title>
-                <span class="flex flex-wrap items-center gap-2">
+                <span class="flex min-w-0 items-center gap-2">
                     <button
                         type="button"
-                        class="cursor-pointer rounded-sm text-left font-mono text-xs hover:text-link hover:underline"
+                        class="min-w-0 cursor-pointer truncate rounded-sm text-left font-mono text-xs hover:text-link hover:underline"
                         v-tooltip.top="notice.path"
                         @click="void openWorkspaceRef(notice.path)"
                     >
                         {{ notice.file }}
                     </button>
                     <!-- Beside the name, not the row's far edge, since it's a fact about this file. -->
-                    <StatusBadge variant="neutral" size="xs" :label="notice.impact" />
+                    <StatusBadge variant="neutral" size="xs" :label="notice.impact" class="shrink-0" />
                 </span>
             </template>
             <template #below>

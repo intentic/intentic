@@ -111,9 +111,11 @@ const statusWords = computed((): string | undefined => status.value?.words);
 <template>
     <Row icon="shield" :tone="status?.tone ?? `default`" class="@container/repo-check">
         <template #title>
-            <span class="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                <span>{{ title ?? name }}</span>
-                <span v-if="title === undefined" class="min-w-0 break-all font-mono text-2xs text-subtle">{{ entry.path }}</span>
+            <span class="flex min-w-0 items-baseline gap-x-2">
+                <span class="min-w-0 truncate">{{ title ?? name }}</span>
+                <span v-if="title === undefined" class="min-w-0 truncate font-mono text-2xs text-subtle" v-tooltip.top.overflow="entry.path">{{
+                    entry.path
+                }}</span>
             </span>
         </template>
         <template v-if="entry.error !== undefined || statusWords !== undefined" #description>

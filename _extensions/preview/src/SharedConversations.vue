@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Await, Button, CopyButton, formatDayMonth, Icon, InfoHint, Notice, noticeOf, Section } from "@intentic/extension-ui";
+import { Await, Button, CopyButton, formatDayMonth, Icon, InfoHint, Notice, noticeOf, Row, RowGroup, Section } from "@intentic/extension-ui";
 import { ref } from "vue";
 import { useShares } from "./useShares";
 import { t } from "./i18n.js";
@@ -60,30 +60,28 @@ const when = (at: number): string => {
                 <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-2" />
                 <Notice v-else-if="refreshError" :of="noticeOf(refreshError)" class="mb-2" />
 
-                <div class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm">
-                    <div v-for="share in shares" :key="share.id" class="flex flex-col gap-1.5 px-4 py-2.5">
-                        <div class="flex items-center gap-3">
-                            <Icon name="comments" class="shrink-0 text-subtle" />
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-xs font-medium text-content" v-tooltip.top.overflow="share.title">{{ share.title }}</p>
-                                <!-- Order matters: how current, how much, how deep. -->
-                                <p class="truncate text-2xs text-subtle">
-                                    {{
-                                        t(
-                                            `sharedConversations.summary`,
-                                            {
-                                                when: when(share.sharedAt),
-                                                count: share.messages,
-                                                detail:
-                                                    share.detail === `messages`
-                                                        ? t(`sharedConversations.messagesOnly`)
-                                                        : t(`sharedConversations.withAgentWork`),
-                                            },
-                                            share.messages,
-                                        )
-                                    }}
-                                </p>
-                            </div>
+                <!-- The kit's rows, at the height every other list in the shell has; the address each one is published at is a line of
+                     its own under the name, since it is what a reader copies and checks. -->
+                <RowGroup>
+                    <Row
+                        v-for="share in shares"
+                        :key="share.id"
+                        icon="comments"
+                        :title="share.title"
+                        :description="
+                            t(
+                                `sharedConversations.summary`,
+                                {
+                                    when: when(share.sharedAt),
+                                    count: share.messages,
+                                    detail: share.detail === `messages` ? t(`sharedConversations.messagesOnly`) : t(`sharedConversations.withAgentWork`),
+                                },
+                                share.messages,
+                            )
+                        "
+                        indent
+                    >
+                        <template #control>
                             <a
                                 v-if="share.url"
                                 :href="share.url"
@@ -110,18 +108,23 @@ const when = (at: number): string => {
                             <Button
                                 :label="t(`sharedConversations.stopSharing`)"
                                 size="small"
-                                tier="quiet" tone="danger"
+                                tier="quiet"
+                                tone="danger"
                                 :disabled="busy !== undefined"
                                 @click="act(share.id, remove.mutateAsync)"
                             >
                                 <template #icon><Icon name="trash" /></template>
                             </Button>
-                        </div>
-                        <span v-if="share.url" class="truncate font-mono text-2xs text-subtle" v-tooltip.bottom.overflow="share.url">{{ share.url }}</span>
-                        <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
-                        <span v-else class="text-2xs text-danger">{{ t(`sharedConversations.sandboxNoPublicAddress`) }}</span>
-                    </div>
-                </div>
+                        </template>
+                        <template #below>
+                            <span v-if="share.url" class="block truncate font-mono text-2xs text-subtle" v-tooltip.bottom.overflow="share.url">{{
+                                share.url
+                            }}</span>
+                            <!-- No tunnel means the page exists but nothing can reach it; worth flagging instead of looking fine. -->
+                            <span v-else class="block text-2xs text-danger">{{ t(`sharedConversations.sandboxNoPublicAddress`) }}</span>
+                        </template>
+                    </Row>
+                </RowGroup>
             </Section>
         </template>
     </Await>
