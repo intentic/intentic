@@ -106,7 +106,7 @@ it(`says the records were reset when the platform answered from another database
     await waitFor(() => expect(el.textContent).toContain(`intentic's records were reset`));
 });
 
-// Home's first run, where a browser makes its first sandbox on a press (app/environments/standAside.ts).
+// Home's first run, where a first sandbox is made on a press (app/environments/nothingToOpen.ts).
 it(`sends the reader to Home's first run when there is nothing to bring back and no workspace`, async () => {
     candidates.value = [];
     await mount();

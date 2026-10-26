@@ -10879,14 +10879,6 @@
             "wrongAddressProblem": "Ihre Sandbox läuft, meldet sich aber von {announced}; erwartet wird {expected}.",
             "wrongAddressRemedy": "Wir geben Ihnen keine Adresse, für die wir nicht einstehen können. Beginnen Sie unten neu; eine neue Maschine startet unter der richtigen Adresse."
         },
-        "noSandbox": {
-            "title": "Noch nichts zum Öffnen",
-            "headline": "Sie sind angemeldet",
-            "lede": "Dieses Konto hat noch keine Sandbox. Dieser Computer braucht keine: Ihre Dateien sind da und bereit zum Öffnen.",
-            "openThisComputer": "Diesen Computer öffnen",
-            "setUpSandbox": "Eine Sandbox einrichten",
-            "sandboxLater": "In einer Sandbox arbeiten Agenten. Richten Sie eine ein, sobald Sie sie brauchen."
-        },
         "platformUnavailable": {
             "intenticIsntReachable": "Intentic antwortet nicht",
             "signInNotChanged": "Die Server von Intentic antworten gerade nicht. Ihre Anmeldung ist unverändert und Ihre Sandboxes laufen weiter; diese Seite öffnet Ihren Arbeitsbereich von selbst, sobald Intentic wieder da ist.",

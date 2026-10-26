@@ -1131,10 +1131,12 @@ pub fn home_facts(state: State<'_, AppState>) -> HomeFacts {
 }
 
 /// Ask the OS to point at the main window, brought back to the front at This device first — a stopped setup that
-/// nobody is looking at is a stopped setup nobody finds out about.
+/// nobody is looking at is a stopped setup nobody finds out about. `handed_over`: the run is a setup handed over from
+/// the workspace, which the workspace may be drawing itself, and then only the reader's eye is asked for
+/// (windows/setup.rs `alert_for`).
 #[tauri::command]
-pub fn setup_alert(app: AppHandle) {
-    crate::windows::setup::alert_setup(&app);
+pub fn setup_alert(app: AppHandle, handed_over: Option<bool>) {
+    crate::windows::setup::alert_setup(&app, handed_over.unwrap_or(false));
 }
 
 /* WHERE THE INSTALL HAS GOT TO, as This device draws it (src/device/useDevice.ts `progressShown`). The web's

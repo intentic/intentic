@@ -25,7 +25,7 @@ export interface SetupGateHost {
 //
 // `path` is where the navigation lands, `asked` the address that asked for it, which differ when the shell's own redirect
 // chose the landing: the bare address lands on Home (lib/routes/firstScreens.ts), and is still the arrival that resumes an
-// unfinished setup, and in the desktop app the one put on This computer when there is nothing to open (standAside.ts).
+// unfinished setup, in a browser; in the desktop app Home offers that setup itself (app/environments/nothingToOpen.ts).
 export const readSetupRedirect = async (sandbox: SetupGateHost, path = ``, authenticated = true, asked = path): Promise<RouteLocationRaw | undefined> => {
     // Anonymous home has no account registry to read; its add action is where sign-in begins.
     if (!authenticated && isHomePath(path)) {

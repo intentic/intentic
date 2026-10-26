@@ -1,5 +1,6 @@
 import type { RouteLocationNormalized, RouteLocationRaw } from "vue-router";
 import { t } from "@intentic/ui/i18n";
+import { nothingToOpen } from "../app/environments/nothingToOpen";
 import { openOnProject } from "../app/projectScope";
 import { useAuth } from "../client/auth/useAuth";
 import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
@@ -9,10 +10,9 @@ import { useNotifications } from "../workbench/notifications/notifications";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { unavailable } from "./sessionGuard";
 import { readSetupRedirect } from "./setupGate";
-import { workspaceAside } from "./thisComputerFirst";
 
 // THE WORKSPACE SHELL'S ENTRY GUARDS, after sign-in (sessionGuard.ts): whether there is a workspace to open, and which
-// sandbox a link names. The rules are their modules' (setupGate.ts, thisComputerFirst.ts, sandboxArrival.ts); these
+// sandbox a link names. The rules are their modules' (setupGate.ts, app/environments/nothingToOpen.ts, sandboxArrival.ts); these
 // bind them to the live account, sandbox list and notifications for the route table (index.ts).
 
 // Gates the workspace shell on having a workspace to open; setupGate.ts owns the predicate. A list the platform could
@@ -47,9 +47,9 @@ export const openNamedSandbox = (to: SandboxArrivalRoute): Promise<true | RouteL
     return arriveOnSandbox(to, { list, refresh, select, missing, scope: openOnProject, landing: sandboxEntryPath });
 };
 
-// The shell's gate as it stands here (thisComputerFirst.ts): a landing that is where the navigation already goes is no
+// The shell's gate as it stands here (nothingToOpen.ts): a landing that is where the navigation already goes is no
 // redirect, so the bare address with nothing to open arrives on Home once rather than twice.
 export const settleGate = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
-    const gate = workspaceAside.settle(await requireSetup(to));
+    const gate = nothingToOpen.settle(await requireSetup(to));
     return gate === to.path ? true : gate;
 };

@@ -163,7 +163,8 @@ describe(`a setup handed over to a Windows PC that still needs its own setup`, (
         // Saved as a restart saves one: this PC's setup may well ask for a restart.
         expect(asked(`park_setup_for_pc`)).toBe(1);
         await nextTick();
-        expect(lastReport()).toMatchObject({ state: `waiting`, waitingFor: `pcSetup`, name: `work`, at: expect.any(Number) });
+        // This PC's setup is offered and not started: the page hears a question for the reader, answered on the card.
+        expect(lastReport()).toMatchObject({ state: `waiting`, waitingFor: `consent`, name: `work`, at: expect.any(Number) });
         // A check made before Docker was installed by hand would still say it is needed: asked again, and Docker too.
         expect(pc.recheck).toHaveBeenCalledTimes(1);
         expect(asked(`docker_ready`)).toBe(1);
@@ -173,6 +174,7 @@ describe(`a setup handed over to a Windows PC that still needs its own setup`, (
         pc.setup.value = { state: `running`, percent: 40 };
         await nextTick();
         expect(setup.pcSetup.value).toMatchObject({ state: `running`, percent: 40 });
+        expect(lastReport()).toMatchObject({ state: `waiting`, waitingFor: `pcSetup` });
         expect(codesRun()).toEqual([]);
         pc.setup.value = { state: `ready` };
         await waitFor(() => expect(codesRun()).toEqual([`live`]));

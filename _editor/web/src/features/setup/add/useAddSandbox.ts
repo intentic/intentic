@@ -1,4 +1,4 @@
-import type { SetupCode } from "@intentic/api-contract";
+import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
 import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -10,6 +10,7 @@ import { arrivingProfile } from "../../../app/useProfile";
 import type { apiClient } from "../../../lib/useApi";
 import { autoSandboxName, SANDBOX_NAME_MAX } from "../../../client/sandbox/sandboxName";
 import type { MachineDoor } from "../../sandbox/live/sandboxDoors";
+import { touched } from "../setupArrival";
 import { readOffer } from "../setupLanes";
 import { type HostedLaneApi, type HostedLaneHost, useHostedLane } from "../flow/useHostedLane";
 import { type RegistryWatchHost, useRegistryWatch } from "../flow/useRegistryWatch";
@@ -246,6 +247,27 @@ export const useAddSandbox = (host: AddSandboxHost) => {
         }
     };
 
+    // A setup of the reader's own left unfinished, finished here on this computer as a new one is made (Home's first run in
+    // the desktop app, features/home/newSandbox/): the row it has, a fresh code for it, the app running it out of sight.
+    // A refusal keeps the row, which was never this press's to discard (`createdHere`), and says why.
+    const resume = async (existing: SandboxSummary): Promise<void> => {
+        if (creating.value || started.value !== undefined) {
+            return;
+        }
+        creating.value = true;
+        error.value = null;
+        try {
+            row.created.value = existing;
+            row.createdHere.value = false;
+            row.resuming.value = touched(existing);
+            name.value = existing.name;
+            track(`sandbox_add_started`, { target: `here`, resumed: true });
+            await startWithCode(HERE, existing.id, existing.name);
+        } finally {
+            creating.value = false;
+        }
+    };
+
     return {
         name,
         problem,
@@ -261,6 +283,7 @@ export const useAddSandbox = (host: AddSandboxHost) => {
         onMachine,
         read,
         create,
+        resume,
         // The same press on the same machine, with the same code: a run that failed never claimed it.
         retry: () => onMachine.setUpOn(),
     };

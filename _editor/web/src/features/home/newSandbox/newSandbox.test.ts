@@ -1,5 +1,7 @@
 import { ref } from "vue";
 import {
+    finishAskedBy,
+    finishOnHome,
     markReady,
     newSandboxDialogShown,
     newSandboxNote,
@@ -34,8 +36,9 @@ describe(`the new sandbox's address`, () => {
 });
 
 // A run as its host publishes it, as much of it as the dialog, the page and the tile decide on.
-const runOf = (state: { pressed: boolean; started?: `here` | `hosted` }) => ({
+const runOf = (state: { pressed: boolean; started?: `here` | `hosted`; resumed?: boolean }) => ({
     pressed: ref(state.pressed),
+    resumed: ref(state.resumed ?? false),
     here: { add: { started: ref(state.started === undefined ? undefined : { kind: state.started }) } },
 });
 
@@ -71,6 +74,31 @@ describe(`what Home shows of the new sandbox`, () => {
         const refused = runOf({ pressed: true });
         expect(newSandboxTileShown(chat, refused)).toBe(true);
         expect(newSandboxDialogShown(asked, refused)).toBe(true);
+    });
+});
+
+// A setup left unfinished, finished on Home in the desktop app: no dialog, its page and its tile from the press on.
+describe(`finishing a setup left unfinished on Home`, () => {
+    const finish = { name: `home`, query: finishOnHome(`row1`).query };
+
+    it(`is asked by Home's address naming the row, beside the new sandbox's ask`, () => {
+        expect(finishOnHome(`row1`)).toEqual({ path: `/home`, query: { add: `sandbox`, finish: `row1` } });
+        expect(finishAskedBy(finish)).toBe(`row1`);
+        expect(finishAskedBy({ name: `home`, query: { add: `sandbox` } })).toBeUndefined();
+        expect(finishAskedBy({ name: `home`, query: { finish: `row1` } })).toBeUndefined();
+        expect(finishAskedBy({ name: `home`, query: { add: `sandbox`, finish: `` } })).toBeUndefined();
+    });
+
+    it(`shows its page and never the dialog, before its code is minted and after it was refused`, () => {
+        for (const run of [runOf({ pressed: false }), runOf({ pressed: true, resumed: true })]) {
+            expect(newSandboxDialogShown(finish, run)).toBe(false);
+            expect(newSandboxPageShown(finish, run)).toBe(true);
+        }
+        // Gone back to from its tile, the address no longer names the row: still its page, still no form.
+        const asked = { name: `home`, query: { add: `sandbox` } };
+        expect(newSandboxDialogShown(asked, runOf({ pressed: true, resumed: true }))).toBe(false);
+        expect(newSandboxPageShown(asked, runOf({ pressed: true, resumed: true }))).toBe(true);
+        expect(newSandboxTileShown({ name: `home`, query: {} }, runOf({ pressed: true, resumed: true }))).toBe(true);
     });
 });
 

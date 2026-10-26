@@ -10879,14 +10879,6 @@
             "wrongAddressProblem": "Votre sandbox tourne, mais il se signale depuis {announced}, alors que nous l'attendons à {expected}.",
             "wrongAddressRemedy": "Nous ne vous donnerons pas une adresse dont nous ne pouvons pas répondre. Relancez ci-dessous : une nouvelle machine démarre à la bonne adresse."
         },
-        "noSandbox": {
-            "title": "Rien à ouvrir pour l'instant",
-            "headline": "Vous êtes connecté",
-            "lede": "Ce compte n'a pas encore de sandbox. Cet ordinateur n'en a pas besoin : vos fichiers y sont, prêts à être ouverts.",
-            "openThisComputer": "Ouvrir Cet ordinateur",
-            "setUpSandbox": "Configurer un sandbox",
-            "sandboxLater": "Un sandbox est l'endroit où les agents travaillent. Configurez-en un quand vous en voulez."
-        },
         "platformUnavailable": {
             "intenticIsntReachable": "Intentic ne répond pas",
             "signInNotChanged": "Les serveurs d'Intentic ne répondent pas pour l'instant. Votre connexion n'a pas changé et vos sandboxes continuent de tourner ; cette page ouvre votre espace de travail d'elle-même dès qu'Intentic revient.",

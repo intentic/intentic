@@ -167,8 +167,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
 /// from the reports this app sends it (setup.rs `announce_setup`). Swapping This device in over it took the reader
 /// out of Home into another part of the app to watch a bar Home already shows. So the main window takes the run out
 /// of sight: the page it already has hears the parked setup, and one not built yet is built hidden and finds it on
-/// its start. What only this app can ask (a consent, a restart) or a run that stops still brings the card forward
-/// (setup.rs `alert_setup`), as after "Back to your workspace".
+/// its start. A run that stops, or waits on the reader, does not bring the card forward either (setup.rs `alert_for`):
+/// Home's tile wears the mark, and its page opens the card on the reader's press.
 fn park_setup(app: &AppHandle, mut args: SetupArgs, stay: bool) {
     args.minted_at = args.minted_at.or_else(|| {
         std::time::SystemTime::now()
@@ -180,6 +180,7 @@ fn park_setup(app: &AppHandle, mut args: SetupArgs, stay: bool) {
         .pending
         .lock()
         .unwrap() = Some(args);
+    super::setup::handed_over(stay);
     if !stay {
         show_device(app);
     } else if crate::frame::face(app, super::HOME).is_none() {

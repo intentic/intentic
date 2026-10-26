@@ -1,16 +1,56 @@
-use super::{show_home_at, Keyboard, DEVICE_ROUTE, WORKSPACE};
+use super::{show_home_at, swap_in, Keyboard, DEVICE_ROUTE, WORKSPACE};
 use crate::commands::SetupReport;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
 
+/* A SETUP THE WORKSPACE DRAWS ITSELF (2026-10-26). Home's new sandbox, and a setup left unfinished that Home finishes,
+ * hand the install over with `stay` (links.rs `park_setup`) and draw it in a tile of Home's rail, which wears a mark
+ * when the run waits on the reader or stops. Swapping This device in over Home for that took the reader who had just
+ * signed in there off it, to a card about preparing their PC they had not asked to see. So for such a setup the alert
+ * asks for the reader's eye and leaves the face alone; the tile says what the run needs, and its page's button opens
+ * the card when they choose to. Remembered for this launch only: after a restart no page draws it, and the card is the
+ * one place it is said again. */
+static IN_PLACE: AtomicBool = AtomicBool::new(false);
+
+/// A setup handed over now, drawn by the page that asked (`stay`) or by This device's card.
+pub fn handed_over(in_place: bool) {
+    IN_PLACE.store(in_place, Ordering::SeqCst);
+}
+
+/// What an alert does: bring This device's card forward, or only ask for the reader's eye over the face they are on.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Alert {
+    Card,
+    InPlace,
+}
+
+/// The alert for a run: a handed-over setup the workspace draws itself is told in place; anything else (a sync
+/// enrollment, a setup the card holds) brings the card. Pure.
+pub fn alert_for(handed_over: bool, in_place: bool) -> Alert {
+    if handed_over && in_place {
+        Alert::InPlace
+    } else {
+        Alert::Card
+    }
+}
+
 /* An install runs for minutes, and the main window is deliberately minimisable and deliberately never topmost. */
-pub fn alert_setup(app: &AppHandle) {
+pub fn alert_setup(app: &AppHandle, handed_over: bool) {
     // The keyboard only when the workspace is the window being read; a run that takes minutes must not pull the user
     // out of whatever they moved on to. Wrong here costs a focus, never a second window.
-    let reading_workspace = crate::frame::shown() == Some(WORKSPACE)
-        && crate::frame::frame(app).is_some_and(|frame| frame.is_visible().unwrap_or(false));
+    let frame_shown =
+        crate::frame::frame(app).is_some_and(|frame| frame.is_visible().unwrap_or(false));
+    if alert_for(handed_over, IN_PLACE.load(Ordering::SeqCst)) == Alert::InPlace {
+        // A frame closed to the tray comes back on the workspace, where the tile says what the run needs.
+        if !frame_shown {
+            let _ = swap_in(app, WORKSPACE, Keyboard::Leave);
+        }
+        attention(app);
+        return;
+    }
+    let reading_workspace = crate::frame::shown() == Some(WORKSPACE) && frame_shown;
     let keyboard = if reading_workspace {
         Keyboard::Take
     } else {
@@ -19,6 +59,11 @@ pub fn alert_setup(app: &AppHandle) {
     // The swap the setup arrived through, run again rather than a bare `show`: a run settling while the workspace
     // holds the frame has to end with one face up, and only the swap takes the other off screen.
     show_home_at(app, Some(DEVICE_ROUTE), keyboard);
+    attention(app);
+}
+
+/// The taskbar's flash, or the platform's equivalent: the window asks to be looked at without taking the keyboard.
+fn attention(app: &AppHandle) {
     if let Some(frame) = crate::frame::frame(app) {
         let _ = frame.request_user_attention(Some(tauri::UserAttentionType::Critical));
     }
@@ -200,6 +245,16 @@ mod tests {
         )
         .unwrap();
         assert!(setup_announcement(&parked).contains("\"waitingFor\":\"pcSetup\""));
+    }
+
+    /// Only a handed-over setup the workspace draws itself is told in place; a sync enrollment, or a setup the card
+    /// holds, still brings This device's card forward.
+    #[test]
+    fn only_a_setup_the_workspace_draws_is_told_in_place() {
+        assert_eq!(alert_for(true, true), Alert::InPlace);
+        assert_eq!(alert_for(true, false), Alert::Card);
+        assert_eq!(alert_for(false, true), Alert::Card);
+        assert_eq!(alert_for(false, false), Alert::Card);
     }
 
     /// The app repeats the page's last report only in the page's silence, only for a setup it can vouch for, and not

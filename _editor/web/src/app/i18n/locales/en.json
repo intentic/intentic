@@ -10879,14 +10879,6 @@
             "wrongAddressProblem": "Your sandbox is running, but it's checking in from {announced}, we expect it at {expected}.",
             "wrongAddressRemedy": "We won't hand you an address we can't vouch for. Start it over below, a fresh machine comes up on the right one."
         },
-        "noSandbox": {
-            "title": "Nothing to open yet",
-            "headline": "You're signed in",
-            "lede": "This account has no sandbox yet. This computer needs none: your files are there, ready to open.",
-            "openThisComputer": "Open This computer",
-            "setUpSandbox": "Set up a sandbox",
-            "sandboxLater": "A sandbox is where agents work. Set one up whenever you want them."
-        },
         "platformUnavailable": {
             "intenticIsntReachable": "Intentic isn't answering",
             "signInNotChanged": "Intentic's servers aren't answering right now. Your sign-in is unchanged and your sandboxes keep running; this page opens your workspace by itself once Intentic is back.",

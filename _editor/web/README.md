@@ -345,11 +345,11 @@ flowchart LR
   Android app's WebView, which keeps the board it draws itself (`lib/routes/firstScreens.ts` `rootLanding`). `/home` alone
   also opens signed out, with its first run and no account registry or plan reads. Its Add sandbox action asks for
   sign-in and returns to `/home?add=sandbox`, the address of Home's new sandbox (below). The shell renders `ShellDesktop.vue`
-  (rail, side panel, terminal and status bar) or `ShellMobile.vue` (one screen at a time). In a browser an account
-  with nothing to open lands on Home's first run rather than on setup (which used to start a machine the moment it
-  arrived), and an unfinished setup of the reader's own is resumed on `/setup`. In the desktop app it is put on This
-  computer, and the workspace waits behind it on `/no-sandbox`, which offers This computer or setup
-  (`router/thisComputerFirst.ts`). A link naming a sandbox (`/?sandbox=<id>`, the
+  (rail, side panel, terminal and status bar) or `ShellMobile.vue` (one screen at a time). An account with nothing to
+  open lands on Home's first run rather than on setup (which used to start a machine the moment it arrived), in the
+  desktop app too (`app/environments/nothingToOpen.ts`). A browser resumes an unfinished setup of the reader's own on
+  `/setup`; the desktop app stays on Home, whose first run offers that setup by name and runs it in place, in a tile of
+  Home's rail. A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell inside it, on
   the screen it was last left on or its board (`sandboxEntry`), if the account lists it, and otherwise says that
   sandbox is not on the account any more; the id leaves the address either way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is
@@ -604,8 +604,10 @@ of ours starting, the first start); any other tile can be pressed meanwhile: the
 home conversation once it is up; one who went elsewhere is not moved, and finds its tile marked ready. A press the
 platform refuses stays in the dialog with the reason. Picked to run on
 this computer, the desktop app runs the install out of sight (`intentic://setup?…&stay=1`, the app's `park_setup`)
-instead of swapping its window over to This device; only a question it alone can ask, or a run that stops, brings its
-card forward. A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
+instead of swapping its window over to This device, and keeps it there when the run waits on the reader or stops: the
+tile wears the mark, and the run's page opens the app's card on the reader's press. In the desktop app a setup of the
+reader's own left unfinished is finished the same way, from the first run's "Finish setting up": `/home?add=sandbox&finish=<id>`
+puts up its tile and its run's page with no dialog, on a fresh code for the row it has. A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
 **Home shows a sandbox's own view in place** (2026-10-25, `lib/routes/homeDetour.ts`): a navigation from Home to a view
 it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<view>`, drawn where the chat was
 (`HomeDetour.vue`) under a labelled "Back to chat"; Esc and the browser's Back return too. The chat stays mounted,

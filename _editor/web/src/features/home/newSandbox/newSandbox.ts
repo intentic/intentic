@@ -1,7 +1,10 @@
+import type { SandboxSummary } from "@intentic/api-contract";
 import { t } from "@intentic/ui/i18n";
 import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import { ref, shallowRef, type Ref } from "vue";
 import type { LocationQuery } from "vue-router";
+import { z } from "zod";
+import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE } from "../../../models/sandbox/addSandbox";
 import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 
@@ -23,11 +26,30 @@ import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 //
 // The run outlives its dialog and its page: NewSandboxHost.vue holds it, mounted by the shell while Home asks for the new
 // sandbox or a run is under way, and publishes it here for the dialog, the page and the tile (NewSandboxTile.vue) to draw.
+//
+// A SETUP LEFT UNFINISHED IS FINISHED THE SAME WAY, in the desktop app (2026-10-26): Home's first run offers it by name, and
+// its press asks Home to finish that row (`?finish=<id>`), which puts up its tile and its page with no dialog, its run on
+// this computer. It used to go to /setup, which handed the install to the app, and the app swapped This computer in over
+// the workspace for as long as it ran.
 
 type HomeAddress = { readonly name?: unknown; readonly query: LocationQuery };
 
 /** Whether an address of Home asks for the new sandbox: `/home?add=sandbox`, its dialog or its run's page. */
 export const newSandboxShownBy = (route: HomeAddress): boolean => route.name === `home` && route.query[ADD_SANDBOX_QUERY] === ADD_SANDBOX_VALUE;
+
+/** The query naming a setup of the reader's own that Home is asked to finish in place, beside the new sandbox's ask. */
+const FINISH_QUERY = `finish`;
+
+const RowId = z.string().min(1);
+
+/** The row an address of Home asks to finish (`/home?add=sandbox&finish=<id>`), or undefined when it asks for a new one. */
+export const finishAskedBy = (route: HomeAddress): string | undefined => {
+    const asked = RowId.safeParse(route.query[FINISH_QUERY]);
+    return newSandboxShownBy(route) && asked.success ? asked.data : undefined;
+};
+
+/** Home's address asking to finish `sandboxId` in place: its tile and its page, no dialog. */
+export const finishOnHome = (sandboxId: string) => ({ path: HOME_PATH, query: { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, [FINISH_QUERY]: sandboxId } });
 
 /** The new sandbox as its host publishes it. */
 export interface NewSandboxRun {
@@ -36,8 +58,14 @@ export interface NewSandboxRun {
     readonly pressed: Readonly<Ref<boolean>>;
     /** The row reported in and was selected: what is left is its first start. */
     readonly opening: Readonly<Ref<boolean>>;
+    /** A setup left unfinished is what this run finishes, rather than a sandbox it makes: there is no form to go back to. */
+    readonly resumed: Readonly<Ref<boolean>>;
     /** The press, so the tile stands from it. */
     readonly create: () => Promise<void>;
+    /** The press on a setup left unfinished, finished on this computer; the tile stands from it as from Create. */
+    readonly resume: (row: SandboxSummary) => Promise<void>;
+    /** The same press again after it failed: a code the platform would not give, or a run on a machine that stopped. */
+    readonly retry: () => void;
     /** Its first start is on screen: the page gives way to its home conversation. */
     readonly opened: () => void;
     /** Put away: a form never pressed, a refusal, or a run that failed and was let go. */
@@ -71,16 +99,20 @@ export const seenReady = (sandboxId: string): void => {
 /** What the dialog, the page and the tile decide on: whether Create was pressed, and whether the press went somewhere. */
 type RunOnScreen = {
     readonly pressed: Readonly<Ref<boolean>>;
+    readonly resumed: Readonly<Ref<boolean>>;
     readonly here: { readonly add: { readonly started: Readonly<Ref<unknown>> } };
 };
 
+/** Finishing a setup left unfinished, asked for or under way: it has a page from the press on, and never a dialog. */
+const finishing = (route: HomeAddress, run: RunOnScreen): boolean => run.resumed.value || finishAskedBy(route) !== undefined;
+
 /** Asked for and nothing started yet (a press still in flight, or one the platform refused): the dialog takes the name. */
 export const newSandboxDialogShown = (route: HomeAddress, run: RunOnScreen | undefined): boolean =>
-    newSandboxShownBy(route) && run !== undefined && run.here.add.started.value === undefined;
+    newSandboxShownBy(route) && run !== undefined && run.here.add.started.value === undefined && !finishing(route, run);
 
 /** Asked for once the press went somewhere: the run's progress stands in the chat's place, and its tile is the selected one. */
 export const newSandboxPageShown = (route: HomeAddress, run: RunOnScreen | undefined): boolean =>
-    newSandboxShownBy(route) && run !== undefined && run.here.add.started.value !== undefined;
+    newSandboxShownBy(route) && run !== undefined && (run.here.add.started.value !== undefined || finishing(route, run));
 
 /** The tile stands from the press, except while the dialog still holds it (in flight, or refused and shown again). */
 export const newSandboxTileShown = (route: HomeAddress, run: RunOnScreen | undefined): boolean =>

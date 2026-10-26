@@ -1,4 +1,4 @@
-import type { OnboardingCheck, OnboardingSetup } from "../../desktop";
+import type { OnboardingCheck, OnboardingSetup, SetupReportWaitingFor } from "../../desktop";
 
 // WHETHER A SETUP HANDED OVER CAN RUN ON THIS PC YET (2026-10-12). On Windows, Docker and WSL for this PC are set up by
 // onboarding (onboarding.rs, the "Set up this PC" of This computer's card, PcSetupCard.vue), not by a sandbox's setup
@@ -47,5 +47,28 @@ export const pcGate = (input: PcGateInput): PcGate => {
         case `cantRun`:
         case `unknown`:
             return `go`;
+    }
+};
+
+/**
+ * What a setup parked behind this PC's own setup waits for, as the workspace page is told (setup.ts `report`). `pcSetup`
+ * only while nothing is asked of the reader: that setup running, finished, or not yet known to be needed (the check still
+ * out), after which the parked one carries on by itself. One not started, stopped on a failure or on Windows' permission,
+ * waits on the reader's press on This computer's card, which the page hears as `consent`, a question answered in the app;
+ * a restart or a sign-out it waits on is said as itself. (2026-10-26) Every park was `pcSetup`, and Home's tile for the
+ * new sandbox spun over a run that would never start until the reader found This computer's card by themselves. Pure.
+ */
+export const parkedWaitingFor = (check: OnboardingCheck[`state`] | undefined, setup: OnboardingSetup | undefined): SetupReportWaitingFor => {
+    switch (setup?.state) {
+        case `running`:
+        case `ready`:
+            return `pcSetup`;
+        case `waiting`:
+            return setup.for === `admin` ? `consent` : setup.for;
+        case `failed`:
+            return `consent`;
+        case `idle`:
+        case undefined:
+            return check === `needsSetup` ? `consent` : `pcSetup`;
     }
 };

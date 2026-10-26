@@ -55,7 +55,7 @@ import {
     type StepTime,
 } from "./installTelemetry";
 import { dockerReady, info } from "./machine";
-import { pcGate, type PcGate } from "./pcSetup/pcGate";
+import { parkedWaitingFor, pcGate, type PcGate } from "./pcSetup/pcGate";
 import { activeRun, eventsOf, linesOf, running, runOutcome, start } from "./runs";
 import { sleep, within } from "@intentic/base/async";
 
@@ -281,7 +281,7 @@ export type InstallTrigger = `arrival` | `resume` | `consent` | `recheck` | `ret
    silently did nothing: the card had only "Back" and "Dismiss", and the workspace page waited on a run that never
    started (2026-10-12). */
 
-/** Parked for this PC's own setup (Docker/WSL, onboarding.rs): the workspace page hears `waitingFor: "pcSetup"`. */
+/** Parked for this PC's own setup (Docker/WSL, onboarding.rs): the workspace page hears what it waits on (`parkedWaitingFor`). */
 export const pcParked = ref(false);
 // Onboarding's own reading of this PC (onboarding/pc.ts, as This computer's card follows it), from the first park on: its
 // check for the gate, and this PC's setup as it runs. Shallow: their fields are refs of their own.
@@ -291,8 +291,7 @@ interface PcFollowed {
 }
 const pcFollowed = shallowRef<PcFollowed | undefined>(undefined);
 const followPc = (): PcFollowed => (pcFollowed.value ??= { host: pcParts(), setup: followPcSetup() });
-/** This PC's own setup while parked: started, running, waiting on Windows, or stopped. */
-export const pcSetup = computed(() => pcFollowed.value?.setup.value);
+export const pcSetup = computed(() => pcFollowed.value?.setup.value); // started, running, waiting on Windows, or stopped
 // The park's watch on the gate, and its slow Docker probe, both stopped when the setup runs or is given up; and whether
 // the gate has opened and the run is on its way, so a gate that opens twice runs it once.
 let pcWatch: WatchStopHandle | undefined;
@@ -562,9 +561,9 @@ const settleSetup = async (args: SetupArgs, failure: string | undefined, started
             tell({ ...nameOf(args), state: `closed`, percent: 0 });
             return;
         }
-        // The main window is never topmost, so a run that stops while it is hidden would otherwise go unnoticed;
-        // `setupAlert` brings it back to the front, in the workspace's place rather than beside it.
-        await setupAlert();
+        // The main window is never topmost, so a run that stops while it is hidden would otherwise go unnoticed; `setupAlert`
+        // brings it forward in the workspace's place, or only points at a run Home draws itself (windows/setup.rs).
+        await setupAlert(true);
         return;
     }
     // The last word the workspace page hears about this run, sent while there is still a setup to report on: the page
@@ -732,8 +731,9 @@ export const setupState = computed<SetupReport[`state`]>(() => {
 });
 const report = computed((): SetupReport | undefined => {
     if (setupMode.value && pcParked.value && !running.value) {
-        // No run, so no plan to report from: where the bar stood, and what it waits for.
-        return { ...nameOf(pending.value), state: `waiting`, percent: Math.round(progress.value?.percent ?? 0), waitingFor: `pcSetup` };
+        // No run to report from: where the bar stood, and what the park waits on (pcGate.ts).
+        const waitingFor = parkedWaitingFor(pcFollowed.value?.host.check.value?.state, pcSetup.value);
+        return { ...nameOf(pending.value), state: `waiting`, percent: Math.round(progress.value?.percent ?? 0), waitingFor };
     }
     const view = progressShown.value;
     const state = progress.value;

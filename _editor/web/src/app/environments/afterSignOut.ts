@@ -2,7 +2,7 @@ import { noteReload } from "@intentic/ui/reload-reason";
 import { desktopWorkspace } from "./desktopWorkspace";
 import { environment } from "./environment";
 import { tellNative } from "./nativeApp";
-import { NOTHING_TO_OPEN_PATH } from "./standAside";
+import { NOTHING_TO_OPEN_PATH } from "./nothingToOpen";
 
 // Where a signed-out reader goes: a full navigation, not a router push, since `afterSignOut` may point outside this SPA.
 // The load it causes is the app's doing, not the reader's, so analytics is told why (reloadReason). Inside the Android

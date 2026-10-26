@@ -231,3 +231,33 @@ describe(`the press`, () => {
         }
     });
 });
+
+// A setup of the reader's own left unfinished, finished on Home in the desktop app (features/home/newSandbox/).
+describe(`finishing a setup left unfinished`, () => {
+    const unfinished = sandboxSummary({ id: `old`, name: `targowisko`, token: `tok`, lastSeenAt: null });
+
+    it(`makes no row, and hands this computer's app a fresh code for the one it has`, async () => {
+        const { add, create, openDesktopLink } = stage({ inApp: true, rows: [unfinished] });
+        await add.resume(unfinished);
+        const link = new URL(openDesktopLink.mock.calls[0]?.[0] ?? ``);
+        expect({
+            made: create.mock.calls.length,
+            started: add.started.value?.kind,
+            created: add.created.value?.id,
+            sandbox: link.searchParams.get(`sandbox`),
+            name: link.searchParams.get(`name`),
+            code: link.searchParams.get(`code`),
+        }).toEqual({ made: 0, started: `here`, created: `old`, sandbox: `old`, name: `targowisko`, code: `code-old` });
+    });
+
+    it(`keeps the row, and says why, when no code could be minted for it`, async () => {
+        const { add, remove } = stage({ inApp: true, rows: [unfinished], setupCode: new Error(`down`) });
+        await add.resume(unfinished);
+        expect({ started: add.started.value, removed: remove.mock.calls.length, error: add.error.value !== null, created: add.created.value?.id }).toEqual({
+            started: undefined,
+            removed: 0,
+            error: true,
+            created: `old`,
+        });
+    });
+});

@@ -1,4 +1,4 @@
-import { pcGate, type PcGateInput } from "./pcGate";
+import { parkedWaitingFor, pcGate, type PcGateInput } from "./pcGate";
 
 // Whether a setup handed over runs now, waits for the PC check, or waits for this PC's own setup (onboarding.rs).
 
@@ -37,5 +37,28 @@ describe(`a setup handed over to this PC`, () => {
         expect(pcGate(windows(`ready`))).toBe(`go`);
         expect(pcGate(windows(`unknown`))).toBe(`go`);
         expect(pcGate(windows(`cantRun`))).toBe(`go`);
+    });
+});
+
+// What the workspace page hears of a setup parked behind this PC's own: Home's tile spins only while nothing is asked of
+// the reader, and wears its "needs you" mark while the card waits on a press.
+describe(`a setup parked behind this PC's own setup, as the workspace page is told`, () => {
+    it(`carries on by itself while this PC's setup runs or has finished, or the check has not said it is needed`, () => {
+        expect(parkedWaitingFor(`needsSetup`, { state: `running`, percent: 40 })).toBe(`pcSetup`);
+        expect(parkedWaitingFor(`needsSetup`, { state: `ready` })).toBe(`pcSetup`);
+        expect(parkedWaitingFor(`checking`, { state: `idle` })).toBe(`pcSetup`);
+        expect(parkedWaitingFor(undefined, undefined)).toBe(`pcSetup`);
+    });
+
+    it(`waits on the reader's press while this PC's setup is offered and not started, or stopped`, () => {
+        expect(parkedWaitingFor(`needsSetup`, { state: `idle` })).toBe(`consent`);
+        expect(parkedWaitingFor(`needsSetup`, undefined)).toBe(`consent`);
+        expect(parkedWaitingFor(`needsSetup`, { state: `failed`, reason: `WSL would not start` })).toBe(`consent`);
+        expect(parkedWaitingFor(`needsSetup`, { state: `waiting`, for: `admin` })).toBe(`consent`);
+    });
+
+    it(`says a restart or a sign-out this PC's setup waits on as itself`, () => {
+        expect(parkedWaitingFor(`needsSetup`, { state: `waiting`, for: `restart` })).toBe(`restart`);
+        expect(parkedWaitingFor(`needsSetup`, { state: `waiting`, for: `signOut` })).toBe(`signOut`);
     });
 });

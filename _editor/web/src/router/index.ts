@@ -27,7 +27,7 @@ import { useSandbox } from "../client/sandbox/useSandbox";
 import { useRole } from "../client/sandbox/useRole";
 import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
-import { noSandboxRoute } from "./thisComputerFirst";
+import { NOTHING_TO_OPEN_PATH } from "../app/environments/nothingToOpen";
 import { openNamedSandbox, requireSetup, settleGate } from "./shellGates";
 import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/settings/settingsNav";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
@@ -175,7 +175,9 @@ const routes: RouteRecordRaw[] = [
         meta: { title: () => t(`router.index.signingIn`) },
         component: () => import(`../features/auth/DesktopAuthComplete.vue`),
     },
-    noSandboxRoute,
+    // The desktop app's workspace with nothing to open waited here until 2026-10-26, behind This computer; a window an
+    // older build left on it lands where it lands now (app/environments/nothingToOpen.ts).
+    { path: `/no-sandbox`, redirect: NOTHING_TO_OPEN_PATH },
     {
         // The sandboxes this device remembers and the account's list lacks, offered back (features/sandbox/recovery).
         path: `/recover`,
@@ -205,8 +207,8 @@ const routes: RouteRecordRaw[] = [
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Home, recovery and settings need only an account; other pages need a sandbox;
-        // otherwise requireSetup sends the reader to Home's first run (in the desktop app, to This computer: thisComputerFirst.ts),
-        // or to /setup to resume an unfinished one of their own.
+        // otherwise requireSetup sends the reader to Home's first run, or in a browser to /setup to resume an unfinished
+        // one of their own (app/environments/nothingToOpen.ts).
         path: `/`,
         beforeEnter: [requireAuth, settleGate, openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),

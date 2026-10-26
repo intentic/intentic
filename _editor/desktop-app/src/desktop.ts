@@ -332,9 +332,9 @@ export interface FirstTaskDraft {
 }
 /** The draft "Ask about this" left for This computer's card, taken (first_task.rs `first_task_take_draft`): once. */
 export const firstTaskTakeDraft = (): Promise<FirstTaskDraft | null> => invoke(`first_task_take_draft`);
-// Brings the main window to the front at This device, for a run that stopped while nobody was looking (windows.rs takes
-// the frame back rather than opening beside it).
-export const setupAlert = (): Promise<void> => invoke(`setup_alert`);
+// This device brought forward in the workspace's place, for a run that stopped unwatched; a setup `handedOver` that Home
+// draws in its own tile is only pointed at, never swapped in over it (windows/setup.rs `alert_for`).
+export const setupAlert = (handedOver = false): Promise<void> => invoke(`setup_alert`, { handedOver });
 /* Setup progress is shared with the workspace bar. */
 /** What a setup stopped on a question is waiting for: the reader's go-ahead, or a session Windows has to end. */
 export type SetupWaitingFor = `consent` | `restart` | `signOut`;
