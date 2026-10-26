@@ -141,7 +141,18 @@
             "sends": "part {at}",
             "scheduledMessages": "Messages",
             "sendsWhenRoom": "envoi quand la mémoire se libère",
-            "reviewChangesCount": "Examiner les modifications : {added} lignes ajoutées, {removed} supprimées"
+            "reviewChangesCount": "Examiner les modifications : {added} lignes ajoutées, {removed} supprimées",
+            "youDeletedFile": "Vous avez supprimé {name}, que cet agent a aussi modifié.",
+            "youDeletedFiles": "Vous avez supprimé {count} fichier que cet agent a aussi modifié. | Vous avez supprimé {count} fichiers que cet agent a aussi modifiés.",
+            "yourChangesToFile": "Vos modifications non validées de {name} bloquent : validez-les ou abandonnez-les et il pourra continuer.",
+            "yourChangesToFiles": "Vos modifications non validées de {count} fichier bloquent : validez-les ou abandonnez-les et il pourra continuer. | Vos modifications non validées de {count} fichiers bloquent : validez-les ou abandonnez-les et il pourra continuer.",
+            "keepDeleted": "Garder supprimé",
+            "keepDeletedTitle": "Le garder supprimé",
+            "keepDeletedNote": "L'agent abandonne ses modifications",
+            "restoreAndLand": "Restaurer et intégrer",
+            "restoreAndLandTitle": "Restaurer, puis intégrer",
+            "restoreAndLandNote": "Ses modifications entrent aussi",
+            "otherStagedDeletion": "Vous avez {count} autre modification indexée, et garder cette suppression la validerait aussi. Validez-la ou retirez-la de l'index dans Modifications d'abord, puis réessayez. | Vous avez {count} autres modifications indexées, et garder cette suppression les validerait aussi. Validez-les ou retirez-les de l'index dans Modifications d'abord, puis réessayez."
         },
         "agentConflictReport": {
             "agentWriting": "L'agent écrit",
@@ -445,7 +456,8 @@
             "minutes": "{minutes} min",
             "watchingConditions": "Surveille {count} condition | Surveille {count} conditions",
             "unknownCommand": "Commande inconnue",
-            "warned": "Avertissement"
+            "warned": "Avertissement",
+            "yourDeletion": "Votre suppression"
         },
         "agentsView": {
             "agentResolveConflict": "Laisser l'agent résoudre le conflit ?",
@@ -11883,7 +11895,7 @@
             "mergesInOwnWorktree": "Il fusionne dans son propre worktree : rien n'atteint votre espace de travail sauf si cela réussit.",
             "noRestorePointsYet": "Pas encore de points de restauration : l'historique des fichiers est enregistré automatiquement pendant que vous et vos agents travaillez.",
             "noVersionsYetOne": "Pas encore de versions : une est enregistrée automatiquement chaque fois que vous ou votre assistant changez quelque chose.",
-            "ownUncommittedEditsOn": "Vos propres modifications non committées sont sur les fichiers dont il a besoin : dès que vous les committez, il sera prêt à intégrer.",
+            "ownUncommittedEditsOn": "Vos propres modifications non validées sont sur des fichiers dont il a besoin : validez-les ou abandonnez-les et il pourra continuer.",
             "project": "projet",
             "projects": "Projets",
             "projects2": "projets",

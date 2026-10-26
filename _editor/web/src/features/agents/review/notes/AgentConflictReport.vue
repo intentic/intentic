@@ -4,6 +4,7 @@ import { Button, toneTint, useDevice } from "@intentic/ui";
 import { computed } from "vue";
 import { agentBlockers, blockersOf, causeLine, settingsOrigin, settingsPageName, userBlockers } from "../../../../models/conversations/review/conflictResolution";
 import { workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { ownerHoldLine, type OwnerHold } from "../../../../models/conversations/review/ownerHold";
 import { useT } from "@intentic/ui/i18n";
 
 // What a refused land is blocking, as one decision bar: how many files conflict, why in one line, and what happens
@@ -27,11 +28,26 @@ const props = defineProps<{
     queued: boolean;
     // Agent is in another sandbox; fixing and committing happen there, but merge stays offerable.
     box?: string;
+    // What the user's half is, off their own Changes (useOwnerHold): a deletion gets its two answers here.
+    owner?: OwnerHold | undefined;
 }>();
 
 // `saveSettings`: the held paths, to save before landing again.
 // `settle`: the work is in already, brought in by hand.
-const emit = defineEmits<{ merge: []; settle: []; commit: []; saveSettings: [readonly string[]]; stop: []; chat: []; cancel: []; show: []; cross: [] }>();
+// `keepDeleted` / `restoreDeleted`: the user's half is files they deleted (ownerHoldActions).
+const emit = defineEmits<{
+    merge: [];
+    settle: [];
+    commit: [];
+    saveSettings: [readonly string[]];
+    keepDeleted: [OwnerHold];
+    restoreDeleted: [OwnerHold];
+    stop: [];
+    chat: [];
+    cancel: [];
+    show: [];
+    cross: [];
+}>();
 
 const { mobile } = useDevice();
 
@@ -42,7 +58,11 @@ const mine = computed(() => agentBlockers(blockers.value));
 const theirs = computed(() => userBlockers(blockers.value));
 // The user's half when a Sandbox page wrote all of it: saved in one press rather than sent to Changes.
 const settingsPages = computed(() => settingsOrigin(theirs.value)?.map(settingsPageName).join(`, `));
-const why = computed(() => workspaceOverlap(theirs.value.length) ?? causeLine(blockers.value, settingsPages.value));
+// The user's whole half deleted by them, and nothing else in the way: the bar names the file and offers both answers.
+const deleted = computed(() => (props.owner?.kind === `deleted` && settingsPages.value === undefined && mine.value.length === 0 ? props.owner : undefined));
+const why = computed(
+    () => workspaceOverlap(theirs.value.length) ?? (deleted.value === undefined ? causeLine(blockers.value, settingsPages.value) : ownerHoldLine(deleted.value)),
+);
 const saveSettings = (): void => emit(`saveSettings`, theirs.value.map((blocker) => blocker.path));
 // A three-way apply goes through the index, so git refuses it outright on any unstaged path.
 const mergeable = computed(() => blockedCount.value > 0 && theirs.value.length === 0);
@@ -111,6 +131,32 @@ const ROW = `flex flex-wrap items-center gap-x-2 gap-y-1`;
             >
                 <Icon name="check" />{{ t(`agents.agentConflictReport.saveSettingsAndLand`) }}
             </Button>
+            <!-- Files the user deleted: kept gone (the agent drops its edits) or put back, both carried out from here. -->
+            <template v-else-if="deleted !== undefined">
+                <Button
+                    size="small"
+                    tier="accent"
+                    class="whitespace-nowrap"
+                    :disabled="busy"
+                    v-tooltip.bottom="{ title: t(`agents.agentCard.keepDeletedTitle`), note: t(`agents.agentCard.keepDeletedNote`) }"
+                    @click="emit('keepDeleted', deleted)"
+                >
+                    <Icon name="trash" />{{ t(`agents.agentCard.keepDeleted`) }}
+                </Button>
+                <Button
+                    size="small"
+                    tier="boring"
+                    class="whitespace-nowrap"
+                    :disabled="busy"
+                    v-tooltip.bottom="{
+                        title: t(`agents.agentCard.restoreAndLandTitle`),
+                        note: t(`agents.agentCard.restoreAndLandNote`),
+                    }"
+                    @click="emit('restoreDeleted', deleted)"
+                >
+                    <Icon name="undo" />{{ t(`agents.agentCard.restoreAndLand`) }}
+                </Button>
+            </template>
             <!-- The user's own half, which nothing else here can do for them. -->
             <template v-else-if="theirs.length > 0">
                 <Button size="small" :tier="mine.length === 0 ? `accent` : `boring`" class="whitespace-nowrap" @click="emit('commit')">

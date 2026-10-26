@@ -11,6 +11,8 @@ import AgentScratchReport from "./AgentScratchReport.vue";
 import ReviewDependencyNotes from "./ReviewDependencyNotes.vue";
 import ReviewUncarriedNotes from "./ReviewUncarriedNotes.vue";
 import type { useAgentChanges } from "../useAgentChanges";
+import { useOwnerHold } from "../../../../models/conversations/review/settingsRefusal";
+import type { OwnerHold } from "../../../../models/conversations/review/ownerHold";
 
 // Everything the review says above its two columns (AgentReviewPanel): a failed read, a refused land and what it left,
 // work no land carries, scratch, ignored outputs, and the dependencies landing takes on. All of it sits in one box that
@@ -40,6 +42,10 @@ const NOTE_LINE = `mx-2 mt-1.5 flex shrink-0 items-center gap-1.5 px-2 text-2xs 
 
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
+// What the owner's half of the refusal is, read off their own Changes, as the board card reads it.
+const refused = (): boolean => (changes.conflicts.value?.length ?? 0) > 0;
+const owner = useOwnerHold(() => ({ sandboxId: at }), refused, () => changes.conflicts.value);
+const mainBranch = computed(() => changes.conflicts.value?.find((conflict) => conflict.mainBranch !== undefined)?.mainBranch);
 </script>
 
 <template>
@@ -60,6 +66,9 @@ const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((e
             :asked="changes.asked.value"
             :queued="changes.fixQueued.value"
             :box="remoteName"
+            :owner="owner"
+            @keep-deleted="(held: OwnerHold) => changes.keepDeletedFiles(held, mainBranch)"
+            @restore-deleted="(held: OwnerHold) => changes.restoreDeletedFiles(held)"
             @merge="changes.land('merge')"
             @settle="changes.settle()"
             @commit="openChanges"

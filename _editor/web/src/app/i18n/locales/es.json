@@ -141,7 +141,18 @@
             "sends": "se envía {at}",
             "scheduledMessages": "Mensajes",
             "sendsWhenRoom": "se envía al liberarse memoria",
-            "reviewChangesCount": "Revisar cambios: {added} líneas añadidas, {removed} eliminadas"
+            "reviewChangesCount": "Revisar cambios: {added} líneas añadidas, {removed} eliminadas",
+            "youDeletedFile": "Eliminaste {name}, y este agente también lo cambió.",
+            "youDeletedFiles": "Eliminaste {count} archivo que este agente también cambió. | Eliminaste {count} archivos que este agente también cambió.",
+            "yourChangesToFile": "Tus cambios sin confirmar en {name} se interponen: confírmalos o descártalos y podrá seguir.",
+            "yourChangesToFiles": "Tus cambios sin confirmar en {count} archivo se interponen: confírmalos o descártalos y podrá seguir. | Tus cambios sin confirmar en {count} archivos se interponen: confírmalos o descártalos y podrá seguir.",
+            "keepDeleted": "Mantener eliminado",
+            "keepDeletedTitle": "Mantenerlo eliminado",
+            "keepDeletedNote": "El agente descarta sus cambios",
+            "restoreAndLand": "Restaurar e integrar",
+            "restoreAndLandTitle": "Restaurar, luego integrar",
+            "restoreAndLandNote": "Sus cambios también entran",
+            "otherStagedDeletion": "Tienes {count} cambio más preparado, y mantener esta eliminación también lo confirmaría. Confírmalo o quítalo de preparados en Cambios primero y vuelve a intentarlo. | Tienes {count} cambios más preparados, y mantener esta eliminación también los confirmaría. Confírmalos o quítalos de preparados en Cambios primero y vuelve a intentarlo."
         },
         "agentConflictReport": {
             "agentWriting": "El agente escribe",
@@ -445,7 +456,8 @@
             "minutes": "{minutes} min",
             "watchingConditions": "Vigilando {count} condición | Vigilando {count} condiciones",
             "unknownCommand": "Comando desconocido",
-            "warned": "Advertencia"
+            "warned": "Advertencia",
+            "yourDeletion": "Tu eliminación"
         },
         "agentsView": {
             "agentResolveConflict": "¿Que el agente resuelva el conflicto?",
@@ -11883,7 +11895,7 @@
             "mergesInOwnWorktree": "Fusiona en su propio worktree: nada llega a tu espacio de trabajo si no sale bien.",
             "noRestorePointsYet": "Todavía no hay puntos de restauración: el historial de archivos se guarda automáticamente mientras tú y tus agentes trabajáis.",
             "noVersionsYetOne": "Todavía no hay versiones: se guarda una automáticamente cada vez que tú o tu asistente cambiáis algo.",
-            "ownUncommittedEditsOn": "Tienes ediciones propias sin commit en los archivos que necesita: en cuanto hagas commit de ellas, estará listo para integrarse.",
+            "ownUncommittedEditsOn": "Tus propios cambios sin confirmar están en archivos que necesita: confírmalos o descártalos y podrá seguir.",
             "project": "proyecto",
             "projects": "Proyectos",
             "projects2": "proyectos",

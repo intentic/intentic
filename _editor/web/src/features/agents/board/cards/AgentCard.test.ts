@@ -77,6 +77,8 @@ const mount = (
         onReland?: () => void;
         onLand?: () => void;
         onUnwatch?: () => void;
+        onKeepDeleted?: (...args: unknown[]) => void;
+        onRestoreDeleted?: (...args: unknown[]) => void;
     } = {},
 ): HTMLElement => {
     const el = document.createElement(`div`);
@@ -660,7 +662,7 @@ it(`says, without a press of its own, that a refusal is the user's own to clear`
     const el = mount(conflicted([`workspace`]));
     expect(pressFor(el, `Have the agent resolve it`)).toBeUndefined();
     expect(pressFor(el, `Commit or stash yours`)).toBeUndefined();
-    expect(el.textContent ?? ``).toContain(`Your own uncommitted edits are on the files it needs: once you commit them, it is ready to land.`);
+    expect(el.textContent ?? ``).toContain(`Your own uncommitted changes are on files it needs: commit or discard them and it can go on.`);
     // The chip says whose refusal it is, so the card's corner and its sentence agree.
     expect(el.textContent ?? ``).toContain(`Your edits`);
 });
@@ -678,11 +680,52 @@ it(`names the Sandbox page when a page wrote every file holding the land`, () =>
     expect(el.textContent ?? ``).not.toContain(`Your edits`);
 });
 
+// deft-lynx-0y1h, 2026-10-26: the owner deleted a report the agent had then edited, and the card said "your edits" with
+// no press, so they hunted for an edit that did not exist. Read off the owner's own Changes, a deletion is named as one
+// and both of its answers are presses; an edit is named by its file.
+const REPORT = `docs/reports/composer.md`;
+const heldBy = (status: `deleted` | `modified`): HTMLElement => {
+    const conflicts = [{ repo: `root`, clean: 0, mainBranch: `main`, paths: [{ path: REPORT, reason: `workspace` as const }] }];
+    const change = { path: REPORT, status };
+    queryClient.setQueryData(rpcKey(`agents.diff`, { id: `a1` }), { repos: [], conflicts });
+    queryClient.setQueryData(rpcKey(`git.changes`), { repos: [{ repo: `root`, branch: `main`, conflicted: [], staged: [], unstaged: [change] }] });
+    return mount(conflicted([`workspace`]), undefined, { onKeepDeleted: keep, onRestoreDeleted: restore });
+};
+const keep = jest.fn();
+const restore = jest.fn();
+afterEach(() => {
+    queryClient.removeQueries({ queryKey: rpcKey(`agents.diff`, { id: `a1` }) });
+    queryClient.removeQueries({ queryKey: rpcKey(`git.changes`) });
+    keep.mockReset();
+    restore.mockReset();
+});
+
+it(`names a file the owner deleted as a deletion, and offers keeping it gone or putting it back`, () => {
+    const el = heldBy(`deleted`);
+    expect(el.textContent ?? ``).toContain(`You deleted composer.md, which this agent also changed.`);
+    expect(el.textContent ?? ``).toContain(`Your deletion`);
+    expect(el.textContent ?? ``).not.toContain(`Your edits`);
+
+    pressFor(el, `Keep deleted`)?.click();
+    pressFor(el, `Restore & land`)?.click();
+    const owner = { kind: `deleted`, blockers: [{ repo: `root`, path: REPORT, reason: `workspace` }], only: REPORT };
+    expect(keep.mock.calls).toEqual([[owner, `main`]]);
+    expect(restore.mock.calls).toEqual([[owner]]);
+});
+
+it(`names the file an owner's edit holds, with no press the card cannot carry out`, () => {
+    const el = heldBy(`modified`);
+    expect(el.textContent ?? ``).toContain(`Your uncommitted changes to composer.md are in its way: commit or discard them and it can go on.`);
+    expect(pressFor(el, `Keep deleted`)).toBeUndefined();
+    expect(pressFor(el, `Restore & land`)).toBeUndefined();
+    expect(el.textContent ?? ``).toContain(`Your edits`);
+});
+
 it(`keeps the agent's press while any cause is still one a rebase reaches`, () => {
     for (const agent of [conflicted([`workspace`, `diverged`]), conflicted()]) {
         const el = mount(agent);
         expect(pressFor(el, `Have the agent resolve it`)).toEqual(expect.any(Object));
-        expect(el.textContent ?? ``).not.toContain(`Your own uncommitted edits`);
+        expect(el.textContent ?? ``).not.toContain(`Your own uncommitted changes`);
         unmount();
     }
 });

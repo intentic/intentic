@@ -141,7 +141,18 @@
             "sends": "sendet {at}",
             "scheduledMessages": "Nachrichten",
             "sendsWhenRoom": "sendet, sobald Speicher frei ist",
-            "reviewChangesCount": "Änderungen prüfen: {added} Zeilen hinzugefügt, {removed} entfernt"
+            "reviewChangesCount": "Änderungen prüfen: {added} Zeilen hinzugefügt, {removed} entfernt",
+            "youDeletedFile": "Du hast {name} gelöscht, und dieser Agent hat die Datei auch geändert.",
+            "youDeletedFiles": "Du hast {count} Datei gelöscht, die dieser Agent auch geändert hat. | Du hast {count} Dateien gelöscht, die dieser Agent auch geändert hat.",
+            "yourChangesToFile": "Deine nicht committeten Änderungen an {name} stehen im Weg: committe oder verwirf sie, dann geht es weiter.",
+            "yourChangesToFiles": "Deine nicht committeten Änderungen an {count} Datei stehen im Weg: committe oder verwirf sie, dann geht es weiter. | Deine nicht committeten Änderungen an {count} Dateien stehen im Weg: committe oder verwirf sie, dann geht es weiter.",
+            "keepDeleted": "Gelöscht lassen",
+            "keepDeletedTitle": "Gelöscht lassen",
+            "keepDeletedNote": "Der Agent verwirft seine Änderungen",
+            "restoreAndLand": "Wiederherstellen & übernehmen",
+            "restoreAndLandTitle": "Wiederherstellen, dann übernehmen",
+            "restoreAndLandNote": "Seine Änderungen kommen mit",
+            "otherStagedDeletion": "Du hast {count} weitere Änderung vorgemerkt, und das Behalten dieser Löschung würde sie mitcommitten. Committe sie zuerst oder nimm sie in Änderungen aus der Vormerkung, dann versuch es erneut. | Du hast {count} weitere Änderungen vorgemerkt, und das Behalten dieser Löschung würde sie mitcommitten. Committe sie zuerst oder nimm sie in Änderungen aus der Vormerkung, dann versuch es erneut."
         },
         "agentConflictReport": {
             "agentWriting": "Agent schreibt",
@@ -445,7 +456,8 @@
             "minutes": "{minutes} Min.",
             "watchingConditions": "Beobachtet {count} Bedingung | Beobachtet {count} Bedingungen",
             "unknownCommand": "Unbekannter Befehl",
-            "warned": "Warnung"
+            "warned": "Warnung",
+            "yourDeletion": "Deine Löschung"
         },
         "agentsView": {
             "agentResolveConflict": "Den Agenten den Konflikt lösen lassen?",
@@ -11883,7 +11895,7 @@
             "mergesInOwnWorktree": "Es merged in seinem eigenen Worktree: nichts erreicht Ihren Workspace, wenn es nicht gelingt.",
             "noRestorePointsYet": "Noch keine Wiederherstellungspunkte: die Dateihistorie wird automatisch gesichert, während Sie und Ihre Agenten arbeiten.",
             "noVersionsYetOne": "Noch keine Versionen: jedes Mal, wenn Sie oder Ihr Assistent etwas ändern, wird automatisch eine gesichert.",
-            "ownUncommittedEditsOn": "Ihre eigenen, nicht committeten Änderungen liegen auf den Dateien, die es braucht: sobald Sie sie committen, ist es bereit zu landen.",
+            "ownUncommittedEditsOn": "Deine eigenen nicht committeten Änderungen liegen auf Dateien, die es braucht: committe oder verwirf sie, dann geht es weiter.",
             "project": "Projekt",
             "projects": "Projekte",
             "projects2": "Projekte",

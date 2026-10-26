@@ -30,6 +30,8 @@ import { turnInFlight } from "../../../models/agent-status/agentStatus-standing"
 import { landedAway } from "../fleet/agentStatus-land";
 import { agentBlockers, blockersOf } from "../../../models/conversations/review/conflictResolution";
 import { useAgents } from "../../../models/fleet/useAgents";
+import { commitOnly, keepDeleted, restoreAndLand } from "../../../models/fleet/ownerHoldActions";
+import type { OwnerHold } from "../../../models/conversations/review/ownerHold";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 
 // Per-agent review of what a worktree has that main does not (agents.diff): one flat set per repo, no
@@ -56,21 +58,7 @@ const reviewFileKey = (repo: string, path: string): string => JSON.stringify([re
 // The conflict report's one press over files a Sandbox page wrote (conflictResolution's settingsOrigin): exactly those
 // root-repo paths, committed as they stand before the land runs again. Held as the owner's own edits, such a land once
 // took three Accepts, a trip to Changes and a redo. Nothing to do for none, which is every other land.
-// A commit records the whole index (git.routes.ts), so anything else already staged would ride along under this
-// commit's message: refused instead, before anything is staged, for the owner to commit or unstage first.
-const commitSettings = async (paths: readonly string[], at: string | undefined): Promise<void> => {
-    if (paths.length === 0) {
-        return;
-    }
-    const { repos } = await sandboxRpc.git.changes(undefined, { context: { at } });
-    const root = repos.find((repo) => repo.repo === `root`);
-    const wanted = new Set(paths);
-    const others = (root?.staged ?? []).filter((change) => !wanted.has(change.path)).length + (root?.truncated?.staged ?? 0);
-    if (others > 0) {
-        throw new Error(t(`agents.useAgentChanges.otherStaged`, { count: others }, others));
-    }
-    await sandboxRpc.git.commit({ repo: `root`, message: `Settings: saved before landing`, stage: { paths: [...paths] } }, { context: { at } });
-};
+const commitSettings = (paths: readonly string[], at: string | undefined): Promise<void> => commitOnly(`root`, paths, `Settings: saved before landing`, at);
 
 // Named apart from the composable that reads it, so the background loader and the panel warm the same cache entry
 // rather than parallel ones.
@@ -135,11 +123,12 @@ const forgetAsk = (id: string): void => without(askedByAgent, id);
 
 // Hands a land conflict back to the agent, marked asked on the press and unmarked once the press turns out to start no
 // turn; a refusal (e.g. a stale report) is thrown, for the press to keep as its failure like any other.
-const askToResolve = async (id: string): Promise<void> => {
+// `send`: the press's own way of asking (Keep deleted commits the owner's deletion first).
+const askToResolve = async (id: string, send: () => Promise<ResolveAsk> = () => askAgentToResolve(id)): Promise<void> => {
     askedByAgent.value = new Set(askedByAgent.value).add(id);
     let ask: ResolveAsk = { kind: `dropped` };
     try {
-        ask = await askAgentToResolve(id);
+        ask = await send();
     } finally {
         if (ask.kind !== `sent`) {
             forgetAsk(id);
@@ -396,6 +385,27 @@ export function useAgentChanges(
         });
     };
 
+    // The two answers to a land held by the owner's own deletion (ownerHoldActions), as the board card offers them.
+    const keepDeletedFiles = async (owner: OwnerHold, mainBranch: string | undefined): Promise<void> => {
+        const id = agentId.value;
+        await act(`resolve`, {
+            what: t(`agents.useAgentChanges.askingResolve`, { name: name() }),
+            failed: t(`agents.useAgentChanges.askResolveFailed`),
+            task: () => askToResolve(id, () => keepDeleted(id, owner, mainBranch)),
+        });
+    };
+    const restoreDeletedFiles = async (owner: OwnerHold): Promise<void> => {
+        const id = agentId.value;
+        const called = name();
+        await act(`land`, {
+            what: t(`agents.useAgentChanges.landing`, { name: called }),
+            failed: t(`agents.useAgentChanges.landFailed`),
+            quiet: false,
+            done: (result) => (result?.landed === true ? t(`agents.useAgentChanges.landed`, { name: called }) : undefined),
+            task: () => restoreAndLand(id, owner, reach.value),
+        });
+    };
+
     // The header's fix press: asks now, or, while a turn runs, once it has ended.
     const fixConflicts = (): Promise<void> => {
         if (!inTurn.value) {
@@ -509,6 +519,8 @@ export function useAgentChanges(
         land,
         setAutoLand,
         askResolve,
+        keepDeletedFiles,
+        restoreDeletedFiles,
         fixConflicts,
         cancelFix,
         fixQueued,

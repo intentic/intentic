@@ -11,6 +11,8 @@ import { dropActionFor, type DropAction, type DropTarget, type PendingAction } f
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useNotifications } from "../../../workbench/notifications/notifications";
 import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import type { OwnerHold } from "../../../models/conversations/review/ownerHold";
+import { keepDeleted, restoreAndLand } from "../../../models/fleet/ownerHoldActions";
 
 // Pointer-driven card drag: Pointer Events (not HTML5 drag-and-drop) give a real AgentCard ghost, Escape-to-cancel, and
 // DOM hit-testing for the drop target. A drop never assigns a lane: it runs the action, and the action claims the card
@@ -155,7 +157,7 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
 
 // The card doesn't move lane here; the action's claim does, on the press, and the roster frame the action provokes
 // confirms it. The action's own layer only withholds a second press on the same card until this one has answered.
-const perform = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
+const perform = async (id: string, chosen: PendingAction, at?: string, run: () => Promise<void> = () => runAction(id, chosen, at)): Promise<void> => {
     // Re-entry on the same card is a no-op, like useAsyncAction's: a card mid-action is pointer-inert.
     if (pendingOn(id, at) !== undefined) {
         return;
@@ -165,7 +167,7 @@ const perform = async (id: string, chosen: PendingAction, at?: string): Promise<
     // After a switch the strip is the next sandbox's, which this press never touched.
     const current = sandboxScopeGuard();
     try {
-        await runAction(id, chosen, at);
+        await run();
         // The action's own roster frame is already on its way; this just closes the gap on a quiet stream. Another box
         // has no stream to close, so its re-read is the only thing that moves the card.
         await (at === undefined ? refresh() : Promise.resolve(refreshAcross()));
@@ -198,6 +200,24 @@ const cancelResolve = (): void => {
 // Shares `perform` with the drop rather than a second implementation, so the claim, notice and refresh can't drift.
 // Skips the confirm dialog: a button press, unlike a drag, already states the action it is about to take.
 const resolveNow = (id: string, at?: string): Promise<void> => perform(id, `resolve`, at);
+
+// The two answers a card owes a land held by the owner's own deletion (ownerHoldActions), through the same runner so
+// the claim, notice and refresh are the drop's. Keep deleted reports like Resolve (the turn does the rest); Restore &
+// land like Land now.
+const keepDeletedNow = (id: string, owner: OwnerHold, mainBranch: string | undefined): Promise<void> =>
+    perform(id, `keepDeleted`, undefined, async () => {
+        const ask = await keepDeleted(id, owner, mainBranch);
+        if (ask.kind === `refused`) {
+            notice.value = ask.why;
+        }
+    });
+const restoreDeletedNow = (id: string, owner: OwnerHold, at?: string): Promise<void> =>
+    perform(id, `restoreDeleted`, at, async () => {
+        const result = await restoreAndLand(id, owner, at);
+        if (!result.landed) {
+            notice.value = t(`agents.useAgentDrag.landingHitConflict`);
+        }
+    });
 
 // The ready card's "Land now": shares the same runner as resolveNow, with no confirm dialog since landing is reversible
 // in the git sense (the branch keeps everything).
@@ -328,6 +348,8 @@ export function useAgentDrag() {
         confirmResolve,
         cancelResolve,
         resolveNow,
+        keepDeletedNow,
+        restoreDeletedNow,
         landNow,
         relandNow,
         pendingLand,

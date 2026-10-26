@@ -62,7 +62,9 @@ import { previewOf } from "../../../../models/conversations/panel/useChat-strip"
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 import { providerAccounts } from "../../../../models/providers/providerAccounts";
 import { markSegments } from "../../../../lib/markSegments";
-import { settingsChip, useWorkspaceRefusal } from "../../../../models/conversations/review/settingsRefusal";
+import { settingsChip, useOwnerHold, useWorkspaceRefusal } from "../../../../models/conversations/review/settingsRefusal";
+import type { OwnerHold } from "../../../../models/conversations/review/ownerHold";
+import CardOwnerHold from "./CardOwnerHold.vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { modelLabelFor } from "../../../../models/providers/providerCatalog";
@@ -114,6 +116,9 @@ const emit = defineEmits<{
     // drill-in that leads to the chat.
     changes: [];
     resolve: [];
+    // A land held by the owner's own deletion: keep it deleted (the agent drops its edits) or put it back and land.
+    keepDeleted: [owner: OwnerHold, mainBranch: string | undefined];
+    restoreDeleted: [owner: OwnerHold];
     land: [];
     // Separate from `land`: relands the whole output, not just the remainder, and must never fire by accident.
     reland: [];
@@ -167,7 +172,7 @@ const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: t
         props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true as const } : standingChip(props.agent, titleOfAgent);
     // Files a Sandbox page wrote are not "Your edits": named as the review names them (settingsPages, below), as the
     // rail's row names them too (settingsChip).
-    return settingsChip(own, props.agent, settingsPages.value);
+    return settingsChip(own, props.agent, settingsPages.value, ownerHold.value?.kind === `deleted`);
 });
 // Shared with agentStatus.activityLine so the rail and board never narrate the same turn differently.
 const activityText = computed(() => activityLine(props.agent));
@@ -242,8 +247,7 @@ const resolvable = computed(() => props.agent.archivedAt === undefined && dropAc
 // The other half of a refused land, and the reason `resolvable` can be false on a card that is plainly conflicted: no
 // rebase reaches a file the user has uncommitted edits on, so the card says so in the same seat instead of offering the
 // agent. Never both: `conflictIsYours` is exactly the case laneDrop withholds `resolve` for.
-// A sentence, not a press: the card cannot commit those edits, and the daemon re-reads the refusal once they are
-// committed, moving the card on by itself. The review panel's ladder, one click away, names the files.
+// The daemon re-reads the refusal once they are committed, moving the card on by itself; a deletion it can also answer.
 const yoursToClear = computed(
     () => props.agent.archivedAt === undefined && (props.agent.attention.conflict || props.agent.status === `conflict`) && conflictIsYours(props.agent),
 );
@@ -251,6 +255,9 @@ const yoursToClear = computed(
 const workspaceRefusal = useWorkspaceRefusal(() => props.agent, () => yoursToClear.value);
 const settingsPages = computed(() => settingsPagesOf(workspaceRefusal.value));
 const overlapLine = computed(() => workspaceOverlap(userBlockers(blockersOf(workspaceRefusal.value)).length));
+// What the owner's half is, off their own Changes: a deletion is named and answered as one (CardOwnerHold).
+const ownerHold = useOwnerHold(() => props.agent, () => yoursToClear.value, () => workspaceRefusal.value);
+const holdMain = computed(() => workspaceRefusal.value?.find((conflict) => conflict.mainBranch !== undefined)?.mainBranch);
 // Work this agent landed that's no longer in the tree; excluded in the archive, like every other press here (restore
 // first).
 // Takes the Ready button's slot: Land now would leave the discarded half missing (the hardest wrong to notice), so Land
@@ -811,12 +818,18 @@ const grab = (event: PointerEvent): void => {
                 <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
             </div>
 
-            <!-- Same seat, the refusals the agent cannot touch: a fact, not a press. Nothing on the card can commit the edits in its way, a button that only changed the view read as one that did nothing, and the card leaves this seat by itself once they are committed. The footer's review link names the files. -->
-            <p v-else-if="yoursToClear" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
-                <Icon name="file-edit" class="shrink-0 text-2xs text-warning" /><span class="min-w-0">{{
-                    overlapLine ?? (settingsPages === undefined ? words.clearYoursHint : t(`agents.agentCard.settingsNotSaved`, { pages: settingsPages }))
-                }}</span>
-            </p>
+            <!-- Same seat, the refusals only the owner can clear: what of theirs is in the way, named, with both answers
+                 as presses when it is a deletion (CardOwnerHold). The footer's review link names every file. -->
+            <CardOwnerHold
+                v-else-if="yoursToClear"
+                :owner="ownerHold"
+                :overlap="overlapLine"
+                :settings-pages="settingsPages"
+                :local="agent.sandboxId === undefined"
+                :busy="busy"
+                @keep-deleted="(owner) => emit('keepDeleted', owner, holdMain)"
+                @restore-deleted="(owner) => emit('restoreDeleted', owner)"
+            />
 
             <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">

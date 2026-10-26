@@ -13,7 +13,8 @@ export type DropAction = "land" | "resolve" | "stop" | "discard" | "unwatch";
 
 // Every action the board can have in flight against an agent, not just drop actions: a card is equally busy while an
 // archive or restore is out. Kept as the action, not a boolean, so a card's own buttons can report their own progress.
-export type PendingAction = DropAction | "archive" | "restore" | "reland";
+// `keepDeleted` / `restoreDeleted`: the two answers to a land held by the owner's own deletion (ownerHoldActions).
+export type PendingAction = DropAction | "archive" | "restore" | "reland" | "keepDeleted" | "restoreDeleted";
 
 // What a card is waiting on: its own press or drop in flight (`running`, keyed per card by useAgentDrag), or an archive
 // or restore batch, which names ids alone and is the active box's only, so another box's card is never in it.

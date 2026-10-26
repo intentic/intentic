@@ -226,7 +226,8 @@ export type ResolveAsk =
 
 // The card moves and the chat opens the turn on the press, and the report its words need is read meanwhile, not first.
 // Resolves once the daemon took the turn or it went nowhere, never at its end, which would hold a busy flag for minutes.
-export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
+// `prompt`: a turn the caller already composed (keepDeletedPrompt), sent as this same errand without reading the report.
+export const askAgentToResolve = async (id: string, prompt?: string): Promise<ResolveAsk> => {
     const { agentById, open } = useAgents();
     const agent = agentById(id);
     if (agent !== undefined) {
@@ -241,7 +242,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     const read = new AbortController();
     // The verdict alone, not the whole review: the review's per-file line counts cost tens of seconds on a large
     // branch, and the turn waited on them before anything reached the daemon or any other window watching this chat.
-    const report = sandboxRpc.agents.conflicts({ id }, { signal: read.signal });
+    const report = prompt === undefined ? sandboxRpc.agents.conflicts({ id }, { signal: read.signal }) : Promise.resolve({ conflicts: undefined });
     // Awaited only inside `compose`, which a superseded press never reaches; its rejection is still thrown there.
     report.catch(() => undefined);
     // Settled by `compose` itself whenever it answers without a prompt; a turn that never went says nothing.
@@ -261,6 +262,9 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
         wearAgentRun(conversation, agent);
         taken = await conversation.turn.startErrand(errands().landConflict.opening, async (signal) => {
             signal.addEventListener(`abort`, () => read.abort());
+            if (prompt !== undefined) {
+                return prompt;
+            }
             const { conflicts } = await report;
             const answer = await answerFor(id, conflicts);
             if (typeof answer === `string`) {

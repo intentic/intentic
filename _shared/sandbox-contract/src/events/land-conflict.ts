@@ -82,6 +82,32 @@ export const landConflictPrompt = (conflicts: readonly LandConflict[] | undefine
         ...(theirs.length === 0
             ? []
             : [`Leave these alone: the user has uncommitted edits on them, which only they can clear; rebasing will not unblock them:\n${listing(theirs, false)}`]),
-        "Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends, stop once the rebase is clean.",
+        STAY_INSIDE,
+    ].join("\n\n");
+};
+
+const STAY_INSIDE =
+    "Stay inside your own worktree: never edit, stage or commit in the user's checkout. The app re-lands automatically when your turn ends, stop once the rebase is clean.";
+
+/**
+ * The same turn for a land the user's own deletion held: they deleted files this conversation changed, chose to keep
+ * them deleted, and the app committed that deletion on their main line before sending this. So the rebase stops on a
+ * modify/delete conflict whose answer is already decided, and the generic "keep both sides" would bring the file back.
+ * Opens like `landConflictPrompt`, so the chat folds it as the same errand.
+ */
+export const keepDeletedPrompt = (deleted: readonly Blocker[], mainBranch: string | undefined): string => {
+    const main = mainBranch === undefined || mainBranch === "" ? "<branch>" : mainBranch;
+    return [
+        LAND_CONFLICT_OPENING,
+        [
+            "1. `git add -A && git commit`: a rebase refuses to start on a dirty tree.",
+            mainBranch === undefined || mainBranch === ""
+                ? "2. `git rebase <branch>`, where `<branch>` is the one in brackets on the FIRST line of `git worktree list`, the user's main line."
+                : `2. \`git rebase ${main}\`, that is the user's main line.`,
+            `3. Where it stops on one of the files below (deleted by them, modified by you): \`git rm\` it, then \`git rebase --continue\`. If the rebase gets away from you: \`git rebase --abort\`, \`git merge ${main}\`, and \`git rm\` them there instead.`,
+            "4. Resolve any other conflict keeping the intent of BOTH sides.",
+        ].join("\n"),
+        `The user deleted these on purpose and the deletion is committed on their main line. Keep them deleted: do not re-create them, and do not move your changes to them into another file:\n${listing(deleted, false)}`,
+        STAY_INSIDE,
     ].join("\n\n");
 };

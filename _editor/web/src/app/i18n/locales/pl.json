@@ -141,7 +141,18 @@
             "sends": "wyśle {at}",
             "scheduledMessages": "Wiadomości",
             "sendsWhenRoom": "wyśle, gdy zwolni się pamięć",
-            "reviewChangesCount": "Przejrzyj zmiany: dodane wiersze: {added}, usunięte: {removed}"
+            "reviewChangesCount": "Przejrzyj zmiany: dodane wiersze: {added}, usunięte: {removed}",
+            "youDeletedFile": "Usunięto {name}, a ten agent też go zmienił.",
+            "youDeletedFiles": "Usunięto {count} plik, który ten agent też zmienił. | Usunięto {count} pliki, które ten agent też zmienił. | Usunięto {count} plików, które ten agent też zmienił.",
+            "yourChangesToFile": "Na drodze stoją Twoje niezacommitowane zmiany w {name}: zrób ich commit albo je odrzuć, a agent pójdzie dalej.",
+            "yourChangesToFiles": "Na drodze stoją Twoje niezacommitowane zmiany w {count} pliku: zrób ich commit albo je odrzuć, a agent pójdzie dalej. | Na drodze stoją Twoje niezacommitowane zmiany w {count} plikach: zrób ich commit albo je odrzuć, a agent pójdzie dalej. | Na drodze stoją Twoje niezacommitowane zmiany w {count} plikach: zrób ich commit albo je odrzuć, a agent pójdzie dalej.",
+            "keepDeleted": "Zostaw usunięty",
+            "keepDeletedTitle": "Zostaw go usuniętego",
+            "keepDeletedNote": "Agent porzuci swoje zmiany",
+            "restoreAndLand": "Przywróć i scal",
+            "restoreAndLandTitle": "Przywróć, potem scal",
+            "restoreAndLandNote": "Jego zmiany też wejdą",
+            "otherStagedDeletion": "Masz {count} inną zmianę przygotowaną do commita, a zachowanie tego usunięcia zacommitowałoby ją razem z nim. Najpierw zacommituj ją albo cofnij jej przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} inne zmiany przygotowane do commita, a zachowanie tego usunięcia zacommitowałoby je razem z nim. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie. | Masz {count} innych zmian przygotowanych do commita, a zachowanie tego usunięcia zacommitowałoby je razem z nim. Najpierw zacommituj je albo cofnij ich przygotowanie w Zmianach, potem spróbuj ponownie."
         },
         "agentConflictReport": {
             "agentWriting": "Agent pisze",
@@ -445,7 +456,8 @@
             "minutes": "{minutes} min",
             "watchingConditions": "Obserwuje {count} warunek | Obserwuje {count} warunki | Obserwuje {count} warunków",
             "unknownCommand": "Nieznane polecenie",
-            "warned": "Ostrzeżenie"
+            "warned": "Ostrzeżenie",
+            "yourDeletion": "Twoje usunięcie"
         },
         "agentsView": {
             "agentResolveConflict": "Niech agent rozwiąże konflikt?",
@@ -11292,7 +11304,7 @@
             "mergesInOwnWorktree": "Scala w swoim własnym worktree: nic nie dociera do Twojej przestrzeni roboczej, jeśli się nie uda.",
             "noRestorePointsYet": "Nie ma jeszcze punktów przywracania: historia plików zapisuje się sama, kiedy Ty i Twoje agenty pracujecie.",
             "noVersionsYetOne": "Nie ma jeszcze wersji: zapisuje się automatycznie za każdym razem, gdy Ty albo Twój asystent coś zmienicie.",
-            "ownUncommittedEditsOn": "Twoje własne niezacommitowane zmiany leżą na plikach, których potrzebuje: gdy zrobisz ich commit, będzie gotowy do scalenia.",
+            "ownUncommittedEditsOn": "Na plikach, których potrzebuje, są Twoje własne niezacommitowane zmiany: zrób ich commit albo je odrzuć, a pójdzie dalej.",
             "project": "projekt",
             "projects": "Projekty",
             "projects2": "projekty",

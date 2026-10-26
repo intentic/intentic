@@ -83,7 +83,7 @@ const { archived, archiveLoading, archiveFailure, archive, restore, notice, dism
 // (liveMetrics.ts). A phone reads none, whatever Settings says: its board has no foot to spare from the floating New agent.
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
-const { resolveNow, pressLand, pendingLand, confirmLand, cancelLand, unwatchNow } = drag;
+const { resolveNow, keepDeletedNow, restoreDeletedNow, pressLand, pendingLand, confirmLand, cancelLand, unwatchNow } = drag;
 // The press a phone's land confirm ends in, in the reader's words for it, and the card it names.
 const words = useVocabulary();
 const landingName = computed(() => pendingLand.value?.title ?? t(`agents.agentsView.thisAgent`));
@@ -541,6 +541,8 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                         @review="drillIn(agent)"
                                         @changes="reviewAgent(agent)"
                                         @resolve="resolveNow(agent.id, agent.sandboxId)"
+                                        @keep-deleted="(owner, main) => keepDeletedNow(agent.id, owner, main)"
+                                        @restore-deleted="(owner) => restoreDeletedNow(agent.id, owner, agent.sandboxId)"
                                         @land="pressLand(agent, `land`, mobile)"
                                         @reland="pressLand(agent, `reland`, mobile)"
                                         @unwatch="unwatchNow(agent.id, agent.sandboxId)"

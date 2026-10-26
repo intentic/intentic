@@ -141,7 +141,18 @@
             "sends": "sends {at}",
             "scheduledMessages": "Messages",
             "sendsWhenRoom": "sends when memory frees",
-            "reviewChangesCount": "Review changes: {added} lines added, {removed} removed"
+            "reviewChangesCount": "Review changes: {added} lines added, {removed} removed",
+            "youDeletedFile": "You deleted {name}, which this agent also changed.",
+            "youDeletedFiles": "You deleted {count} file this agent also changed. | You deleted {count} files this agent also changed.",
+            "yourChangesToFile": "Your uncommitted changes to {name} are in its way: commit or discard them and it can go on.",
+            "yourChangesToFiles": "Your uncommitted changes to {count} file are in its way: commit or discard them and it can go on. | Your uncommitted changes to {count} files are in its way: commit or discard them and it can go on.",
+            "keepDeleted": "Keep deleted",
+            "keepDeletedTitle": "Keep it deleted",
+            "keepDeletedNote": "The agent drops its edits",
+            "restoreAndLand": "Restore & land",
+            "restoreAndLandTitle": "Restore, then land",
+            "restoreAndLandNote": "Its edits land too",
+            "otherStagedDeletion": "You have {count} other change staged, and keeping this deletion would commit it too. Commit or unstage it in Changes first, then try again. | You have {count} other changes staged, and keeping this deletion would commit them too. Commit or unstage them in Changes first, then try again."
         },
         "agentConflictReport": {
             "agentWriting": "Agent writing",
@@ -445,7 +456,8 @@
             "minutes": "{minutes}m",
             "watchingConditions": "Watching {count} condition | Watching {count} conditions",
             "unknownCommand": "Unknown command",
-            "warned": "Warning"
+            "warned": "Warning",
+            "yourDeletion": "Your deletion"
         },
         "agentsView": {
             "agentResolveConflict": "Have the agent resolve the conflict?",
@@ -11883,7 +11895,7 @@
             "mergesInOwnWorktree": "It merges in its own worktree: nothing reaches your workspace unless it succeeds.",
             "noRestorePointsYet": "No restore points yet: file history is saved automatically as you and your agents work.",
             "noVersionsYetOne": "No versions yet: one is saved automatically every time you or your assistant change something.",
-            "ownUncommittedEditsOn": "Your own uncommitted edits are on the files it needs: once you commit them, it is ready to land.",
+            "ownUncommittedEditsOn": "Your own uncommitted changes are on files it needs: commit or discard them and it can go on.",
             "project": "project",
             "projects": "Projects",
             "projects2": "projects",
