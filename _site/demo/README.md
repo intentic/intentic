@@ -56,3 +56,6 @@ pnpm -C _site/demo build      # into _site/site/public/demo/
 pnpm -C _site/demo smoke
 pnpm -C _site/demo typecheck
 ```
+
+The demo typecheck includes the editor source and uses the same 8 GiB V8 heap limit as the editor.
+The previous 6 GiB limit exhausted its heap on a cold CI check (2026-10-25).

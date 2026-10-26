@@ -66,14 +66,14 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-// "Anyone" is a row, not the absence of one: an empty pick means keep every account here, but reaches none on a wake.
-it(`offers anyone as a pick, and says what it means here`, () => {
+// Full access is a row: picking it clears the persona override and keeps every connected account available here.
+it(`offers full access as a pick, and says what it means here`, () => {
     personas.value = [{ id: `work`, capabilities: [`reddit-work`] }];
     const element = mount(`work`);
 
-    const anyone = rowLabelled(element, `Anyone`)!;
-    expect(text(anyone)).toContain(`Every account you've connected`);
-    anyone.click();
+    const fullAccess = rowLabelled(element, `Full access`)!;
+    expect(text(fullAccess)).toContain(`Every account you've connected`);
+    fullAccess.click();
     expect(events).toEqual([undefined]);
 });
 
@@ -120,13 +120,14 @@ it(`explains the empty workspace and offers the way in`, () => {
     expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
 });
 
-// A guest holds personas, it does not manage them, and "Anyone" would reach every account: exactly what it is not handed.
-it(`offers a guest its personas alone: no Anyone, no way to the personas page`, () => {
+// A guest holds only its assigned personas; both built-ins and persona management stay with the owner.
+it(`offers a guest its personas alone: no built-ins, no way to the personas page`, () => {
     isGuest.value = true;
     personas.value = [{ id: `support`, label: `Support`, capabilities: [] }];
     const element = mount(`support`);
 
-    expect(rowLabelled(element, `Anyone`)).toBeUndefined();
+    expect(rowLabelled(element, `Full access`)).toBeUndefined();
+    expect(rowLabelled(element, `No accounts`)).toBeUndefined();
     expect(linkLabelled(element, `Manage personas`)).toBeUndefined();
     rowLabelled(element, `Support`)!.click();
     expect(events).toEqual([`support`]);

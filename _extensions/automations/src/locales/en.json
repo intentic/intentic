@@ -511,7 +511,7 @@
         "cutOffCount": "{count} cut off | {count} cut off",
         "failedCount": "{count} failed | {count} failed",
         "firstAt": "First at {at}",
-        "inARow": "{count} in a row",
+        "inARow": "{count} consecutive",
         "ranCount": "{count} ran | {count} ran",
         "showAll": "Show all {count} runs",
         "showFewer": "Show fewer",
