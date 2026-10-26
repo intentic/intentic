@@ -10197,6 +10197,18 @@
             }
         },
         "explainers": {
+            "changelog": {
+                "label": "Cómo funciona el registro de cambios",
+                "title": "Notas de versión para cada repositorio",
+                "experience": "Una nota breve explica los cambios que los usuarios notarán. Las refactorizaciones y otros cambios internos pueden no llevar nota, incluso con la opción activada.",
+                "tokens": "La nota se redacta junto con el mensaje del commit, fuera de la conversación con el agente.",
+                "enabled": "Repositorio activado",
+                "disabled": "Repositorio desactivado",
+                "commit": "Commit",
+                "withNote": "Nota de versión para usuarios",
+                "withoutNote": "Sin nota de versión",
+                "perRepo": "Desactivado por defecto. Se elige por separado para cada repositorio."
+            },
             "schematic": "Un esquema del mecanismo, no las cifras de tu sandbox.",
             "inTheChat": "En el chat",
             "tokens": "Tokens",

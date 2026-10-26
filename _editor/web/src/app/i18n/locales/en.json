@@ -10197,6 +10197,18 @@
             }
         },
         "explainers": {
+            "changelog": {
+                "label": "How changelog works",
+                "title": "Release notes, one repository at a time",
+                "experience": "A short note explains changes users will notice. Refactors and other internal changes may have no note, even when enabled.",
+                "tokens": "The note is written with the commit message, outside the agent's conversation.",
+                "enabled": "Repository enabled",
+                "disabled": "Repository disabled",
+                "commit": "Commit",
+                "withNote": "Release note for users",
+                "withoutNote": "No release note",
+                "perRepo": "Off by default. Each repository is a separate choice."
+            },
             "schematic": "A sketch of the mechanism, not your sandbox's numbers.",
             "inTheChat": "In the chat",
             "tokens": "Tokens",

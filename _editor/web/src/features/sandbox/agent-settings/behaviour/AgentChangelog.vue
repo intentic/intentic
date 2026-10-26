@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useRepos } from "../../../../models/workspace/tree/useRepos";
 import { useT } from "@intentic/ui/i18n";
+import ChangelogExplainer from "./explainers/ChangelogExplainer.vue";
 
 // Per-repo switch for whether a commit gets a release note; the only place this feature turns on. A commit
 // message's style is learned from repo history, but a release note has nothing to learn from, so it needs an
@@ -29,6 +30,7 @@ const repoLabel = (repo: string): string => (repo === `root` ? t(`sandbox.agentC
 
 <template>
     <RowGroup data-setting="agent-changelog" :label="t(`sandbox.agentChangelog.changelog`)">
+        <template #info><ChangelogExplainer /></template>
         <!-- One row per repo, `root` first (ordered by useRepos). -->
         <Row v-for="repo in repos" :key="repo" icon="book" :title="repoLabel(repo)" :description="t(`sandbox.agentChangelog.includeReleaseNoteEach`)">
             <template #control>

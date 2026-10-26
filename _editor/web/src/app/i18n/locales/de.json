@@ -10197,6 +10197,18 @@
             }
         },
         "explainers": {
+            "changelog": {
+                "label": "So funktioniert das Änderungsprotokoll",
+                "title": "Versionshinweise für jedes Repository einzeln",
+                "experience": "Ein kurzer Hinweis erklärt Änderungen, die Nutzer bemerken. Refactorings und andere interne Änderungen können auch bei aktivierter Option ohne Hinweis bleiben.",
+                "tokens": "Der Hinweis wird zusammen mit der Commit-Nachricht verfasst, außerhalb der Unterhaltung mit dem Agenten.",
+                "enabled": "Repository aktiviert",
+                "disabled": "Repository deaktiviert",
+                "commit": "Commit",
+                "withNote": "Versionshinweis für Nutzer",
+                "withoutNote": "Kein Versionshinweis",
+                "perRepo": "Standardmäßig aus. Für jedes Repository einzeln wählbar."
+            },
             "schematic": "Eine Skizze des Ablaufs, keine Messwerte Ihrer Sandbox.",
             "inTheChat": "Im Chat",
             "tokens": "Tokens",

@@ -10197,6 +10197,18 @@
             }
         },
         "explainers": {
+            "changelog": {
+                "label": "Comment fonctionne le journal des modifications",
+                "title": "Des notes de version, dépôt par dépôt",
+                "experience": "Une courte note explique les changements visibles pour les utilisateurs. Les refactorisations et autres changements internes peuvent ne pas avoir de note, même si l’option est activée.",
+                "tokens": "La note est rédigée avec le message de commit, en dehors de la conversation avec l’agent.",
+                "enabled": "Dépôt activé",
+                "disabled": "Dépôt désactivé",
+                "commit": "Commit",
+                "withNote": "Note de version pour les utilisateurs",
+                "withoutNote": "Aucune note de version",
+                "perRepo": "Désactivé par défaut. Le choix se fait séparément pour chaque dépôt."
+            },
             "schematic": "Un schéma du mécanisme, pas les chiffres de votre sandbox.",
             "inTheChat": "Dans le chat",
             "tokens": "Jetons",

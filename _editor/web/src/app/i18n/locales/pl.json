@@ -9606,6 +9606,18 @@
             }
         },
         "explainers": {
+            "changelog": {
+                "label": "Jak działa lista zmian",
+                "title": "Informacje o wydaniu dla każdego repozytorium",
+                "experience": "Krótka notatka opisuje zmiany widoczne dla użytkowników. Refaktoryzacje i inne zmiany wewnętrzne mogą nie mieć notatki, nawet gdy opcja jest włączona.",
+                "tokens": "Notatka powstaje wraz z opisem commita, poza rozmową z agentem.",
+                "enabled": "Repozytorium włączone",
+                "disabled": "Repozytorium wyłączone",
+                "commit": "Commit",
+                "withNote": "Notatka dla użytkowników",
+                "withoutNote": "Bez notatki o wydaniu",
+                "perRepo": "Domyślnie wyłączone. Każde repozytorium wybierasz osobno."
+            },
             "schematic": "Szkic mechanizmu, nie liczby z twojego sandboxa.",
             "inTheChat": "W czacie",
             "tokens": "Tokeny",
