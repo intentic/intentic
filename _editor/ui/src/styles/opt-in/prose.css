@@ -119,9 +119,10 @@
     margin: 0.35em 0;
 }
 
-/* 500, one step over the 400 around it — not 600, which is the headings' weight. */
+/* 500, one step over the 400 around it — not 600, which is the headings' weight. A number, not --font-weight-medium: the
+   prose body stays 400 in every look, and dark lowers the token to 400, which drew bold exactly as plain text. */
 .md-prose strong {
-    font-weight: var(--font-weight-medium);
+    font-weight: 500;
 }
 
 .md-prose blockquote {

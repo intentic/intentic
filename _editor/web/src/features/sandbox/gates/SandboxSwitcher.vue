@@ -342,7 +342,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
             <!-- In a local window, the same place heads the panel as where this window already is: the folder it shows
                  and its path. Not a row to pick, being the place on screen. -->
             <template v-else-if="folder">
-                <div class="ui-row-select-on flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs" aria-current="true">
+                <div class="ui-row-select-on ui-row-select-horizontal flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs" aria-current="true">
                     <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-link">
                         <Icon name="desktop" class="text-sm" />
                     </span>
@@ -405,7 +405,7 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                             data-menu-row
                             :data-current="isActive(option) || undefined"
                             :aria-current="isActive(option) || undefined"
-                            class="ui-row-select flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
+                            class="ui-row-select ui-row-select-horizontal flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
                             :class="{ 'ui-row-select-on': isActive(option) }"
                             @click="pick(option)"
                         >
