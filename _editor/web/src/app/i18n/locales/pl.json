@@ -3782,7 +3782,10 @@
         },
         "composerIntent": {
             "alsoReplaced": "Też zastąpione",
+            "anywayLine": "{reading}, według ostatniego odczytu. Wyślij i tak spróbuje tego konta, na wypadek gdyby odczyt był nieaktualny.",
             "discardsRequest": "Odrzuca prośbę powyżej",
+            "hintAnyway": "Wyślij mimo to",
+            "hintAnywayNote": "Próba na tym koncie teraz. Jeśli nadal odmówi, wiadomość zostaje z powodem podanym przez dostawcę.",
             "hintEditOne": "Zastąp wiadomość",
             "hintIdle": "Wyślij",
             "hintParked": "Po prośbie powyżej",
@@ -3795,6 +3798,7 @@
             "hintScheduledHeld": "Czeka w tym czacie do tej pory; nic nie jest wysyłane wcześniej",
             "hintSteer": "Pokieruj turą",
             "inMinutes": "{minutes} min",
+            "lastReading": "Ostatni odczyt",
             "noReply": "Bez odpowiedzi",
             "otherWays": "Wyślij wcześniej",
             "placeholderEdit": "Zadaj tę turę jeszcze raz, inaczej…",

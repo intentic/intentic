@@ -3782,7 +3782,10 @@
         },
         "composerIntent": {
             "alsoReplaced": "Also replaced",
+            "anywayLine": "{reading}, by the last reading. Send tries this account anyway, in case that reading is out of date.",
             "discardsRequest": "Discards request above",
+            "hintAnyway": "Send anyway",
+            "hintAnywayNote": "Tried on this account now. If it is still refused, the message stays with the provider's reason.",
             "hintEditOne": "Replace message",
             "hintIdle": "Send",
             "hintParked": "After request above",
@@ -3795,6 +3798,7 @@
             "hintScheduledHeld": "Waits in this chat until then; nothing is sent before",
             "hintSteer": "Steer turn",
             "inMinutes": "{minutes}m",
+            "lastReading": "Last reading",
             "noReply": "No reply",
             "otherWays": "Send sooner",
             "placeholderEdit": "Ask this turn again, differently…",

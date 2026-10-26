@@ -332,7 +332,8 @@ const {
     spentUntil,
     atReopen,
     canSend,
-    refusal,
+    statusBlock,
+    anyway,
     sendShown,
     composerPlaceholder,
     sendHint,
@@ -912,6 +913,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                                 :class="{
                                                     'composer-scheduled': scheduledLabel,
                                                     'composer-split-main': caretShown,
+                                                    'composer-anyway': anyway,
                                                     'max-md:h-11 max-md:w-11': !scheduledLabel,
                                                     'composer-flash': flashed === 'later',
                                                 }"
@@ -1020,7 +1022,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <!-- Withheld from the strip: floating over another page, readouts about a chat are a second row of text around a box
              asked for as one. -->
         <!-- The composer's own hints and refusals say nothing where the subagent bar stands in the composer's place. -->
-        <ChatPaneStatus v-if="connected && !strip" :block="subagentOf ? undefined : refusal" :hint="subagentOf ? `` : composerHint" />
+        <ChatPaneStatus v-if="connected && !strip" :block="subagentOf ? undefined : statusBlock" :hint="subagentOf ? `` : composerHint" />
 
         <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay

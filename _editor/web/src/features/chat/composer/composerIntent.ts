@@ -214,15 +214,21 @@ export const sendHintFor = (intent: SendIntent, words: ComposerWords): TooltipVa
 type Refusal = SendBlock | `runningPlace` | `planPending` | `attachedVoice` | `runningEdit` | `uploading` | `uploadFailed`;
 
 // Only an edit or a fresh immediate turn needs the selected account to be available. Live feedback,
-// explicit bookings and words placed as the agent do not start a turn on it.
+// explicit bookings and words placed as the agent do not start a turn on it. An edit is refused outright: it rewinds
+// the transcript before the provider answers, so a refusal there would cost messages.
 const accountRefusalOf = (situation: ComposerSituation): SendBlock | undefined => {
-    if (situation.voiceAgent) {
+    if (situation.voiceAgent || !situation.editing) {
         return undefined;
     }
-    if (situation.editing) {
-        return situation.accountBlock ?? (situation.spentUntil === undefined ? undefined : `editSpent`);
-    }
-    if (situation.streaming || situation.pendingPlan || situation.later === true) {
+    return situation.accountBlock ?? (situation.spentUntil === undefined ? undefined : `editSpent`);
+};
+
+// A fresh turn on an account that READS blocked is a warning, not a refusal (2026-10-26): the reading lags the provider
+// (a seat taken away and given back, an allowance read wrong), and the provider has the last word. The press then sends
+// anyway, naming the account so the daemon tries it rather than holding or moving the turn; a refused try costs nothing,
+// the message stays in the transcript with the provider's own reason.
+const accountCautionOf = (situation: ComposerSituation): SendBlock | undefined => {
+    if (situation.voiceAgent || situation.editing || situation.streaming || situation.pendingPlan || situation.later === true) {
         return undefined;
     }
     return situation.accountBlock;
@@ -306,6 +312,24 @@ export const sendRefusalTitle = (situation: ComposerSituation): string | undefin
     return refusal === undefined ? undefined : REFUSAL_TITLE[refusal]();
 };
 
+/**
+ * The block a press would send past: set while the box holds something, nothing else refuses, and the account the turn
+ * runs on reads blocked. The press then reads as "Send anyway" and names the account (composerSend's submit).
+ */
+export const sendAnyway = (situation: ComposerSituation): SendBlock | undefined =>
+    situation.staged && refusalOf(situation) === undefined ? accountCautionOf(situation) : undefined;
+
+// What the status line says while the press would send anyway: the reading, and that Send tries the account regardless.
+export const sendAnywayLine = (block: SendBlock): string => t(`chat.composerIntent.anywayLine`, { reading: sendBlockTitle(block) });
+
+// The Send button's hover in that state.
+export const sendAnywayHint = (block: SendBlock): TooltipValue => ({
+    title: t(`chat.composerIntent.hintAnyway`),
+    tone: `warning`,
+    rows: [{ label: t(`chat.composerIntent.lastReading`), value: sendBlockTitle(block) }],
+    note: t(`chat.composerIntent.hintAnywayNote`),
+});
+
 // The last turn stopped, but staged words/files, a pending plan, or a queued message mean saying so
 // would be wrong. Visible is the strip; offered is the bare press continuing it NOW, which additionally requires
 // `pickUp.ready` and an account with room: on a spent one the press is refused before anything runs, so the bare press
@@ -313,8 +337,13 @@ export const sendRefusalTitle = (situation: ComposerSituation): string | undefin
 export const continueVisible = (situation: ComposerSituation): boolean =>
     situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
 
+// A blocked reading still keeps the bare Continue back: only a press on words in the box sends anyway.
 export const continueOffered = (situation: ComposerSituation): boolean =>
-    continueVisible(situation) && situation.pickUp?.ready === true && situation.spentUntil === undefined && refusalOf(situation) === undefined;
+    continueVisible(situation) &&
+    situation.pickUp?.ready === true &&
+    situation.spentUntil === undefined &&
+    situation.accountBlock === undefined &&
+    refusalOf(situation) === undefined;
 
 /**
  * What a bare press does for a stopped turn while the account is spent with a reopen ahead: book its continuation for
@@ -339,9 +368,14 @@ export const reopenHintFor = (press: ReopenPress | `armed`, words: ComposerWords
     }
 };
 
-// A bare press with nothing typed, sending the messages written while the agent was busy.
+// A bare press with nothing typed, sending the messages written while the agent was busy. Not on an account that reads
+// blocked: those messages name no account, so only words sent from the box go anyway (sendAnyway).
 const queueFlushable = (situation: ComposerSituation): boolean =>
-    situation.queued > 0 && !situation.streaming && !situation.pendingPlan && situation.queueScheduled !== true;
+    situation.queued > 0 &&
+    !situation.streaming &&
+    !situation.pendingPlan &&
+    situation.queueScheduled !== true &&
+    accountCautionOf(situation) === undefined;
 
 // Whether the press lands at all; a mid-turn message is never refused; only whether there's something
 // to send and something stopping it.

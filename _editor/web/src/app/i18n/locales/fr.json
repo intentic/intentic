@@ -3782,7 +3782,10 @@
         },
         "composerIntent": {
             "alsoReplaced": "Aussi remplacés",
+            "anywayLine": "{reading}, d’après la dernière lecture. Envoyer essaie quand même ce compte, au cas où cette lecture serait périmée.",
             "discardsRequest": "Abandonne la demande",
+            "hintAnyway": "Envoyer quand même",
+            "hintAnywayNote": "Essayé maintenant sur ce compte. S’il est encore refusé, le message reste avec la raison du fournisseur.",
             "hintEditOne": "Remplacer le message",
             "hintIdle": "Envoyer",
             "hintParked": "Après la demande ci-dessus",
@@ -3795,6 +3798,7 @@
             "hintScheduledHeld": "Attend dans ce chat jusque-là ; rien n'est envoyé avant",
             "hintSteer": "Orienter le tour",
             "inMinutes": "{minutes} min",
+            "lastReading": "Dernière lecture",
             "noReply": "Pas de réponse",
             "otherWays": "Envoyer plus tôt",
             "placeholderEdit": "Reposer ce tour, autrement…",

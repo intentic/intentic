@@ -15,6 +15,9 @@ import {
     reopenPressOf,
     type ReopenPress,
     sendable,
+    sendAnyway,
+    sendAnywayHint,
+    sendAnywayLine,
     sendHintFor,
     sendIntentOf,
     type SendIntent,
@@ -32,7 +35,7 @@ import type { ChatRouting } from "../../routing/chatRoute";
 import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../../../models/providers/usageStatus";
-import { sendBlockOf } from "../../../../models/providers/sendAvailability";
+import { type SendBlock, sendBlockOf } from "../../../../models/providers/sendAvailability";
 import { anyProviderReady } from "../../../../models/providers/access";
 import { planFeedback } from "../../../../models/conversations/session/cardReplies";
 import { track } from "../../../../app/analytics";
@@ -80,6 +83,28 @@ export interface SendHost {
     // The title an agent's card goes by, for a message booked to wait for it.
     readonly titleOf: (conversationId: string) => string | undefined;
 }
+
+// The blocked reading a press sends past (composerIntent's sendAnyway): whether it does, the status line's words (the
+// refusal first, which outranks it) and the press's hover.
+const anywayReadings = (situation: Readonly<Ref<ComposerSituation>>, refusal: Readonly<Ref<string | undefined>>) => {
+    const block = computed(() => sendAnyway(situation.value));
+    return {
+        block,
+        on: computed(() => block.value !== undefined),
+        statusBlock: computed(() => refusal.value ?? (block.value === undefined ? undefined : sendAnywayLine(block.value))),
+        hint: computed(() => (block.value === undefined ? undefined : sendAnywayHint(block.value))),
+    };
+};
+
+// Sending past a blocked reading names the account, so the daemon tries it at once rather than holding the turn or moving
+// it elsewhere (offBlockedAccount); a pick already standing names it as it is.
+const nameBlockedAccount = (view: ConversationView, block: SendBlock | undefined): void => {
+    const { selection } = view.conversation.value;
+    const account = selection.servingAccount.value?.id;
+    if (block !== undefined && account !== undefined && !(selection.state.value.accountPicked && selection.account.value === account)) {
+        selection.apply({ kind: `selectAccount`, account });
+    }
+};
 
 // The turn as the composer treats it: a turn a person already ended is over here from the press, whatever is still
 // unwinding behind it, so what is typed next is the next turn's (TurnClient.say waits the unwind out), never words for
@@ -265,8 +290,11 @@ const reopenReadings = (on: {
         reopenPress,
         // What the time-labelled button says on an empty box with a turn to continue: that press, or that it is already set.
         reopenShown: computed(() => (on.intent.value === `scheduled` && continueVisible(on.situation.value) ? atReopen.value : undefined)),
-        // Whether the strip's own press would get through now (a held turn always would; it is the account that may not).
-        pressable: computed(() => on.situation.value.pickUp?.ready === true && sendRefusal(on.situation.value) === undefined),
+        // Whether the strip's own press would get through now (a held turn always would; it is the account that may not,
+        // and a blocked reading keeps it back too: only words in the box go anyway).
+        pressable: computed(
+            () => on.situation.value.pickUp?.ready === true && on.situation.value.accountBlock === undefined && sendRefusal(on.situation.value) === undefined,
+        ),
         // What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
         keyHint: computed(() => continueKeyHintOf(on.continueOffer.value, on.spentUntil.value, reopenPress.value, on.now.value)),
     };
@@ -356,6 +384,7 @@ export const useComposerSend = (host: SendHost) => {
     const intent = computed(() => sendIntentOf(situation.value));
     // Why Send is refusing, in the user's words; undefined when the press will land.
     const refusal = computed(() => sendRefusal(situation.value));
+    const anyway = anywayReadings(situation, refusal);
     const continueOffer = computed(() => continueOffered(situation.value));
     const reopen = reopenReadings({ situation, intent, continueOffer, spentUntil, now: paneNow });
     const { reopenPress, reopenShown } = reopen;
@@ -490,6 +519,7 @@ export const useComposerSend = (host: SendHost) => {
         if (!canSend.value) {
             return;
         }
+        nameBlockedAccount(view, anyway.block.value);
         // A message booked for the moment the reader picked: the pick is spent by it, as a workflow badge is by its send.
         const picked = intent.value === `later` ? later.value : undefined;
         if (picked !== undefined) {
@@ -513,6 +543,8 @@ export const useComposerSend = (host: SendHost) => {
         intent,
         ...scheduledPress({ intent, later, spentUntil, now: paneNow, words, titleOf: host.titleOf }),
         refusal,
+        statusBlock: anyway.statusBlock,
+        anyway: anyway.on,
         continueOffer,
         canSend,
         continueTurn,
@@ -553,7 +585,7 @@ export const useComposerSend = (host: SendHost) => {
             }
             // An empty box over a stopped turn: the time-labelled press continues it then, or says it already goes then.
             const shown = reopenShown.value;
-            return shown === undefined ? sendHintFor(intent.value, words.value) : reopenHintFor(shown, words.value);
+            return anyway.hint.value ?? (shown === undefined ? sendHintFor(intent.value, words.value) : reopenHintFor(shown, words.value));
         }),
         ...stopPress(host, words, awaitingDecision),
         submit,

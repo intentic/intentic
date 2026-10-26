@@ -3782,7 +3782,10 @@
         },
         "composerIntent": {
             "alsoReplaced": "Auch ersetzt",
+            "anywayLine": "{reading}, laut letzter Abfrage. Senden versucht dieses Konto trotzdem, falls die Abfrage veraltet ist.",
             "discardsRequest": "Verwirft Anfrage oben",
+            "hintAnyway": "Trotzdem senden",
+            "hintAnywayNote": "Wird jetzt mit diesem Konto versucht. Wird es weiter abgelehnt, bleibt die Nachricht mit dem Grund des Anbieters stehen.",
             "hintEditOne": "Nachricht ersetzen",
             "hintIdle": "Senden",
             "hintParked": "Nach der Anfrage oben",
@@ -3795,6 +3798,7 @@
             "hintScheduledHeld": "Wartet bis dahin in diesem Chat; vorher wird nichts gesendet",
             "hintSteer": "Zug lenken",
             "inMinutes": "{minutes} Min.",
+            "lastReading": "Letzte Abfrage",
             "noReply": "Keine Antwort",
             "otherWays": "Früher senden",
             "placeholderEdit": "Diesen Zug anders erneut stellen…",

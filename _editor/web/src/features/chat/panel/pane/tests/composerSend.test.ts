@@ -650,7 +650,7 @@ describe(`availability through the real selection`, () => {
         expect(send.intent.value).toBe(`idle`);
     });
 
-    it.each([`no-reset`, `reauth`, `admin`] as const)(`refuses %s for text, empty continuation, queue and direct edit before rewind`, async (kind) => {
+    it.each([`no-reset`, `reauth`, `admin`] as const)(`sends text anyway on %s, naming the account, but refuses continuation, queue and edit`, async (kind) => {
         const { chat, send, say, view } = composerOf();
         const entry = { id: `a1`, label: `Claude`, connectedAt: 1 };
         providerAccounts.value = { ...providerAccounts.value, claude: [{ ...entry,
@@ -661,19 +661,23 @@ describe(`availability through the real selection`, () => {
         const continued = jest.spyOn(chat.turn, `continueTurn`).mockResolvedValue(undefined);
         const rewind = jest.spyOn(chat.transcript, `rewindTo`);
         expect(view.servingState.value?.kind).toBe(kind === `no-reset` ? `spent` : `blocked`);
+        const moved = jest.spyOn(chat.turn, `moveAccount`).mockImplementation(() => undefined);
         chat.draft.value = `keep my words`;
         chat.attachments.value = [CHIP];
-        expect(send.canSend.value).toBe(false);
-        expect(send.refusal.value).toBe(kind === `no-reset`
-            ? `Allowance exhausted; the reset time is unknown. Choose another account or model, or wait for the allowance to return.`
-            : kind === `reauth` ? `Reconnect this account or choose another account or model. Your message stays here.`
-            : `An organisation admin must restore this account’s access. Choose another account or model to continue.`);
+        // A reading lags the provider (a seat taken away and given back): the words go anyway, and the press says so.
+        expect(send.canSend.value).toBe(true);
+        expect(send.anyway.value).toBe(true);
+        expect(send.refusal.value).toBeUndefined();
+        const reading = kind === `no-reset` ? `Allowance exhausted` : kind === `reauth` ? `Reconnect account` : `Account access blocked`;
+        expect(send.statusBlock.value).toBe(`${reading}, by the last reading. Send tries this account anyway, in case that reading is out of date.`);
+        expect(send.sendHint.value).toMatchObject({ title: `Send anyway`, tone: `warning`, rows: [{ value: reading }] });
         send.submit();
-        send.submit({ now: true });
-        expect(chat.draft.value).toBe(`keep my words`);
-        expect(chat.attachments.value).toEqual([CHIP]);
-        chat.draft.value = ``;
-        chat.attachments.value = [];
+        // Named, so the daemon tries the account rather than holding the turn or moving it elsewhere.
+        expect(chat.selection.state.value).toMatchObject({ account: `a1`, accountPicked: true });
+        expect(moved).toHaveBeenCalledWith(`a1`);
+        expect(say).toHaveBeenCalledTimes(1);
+        expect(say.mock.calls[0]?.[0]).toBe(`keep my words`);
+        expect(chat.draft.value).toBe(``);
         chat.pickUp.value = { reason: `stopped`, held: { ran: true } };
         expect(send.continueOffer.value).toBe(false);
         expect(send.pickUpPressable.value).toBe(false);
@@ -691,7 +695,7 @@ describe(`availability through the real selection`, () => {
         expect(chat.draft.value).toBe(`replacement`);
         expect(chat.transcript.editing.value?.id).toBe(1);
         expect(rewind).not.toHaveBeenCalled();
-        expect(say).not.toHaveBeenCalled();
+        expect(say).toHaveBeenCalledTimes(1);
         expect(continued).not.toHaveBeenCalled();
     });
 

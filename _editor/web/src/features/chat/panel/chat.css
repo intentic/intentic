@@ -1213,6 +1213,26 @@
     width: 2.125rem;
     padding-inline-start: 0.125rem;
 }
+/* A split send whose press is refused while its caret still opens (an upload going, an edit waiting): the caret wears the
+   press's grey, so the pair keeps reading as one pill and not as a grey stub beside a lit caret. */
+.composer-send.composer-split-main:disabled + .composer-split-caret:not(:disabled) {
+    background: var(--color-overlay);
+    color: var(--color-subtle);
+}
+.composer-send.composer-split-main:disabled + .composer-split-caret:not(:disabled):hover {
+    color: var(--color-content);
+}
+/* SEND ANYWAY: the account reads blocked, and the press tries it regardless (composerIntent's sendAnyway). The warning hue
+   says the press is a gamble before the hover does; its caret wears it too. */
+.composer-send.composer-anyway,
+.composer-send.composer-anyway + .composer-split-caret {
+    background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+    color: var(--color-warning);
+}
+.composer-send.composer-anyway:hover,
+.composer-send.composer-anyway + .composer-split-caret:hover {
+    background: color-mix(in srgb, var(--color-warning) 26%, transparent);
+}
 .composer-stop {
     background: var(--color-overlay);
     color: var(--color-content);

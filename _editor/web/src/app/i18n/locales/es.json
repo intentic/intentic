@@ -3782,7 +3782,10 @@
         },
         "composerIntent": {
             "alsoReplaced": "También reemplazados",
+            "anywayLine": "{reading}, según la última lectura. Enviar prueba esta cuenta de todos modos, por si la lectura está desactualizada.",
             "discardsRequest": "Descarta la solicitud",
+            "hintAnyway": "Enviar de todos modos",
+            "hintAnywayNote": "Se prueba ahora en esta cuenta. Si sigue rechazada, el mensaje se queda con el motivo del proveedor.",
             "hintEditOne": "Reemplazar mensaje",
             "hintIdle": "Enviar",
             "hintParked": "Tras la solicitud de arriba",
@@ -3795,6 +3798,7 @@
             "hintScheduledHeld": "Espera en este chat hasta entonces; no se envía nada antes",
             "hintSteer": "Guiar el turno",
             "inMinutes": "{minutes} min",
+            "lastReading": "Última lectura",
             "noReply": "Sin respuesta",
             "otherWays": "Enviar antes",
             "placeholderEdit": "Vuelve a pedir este turno, de otra forma…",
