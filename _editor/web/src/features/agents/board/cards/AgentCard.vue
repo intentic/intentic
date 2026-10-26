@@ -600,10 +600,11 @@ const grab = (event: PointerEvent): void => {
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
             <!-- The session's kind as a glyph, tinted by the package it works in (sessionKind.ts); a dot for the everyday single agent. -->
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
+            <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
             <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full">
                 <!-- A tick per checklist item and one for the session's ending, closed once it is finished (`tileRim`). -->
                 <SegmentRing :segments="rim.segments" :filled="rim.filled" :size="22" :stroke="1.5" class="absolute inset-0" :class="rim.tone" />
-                <IdentityTile :session="agent" class="h-4 w-4 text-2xs" />
+                <IdentityTile :session="agent" class="h-4.5 w-4.5 text-xs" />
             </span>
             <input
                 v-if="edit.editing"
