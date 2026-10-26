@@ -60,9 +60,28 @@ const sections = computed<PickSection[]>(() => (rows.value.entries.length === 0 
 
 type Mode = `all` | `some`;
 const mode = computed<Mode>(() => (accounts === `all` ? `all` : `some`));
+// What each mode means rides on it as a hover card, rather than as lines under the control; the accounts with no
+// allowance to spend are named on "Only these", the one place they matter.
 const MODES = computed(() => [
-    { value: `all` as const, label: t(`sandbox.sandboxAccess.reachAll`), icon: `check-circle` as const },
-    { value: `some` as const, label: t(`sandbox.sandboxAccess.reachSome`), icon: `lock` as const },
+    {
+        value: `all` as const,
+        label: t(`sandbox.sandboxAccess.reachAll`),
+        icon: `check-circle` as const,
+        title: { title: t(`sandbox.sandboxAccess.tipAiAllTitle`), note: t(`sandbox.sandboxAccess.tipAiAllNote`) },
+    },
+    {
+        value: `some` as const,
+        label: t(`sandbox.sandboxAccess.reachSome`),
+        icon: `lock` as const,
+        title: {
+            title: t(`sandbox.sandboxAccess.tipPickedOnly`),
+            note: t(`sandbox.sandboxAccess.tipAiSomeNote`),
+            rows:
+                rows.value.alwaysAvailable.length === 0
+                    ? undefined
+                    : [{ label: t(`sandbox.sandboxAccess.tipAlwaysAvailable`), value: rows.value.alwaysAvailable.join(`, `) }],
+        },
+    },
 ]);
 // Narrowing starts from nothing ticked, as the connections' reach does: the owner names what they mean to hand over.
 const pickMode = (next: Mode): void => emit(`change`, next === `all` ? `all` : []);
@@ -72,9 +91,6 @@ const picked = computed<readonly string[]>(() => (accounts === `all` ? [] : acco
 <template>
     <div class="flex flex-col gap-3">
         <SegmentedControl :model-value="mode" :options="MODES" :class="{ 'pointer-events-none opacity-60': disabled }" @update:model-value="pickMode" />
-        <p class="text-xs text-muted">
-            {{ mode === `all` ? t(`sandbox.sandboxAccess.aiAccountsAllNote`) : t(`sandbox.sandboxAccess.aiAccountsSomeNote`) }}
-        </p>
 
         <template v-if="mode === `some`">
             <div v-if="!accountsLoaded && sections.length === 0" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
@@ -96,9 +112,5 @@ const picked = computed<readonly string[]>(() => (accounts === `all` ? [] : acco
                 </template>
             </MultiPick>
         </template>
-
-        <p v-if="rows.alwaysAvailable.length > 0" class="text-xs text-subtle">
-            {{ t(`sandbox.sandboxAccess.aiAccountsAlwaysAvailable`, { names: rows.alwaysAvailable.join(`, `) }) }}
-        </p>
     </div>
 </template>

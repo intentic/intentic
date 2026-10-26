@@ -201,6 +201,9 @@ const tab = async (label: string, within?: HTMLElement): Promise<void> => {
     [...(within ?? document.body).querySelectorAll<HTMLButtonElement>(`[role=tab]`)].find((button) => button.textContent?.trim() === label)?.click();
     await nextTick();
 };
+// What a choice says of itself on hover: its accessible name folds the hover card in, since a phone never sees it.
+const hintOf = (label: string, within?: HTMLElement): string | null | undefined =>
+    [...(within ?? document.body).querySelectorAll<HTMLButtonElement>(`[role=tab]`)].find((button) => button.textContent?.trim() === label)?.getAttribute(`aria-label`);
 const tickRow = async (name: string, within?: HTMLElement): Promise<void> => {
     [...(within ?? panel() ?? document.body).querySelectorAll<HTMLLabelElement>(`label`)]
         .find((row) => row.textContent?.includes(name))
@@ -482,7 +485,7 @@ it(`holds a move to chatting until its areas reach an assistant, then saves it`,
     expect(grantsSent()).toEqual([]);
 
     await tickRow(`Support guest`);
-    expect(shown()).toContain(`They can talk to Support.`);
+    expect(shown()).not.toContain(`No assistant works in these areas.`);
     daemonMembers.mockReturnValue([{ email: `guest@example.com`, role: `guest`, agents: `chat`, areas: [`support`] }]);
     await autosaved();
 
@@ -536,7 +539,7 @@ it(`limits what a person's agents may use`, async () => {
     await tab(`Only these`, part(`Connections and secrets`));
     await settle();
     expect(shown()).toContain(`0 of 2 picked`);
-    expect(shown()).toContain(`Always available, nothing to withhold: Docker.`);
+    expect(hintOf(`Only these`, part(`Connections and secrets`))).toContain(`Always available Docker`);
     await tickRow(`github`);
     await autosaved();
 
@@ -569,7 +572,7 @@ it(`limits which AI accounts a person's conversations run on`, async () => {
         await settle();
         await openPerson(`guest@example.com`);
         const accounts = part(`AI accounts`);
-        expect(accounts?.textContent).toContain(`Every AI account this sandbox holds`);
+        expect(hintOf(`All`, accounts)).toContain(`Every AI account`);
         await tab(`Only these`, accounts);
         await settle();
         expect(shown()).toContain(`Pick at least one AI account their agents can run on.`);
@@ -584,16 +587,17 @@ it(`limits which AI accounts a person's conversations run on`, async () => {
     }
 });
 
-// Managing is every other answer at once; the panel says so rather than drawing controls that would mean nothing.
-it(`makes a person a manager with one switch`, async () => {
+// Managing is every other answer at once, so it is asked first; the panel then says what it hands over rather than
+// drawing controls that would mean nothing.
+it(`gives a person full access with the first choice`, async () => {
     withMember(`viewer`);
     setRole.mockResolvedValue({ members: [accepted(`maintainer`)] });
     mount();
     await settle();
     await openPerson(`guest@example.com`);
-    panel()?.querySelectorAll<HTMLInputElement>(`input[role="switch"]`)[0]?.click();
-    await nextTick();
-    expect(shown()).toContain(`Sees and edits everything, runs agents, uses every connection.`);
+    await tab(`Full access`, part(`Access`));
+    expect(shown()).toContain(`Publish, change settings and connections`);
+    expect(hintOf(`Chat with assistants`)).toBeUndefined();
     await autosaved();
 
     expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `maintainer`, emailSignIn: false }]);

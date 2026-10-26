@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SegmentedControl } from "@intentic/ui";
+import { SegmentedControl, type Tip } from "@intentic/ui";
 import { computed } from "vue";
 import { useAreas } from "../areas/useAreas";
 import MultiPick from "./pick/MultiPick.vue";
@@ -27,10 +27,16 @@ const editable = computed(() => (see === undefined ? areas.value : areas.value.f
 type Scope = `none` | `all` | `some`;
 const scope = computed<Scope>(() => (edit === `none` || edit === `all` ? edit : `some`));
 const held = computed<readonly string[]>(() => (edit === `none` || edit === `all` ? [] : edit));
+// What each scope means rides on it as a hover card, rather than as a line under the control.
+const tip = (title: string): Tip => ({ title, note: t(`sandbox.sandboxAccess.tipEditNote`) });
 const SCOPES = computed(() => [
-    { value: `none` as const, label: t(`sandbox.sandboxAccess.editNothing`) },
-    ...(see === undefined ? [{ value: `all` as const, label: t(`sandbox.sandboxAccess.editEverything`) }] : []),
-    ...(editable.value.length > 0 ? [{ value: `some` as const, label: t(`sandbox.sandboxAccess.onlySomeAreas`) }] : []),
+    { value: `none` as const, label: t(`sandbox.sandboxAccess.editNothing`), title: tip(t(`sandbox.sandboxAccess.tipEditNoneTitle`)) },
+    ...(see === undefined
+        ? [{ value: `all` as const, label: t(`sandbox.sandboxAccess.editEverything`), title: tip(t(`sandbox.sandboxAccess.tipEditAllTitle`)) }]
+        : []),
+    ...(editable.value.length > 0
+        ? [{ value: `some` as const, label: t(`sandbox.sandboxAccess.onlySomeAreas`), title: tip(t(`sandbox.sandboxAccess.tipPickedAreas`)) }]
+        : []),
 ]);
 const pickScope = (next: Scope): void => emit(`change`, next === `some` ? [...held.value] : next);
 const sections = computed<PickSection[]>(() => [
@@ -50,6 +56,5 @@ const sections = computed<PickSection[]>(() => [
             :disabled="disabled"
             @change="(next) => emit(`change`, next)"
         />
-        <p class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.editNote`) }}</p>
     </div>
 </template>

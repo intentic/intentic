@@ -59,9 +59,25 @@ const reading = computed(() => capabilitiesQuery.isPending.value || inventoryQue
 
 type Mode = `all` | `some`;
 const mode = computed<Mode>(() => (reach === `all` ? `all` : `some`));
+// What each mode means rides on it as a hover card, rather than as lines under the control; the kinds nothing withholds
+// are named on "Only these", the one place they matter.
 const MODES = computed(() => [
-    { value: `all` as const, label: t(`sandbox.sandboxAccess.reachAll`), icon: `check-circle` as const },
-    { value: `some` as const, label: t(`sandbox.sandboxAccess.reachSome`), icon: `lock` as const },
+    {
+        value: `all` as const,
+        label: t(`sandbox.sandboxAccess.reachAll`),
+        icon: `check-circle` as const,
+        title: { title: t(`sandbox.sandboxAccess.tipReachAllTitle`), note: t(`sandbox.sandboxAccess.tipReachAllNote`) },
+    },
+    {
+        value: `some` as const,
+        label: t(`sandbox.sandboxAccess.reachSome`),
+        icon: `lock` as const,
+        title: {
+            title: t(`sandbox.sandboxAccess.tipPickedOnly`),
+            note: t(`sandbox.sandboxAccess.tipReachSomeNote`),
+            rows: alwaysShared.value.length === 0 ? undefined : [{ label: t(`sandbox.sandboxAccess.tipAlwaysAvailable`), value: alwaysShared.value.join(`, `) }],
+        },
+    },
 ]);
 // Narrowing starts from nothing ticked: a reach that silently held everything would read as limited while reaching
 // all of it, and the owner names what they mean to hand over row by row.
@@ -123,9 +139,6 @@ const byValue = computed(() => new Map(accounts.value.map((account) => [`${CONNE
 <template>
     <div class="flex flex-col gap-3">
         <SegmentedControl :model-value="mode" :options="MODES" :class="{ 'pointer-events-none opacity-60': disabled }" @update:model-value="pickMode" />
-        <p class="text-xs text-muted">
-            {{ mode === `all` ? t(`sandbox.sandboxAccess.reachAllNote`) : t(`sandbox.sandboxAccess.reachSomeNote`) }}
-        </p>
 
         <template v-if="mode === `some`">
             <div v-if="reading" role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
@@ -154,9 +167,5 @@ const byValue = computed(() => new Map(accounts.value.map((account) => [`${CONNE
                 </template>
             </MultiPick>
         </template>
-
-        <p v-if="alwaysShared.length > 0" class="text-xs text-subtle">
-            {{ t(`sandbox.sandboxAccess.reachAlwaysShared`, { names: alwaysShared.join(`, `) }) }}
-        </p>
     </div>
 </template>

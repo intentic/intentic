@@ -28,9 +28,20 @@ const nobodyAnywhere = computed(() => chat && areas.value.every((area) => namesO
 
 type Scope = `whole` | `some`;
 const scope = computed<Scope>(() => (picked === undefined && !chat ? `whole` : `some`));
+// What each scope means rides on it as a hover card, rather than as a line under the control.
 const SCOPES = computed(() => [
-    { value: `whole` as const, label: t(`sandbox.sandboxAccess.wholeWorkspace`), icon: `globe` as const },
-    { value: `some` as const, label: t(`sandbox.sandboxAccess.onlySomeAreas`), icon: `folder` as const },
+    {
+        value: `whole` as const,
+        label: t(`sandbox.sandboxAccess.wholeWorkspace`),
+        icon: `globe` as const,
+        title: { title: t(`sandbox.sandboxAccess.tipSeeWholeTitle`), note: t(`sandbox.sandboxAccess.tipSeeNote`) },
+    },
+    {
+        value: `some` as const,
+        label: t(`sandbox.sandboxAccess.onlySomeAreas`),
+        icon: `folder` as const,
+        title: { title: t(`sandbox.sandboxAccess.tipPickedAreas`), note: t(`sandbox.sandboxAccess.tipSeeNote`) },
+    },
 ]);
 // Narrowing starts from nothing ticked rather than every area: a fence that silently held them all would read as
 // narrowed while reaching everything.
@@ -82,14 +93,12 @@ const sections = computed<PickSection[]>(() => [
                 @change="(next) => emit(`change`, next)"
             />
 
-            <!-- What the pick hands over. Guidance stays quiet until a pick is actually wrong. -->
+            <!-- Guidance stays quiet until a pick is actually wrong; who each area reaches is on its own row. -->
             <p v-if="nobodyAnywhere" class="text-xs text-muted">
                 {{ t(`sandbox.sandboxAccess.guestHasNobodyAnywhere`) }}
                 <RouterLink to="/sandbox/personas" class="text-content underline">{{ t(`sandbox.sandboxAccess.giveAssistantFolder`) }}</RouterLink>
             </p>
             <p v-else-if="chat && held.length > 0 && reached.length === 0" class="ui-field-error">{{ t(`sandbox.sandboxAccess.noAssistantWorksHere`) }}</p>
-            <p v-else-if="chat && reached.length > 0" class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.fenceHoldsAssistants`, { names: reached.join(`, `) }) }}</p>
-            <p v-else-if="!chat" class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.agentsSeeSame`) }}</p>
         </template>
     </div>
 </template>

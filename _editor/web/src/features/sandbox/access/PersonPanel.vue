@@ -12,9 +12,9 @@ import ReachPicker from "./ReachPicker.vue";
 import { usePersonaReach } from "./usePersonaReach";
 import { useT } from "@intentic/ui/i18n";
 
-// ONE PERSON'S ACCESS, opened under their tile: whether their conversations run agents, where they see, where they edit
-// by hand, which AI accounts their turns run on and what their agents may spend, whether they manage the sandbox, and
-// how they sign in. Changes save as they are
+// ONE PERSON'S ACCESS, opened under their tile: first whether they manage the sandbox (full access, every answer below at
+// once), else whether their conversations run agents, where they see, where they edit by hand, which AI accounts their
+// turns run on and what their agents may spend; and how they sign in. Changes save as they are
 // made, like a persona's: a run of clicks is one write, and an answer the daemon would refuse (a chat with no area, a
 // narrowed scope with nothing ticked) waits here, said, instead of being sent. Mounted once per person, so a draft never
 // carries from one to the next; one still waiting when the panel closes is sent on its way out.
@@ -98,18 +98,29 @@ const status = computed((): SaveStatus => {
 // AGENTS: chatting is the guest's way of working, held to areas; leaving it keeps the areas, and coming to it drops
 // hand edits, which a chat never has. Home only is the master view's one conversation and nothing else: no hand edits
 // either, its areas optional, and whether its work lands by itself (`lands`) is also whether they may land it.
+// What each choice means rides on the choice itself, as a hover card, rather than as a line under the control.
 const AGENTS = computed(() => [
-    { value: `off` as const, label: t(`sandbox.sandboxAccess.agentsOff`) },
-    { value: `chat` as const, label: t(`sandbox.sandboxAccess.agentsChat`) },
-    { value: `home` as const, label: t(`sandbox.sandboxAccess.agentsHome`) },
-    { value: `run` as const, label: t(`sandbox.sandboxAccess.agentsRun`) },
+    {
+        value: `off` as const,
+        label: t(`sandbox.sandboxAccess.agentsOff`),
+        title: { title: t(`sandbox.sandboxAccess.tipOffTitle`), note: t(`sandbox.sandboxAccess.tipOffNote`) },
+    },
+    {
+        value: `chat` as const,
+        label: t(`sandbox.sandboxAccess.agentsChat`),
+        title: { title: t(`sandbox.sandboxAccess.tipChatTitle`), note: t(`sandbox.sandboxAccess.tipChatNote`) },
+    },
+    {
+        value: `home` as const,
+        label: t(`sandbox.sandboxAccess.agentsHome`),
+        title: { title: t(`sandbox.sandboxAccess.tipHomeTitle`), note: t(`sandbox.sandboxAccess.tipHomeNote`) },
+    },
+    {
+        value: `run` as const,
+        label: t(`sandbox.sandboxAccess.agentsRun`),
+        title: { title: t(`sandbox.sandboxAccess.tipRunTitle`), note: t(`sandbox.sandboxAccess.tipRunNote`) },
+    },
 ]);
-const AGENT_NOTES = {
-    off: () => t(`sandbox.sandboxAccess.agentsOffNote`),
-    chat: () => t(`sandbox.sandboxAccess.agentsChatNote`),
-    home: () => t(`sandbox.sandboxAccess.agentsHomeNote`),
-    run: () => t(`sandbox.sandboxAccess.agentsRunNote`),
-} satisfies Record<AgentAccess, () => string>;
 const pickAgents = (agents: AgentAccess): void => {
     if (agents === `chat`) {
         set({ agents, see: draft.value.see ?? [], edit: `none` });
@@ -125,7 +136,8 @@ const pickSee = (see: string[] | undefined): void => {
     set({ see, edit: kept });
 };
 
-// MANAGE: every other answer at once. The answers below are kept while it is on, so turning it off again gives them back;
+// ACCESS: managing the sandbox is every other answer at once, so it is the first thing asked rather than a switch found
+// after the rest has been set up by hand. The answers below are kept while it is on, so turning it off again gives them back;
 // a person who managed from the start comes down to running agents across the workspace.
 const beforeManage = ref<AccessDraft>();
 const pickManage = (on: boolean): void => {
@@ -138,6 +150,29 @@ const pickManage = (on: boolean): void => {
     set(back === undefined ? { manage: false, agents: `run`, see: undefined, edit: `none` } : { ...back, emailSignIn: draft.value.emailSignIn, manage: false });
 };
 
+type Level = `custom` | `full`;
+const LEVELS = computed(() => [
+    {
+        value: `custom` as const,
+        label: t(`sandbox.sandboxAccess.accessCustom`),
+        title: { title: t(`sandbox.sandboxAccess.tipCustomTitle`), note: t(`sandbox.sandboxAccess.tipCustomNote`) },
+    },
+    {
+        value: `full` as const,
+        label: t(`sandbox.sandboxAccess.accessFull`),
+        title: { title: t(`sandbox.sandboxAccess.tipFullTitle`), note: t(`sandbox.sandboxAccess.tipFullNote`) },
+    },
+]);
+// Full access said in the same words the custom answers use, so the reader sees what it hands over before picking it.
+const FULL = computed(() => [
+    { label: t(`sandbox.sandboxAccess.agentsSection`), value: t(`sandbox.sandboxAccess.fullAgentsValue`) },
+    { label: t(`sandbox.sandboxAccess.seeSection`), value: t(`sandbox.sandboxAccess.wholeWorkspace`) },
+    { label: t(`sandbox.sandboxAccess.editSection`), value: t(`sandbox.sandboxAccess.editEverything`) },
+    { label: t(`sandbox.sandboxAccess.aiAccountsSection`), value: t(`sandbox.sandboxAccess.reachAll`) },
+    { label: t(`sandbox.sandboxAccess.reachSection`), value: t(`sandbox.sandboxAccess.reachAll`) },
+    { label: t(`sandbox.sandboxAccess.fullSettings`), value: t(`sandbox.sandboxAccess.fullSettingsValue`) },
+]);
+
 const PROBLEMS = {
     pickSeeArea: () => t(`sandbox.sandboxAccess.pickSeeArea`),
     pickEditArea: () => t(`sandbox.sandboxAccess.pickEditArea`),
@@ -148,7 +183,6 @@ const PROBLEMS = {
 } as const;
 
 const confirmingRemove = ref(false);
-const manageId = useId();
 const landsId = useId();
 const signInId = useId();
 </script>
@@ -191,12 +225,24 @@ const signInId = useId();
         <Notice v-if="notice" :of="notice" />
         <p v-else-if="problem !== undefined" class="text-xs text-warning">{{ PROBLEMS[problem]() }}</p>
 
-        <p v-if="draft.manage" class="text-sm text-muted">{{ t(`sandbox.sandboxAccess.managesAll`) }}</p>
+        <Section :label="t(`sandbox.sandboxAccess.accessSection`)">
+            <SegmentedControl
+                :model-value="draft.manage ? `full` : `custom`"
+                :options="LEVELS"
+                @update:model-value="(level: Level) => pickManage(level === `full`)"
+            />
+        </Section>
+
+        <dl v-if="draft.manage" class="flex flex-col gap-2">
+            <div v-for="row in FULL" :key="row.label" class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                <dt class="shrink-0 text-xs text-muted sm:w-44 sm:text-sm">{{ row.label }}</dt>
+                <dd class="text-sm text-content">{{ row.value }}</dd>
+            </div>
+        </dl>
         <template v-else>
             <Section :label="t(`sandbox.sandboxAccess.agentsSection`)">
                 <div class="flex flex-col gap-2">
                     <SegmentedControl :model-value="draft.agents" :options="AGENTS" @update:model-value="pickAgents" />
-                    <p class="text-xs text-muted">{{ AGENT_NOTES[draft.agents]() }}</p>
                     <div v-if="draft.agents === `home`" class="flex items-center gap-3 py-1.5">
                         <label :for="landsId" class="flex min-w-0 flex-1 cursor-pointer flex-col">
                             <span class="text-sm text-content">{{ t(`sandbox.sandboxAccess.homeLands`) }}</span>
@@ -230,13 +276,6 @@ const signInId = useId();
         </template>
 
         <div class="-mx-1 flex flex-col border-t border-line-subtle pt-3">
-            <div class="flex items-center gap-3 px-1 py-1.5">
-                <label :for="manageId" class="flex min-w-0 flex-1 cursor-pointer flex-col">
-                    <span class="text-sm text-content">{{ t(`sandbox.sandboxAccess.manageSandbox`) }}</span>
-                    <span class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.manageSandboxNote`) }}</span>
-                </label>
-                <ToggleSwitch :input-id="manageId" :model-value="draft.manage" class="ui-switch-sm shrink-0" @update:model-value="pickManage" />
-            </div>
             <div class="flex items-center gap-3 px-1 py-1.5">
                 <label :for="signInId" class="flex min-w-0 flex-1 cursor-pointer flex-col">
                     <span class="text-sm text-content">{{ t(`sandbox.sandboxAccess.signInWithCode`) }}</span>
