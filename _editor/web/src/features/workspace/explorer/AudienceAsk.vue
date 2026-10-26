@@ -19,8 +19,8 @@ const { setAudience } = useAudience();
 const { canShip } = useRole();
 const { upsert } = useRules();
 
-// On by default: the maker's contract is "it edits my thing and I can always go back", which these two rules are.
-const applyOnOwn = ref(true);
+// Applying work and saving versions are opt-in, regardless of which audience the person chooses.
+const applyOnOwn = ref(false);
 
 const answer = (value: Audience): void => {
     setAudience(value);

@@ -10,8 +10,8 @@ export const NAMED_RULES = {
     version: `auto-version`,
 } as const;
 
-// The two rows a maker's arrival writes together: finished work lands on its own, and what lands is committed. Also
-// what the Agent tab's own toggles write, so the two doors never disagree on the rule.
+// The two rows a maker's arrival can opt into together: finished work lands on its own, and what lands is committed.
+// Also what the Agent tab's own toggles write, so the two doors never disagree on the rule.
 export const autoLandRule = (): Rule => ({
     id: NAMED_RULES.land,
     label: t(`sandbox.words.landFinishedWorkAutomatically`),
