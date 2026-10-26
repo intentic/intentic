@@ -955,24 +955,6 @@
             "line": "Dale una tarea. Trabaja en su propia copia mientras sigues con lo tuyo, y su tarjeta aparece justo aquí.",
             "writeYourOwn": "Escribir la mía"
         },
-        "exampleCard": {
-            "title": "Añadir un interruptor de modo oscuro",
-            "tag": "Ejemplo",
-            "openLabel": "Abrir el ejemplo: así se ve un agente terminado",
-            "files": "{count} archivo | {count} archivos",
-            "line": "Ábrelo para ver cómo revisas el trabajo de un agente y lo integras.",
-            "reviewTitle": "Ejemplo: revisar el trabajo de un agente",
-            "reviewIntro": "Es un ejemplo grabado, no trabajo hecho aquí. Cuando tu propio agente termine, su tarjeta abrirá una revisión como esta.",
-            "asked": "Lo que pediste",
-            "prompt": "Añade un interruptor de modo oscuro en la cabecera y recuerda la elección.",
-            "did": "Lo que dice que hizo",
-            "reply": "Añadí un almacén de tema que lee el ajuste del sistema y guarda tu elección, un interruptor en la cabecera y colores oscuros para la página. Ejecuté las pruebas; pasan.",
-            "changed": "Qué cambió",
-            "landTitle": "Después lo integras",
-            "landLine": "El agente trabajó en su propia copia, así que tu espacio de trabajo aún no ha cambiado. Integrar trae estos cambios. Si no están bien, dile al agente en su chat qué corregir.",
-            "close": "Cerrar",
-            "startOwn": "Iniciar mi propio agente"
-        },
         "freshSession": {
             "reviewInWords": "Revisa el trabajo del que partió esta sesión en busca de errores de corrección. Para cada hallazgo, indica el archivo y la línea, qué falla y qué entradas lo hacen fallar. Informa de lo que afecta a la corrección o al propósito del trabajo, no de preferencias de estilo.",
             "testInWords": "Prueba el trabajo del que partió esta sesión: ejecuta sus tests y las comprobaciones que correspondan, y prueba lo que cambió como lo usaría una persona. Informa de lo que ejecutaste, con los comandos exactos, y de qué pasó y qué falló. No cambies nada salvo que te lo pida.",

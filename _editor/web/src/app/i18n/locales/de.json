@@ -955,24 +955,6 @@
             "line": "Geben Sie ihm eine Aufgabe. Er arbeitet auf seiner eigenen Kopie, während Sie weitermachen, und seine Karte erscheint genau hier.",
             "writeYourOwn": "Eigene schreiben"
         },
-        "exampleCard": {
-            "title": "Dunkelmodus-Schalter hinzufügen",
-            "tag": "Beispiel",
-            "openLabel": "Beispiel öffnen: so sieht ein fertiger Agent aus",
-            "files": "{count} Datei | {count} Dateien",
-            "line": "Öffnen Sie es, um zu sehen, wie Sie die Arbeit eines Agenten prüfen und landen.",
-            "reviewTitle": "Beispiel: die Arbeit eines Agenten prüfen",
-            "reviewIntro": "Dies ist ein aufgezeichnetes Beispiel, keine hier erledigte Arbeit. Wenn Ihr eigener Agent fertig ist, öffnet seine Karte eine Prüfung wie diese.",
-            "asked": "Was Sie gefragt haben",
-            "prompt": "Füge im Header einen Dunkelmodus-Schalter hinzu und merke dir die Wahl.",
-            "did": "Was er getan hat, laut ihm",
-            "reply": "Ich habe einen Theme-Speicher ergänzt, der die Systemeinstellung liest und Ihre Wahl speichert, einen Schalter im Header und dunkle Farben für die Seite. Die Tests laufen durch.",
-            "changed": "Was sich geändert hat",
-            "landTitle": "Dann landen Sie es",
-            "landLine": "Der Agent hat auf seiner eigenen Kopie gearbeitet, also hat sich Ihr Workspace noch nicht geändert. Landen holt diese Änderungen herein. Wenn sie nicht stimmen, sagen Sie dem Agenten stattdessen in seinem Chat, was er korrigieren soll.",
-            "close": "Schließen",
-            "startOwn": "Meinen eigenen Agenten starten"
-        },
         "freshSession": {
             "reviewInWords": "Prüfe die Arbeit, von der diese Sitzung ausging, auf Korrektheitsfehler. Nenne zu jedem Befund Datei und Zeile, was schiefgeht und welche Eingaben den Fehler auslösen. Berichte, was die Korrektheit oder den Zweck der Arbeit betrifft, keine Stilvorlieben.",
             "testInWords": "Teste die Arbeit, von der diese Sitzung ausging: Führe ihre Tests und die zutreffenden Prüfungen aus und probiere das Geänderte so aus, wie eine Person es benutzen würde. Berichte, was du ausgeführt hast, mit den genauen Befehlen, und was bestanden hat und was fehlgeschlagen ist. Ändere nichts, außer ich bitte darum.",

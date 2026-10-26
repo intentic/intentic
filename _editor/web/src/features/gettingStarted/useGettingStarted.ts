@@ -160,7 +160,6 @@ const create = (): GettingStarted => {
     publishTour({
         moment,
         progress: shown,
-        visible,
         trial: computed(() => firstReadyProvider() === TRIAL_PROVIDER),
         run: (action) => {
             if (action === `writeTask`) {

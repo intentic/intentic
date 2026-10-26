@@ -955,24 +955,6 @@
             "line": "Give it a task. It works on its own copy while you carry on, and its card appears right here.",
             "writeYourOwn": "Write my own"
         },
-        "exampleCard": {
-            "title": "Add a dark-mode toggle",
-            "tag": "Example",
-            "openLabel": "Open the example: what a finished agent looks like",
-            "files": "{count} file | {count} files",
-            "line": "Open it to see how you review an agent's work and land it.",
-            "reviewTitle": "Example: reviewing an agent's work",
-            "reviewIntro": "This is a recorded example, not work done here. When your own agent finishes, its card opens a review like this one.",
-            "asked": "What you asked",
-            "prompt": "Add a dark-mode toggle to the header and remember the choice.",
-            "did": "What it says it did",
-            "reply": "Added a theme store that reads the system setting and saves your choice, a toggle in the header, and dark colors for the page. I ran the tests; they pass.",
-            "changed": "What changed",
-            "landTitle": "Then you land it",
-            "landLine": "The agent worked on its own copy, so your workspace hasn't changed yet. Land brings these changes in. If they aren't right, tell the agent what to fix in its chat instead.",
-            "close": "Close",
-            "startOwn": "Start my own agent"
-        },
         "freshSession": {
             "reviewInWords": "Review the work this session started from for correctness bugs. For each finding, name the file and line, what goes wrong, and the inputs that make it go wrong. Report what affects correctness or what the work is for, not style preferences.",
             "testInWords": "Test the work this session started from: run its tests and the checks that apply, and try what it changed the way a person would use it. Report what you ran, with the exact commands, and what passed and what failed. Change nothing unless I ask.",

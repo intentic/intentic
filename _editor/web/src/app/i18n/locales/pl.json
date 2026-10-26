@@ -955,24 +955,6 @@
             "line": "Daj mu zadanie. Pracuje na własnej kopii, a Ty robisz swoje; jego karta pojawi się właśnie tutaj.",
             "writeYourOwn": "Napiszę własne"
         },
-        "exampleCard": {
-            "title": "Dodaj przełącznik trybu ciemnego",
-            "tag": "Przykład",
-            "openLabel": "Otwórz przykład: jak wygląda skończony agent",
-            "files": "{count} plik | {count} pliki | {count} plików",
-            "line": "Otwórz, żeby zobaczyć, jak przeglądasz pracę agenta i ją scalasz.",
-            "reviewTitle": "Przykład: przegląd pracy agenta",
-            "reviewIntro": "To nagrany przykład, a nie praca wykonana tutaj. Gdy Twój agent skończy, jego karta otworzy taki sam przegląd.",
-            "asked": "O co poprosiłeś",
-            "prompt": "Dodaj w nagłówku przełącznik trybu ciemnego i zapamiętuj wybór.",
-            "did": "Co według niego zrobił",
-            "reply": "Dodałem magazyn motywu, który czyta ustawienie systemu i zapisuje Twój wybór, przełącznik w nagłówku oraz ciemne kolory strony. Uruchomiłem testy; przechodzą.",
-            "changed": "Co się zmieniło",
-            "landTitle": "Potem to scalasz",
-            "landLine": "Agent pracował na własnej kopii, więc Twoja przestrzeń robocza jeszcze się nie zmieniła. Scalenie wprowadza te zmiany. Jeśli coś jest nie tak, napisz agentowi w jego czacie, co poprawić.",
-            "close": "Zamknij",
-            "startOwn": "Uruchom mojego agenta"
-        },
         "freshSession": {
             "reviewInWords": "Przejrzyj pracę, od której zaczęła się ta sesja, pod kątem błędów poprawności. Przy każdej uwadze podaj plik i wiersz, co działa źle i jakie dane wejściowe do tego prowadzą. Zgłaszaj to, co wpływa na poprawność lub cel pracy, a nie kwestie stylu.",
             "testInWords": "Przetestuj pracę, od której zaczęła się ta sesja: uruchom jej testy i pasujące sprawdzenia, a zmienione rzeczy wypróbuj tak, jak użyłby ich człowiek. Napisz, co uruchomiłeś (dokładne polecenia), co przeszło, a co nie. Niczego nie zmieniaj, dopóki nie poproszę.",

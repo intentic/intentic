@@ -44,8 +44,6 @@ export interface PhoneLanesHost {
     readonly scope: { readonly scopedHeld: Readonly<Ref<readonly unknown[]>>; readonly attentionElsewhere: Readonly<Ref<number>> };
     readonly dragging: Readonly<Ref<boolean>>;
     readonly filtering: Readonly<Ref<boolean>>;
-    // Finished holds the example card until the reader's own first agent finishes (ExampleAgentCard).
-    readonly exampleShown: Readonly<Ref<boolean>>;
 }
 
 // The board's lanes as a phone draws them (all of them elsewhere), and per lane: whether it is Finished drawn for its
@@ -55,7 +53,7 @@ export const usePhoneLanes = (host: PhoneLanesHost) => {
     const rows = (key: FleetLane): number => lanes.cardsFor(key).length + lanes.runsFor(key).length;
     const content = (key: FleetLane): LaneContent => {
         const held = key === `attention` && !view.value.archive && (scope.scopedHeld.value.length > 0 || scope.attentionElsewhere.value > 0);
-        const tail = key === `finished` && (view.value.archive || host.exampleShown.value || (!filtering.value && lanes.hiddenFinished.value > 0));
+        const tail = key === `finished` && (view.value.archive || (!filtering.value && lanes.hiddenFinished.value > 0));
         if (held || tail || rows(key) > 0) {
             return `rows`;
         }

@@ -955,24 +955,6 @@
             "line": "Donnez-lui une tâche. Il travaille sur sa propre copie pendant que vous continuez, et sa carte apparaît ici même.",
             "writeYourOwn": "Écrire la mienne"
         },
-        "exampleCard": {
-            "title": "Ajouter un interrupteur de mode sombre",
-            "tag": "Exemple",
-            "openLabel": "Ouvrir l'exemple : à quoi ressemble un agent terminé",
-            "files": "{count} fichier | {count} fichiers",
-            "line": "Ouvrez-le pour voir comment relire le travail d'un agent et l'intégrer.",
-            "reviewTitle": "Exemple : relire le travail d'un agent",
-            "reviewIntro": "Ceci est un exemple enregistré, pas du travail fait ici. Quand votre propre agent aura terminé, sa carte ouvrira une relecture comme celle-ci.",
-            "asked": "Ce que vous avez demandé",
-            "prompt": "Ajoute un interrupteur de mode sombre dans l'en-tête et mémorise le choix.",
-            "did": "Ce qu'il dit avoir fait",
-            "reply": "J'ai ajouté un stockage de thème qui lit le réglage du système et enregistre votre choix, un interrupteur dans l'en-tête et des couleurs sombres pour la page. J'ai lancé les tests ; ils passent.",
-            "changed": "Ce qui a changé",
-            "landTitle": "Ensuite, vous l'intégrez",
-            "landLine": "L'agent a travaillé sur sa propre copie, donc votre espace de travail n'a pas encore changé. Intégrer y fait entrer ces changements. S'ils ne conviennent pas, dites plutôt à l'agent quoi corriger dans son chat.",
-            "close": "Fermer",
-            "startOwn": "Lancer mon propre agent"
-        },
         "freshSession": {
             "reviewInWords": "Relis le travail dont cette session est partie à la recherche de bugs de correction. Pour chaque constat, indique le fichier et la ligne, ce qui ne va pas et les entrées qui provoquent le problème. Signale ce qui affecte la correction ou la finalité du travail, pas les préférences de style.",
             "testInWords": "Teste le travail dont cette session est partie : lance ses tests et les vérifications qui s'appliquent, et essaie ce qu'il a changé comme une personne l'utiliserait. Indique ce que tu as lancé, avec les commandes exactes, et ce qui a réussi ou échoué. Ne modifie rien sauf si je le demande.",

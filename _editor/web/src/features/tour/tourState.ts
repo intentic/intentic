@@ -13,7 +13,6 @@ export type TourAction = `writeTask` | `skipWork`;
 export interface TourSource {
     readonly moment: Readonly<Ref<MarkStep | undefined>>;
     readonly progress: Readonly<Ref<Progress>>;
-    readonly visible: Readonly<Ref<boolean>>;
     // A first agent would run on the free trial, which is worth saying: nothing needs connecting first.
     readonly trial: Readonly<Ref<boolean>>;
     readonly run: (action: TourAction) => void;
@@ -29,7 +28,6 @@ export const publishTour = (published: TourSource): void => {
 
 export const tourMoment = computed(() => source.value?.moment.value);
 export const tourProgress = computed(() => source.value?.progress.value);
-export const tourVisible = computed(() => source.value?.visible.value === true);
 export const tourTrial = computed(() => source.value?.trial.value === true);
 
 export const runTourAction = (action: TourAction): void => source.value?.run(action);

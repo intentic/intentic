@@ -45,9 +45,7 @@ import LaneHeader from "../../../components/LaneHeader.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
 import { cardSwipeAction, cardSwipeOf } from "./cards/cardSwipe";
-import ExampleAgentCard from "./cards/ExampleAgentCard.vue";
 import FirstAgentSlot from "./cards/FirstAgentSlot.vue";
-import { tourVisible } from "../../tour/tourState";
 import { markHinted } from "../../tour/tourMarks";
 import ChildRows from "../../../parts/fleet/ChildRows.vue";
 import { CHILD_ROWS } from "../../../models/fleet/board/childRows";
@@ -262,15 +260,8 @@ useAttentionAsk({
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
-// The example card stands in Finished while getting started is on and the board holds nothing of the reader's own: a
-// picture of the review before there is anything of theirs to review. It goes as soon as their first agent starts,
-// not when it finishes: beside real work, a finished-looking sample is one more card to tell apart from it, and the
-// reader's own card is now the thing to watch. Never in the archive or a filtered board.
-const LANES_OF_OWN_WORK = [`attention`, `active`, `finished`] as const;
-const ownWork = computed(() => LANES_OF_OWN_WORK.some((lane) => cardsFor(lane).length > 0 || runsFor(lane).length > 0));
-const exampleShown = computed(() => tourVisible.value && !view.value.archive && !filtering.value && !ownWork.value);
 // A phone draws only the lanes with something in them (phoneLanes.ts).
-const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, exampleShown });
+const { drawnLanes, bareLane, saysEmpty } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -485,11 +476,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             (view.purged ? words.archiveEmptied : words.archiveNothingYet)
                         }}
                     </p>
-                    <!-- Until the reader's own first agent finishes, Finished holds the example of one (ExampleAgentCard). -->
-                    <div v-else-if="lane.key === 'finished' && exampleShown" class="flex flex-col gap-2 pb-2.5">
-                        <ExampleAgentCard />
-                        <p class="px-1 text-2xs leading-snug text-subtle">{{ first ? lane.first : lane.empty }}</p>
-                    </div>
                     <!-- A first run's Active lane holds the first agent's slot, where its card will arrive. -->
                     <div
                         v-else-if="first && lane.key === 'active' && cardsFor('active').length === 0 && runsFor('active').length === 0"
