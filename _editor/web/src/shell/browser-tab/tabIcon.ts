@@ -1,3 +1,6 @@
+import { glyphBody } from "@intentic/ui/glyph";
+import { ICONS } from "@intentic/ui/icons";
+import { type LogoStyle, readLogoStyle } from "../../features/sandbox/overview/logo/presets";
 import type { TabMark } from "./tabSignal";
 
 // The tab's icon for a mark: the open sandbox's logo, or the lotus (public/favicon.svg, the same paths) where it has
@@ -30,13 +33,66 @@ const drawableLogo = (logo: string | undefined): string | undefined => (logo?.st
 
 const attribute = (value: string): string => value.replaceAll(`&`, `&amp;`).replaceAll(`"`, `&quot;`).replaceAll(`<`, `&lt;`);
 
+/** The part of an uploaded logo worth showing, in its own pixels: a square around what is not transparent. */
+export interface LogoCrop {
+    readonly width: number;
+    readonly height: number;
+    readonly x: number;
+    readonly y: number;
+    readonly side: number;
+}
+
 // Offline takes the colour out of a logo as it does out of the lotus, and fades it a little, so the grey reads as
 // "not connected" rather than as a grey logo.
 const GREY = `<filter id="grey"><feColorMatrix type="saturate" values="0"/></filter>`;
 
-const picture = (logo: string, offline: boolean): string =>
-    `${offline ? GREY : `` 
-    }<image href="${attribute(logo)}" x="0" y="0" width="32" height="32" preserveAspectRatio="xMidYMid slice"${offline ? ` filter="url(#grey)" opacity=".7"` : ``}/>`;
+// A preset (logo/presets.ts) is its glyph on a faint plate with a wide margin, sized for a tile in the rail; at 16
+// pixels the plate is invisible and the margin shrinks the glyph to half the icon. The tab draws the glyph alone and
+// full size instead, as tight as the lotus it replaces.
+const presetArt = ({ icon, color }: LogoStyle, offline: boolean): string =>
+    `<g transform="scale(${32 / 24})" color="${offline ? LOTUS_OFFLINE : color}">${glyphBody(ICONS[icon])}</g>`;
+
+// An upload is a square with its picture fitted inside (imageDataUrl.ts, `contain`), so a wide logo or one drawn
+// with a margin arrives with a transparent border; the crop, where the page could measure one, trims it.
+const imageArt = (logo: string, offline: boolean, crop: LogoCrop | undefined): string => {
+    const look = offline ? ` filter="url(#grey)" opacity=".7"` : ``;
+    const image =
+        crop === undefined
+            ? `<image href="${attribute(logo)}" x="0" y="0" width="32" height="32" preserveAspectRatio="xMidYMid slice"${look}/>`
+            : `<svg x="0" y="0" width="32" height="32" viewBox="${crop.x} ${crop.y} ${crop.side} ${crop.side}"><image href="${attribute(logo)}" width="${crop.width}" height="${crop.height}"${look}/></svg>`;
+    return `${offline ? GREY : ``}${image}`;
+};
+
+const picture = (logo: string, offline: boolean, crop: LogoCrop | undefined): string => {
+    const preset = readLogoStyle(logo);
+    return preset === undefined ? imageArt(logo, offline, crop) : presetArt(preset, offline);
+};
+
+// Pixels fainter than this are a soft edge or a shadow's tail, not the picture.
+const SOLID = 24;
+
+/** The square around a picture's visible pixels (RGBA, row by row), or undefined for one with none. */
+export const visibleSquare = (pixels: Uint8ClampedArray, width: number, height: number): LogoCrop | undefined => {
+    let left = width;
+    let top = height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+            if ((pixels[(y * width + x) * 4 + 3] ?? 0) > SOLID) {
+                left = Math.min(left, x);
+                right = Math.max(right, x);
+                top = Math.min(top, y);
+                bottom = Math.max(bottom, y);
+            }
+        }
+    }
+    if (right < 0) {
+        return undefined;
+    }
+    const side = Math.max(right - left, bottom - top) + 1;
+    return { width, height, side, x: (left + right + 1 - side) / 2, y: (top + bottom + 1 - side) / 2 };
+};
 
 // A digit up to nine; past that a bare disc, since two digits at this size are a smudge and the title spells the count.
 const asksGlyph = (count: number): string =>
@@ -69,11 +125,11 @@ const discOf = (mark: TabMark): Disc | undefined => {
 };
 
 /** The tab's icon: the logo (or the lotus) with the mark's disc, if any. Neither leaves the page's own icon, never drawn. */
-export const iconSvg = (mark: TabMark | undefined, logo?: string): string => {
+export const iconSvg = (mark: TabMark | undefined, logo?: string, crop?: LogoCrop): string => {
     const disc = mark === undefined ? undefined : discOf(mark);
     const offline = mark?.kind === `offline`;
     const own = drawableLogo(logo);
-    const art = own === undefined ? lotus(offline ? LOTUS_OFFLINE : LOTUS) : picture(own, offline);
+    const art = own === undefined ? lotus(offline ? LOTUS_OFFLINE : LOTUS) : picture(own, offline, crop);
     // Under the lotus, the quadrant above and right of the disc goes too: only the outer petal's tip reaches there,
     // and past the ring it would float as a speck. A logo fills its square, so there it is only the ring.
     const corner = disc === undefined || own !== undefined ? `` : `<rect x="${disc.at}" width="${32 - disc.at}" height="${disc.at}" fill="#000"/>`;
@@ -150,6 +206,46 @@ export const drawPng = (svg: string, size: number): Promise<string | undefined> 
         image.src = svgUrl(svg);
     });
 
+// Measured once per logo: the page keeps one or two, and a mark changing must not read the pixels again.
+const crops = new Map<string, Promise<LogoCrop | undefined>>();
+
+const measure = (logo: string): Promise<LogoCrop | undefined> =>
+    new Promise((resolve) => {
+        const image = new Image();
+        image.addEventListener(`load`, () => {
+            try {
+                const { naturalWidth: width, naturalHeight: height } = image;
+                const canvas = document.createElement(`canvas`);
+                canvas.width = width;
+                canvas.height = height;
+                const context = canvas.getContext(`2d`, { willReadFrequently: true });
+                if (context === null || width === 0 || height === 0) {
+                    resolve(undefined);
+                    return;
+                }
+                context.drawImage(image, 0, 0);
+                resolve(visibleSquare(context.getImageData(0, 0, width, height).data, width, height));
+                // allow(silent-catch): A picture the page may not read back is drawn whole, margin and all.
+            } catch {
+                resolve(undefined);
+            }
+        });
+        image.addEventListener(`error`, () => resolve(undefined));
+        image.src = logo;
+    });
+
+const cropOf = (logo: string | undefined): Promise<LogoCrop | undefined> => {
+    if (logo === undefined || readLogoStyle(logo) !== undefined) {
+        return Promise.resolve(undefined);
+    }
+    let crop = crops.get(logo);
+    if (crop === undefined) {
+        crop = measure(logo);
+        crops.set(logo, crop);
+    }
+    return crop;
+};
+
 // A PNG, where the browser can draw one: Safari shows no SVG icon a page sets, and every browser shows a PNG.
 const rasterize = async (svg: string): Promise<{ readonly href: string; readonly type: string }> => {
     const png = await drawPng(svg, 64);
@@ -200,9 +296,11 @@ export const showTabIcon = (mark: TabMark | undefined, logo?: string): void => {
         restore();
         return;
     }
-    void rasterize(iconSvg(mark, own)).then(({ href, type }) => {
-        if (turn === drawing) {
-            place(href, type);
-        }
-    });
+    void cropOf(own)
+        .then((crop) => rasterize(iconSvg(mark, own, crop)))
+        .then(({ href, type }) => {
+            if (turn === drawing) {
+                place(href, type);
+            }
+        });
 };
