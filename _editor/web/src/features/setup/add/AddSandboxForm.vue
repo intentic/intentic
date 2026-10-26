@@ -1,6 +1,6 @@
-<!-- THE ADD SANDBOX FORM: a name and where it runs, one press (useAddSandbox.ts). Drawn by the dialog (AddSandboxDialog.vue)
-     and by Home's new sandbox in place (features/home/newSandbox/HomeNewSandbox.vue); each puts its own buttons in the
-     slot or its footer. Enter in the name field submits, through `submit` rather than straight to the run, so each place
+<!-- THE ADD SANDBOX FORM: a name and where it runs, one press (useAddSandbox.ts). Drawn by the phone's dialog
+     (AddSandboxDialog.vue) and by Home's new sandbox dialog (features/home/newSandbox/NewSandboxDialog.vue); each puts its
+     own buttons in the slot or its footer. Enter in the name field submits, through `submit` rather than straight to the run, so each place
      takes the press its own way. -->
 <script setup lang="ts">
 import { Notice, SegmentedControl, ui } from "@intentic/ui";
@@ -9,7 +9,7 @@ import { computed } from "vue";
 import type { AddSandboxHere } from "./useAddSandboxHere";
 
 const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
-// The press, as each place takes it: the dialog creates, Home's page also puts up the new sandbox's tile first.
+// The press, as each place takes it: the phone's dialog creates, Home's also puts up the new sandbox's tile first.
 const emit = defineEmits<{ submit: [] }>();
 
 const t = useT();

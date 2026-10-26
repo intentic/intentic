@@ -379,7 +379,11 @@ flowchart LR
   reaches a page already showing something is redeemed in that dialog, so the reader stays on that view (the web's
   `features/auth/signInDialog.ts`). An account that signs in by emailed code needs no browser: the code is typed in that
   dialog, since the mail's link would open the system browser instead. Its hand-off from the browser, when it signed in there, carries the session alone (no Google token),
-  and the workspace's daemon sessions come from the platform's identity assertions.
+  and the workspace's daemon sessions come from the platform's identity assertions. A sandbox that checks Google itself
+  needs a Google credential the webview cannot mint: the workspace takes the one the platform holds for a signed-in
+  Google account (`desktop.googleIdToken`, the same one `/desktop-auth` asks for first) without asking, and sends the
+  reader to the browser only when the platform holds none (2026-10-26, the web's `client/auth/useGoogleIdentity.ts`).
+  Before that, a sandbox just made from Home asked for the browser trip the moment it answered.
 - **The last face.** `last-face.json` (`home` or `workspace`) is the face the user was last seen choosing: every
   showing of the workspace writes `workspace`, and the main window shown on purpose (a launch into it, the tray's "This
   computer", the workspace's way back) writes `home`. An install without the file reads `workspace` if it ever showed the

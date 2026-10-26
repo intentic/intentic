@@ -595,12 +595,14 @@ the sandbox switcher's Sandboxes header (on a phone, the Menu page's), and `Mod+
 ledger projection and which sandbox's home is on screen (`homeShownFor`, which a new sandbox's first start waits on).
 **A new sandbox is made on Home, in a tile of its own** (2026-10-26, `features/home/newSandbox/`): every "Add sandbox" on
 a desktop (the rail's +, the first run's Create, the switcher inside a sandbox, the palette, the desktop app's folder
-window) opens `/home?add=sandbox`, which puts a temporary tile at the end of the rail, selected, and in the chat's place
-a name, where it runs and Create. The same page then draws the run (the app's install, a connected machine's steps, a
-machine of ours starting, the first start) while the tile wears the rail's spinning mark, or a warning mark when the run
-waits on the reader or stopped. Any other tile can be pressed meanwhile: the run is held above Home
+window) opens `/home?add=sandbox`, which puts a dialog over Home asking for a name and where it runs. Create closes it
+and leaves the reader on the chat they were in (a first sandbox, with no chat to go back to, on its run instead), with a
+tile at the end of the rail wearing the rail's spinning mark, or a warning mark when the run waits on the reader or
+stopped. Pressing the tile shows the run in the chat's place (the app's install, a connected machine's steps, a machine
+of ours starting, the first start); any other tile can be pressed meanwhile: the run is held above Home
 (`NewSandboxHost.vue`, mounted by `WorkspaceShell.vue`), so it carries on. A reader watching lands on the new sandbox's
-home conversation once it is up; one who went elsewhere is not moved, and finds its tile marked ready. Picked to run on
+home conversation once it is up; one who went elsewhere is not moved, and finds its tile marked ready. A press the
+platform refuses stays in the dialog with the reason. Picked to run on
 this computer, the desktop app runs the install out of sight (`intentic://setup?…&stay=1`, the app's `park_setup`)
 instead of swapping its window over to This device; only a question it alone can ask, or a run that stops, brings its
 card forward. A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
@@ -621,7 +623,7 @@ them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu
 offers This computer beside Settings; the Home rail holds only sandboxes and Add (2026-10-26). Computer tools stay
 available without becoming a primary destination during onboarding. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
-is, three steps, and Create, which opens the new sandbox's tile and page in its place; a setup of the reader's own that never
+is, three steps, and Create, which opens the new sandbox's dialog and then its tile and run in its place; a setup of the reader's own that never
 finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.
 
 A **home-only** member (Access ▸ People, Agents: Home only) reaches nothing else: the shell fence

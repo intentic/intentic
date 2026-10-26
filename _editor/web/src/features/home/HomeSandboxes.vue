@@ -19,7 +19,7 @@ import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import NewSandboxTile from "./newSandbox/NewSandboxTile.vue";
-import { newSandbox, newSandboxShownBy, readySandboxes, seenReady } from "./newSandbox/newSandbox";
+import { newSandbox, newSandboxPageShown, readySandboxes, seenReady } from "./newSandbox/newSandbox";
 
 defineOptions({ inheritAttrs: false });
 const { phone = false } = defineProps<{ phone?: boolean }>();
@@ -48,8 +48,10 @@ const badgeOf = (id: string): ViewBadge | undefined => {
 const noteOf = (id: string): string => (readySandboxes.value.has(id) ? t(`home.newSandbox.ready`) : t(`home.doubleClickToEnter`));
 // The tile of the sandbox whose chat the page shows; on a page of the person's own (settings), none is.
 const route = useRoute();
-// While the new sandbox's page stands in the chat's place, its tile is the selected one.
-const selected = (id: string): boolean => route.name === `home` && sandbox.activeSandboxId.value === id && !newSandboxShownBy(route);
+// While the new sandbox's page stands in the chat's place, its tile is the selected one; its dialog over the chat leaves
+// the chat's own tile selected.
+const selected = (id: string): boolean =>
+    route.name === `home` && sandbox.activeSandboxId.value === id && !newSandboxPageShown(route, newSandbox.value);
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
 // The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
 const add = useRequestAddSandbox();

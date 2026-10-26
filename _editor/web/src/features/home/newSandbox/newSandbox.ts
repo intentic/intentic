@@ -7,22 +7,27 @@ import type { AddSandboxHere } from "../../setup/add/useAddSandboxHere";
 
 // A NEW SANDBOX IS MADE ON HOME, IN A TILE OF ITS OWN (2026-10-26). The + on Home's rail, its first-run page, and every
 // other "Add sandbox" on a desktop (the switcher inside a sandbox, the palette, a folder window of the app) open Home
-// with a temporary tile at the end of the sandboxes, selected, and the page in the chat's place asking for a name and
-// where it runs. Create turns that same page into the run's progress and the tile into the sandbox it will be, with the
-// rail's spinning mark in its corner. The reader can go back to any other sandbox's chat meanwhile and come back to the
-// tile to watch; once it is ready, a reader watching lands on its home conversation, and one who is elsewhere finds the
-// tile marked ready instead of being pulled off what they are doing.
+// with a dialog over it asking for a name and where it runs (NewSandboxDialog.vue). Create closes it and leaves the
+// reader on the chat they were in, with a tile at the end of the sandboxes wearing the rail's spinning mark: the sandbox
+// it will be. Pressing the tile shows the run's progress in the chat's place (HomeNewSandbox.vue), and any other tile
+// takes the reader back. Once it is ready, a reader watching lands on its home conversation, and one who is elsewhere
+// finds the tile marked ready instead of being pulled off what they are doing. A first sandbox has no chat to go back
+// to, so its reader is left on the progress.
 //
-// It replaced a dialog over Home whose run, picked to happen on this computer, swapped the desktop app's window over to
+// (2026-10-26, the owner's) The first cut put the form in the chat's place too, behind a dashed tile already selected;
+// the form is a dialog again so the press is one step over whatever was on screen, and nothing moves until it is made.
+// Before both, a dialog over Home whose run, picked to happen on this computer, swapped the desktop app's window over to
 // This device to watch a bar Home could already draw (desktop.ts `DesktopSetupArgs.stay`), and which, once closed, left
-// the sandbox nowhere on screen until it reported in. A phone, with no rail, keeps the dialog (models/sandbox/addSandbox.ts).
+// the sandbox nowhere on screen until it reported in. A phone, with no rail, keeps the dialog that draws its run as well
+// (models/sandbox/addSandbox.ts).
 //
-// The run outlives its page: NewSandboxHost.vue holds it, mounted by the shell while the page is up or a run is under
-// way, and publishes it here for the page (HomeNewSandbox.vue) and the tile (NewSandboxTile.vue) to draw.
+// The run outlives its dialog and its page: NewSandboxHost.vue holds it, mounted by the shell while Home asks for the new
+// sandbox or a run is under way, and publishes it here for the dialog, the page and the tile (NewSandboxTile.vue) to draw.
 
-/** Whether an address of Home shows the new sandbox in its chat's place: `/home?add=sandbox`. */
-export const newSandboxShownBy = (route: { readonly name?: unknown; readonly query: LocationQuery }): boolean =>
-    route.name === `home` && route.query[ADD_SANDBOX_QUERY] === ADD_SANDBOX_VALUE;
+type HomeAddress = { readonly name?: unknown; readonly query: LocationQuery };
+
+/** Whether an address of Home asks for the new sandbox: `/home?add=sandbox`, its dialog or its run's page. */
+export const newSandboxShownBy = (route: HomeAddress): boolean => route.name === `home` && route.query[ADD_SANDBOX_QUERY] === ADD_SANDBOX_VALUE;
 
 /** The new sandbox as its host publishes it. */
 export interface NewSandboxRun {
@@ -62,6 +67,24 @@ export const seenReady = (sandboxId: string): void => {
         readySandboxes.value = new Set([...readySandboxes.value].filter((id) => id !== sandboxId));
     }
 };
+
+/** What the dialog, the page and the tile decide on: whether Create was pressed, and whether the press went somewhere. */
+type RunOnScreen = {
+    readonly pressed: Readonly<Ref<boolean>>;
+    readonly here: { readonly add: { readonly started: Readonly<Ref<unknown>> } };
+};
+
+/** Asked for and nothing started yet (a press still in flight, or one the platform refused): the dialog takes the name. */
+export const newSandboxDialogShown = (route: HomeAddress, run: RunOnScreen | undefined): boolean =>
+    newSandboxShownBy(route) && run !== undefined && run.here.add.started.value === undefined;
+
+/** Asked for once the press went somewhere: the run's progress stands in the chat's place, and its tile is the selected one. */
+export const newSandboxPageShown = (route: HomeAddress, run: RunOnScreen | undefined): boolean =>
+    newSandboxShownBy(route) && run !== undefined && run.here.add.started.value !== undefined;
+
+/** The tile stands from the press, except while the dialog still holds it (in flight, or refused and shown again). */
+export const newSandboxTileShown = (route: HomeAddress, run: RunOnScreen | undefined): boolean =>
+    run !== undefined && run.pressed.value && !newSandboxDialogShown(route, run);
 
 /** Where the new sandbox stands, as its tile wears it. */
 export type NewSandboxPhase = `draft` | `running` | `asking` | `failed` | `opening`;

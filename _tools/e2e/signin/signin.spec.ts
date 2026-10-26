@@ -133,13 +133,17 @@ const signInThroughTheApp = async (
     const appHears = await listenForDeepLinks(window);
 
     await options.before?.(window);
-    // Home opens before sign-in; its account link opens /login, whose action in the app is the browser hand-off.
+    // Home opens before sign-in. Its Sign in asks in a dialog over Home rather than on /login (the web's
+    // features/auth/signInDialog.ts): the app has no back button, so the view stays, and the dialog's action in the app is
+    // the browser hand-off.
     await window.goto(`${web}/`);
     await expect(window).toHaveURL(/\/home$/u);
     expect(await signedInAs(webview)).toBeUndefined();
     await window.locator(`[data-home-no-sandbox]`).getByRole(`link`, { name: LABELS.signIn, exact: true }).click();
-    await expect(window).toHaveURL(/\/login/u);
-    await window.getByRole(`button`, { name: LABELS.continueInBrowser }).click();
+    const dialog = window.getByTestId(`sign-in-dialog`).getByRole(`dialog`);
+    await expect(dialog).toBeVisible();
+    await expect(window, `the app's window must stay on the view it was asked from`).toHaveURL(/\/home$/u);
+    await dialog.getByRole(`button`, { name: LABELS.continueInBrowser }).click();
     await appHears.next(`intentic://signin`);
 
     // auth.rs `start`: the app opens its page in the person's browser.

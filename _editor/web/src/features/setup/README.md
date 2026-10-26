@@ -59,16 +59,17 @@ setup of the reader's own is resumed, where "More ways" and cloud pricing lead, 
   sized by them, the time left, and the raw output behind "Show log", which opens by itself when the run fails.
 
 - **Adding a sandbox** is not this page. On a desktop every "Add sandbox" (the home rail's +, Home's first run, the
-  switcher, the command palette, the desktop app's folder window) makes it on Home, in a tile of its own with its page
-  in the chat's place (`features/home/newSandbox/`, which says why). A phone, with no rail, and a guest of a box, with no
-  Home, get a dialog over the current place instead (`add/AddSandboxDialog.vue`). Both draw the same pieces: the form
+  switcher, the command palette, the desktop app's folder window) makes it on Home: a dialog for the name, then a tile
+  of its own whose run shows in the chat's place (`features/home/newSandbox/`, which says why). A phone, with no rail,
+  and a guest of a box, with no Home, get a dialog over the current place that draws the run too
+  (`add/AddSandboxDialog.vue`). Both draw the same pieces: the form
   (`add/AddSandboxForm.vue`: a name and where it runs, this computer in the app, a connected machine, a machine of ours
   with room), the run (`add/AddSandboxRun.vue`), and one wiring of this window's platform, app and credential
   (`add/useAddSandboxHere.ts`) around the press (`add/useAddSandbox.ts`). Signed out, the press asks for sign-in and
   returns to the same ask. It runs this page's own flows on the row (`useSetupRow`, `useHostedLane`,
   `useSetupOnMachine`, `useRegistryWatch`), so `/setup?sandbox=<id>` resumes the same run, and the getting-started
   ring's "Finish setting up" reaches it once it is put away. Once the sandbox reports in it is selected, unless Home's
-  reader went back to another sandbox meanwhile, and the run waits out its first start (`add/AddSandboxOpening.vue`, the
+  reader is on another sandbox's chat (where Create leaves one who has another), and the run waits out its first start (`add/AddSandboxOpening.vue`, the
   daemon's boot steps), so the connecting and starting gates are never shown: on Home until its home conversation is on
   screen (`models/home/homeChat.ts` `homeShownFor`), where the first session starts; a finished setup here lands there
   too (`landingAfterSetup`), a folder's project inside its sandbox. The dialog opened inside a sandbox opens the new

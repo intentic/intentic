@@ -5,9 +5,9 @@ import { useAccount } from "../../client/auth/useAccount";
 import { useRole } from "../../client/sandbox/useRole";
 import { signInAt } from "../../lib/routes/signIn";
 
-// ONE "ADD SANDBOX" ACTION, wherever it is pressed. On a desktop it is made on Home, in a tile of its own rail with its
-// page in the chat's place (features/home/newSandbox/newSandbox.ts), whatever the press was in; the address of that
-// page is the ask. Where there is no Home to make it on (a phone, which has no rail, and a guest's window, whose way in
+// ONE "ADD SANDBOX" ACTION, wherever it is pressed. On a desktop it is made on Home, from a dialog over it and then in a
+// tile of its own rail (features/home/newSandbox/newSandbox.ts), whatever the press was in; Home's address with the ask
+// in it is what puts the dialog up. Where there is no Home to make it on (a phone, which has no rail, and a guest's window, whose way in
 // is a box's chat) it is the dialog the shell mounts (features/setup/add/AddSandboxDialog.vue). Signing in is the only
 // detour: it returns to the home address whose query asks for either.
 //

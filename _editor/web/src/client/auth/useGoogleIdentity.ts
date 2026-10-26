@@ -261,12 +261,44 @@ const openChooser = (mode: MintMode): void => {
     }
 };
 
+// THE DESKTOP APP'S SILENT ATTEMPT (2026-10-26). Its webview cannot ask Google, so every sandbox that needed a
+// credential sent the reader out to the browser and back, even though the platform already holds a fresh one for an
+// account that signed in with Google (desktop.routes.ts `googleIdToken`, which /desktop-auth asks first for the same
+// reason). A sandbox just made from Home asked for that trip the moment it answered. Asked only with a session, since a
+// sessionless call answers 401 and tears the signed-in runtime down; loaded on demand, as analytics is, so this module
+// keeps no import-time tie to the platform client (useAuth imports this one).
+const platformHeldToken = async (): Promise<string | undefined> => {
+    try {
+        const [{ useAuth }, { apiClient }] = await Promise.all([import("./useAuth"), import("../../lib/useApi")]);
+        if (useAuth().user.value === null) {
+            return undefined;
+        }
+        const { idToken } = await apiClient.desktop.googleIdToken();
+        return idToken === undefined || idToken === `` ? undefined : idToken;
+    } catch {
+        // allow(silent-catch): an older platform without the route, or one out of reach, holds nothing; the hand-off follows
+        return undefined;
+    }
+};
+
 // One mint: initializes GIS (wires the credential callback and whichever button renders), tries the silent prompt,
 // acts per mode on failure, then waits for the credential via `settle`. A picking mint skips the silent prompt
-// entirely: its whole point is that Google asks.
+// entirely: its whole point is that Google asks. In the desktop app the silent attempt is the platform's credential.
 const mint = async (mode: MintMode): Promise<string | undefined> => {
     mintMode = mode;
     const signal = mints.next();
+    if (desktopVersion() !== undefined && !picking) {
+        const held = await platformHeldToken();
+        // Retired meanwhile (a sign-out, a switch, a dismissal): nothing is taken, and its callers get nothing.
+        if (signal.aborted) {
+            return undefined;
+        }
+        if (held !== undefined && acceptCredential(held)) {
+            mints.abort();
+            inflight = undefined;
+            return held;
+        }
+    }
     try {
         await ensureInitialized();
     } catch {

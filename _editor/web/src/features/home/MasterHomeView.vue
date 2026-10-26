@@ -7,14 +7,17 @@ import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeSandboxes from "./HomeSandboxes.vue";
 import HomeChat from "./HomeChat.vue";
 import HomeNewSandbox from "./newSandbox/HomeNewSandbox.vue";
-import { newSandboxShownBy } from "./newSandbox/newSandbox";
+import NewSandboxDialog from "./newSandbox/NewSandboxDialog.vue";
+import { newSandbox, newSandboxDialogShown, newSandboxPageShown } from "./newSandbox/newSandbox";
 const route = useRoute();
 const { mobile } = useDevice();
 const sandbox = useSandbox();
 const list = computed(() => mobile.value && route.params[`sandbox`] === undefined);
-// The new sandbox's page in the chat's place (newSandbox.ts); a phone adds through its dialog instead. The chat stays
-// mounted underneath, hidden, so going back to it finds its draft as it was.
-const making = computed(() => !mobile.value && newSandboxShownBy(route));
+// The new sandbox's dialog over the chat until its press went somewhere, then its run's page in the chat's place
+// (newSandbox.ts); a phone adds through the shell's dialog instead. The chat stays mounted underneath, hidden, so going
+// back to it finds its draft as it was.
+const asking = computed(() => !mobile.value && newSandboxDialogShown(route, newSandbox.value));
+const making = computed(() => !mobile.value && newSandboxPageShown(route, newSandbox.value));
 watch(
     () => [route.params[`sandbox`], sandbox.sandboxes.value] as const,
     ([id, boxes]) => {
@@ -33,6 +36,7 @@ watch(
         <template v-else>
             <HomeNewSandbox v-if="making" />
             <HomeChat v-show="!making" :key="sandbox.activeSandboxId.value" />
+            <NewSandboxDialog v-if="asking && newSandbox" :run="newSandbox" />
         </template>
     </div>
 </template>

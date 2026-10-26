@@ -1,10 +1,14 @@
 <!-- THE NEW SANDBOX'S RUN, held where leaving its page does not end it (newSandbox.ts says why). Mounted by the shell on a
-     desktop while Home shows the page or a run is under way, keyed by `newSandboxGeneration` so a run that ended leaves
-     nothing behind for the next. Draws nothing: the page and the rail's tile draw what it publishes. -->
+     desktop while Home asks for the new sandbox or a run is under way, keyed by `newSandboxGeneration` so a run that
+     ended leaves nothing behind for the next. Draws nothing: the dialog, the page and the rail's tile draw what it
+     publishes. Once the press has gone somewhere it closes the dialog by taking the ask out of Home's address, so the
+     reader is back on the chat they were in; a first sandbox, with no chat to go back to, keeps its page. -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { HOME_PATH } from "../../../lib/routes/firstScreens";
+import { switchableSandboxes } from "../../../models/sandbox/live/roster";
 import { useAddSandboxHere } from "../../setup/add/useAddSandboxHere";
 import { markReady, newSandbox, newSandboxBusy, newSandboxGeneration, newSandboxShownBy, type NewSandboxRun } from "./newSandbox";
 
@@ -62,6 +66,20 @@ watch(watching, (now) => {
         readyUnseen(id);
     }
 });
+
+// Started: the dialog goes, and the reader with another sandbox is back on its chat while the tile carries the run. The
+// address is replaced, not pushed, so Back still leads where it led before the + was pressed.
+const sandbox = useSandbox();
+watch(
+    () => here.add.started.value !== undefined,
+    (now, before) => {
+        const id = here.add.created.value?.id;
+        const others = switchableSandboxes(sandbox.sandboxes.value).some((box) => box.id !== id);
+        if (now && !before && watching.value && others) {
+            void router.replace(HOME_PATH);
+        }
+    },
+);
 
 const { problem, pick, creating } = here.add;
 const run: NewSandboxRun = {

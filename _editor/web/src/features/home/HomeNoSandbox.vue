@@ -1,10 +1,12 @@
 <!-- HOME'S FIRST RUN: what the person sees before their first sandbox, which since Home became the first screen
      (2026-10-25) is the first thing a new account sees at all. It says what a sandbox is and how the master view is
-     used, in three steps, and makes one on a press: the new sandbox's tile and page in this one's place, which stays
-     until its home conversation is on screen here (newSandbox/newSandbox.ts; a phone's dialog, features/setup/add/). It
-     used to be a disabled composer and a coach
+     used, in three steps, and makes one on a press: the new sandbox's dialog, then its tile and its run's page in this
+     one's place, which stays until its home conversation is on screen here (newSandbox/newSandbox.ts; a phone's dialog,
+     features/setup/add/). It used to be a disabled composer and a coach
      mark pointing at the rail's +, and before that a setup page that started a machine the moment it arrived.
-     - A setup of the person's own that never finished is offered first, by name: it resumes on /setup.
+     - A setup of the person's own that never finished is offered first, by name: it resumes on /setup. Never the one
+       Home is making right now, whose run is its tile's: offered here, it read as a setup left unfinished and sent its
+       reader to /setup to "finish" a sandbox already starting (2026-10-26).
      - Signed out (anonymous Home), Create signs in first and comes back to the same ask (models/sandbox/addSandbox.ts),
        and a returning person whose session ended is told plainly that signing in brings their sandboxes back. -->
 <script setup lang="ts">
@@ -19,6 +21,7 @@ import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
 import { useRequestAddSandbox } from "../../models/sandbox/addSandbox";
 import { unfinishedSandboxes } from "../../models/sandbox/live/roster";
+import { newSandbox } from "./newSandbox/newSandbox";
 
 // Under the phone list's own heading the page is a section of it; on a desktop it is the page.
 const { nested = false } = defineProps<{ nested?: boolean }>();
@@ -27,7 +30,7 @@ const t = useT();
 const { user } = useAuth();
 const sandbox = useSandbox();
 const signedOut = computed(() => user.value === null);
-const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value)[0]);
+const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value).find((box) => box.id !== newSandbox.value?.here.add.created.value?.id));
 const add = useRequestAddSandbox();
 const STEPS = [`create`, `ask`, `open`] as const;
 </script>

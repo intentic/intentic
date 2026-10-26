@@ -85,7 +85,7 @@ watch(mobile, (isMobile) => {
 
 // THE ASK FOR A NEW SANDBOX AS AN ADDRESS: every press on a desktop (models/sandbox/addSandbox.ts), the desktop app's
 // folder window handing its "Add sandbox" here (switcherPlace.ts), a sign-in coming back. On a desktop it is Home's own
-// address while the new sandbox's page is up, so it stays, and anywhere else it is taken to Home. Where there is no Home
+// address while the new sandbox's dialog or page is up, so it stays, and anywhere else it is taken to Home. Where there is no Home
 // to make it on, the dialog opens over the workspace and the address loses its ask, so a reload does not raise it again.
 // Signed out, the ask waits in the address for the sign-in; in the desktop app that sign-in is a dialog over this same
 // view (features/auth/signInDialog.ts), so the account arriving is what answers it, not a navigation.

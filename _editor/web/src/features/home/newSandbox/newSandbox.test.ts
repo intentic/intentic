@@ -1,4 +1,16 @@
-import { markReady, newSandboxNote, newSandboxPhase, newSandboxShownBy, readySandboxes, seenReady, type NewSandboxFacts } from "./newSandbox";
+import { ref } from "vue";
+import {
+    markReady,
+    newSandboxDialogShown,
+    newSandboxNote,
+    newSandboxPageShown,
+    newSandboxPhase,
+    newSandboxShownBy,
+    newSandboxTileShown,
+    readySandboxes,
+    seenReady,
+    type NewSandboxFacts,
+} from "./newSandbox";
 
 const facts = (overrides: Partial<NewSandboxFacts> = {}): NewSandboxFacts => ({
     pressed: true,
@@ -18,6 +30,47 @@ describe(`the new sandbox's address`, () => {
         expect(newSandboxShownBy({ name: `home`, query: { show: `models` } })).toBe(false);
         // The workspace taking the same query is the shell's to send to Home, not Home showing it.
         expect(newSandboxShownBy({ name: `agents`, query: { add: `sandbox` } })).toBe(false);
+    });
+});
+
+// A run as its host publishes it, as much of it as the dialog, the page and the tile decide on.
+const runOf = (state: { pressed: boolean; started?: `here` | `hosted` }) => ({
+    pressed: ref(state.pressed),
+    here: { add: { started: ref(state.started === undefined ? undefined : { kind: state.started }) } },
+});
+
+describe(`what Home shows of the new sandbox`, () => {
+    const asked = { name: `home`, query: { add: `sandbox` } };
+    const chat = { name: `home`, query: {} };
+
+    it(`asks for its name in a dialog over the chat until the press has gone somewhere`, () => {
+        for (const run of [runOf({ pressed: false }), runOf({ pressed: true })]) {
+            expect(newSandboxDialogShown(asked, run)).toBe(true);
+            expect(newSandboxPageShown(asked, run)).toBe(false);
+        }
+        // Not up yet: nothing to draw, rather than a dialog with no run behind it.
+        expect(newSandboxDialogShown(asked, undefined)).toBe(false);
+    });
+
+    it(`puts up no tile before Create, nor while the dialog still holds the press`, () => {
+        expect(newSandboxTileShown(chat, runOf({ pressed: false }))).toBe(false);
+        expect(newSandboxTileShown(asked, runOf({ pressed: true }))).toBe(false);
+    });
+
+    it(`once started, leaves the chat to the reader with the tile on the rail, and shows the run when asked`, () => {
+        const started = runOf({ pressed: true, started: `here` });
+        expect(newSandboxTileShown(chat, started)).toBe(true);
+        expect(newSandboxDialogShown(chat, started)).toBe(false);
+        expect(newSandboxPageShown(chat, started)).toBe(false);
+        expect(newSandboxPageShown(asked, started)).toBe(true);
+        expect(newSandboxTileShown(asked, started)).toBe(true);
+    });
+
+    it(`keeps the tile for a press refused after the reader left, and shows the dialog again when it is pressed`, () => {
+        // A machine of ours that would not start puts the run back before anything started.
+        const refused = runOf({ pressed: true });
+        expect(newSandboxTileShown(chat, refused)).toBe(true);
+        expect(newSandboxDialogShown(asked, refused)).toBe(true);
     });
 });
 
