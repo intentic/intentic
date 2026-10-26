@@ -63,7 +63,7 @@ const retry = (): void => {
                 <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
                     <!-- Padding here matches .chat-prompt's own vertical padding. -->
                     <div class="flex justify-end pt-3 pb-2">
-                        <div class="chat-surface flex flex-col gap-1.5 rounded-lg px-3 py-2" :class="turn.bubble">
+                        <div class="chat-surface flex flex-col gap-1.5 px-4 py-2.5" :class="turn.bubble">
                             <span v-for="(line, lineIndex) in turn.prompt" :key="lineIndex" class="h-3 rounded bg-content/10" :class="line" />
                         </div>
                     </div>

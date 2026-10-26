@@ -30,10 +30,11 @@
 .chat-prompt-pinned {
     background-image: linear-gradient(to bottom, var(--color-card) calc(100% - var(--chat-gap)), transparent);
 }
-/* The bubble, not the band, is what says the prompt is OVER the text rather than in it. The scale's own shadow, so the
-   tint follows the scheme — a shadow mixed from `--color-content` is a light halo in a dark one. */
+/* The bubble, not the band, is what says the prompt is OVER the text rather than in it: it keeps its own edge and
+   takes the scale's first float under it. The scale's own shadow, so the tint follows the scheme — a shadow mixed from
+   `--color-content` is a light halo in a dark one. */
 .chat-prompt-pinned .chat-surface {
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--chat-prompt-lift), var(--ui-shadow-1);
 }
 /* Doomed edits include the prompt and all following content. */
 .chat-doomed {
@@ -42,9 +43,10 @@
     text-decoration-color: currentColor;
     transition: opacity 120ms ease-out;
 }
-/* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has to be read in. */
+/* A prompt is pinned for as long as its answer runs, so its height is charged against the room that answer has to be read in.
+   Six lines plus the bubble's own `py-2.5`. */
 .chat-prompt-text {
-    max-height: calc(6lh + 1rem);
+    max-height: calc(6lh + 1.25rem);
     overflow: hidden;
 }
 /* STUCK, THE PROMPT IS THE TITLE OF WHAT IS RUNNING UNDER IT, not the text a second time: one line for as long as the
@@ -73,18 +75,19 @@
     translate: 0 -50%;
 }
 /* The ellipsis already says there is more; the fade below is for a row with a cut line to fade. */
-.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped::after {
-    content: none;
+.chat-prompt-pinned:not(.chat-prompt-open) .chat-prompt-clamped .chat-prompt-text {
+    mask-image: none;
 }
-/* The open/close control overlays the bubble's overflow gradient. */
+/* The open/close control sits on the bubble's own fill, over the faded last line; inset from the corner so it stays
+   inside the bubble's curve. */
 .chat-prompt-toggle {
     position: absolute;
-    right: 0.375rem;
-    bottom: 0.25rem;
+    right: 0.5rem;
+    bottom: 0.375rem;
     border-radius: var(--radius-md);
     padding: 0.125rem 0.25rem;
     color: var(--color-subtle);
-    background: color-mix(in srgb, var(--color-overlay) 55%, var(--color-card));
+    background-color: var(--chat-prompt-fill);
     transition: color var(--motion-hover);
 }
 .chat-prompt-toggle:hover {
@@ -94,19 +97,14 @@
 .chat-prompt-open .chat-prompt-toggle {
     right: 0.75rem;
 }
-/* The "there is more of this" fade, applied only to a prompt the clamp actually cut (ChatMessageView measures it). */
-.chat-prompt-clamped::after {
-    content: "";
-    position: absolute;
-    inset: auto 0 0 0;
-    height: 1.75rem;
-    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
-    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--color-overlay) 55%, var(--color-card)));
-    pointer-events: none;
-}
-/* The fade's height: find-in-page counts text under it as on screen and would not scroll, and that scroll is what opens
-   the prompt (ChatMessageView onBubbleScroll). */
+/* The "there is more of this" fade, applied only to a prompt the clamp actually cut (ChatMessageView measures it). The
+   WORDS fade, rather than a band painted over them in the fill's colour, so the fade matches any surface it is on (the
+   held bubble's thinner fill, Sanctum's grain) without a second copy of that fill to keep in step. The last line fades
+   out and is gone by the bottom padding (`py-2.5`), where the line after it would otherwise start to show.
+   scroll-padding is the fade's height: find-in-page counts text under it as on screen and would not scroll, and that
+   scroll is what opens the prompt (ChatMessageView onBubbleScroll). */
 .chat-prompt-clamped .chat-prompt-text {
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 0.625rem - 1.25lh), transparent calc(100% - 0.625rem));
     scroll-padding-bottom: 1.75rem;
 }
 /* Opening a prompt is a deliberate "I want to read this again" — asked, more often than not, while the answer to it is streaming underneath. */
@@ -119,15 +117,37 @@
        overflowed as a pinned title, under the 34rem cap) ends under the chevron, and opening it shows less than shut. */
     padding-right: 2.25rem;
 }
+/* THE PROMPT BUBBLE: the reader's own words, set off by what they are made of, never by a rim. A 1px outline drew it
+   as a text field, the one thing a sent message is not.
+   - FILL: the accent stirred into the step above the transcript, so the person's voice is warm where everything the
+     agent opened (`--chat-inset`, a neutral ink-on-paper wash) is not. Opaque, so the chevron can wear the same fill.
+   - SHAPE: soft on three corners and tight on the one facing the speaker's edge (and the author's face, which stands
+     at the bubble's top). The radius lives here rather than in a `rounded-*` at the call sites, which this unlayered
+     sheet would beat anyway.
+   - LIFT: in the light, the room's warm shadow at its faintest; in the dark, where what is nearer is lighter, the lit
+     upper lip the dark looks give every raised plate instead. */
 .chat-surface {
-    background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
+    --chat-prompt-fill: color-mix(in oklab, var(--color-primary-500) 8%, color-mix(in oklab, var(--color-content) 4%, var(--color-card)));
+    --chat-prompt-lift: 0 1px 2px rgb(var(--ui-shadow-tint) / 0.08);
+    border-radius: 1.125rem 0.375rem 1.125rem 1.125rem;
+    background-color: var(--chat-prompt-fill);
+    box-shadow: var(--chat-prompt-lift);
 }
-/* A PROMPT THAT DID NOT GO OUT (ChatHeldBubble): the same bubble, on a dashed edge. Here rather than a `border-dashed` at
-   the call site, since this sheet is unlayered and the surface's own `border` above would beat any utility. */
+/* The light recipe's ink is light here, and laid on a near-black card it lifts too little to read as a surface: the
+   dark scheme's own step above a card (`--color-overlay`) carries the tint instead. */
+[data-mode="dark"] .chat-surface {
+    --chat-prompt-fill: color-mix(in oklab, var(--color-primary-500) 8%, var(--color-overlay));
+    --chat-prompt-lift: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+/* A PROMPT THAT DID NOT GO OUT (ChatHeldBubble): the same shape, drawn as an outline on a dashed edge with only a
+   trace of the fill, since it has not landed in the conversation yet. Its chevron sits on that thin fill too. */
 .chat-surface-held {
-    border-style: dashed;
-    background: color-mix(in srgb, var(--color-overlay) 30%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--color-primary-500) 30%, var(--color-line-strong));
+    background-color: color-mix(in oklab, var(--chat-prompt-fill) 40%, transparent);
+    box-shadow: none;
+}
+.chat-surface-held .chat-prompt-toggle {
+    background-color: transparent;
 }
 /* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. */
 .chat-skeleton {

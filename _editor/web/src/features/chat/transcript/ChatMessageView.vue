@@ -477,12 +477,12 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- The frame owns positioning for the fade and toggle chip. -->
                 <div
                     v-if="message.text"
-                    class="chat-surface relative min-w-0 rounded-lg"
+                    class="chat-surface relative min-w-0"
                     :class="{ 'chat-prompt-clamped': overflowing && !expanded }"
                 >
                     <div
                         ref="bubble"
-                        class="chat-prompt-text whitespace-pre-wrap px-3 py-2 text-xs leading-relaxed text-content"
+                        class="chat-prompt-text whitespace-pre-wrap px-4 py-2.5 text-xs leading-relaxed text-content"
                         :class="{ 'cursor-pointer': overflowing && !expanded }"
                         @scroll="onBubbleScroll"
                         @click="onBubbleClick"

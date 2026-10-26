@@ -94,13 +94,13 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
             <!-- Dashed: the one mark that it never went out; everything else about it is the prompt it would have been. -->
             <div
                 v-if="message.text"
-                class="chat-surface chat-surface-held relative min-w-0 rounded-lg"
+                class="chat-surface chat-surface-held relative min-w-0"
                 :class="{ 'flex-1': compact, 'chat-prompt-clamped': overflowing && !expanded, 'chat-prompt-open': expanded }"
             >
                 <div
                     ref="bubble"
                     class="chat-prompt-text text-xs leading-relaxed text-muted"
-                    :class="[compact ? 'truncate px-2.5 py-1' : 'whitespace-pre-wrap px-3 py-2', { 'cursor-pointer': overflowing && !expanded }]"
+                    :class="[compact ? 'truncate px-2.5 py-1' : 'whitespace-pre-wrap px-4 py-2.5', { 'cursor-pointer': overflowing && !expanded }]"
                     @click="overflowing && !expanded && (expanded = true)"
                 >
                     {{ message.text }}

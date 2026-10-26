@@ -771,6 +771,12 @@
     color: var(--sanctum-gold-bright);
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
+/* THE READER'S OWN WORDS ARE A STONE A STEP ABOVE THE CARD (chat.css `.chat-surface`), so they take the tooth every such
+   step takes and a plaque's warm lit lip rather than the plain dark scheme's white one. */
+[data-skin="sanctum"] .chat-surface {
+    --chat-prompt-lift: inset 0 1px 0 rgba(255, 250, 238, 0.05);
+    background-image: var(--sanctum-tooth);
+}
 /* Settled-card selection uses structural metal to mark location. */
 [data-skin="sanctum"] .chat-option-picked {
     background: rgba(201, 160, 92, 0.1);

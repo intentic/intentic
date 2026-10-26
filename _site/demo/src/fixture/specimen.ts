@@ -305,7 +305,8 @@ const messages: TranscriptRow[] = [
     {
         role: `user`,
         sentAt: Date.now() - 3 * HOUR,
-        text: `Good. Write it up as a plan before you touch the PowerShell kit, and show me the report as a page.`,
+        // Long enough to clamp, so the fold, its fade and its chevron are on show; the pinned title is its first line.
+        text: `Good. Before you touch the PowerShell kit:\n1. Write it up as a plan, one step per fix, so I can approve it in one go.\n2. Reproduce the \`-Force\` bug against a target that already exists, not a fresh one.\n3. Leave the sh kit alone: it is green on main and should stay that way.\n4. Show me the report as a page, with the before and after of every script you changed.\n5. If anything needs a secret, ask for it on a card instead of guessing.\n6. Once I approve the plan, land it and close the issue.`,
         rewindIndex: 9,
         checkpointId: `chk_spec_9`,
     },
