@@ -51,8 +51,8 @@ canvas band and stop pinning, since a pinned header with nothing behind it would
 - A picture's masters are `src/assets/wallpaper/<name>-dark.png` and `<name>-light.png`, 16:9;
   `pnpm --filter @intentic/web wallpaper:art` encodes every master into the AVIF rungs under
   `public/assets/wallpaper/`, which are committed, plus the blurred grounds its `GROUNDS` list names.
-- Picking the Silver look in Appearance also puts on `valley`, the misty valley it was drawn over, unless
-  wallpapers are off; the wallpaper row can change it straight back.
+- Picking a look never changes the wallpaper, Silver included: the two rows are independent, so a picture someone
+  chose stays chosen when they try another look.
 - A new wallpaper needs its masters, its name in `WALLPAPERS`, its `--wallpaper-art` rules in `wallpapers.css` and
   a `settings.appearance.wallpaper.<name>` label in every locale.
 

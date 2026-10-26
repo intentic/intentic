@@ -120,12 +120,8 @@ const setThemeChoice = (value: ThemeRow): void => {
     }
     // The skin goes first: pinning a skin drags the scheme dark with it, and the line below then says so outright.
     setSkin(look.skin);
+    // The look never touches the wallpaper: that is its own row, worn under any look, and a pick made there stays put.
     setScheme(look.scheme);
-    // Silver is drawn as frosted glass over its valley, so arriving at it brings the valley along; a reader who turned
-    // wallpapers off keeps them off, and the row below can change it back at once.
-    if (value === `silver` && wallpaper.value !== `none`) {
-        wallpaper.value = `valley`;
-    }
 };
 const wallpaperOptions = computed(() => WALLPAPERS.map((value) => ({ label: t(`settings.appearance.wallpaper.${value}`), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
