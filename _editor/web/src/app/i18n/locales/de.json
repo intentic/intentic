@@ -7819,8 +7819,6 @@
             "whatSyncDoes": "Verbindet diesen Computer mit der Sandbox und spiegelt einen Ordner in beide Richtungen."
         },
         "sandboxBehindCard": {
-            "newerSide": "neuer",
-            "olderSide": "älter",
             "restartTipTitle": "Schneller Neustart",
             "restartTipOn": "Baut neu auf",
             "restartTipTakes": "Dauer",
@@ -7851,7 +7849,8 @@
             "restartBecomesButton": "wird das zu einem Knopf.",
             "restartingTheSandbox": "Die Sandbox wird neu gestartet",
             "couldntRestart": "Die Sandbox ließ sich dort nicht neu starten.",
-            "restartCommand": "Befehl zum Neustarten"
+            "restartCommand": "Befehl zum Neustarten",
+            "runsOn": "Sie läuft auf {where}."
         },
         "recentlyDeleted": {
             "comesBackAsName": "Kommt mit einer neuen Adresse zurück, die Maschine, auf der sie lief, muss also erneut verbunden werden",
@@ -8848,6 +8847,10 @@
         },
         "driftReport": {
             "areas": {
+                "accessProfiles": {
+                    "label": "Zugriffsprofile",
+                    "where": "wiederverwendbare Rechte für Personen und Dienste"
+                },
                 "accounts": {
                     "label": "Konten",
                     "where": "die Konten, als die sich diese Sandbox anmeldet"
@@ -8956,13 +8959,13 @@
                     "label": "Organisation",
                     "where": "welche Organisation diese Sandbox verwaltet und was sie festlegt"
                 },
-                "panels": {
-                    "label": "Panels",
-                    "where": "die Operator-Panels in der Seitenleiste"
-                },
                 "pages": {
                     "label": "Seiten im Chat",
                     "where": "die interaktiven Seiten, die ein Agent in einem Chat zeigt"
+                },
+                "panels": {
+                    "label": "Panels",
+                    "where": "die Operator-Panels in der Seitenleiste"
                 },
                 "personas": {
                     "label": "Personas",
@@ -8999,6 +9002,10 @@
                 "secrets": {
                     "label": "Secrets",
                     "where": "gespeicherte Zugangsdaten und welche fehlen"
+                },
+                "services": {
+                    "label": "Dienste",
+                    "where": "die nicht-menschlichen Konten, als die unbeaufsichtigte Arbeit handelt"
                 },
                 "sessions": {
                     "label": "Unterhaltungen",
@@ -9042,22 +9049,16 @@
                 }
             },
             "unknownWhere": "etwas Neueres als diese Seite",
-            "unnamedWhere": "ein Teil Ihrer Sandbox, für den diese Seite keinen verständlichen Namen hat",
             "impact": {
                 "missing": "Ihre Sandbox hat diesen Teil noch nicht, daher funktioniert alles hier, was ihn braucht, erst, wenn die Sandbox aufholt.",
                 "drifted": "Die beiden Seiten erwarten hier leicht Unterschiedliches. Vielleicht bleibt etwas leer, oder eine Änderung lässt sich nicht speichern.",
                 "extra": "Ihre Sandbox hat das, und diese Seite ist zu alt, um es zu nutzen. Nichts ist kaputt — Sie bekommen es nur noch nicht."
             },
             "tag": {
-                "missing": "nicht verfügbar",
-                "drifted": "kann sich falsch verhalten",
-                "extra": "noch nicht genutzt"
-            },
-            "appLabel": "Diese Seite",
-            "appWhat": "der Editor, den Sie gerade sehen, in diesem Browser-Tab",
-            "sandboxLabel": "Ihre Sandbox",
-            "sandboxWhat": "der Rechner, der Ihren Code ausführt",
-            "sandboxWhatOn": "der Rechner, der Ihren Code ausführt, auf {where}"
+                "missing": "Nicht verfügbar",
+                "drifted": "Kann sich falsch verhalten",
+                "extra": "Noch nicht genutzt"
+            }
         },
         "useAgentMemory": {
             "couldntRead": "{file} ließ sich nicht lesen.",

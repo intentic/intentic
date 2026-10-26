@@ -76,6 +76,10 @@ const mount = (): HTMLElement => {
     return el;
 };
 
+// A part of the app's chip on the card, by its name.
+const chip = (label: string): HTMLButtonElement | undefined =>
+    [...document.querySelectorAll<HTMLButtonElement>(`button[aria-haspopup]`)].find((button) => button.textContent?.trim() === label);
+
 beforeEach(() => {
     resetSandboxScope();
     // Reset to "the dev server hasn't answered", so only the test that asks for it sees an uncompiled contract.
@@ -104,13 +108,12 @@ it(`names the sandbox as behind only when a missing route proves it`, () => {
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Your sandbox is older than this page`);
     expect(text).toContain(`Your sandbox was built before these parts existed`);
-    // The area reads as the product names it, with what the reader would be looking at when it bites.
-    expect(text).toContain(`VPN`);
-    expect(text).toContain(`this sandbox's VPN connection`);
-    expect(text).toContain(`not available`);
+    // The area reads as the product names it, on the line of its kind; where it lives waits in its chip's popover.
+    expect(text).toContain(`Not available`);
+    expect(chip(`VPN`)).toEqual(expect.any(HTMLButtonElement));
+    expect(text).not.toContain(`this sandbox's VPN connection`);
     expect(text).not.toMatch(/reload this page/i);
-    // The side something proves is behind, marked; never the count of internal endpoints, which means nothing here.
-    expect(text).toContain(`older`);
+    // Never the count of internal endpoints, which means nothing here.
     expect(text).not.toContain(`${LEVEL.length - withoutVpn.length} missing`);
 });
 
@@ -121,20 +124,28 @@ it(`refuses to name a side when only the payloads disagree`, () => {
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Some parts of this page may not work`);
     expect(text).toContain(`Sandbox settings`);
-    expect(text).toContain(`everything on the Sandbox tabs`);
-    expect(text).toContain(`may misbehave`);
+    expect(text).toContain(`May misbehave`);
     expect(text).not.toContain(`Your sandbox is older than this page`);
 });
 
-// The question the old card never answered: WHICH two programs. Each names itself, what it is, and how many calls
-// it knows — the scale the disagreement count is read against.
-it(`names both sides in words that don't assume you built this`, () => {
-    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+// The heading names the two sides; the one fact it can't hold is which machine the sandbox is on, said only when
+// something knows it rather than guessing from the one connected device.
+it(`says which machine the sandbox runs on, once, when it is known`, () => {
+    hostId.value = `ada-laptop`;
+    setDaemonRoutes(withoutVpn, SHAPES);
+    expect(mount().textContent ?? ``).toContain(
+        `Your sandbox was built before these parts existed, so it doesn't know about them. It runs on ada-laptop.`,
+    );
+});
+
+// Each kind is said once, as its line's label, never once per part of the app.
+it(`says each kind of gap once, however many parts it reaches`, () => {
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`, `agents.list`, `sessions.list`));
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`This page`);
-    expect(text).toContain(`the editor you're looking at, in this browser tab`);
-    expect(text).toContain(`Your sandbox`);
-    expect(text).toContain(`the machine running your code`);
+    expect(text.match(/May misbehave/g)).toHaveLength(1);
+    for (const label of [`Sandbox settings`, `The fleet`, `Conversations`]) {
+        expect(chip(label)).toEqual(expect.any(HTMLButtonElement));
+    }
 });
 
 // The vocabulary rule, enforced rather than trusted: these are the words that made two earlier versions of this card
@@ -165,26 +176,25 @@ it(`groups many drifted routes into one feature row`, () => {
     expect(agentRoutes.length).toBeGreaterThan(1);
     setDaemonRoutes(LEVEL, reshaped(...agentRoutes));
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`Running a turn`);
-    expect(text).toContain(`may misbehave`);
+    expect(chip(`Running a turn`)).toEqual(expect.any(HTMLButtonElement));
+    expect(text).toContain(`May misbehave`);
     expect(text).not.toMatch(/\d+ features? affected/);
 });
 
 // The dotted route names are the evidence, not the report: they used to be all the card said, and now they are what
-// a chevron opens, under the sentence that says what that kind of gap costs.
-it(`keeps the route names behind the row, with what the gap costs`, () => {
+// a chip opens, under where that part lives and the sentence that says what that kind of gap costs.
+it(`keeps the route names behind the chip, with what the gap costs`, () => {
     const agentRoute = Object.keys(SHAPES).find((name) => name.startsWith(`agent.`));
     expect(agentRoute).toEqual(expect.any(String));
     setDaemonRoutes(LEVEL, reshaped(agentRoute!));
-    const el = mount();
-    expect(el.textContent ?? ``).not.toContain(agentRoute!);
+    expect(document.body.textContent ?? ``).not.toContain(agentRoute!);
+    mount();
 
-    const row = [...el.querySelectorAll(`button[aria-expanded]`)].find((button) => button.textContent?.includes(`Running a turn`));
-    expect(row).toEqual(expect.any(HTMLButtonElement));
-    row?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, detail: 1 }));
+    chip(`Running a turn`)?.click();
     return nextTick().then(() => {
-        const text = el.textContent ?? ``;
+        const text = document.body.textContent ?? ``;
         expect(text).toContain(agentRoute!);
+        expect(text).toContain(`sending, stopping and following a turn`);
         expect(text).toContain(`The two sides expect slightly different things here.`);
         expect(text).not.toContain(`Everything else works`);
         expect(text).not.toContain(`Still showing`);
@@ -200,8 +210,8 @@ it(`calls a total disagreement one mismatch rather than naming every area`, () =
     expect(text).toContain(`This page and your sandbox are far apart`);
     expect(text).toContain(`Nearly every part of the app is affected, so they aren't listed one by one.`);
     expect(text).toContain(`two quite different versions`);
-    // Not forty rows of areas: the `where` line of one that would otherwise be listed.
-    expect(text).not.toContain(`the file tree, the editor and search`);
+    // Not forty chips: the name of one that would otherwise be listed.
+    expect(chip(`Files`)).toBeUndefined();
 });
 
 // The dev case the card used to misdiagnose: this app bundles the contract from source, the sandbox loads it compiled,
@@ -229,9 +239,9 @@ it(`calls a two-way gap a fork rather than naming either side as behind`, () => 
     const text = mount().textContent ?? ``;
     expect(text).toContain(`This page and your sandbox are from different versions`);
     expect(text).toContain(`neither one is simply newer`);
-    // Both directions get a row of their own, since they are different failures: one feature is gone, one is unused.
-    expect(text).toContain(`not available`);
-    expect(text).toContain(`not used yet`);
+    // Both directions get a line of their own, since they are different failures: one feature is gone, one is unused.
+    expect(text).toContain(`Not available`);
+    expect(text).toContain(`Not used yet`);
     expect(text).not.toContain(`Your sandbox is older than this page`);
     expect(text).not.toContain(`This page is the older of the two.`);
 });

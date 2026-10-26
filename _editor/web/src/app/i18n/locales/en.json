@@ -7819,8 +7819,6 @@
             "whatSyncDoes": "Pairs this computer with the sandbox and mirrors a folder both ways."
         },
         "sandboxBehindCard": {
-            "newerSide": "newer",
-            "olderSide": "older",
             "restartTipTitle": "Quick restart",
             "restartTipOn": "Rebuilds on",
             "restartTipTakes": "Takes",
@@ -7851,7 +7849,8 @@
             "restartBecomesButton": "this becomes a button.",
             "restartingTheSandbox": "Restarting the sandbox",
             "couldntRestart": "Couldn't restart the sandbox there.",
-            "restartCommand": "Restart command"
+            "restartCommand": "Restart command",
+            "runsOn": "It runs on {where}."
         },
         "recentlyDeleted": {
             "comesBackAsName": "Comes back with a new address, so the machine it ran on has to be connected again",
@@ -8848,6 +8847,10 @@
         },
         "driftReport": {
             "areas": {
+                "accessProfiles": {
+                    "label": "Access profiles",
+                    "where": "reusable sets of what a person or service may reach"
+                },
                 "accounts": {
                     "label": "Accounts",
                     "where": "the accounts this sandbox signs in as"
@@ -8956,13 +8959,13 @@
                     "label": "Organisation",
                     "where": "which organisation manages this sandbox, and what it holds"
                 },
-                "panels": {
-                    "label": "Panels",
-                    "where": "the operator panels in the sidebar"
-                },
                 "pages": {
                     "label": "Pages in chat",
                     "where": "the interactive pages an agent shows in a chat"
+                },
+                "panels": {
+                    "label": "Panels",
+                    "where": "the operator panels in the sidebar"
                 },
                 "personas": {
                     "label": "Personas",
@@ -8999,6 +9002,10 @@
                 "secrets": {
                     "label": "Secrets",
                     "where": "stored credentials and which are missing"
+                },
+                "services": {
+                    "label": "Services",
+                    "where": "the non-human accounts unattended work acts as"
                 },
                 "sessions": {
                     "label": "Conversations",
@@ -9042,22 +9049,16 @@
                 }
             },
             "unknownWhere": "something newer than this page",
-            "unnamedWhere": "a part of your sandbox this page has no plain name for",
             "impact": {
                 "missing": "Your sandbox doesn't have this part yet, so anything here that needs it won't work until the sandbox catches up.",
                 "drifted": "The two sides expect slightly different things here. You might see something come up empty, or a change that won't save.",
                 "extra": "Your sandbox has this and this page is too old to use it. Nothing is broken — you just don't get it yet."
             },
             "tag": {
-                "missing": "not available",
-                "drifted": "may misbehave",
-                "extra": "not used yet"
-            },
-            "appLabel": "This page",
-            "appWhat": "the editor you're looking at, in this browser tab",
-            "sandboxLabel": "Your sandbox",
-            "sandboxWhat": "the machine running your code",
-            "sandboxWhatOn": "the machine running your code, on {where}"
+                "missing": "Not available",
+                "drifted": "May misbehave",
+                "extra": "Not used yet"
+            }
         },
         "useAgentMemory": {
             "couldntRead": "Couldn't read {file}.",

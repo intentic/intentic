@@ -15,6 +15,10 @@ export interface AreaName {
     readonly where: string;
 }
 const AREAS = {
+    accessProfiles: () => ({
+        label: t(`sandbox.driftReport.areas.accessProfiles.label`),
+        where: t(`sandbox.driftReport.areas.accessProfiles.where`),
+    }),
     accounts: () => ({ label: t(`sandbox.driftReport.areas.accounts.label`), where: t(`sandbox.driftReport.areas.accounts.where`) }),
     activity: () => ({ label: t(`sandbox.driftReport.areas.activity.label`), where: t(`sandbox.driftReport.areas.activity.where`) }),
     agent: () => ({ label: t(`sandbox.driftReport.areas.agent.label`), where: t(`sandbox.driftReport.areas.agent.where`) }),
@@ -54,6 +58,7 @@ const AREAS = {
     safety: () => ({ label: t(`sandbox.driftReport.areas.safety.label`), where: t(`sandbox.driftReport.areas.safety.where`) }),
     secrets: () => ({ label: t(`sandbox.driftReport.areas.secrets.label`), where: t(`sandbox.driftReport.areas.secrets.where`) }),
     sessions: () => ({ label: t(`sandbox.driftReport.areas.sessions.label`), where: t(`sandbox.driftReport.areas.sessions.where`) }),
+    services: () => ({ label: t(`sandbox.driftReport.areas.services.label`), where: t(`sandbox.driftReport.areas.services.where`) }),
     settings: () => ({ label: t(`sandbox.driftReport.areas.settings.label`), where: t(`sandbox.driftReport.areas.settings.where`) }),
     share: () => ({ label: t(`sandbox.driftReport.areas.share.label`), where: t(`sandbox.driftReport.areas.share.where`) }),
     skills: () => ({ label: t(`sandbox.driftReport.areas.skills.label`), where: t(`sandbox.driftReport.areas.skills.where`) }),

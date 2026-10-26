@@ -7819,8 +7819,6 @@
             "whatSyncDoes": "Empareja este ordenador con el sandbox y refleja una carpeta en ambos sentidos."
         },
         "sandboxBehindCard": {
-            "newerSide": "más reciente",
-            "olderSide": "más antigua",
             "restartTipTitle": "Reinicio rápido",
             "restartTipOn": "Reconstruye en",
             "restartTipTakes": "Tarda",
@@ -7851,7 +7849,8 @@
             "restartBecomesButton": "esto se convierte en un botón.",
             "restartingTheSandbox": "Reiniciando el sandbox",
             "couldntRestart": "No se pudo reiniciar el sandbox allí.",
-            "restartCommand": "Comando para reiniciar"
+            "restartCommand": "Comando para reiniciar",
+            "runsOn": "Se ejecuta en {where}."
         },
         "recentlyDeleted": {
             "comesBackAsName": "Vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina donde se ejecutaba",
@@ -8848,6 +8847,10 @@
         },
         "driftReport": {
             "areas": {
+                "accessProfiles": {
+                    "label": "Perfiles de acceso",
+                    "where": "conjuntos reutilizables de lo que una persona o servicio puede alcanzar"
+                },
                 "accounts": {
                     "label": "Cuentas",
                     "where": "las cuentas con las que este sandbox inicia sesión"
@@ -8956,13 +8959,13 @@
                     "label": "Organización",
                     "where": "qué organización gestiona este sandbox y qué contiene"
                 },
-                "panels": {
-                    "label": "Paneles",
-                    "where": "los paneles de operador de la barra lateral"
-                },
                 "pages": {
                     "label": "Páginas en el chat",
                     "where": "las páginas interactivas que un agente muestra en un chat"
+                },
+                "panels": {
+                    "label": "Paneles",
+                    "where": "los paneles de operador de la barra lateral"
                 },
                 "personas": {
                     "label": "Personas",
@@ -8999,6 +9002,10 @@
                 "secrets": {
                     "label": "Secretos",
                     "where": "credenciales guardadas y cuáles faltan"
+                },
+                "services": {
+                    "label": "Servicios",
+                    "where": "las cuentas no humanas con las que actúa el trabajo desatendido"
                 },
                 "sessions": {
                     "label": "Conversaciones",
@@ -9042,22 +9049,16 @@
                 }
             },
             "unknownWhere": "algo más reciente que esta página",
-            "unnamedWhere": "una parte de tu sandbox que esta página no sabe nombrar",
             "impact": {
                 "missing": "Tu sandbox aún no tiene esta parte, así que lo que dependa de ella no funcionará hasta que se actualice.",
                 "drifted": "Ambos lados esperan cosas ligeramente distintas aquí. Puede que algo aparezca vacío o que un cambio no se guarde.",
                 "extra": "Tu sandbox tiene esto, pero esta página es demasiado antigua para usarlo. Nada está roto: simplemente aún no puedes aprovecharlo."
             },
             "tag": {
-                "missing": "no disponible",
-                "drifted": "puede fallar",
-                "extra": "aún no se usa"
-            },
-            "appLabel": "Esta página",
-            "appWhat": "el editor que ves en esta pestaña del navegador",
-            "sandboxLabel": "Tu sandbox",
-            "sandboxWhat": "la máquina que ejecuta tu código",
-            "sandboxWhatOn": "la máquina que ejecuta tu código, en {where}"
+                "missing": "No disponible",
+                "drifted": "Puede fallar",
+                "extra": "Aún no se usa"
+            }
         },
         "useAgentMemory": {
             "couldntRead": "No se ha podido leer {file}.",

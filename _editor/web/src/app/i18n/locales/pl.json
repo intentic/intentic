@@ -7273,8 +7273,6 @@
             "whatSyncDoes": "Paruje ten komputer z sandboxem i odzwierciedla folder w obie strony."
         },
         "sandboxBehindCard": {
-            "newerSide": "nowsza wersja",
-            "olderSide": "starsza wersja",
             "restartTipTitle": "Szybki restart",
             "restartTipOn": "Przebudowa na",
             "restartTipTakes": "Trwa",
@@ -7305,7 +7303,8 @@
             "restartBecomesButton": "restart stanie się tutaj przyciskiem.",
             "restartingTheSandbox": "Restart sandboxa",
             "couldntRestart": "Nie udało się tam zrestartować sandboxa.",
-            "restartCommand": "Polecenie restartu"
+            "restartCommand": "Polecenie restartu",
+            "runsOn": "Działa na urządzeniu {where}."
         },
         "recentlyDeleted": {
             "comesBackAsName": "Wraca z nowym adresem, więc maszynę, na której działało, trzeba połączyć ponownie",
@@ -8255,6 +8254,10 @@
         },
         "driftReport": {
             "areas": {
+                "accessProfiles": {
+                    "label": "Profile dostępu",
+                    "where": "wielokrotnego użytku zestawy tego, do czego osoba lub usługa ma dostęp"
+                },
                 "accounts": {
                     "label": "Konta",
                     "where": "konta, na które loguje się ten sandbox"
@@ -8363,13 +8366,13 @@
                     "label": "Organizacja",
                     "where": "która organizacja zarządza tym sandboxem i czym w nim zarządza"
                 },
-                "panels": {
-                    "label": "Panele",
-                    "where": "panele operatora na pasku bocznym"
-                },
                 "pages": {
                     "label": "Strony w czacie",
                     "where": "interaktywne strony, które agent pokazuje w czacie"
+                },
+                "panels": {
+                    "label": "Panele",
+                    "where": "panele operatora na pasku bocznym"
                 },
                 "personas": {
                     "label": "Persony",
@@ -8406,6 +8409,10 @@
                 "secrets": {
                     "label": "Sekrety",
                     "where": "zapisane dane logowania i to, których brakuje"
+                },
+                "services": {
+                    "label": "Usługi",
+                    "where": "konta nie-ludzkie, w imieniu których działa praca bez nadzoru"
                 },
                 "sessions": {
                     "label": "Rozmowy",
@@ -8449,22 +8456,16 @@
                 }
             },
             "unknownWhere": "coś nowszego niż ta strona",
-            "unnamedWhere": "część Twojego sandboxa, dla której ta strona nie ma prostej nazwy",
             "impact": {
                 "missing": "Twój sandbox jeszcze tego nie ma, więc nic, co tego tutaj potrzebuje, nie zadziała, dopóki sandbox nie nadrobi zaległości.",
                 "drifted": "Obie strony oczekują tu trochę innych rzeczy. Coś może się pokazać puste albo zmiana może się nie zapisać.",
                 "extra": "Twój sandbox to ma, ale ta strona jest za stara, żeby z tego korzystać. Nic się nie zepsuło — po prostu jeszcze tego nie dostajesz."
             },
             "tag": {
-                "missing": "niedostępne",
-                "drifted": "może działać źle",
-                "extra": "jeszcze nieużywane"
-            },
-            "appLabel": "Ta strona",
-            "appWhat": "edytor, który właśnie oglądasz, w tej karcie przeglądarki",
-            "sandboxLabel": "Twój sandbox",
-            "sandboxWhat": "maszyna, na której działa Twój kod",
-            "sandboxWhatOn": "maszyna, na której działa Twój kod, na urządzeniu {where}"
+                "missing": "Niedostępne",
+                "drifted": "Może działać źle",
+                "extra": "Jeszcze nieużywane"
+            }
         },
         "useAgentMemory": {
             "couldntRead": "Nie udało się odczytać pliku {file}.",

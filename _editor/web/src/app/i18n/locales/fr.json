@@ -7819,8 +7819,6 @@
             "whatSyncDoes": "Associe cet ordinateur au bac à sable et miroite un dossier dans les deux sens."
         },
         "sandboxBehindCard": {
-            "newerSide": "plus récent",
-            "olderSide": "plus ancien",
             "restartTipTitle": "Redémarrage rapide",
             "restartTipOn": "Reconstruit sur",
             "restartTipTakes": "Durée",
@@ -7851,7 +7849,8 @@
             "restartBecomesButton": "ceci devient un bouton.",
             "restartingTheSandbox": "Redémarrage du sandbox",
             "couldntRestart": "Impossible de redémarrer le sandbox là-bas.",
-            "restartCommand": "Commande de redémarrage"
+            "restartCommand": "Commande de redémarrage",
+            "runsOn": "Elle tourne sur {where}."
         },
         "recentlyDeleted": {
             "comesBackAsName": "Revient avec une nouvelle adresse : la machine sur laquelle il tournait devra être reconnectée",
@@ -8848,6 +8847,10 @@
         },
         "driftReport": {
             "areas": {
+                "accessProfiles": {
+                    "label": "Profils d'accès",
+                    "where": "ensembles réutilisables de ce qu'une personne ou un service peut atteindre"
+                },
                 "accounts": {
                     "label": "Comptes",
                     "where": "les comptes sous lesquels ce sandbox se connecte"
@@ -8956,13 +8959,13 @@
                     "label": "Organisation",
                     "where": "l'organisation qui gère ce sandbox, et ce qu'elle impose"
                 },
-                "panels": {
-                    "label": "Panneaux",
-                    "where": "les panneaux d'opérateur dans la barre latérale"
-                },
                 "pages": {
                     "label": "Pages dans le chat",
                     "where": "les pages interactives qu'un agent affiche dans un chat"
+                },
+                "panels": {
+                    "label": "Panneaux",
+                    "where": "les panneaux d'opérateur dans la barre latérale"
                 },
                 "personas": {
                     "label": "Personas",
@@ -8999,6 +9002,10 @@
                 "secrets": {
                     "label": "Secrets",
                     "where": "les identifiants stockés et ceux qui manquent"
+                },
+                "services": {
+                    "label": "Services",
+                    "where": "les comptes non humains au nom desquels agit le travail sans surveillance"
                 },
                 "sessions": {
                     "label": "Conversations",
@@ -9042,22 +9049,16 @@
                 }
             },
             "unknownWhere": "quelque chose de plus récent que cette page",
-            "unnamedWhere": "une partie de votre sandbox pour laquelle cette page n'a pas de nom simple",
             "impact": {
                 "missing": "Votre sandbox n'a pas encore cette partie : tout ce qui en dépend ici ne fonctionnera pas tant que le sandbox n'aura pas rattrapé son retard.",
                 "drifted": "Les deux côtés n'attendent pas tout à fait la même chose ici. Il se peut que quelque chose s'affiche vide, ou qu'une modification ne s'enregistre pas.",
                 "extra": "Votre sandbox a ceci et cette page est trop ancienne pour l'utiliser. Rien n'est cassé : vous n'en profitez simplement pas encore."
             },
             "tag": {
-                "missing": "indisponible",
-                "drifted": "peut mal fonctionner",
-                "extra": "pas encore utilisé"
-            },
-            "appLabel": "Cette page",
-            "appWhat": "l'éditeur que vous regardez, dans cet onglet du navigateur",
-            "sandboxLabel": "Votre sandbox",
-            "sandboxWhat": "la machine qui exécute votre code",
-            "sandboxWhatOn": "la machine qui exécute votre code, sur {where}"
+                "missing": "Indisponible",
+                "drifted": "Peut mal fonctionner",
+                "extra": "Pas encore utilisé"
+            }
         },
         "useAgentMemory": {
             "couldntRead": "Impossible de lire {file}.",

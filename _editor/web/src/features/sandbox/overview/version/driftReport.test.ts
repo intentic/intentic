@@ -2,7 +2,7 @@
 // Pure, so this pins the naming and the order without a daemon or a mount.
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { setLocale } from "@intentic/ui/i18n";
-import { driftAreas, kindImpact, kindTag, sandboxParty } from "./driftReport";
+import { driftAreas, driftGroups, kindImpact, kindTag } from "./driftReport";
 
 it(`names an area as the product names it, not as the contract does`, () => {
     const [area] = driftAreas({ missing: [], drifted: [`agent.send`, `agent.stop`], extra: [] });
@@ -20,8 +20,8 @@ it(`names an area as the product names it, not as the contract does`, () => {
 it(`has a name for every group in the shipped contract`, () => {
     const groups = [...new Set(SANDBOX_ROUTE_NAMES.map((name) => name.split(`.`)[0] ?? name))];
     const unnamed = driftAreas({ missing: groups.map((group) => `${group}.probe`), drifted: [], extra: [] })
-        // A group of ours with no entry in the table falls back to this line, not to the one about a newer sandbox.
-        .filter((area) => area.where === `a part of your sandbox this page has no plain name for`)
+        // A group of ours with no entry in the table goes by its name alone, not by the line about a newer sandbox.
+        .filter((area) => area.where === undefined)
         .map((area) => area.key);
     expect(unnamed).toEqual([]);
 });
@@ -41,10 +41,11 @@ it(`folds a hand-written route into the area its path names`, () => {
 });
 
 // Two different unnamed cases, and telling the reader the wrong one sends them to update a sandbox that is already
-// current: a group only the DAEMON named is newer than this page, one of our own is merely unlabelled here.
+// current: a group only the DAEMON named is newer than this page, one of our own is merely unlabelled here, and says
+// nothing rather than "a part this page has no plain name for".
 it(`tells an unlabelled area of our own from a feature this page predates`, () => {
     const [ours] = driftAreas({ missing: [`POST /intake/scan`], drifted: [], extra: [] });
-    expect(ours).toMatchObject({ key: `intake`, label: `Intake`, where: `a part of your sandbox this page has no plain name for` });
+    expect(ours).toMatchObject({ key: `intake`, label: `Intake`, where: undefined });
     const [theirs] = driftAreas({ missing: [], drifted: [], extra: [`GET /teleport/status`] });
     expect(theirs).toMatchObject({ key: `teleport`, where: `something newer than this page` });
 });
@@ -72,6 +73,18 @@ it(`ranks by consequence, then by how much of the area is affected`, () => {
     ]);
 });
 
+// The card draws one line per kind, so the kind is said once rather than once per area; an area sits on the line of
+// the worst kind it holds, and a kind with nothing in it draws no line at all.
+it(`groups the areas into one line per kind, worst kind first`, () => {
+    const groups = driftGroups(
+        driftAreas({ missing: [`vpn.status`, `git.blame`], drifted: [`git.status`, `agents.list`, `settings.get`], extra: [] }),
+    );
+    expect(groups.map((group) => [group.kind, group.areas.map((area) => area.key)])).toEqual([
+        [`missing`, [`git`, `vpn`]],
+        [`drifted`, [`settings`, `agents`]],
+    ]);
+});
+
 // One area can be hit both ways at once; the row states the worst of them and still carries every name behind it.
 it(`keeps all three kinds on one area and reports the worst`, () => {
     const [area] = driftAreas({ missing: [`git.blame`], drifted: [`git.status`], extra: [`git.future`] });
@@ -79,7 +92,7 @@ it(`keeps all three kinds on one area and reports the worst`, () => {
 });
 
 // Read when asked, never at import: a reader who switches to Polish after the page loaded gets the areas, the badges,
-// the costs and the sides in Polish, while a group this build has never heard of keeps its own name.
+// and the costs in Polish, while a group this build has never heard of keeps its own name.
 it(`names everything in the language the reader switched to after the page loaded`, async () => {
     try {
         await setLocale(`pl`);
@@ -88,11 +101,10 @@ it(`names everything in the language the reader switched to after the page loade
             [`VPN`, `połączenie VPN tego sandboxa`],
             [`Teleport`, `coś nowszego niż ta strona`],
         ]);
-        expect(kindTag(`drifted`)).toBe(`może działać źle`);
+        expect(kindTag(`drifted`)).toBe(`Może działać źle`);
         expect(kindImpact(`extra`)).toBe(
             `Twój sandbox to ma, ale ta strona jest za stara, żeby z tego korzystać. Nic się nie zepsuło — po prostu jeszcze tego nie dostajesz.`,
         );
-        expect(sandboxParty(`ada-laptop`)).toMatchObject({ label: `Twój sandbox`, what: `maszyna, na której działa Twój kod, na urządzeniu ada-laptop` });
     } finally {
         await setLocale(`en`);
     }

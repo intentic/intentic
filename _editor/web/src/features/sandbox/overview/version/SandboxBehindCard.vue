@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { machinesOf } from "@intentic/sandbox-contract/schemas/devices";
-import { Button, DisclosureRow, Notice, Row, RowGroup, RowNote, StatusBadge, type Tip } from "@intentic/ui";
+import { Button, Notice, RowGroup, RowNote, type Tip } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, ref, watchEffect } from "vue";
+import { computed, watchEffect } from "vue";
 import {
     appBehind,
     comparedRouteCount,
@@ -13,7 +13,8 @@ import {
     missingRoutes,
     unknownDaemonRoutes,
 } from "../../../../client/sandbox/useDaemonRoutes";
-import { appParty, driftAreas, KIND_BADGE, KIND_ICON, KIND_TONE, kindImpact, kindTag, sandboxParty } from "./driftReport";
+import { driftAreas, type DriftGroup, driftGroups, kindTag } from "./driftReport";
+import DriftChip from "./DriftChip.vue";
 import { contractUncompiled, readContractFreshness, uncompiledRoutes } from "../../../../client/sandbox/contractFreshness";
 import { useEnvironment } from "../../../../models/sandbox/environment/useEnvironment";
 import RunCommand from "../../../../components/RunCommand.vue";
@@ -28,10 +29,11 @@ import { useT } from "@intentic/ui/i18n";
 // gaps a version compare misses (dev packages are all 0.0.0). A missing route names the daemon as older; a drifted
 // payload only proves disagreement, so the heading never guesses. Non-blocking: an old sandbox keeps working.
 //
-// WHAT IT DRAWS IS THE TWO SIDES AND THEN THE EVIDENCE, because "7 routes disagree" named the mechanism and nothing
-// a reader could act on: not which two things are failing to meet, not what goes wrong, not where they would see it.
-// The sides are two rows, the fallout is one row per part of the app (driftReport.ts), and the dotted route names —
-// the only part that was ever on screen — are now what a chevron opens.
+// WHAT IT DRAWS IS ONE SENTENCE AND THEN THE FALLOUT, because "7 routes disagree" named the mechanism and nothing a
+// reader could act on. The heading names which side is behind and the sentence under it says why (and, when known,
+// which machine the sandbox is on); then one line per kind of gap ("Not available", "May misbehave"), its parts as
+// chips (DriftChip). A row per part with a badge each was the version before, and fifteen rows saying "may misbehave"
+// fifteen times read as a wall. What a part is, what the gap costs and the dotted route names are a chip's popover.
 //
 // EVERY SENTENCE HERE IS WRITTEN FOR SOMEONE WHO DID NOT BUILD THIS. No "contract", "route", "call", "daemon",
 // "compiled" or "working tree" reaches the screen; those words made the first two versions of this card unreadable.
@@ -162,7 +164,7 @@ const heading = computed(() => {
 // than a sentence to append: the wholesale cause says it inside its own message, so no language has to be glued.
 const leaning = computed(() => appBehind.value && !forked.value && !contractUncompiled.value);
 
-// WHY, in one sentence and no numbers. Partial drift has no cause row: the heading and per-feature rows carry it.
+// WHY, in one sentence and no numbers. Partial drift has no cause line: the heading and the chips carry it.
 const cause = computed((): string | undefined => {
     if (contractUncompiled.value) {
         return t(`sandbox.sandboxBehindCard.causeUncompiled`);
@@ -181,111 +183,79 @@ const cause = computed((): string | undefined => {
 
 // Which machine the sandbox is actually on, said only when this app is sure of it: the fallback `hostId` above is a
 // one-device guess, good enough to aim a restart at and not good enough to state as a fact.
-const parties = computed(() => [appParty(), sandboxParty(running.value)]);
+const runsOn = computed(() => (running.value === undefined ? undefined : t(`sandbox.sandboxBehindCard.runsOn`, { where: running.value })));
 
 // EVERY AREA AT ONCE IS NOT A LIST, IT IS A WALL. Past the wholesale threshold the drift reaches all forty-odd
-// areas of the product, and drawing a row each indicts the whole app for one cause while burying the missing
-// routes — the part a reader can still act on — forty rows down. So the drifted rows stand down to one sentence
-// there, and the other two kinds keep their rows.
+// areas of the product, and forty chips indict the whole app for one cause. So the drifted line holds one sentence
+// there instead of chips, and the other two kinds keep theirs.
 const listed = computed(() => (driftScope.value === `wholesale` ? [] : driftedRoutes.value));
-const areas = computed(() =>
-    driftAreas({ missing: missingRoutes.value, drifted: listed.value, extra: unknownDaemonRoutes.value }),
-);
-const wholesaleNote = computed(() => (driftScope.value === `wholesale` ? t(`sandbox.sandboxBehindCard.wholesaleNote`) : undefined));
+const groups = computed((): readonly (DriftGroup & { readonly note?: string })[] => {
+    const found = driftGroups(driftAreas({ missing: missingRoutes.value, drifted: listed.value, extra: unknownDaemonRoutes.value }));
+    if (driftScope.value !== `wholesale`) {
+        return found;
+    }
+    // The drifted line keeps its place between the other two, holding the sentence instead of chips.
+    const drifted = { kind: `drifted` as const, areas: [], note: t(`sandbox.sandboxBehindCard.wholesaleNote`) };
+    return [...found.filter((group) => group.kind === `missing`), drifted, ...found.filter((group) => group.kind === `extra`)];
+});
 
-// Closed on arrival: the card's job is to name what is affected, and the dotted route names behind a row are for
-// whoever is about to go and fix it.
-const opened = ref<Record<string, boolean>>({});
-const toggle = (key: string, open: boolean): void => {
-    opened.value = { ...opened.value, [key]: open };
-};
-
-// Every route this area contributes, in the order the kinds are explained below it.
-const evidence = (area: (typeof areas.value)[number]): readonly string[] => [...area.missing, ...area.drifted, ...area.extra];
-// Only the kinds this area actually holds, so a drifted-only row doesn't explain what "missing" would have meant.
-const kindsOf = (area: (typeof areas.value)[number]) =>
-    ([`missing`, `drifted`, `extra`] as const).filter((kind) => area[kind].length > 0);
+// The bottom block holds only what is there to say: a restart in flight or done, a refusal, the printed command, the
+// offer to connect, or (outside dev) where the fix lives.
+const restartStatus = computed(() => hostId.value !== undefined && (restarted.value || restarting.value));
+const hasFooter = computed(() => !isDev || restartStatus.value || failed.value !== undefined || showCommand.value);
 </script>
 
 <template>
     <RowGroup v-if="daemonBehind || daemonDrifted" :label="heading">
-        <!-- The cause, before any list: a reader who misreads why is going to misread every row under it. -->
-        <RowNote v-if="cause !== undefined" icon="exclamation-triangle" tone="warning">{{ cause }}</RowNote>
+        <!-- RESTART, NEVER "RELOAD": this rebuilds and restarts the whole sandbox out there. Top right, where the fix
+             for the whole group belongs, rather than under a list the reader has to get past first. -->
+        <template v-if="isDev && hostId" #actions>
+            <Button
+                :label="restarting ? t(`sandbox.sandboxBehindCard.restarting`) : t(`sandbox.sandboxBehindCard.restartSandbox`)"
+                size="small"
+                v-tooltip.top="restartTip"
+                :loading="restarting"
+                @click="void restartOnDevice()"
+            >
+                <template #icon><Icon name="refresh" /></template>
+            </Button>
+        </template>
 
-        <!-- WHICH TWO THINGS THESE ARE: the one being looked at, and the one behind it. The tag marks only the side
-             something PROVES is behind — a guess here sends somebody to restart the wrong one. -->
-        <Row v-for="party in parties" :key="party.label" :icon="party.icon" :title="party.label" :description="party.what">
-            <template #meta>
-                <StatusBadge
-                    v-if="party.age"
-                    :variant="party.age === `older` ? `warning` : `neutral`"
-                    size="xs"
-                    :label="party.age === `older` ? t(`sandbox.sandboxBehindCard.olderSide`) : t(`sandbox.sandboxBehindCard.newerSide`)"
-                />
-            </template>
-        </Row>
-        <RowNote v-if="wholesaleNote" icon="arrows-h" tone="warning">{{ wholesaleNote }}</RowNote>
+        <!-- The cause, before any list: a reader who misreads why is going to misread every chip under it. -->
+        <RowNote v-if="cause !== undefined || runsOn !== undefined" icon="exclamation-triangle" tone="warning">
+            {{ [cause, runsOn].filter((part) => part !== undefined).join(` `) }}
+        </RowNote>
 
-        <!-- One row per part of the app, not per route: one shared piece of code reaches dozens of routes across
-             parts that have nothing to do with each other, and the flat name list read as that many separate faults. -->
-        <DisclosureRow
-            v-for="area in areas"
-            :key="area.key"
-            :icon="KIND_ICON[area.kind]"
-            :tone="KIND_TONE[area.kind]"
-            :title="area.label"
-            :description="area.where"
-            :open="opened[area.key] === true"
-            @update:open="toggle(area.key, $event)"
-        >
-            <template #meta>
-                <StatusBadge :variant="KIND_BADGE[area.kind]" size="xs" :label="kindTag(area.kind)" />
-            </template>
-            <template #below>
-                <div class="flex flex-col gap-2 pb-1">
-                    <p v-for="kind in kindsOf(area)" :key="kind" class="text-2xs text-muted">{{ kindImpact(kind) }}</p>
-                    <!-- The internal names, last and quietest: what a fix is written against, and what nobody else needs. -->
-                    <ul class="flex flex-wrap gap-x-3 gap-y-1">
-                        <li v-for="route in evidence(area)" :key="route" class="font-mono text-2xs text-subtle">{{ route }}</li>
-                    </ul>
+        <!-- One line per kind of gap, its parts as chips: the kind is said once, not once per part. -->
+        <RowNote v-for="group in groups" :key="group.kind" variant="block">
+            <div class="flex flex-col gap-1.5 sm:flex-row sm:items-baseline sm:gap-3">
+                <span class="shrink-0 text-xs text-muted sm:w-28">{{ kindTag(group.kind) }}</span>
+                <span v-if="group.note !== undefined" class="text-xs">{{ group.note }}</span>
+                <div v-else class="flex flex-wrap gap-1.5">
+                    <DriftChip v-for="area in group.areas" :key="area.key" :area="area" />
                 </div>
-            </template>
-        </DisclosureRow>
-
-        <RowNote variant="block">
-            <div class="flex flex-col gap-3">
-                <div v-if="isDev" class="flex flex-col gap-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <!-- RESTART, NEVER "RELOAD": this rebuilds and restarts the whole sandbox out there. -->
-                        <Button
-                            v-if="hostId"
-                            :label="restarting ? t(`sandbox.sandboxBehindCard.restarting`) : t(`sandbox.sandboxBehindCard.restartSandbox`)"
-                            size="small"
-                            v-tooltip.top="restartTip"
-                            :loading="restarting"
-                            @click="void restartOnDevice()"
-                        >
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
-                        <!-- Only while it's happening or done: what the button does, before it's pressed, lives in its hover card. -->
-                        <span v-if="hostId && (restarted || restarting)" class="text-2xs text-subtle">
-                            <template v-if="restarted">{{ t(`sandbox.sandboxBehindCard.rebuiltOnReloadPage`, { hostId }) }}</template>
-                            <template v-else>{{ t(`sandbox.sandboxBehindCard.restartingOn`, { hostId }) }}</template>
-                        </span>
-                    </div>
-                    <Notice v-if="failed" :of="failed" class="text-2xs" />
-                    <RunCommand
-                        v-if="showCommand"
-                        :command="restartCommand"
-                        :explanation="daemonDrifted && !failed ? t(`sandbox.sandboxBehindCard.stillHereRun`) : t(`sandbox.sandboxBehindCard.run`)"
-                        :label="t(`sandbox.sandboxBehindCard.restartCommand`)"
-                    />
-                    <!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
-                    <ConnectDeviceHint v-if="!hostId" :slug="slug" :gains="t(`sandbox.sandboxBehindCard.restartBecomesButton`)" />
-                </div>
-                <p v-else-if="daemonDrifted" class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.staysUpdateSandboxImage`) }}</p>
-                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.updateSandboxImage`) }}</p>
             </div>
+        </RowNote>
+
+        <RowNote v-if="hasFooter" variant="block">
+            <div v-if="isDev" class="flex flex-col gap-2">
+                <!-- Only while it's happening or done: what the button does, before it's pressed, lives in its hover card. -->
+                <p v-if="restartStatus" class="text-2xs text-subtle">
+                    <template v-if="restarted">{{ t(`sandbox.sandboxBehindCard.rebuiltOnReloadPage`, { hostId }) }}</template>
+                    <template v-else>{{ t(`sandbox.sandboxBehindCard.restartingOn`, { hostId }) }}</template>
+                </p>
+                <Notice v-if="failed" :of="failed" class="text-2xs" />
+                <RunCommand
+                    v-if="showCommand"
+                    :command="restartCommand"
+                    :explanation="daemonDrifted && !failed ? t(`sandbox.sandboxBehindCard.stillHereRun`) : t(`sandbox.sandboxBehindCard.run`)"
+                    :label="t(`sandbox.sandboxBehindCard.restartCommand`)"
+                />
+                <!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
+                <ConnectDeviceHint v-if="!hostId" :slug="slug" :gains="t(`sandbox.sandboxBehindCard.restartBecomesButton`)" />
+            </div>
+            <p v-else-if="daemonDrifted" class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.staysUpdateSandboxImage`) }}</p>
+            <p v-else class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.updateSandboxImage`) }}</p>
         </RowNote>
     </RowGroup>
 </template>
