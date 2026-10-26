@@ -126,7 +126,7 @@ it(`a device sign-in copies its code with the press that opens the page, and say
         await nextTick();
 
         expect(writes).toEqual([`K7QX-2MPD`]);
-        expect(host.textContent).toContain(`Code copied: paste it on the page that opened.`);
+        expect(host.textContent).toContain(`Code copied: paste it on the page.`);
         expect(host.textContent, `the copied note replaced the wait, which is still on`).toContain(`Waiting`);
         [...host.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `K7QX-2MPD`)!.click();
         expect(writes).toEqual([`K7QX-2MPD`, `K7QX-2MPD`]);
@@ -175,7 +175,7 @@ describe(`a press on the device code`, () => {
                 // The held note goes up with the first copy and stays; what follows has to show past it.
                 codeButton(host, `K7QX-2MPD`).click();
                 await advanceTimersByTimeAsync(0);
-                expect(host.textContent).toContain(`Code copied: paste it on the page that opened.`);
+                expect(host.textContent).toContain(`Code copied: paste it on the page.`);
                 expect(live()).toBe(`Copied`);
 
                 await advanceTimersByTimeAsync(1_600);
@@ -201,9 +201,9 @@ describe(`a press on the device code`, () => {
                 await new Promise((resolve) => setTimeout(resolve));
                 await nextTick();
 
-                expect(host.textContent).toContain(`Your browser didn't let this page copy the code.`);
+                expect(host.textContent).toContain(`Couldn't copy: select the code and copy it yourself.`);
                 expect(host.textContent).not.toContain(`Code copied`);
-                expect(host.querySelector(`[aria-live]`)?.textContent).toContain(`didn't let this page copy`);
+                expect(host.querySelector(`[aria-live]`)?.textContent).toContain(`Couldn't copy`);
                 const field = host.querySelector<HTMLInputElement>(`input[readonly]`)!;
                 expect(field.value).toBe(`K7QX-2MPD`);
                 expect(document.activeElement).toBe(field);
@@ -345,17 +345,17 @@ const WATCHED_CLAUDE = {
 
 it(`a sign-in watched on the owner's machine asks for nothing back, and says where it finishes`, async () => {
     const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
-    expect(host.textContent).toContain(`it finishes by itself on rog`);
+    expect(host.textContent).toContain(`Finishes by itself on rog`);
     expect(host.querySelector(`input[name="connectCode"]`), `asked for a paste a device is already catching`).toBeNull();
     host.querySelector(`a`)!.click();
     await nextTick();
-    expect(host.textContent).toContain(`Waiting for the sign-in to land on rog`);
+    expect(host.textContent).toContain(`Waiting for the sign-in on rog`);
     expect(host.querySelector(`input[name="connectCode"]`), `the trip alone opened the paste field`).toBeNull();
 });
 
 it(`a watched sign-in still takes the address back from a browser nothing watches`, async () => {
     const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
-    const elsewhere = [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`somewhere other than rog`))!;
+    const elsewhere = [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Signing in elsewhere`))!;
     elsewhere.click();
     await nextTick();
     const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)!;
@@ -369,7 +369,7 @@ it(`a watched sign-in still takes the address back from a browser nothing watche
 
 it(`draws the dead-end page at the address the provider was really sent to`, async () => {
     const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
-    [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`somewhere other than rog`))!.click();
+    [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Signing in elsewhere`))!.click();
     await nextTick();
     [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`What that page looks like`))!.click();
     await nextTick();
@@ -382,7 +382,7 @@ describe(`what the provider's own pages will show`, () => {
     it(`tells a Google sign-in about Antigravity and its warning, with a way to another provider`, async () => {
         const elsewhere = jest.fn();
         const host = await mount({ ...GOOGLE_FLOW }, `routed`, elsewhere);
-        expect(host.textContent).toContain(`What you'll see`);
+        expect(host.textContent).toContain(`You'll see`);
         expect(host.textContent).toContain(`Google Antigravity`);
         expect(host.textContent).toContain(`Google Play`);
         [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Use another provider instead`))!.click();
@@ -394,7 +394,7 @@ describe(`what the provider's own pages will show`, () => {
         expect(host.textContent).toContain(`Windsurf`);
         expect(host.textContent).toContain(`the company behind Devin`);
         expect(host.textContent).toContain(`an authentication token for Devin CLI`);
-        expect(host.textContent).toContain(`come back here with the token`);
+        expect(host.textContent).toContain(`paste the token its last page shows`);
         expect(host.textContent, `offered a way out of a sign-in nothing warns about`).not.toContain(`Use another provider`);
         await goToProvider();
         const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)!;
@@ -404,7 +404,7 @@ describe(`what the provider's own pages will show`, () => {
 
     it(`says nothing extra for a sign-in whose pages match what the panel says`, async () => {
         const host = await mount({ provider: `claude`, url: `https://claude.ai/oauth/authorize`, code: ``, handshake: `hc` });
-        expect(host.textContent).not.toContain(`What you'll see`);
-        expect(host.textContent).toContain(`come back here with the code`);
+        expect(host.textContent).not.toContain(`You'll see`);
+        expect(host.textContent).toContain(`paste the code it shows`);
     });
 });

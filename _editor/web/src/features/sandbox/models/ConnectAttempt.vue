@@ -47,6 +47,8 @@ const heading = computed(() =>
 const startWait = useProgress(useBusySince(() => phase === `starting`));
 
 const headingId = useId();
+// Where ConnectFlow puts the step's own button: in the heading's row, beside Cancel.
+const actionsId = useId();
 const block = useTemplateRef<HTMLElement>(`block`);
 const headingEl = useTemplateRef<HTMLElement>(`headingEl`);
 
@@ -61,22 +63,24 @@ defineExpose({ reveal });
 </script>
 
 <template>
-    <section ref="block" class="flex flex-col gap-3" :aria-labelledby="headingId">
-        <div class="flex items-start gap-2.5 text-sm">
-            <Icon
-                :name="phase === `failed` ? `exclamation-circle` : phase === `starting` ? `spinner` : `sign-in`"
-                :spin="phase === `starting`"
-                class="shrink-0"
-                :class="phase === `failed` ? `text-danger` : `text-accent`"
-            />
-            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <h3 :id="headingId" ref="headingEl" tabindex="-1" class="text-sm font-medium leading-tight outline-none">{{ heading }}</h3>
-                <template v-if="phase === `starting`">
-                    <p class="text-xs text-subtle" role="status">{{ t(`connect.connectAttempt.opening`) }}</p>
-                    <ProgressMeter v-if="startWait" :progress="startWait" />
-                </template>
-                <p v-else-if="phase === `failed`" class="whitespace-pre-line break-words text-xs text-muted">{{ problem }}</p>
-            </div>
+    <section ref="block" class="flex flex-col gap-1.5" :aria-labelledby="headingId">
+        <!-- One row for every phase: what is happening, then what to press, at the right. The step's own action (Open, Open
+             again) is sent up here by ConnectFlow, so a wide pane no longer stacks a button and three lines in its left third. -->
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h3
+                :id="headingId"
+                ref="headingEl"
+                tabindex="-1"
+                class="mr-auto flex min-w-0 items-center gap-2 text-sm font-medium leading-tight outline-none"
+                :class="phase === `failed` ? `text-danger` : `text-content`"
+            >
+                <Icon v-if="phase === `failed`" name="exclamation-circle" class="shrink-0" />{{ heading }}
+            </h3>
+            <div v-if="phase === `live`" :id="actionsId" class="flex items-center gap-2 empty:hidden"></div>
+            <template v-else-if="phase === `failed`">
+                <Button size="small" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
+                <Button size="small" tier="quiet" :label="t(`ui.action.dismiss`)" @click="emit(`dismiss`)" />
+            </template>
             <!-- Cancel sits with the heading, not inside the steps: it ends this whole attempt, whichever step it is on. -->
             <button
                 v-if="phase !== `failed`"
@@ -89,16 +93,16 @@ defineExpose({ reveal });
             </button>
         </div>
 
-        <template v-if="phase === `live`">
+        <template v-if="phase === `starting`">
+            <p class="flex items-center gap-1.5 text-xs text-subtle" role="status"><Icon name="spinner" spin />{{ t(`connect.connectAttempt.opening`) }}</p>
+            <ProgressMeter v-if="startWait" :progress="startWait" />
+        </template>
+        <p v-else-if="phase === `failed`" class="whitespace-pre-line break-words text-xs text-muted">{{ problem }}</p>
+        <template v-else>
             <!-- A refused step stays beside the steps it refused, not in a banner over the page. -->
             <Notice v-if="problem" :of="{ tone: `danger`, title: problem }" size="sm" />
             <!-- Choosing another provider over this one's sign-in ends this attempt, which puts the others back in front of the reader. -->
-            <ConnectFlow :kind="kind" :provider="provider" roomy @elsewhere="emit(`cancel`)" />
+            <ConnectFlow :kind="kind" :provider="provider" roomy :actions-target="actionsId" @elsewhere="emit(`cancel`)" />
         </template>
-
-        <div v-else-if="phase === `failed`" class="flex flex-wrap items-center gap-2">
-            <Button size="small" :label="t(`ui.action.tryAgain`)" @click="emit(`retry`)" />
-            <Button size="small" tier="quiet" :label="t(`ui.action.dismiss`)" @click="emit(`dismiss`)" />
-        </div>
     </section>
 </template>

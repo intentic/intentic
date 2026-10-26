@@ -1,4 +1,4 @@
-import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import type { LoginStart, Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { ProviderRefusals, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { STARTED_AT } from "./roster";
 import { demoMode } from "../mode";
@@ -136,4 +136,23 @@ export const demoRefusals = (): ProviderRefusals => ({
             },
         ],
     },
+});
+
+// A provider-account sign-in, started: the shape each provider would really take, so the connect panel can be seen in each.
+// Devin's is a redirect two of the owner's machines watch, Claude's a paste-back, every other one a device code. None lands.
+export const demoSignInStart = (provider: string, variant: string | undefined, state: string): LoginStart => ({
+    url: `https://example.com/demo-sign-in?provider=${provider}`,
+    code: provider === `devin` || provider === `claude` ? `` : `DEMO-4821`,
+    state: provider === `devin` ? state : ``,
+    flow: provider === `devin` ? `redirect` : provider === `claude` ? `paste` : `device`,
+    variant: variant ?? ``,
+    handshake: `demo-handshake-${provider}`,
+    expiresAt: Date.now() + 15 * 60 * 1000,
+    catchers:
+        provider === `devin`
+            ? [
+                  { kind: `device`, label: `omen` },
+                  { kind: `device`, label: `rog` },
+              ]
+            : [],
 });

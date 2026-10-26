@@ -66,7 +66,7 @@ import {
 import { commit, discard, gitChanges, indexRunState, stage, startIndexRun, unstage } from "./gitIndex";
 import { demoMode, demoQuiet, deskEdition, freshEdition, noModels } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
-import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS, demoRefusals } from "./accounts";
+import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS, demoRefusals, demoSignInStart } from "./accounts";
 import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
 import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "./events";
@@ -293,15 +293,7 @@ export const procedures = {
         }),
         // Starts a provider-account sign-in (Cursor's, Grok's) in its device shape, so the connect view's card can be seen
         // holding one: a page to open, a code to copy, the wait for approval. Like the routed one below it never lands.
-        start: ({ provider, variant }) => ({
-            url: `https://example.com/demo-sign-in?provider=${provider}`,
-            code: `DEMO-4821`,
-            state: ``,
-            flow: `device`,
-            variant: variant ?? ``,
-            handshake: `demo-handshake-${provider}`,
-            expiresAt: Date.now() + 15 * 60 * 1000,
-        }),
+        start: ({ provider, variant }) => demoSignInStart(provider, variant, DEMO_CONNECT_STATE),
         status: () => ({ status: `wait` }),
         cancel: () => ({ ok: true }),
     },

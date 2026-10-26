@@ -20,7 +20,14 @@ const t = useT();
 
 // `roomy` is the same panel given a page to stand on rather than a strip above a composer: full-size controls, and the
 // dead-end picture already open, since there the picture is reference beside the button instead of competing with it.
-const { kind, provider, roomy = false } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider; roomy?: boolean }>();
+// `actionsTarget` is the id of the host's heading row: the step's own button (Open, Open again) goes there, beside Cancel,
+// so the panel reads as one line of what to do with its button at the end instead of a stack in the pane's left third.
+const {
+    kind,
+    provider,
+    roomy = false,
+    actionsTarget,
+} = defineProps<{ kind: `native` | `routed`; provider: AgentProvider; roomy?: boolean; actionsTarget?: string }>();
 // The reader would rather not go through this provider's sign-in after reading what it shows: the host ends the attempt,
 // which puts the other providers back in front of them.
 const emit = defineEmits<{ elsewhere: [] }>();
@@ -83,7 +90,7 @@ const pasteLabel = computed(() => {
 });
 const pastePlaceholder = computed(() => {
     if (redirectFlow.value) {
-        return t(`sandbox.connectFlow.pasteAddressPlaceholder`);
+        return t(`sandbox.connectFlow.pasteAddressPlaceholder`, { destination: destination.value });
     }
     return token.value ? t(`sandbox.connectFlow.pasteTokenPlaceholder`) : t(`sandbox.connectFlow.pasteCodePlaceholder`);
 });
@@ -311,6 +318,23 @@ watch(onScreen, () => {
 });
 onUnmounted(() => arm(false));
 
+// Which of the panel's steps is on screen, read once so the heading row's button and the body cannot disagree.
+// `watched`: a device of the owner's catches the landing, so going is the whole of it. `go`: step one of a paste sign-in,
+// the trip. `paste`: step two, the field.
+const step = computed<`redeeming` | `device` | `watched` | `go` | `paste`>(() => {
+    if (redeeming.value) {
+        return `redeeming`;
+    }
+    if (deviceFlow.value) {
+        return `device`;
+    }
+    if (watching.value && !pasteInstead.value && pasted.value.trim() === ``) {
+        return `watched`;
+    }
+    return broughtBack.value ? `paste` : `go`;
+});
+const onOpen = (event: Event): void => (step.value === `device` ? openDevicePage(event) : openedProvider());
+
 // Naming is a rename, not a required step (the daemon derives one when blank); folded away until asked for, and
 // re-folds with each new handshake. Native only, a subscription is named by the account it signs in as.
 const namingAccount = ref(false);
@@ -327,162 +351,160 @@ watch(flow, (live) => {
 </script>
 
 <template>
-    <div v-if="flow" class="flex flex-col gap-2.5">
-        <!-- The exchange takes the whole panel rather than spinning one button inside it: what was brought back is already spent. -->
-        <p v-if="redeeming" class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ submitNote }}</p>
-        <!-- Out-of-band sign-in: the page finishes it, so the button and the wait are the whole panel. -->
-        <template v-else-if="deviceFlow">
-            <!-- `self-start`: without it the button stretches edge to edge, reading as a banner, not step one of three. -->
+    <div v-if="flow" class="@container flex flex-col gap-2" :class="bodyText">
+        <!-- The step's one button, in the host's heading row when it has one (in place otherwise). Step two's field is the
+             subject, so going back to the provider is a quiet link there rather than a second primary press. -->
+        <Teleport defer :to="`#${actionsTarget}`" :disabled="actionsTarget === undefined">
             <Button
+                v-if="step === `device` || step === `watched` || step === `go`"
                 as="a"
-                class="self-start touch-target"
-                :size="controlSize"
+                class="touch-target"
+                :size="actionsTarget === undefined ? controlSize : `small`"
                 :href="flow.url"
                 target="_blank"
                 rel="noopener"
-                @click="openDevicePage"
+                @click="onOpen"
             >
                 <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
             </Button>
-            <!-- Placed above what it describes: an instruction read after the fact is read too late. -->
-            <p v-if="hint" :class="[bodyText, `text-subtle`]">{{ hint }}</p>
-            <!-- Device code is read, not typed: sized for a second screen, and copied by a press on it as well as by the icon. -->
-            <div
-                v-if="flow.code"
-                class="relative flex items-center justify-between gap-2 rounded-md border border-line bg-canvas px-3 py-1.5 text-base"
-            >
-                <!-- A refused copy leaves the code in a field already selected, for the reader's own copy. -->
-                <input
-                    v-if="copyRefused"
-                    ref="codeField"
-                    readonly
-                    :value="flow.code"
-                    :aria-label="t(`sandbox.connectFlow.codeLabel`)"
-                    :class="ui.input({ size: `inline` }, `min-w-0 flex-1 font-mono font-semibold tracking-[0.2em]`)"
-                    @focus="codeField?.select()"
-                />
-                <button
-                    v-else
-                    type="button"
-                    class="min-w-0 truncate text-left font-mono text-base font-semibold tracking-[0.2em] text-content"
-                    :title="t(`sandbox.connectFlow.copyCode`)"
-                    @click="copyCode"
-                >
-                    {{ flow.code }}
-                </button>
-                <!-- allow(recipes): A COPY GLYPH THAT SAYS "COPIED" for a beat after the press: while the word shows,
-                     the box is the word's width, then it is the glyph's square again. -->
-                <button
-                    type="button"
-                    :aria-label="t(`sandbox.connectFlow.copyCode`)"
-                    :class="ui.iconButton({ tone: `subtle` }, justCopied && `w-auto px-1.5 text-success`)"
-                    @click="copyCode"
-                >
-                    <!-- Keyed by the press, so each one pops its own tick (the checkbox's) rather than leaving the last one standing. -->
-                    <span
-                        :key="justCopied ? copyPresses : 0"
-                        class="flex items-center gap-1 text-2xs"
-                        :class="{ 'motion-safe:animate-[ui-check-in_160ms_cubic-bezier(0.2,0.9,0.3,1.25)]': justCopied }"
+            <a v-else-if="step === `paste`" :class="ui.textButton({ size: `xs` })" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
+                {{ t(`sandbox.connectFlow.openAgain`) }}<Icon name="external-link" />
+            </a>
+        </Teleport>
+
+        <!-- The exchange takes the whole panel: what was brought back is already spent. -->
+        <p v-if="step === `redeeming`" class="flex items-center gap-1.5 text-subtle"><Icon name="spinner" spin />{{ submitNote }}</p>
+
+        <!-- Out-of-band sign-in: the page finishes it. What to do (or that the code is already copied), then the code with the wait beside it. -->
+        <template v-else-if="step === `device`">
+            <p v-if="flow.code && copyRefused" class="text-warning">{{ t(`sandbox.connectFlow.copyRefused`) }}</p>
+            <p v-else-if="flow.code && codeCopied" class="text-muted">{{ t(`sandbox.connectFlow.codeCopied`) }}</p>
+            <p v-else-if="hint" class="text-muted">{{ hint }}</p>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <!-- Device code is read, not typed: sized for a second screen, and copied by a press on it as well as by the icon. -->
+                <div v-if="flow.code" class="relative flex items-center gap-2 rounded-md border border-line bg-canvas py-1 pl-3 pr-1 text-base">
+                    <!-- A refused copy leaves the code in a field already selected, for the reader's own copy. -->
+                    <input
+                        v-if="copyRefused"
+                        ref="codeField"
+                        readonly
+                        :value="flow.code"
+                        :aria-label="t(`sandbox.connectFlow.codeLabel`)"
+                        :class="ui.input({ size: `inline` }, `w-40 font-mono font-semibold tracking-[0.2em]`)"
+                        @focus="codeField?.select()"
+                    />
+                    <button
+                        v-else
+                        type="button"
+                        class="min-w-0 truncate text-left font-mono text-base font-semibold tracking-[0.2em] text-content"
+                        :title="t(`sandbox.connectFlow.copyCode`)"
+                        @click="copyCode"
                     >
-                        <Icon :name="justCopied ? `check` : `copy`" />
-                        <span v-if="justCopied" aria-hidden="true">{{ t(`ui.action.copied`) }}</span>
-                    </span>
-                </button>
-                <span class="sr-only" aria-live="polite"
-                    ><span :key="copyPresses">{{ copyAnnouncement }}</span></span
-                >
+                        {{ flow.code }}
+                    </button>
+                    <!-- allow(recipes): A COPY GLYPH THAT SAYS "COPIED" for a beat after the press: while the word shows,
+                         the box is the word's width, then it is the glyph's square again. -->
+                    <button
+                        type="button"
+                        :aria-label="t(`sandbox.connectFlow.copyCode`)"
+                        :class="ui.iconButton({ tone: `subtle` }, justCopied && `w-auto px-1.5 text-success`)"
+                        @click="copyCode"
+                    >
+                        <!-- Keyed by the press, so each one pops its own tick (the checkbox's) rather than leaving the last one standing. -->
+                        <span
+                            :key="justCopied ? copyPresses : 0"
+                            class="flex items-center gap-1 text-2xs"
+                            :class="{ 'motion-safe:animate-[ui-check-in_160ms_cubic-bezier(0.2,0.9,0.3,1.25)]': justCopied }"
+                        >
+                            <Icon :name="justCopied ? `check` : `copy`" />
+                            <span v-if="justCopied" aria-hidden="true">{{ t(`ui.action.copied`) }}</span>
+                        </span>
+                    </button>
+                    <span class="sr-only" aria-live="polite"
+                        ><span :key="copyPresses">{{ copyAnnouncement }}</span></span
+                    >
+                </div>
+                <p class="flex items-center gap-1.5 text-subtle"><Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}</p>
             </div>
-            <p v-if="flow.code && copyRefused" :class="[bodyText, `text-warning`]">{{ t(`sandbox.connectFlow.copyRefused`) }}</p>
-            <p v-else-if="flow.code && codeCopied" :class="[bodyText, `text-subtle`]">{{ t(`sandbox.connectFlow.codeCopied`) }}</p>
-            <!-- Kept beside the copied note: the wait is still on after the code went to the clipboard. -->
-            <p class="flex items-center gap-1.5 text-2xs text-subtle"><Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}</p>
         </template>
 
-        <!-- Watched on the owner's own machine: going is the whole of it, and the paste is folded behind "somewhere else". -->
-        <template v-else-if="watching && !pasteInstead && pasted.trim() === ``">
-            <p :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.finishesOn`, { where: watchedOn }) }}</p>
-            <ConnectTripNote v-if="tripNote" :note="tripNote" :class="bodyText" @elsewhere="emit(`elsewhere`)" />
-            <Button
-                as="a"
-                class="self-start touch-target"
-                :size="controlSize"
-                :href="flow.url"
-                target="_blank"
-                rel="noopener"
-                @click="openedProvider"
-            >
-                <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
-            </Button>
-            <p v-if="connectSent" class="flex items-center gap-1.5 text-2xs text-subtle">
-                <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingOn`, { where: watchedOn }) }}
-            </p>
-            <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="bringItBack">
-                {{ t(`sandbox.connectFlow.notThere`, { where: watchedOn }) }}
-            </button>
-        </template>
-
-        <!-- Step one, and the only thing on the panel: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->
-        <template v-else-if="!broughtBack">
-            <i18n-t v-if="redirectFlow" keypath="sandbox.connectFlow.comeBackWithAddress" tag="p" :class="[bodyText, `text-muted`]" scope="global">
-                <template #destination>{{ destination }}</template>
-                <template #wontLoad
-                    ><span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span></template
-                >
-            </i18n-t>
-            <p v-else :class="[bodyText, `text-muted`]">
-                {{ token ? t(`sandbox.connectFlow.comeBackWithToken`) : t(`sandbox.connectFlow.comeBackWithCode`) }}
-            </p>
-            <ConnectTripNote v-if="tripNote" :note="tripNote" :class="bodyText" @elsewhere="emit(`elsewhere`)" />
-            <Button
-                as="a"
-                class="self-start touch-target"
-                :size="controlSize"
-                :href="flow.url"
-                target="_blank"
-                rel="noopener"
-                @click="openedProvider"
-            >
-                <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
-            </Button>
-            <!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
-            <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="connectSent = true">
-                {{ t(`sandbox.connectFlow.alreadyPasteHere`) }}
-            </button>
-        </template>
-
-        <!-- Step two: the field is the subject now, so nothing else on the panel competes for the press. -->
-        <template v-else>
-            <label :for="pasteFieldId" :class="[bodyText, `text-muted`]">{{ pasteLabel }}</label>
-            <div class="flex gap-2">
-                <input
-                    :id="pasteFieldId"
-                    ref="pasteField"
-                    v-model="pasted"
-                    name="connectCode"
-                    :placeholder="pastePlaceholder"
-                    :class="roomy ? ui.input(`min-w-0 flex-1 font-mono`) : ui.input({ size: `sm` }, `min-w-0 flex-1 font-mono`)"
-                    @keydown.enter="finish"
-                />
-                <Button
-                    :label="t(`sandbox.connectFlow.finish`)"
-                    class="touch-target"
-                    :size="controlSize"
-                    :disabled="pasted.trim().length === 0"
-                    @click="finish"
-                />
-            </div>
-            <div class="flex flex-wrap items-center gap-x-4">
-                <a :class="ui.textButton({ size: `xs` })" :href="flow.url" target="_blank" rel="noopener" @click="openedProvider">
-                    {{ t(`sandbox.connectFlow.openAgain`, { destination }) }}<Icon name="external-link" />
-                </a>
-                <!-- The dead-end page as reference rather than instruction: folded, and inert, so a press on it can't be swallowed by a picture. -->
-                <button v-if="redirectFlow" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="showDeadEnd = !showDeadEnd">
-                    <Icon :name="showDeadEnd ? `chevron-down` : `chevron-right`" />{{ t(`sandbox.connectFlow.whatPageLooksLike`) }}
+        <!-- Watched on the owner's own machine: where it finishes (then the wait for it), and the paste behind "elsewhere". -->
+        <template v-else-if="step === `watched`">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <p v-if="connectSent" class="flex items-center gap-1.5 text-subtle">
+                    <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingOn`, { where: watchedOn }) }}
+                </p>
+                <p v-else class="text-muted">{{ t(`sandbox.connectFlow.finishesOn`, { where: watchedOn }) }}</p>
+                <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="bringItBack">
+                    {{ t(`sandbox.connectFlow.notThere`) }}
                 </button>
+            </div>
+            <ConnectTripNote v-if="tripNote" :note="tripNote" @elsewhere="emit(`elsewhere`)" />
+        </template>
+
+        <!-- Step one: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->
+        <template v-else-if="step === `go`">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <i18n-t v-if="redirectFlow" keypath="sandbox.connectFlow.comeBackWithAddress" tag="p" class="text-muted" scope="global">
+                    <template #wontLoad
+                        ><span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span></template
+                    >
+                </i18n-t>
+                <p v-else class="text-muted">
+                    {{ token ? t(`sandbox.connectFlow.comeBackWithToken`) : t(`sandbox.connectFlow.comeBackWithCode`) }}
+                </p>
+                <!-- The way in for someone who already made the trip (a reopened panel, a second tab); without it the only way out of step one was Cancel. -->
+                <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="connectSent = true">
+                    {{ t(`sandbox.connectFlow.alreadyPasteHere`) }}
+                </button>
+            </div>
+            <ConnectTripNote v-if="tripNote" :note="tripNote" @elsewhere="emit(`elsewhere`)" />
+        </template>
+
+        <!-- Step two: the field is the subject. On a wide pane the dead-end picture stands beside it as reference, not under it. -->
+        <div v-else class="flex flex-col gap-3 @2xl:flex-row @2xl:items-start">
+            <div class="flex min-w-0 max-w-xl flex-1 flex-col gap-2">
+                <label :for="pasteFieldId" class="sr-only">{{ pasteLabel }}</label>
+                <div class="flex gap-2">
+                    <input
+                        :id="pasteFieldId"
+                        ref="pasteField"
+                        v-model="pasted"
+                        name="connectCode"
+                        :placeholder="pastePlaceholder"
+                        :class="roomy ? ui.input(`min-w-0 flex-1 font-mono`) : ui.input({ size: `sm` }, `min-w-0 flex-1 font-mono`)"
+                        @keydown.enter="finish"
+                    />
+                    <Button
+                        :label="t(`sandbox.connectFlow.finish`)"
+                        class="touch-target"
+                        :size="controlSize"
+                        :disabled="pasted.trim().length === 0"
+                        @click="finish"
+                    />
+                </div>
+                <div v-if="redirectFlow || namesTheAccount" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <!-- The dead-end page as reference rather than instruction: folded, and inert, so a press on it can't be swallowed by a picture. -->
+                    <button v-if="redirectFlow" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="showDeadEnd = !showDeadEnd">
+                        <Icon :name="showDeadEnd ? `chevron-down` : `chevron-right`" />{{ t(`sandbox.connectFlow.whatPageLooksLike`) }}
+                    </button>
+                    <template v-if="namesTheAccount">
+                        <button v-if="!namingAccount" type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="namingAccount = true">
+                            {{ t(`sandbox.connectFlow.nameAccount`) }}
+                        </button>
+                        <input
+                            v-else
+                            v-model="connectLabel"
+                            name="accountLabel"
+                            :placeholder="t(`sandbox.words.accountName`)"
+                            :class="ui.input({ size: `sm` }, `min-w-0`)"
+                        />
+                    </template>
+                </div>
             </div>
             <div
                 v-if="redirectFlow && showDeadEnd"
-                class="pointer-events-none overflow-hidden rounded-lg border border-line bg-canvas select-none"
+                class="pointer-events-none max-w-md shrink-0 overflow-hidden rounded-lg border border-line bg-canvas select-none @2xl:w-80"
                 aria-hidden="true"
             >
                 <div class="flex items-center gap-2 border-b border-line-subtle px-2 py-1.5">
@@ -501,18 +523,6 @@ watch(flow, (live) => {
                     <span class="text-2xs text-subtle">{{ t(`sandbox.connectFlow.siteCantReached`) }}</span>
                 </div>
             </div>
-            <template v-if="namesTheAccount">
-                <button v-if="!namingAccount" type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="namingAccount = true">
-                    {{ t(`sandbox.connectFlow.nameAccount`) }}
-                </button>
-                <input
-                    v-else
-                    v-model="connectLabel"
-                    name="accountLabel"
-                    :placeholder="t(`sandbox.words.accountName`)"
-                    :class="ui.input({ size: `sm` }, `min-w-0`)"
-                />
-            </template>
-        </template>
+        </div>
     </div>
 </template>
