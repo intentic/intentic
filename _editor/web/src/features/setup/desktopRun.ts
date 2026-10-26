@@ -98,7 +98,7 @@ export const minutesLeft = (report: DesktopSetupReport): number | undefined =>
 /* A DOWNLOAD TOO SLOW TO WAIT FOR. */
 
 // Past ten minutes still to go by the app's estimate, or, from an app that gives none in seconds, eight minutes into
-// the pull: the reader is offered a machine of ours instead, and taking it stops the PC's download (Setup.vue).
+// the pull: the reader is offered a machine of ours instead, and taking it stops the PC's download (add/useAddSandbox.ts).
 export const SLOW_DOWNLOAD_LEFT_S = 600;
 export const SLOW_DOWNLOAD_MS = 8 * 60_000;
 

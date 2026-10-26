@@ -138,9 +138,9 @@ const edit = (link: InboundLinkSummary): void => {
     draft.value = { runAs: link.terms.runAs, actsAs: link.terms.actsAs ?? NO_PERSONA, approve: link.terms.approve, turnsPerHour: link.terms.turnsPerHour };
 };
 const save = async (link: InboundLinkSummary): Promise<void> => {
-    const { actsAs, approve, turnsPerHour, runAs } = draft.value;
+    const { actsAs, approve, turnsPerHour, runAs: service } = draft.value;
     // Owner again is a null, which takes the service off; absence would keep the one the link had.
-    const input: InboundLinkTermsUpdate = { approve, turnsPerHour, runAs: runAs ?? null };
+    const input: InboundLinkTermsUpdate = { approve, turnsPerHour, runAs: service ?? null };
     if (actsAs !== NO_PERSONA) {
         input.actsAs = actsAs;
     }

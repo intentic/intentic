@@ -190,7 +190,7 @@ describe(`sandbox routes`, () => {
         expect(result).toEqual({ ok: true });
         const [mail] = sent.mock.calls[0] as [{ to: string; html: string }];
         expect(mail.to).toBe(`owner@example.com`);
-        expect(mail.html).toContain(`https://app.test/setup?sandbox=s1`);
+        expect(mail.html).toContain(`https://app.test/home?add=sandbox&finish=s1`);
         // Secrets stay off the wire; a mail is stored and forwarded by parties we have no relationship with.
         expect(mail.html).not.toContain(`s3cr3t-code`);
         expect(mail.html).not.toContain(sandboxRow.token);
@@ -210,7 +210,7 @@ describe(`sandbox routes`, () => {
         );
 
         expect(warn).toHaveBeenCalledWith(
-            { to: `owner@example.com`, link: `https://app.test/setup?sandbox=s1` },
+            { to: `owner@example.com`, link: `https://app.test/home?add=sandbox&finish=s1` },
             expect.stringContaining(`unconfigured`),
         );
     });

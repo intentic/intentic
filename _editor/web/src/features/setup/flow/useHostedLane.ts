@@ -117,7 +117,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
             [machineCall.value, releaseCall.value].filter((call) => call?.state === `failed`).toSorted((a, b) => (b?.order ?? 0) - (a?.order ?? 0))[0]
                 ?.failure,
     );
-    // A refusal for want of Google is answered by the ways on from there (Setup.vue), not said as a failure.
+    // A refusal for want of Google is answered by the ways on from there (SetupNeedsGoogle.vue), not said as a failure.
     const hostedError = computed(() => (hostedFailure.value?.google === true ? undefined : hostedFailure.value?.notice));
     const clearHostedError = (): void => {
         work.dismiss(`machine`);
@@ -485,7 +485,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
         hostedProjects,
         hostedSpent,
         hostedSuspended,
-        // Read with the offer's `needsGoogle` by the setup screen, which offers the ways on (Setup.vue hostedNeedsGoogle).
+        // Read with the offer's `needsGoogle` by the press (add/useAddSandbox.ts), whose form offers the ways on.
         refusedForGoogle,
         hostedFull,
         hostedHours,

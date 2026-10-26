@@ -67,7 +67,7 @@ describe(`the row this visit sets up`, () => {
         expect(row.finished.value).toBe(true);
     });
 
-    // A hosted project's folder reaches the app before its workspace opens (hostedProject.ts): until it has, the page
+    // A hosted project's folder reaches the app before its workspace opens: until it has, the page
     // stays, and the next check-in reading asks again.
     it(`opens the workspace only once the row's hand-off has gone through`, async () => {
         const handOff = jest.fn(async (_id: string) => false);

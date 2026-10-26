@@ -3,7 +3,7 @@ import type { HostedWaitView } from "./hostedWait";
 
 // A healthy wait on a machine of ours: one row per step, the current one spinning, and the note under them that carries
 // the origin's estimate and the time waited. A failed wait says its problem instead, which is the caller's to draw
-// (Setup.vue offers a start-over beside it). Shared by /setup's card and the Add sandbox dialog.
+// (add/AddSandboxRun.vue offers a start-over beside it), on Home and in its dialog alike.
 
 const { wait } = defineProps<{ wait: Pick<HostedWaitView, `steps` | `note`> }>();
 </script>

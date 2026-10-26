@@ -1,4 +1,4 @@
-// The 48 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
+// The 50 groups of the daemon's surface, hand-written since the contract can't state reading order or audience. Order
 // is editorial, not alphabetical; shelves are consecutive runs of it, enforced by spec.test.ts, which also fails a
 // contract group missing here or an entry with no routes.
 
@@ -192,6 +192,22 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "The named parts of the workspace a teammate's reach is granted in",
         description:
             "An area is a name over a set of folders, and it is the unit access is handed out in: widening what a team sees is one edit here rather than one edit per person. Reading them is anybody's, since a fenced person is shown the name of the fence they are behind; writing one changes who sees what on their next request, so both writes are the sandbox owner's. An area people still hold cannot be deleted, because a grant pointing at nothing is a fence with no answer.",
+    },
+    {
+        name: "accessProfiles",
+        shelf: "workspace",
+        label: "Access profiles",
+        summary: "Named sets of what a holder may reach, shared by people and services",
+        description:
+            "A profile names the areas, connections, secrets, AI accounts and tools its holders reach, so a team or a service is pointed at one answer rather than given its own copy. A maintainer reads them; both writes are the sandbox owner's, since editing one changes what everybody holding it may do and closes their open connections. A profile anyone or anything still holds cannot be deleted.",
+    },
+    {
+        name: "services",
+        shelf: "workspace",
+        label: "Services",
+        summary: "Who unattended work acts as, and the access profile it is held to",
+        description:
+            "Automations, sender rules, inbound links and control tokens run as a service: a named identity with a steward and an access profile. A maintainer may write one, since a maintainer writes the automations that run as it, but what a service reaches is never more than its steward may. One still in use cannot be deleted.",
     },
 
     // Agent setup

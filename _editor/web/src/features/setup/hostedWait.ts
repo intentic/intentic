@@ -89,8 +89,8 @@ export interface HostedWaitInput {
     readonly warm: boolean | undefined;
     // Elapsed wait time; only escalates an otherwise-progressing wait, never invents a diagnosis on its own.
     readonly waitedMs: number;
-    // How long the CURRENT down reading has held, 0 whenever the machine last read as anything else. The page
-    // keeps this clock (Setup.vue), since a pure view of one poll cannot tell a stop from a transition.
+    // How long the CURRENT down reading has held, 0 whenever the machine last read as anything else. The hosted
+    // lane keeps this clock (flow/useHostedLane.ts), since a pure view of one poll cannot tell a stop from a transition.
     readonly downForMs: number;
     // Whether a start this page asked for is in flight. A machine somebody is already starting is not a machine
     // that won't come up, so no verdict is passed over one.

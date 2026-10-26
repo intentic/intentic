@@ -117,7 +117,7 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView({ ...stopping, downForMs: 46_000 }).failure?.problem).toContain(`isn't running`);
     });
 
-    /* THE VERDICT THIS CARD NOW HAS TO EARN. The page starts a stopped machine itself (Setup.vue), so the only
+    /* THE VERDICT THIS CARD NOW HAS TO EARN. The hosted lane starts a stopped machine itself (flow/useHostedLane.ts), so the only
      * thing a stop means while that start is running is that a boot is about to begin. */
     it(`says nothing about a machine somebody is already starting`, () => {
         const starting = wait({ machine: `stopped`, downForMs: 60_000, waking: true });

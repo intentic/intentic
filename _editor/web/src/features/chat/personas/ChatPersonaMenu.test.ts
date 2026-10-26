@@ -72,7 +72,7 @@ it(`offers full access as a pick, and says what it means here`, () => {
     const element = mount(`work`);
 
     const fullAccess = rowLabelled(element, `Full access`)!;
-    expect(text(fullAccess)).toContain(`Every account you've connected`);
+    expect(text(fullAccess)).toContain(`Every account and tool within`);
     fullAccess.click();
     expect(events).toEqual([undefined]);
 });

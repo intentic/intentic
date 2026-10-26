@@ -169,7 +169,7 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
             <button v-if="sessionEnd !== undefined && hostedOffered" type="button" :class="ui.textButton({ size: `xs` }, `self-start`)" @click="emit(`elsewhere`)">
                 {{ t(`setup.desktopSetupProgress.useHostedInstead`) }}
             </button>
-            <!-- A calm offer, not a warning: the download is fine, only slow. Taking it stops the download on this PC (Setup.vue),
+            <!-- A calm offer, not a warning: the download is fine, only slow. Taking it stops the download on this PC (add/useAddSandbox.ts),
                  since the machine of ours takes over the sandbox's address, and the offer says so. -->
             <div v-if="slow" class="flex flex-col gap-2 text-2xs text-muted">
                 <span>

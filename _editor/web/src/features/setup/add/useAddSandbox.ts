@@ -59,7 +59,7 @@ export interface AddSandboxHost {
     readonly appStays?: boolean;
     readonly mobile: Readonly<Ref<boolean>>;
     readonly openDesktopLink: (link: string) => void;
-    // One silent try at the browser's sandbox credential while a machine of ours boots (Setup.vue's own).
+    // One silent try at the browser's sandbox credential while a machine of ours boots.
     readonly warmCredential: () => Promise<void>;
     // The row has reported in and is selected: open it.
     readonly enter: () => Promise<void>;

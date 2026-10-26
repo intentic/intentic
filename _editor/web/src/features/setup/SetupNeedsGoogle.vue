@@ -6,8 +6,8 @@ import { ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useAuth } from "../../client/auth/useAuth";
 
-// Drawn in place of the hosted rung's button while the free machine needs Google linked first (Setup.vue's
-// `hostedNeedsGoogle`). `chooseMine` is the own-computer rung's press, absent where the ladder offers no such rung.
+// Drawn in place of the hosted rung's button while the free machine needs Google linked first (the Add sandbox
+// form's `hostedProblem`, add/AddSandboxForm.vue). `chooseMine` is the own-computer rung's press, absent where the ladder offers no such rung.
 const t = useT();
 const route = useRoute();
 const { linkGoogle } = useAuth();

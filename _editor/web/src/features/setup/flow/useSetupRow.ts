@@ -17,8 +17,8 @@ export interface SetupRowHost {
     readonly sandbox: Pick<SandboxStore, `sandboxes` | `create` | `select` | `remove`>;
     // Opens the workspace once the row is selected.
     readonly enter: () => Promise<void>;
-    // What the reported-in row still needs before its workspace opens (a hosted project's folder handed to the app,
-    // hostedProject.ts); false keeps this page, and the registry watch's next reading connects again.
+    // What the reported-in row still needs before its workspace opens (a hosted project's folder handed to the app);
+    // false keeps this page, and the registry watch's next reading connects again.
     readonly handOff?: ((id: string) => Promise<boolean>) | undefined;
     // What a row minted here is named after: the folder a project setup is for. A row found rather than made keeps its
     // own name.

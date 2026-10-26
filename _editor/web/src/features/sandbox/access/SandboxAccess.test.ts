@@ -931,7 +931,7 @@ it(`shows profiles, their tier and service holders, then synchronizes changed ho
     buttonLabelled(`Edit`)?.click();
     await settle();
     buttonLabelled(`Save`)?.click();
-    await waitFor(() => expect(saveProfile).toHaveBeenCalled());
+    await waitFor(() => expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({ id: `engineering`, label: `Engineering` })));
     await waitFor(() => expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `collaborator` }));
 });
 

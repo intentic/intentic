@@ -11,8 +11,8 @@ import { useSetupRunProgress } from "./progress/useSetupRunProgress";
 // A press on a connected machine, drawn as the steps `ic sandbox connect` takes rather than as the lines it prints
 // (2026-10-21: a credential helper's complaint and a key file's path were the page's progress). The lines are read by
 // the engine the desktop app reads its own install with (progress/), drawn by the card every long run on a machine is
-// (<StagedProgress>), and kept one press away, opening by themselves when the run fails. Shared by /setup's card
-// (SetupOnMachine.vue) and the Add sandbox dialog (add/AddSandboxDialog.vue).
+// (<StagedProgress>), and kept one press away, opening by themselves when the run fails. Drawn by the Add sandbox
+// run (add/AddSandboxRun.vue), on Home and in its dialog alike.
 
 const { door, machine } = defineProps<{
     // The machine the run went to.
