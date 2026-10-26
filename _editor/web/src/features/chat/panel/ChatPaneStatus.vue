@@ -5,7 +5,7 @@ import { formatElapsed, formatTokens, Icon, ProgressRing, ResponsiveOverlay, typ
 import { useNow } from "@intentic/ui/async";
 import { formatClock } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import KeepWarmPanel from "../../../parts/fleet/KeepWarmPanel.vue";
 import { contextPct } from "../../../models/agent-status/agentStatus-meta";
 import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
@@ -18,6 +18,8 @@ import { useRole } from "../../../client/sandbox/useRole";
 import { useAudience } from "../../../app/useAudience";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
+import HomeDoor from "./pane/HomeDoor.vue";
+import { homeConversation } from "../../../models/home/homeChat";
 import UsageMeter from "../session/UsageMeter.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -35,12 +37,18 @@ const { block, hint } = defineProps<{
     hint: string;
 }>();
 
-const { isGuest } = useRole();
+const { isGuest, homeOnly } = useRole();
 // A maker's strip keeps the one reading they can act on, how much of the allowance is left, said as that; the context
 // window and the prompt cache's clock are a developer's instruments and stay off it.
 const { maker } = useAudience();
 const { contextUsage, provider, account, model, conversation } = usePaneView();
 const { mobile, keyboardInset } = useDevice();
+// Under the master view's own chat, the sandbox it talks to and the way inside it (pane/HomeDoor.vue). On a phone too, where
+// it is the one way in that shows: there the strip takes a row for it. A home-only guest has no sandbox to enter.
+const route = useRoute();
+const homeDoor = computed(
+    () => route.name === `home` && !homeOnly.value && homeConversation.value?.conversationId === conversation.value.conversationId,
+);
 
 // Per-conversation context-window fill: a ring that warns as the chat approaches auto-compaction.
 const contextRing = computed(() => {
@@ -171,7 +179,7 @@ const usageChip = computed(() => {
     <!-- Keep the composer above the mobile keyboard inset. -->
     <div
         class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 text-2xs text-subtle"
-        :class="{ 'pb-2': !mobile || block !== undefined }"
+        :class="{ 'pb-2': !mobile || block !== undefined || homeDoor }"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
         <!-- Whether this transcript shows its tool calls; left of the hint so it stays reachable on narrow panes. Not on a
@@ -184,6 +192,7 @@ const usageChip = computed(() => {
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden min-w-0 flex-1 truncate">{{ hint }}</span>
+        <HomeDoor v-if="homeDoor" :class="{ 'ml-auto': mobile && block === undefined }" />
         <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only the refusal stands here, and the strip takes no room without it:
              the readouts are the desktop's. Under a phone's composer each held a whole row for a glance nobody takes there,
              and each has its own place on the phone (running jobs on their transcript rows and the card, keeping the chat

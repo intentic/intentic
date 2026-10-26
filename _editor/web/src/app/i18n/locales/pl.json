@@ -3401,6 +3401,11 @@
             "warmFor": "Ciepła przez",
             "keptUnread": "Twoja następna wiadomość rozpocznie nową sesję albo pójdzie na innym modelu, więc nie odczyta tej pamięci podręcznej. Otwórz, aby przestać ją podtrzymywać."
         },
+        "homeDoor": {
+            "talkingTo": "Rozmowa z",
+            "open": "Otwórz",
+            "openNamed": "Otwórz {name}"
+        },
         "chatPanel": {
             "backToRunsDiagram": "Wróć do diagramu przebiegu",
             "chatsStayOpen": "Czaty zostają otwarte",

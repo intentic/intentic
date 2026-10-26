@@ -110,7 +110,8 @@ watch(
     <HomeNoSandbox v-if="noSandbox" />
     <section v-else class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <!-- No top bar over the chat (a sandbox name, status, Open button), by the owner's decision (it came back once already): the
-             rail's tile already names the sandbox, and double-click or Enter on it goes inside. -->
+             rail's tile already names the sandbox, double-click or Enter on it goes inside, and the line under the composer
+             names it again with the same way in (chat/panel/pane/HomeDoor.vue). -->
         <HomeDetour v-if="shownView" :view="shownView" />
         <details v-if="!shownView && ledger.length" class="shrink-0 border-b border-line px-4 py-2 text-xs" open>
             <summary class="cursor-pointer text-muted">{{ t(`home.work`) }} · {{ ledger.length }}</summary>

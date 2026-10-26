@@ -3401,6 +3401,11 @@
             "warmFor": "Noch warm",
             "keptUnread": "Ihre nächste Nachricht startet eine neue Sitzung oder läuft auf einem anderen Modell, liest diesen Cache also nicht. Öffnen, um ihn nicht mehr warm zu halten."
         },
+        "homeDoor": {
+            "talkingTo": "Im Gespräch mit",
+            "open": "Öffnen",
+            "openNamed": "{name} öffnen"
+        },
         "chatPanel": {
             "backToRunsDiagram": "Zurück zum Diagramm des Laufs",
             "chatsStayOpen": "Chats bleiben offen",

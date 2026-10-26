@@ -3401,6 +3401,11 @@
             "warmFor": "Caliente",
             "keptUnread": "Tu próximo mensaje empieza una sesión nueva o funciona con otro modelo, así que no leerá esta caché. Ábrelo para dejar de mantenerla caliente."
         },
+        "homeDoor": {
+            "talkingTo": "Hablando con",
+            "open": "Abrir",
+            "openNamed": "Abrir {name}"
+        },
         "chatPanel": {
             "backToRunsDiagram": "Volver al diagrama de la ejecución",
             "chatsStayOpen": "Los chats siguen abiertos",
