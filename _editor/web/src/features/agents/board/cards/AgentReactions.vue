@@ -109,7 +109,8 @@ const STAT_MARK = `touch-target inline-flex cursor-pointer items-center gap-1 ro
 
 <template>
     <!-- No box at all for an unmarked card: an empty one would still take the row's gap. -->
-    <div v-if="!dense || chips.length > 0" class="inline-flex min-w-0 shrink-0 items-center" :class="dense ? `gap-2.5` : `gap-1`">
+    <!-- `data-stat`: a host's summary row reads it as a stat that keeps the row (AgentCard). -->
+    <div v-if="!dense || chips.length > 0" data-stat class="inline-flex min-w-0 shrink-0 items-center" :class="dense ? `gap-2.5` : `gap-1`">
         <button
             v-for="chip in chips"
             :key="chip.emoji"

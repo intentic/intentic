@@ -758,211 +758,215 @@ const grab = (event: PointerEvent): void => {
             <WorkflowMark :workflow="agent.workflow" />
             <ParentMark v-if="parent !== undefined" :parent="parent" :sandbox-id="agent.sandboxId" />
 
-            <div
-                v-if="
-                    box !== undefined ||
-                    provenance !== undefined ||
-                    model !== undefined ||
-                    agent.branch !== undefined ||
-                    (account !== undefined && !mobile)
-                "
-                class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
-            >
-                <!-- NO DOT BEFORE A FACT THAT LEADS WITH ITS OWN GLYPH (the runner's desktop, the branch's code mark, the
-                     account's person): the glyph already parts it from the one before, and a dot written ahead of it was
-                     left at the start of the next line whenever the line wrapped there ("· 👤 someone"). The dot stays only
-                     between the two facts that are bare words, whose it is and the model. -->
-                <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
-                <span
-                    v-if="box !== undefined"
-                    class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
-                    v-tooltip.top="{ title: t(`agents.words.otherSandbox`), rows: [{ label: t(`agents.words.sandbox`), value: box.name }] }"
+            <!-- THE CORNER SHARES THE MODEL LINE: the two wrap along one line, each block between them a whole line, so they meet only when adjacent. Stats (`data-stat`) keep a row of their own, starting in one place on every card. In `dense` the body already is one wrapping line. -->
+            <div :class="dense ? 'contents' : 'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 [&>:not([data-shares])]:w-full'">
+                <div
+                    v-if="
+                        box !== undefined ||
+                        provenance !== undefined ||
+                        model !== undefined ||
+                        agent.branch !== undefined ||
+                        (account !== undefined && !mobile)
+                    "
+                    data-shares
+                    class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
                 >
-                    <SandboxLogo :size="12" :image="box.image ?? null" :name="box.name" />
-                    <span class="truncate">{{ box.name }}</span>
-                </span>
-                <!-- Whose it is leads what it runs on: for a card that isn't the reader's own, that outranks the model. -->
-                <OwnerMark v-if="provenance !== undefined" :mark="provenance" />
-                <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
-                    <!-- Pulled back into the line's wider gap, so the dot sits as close to whose it is as to the model. -->
-                    <span v-if="provenance !== undefined" class="-ml-1.5">·</span>
-                    <span class="truncate">{{ model }}</span>
-                </span>
-                <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
-                <span
-                    v-if="agent.runner !== undefined && !maker"
-                    class="flex shrink-0 items-center gap-1 truncate"
-                    v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: agent.runner }] }"
-                >
-                    <Icon name="desktop" class="text-2xs" />
-                    {{ agent.runner }}
-                </span>
-                <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
-                <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
-                <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
-                <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
-                <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
-                    <Icon name="user" class="shrink-0 text-2xs" />
-                    <span class="truncate">{{ account.label }}</span>
-                </span>
-            </div>
-
-            <!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
-            <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
-                <Icon name="repeat" :spin="loopLine?.spin" class="shrink-0 text-2xs" />
-                <span class="truncate">{{ loopLine?.text }}</span>
-            </p>
-
-            <!-- A permission its turn waits on, answered here: the reply floor is a collaborator's, as in the chat. -->
-            <CardPermissionAsk v-if="canReview" :agent="agent" :disabled="busy" :card="cardRoot ?? undefined" />
-
-            <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
-            <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
-                <!-- No in-flight face: the press moves the card to Active at once, taking this block with it. -->
-                <Button tier="accent" size="small" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
-                    <Icon name="sparkles" />{{ words.resolveConflict }}
-                </Button>
-                <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
-            </div>
-
-            <!-- Same seat, the refusals only the owner can clear: what of theirs is in the way, named, with both answers
-                 as presses when it is a deletion (CardOwnerHold). The footer's review link names every file. -->
-            <CardOwnerHold
-                v-else-if="yoursToClear"
-                :owner="ownerHold"
-                :overlap="overlapLine"
-                :settings-pages="settingsPages"
-                :local="agent.sandboxId === undefined"
-                :busy="busy"
-                @keep-deleted="(owner) => emit('keepDeleted', owner, holdMain)"
-                @restore-deleted="(owner) => emit('restoreDeleted', owner)"
-            />
-
-            <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
-            <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                <!-- Muted when an agent took it out: a fact about its own tidying, not a press this card owes anyone. -->
-                <span
-                    v-tooltip.top="away.tip"
-                    class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug"
-                    :class="away.offerReland ? `text-warning` : `text-muted`"
-                >
-                    <Icon :name="away.icon" class="shrink-0 text-2xs" /><span class="min-w-0"
-                        >{{ away.text
-                        }}<template v-if="away.hint !== undefined">
-                            <span class="text-subtle"> ({{ away.hint }})</span></template
-                        ></span
+                    <!-- NO DOT BEFORE A FACT THAT LEADS WITH ITS OWN GLYPH (the runner's desktop, the branch's code mark, the
+                         account's person): the glyph already parts it from the one before, and a dot written ahead of it was
+                         left at the start of the next line whenever the line wrapped there ("· 👤 someone"). The dot stays only
+                         between the two facts that are bare words, whose it is and the model. -->
+                    <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
+                    <span
+                        v-if="box !== undefined"
+                        class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
+                        v-tooltip.top="{ title: t(`agents.words.otherSandbox`), rows: [{ label: t(`agents.words.sandbox`), value: box.name }] }"
                     >
-                </span>
-                <!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
-                <Button
-                    v-if="away.offerReland"
-                    size="small"
-                    tier="quiet"
-                    :disabled="busy || relanding"
-                    v-tooltip.top="{ title: words.landAgain, note: t(`agents.agentCard.landAgainHint`) }"
-                    class="shrink-0 whitespace-nowrap"
-                    @click.stop="emit('reland')"
-                >
-                    <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? words.landing : words.landAgain }}
-                </Button>
-            </div>
+                        <SandboxLogo :size="12" :image="box.image ?? null" :name="box.name" />
+                        <span class="truncate">{{ box.name }}</span>
+                    </span>
+                    <!-- Whose it is leads what it runs on: for a card that isn't the reader's own, that outranks the model. -->
+                    <OwnerMark v-if="provenance !== undefined" :mark="provenance" />
+                    <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
+                        <!-- Pulled back into the line's wider gap, so the dot sits as close to whose it is as to the model. -->
+                        <span v-if="provenance !== undefined" class="-ml-1.5">·</span>
+                        <span class="truncate">{{ model }}</span>
+                    </span>
+                    <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
+                    <span
+                        v-if="agent.runner !== undefined && !maker"
+                        class="flex shrink-0 items-center gap-1 truncate"
+                        v-tooltip.top="{ title: t(`agents.agentCard.runner`), rows: [{ label: t(`agents.agentCard.machine`), value: agent.runner }] }"
+                    >
+                        <Icon name="desktop" class="text-2xs" />
+                        {{ agent.runner }}
+                    </span>
+                    <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
+                    <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
+                    <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
+                    <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
+                    <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
+                        <Icon name="user" class="shrink-0 text-2xs" />
+                        <span class="truncate">{{ account.label }}</span>
+                    </span>
+                </div>
 
-            <Button v-if="canShip && agent.archivedAt === undefined && retryLand(agent)" size="small" tier="accent" :disabled="busy || landing" @click.stop="emit('land')">
-                {{ t(`ui.action.retry`) }}
-            </Button>
-            <!-- What the land did in the owner's own folder: warm only where they have something to look at or do, and the paths it kept out in the hover. -->
-            <p
-                v-if="delivery !== undefined"
-                v-tooltip.top="delivery.tip"
-                class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug"
-                :class="delivery.warm ? `text-warning` : `text-muted`"
-            >
-                <Icon :name="delivery.icon" class="shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
-            </p>
+                <!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->
+                <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
+                    <Icon name="repeat" :spin="loopLine?.spin" class="shrink-0 text-2xs" />
+                    <span class="truncate">{{ loopLine?.text }}</span>
+                </p>
 
-            <!-- Land now, or Review & land ahead of it, or a collaborator's Request land (CardLandPresses). -->
-            <CardLandPresses
-                v-if="landable || shipping"
-                :agent="agent"
-                :title="displayTitle"
-                :busy="busy"
-                :landing="landing"
-                @land="emit('land')"
-                @changes="emit('changes')"
-            />
+                <!-- A permission its turn waits on, answered here: the reply floor is a collaborator's, as in the chat. -->
+                <CardPermissionAsk v-if="canReview" :agent="agent" :disabled="busy" :card="cardRoot ?? undefined" />
 
-            <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
-            <div
-                v-if="summary"
-                class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
-                :class="dense ? 'min-w-32 flex-1' : ''"
-            >
-                <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
+                <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
+                <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
+                    <!-- No in-flight face: the press moves the card to Active at once, taking this block with it. -->
+                    <Button tier="accent" size="small" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
+                        <Icon name="sparkles" />{{ words.resolveConflict }}
+                    </Button>
+                    <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
+                </div>
 
-                <!-- Red and green only while the diff is a live signal. -->
-                <!-- A press: the count is what the work IS, so it opens the work (the review) rather than the chat the card opens. -->
-                <button
-                    v-if="diffShown && agent.diff !== undefined"
-                    type="button"
-                    class="rounded-sm font-mono hover:underline"
-                    :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
-                    v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
-                    @click.stop="emit('changes')"
-                >
-                    <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
-                    <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
-                </button>
-                <!-- Lifetime cost total, read-only here. -->
-                <span v-if="costShown && agent.costUsd !== undefined">{{ formatMoney(agent.costUsd) }}</span>
-                <!-- Opt-in geek metrics, beside what it cost: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
-                <SessionMetrics v-if="localOnly" :card="agent.id" />
-                <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->
-                <ChildCount :agent="agent" />
-                <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
-                <AgentReactions
-                    v-if="reactable"
-                    ref="reactionsStrip"
-                    :agent-id="agent.id"
-                    :reactions="agent.reactions"
-                    :sandbox-id="agent.sandboxId"
-                    :dense="true"
+                <!-- Same seat, the refusals only the owner can clear: what of theirs is in the way, named, with both answers
+                     as presses when it is a deletion (CardOwnerHold). The footer's review link names every file. -->
+                <CardOwnerHold
+                    v-else-if="yoursToClear"
+                    :owner="ownerHold"
+                    :overlap="overlapLine"
+                    :settings-pages="settingsPages"
+                    :local="agent.sandboxId === undefined"
+                    :busy="busy"
+                    @keep-deleted="(owner) => emit('keepDeleted', owner, holdMain)"
+                    @restore-deleted="(owner) => emit('restoreDeleted', owner)"
                 />
 
-                <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
-                <span class="inline-flex min-w-max flex-[1_1_0] items-center justify-end gap-2 text-subtle">
-                    <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
-                    <button
-                        v-if="resendable"
-                        type="button"
-                        :class="ui.textButton({ tone: `quiet` }, 'inline-flex shrink-0 font-medium')"
-                        :disabled="resending || busy"
-                        v-tooltip.top="{ title: t(`agents.agentCard.sameTurn`), note: t(`agents.agentCard.notNewMessage`) }"
-                        @click.stop="sendAgain"
+                <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
+                <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+                    <!-- Muted when an agent took it out: a fact about its own tidying, not a press this card owes anyone. -->
+                    <span
+                        v-tooltip.top="away.tip"
+                        class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug"
+                        :class="away.offerReland ? `text-warning` : `text-muted`"
                     >
-                        <Icon :name="resending ? `spinner` : `refresh`" :spin="resending" class="text-2xs" />{{
-                            resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`)
-                        }}
-                    </button>
-                    <button
-                        v-else-if="rowDrill"
-                        type="button"
-                        class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline"
-                        @click.stop="reviewCard"
+                        <Icon :name="away.icon" class="shrink-0 text-2xs" /><span class="min-w-0"
+                            >{{ away.text
+                            }}<template v-if="away.hint !== undefined">
+                                <span class="text-subtle"> ({{ away.hint }})</span></template
+                            ></span
+                        >
+                    </span>
+                    <!-- No resting glyph: the line above it already leads with this exact icon, and a repeat would read as a stutter. -->
+                    <Button
+                        v-if="away.offerReland"
+                        size="small"
+                        tier="quiet"
+                        :disabled="busy || relanding"
+                        v-tooltip.top="{ title: words.landAgain, note: t(`agents.agentCard.landAgainHint`) }"
+                        class="shrink-0 whitespace-nowrap"
+                        @click.stop="emit('reland')"
                     >
-                        {{ review }}<Icon name="arrow-right" class="text-2xs" />
+                        <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? words.landing : words.landAgain }}
+                    </Button>
+                </div>
+
+                <Button v-if="canShip && agent.archivedAt === undefined && retryLand(agent)" size="small" tier="accent" :disabled="busy || landing" @click.stop="emit('land')">
+                    {{ t(`ui.action.retry`) }}
+                </Button>
+                <!-- What the land did in the owner's own folder: warm only where they have something to look at or do, and the paths it kept out in the hover. -->
+                <p
+                    v-if="delivery !== undefined"
+                    v-tooltip.top="delivery.tip"
+                    class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug"
+                    :class="delivery.warm ? `text-warning` : `text-muted`"
+                >
+                    <Icon :name="delivery.icon" class="shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
+                </p>
+
+                <!-- Land now, or Review & land ahead of it, or a collaborator's Request land (CardLandPresses). -->
+                <CardLandPresses
+                    v-if="landable || shipping"
+                    :agent="agent"
+                    :title="displayTitle"
+                    :busy="busy"
+                    :landing="landing"
+                    @land="emit('land')"
+                    @changes="emit('changes')"
+                />
+
+                <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`); with no stats it grows into what the model line leaves, a running readout asking 10rem to say what it does. -->
+                <div
+                    v-if="summary" data-shares
+                    class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
+                    :class="dense ? 'min-w-32 flex-1' : ['grow has-[>[data-stat]]:basis-full', working ? 'basis-40' : '']"
+                >
+                    <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
+
+                    <!-- Red and green only while the diff is a live signal. -->
+                    <!-- A press: the count is what the work IS, so it opens the work (the review) rather than the chat the card opens. -->
+                    <button
+                        v-if="diffShown && agent.diff !== undefined"
+                        type="button" data-stat
+                        class="rounded-sm font-mono hover:underline"
+                        :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
+                        v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
+                        @click.stop="emit('changes')"
+                    >
+                        <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
+                        <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                     </button>
-                    <!-- The one part of the card that moves with the clock, so a tick redraws it and not the card around it. -->
-                    <AgentCardClock
-                        :agent="agent"
-                        :working="working"
-                        :activity-text="activityText"
-                        :busy="busy"
-                        :title-of="titleOfAgent"
-                        @unwatch="emit(`unwatch`)"
-                        @stop-job="(jobId) => emit(`stopJob`, jobId)"
-                        @warm="openWarm"
+                    <!-- Lifetime cost total, read-only here. -->
+                    <span v-if="costShown && agent.costUsd !== undefined" data-stat>{{ formatMoney(agent.costUsd) }}</span>
+                    <!-- Opt-in geek metrics, beside what it cost: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
+                    <SessionMetrics v-if="localOnly" data-stat :card="agent.id" />
+                    <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->
+                    <ChildCount data-stat :agent="agent" />
+                    <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
+                    <AgentReactions
+                        v-if="reactable"
+                        ref="reactionsStrip"
+                        :agent-id="agent.id"
+                        :reactions="agent.reactions"
+                        :sandbox-id="agent.sandboxId"
+                        :dense="true"
                     />
-                </span>
+
+                    <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
+                    <span class="inline-flex min-w-max flex-[1_1_0] items-center justify-end gap-2 text-subtle">
+                        <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
+                        <button
+                            v-if="resendable"
+                            type="button"
+                            :class="ui.textButton({ tone: `quiet` }, 'inline-flex shrink-0 font-medium')"
+                            :disabled="resending || busy"
+                            v-tooltip.top="{ title: t(`agents.agentCard.sameTurn`), note: t(`agents.agentCard.notNewMessage`) }"
+                            @click.stop="sendAgain"
+                        >
+                            <Icon :name="resending ? `spinner` : `refresh`" :spin="resending" class="text-2xs" />{{
+                                resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`)
+                            }}
+                        </button>
+                        <button
+                            v-else-if="rowDrill"
+                            type="button"
+                            class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline"
+                            @click.stop="reviewCard"
+                        >
+                            {{ review }}<Icon name="arrow-right" class="text-2xs" />
+                        </button>
+                        <!-- The one part of the card that moves with the clock, so a tick redraws it and not the card around it. -->
+                        <AgentCardClock
+                            :agent="agent"
+                            :working="working"
+                            :activity-text="activityText"
+                            :busy="busy"
+                            :title-of="titleOfAgent"
+                            @unwatch="emit(`unwatch`)"
+                            @stop-job="(jobId) => emit(`stopJob`, jobId)"
+                            @warm="openWarm"
+                        />
+                    </span>
+                </div>
             </div>
         </div>
         <ResponsiveOverlay v-model="warmOpen" :anchor="warmAnchor" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
