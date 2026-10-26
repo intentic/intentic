@@ -17,7 +17,6 @@ import {
     folderOwner,
     isSelf,
     machineCapacity,
-    machineFigures,
     machineHardware,
     machineMark,
     machineRow,
@@ -224,7 +223,7 @@ test(`draws a many-sided machine's environments as lines of their own, and names
     expect(body.environments.map((environment) => environment.label)).toEqual([`Microsoft Windows 11 Home`, `Arch Linux on WSL`]);
     expect(body.environments.map((environment) => environment.state)).toEqual([`live`, `live`]);
     // Either door onto the container serving this page marks the machine as the one in use.
-    expect(body.lines[0]?.self).toBe(true);
+    expect(body.self?.title).toBe(`work`);
     const stopped = machineRows(
         [
             device({
@@ -357,12 +356,6 @@ test(`counts the fleet by verdict, so the board is read before a tile is`, () =>
     expect(fleetCounts([live, asleep, stuck, live], NOW)).toEqual({ live: 2, attention: 1, offline: 1 });
 });
 
-test(`counts what a PC holds once, however many doors list it`, () => {
-    expect(machineFigures(pc()[0]!)).toEqual({ hosted: 1, running: 1, synced: 1, ports: 1 });
-    // A machine nobody could list holds an unknown number of containers, not none.
-    expect(machineFigures(card(row({}, folders(`a`, `b`))))).toEqual({ hosted: undefined, running: 0, synced: 2, ports: 0 });
-});
-
 test(`states the engine's size and the OS a lone machine runs, and leaves out what it never said`, () => {
     const sized = card(row({ facts: { ...ARCH, wsl: undefined, engine: { memoryBytes: 16 * 1024 ** 3, cpus: 8 } } }));
     expect(machineCapacity(sized)).toBe(`16 GiB · 8 cores`);
@@ -398,30 +391,15 @@ const folders = (...ids: string[]): Held => ({
     pairings: ids.map((id) => ({ sandboxId: id, mode: `sync` as const, localDir: `/w/${id}` })),
 });
 
-test(`names every sandbox the machine holds, and what its ports came to`, () => {
-    const body = boardBody(card(row({}, PAIRED)), ``, undefined, NOW);
-    expect(body.lines.map((line) => line.title)).toEqual([`intentic-dev`]);
-    expect(body.lines[0]?.running).toBe(true);
-    expect(body.lines[0]?.facts).toContain(`1 port`);
-    expect(body.more).toBe(0);
-});
-
 test(`says how the sandbox reaches the machine, and which build its agent serves`, () => {
     const body = boardBody(card(row({ sync: { machine: `rog`, mode: `sync`, seenAt: NOW }, agentVersion: `1.2.0` }, PAIRED)), ``, undefined, NOW);
     expect(body.doors).toEqual([`desktop sync`, `commands`, `agent 1.2.0`]);
 });
 
-test(`caps the lines it draws and counts what it left out`, () => {
-    const body = boardBody(card(row({}, folders(`a`, `b`, `c`, `d`, `e`))), ``, undefined, NOW);
-    expect(body.lines).toHaveLength(3);
-    expect(body.more).toBe(2);
-});
-
-test(`draws every match while the filter is set, so a port search never lands off the list`, () => {
+test(`lists no sandbox until the filter is set, then names the ones it matched`, () => {
     const held: Held = { ...folders(`a`, `b`, `c`, `d`), ports: [{ port: 8788, host: `127.0.0.1`, sandboxId: `d`, state: `mirrored` }] };
-    const body = boardBody(card(row({}, held)), `8788`, undefined, NOW);
-    expect(body.lines.map((line) => line.title)).toEqual([`d`]);
-    expect(body.more).toBe(0);
+    expect(boardBody(card(row({}, held)), ``, undefined, NOW).matches).toEqual([]);
+    expect(boardBody(card(row({}, held)), `8788`, undefined, NOW).matches).toEqual([`d`]);
 });
 
 // A machine whose card grants sandbox management and nothing else lists its containers and refuses to describe
@@ -435,17 +413,19 @@ test(`draws the containers of a machine that would not describe itself`, () => {
     expect(locked.groups[0]?.ports).toEqual([]);
 });
 
-test(`separates what is wrong with the machine from what is wrong with its sandboxes`, () => {
-    const body = boardBody(card(row({}, { ...PAIRED, agent: { running: false } })), ``, undefined, NOW);
-    expect(body.warnings).toEqual([`agent stopped`]);
-    expect(body.lines[0]?.warnings).toEqual([]);
+test(`puts what is wrong with a sandbox in the machine's band, under the sandbox's name`, () => {
+    expect(boardBody(card(row({}, { ...PAIRED, agent: { running: false } })), ``, undefined, NOW).warnings).toEqual([`agent stopped`]);
+    const conflicted: Held = { ...PAIRED, pairings: [{ ...PAIRED.pairings![0]!, conflicts: 2 }] };
+    expect(boardBody(card(row({}, conflicted)), ``, undefined, NOW).warnings).toEqual([`intentic-dev: 2 conflicts`]);
 });
 
 test(`marks the sandbox serving this page, and only when both slugs are known`, () => {
-    expect(boardBody(card(row({}, PAIRED)), ``, `work-abc`, NOW).lines[0]?.self).toBe(true);
+    const mine = boardBody(card(row({}, PAIRED)), ``, `work-abc`, NOW).self;
+    expect(mine?.title).toBe(`intentic-dev`);
+    expect(mine?.facts).toContain(`1 port`);
     // Two unknowns must not compare equal: a pairing with no container on an unknown-URL sandbox is not "you".
     const bare: Partial<Report> = { pairings: PAIRED.pairings };
-    expect(boardBody(card(row({}, bare)), ``, undefined, NOW).lines[0]?.self).toBe(false);
+    expect(boardBody(card(row({}, bare)), ``, undefined, NOW).self).toBeUndefined();
 });
 
 test(`finds a machine by a port number, by its sandbox, and by its folder`, () => {

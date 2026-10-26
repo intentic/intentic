@@ -6678,21 +6678,11 @@
             "scanCode": "scan its code from Capabilities"
         },
         "deviceBoardCard": {
-            "more": "… and {more} more",
-            "synced": "synced",
-            "ports": "ports",
-            "runningTip": "{running} of {hosted} sandboxes on this computer are running",
-            "notListed": "This computer did not list its containers",
-            "syncedTip": "Files sync to this computer",
-            "syncedTitle": "Synced sandboxes",
-            "portsTip": "Answering on this computer's localhost",
-            "portsTitle": "Forwarded ports",
             "state": "State",
             "reachedThrough": "Reached through",
-            "holdsNothing": "No sandbox runs or syncs here",
-            "notRunningHere": "not running here",
-            "running": "running",
-            "stopped": "stopped"
+            "yoursHere": "Runs this sandbox",
+            "sandbox": "Sandbox",
+            "here": "Here"
         },
         "deviceConcern": {
             "onDevice": "on that device.",
@@ -8751,7 +8741,6 @@
             "instructions": "Instructions",
             "rebuildNow": "Rebuild now",
             "latest": "Latest",
-            "oneYoureUsing": "the one you're using",
             "unpair": "Unpair",
             "runningOnDeviceKeeps": "Running on that device. It keeps going even if you leave this page.",
             "landFinishedWorkAutomatically": "Land finished work automatically",

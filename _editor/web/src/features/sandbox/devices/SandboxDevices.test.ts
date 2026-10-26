@@ -988,20 +988,20 @@ it(`keeps the explanation and drops the button when the machine is not reachable
     expect(labels(text)).not.toContain(`Fix with agent`);
 });
 
-// A card is read, never expanded: everything a reader used to unfold a machine for is on its face.
-it(`names every sandbox a machine holds, and what each one came to, without being opened`, () => {
-    const text = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]).textContent ?? ``;
-    expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
-    expect(text).toContain(`radarsu-local-0738cd6b5027`);
-    expect(text).toContain(`2 ports`);
-    // The third is stopped on purpose, which is a state rather than an errand: a grey dot, named for a screen reader,
-    // and counted in the tile's running figure.
+// A card is the machine, never expanded: the sandboxes on it are its page's to list, and only one that wants the owner
+// is named on its face, in the warnings band under its own name.
+it(`keeps a card to the machine, naming a sandbox only where it wants the owner`, () => {
     const board = mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]);
-    expect(board.querySelector(`[role="img"][aria-label="stopped"]`)).not.toBeNull();
-    expect(text).toContain(`2/3`);
-    expect(text).toContain(`1 port busy here`);
+    const text = board.textContent ?? ``;
+    // No figures and no sandbox lines: nobody picked a machine by its running, synced and port counts.
+    expect(text).not.toContain(`2/3`);
+    expect(text).not.toContain(`2 ports`);
+    expect(board.querySelector(`[role="img"][aria-label="stopped"]`)).toBeNull();
     // No disclosure button on a machine: a card is one link, so nothing on the board expands.
-    expect(mount([busyMachine(), { ...syncOnly(), key: `other`, label: `other-pc` }]).querySelectorAll(`button[aria-expanded]`)).toHaveLength(0);
+    expect(board.querySelectorAll(`button[aria-expanded]`)).toHaveLength(0);
+    // A sandbox with something wrong is named, in the machine's warnings band, so an amber edge always says why.
+    const troubled = mount([conflicted(), { ...syncOnly(), key: `other`, label: `other-pc` }]).textContent ?? ``;
+    expect(troubled).toContain(`radarsu-local-0738cd6b5027: 10 conflicts`);
 });
 
 it(`gives every computer its own named card and keeps board controls outside the cards`, () => {
@@ -2038,7 +2038,7 @@ const bothDoors = (): void => {
     capabilities.value = [{ id: `rog`, kind: `device`, config: { platform: `windows`, shell: `on`, sandboxes: `on` } }];
 };
 
-it(`draws a Windows PC and its distro as one card, with the container once and each side's own state`, async () => {
+it(`draws a Windows PC and its distro as one card, with each side's own state`, async () => {
     bothDoors();
     const loneMachine: Device = {
         key: `radarsu-omen`,
@@ -2053,13 +2053,13 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     const text = el.textContent ?? ``;
     expect(text).toContain(`Microsoft Windows 11 Home`);
     expect(text).toContain(`Arch Linux on WSL`);
-    // One card, not two: two machines on the board, and the PC's card names its container once.
+    // One card, not two: two machines on the board, and the PC's card leaves its container to the page.
     const cards = [...el.querySelectorAll(`a`)];
     expect(cards).toHaveLength(2);
     const pc = cards.find((card) => card.textContent?.includes(`Microsoft Windows 11 Home`));
-    expect(pc?.textContent?.match(/work/g)).toHaveLength(1);
+    expect(pc?.textContent).not.toContain(`work`);
     // A lone machine's one environment is the machine itself: its OS rides the tile's own line, with no chip for a
-    // side. The PC carries one chip per side, each under its own OS's mark, and its sandboxes once below them.
+    // side. The PC carries one chip per side, each under its own OS's mark.
     const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));
     const sides = [`Microsoft Windows 11 Home`, `Arch Linux on WSL`];
     const chips = (card: Element | undefined): string[] =>
@@ -2067,7 +2067,6 @@ it(`draws a Windows PC and its distro as one card, with the container once and e
     expect(chips(lone)).toEqual([]);
     expect(lone?.textContent).toContain(`Microsoft Windows 11 Pro`);
     expect(chips(pc)).toEqual(sides);
-    expect([...pc!.querySelectorAll(`li`)].some((item) => item.textContent?.includes(`work`))).toBe(true);
 });
 
 it(`opens the PC as one page: an environment row per side, the sandbox once, and the distros the Windows side lists`, async () => {

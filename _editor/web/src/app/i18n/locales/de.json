@@ -6678,21 +6678,11 @@
             "scanCode": "seinen Code unter Fähigkeiten scannen"
         },
         "deviceBoardCard": {
-            "more": "… und {more} weitere",
-            "synced": "synchronisiert",
-            "ports": "Ports",
-            "runningTip": "{running} von {hosted} Sandboxes auf diesem Computer laufen",
-            "notListed": "Dieser Computer hat seine Container nicht aufgelistet",
-            "syncedTip": "Dateien werden auf diesen Computer synchronisiert",
-            "syncedTitle": "Synchronisierte Sandboxes",
-            "portsTip": "Antworten auf localhost dieses Computers",
-            "portsTitle": "Weitergeleitete Ports",
             "state": "Zustand",
             "reachedThrough": "Erreicht über",
-            "holdsNothing": "Hier läuft oder synchronisiert keine Sandbox",
-            "notRunningHere": "läuft hier nicht",
-            "running": "läuft",
-            "stopped": "gestoppt"
+            "yoursHere": "Führt diese Sandbox aus",
+            "sandbox": "Sandbox",
+            "here": "Hier"
         },
         "deviceConcern": {
             "onDevice": "auf diesem Gerät.",
@@ -8751,7 +8741,6 @@
             "instructions": "Anweisungen",
             "rebuildNow": "Jetzt neu bauen",
             "latest": "Neueste",
-            "oneYoureUsing": "das, das Sie gerade benutzen",
             "unpair": "Entkoppeln",
             "runningOnDeviceKeeps": "Läuft auf diesem Gerät. Es macht weiter, auch wenn Sie diese Seite verlassen.",
             "landFinishedWorkAutomatically": "Fertige Arbeit automatisch landen",

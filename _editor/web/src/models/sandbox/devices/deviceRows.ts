@@ -163,29 +163,6 @@ export const fleetCounts = (machines: readonly MachineRow[], readAt: number): Re
     return counts;
 };
 
-// THE TILE'S FIGURES: what the machine is doing for this account, in numbers a glance can compare across a board. Each
-// counted once per PC, since its sides share one engine and its sandboxes are already folded (machineLists).
-export interface MachineFigures {
-    /** Containers on this computer; absent when no side of it could list them, which is not the same as none. */
-    readonly hosted: number | undefined;
-    readonly running: number;
-    /** Sandboxes whose files sync to a folder here, and are not paused. */
-    readonly synced: number;
-    /** Sandbox ports answering on this computer's localhost. */
-    readonly ports: number;
-}
-
-export const machineFigures = (machine: MachineRow): MachineFigures => {
-    const listed = machine.environments.some((environment) => environment.device.sandboxes !== undefined);
-    const hosted = machine.groups.filter((group) => group.sandbox !== undefined);
-    return {
-        hosted: listed ? hosted.length : undefined,
-        running: hosted.filter((group) => group.sandbox?.running === true).length,
-        synced: machine.groups.filter((group) => group.folder?.mode === `sync` && group.folder.paused !== true).length,
-        ports: machine.groups.reduce((total, group) => total + group.ports.filter((port) => port.state === `mirrored`).length, 0),
-    };
-};
-
 // The Docker engine's size: the ceiling every sandbox here shares, and the one hardware fact that decides whether
 // another fits. One engine per PC, so whichever side describes it speaks for the machine.
 export const machineCapacity = (machine: MachineRow): string | undefined => {
@@ -541,22 +518,6 @@ const FILTER_FLOOR = 3;
 export const showFilter = (machines: readonly MachineRow[]): boolean =>
     machines.length > 2 || machines.reduce((total, machine) => total + machine.groups.length, 0) > FILTER_FLOOR;
 
-// One sandbox as a board card states it, on a card nothing expands: enough to answer "which machine has
-// this" and "is it fine", and nothing that needs a click.
-export interface BoardLine {
-    readonly sandboxId: string;
-    readonly title: string;
-    /** Absent on a pairing with no container on the machine. */
-    readonly running: boolean | undefined;
-    readonly facts: readonly string[];
-    readonly warnings: readonly string[];
-    readonly self: boolean;
-}
-
-// How many sandbox lines a card draws before it stops counting; a machine holding a dozen would otherwise
-// be the whole board.
-const BOARD_LINES_MAX = 3;
-
 // One environment of a many-sided machine, as its own line on the card: what it is, how it is reached, and its
 // own state, since a PC with a live Windows side and a stopped distro has no single word for itself.
 export interface BoardEnvironment {
@@ -574,11 +535,12 @@ export interface BoardBody {
     readonly doors: readonly string[];
     /** One line per environment on a many-sided machine; empty on a lone device, whose facts ride the card itself. */
     readonly environments: readonly BoardEnvironment[];
-    readonly lines: readonly BoardLine[];
-    /** Sandboxes those lines do not account for, counted against what the machine reported. */
-    readonly more: number;
-    /** What is wrong with the machine itself; each line above carries its own. */
+    /** What wants the owner on this machine: its own faults, then each sandbox's, named by the sandbox. */
     readonly warnings: readonly string[];
+    /** The sandbox serving this page, when this machine runs it. */
+    readonly self: { readonly title: string; readonly facts: readonly string[] } | undefined;
+    /** The sandboxes the filter matched, so a card found by a sandbox or a port says which; empty while unfiltered. */
+    readonly matches: readonly string[];
 }
 
 const doorsOf = (row: DeviceRow): string[] => [
@@ -604,28 +566,20 @@ const boardWarnings = (machine: MachineRow, readAt: number): readonly string[] =
           )
         : machineWarnings(machine.environments[0]?.device ?? { key: ``, label: `` }, readAt);
 
-// While the filter is active every matching sandbox is drawn, however many: a port search whose answer was
-// the fourth line would otherwise land on a card that doesn't show it.
+// The tile counts nothing and lists no sandbox: the machine's page does both. It keeps what a glance acts on: the
+// faults (a sandbox's named by it, so an amber edge always says why), the sandbox you are using, and what a filter hit.
 export const boardBody = (machine: MachineRow, needle: string, ownSlug: string | undefined, readAt: number): BoardBody => {
-    const matched = needle === `` ? machine.groups : machine.groups.filter((group) => groupMatches(group, needle));
-    const shown = needle === `` ? matched.slice(0, BOARD_LINES_MAX) : matched;
     const lone = manySided(machine) ? undefined : machine.environments[0];
+    const mine = selfGroup(machine, ownSlug);
     return {
         doors: lone === undefined ? [] : doorsOf(lone),
         environments: lone === undefined ? machine.environments.map((environment) => boardEnvironment(environment, readAt)) : [],
-        lines: shown.map((group) => {
-            const summary = groupSummary(group);
-            return {
-                sandboxId: group.sandboxId,
-                title: group.title,
-                running: group.sandbox?.running,
-                facts: summary.facts,
-                warnings: summary.warnings,
-                self: isSelfMachine(machine, group, ownSlug),
-            };
-        }),
-        more: matched.length - shown.length,
-        warnings: boardWarnings(machine, readAt),
+        warnings: [
+            ...boardWarnings(machine, readAt),
+            ...machine.groups.flatMap((group) => groupSummary(group).warnings.map((warning) => `${group.title}: ${warning}`)),
+        ],
+        self: mine === undefined ? undefined : { title: mine.title, facts: groupSummary(mine).facts },
+        matches: needle === `` ? [] : machine.groups.filter((group) => groupMatches(group, needle)).map((group) => group.title),
     };
 };
 

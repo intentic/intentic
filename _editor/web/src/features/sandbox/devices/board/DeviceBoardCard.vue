@@ -2,17 +2,20 @@
 import { BrandMark, Icon, StatusBadge, type Tip, toneDot, toneFill, toneInk, toneRim } from "@intentic/ui";
 import { computed, useId } from "vue";
 import { RouterLink } from "vue-router";
-import { type BoardEnvironment, boardBody, machineFigures, machineMark, machineSpecs, machineVerdict, type MachineRow, manySided } from "../../../../models/sandbox/devices/deviceRows";
+import { type BoardEnvironment, boardBody, machineMark, machineSpecs, machineVerdict, type MachineRow, manySided } from "../../../../models/sandbox/devices/deviceRows";
 import { deviceRoute } from "../../../../models/sandbox/devices/deviceLinks";
 import { lastSeenNote, osTitle } from "../../../../models/sandbox/devices/deviceFacts";
-import { environmentWorking, machineWork, sandboxesWorking } from "../runners/deviceWork";
+import { environmentWorking, machineWork } from "../runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 
 // ONE PHYSICAL COMPUTER AS A TILE, read top to bottom in the order a glance asks: WHAT is it (the OS's own mark, the
-// name, what it runs on), CAN I USE IT (one verdict, top right, the same place on every tile), DOES IT WANT ME (its
-// warnings, in their own tinted band, and an amber edge round the whole tile), and WHAT IS IT DOING (three figures that
-// line up across the board, then the sandboxes themselves). It used to be a stack of rows inside rows, one per side and
-// one per sandbox, every one led by the same monitor glyph, so the machine and the things on it read at one weight.
+// name, what it runs on), CAN I USE IT (one verdict, top right, the same place on every tile), and DOES IT WANT ME (its
+// warnings, in their own tinted band, and an amber edge round the whole tile). Its environments follow as chips, since
+// a live Windows and a sleeping distro have no single word between them.
+//
+// It used to end on three figures (running, synced, ports) and a line per sandbox. Nobody chose a machine by those
+// counts, and the machine's page lists the sandboxes in full, so they went (2026-10-26): what a sandbox has wrong rides
+// the warnings band under its name, and the sandbox you are using is a mark beside the machine's name.
 //
 // The whole surface is one link into the machine's page; nothing on it is a control. Work in flight turns on it the
 // way it does on the page (deviceWork.ts), since the page that started it is usually not on screen any more.
@@ -31,7 +34,6 @@ const { machine, needle, ownSlug, readAt } = defineProps<{
 
 const body = computed(() => boardBody(machine, needle, ownSlug, readAt));
 const verdict = computed(() => machineVerdict(machine, readAt));
-const figures = computed(() => machineFigures(machine));
 const specs = computed(() => machineSpecs(machine));
 const mark = computed(() => machineMark(machine));
 const offline = computed(() => verdict.value.status === `offline`);
@@ -39,7 +41,6 @@ const offline = computed(() => verdict.value.status === `offline`);
 const lone = computed(() => (manySided(machine) ? undefined : machine.environments[0]?.device));
 const asleepSince = computed(() => (offline.value ? machine.environments.map((side) => lastSeenNote(side.device)).find((note) => note !== undefined) : undefined));
 const doing = computed(() => machineWork(machine.key));
-const turning = computed(() => sandboxesWorking(machine.key));
 
 // The OS in full and how this sandbox reaches the machine: the facts nobody scans for, one hover from the line.
 const specsTip = computed<Tip | undefined>(() => {
@@ -59,10 +60,18 @@ const sideTip = (side: BoardEnvironment): Tip => ({
     ],
 });
 
-const runningTip = computed(() =>
-    figures.value.hosted === undefined
-        ? t(`sandbox.deviceBoardCard.notListed`)
-        : t(`sandbox.deviceBoardCard.runningTip`, { running: figures.value.running, hosted: figures.value.hosted }),
+// "Runs the sandbox you're using", as a mark beside the name rather than a badge on a line of its own.
+const selfTip = computed<Tip | undefined>(() =>
+    body.value.self === undefined
+        ? undefined
+        : {
+              title: t(`sandbox.deviceBoardCard.yoursHere`),
+              tone: `info`,
+              rows: [
+                  { label: t(`sandbox.deviceBoardCard.sandbox`), value: body.value.self.title },
+                  ...(body.value.self.facts.length === 0 ? [] : [{ label: t(`sandbox.deviceBoardCard.here`), value: body.value.self.facts.join(` · `) }]),
+              ],
+          },
 );
 </script>
 
@@ -80,7 +89,17 @@ const runningTip = computed(() =>
                  and still has to answer how this sandbox reaches it. -->
             <div v-tooltip.top="specsTip" class="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div class="flex min-w-0 items-center gap-2">
-                    <span :id="titleId" class="min-w-0 flex-1 truncate text-base font-semibold leading-6 text-content">{{ machine.label }}</span>
+                    <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span :id="titleId" class="min-w-0 truncate text-base font-semibold leading-6 text-content">{{ machine.label }}</span>
+                        <Icon
+                            v-if="selfTip"
+                            v-tooltip.top="selfTip"
+                            name="pin"
+                            :class="toneInk(`info`, `shrink-0 text-sm`)"
+                            role="img"
+                            :aria-label="t(`sandbox.deviceBoardCard.yoursHere`)"
+                        />
+                    </span>
                     <StatusBadge :variant="verdict.variant" size="xs" :dot="true" :label="verdict.word" class="shrink-0" />
                 </div>
                 <span v-if="specs.length > 0 || asleepSince" class="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs text-muted">
@@ -124,69 +143,10 @@ const runningTip = computed(() =>
             </li>
         </ul>
 
-        <!-- The figures, in the same three columns on every tile, so a board compares machines by reading across. A
-             machine asleep keeps its last numbers, quieter, since they are a memory rather than a reading. -->
-        <dl class="grid grid-cols-3 border-t border-line-subtle" :class="offline ? `opacity-60` : ``">
-            <div v-tooltip.top="runningTip" class="flex flex-col-reverse gap-0.5 px-4 py-2.5">
-                <dt class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.running`) }}</dt>
-                <dd class="text-lg font-semibold leading-6 tabular-nums text-content">
-                    <template v-if="figures.hosted === undefined">—</template>
-                    <template v-else>
-                        {{ figures.running }}<span v-if="figures.hosted !== figures.running" class="text-sm font-normal text-subtle">/{{ figures.hosted }}</span>
-                    </template>
-                </dd>
-            </div>
-            <div v-tooltip.top="{ title: t(`sandbox.deviceBoardCard.syncedTitle`), note: t(`sandbox.deviceBoardCard.syncedTip`) }" class="flex flex-col-reverse gap-0.5 border-l border-line-subtle px-4 py-2.5">
-                <dt class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.synced`) }}</dt>
-                <dd class="text-lg font-semibold leading-6 tabular-nums" :class="figures.synced === 0 ? `text-subtle` : `text-content`">{{ figures.synced }}</dd>
-            </div>
-            <div v-tooltip.top="{ title: t(`sandbox.deviceBoardCard.portsTitle`), note: t(`sandbox.deviceBoardCard.portsTip`) }" class="flex flex-col-reverse gap-0.5 border-l border-line-subtle px-4 py-2.5">
-                <dt class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.ports`) }}</dt>
-                <dd class="text-lg font-semibold leading-6 tabular-nums" :class="figures.ports === 0 ? `text-subtle` : `text-content`">{{ figures.ports }}</dd>
-            </div>
-        </dl>
-
-        <!-- What runs here, one line per sandbox, capped; a full row each would make the tile taller than the machine. -->
-        <ul
-            v-if="body.lines.length > 0 || body.more > 0"
-            class="flex flex-col gap-1.5 border-t border-line-subtle px-4 py-3"
-            :class="offline ? `opacity-60` : ``"
-        >
-            <li v-for="line in body.lines" :key="line.sandboxId" class="flex min-w-0 items-center gap-2.5">
-                <span class="flex w-3 shrink-0 justify-center">
-                    <!-- Turns while something is done to this sandbox, as its row does on the page. -->
-                    <Icon v-if="turning.includes(line.sandboxId)" name="spinner" spin class="text-2xs text-muted" aria-hidden="true" />
-                    <span
-                        v-else-if="line.running !== undefined"
-                        class="h-2 w-2 rounded-full"
-                        :class="toneDot(line.running ? `success` : `neutral`)"
-                        role="img"
-                        :aria-label="line.running ? t(`sandbox.deviceBoardCard.running`) : t(`sandbox.deviceBoardCard.stopped`)"
-                    ></span>
-                    <!-- Synced or mirrored here, running somewhere else: a hollow ring, present but not on this engine. -->
-                    <span
-                        v-else
-                        class="h-2 w-2 rounded-full border border-content/30"
-                        role="img"
-                        :aria-label="t(`sandbox.deviceBoardCard.notRunningHere`)"
-                    ></span>
-                </span>
-                <span class="flex min-w-0 flex-1 items-center gap-2">
-                    <span class="min-w-0 truncate text-xs" :class="line.running === true ? `text-content` : `text-muted`">{{ line.title }}</span>
-                    <StatusBadge v-if="line.self" variant="info" size="xs" :label="t(`sandbox.words.oneYoureUsing`)" class="shrink-0" />
-                </span>
-                <!-- Facts as a row's meta: counted and uncoloured. A warning keeps its ink: it is the reason to open this machine. -->
-                <span v-if="line.warnings.length > 0" class="min-w-0 max-w-[55%] truncate text-2xs text-warning" v-tooltip.top="line.warnings.join(` · `)">
-                    {{ line.warnings[0] }}
-                </span>
-                <span v-else-if="line.facts.length > 0" class="shrink-0 text-2xs tabular-nums text-subtle">{{ line.facts.join(` · `) }}</span>
-            </li>
-            <!-- Counted against what the machine reported, so a capped list never reads as the whole of it. -->
-            <li v-if="body.more > 0" class="pl-5 text-2xs text-subtle">{{ t(`sandbox.deviceBoardCard.more`, { more: body.more }) }}</li>
-        </ul>
-        <!-- A machine that holds nothing says so, rather than ending on three noughts that read as a reading gone wrong. -->
-        <p v-else-if="needle === ``" class="border-t border-line-subtle px-4 py-3 text-xs text-subtle">
-            {{ t(`sandbox.deviceBoardCard.holdsNothing`) }}
+        <!-- A filter that found this machine by a sandbox or a port says which, since the tile lists none. -->
+        <p v-if="body.matches.length > 0" class="mx-4 mb-3 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+            <Icon name="search" class="shrink-0 text-subtle" aria-hidden="true" />
+            <span class="min-w-0 truncate">{{ body.matches.join(`, `) }}</span>
         </p>
     </RouterLink>
 </template>
