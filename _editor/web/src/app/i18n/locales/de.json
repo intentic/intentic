@@ -8410,6 +8410,7 @@
             "giveItName": "Geben Sie ihm einen Namen.",
             "keepItUnder": "Höchstens {max} Zeichen: Der Agent liest das in jedem Zug.",
             "lowercaseLettersNumbersDashes": "Kleinbuchstaben, Ziffern und Bindestriche: so ruft der Agent ihn auf.",
+            "newSkill": "Neuer Skill",
             "readMergedPullRequests": "Lies die seit dem letzten Tag gemergten Pull-Requests und ordne sie unter Hinzugefügt, Geändert und Behoben ein.",
             "sayWhenToReach": "Sagen Sie, wann der Agent darauf zurückgreifen soll.",
             "toUse": "Wann er zu verwenden ist",

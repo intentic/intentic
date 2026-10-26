@@ -8410,6 +8410,7 @@
             "giveItName": "Donnez-lui un nom.",
             "keepItUnder": "Moins de {max} caractères : l'agent le lit à chaque tour.",
             "lowercaseLettersNumbersDashes": "Minuscules, chiffres et tirets : c'est ainsi que l'agent l'invoque.",
+            "newSkill": "Nouveau skill",
             "readMergedPullRequests": "Lis les pull requests fusionnées depuis le dernier tag, puis regroupe-les sous Ajouté, Modifié et Corrigé.",
             "sayWhenToReach": "Dites quand l'agent doit y recourir.",
             "toUse": "Quand l'utiliser",

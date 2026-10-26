@@ -8410,6 +8410,7 @@
             "giveItName": "Ponle un nombre.",
             "keepItUnder": "Menos de {max} caracteres: el agente lo lee en cada turno.",
             "lowercaseLettersNumbersDashes": "Minúsculas, números y guiones: es como la invoca el agente.",
+            "newSkill": "Nueva skill",
             "readMergedPullRequests": "Lee los pull requests fusionados desde la última etiqueta y agrúpalos en Añadido, Cambiado y Corregido.",
             "sayWhenToReach": "Indica cuándo debe usarla el agente.",
             "toUse": "Cuándo usarla",

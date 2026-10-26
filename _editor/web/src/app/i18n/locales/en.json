@@ -8410,6 +8410,7 @@
             "giveItName": "Give it a name.",
             "keepItUnder": "Keep it under {max} characters: the agent reads it every turn.",
             "lowercaseLettersNumbersDashes": "Lowercase letters, numbers and dashes: it's how the agent invokes it.",
+            "newSkill": "New skill",
             "readMergedPullRequests": "Read the merged pull requests since the last tag, then group them under Added, Changed and Fixed.",
             "sayWhenToReach": "Say when the agent should reach for it.",
             "toUse": "When to use it",

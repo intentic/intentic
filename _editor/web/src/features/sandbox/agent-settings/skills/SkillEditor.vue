@@ -4,17 +4,17 @@ import { Button, Icon, MarkdownDocument, ProseField, useDevice } from "@intentic
 import { computed, ref, useId } from "vue";
 import { useT } from "@intentic/ui/i18n";
 
-// A skill written where it is read: the trigger line and the instructions in the type they are read in, with no field
-// boxes. A quiet label on the left and the value on the right, which is also where it changes: at rest it reads as
-// text, and a hover wash says it can be typed into. The name is not asked here: a saved skill's is frozen (it is the
-// invocation key and the directory) and its row already says it, and a new one is named in the head of the row it will
-// become (<SkillDraftRow>), which hands it in as `name` and is told where to put the caret when it is missing.
+// Two looks, by what the reader is doing. Rewriting a saved skill is editing where it is read: the trigger line and the
+// instructions in the type they are read in, no field boxes, a hover wash saying they can be typed into. Its name is
+// not asked: it is frozen (the invocation key and the directory) and the row already says it.
+// Writing a new one is filling in blanks, and a blank has to look like one: every field is a labelled, framed box, with
+// the label strongest, the hint under it quieter, and the example inside the frame, so an example never passes for a
+// value and the form scans as three questions top to bottom. The name is the first of them; the row's head shows it as typed.
 
 const t = useT();
 
 const {
     skill,
-    name = ``,
     taken = [],
     disabled = false,
     saving = false,
@@ -22,8 +22,6 @@ const {
 } = defineProps<{
     /** The skill being rewritten, name and text as stored. Absent means writing a new one. */
     skill?: SkillDraft;
-    /** A new skill's name as typed in its row's head; ignored for a rewrite, which keeps the stored one. */
-    name?: string;
     /** Names already in the list. Saving is an upsert by name, so a new skill named like one of these would replace it. */
     taken?: readonly string[];
     disabled?: boolean;
@@ -33,7 +31,18 @@ const {
     error?: string | undefined;
 }>();
 
-const emit = defineEmits<{ save: [SkillDraft]; cancel: []; focusName: [] }>();
+const emit = defineEmits<{ save: [SkillDraft]; cancel: [] }>();
+
+/** A new skill's name as typed, shared with the row's head that shows it; ignored for a rewrite, which keeps the stored one. */
+const name = defineModel<string>(`name`, { default: `` });
+// Restricts to what a slug can hold (the name becomes a directory), enforced while typing rather than on save.
+const onName = (event: Event): void => {
+    // SAFETY: bound only on the name <input> below, so the event's target is that input.
+    const box = event.target as HTMLInputElement;
+    const typed = box.value.toLowerCase().replace(/[^a-z0-9-]/g, `-`);
+    box.value = typed;
+    name.value = typed;
+};
 
 const creating = computed(() => skill === undefined);
 // A phone writes the instructions in a source box that brings its own padding; the document adds none on top of it.
@@ -42,7 +51,7 @@ const description = ref(skill?.description ?? ``);
 const body = ref(skill?.body ?? ``);
 
 // Trailing dashes are leftover from typing (`code-review-`), not part of the intended name.
-const slug = computed(() => (skill === undefined ? name.replace(/-+$/, ``) : skill.name));
+const slug = computed(() => (skill === undefined ? name.value.replace(/-+$/, ``) : skill.name));
 
 // One problem per field, or none. The save button stays pressable: a press on an incomplete skill says what is missing
 // under the value that needs it and puts the caret there, rather than a dimmed button that can't be asked why. In the
@@ -78,17 +87,17 @@ const dirty = computed(
     () => skill === undefined || description.value.trim() !== skill.description.trim() || body.value.trim() !== skill.body.trim(),
 );
 
-const ids = { description: useId(), body: useId() };
-type Own = Exclude<Field, `name`>;
-const hintOf = (field: Own): string => `${ids[field]}-hint`;
-const problemOf = (field: Own): string => `${ids[field]}-problem`;
-const describedBy = (field: Own): string => (shown(field) === undefined ? hintOf(field) : `${hintOf(field)} ${problemOf(field)}`);
+const ids = { name: useId(), description: useId(), body: useId() };
+const hintOf = (field: Field): string => `${ids[field]}-hint`;
+const problemOf = (field: Field): string => `${ids[field]}-problem`;
+const describedBy = (field: Field): string => (shown(field) === undefined ? hintOf(field) : `${hintOf(field)} ${problemOf(field)}`);
 
+const nameBox = ref<HTMLInputElement>();
 const triggerBox = ref<{ field: HTMLTextAreaElement | undefined }>();
 const bodyBox = ref<{ focus: () => void }>();
 const focus = (field: Field): void => {
     if (field === `name`) {
-        emit(`focusName`);
+        nameBox.value?.focus();
     } else if (field === `description`) {
         triggerBox.value?.field?.focus();
     } else {
@@ -96,9 +105,7 @@ const focus = (field: Field): void => {
     }
 };
 
-// What the head says under a new skill's name: said here, where the rule lives, and drawn there, where the name is.
-const nameProblem = computed(() => (creating.value ? shown(`name`) : undefined));
-defineExpose({ focus, nameProblem });
+defineExpose({ focus });
 
 const save = (): void => {
     if (disabled || saving || !dirty.value) {
@@ -115,28 +122,67 @@ const save = (): void => {
 
 const example = (text: string): string => t(`sandbox.skillForm.forExample`, { example: text });
 
-// Each value under its quiet label, all on one left edge: two values, one a sentence and one a document, read down a
-// column better than across a label gutter that would only narrow them.
-const PAIR = `flex flex-col gap-0.5`;
-const LABEL = `text-xs text-subtle`;
-// A value that is also where it changes: no box at rest, a wash under the pointer and while the caret is in it, pulled
-// out by its own padding so its words line up with everything else in the column rather than with the wash.
-const VALUE = `-mx-2 rounded-md transition-colors hover:bg-content/5 focus-within:bg-content/5`;
+// Each value under its label, all on one left edge: a sentence and a document read down a column better than across a
+// label gutter that would only narrow them.
+const PAIR = `flex flex-col gap-1`;
+// A rewrite labels quietly, like every other open row's facts; a new skill's labels are the questions being asked.
+const LABEL = computed(() => (creating.value ? `text-sm font-medium text-content` : `text-xs text-subtle`));
+// The hint answers "how do I write this", so it sits between the question and the box, and reads below the label.
+const HINT = `text-xs text-muted`;
+// A rewrite's value is also where it changes: no box at rest, a wash under the pointer and while the caret is in it,
+// pulled out by its own padding so its words line up with everything else in the column rather than with the wash.
+const WASH = `-mx-2 rounded-md transition-colors hover:bg-content/5 focus-within:bg-content/5`;
+// A new skill's value is a blank to fill: the field frame, a step of room under the hint.
+const FRAME = `ui-field-shell mt-1`;
+const PROBLEM = `flex items-center gap-1.5 text-xs text-danger`;
 </script>
 
 <template>
     <!-- Ctrl/Cmd+Enter or +S saves from any value, the same chords the app's other documents answer to. -->
     <div
-        class="flex flex-col gap-4"
+        class="flex flex-col"
+        :class="creating ? `gap-6` : `gap-4`"
         @keydown.ctrl.enter.prevent="save"
         @keydown.meta.enter.prevent="save"
         @keydown.ctrl.s.prevent="save"
         @keydown.meta.s.prevent="save"
     >
+        <!-- A new skill's name, first because the rest is written about it. In the type it is invoked by. -->
+        <div v-if="creating" :class="PAIR">
+            <label :for="ids.name" :class="LABEL">{{ t(`shared.name`) }}</label>
+            <p :id="hintOf(`name`)" :class="HINT">{{ t(`sandbox.skillForm.lowercaseLettersNumbersDashes`) }}</p>
+            <input
+                :id="ids.name"
+                ref="nameBox"
+                :value="name"
+                type="text"
+                :placeholder="example(`release-notes`)"
+                spellcheck="false"
+                autocapitalize="off"
+                autocorrect="off"
+                autocomplete="off"
+                :aria-describedby="describedBy(`name`)"
+                :aria-invalid="shown(`name`) !== undefined"
+                :disabled="disabled"
+                class="ui-field-box mt-1 w-full max-w-80 font-mono"
+                :class="shown(`name`) === undefined ? `` : `ui-field-error-box`"
+                @input="onName"
+                @keydown.enter.exact.prevent="focus(`description`)"
+            />
+            <p v-if="shown(`name`) !== undefined" :id="problemOf(`name`)" :class="PROBLEM">
+                <Icon name="exclamation-circle" class="shrink-0 text-2xs" aria-hidden="true" />
+                {{ shown(`name`) }}
+            </p>
+        </div>
+
         <!-- The value most likely to be typed carelessly, and the only one whose carelessness is invisible afterwards, so
              what the agent does with it is said while a new one is written. -->
         <div :class="PAIR">
             <label :for="ids.description" :class="LABEL">{{ t(`sandbox.skillForm.toUse`) }}</label>
+            <!-- On a rewrite only to a screen reader: a line that appeared on focus would push the instructions down under the caret. -->
+            <p :id="hintOf(`description`)" :class="creating ? HINT : `sr-only`">
+                {{ t(`sandbox.skillForm.agentReadsEveryTurn`) }}
+            </p>
             <ProseField
                 :id="ids.description"
                 ref="triggerBox"
@@ -145,13 +191,9 @@ const VALUE = `-mx-2 rounded-md transition-colors hover:bg-content/5 focus-withi
                 :aria-describedby="describedBy(`description`)"
                 :aria-invalid="shown(`description`) !== undefined"
                 :disabled="disabled"
-                :class="VALUE"
+                :class="creating ? [FRAME, shown(`description`) === undefined ? `` : `ui-field-error-box`] : WASH"
             />
-            <!-- On a rewrite only to a screen reader: a line that appeared on focus would push the instructions down under the caret. -->
-            <p :id="hintOf(`description`)" class="text-2xs text-subtle" :class="creating ? `` : `sr-only`">
-                {{ t(`sandbox.skillForm.agentReadsEveryTurn`) }}
-            </p>
-            <p v-if="shown(`description`) !== undefined" :id="problemOf(`description`)" class="flex items-center gap-1.5 text-xs text-danger">
+            <p v-if="shown(`description`) !== undefined" :id="problemOf(`description`)" :class="PROBLEM">
                 <Icon name="exclamation-circle" class="shrink-0 text-2xs" aria-hidden="true" />
                 {{ shown(`description`) }}
             </p>
@@ -159,9 +201,15 @@ const VALUE = `-mx-2 rounded-md transition-colors hover:bg-content/5 focus-withi
 
         <div :class="PAIR">
             <span :class="LABEL">{{ t(`sandbox.words.instructions`) }}</span>
-            <p :id="hintOf(`body`)" class="text-2xs text-subtle" :class="creating ? `` : `sr-only`">{{ t(`sandbox.skillForm.whatAgentDoesOnce`) }}</p>
-            <!-- No Write/Preview toggle: markup shows only in the block holding the caret. -->
-            <div :aria-describedby="describedBy(`body`)" style="--prose-measure: 76ch">
+            <p :id="hintOf(`body`)" :class="creating ? HINT : `sr-only`">{{ t(`sandbox.skillForm.whatAgentDoesOnce`) }}</p>
+            <!-- No Write/Preview toggle: markup shows only in the block holding the caret. A phone writes in a source box
+                 that brings its own frame and padding, so neither look adds one there. -->
+            <div
+                :aria-describedby="describedBy(`body`)"
+                style="--prose-measure: 76ch"
+                :class="creating && !mobile ? [FRAME, `cursor-text px-1`, shown(`body`) === undefined ? `` : `ui-field-error-box`] : ``"
+                @click.self="bodyBox?.focus()"
+            >
                 <MarkdownDocument
                     ref="bodyBox"
                     v-model="body"
@@ -169,11 +217,10 @@ const VALUE = `-mx-2 rounded-md transition-colors hover:bg-content/5 focus-withi
                     save="none"
                     :label="t(`sandbox.skillForm.whatSkillShouldDo`)"
                     :placeholder="example(t(`sandbox.skillForm.readMergedPullRequests`))"
-                    class="min-h-28"
-                    :class="mobile ? `` : [VALUE, `px-2 py-1`]"
+                    :class="mobile ? `min-h-28` : creating ? `min-h-40 px-2 py-1` : [`min-h-28`, WASH, `px-2 py-1`]"
                 />
             </div>
-            <p v-if="shown(`body`) !== undefined" :id="problemOf(`body`)" class="flex items-center gap-1.5 text-xs text-danger">
+            <p v-if="shown(`body`) !== undefined" :id="problemOf(`body`)" :class="PROBLEM">
                 <Icon name="exclamation-circle" class="shrink-0 text-2xs" aria-hidden="true" />
                 {{ shown(`body`) }}
             </p>

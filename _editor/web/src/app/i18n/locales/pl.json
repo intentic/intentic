@@ -7916,6 +7916,7 @@
             "giveItName": "Nadaj jej nazwę.",
             "keepItUnder": "Najwyżej {max} znaków: agent czyta to w każdej turze.",
             "lowercaseLettersNumbersDashes": "Małe litery, cyfry i myślniki: tak agent ją wywołuje.",
+            "newSkill": "Nowa umiejętność",
             "readMergedPullRequests": "Przeczytaj pull requesty scalone od ostatniego taga i pogrupuj je w Dodane, Zmienione i Poprawione.",
             "sayWhenToReach": "Napisz, kiedy agent ma po nią sięgać.",
             "toUse": "Kiedy jej używać",
