@@ -62,11 +62,9 @@ import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeNote from "../explorer/WorkspaceScopeNote.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import ExplorerSearchBar from "../search/ExplorerSearchBar.vue";
-import BringProjectButton from "../explorer/BringProjectButton.vue";
 import BringProjectModal from "../explorer/BringProjectModal.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import WorkspaceTree from "../explorer/WorkspaceTree.vue";
-import HomeCoverPicker from "../home/HomeCoverPicker.vue";
 import { type RowAction, rowActionsFor } from "../explorer/rowActions";
 import { paneOf } from "../../../models/workspace/tabs/workspaceTabs";
 import { HOISTED_CONTEXT } from "../files/viewerChrome";
@@ -745,9 +743,6 @@ const homeTooltip = computed((): Tip => ({
                     :filter-tip="lensTip"
                 >
                     <template #tools>
-                        <BringProjectButton />
-                        <!-- One file read in every folder: the tree then lists folders alone, and the page beside it reads them. -->
-                        <HomeCoverPicker v-if="!contentMode" compact :cover="cover" @choose="(name) => (cover = name)" @drop="cover = undefined" />
                         <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
                         <!-- Codebase health is a developer's reading: a maker's toolbar has no press for it. -->
                         <button
