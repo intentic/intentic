@@ -26,9 +26,11 @@ flowchart LR
   metal (the rule is "One signal colour" in [../../../ui/README.md](../../../ui/README.md)). The colour picked in
   Appearance still tints the stone through the neutral ramp, and its row says so while Sanctum is on.
 - Silver is smoked glass in a misty room, in neutral greys. The room is `valley-ground.avif`, the valley blurred past
-  recognition (`wallpaper:art` makes it). The canvas, the panes and the raised surfaces (composer, dialogs, menus)
-  each paint that same ground, fixed to the window, under a veil of their own weight. So a pane shows the room's
-  light through it, yet stays opaque and never stacks darker when nested. Elements that also carry a `hover:bg-*`
+  recognition (`wallpaper:art` makes it). The canvas, the rail, the panes and the raised surfaces (composer, dialogs,
+  menus) each paint that same ground, fixed to the window, under a near-opaque veil of their own tone. Only 3–5% of
+  the room shows through, a few grey levels across the window, so wide surfaces stay calm instead of reading as a
+  gradient. Each surface stays opaque and never stacks darker when nested. The quieter inks (`muted`, `subtle`) are
+  set for the lightest surface they sit on, the composer, and keep 4.5:1 there. Elements that also carry a `hover:bg-*`
   utility keep a plain colour, so their hover still shows. Separation comes from tone, not drawn rules. The accent
   ramp is near-colourless silver, and the loud button is a polished plate. Over a wallpaper, the board's cards are
   true `backdrop-filter` glass. Their hover fades a wash in over the fill instead of swapping the fill, which made

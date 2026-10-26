@@ -3,11 +3,13 @@
    the dark scheme, and the dark scheme's own rules (semantic-colors.css) are what this file re-answers.
 
    HOW THE GLASS IS MADE. The room is the valley blurred past recognition (`valley-ground.avif`, wallpaper-art.mjs), and
-   every large surface paints that same ground, fixed to the window, under a veil of its own weight: the canvas a dark
-   one, a pane a lighter and thinner one. A pane therefore shows the light of the room through it, as glass does, while
-   staying opaque: nothing written under it can read through, and a pane inside a pane paints the very same pixels, so
-   nesting never stacks into a darker box. True `backdrop-filter` glass is kept for the one place there is a sharp
-   picture behind: the board's cards over its wallpaper.
+   every large surface paints that same ground, fixed to the window, under a near-opaque veil of its own tone: the canvas
+   the darkest, the rail a step up, a pane a step above that. The veils let only a few percent of the room through, so
+   it reads as a faint unevenness of light, a handful of grey levels across the whole window, never as a gradient: a
+   wide surface you read on all day has to stay calm. Every surface stays opaque, so nothing written under it reads
+   through, and a pane inside a pane paints the very same pixels, so nesting never stacks into a darker box. True
+   `backdrop-filter` glass is kept for the one place there is a sharp picture behind: the board's cards over its
+   wallpaper.
 
    THE GREYS ARE NEUTRAL. Silver is the metal, not slate: every ramp here carries a trace of chroma at most, and the
    room's own picture is half drained of colour, so nothing reads blue. */
@@ -23,7 +25,7 @@
     --color-primary-100: oklch(93.5% 0.003 250);
     --color-primary-200: oklch(89.5% 0.003 250);
     --color-primary-300: var(--silver-bright);
-    --color-primary-400: oklch(80% 0.004 250);
+    --color-primary-400: oklch(81.5% 0.004 250);
     --color-primary-500: var(--silver);
     --color-primary-600: oklch(64% 0.004 250);
     --color-primary-700: oklch(55% 0.004 250);
@@ -31,7 +33,9 @@
     --color-primary-900: oklch(38% 0.004 250);
     --color-primary-950: oklch(29% 0.003 250);
 
-    --silver: oklch(74% 0.004 250);
+    /* 77%, not darker: the metal is also an ink (a pressed composer toggle's label, over a 16% wash of itself), and
+       holds 4.5:1 there. */
+    --silver: oklch(77% 0.004 250);
     --silver-bright: oklch(86% 0.003 250);
     --color-selection-edge: color-mix(in oklab, var(--silver-bright) 75%, transparent);
 
@@ -50,15 +54,16 @@
     --color-surface-900: color-mix(in oklab, oklch(24% 0.004 250) 88%, var(--color-neutral-900));
     --color-surface-950: color-mix(in oklab, oklch(18.5% 0.003 250) 88%, var(--color-neutral-950));
 
-    /* THE ROOM AND ITS VEILS. The ground is dimmed once for everything, then each surface lays its own veil over it.
-       The role colours below are what those veils average to, so a small surface drawn in plain colour (a chip, a
-       field, a badge's ring) sits in a pane as if cut from it. */
+    /* THE ROOM AND ITS VEILS. Each surface lays one veil over the ground, and lets 3–5% of it through: the room ranges
+       over some 170 grey levels, so a surface varies by five to eight of them from its darkest corner to its lightest.
+       At a quarter of that weight the panes swept from dark to bright across the window and read as a gradient. The
+       role colours below are what the veils average to, so a small surface drawn in plain colour (a chip, a field, a
+       badge's ring) sits in a pane as if cut from it. */
     --silver-ground: url("/assets/wallpaper/valley-ground.avif");
-    --silver-dim: rgb(10 10 11 / 0.38);
-    --silver-veil-canvas: rgb(15 16 17 / 0.77);
-    --silver-veil-rail: rgb(22 23 24 / 0.72);
-    --silver-veil-pane: rgb(37 38 40 / 0.68);
-    --silver-veil-raised: rgb(50 51 53 / 0.78);
+    --silver-veil-canvas: rgb(22 23 24 / 0.97);
+    --silver-veil-rail: rgb(29 30 31 / 0.97);
+    --silver-veil-pane: rgb(35 36 38 / 0.965);
+    --silver-veil-raised: rgb(45 46 48 / 0.95);
 
     /* LIGHT, NOT LINES: what separates two things here is a step of tone; the few rules left are faint. */
     --silver-hairline: rgb(255 255 255 / 0.06);
@@ -74,19 +79,25 @@
     --silver-plate-bevel: inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -1px 0 rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.4);
     --silver-sheen: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 0.5) 48%, transparent 66%);
 
-    /* THE ROLES. */
-    --role-canvas: oklch(19.5% 0.002 250);
-    --role-card: oklch(26% 0.003 250);
+    /* THE ROLES: canvas, rail, pane and raised sit about 0.025–0.045 of lightness apart, so tone alone tells them
+       apart. A pane is kept low: any lighter, and the cards and settings groups drawn in it wash out the ink on them. */
+    --role-canvas: oklch(21.2% 0.002 250);
+    --role-card: oklch(26.5% 0.003 250);
     --role-overlay: oklch(31% 0.003 250);
+    --silver-rail: oklch(24% 0.002 250);
     --role-line: var(--silver-hairline);
     --role-line-strong: var(--silver-hairline-strong);
     --role-line-subtle: rgb(255 255 255 / 0.04);
 
-    /* Ink is a soft white, a little short of white so a long read does not glare. */
+    /* Ink is a soft white, a little short of white so a long read does not glare. The two quieter inks are set by
+       the lightest surface they are read on, not by the canvas: the composer, a dialog or a picked card sits near 31%,
+       and the metadata, placeholders and lane names written there are 11–12px. `subtle` holds 4.5:1 there (5:1 on a
+       pane, 6:1 on the canvas); at 61% it fell to 3.5:1 on the composer and 4:1 on a pane. `muted` keeps a clear step
+       above it and 5:1 on a chip. `faint` is for marks, not words, and keeps 3:1 on a raised surface. */
     --role-content: oklch(91% 0.002 250);
-    --role-muted: oklch(73% 0.003 250);
-    --role-subtle: oklch(61% 0.003 250);
-    --role-faint: color-mix(in oklab, var(--role-subtle) 70%, var(--role-card));
+    --role-muted: oklch(77% 0.003 250);
+    --role-subtle: oklch(68.5% 0.003 250);
+    --role-faint: color-mix(in oklab, var(--role-subtle) 76%, var(--role-card));
     --silver-heading-ink: oklch(96% 0.002 250);
 
     --role-link: var(--silver-bright);
@@ -135,7 +146,6 @@
     [data-skin="silver"] .bg-canvas:not([class*="hover:bg-"]) {
         background-image:
             linear-gradient(var(--silver-veil-canvas), var(--silver-veil-canvas)),
-            linear-gradient(var(--silver-dim), var(--silver-dim)),
             var(--silver-ground);
         background-size: cover;
         background-position: center;
@@ -149,7 +159,6 @@
     [data-skin="silver"] .ui-card {
         background-image:
             linear-gradient(var(--silver-veil-pane), var(--silver-veil-pane)),
-            linear-gradient(var(--silver-dim), var(--silver-dim)),
             var(--silver-ground);
         background-size: cover;
         background-position: center;
@@ -164,7 +173,6 @@
     [data-skin="silver"] :is(.p-popover, .p-menu, .p-select-overlay, .p-multiselect-overlay, .p-autocomplete-overlay, .ui-anchored-surface) {
         background-image:
             linear-gradient(var(--silver-veil-raised), var(--silver-veil-raised)),
-            linear-gradient(var(--silver-dim), var(--silver-dim)),
             var(--silver-ground);
         background-size: cover;
         background-position: center;
@@ -450,7 +458,7 @@
     }
     [data-skin="silver"][data-wallpaper] .agents-board [data-lane] .bg-card:not(.session-card) {
         background-image: none;
-        background-color: rgb(30 31 33 / 0.6);
+        background-color: rgb(26 27 29 / 0.64);
         -webkit-backdrop-filter: var(--silver-frost);
         backdrop-filter: var(--silver-frost);
     }
@@ -462,8 +470,8 @@
 /* THE BOARD'S CARDS ARE TRUE GLASS over its picture: styles.css states their gradient's stops unlayered, so these must
    be too. */
 [data-skin="silver"][data-wallpaper] .agents-board .session-card {
-    --session-card-fill-hi: rgb(42 43 45 / 0.72);
-    --session-card-fill-lo: rgb(28 29 31 / 0.66);
+    --session-card-fill-hi: rgb(36 37 39 / 0.76);
+    --session-card-fill-lo: rgb(24 25 27 / 0.7);
     -webkit-backdrop-filter: var(--silver-frost);
     backdrop-filter: var(--silver-frost);
 }
@@ -502,13 +510,12 @@
     transition: none;
 }
 
-/* THE RAIL is the frame's own glass: the same room through a darker veil than the panes beside it, so it stands apart
-   from the file tree by tone alone, and its tiles light by washes. */
+/* THE RAIL is the frame's own glass: the same room through a veil between the canvas's and a pane's, so it stands apart
+   from the file tree by tone alone without sinking to the canvas's near-black, and its tiles light by washes. */
 [data-skin="silver"] .icon-rail {
-    --ui-tile-ground: oklch(22% 0.002 250);
+    --ui-tile-ground: var(--silver-rail);
     background-image:
         linear-gradient(var(--silver-veil-rail), var(--silver-veil-rail)),
-        linear-gradient(var(--silver-dim), var(--silver-dim)),
         var(--silver-ground);
     box-shadow: none;
 }
