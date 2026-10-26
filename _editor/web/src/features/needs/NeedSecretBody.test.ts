@@ -110,10 +110,22 @@ it("keeps it in the sandbox, with no choice offered, while no computer's keyring
     done();
 });
 
-it("keeps it on the computer by default once a keyring answers, asking each time", async () => {
+it("keeps it in the sandbox by default even when a configured keyring answers", async () => {
+    keyrings.value = [{ machine: `rog`, online: true, locked: false, setUp: true, shared: 0 }];
+    const { el, typeValue, press, done } = mount();
+    expect(el.querySelector(`button[role="tab"][aria-selected="true"]`)?.textContent?.trim()).toBe(`Keep it in the sandbox`);
+    expect(el.textContent).toContain(`Stored in this sandbox as VPN_PASSWORD.`);
+    await typeValue(`hunter2`);
+    await press(`Save`);
+    expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: undefined });
+    expect(say).not.toHaveBeenCalled();
+    done();
+});
+
+it("keeps it on the computer when explicitly picked, asking each time", async () => {
     keyrings.value = [{ machine: `rog`, online: true, locked: false, shared: 0 }];
     const { el, typeValue, press, done } = mount();
-    // The owner's computer is the default home while its keyring answers; the sandbox is one press away.
+    await press(`Keep it on my computer`);
     expect(el.querySelector(`button[role="tab"][aria-selected="true"]`)?.textContent?.trim()).toBe(`Keep it on my computer`);
     expect(el.textContent).toContain(`Each use asks you on rog first, with Windows Hello or the keyring's passphrase.`);
     expect(el.textContent).toContain(`Kept in the keyring on rog as VPN_PASSWORD.`);
@@ -122,6 +134,17 @@ it("keeps it on the computer by default once a keyring answers, asking each time
     expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: { device: `rog`, mode: `each-use` } });
     // Unlocked, it is taken in at once: nothing to say after.
     expect(say).not.toHaveBeenCalled();
+    done();
+});
+
+it("keeps the sandbox default when a keyring comes online after the card opens", async () => {
+    const { el, typeValue, press, done } = mount();
+    await typeValue(`hunter2`);
+    keyrings.value = [{ machine: `rog`, online: true, locked: false, setUp: true, shared: 0 }];
+    await nextTick();
+    expect(el.querySelector(`button[role="tab"][aria-selected="true"]`)?.textContent?.trim()).toBe(`Keep it in the sandbox`);
+    await press(`Save`);
+    expect(provideSecret.mutateAsync).toHaveBeenCalledWith({ id: `need-1`, value: `hunter2`, keepOn: undefined });
     done();
 });
 

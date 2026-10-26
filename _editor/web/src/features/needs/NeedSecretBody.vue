@@ -26,14 +26,12 @@ const value = ref(``);
 const { busy, notice, answer } = useNeedAnswer(() => props.need);
 
 // Where it is kept. Offered only while a computer's keyring answers, since a value sent to a computer that does not is a
-// value nobody can take in; and then the computer is the default (2026-10-19, Passwords): a password kept where the
-// owner's own vault is, asked for at each use, is the stronger home, and the sandbox stays one press away. Once the
-// person picks, a keyring coming or going no longer moves the choice under them.
+// value nobody can take in. Keep it in the sandbox by default; a computer is an explicit choice. Once the person
+// picks, a keyring coming or going no longer moves the choice under them.
 const { online } = useKeyrings();
-const picked = ref<`sandbox` | `computer` | undefined>(undefined);
+const picked = ref<`sandbox` | `computer`>(`sandbox`);
 const where = computed<`sandbox` | `computer`>({
-    // A keyring that answers but has no vault yet (`setUp` false) can still be picked, and is no default.
-    get: () => (online.value.length === 0 ? `sandbox` : (picked.value ?? (online.value.some((keyring) => keyring.setUp !== false) ? `computer` : `sandbox`))),
+    get: () => (online.value.length === 0 ? `sandbox` : picked.value),
     set: (choice) => {
         picked.value = choice;
     },
