@@ -128,7 +128,7 @@ const lookTool = (): WebMcpTool => {
     return {
         name: `editor_look`,
         description:
-            `Read or set the editor's look, as the Appearance setting does: system, light, dark or sanctum. Applies live, ` +
+            `Read or set the editor's look, as the Appearance setting does: system, light, dark, sanctum or silver. Applies live, ` +
             `no reload. Answers the look worn and the attributes and canvas colour it resolved to, which are the truth to ` +
             `check a screenshot against. Omit look to only read it.`,
         inputSchema: { type: `object`, properties: { look: { type: `string`, enum: THEME_ROW } } },
@@ -139,7 +139,7 @@ const lookTool = (): WebMcpTool => {
                     throw new Error(`look is one of ${THEME_ROW.join(`, `)}`);
                 }
                 const pair = themeRowLook(look as ThemeRow);
-                // The skin first, as the Appearance row does: pinning sanctum drags the scheme dark with it.
+                // The skin first, as the Appearance row does: pinning a skin drags the scheme dark with it.
                 setSkin(pair.skin);
                 setScheme(pair.scheme);
                 await nextTick();

@@ -100,6 +100,29 @@ describe(`useSkin`, () => {
         expect(localStorage.getItem(`ui-skin`)).toBe(`sanctum`);
     });
 
+    // Under a dark system, so the scheme pinned here does not move: every case's evaluation of the skin stays alive and
+    // still follows the one shared theme, and a scheme flip would have the earlier ones write sanctum over this.
+    it(`pins silver the same way: its attribute, its storage, and the dark scheme`, async () => {
+        systemIs(`dark`);
+        const { useSkin } = await load();
+
+        useSkin().setSkin(`silver`);
+
+        expect(useSkin().skin.value).toBe(`silver`);
+        expect(root().getAttribute(`data-skin`)).toBe(`silver`);
+        expect(localStorage.getItem(`ui-skin`)).toBe(`silver`);
+        expect(localStorage.getItem(`ui-color-scheme`)).toBe(`dark`);
+    });
+
+    it(`restores a stored silver, which the system never picks on its own`, async () => {
+        systemIs(`dark`);
+        localStorage.setItem(`ui-skin`, `silver`);
+        const { useSkin } = await load();
+
+        expect(useSkin().skin.value).toBe(`silver`);
+        expect(root().getAttribute(`data-skin`)).toBe(`silver`);
+    });
+
     it(`turns it off completely: no attribute left, and the scheme stays where it was`, async () => {
         systemIs(`dark`);
         localStorage.setItem(`ui-skin`, `sanctum`);

@@ -6,7 +6,7 @@ import { definePreference } from "@intentic/ui/preference";
 // the scheme. `none` writes no attribute; `mist` is the default when nothing is stored yet.
 
 /** Every wallpaper there is; the list the Appearance row offers, in order. */
-export const WALLPAPERS = [`none`, `mist`] as const;
+export const WALLPAPERS = [`none`, `mist`, `valley`] as const;
 export type Wallpaper = (typeof WALLPAPERS)[number];
 
 const STORAGE_KEY = `ui-wallpaper`;

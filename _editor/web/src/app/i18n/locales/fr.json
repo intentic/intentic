@@ -10524,6 +10524,7 @@
             "look": {
                 "colour": "Couleur",
                 "colourSanctumHint": "Dans Sanctum, les mises en évidence restent dorées et cette couleur ne teinte que la pierre.",
+                "colourSilverHint": "En Argent, les accents restent argentés et cette couleur ne teinte que le verre.",
                 "group": "Apparence",
                 "iconRail": "Rail d'icônes",
                 "language": "Langue",
@@ -10540,12 +10541,15 @@
                 "light": "Clair",
                 "sanctum": "Sanctum",
                 "sanctumHint": "L'apparence d'intentic.dev : pierre cendrée, un filet doré autour de chaque panneau, des plaques gravées et fondues, et la typographie du site.",
+                "silver": "Argent",
+                "silverHint": "Ardoise froide et verre dépoli sur une vallée brumeuse, avec l'argent pour chaque accent.",
                 "system": "Système",
                 "systemHint": "Suit votre système d'exploitation : Sanctum quand il est sombre, l'apparence claire sinon."
             },
             "wallpaper": {
                 "mist": "Brume",
-                "none": "Aucun"
+                "none": "Aucun",
+                "valley": "Vallée"
             },
             "work": {
                 "developerHint": "Les mots de git, l'arborescence comme accueil, tous les panneaux.",

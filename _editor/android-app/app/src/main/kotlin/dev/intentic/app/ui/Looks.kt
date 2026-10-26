@@ -6,14 +6,14 @@ import android.content.res.Configuration
 import android.view.ContextThemeWrapper
 
 /**
- * The look the app wears, one of the web's four (Settings ▸ Appearance): `system` follows the phone, `light` and `dark`
- * pin a scheme, and `sanctum` is the web's dark skin, which the native screens draw as dark. The web's settings change it
+ * The look the app wears, one of the web's five (Settings ▸ Appearance): `system` follows the phone, `light` and `dark`
+ * pin a scheme, and `sanctum` and `silver` are the web's dark skins, which the native screens draw as dark. The web's settings change it
  * (the WebView's `setLook`), it is kept across starts, and the WebView is handed it on its first load.
  */
 object Looks {
     private const val PREFS = "look"
     private const val KEY = "look"
-    val NAMES = setOf("system", "light", "dark", "sanctum")
+    val NAMES = setOf("system", "light", "dark", "sanctum", "silver")
 
     @Volatile var name = "system"
         private set
@@ -37,7 +37,7 @@ object Looks {
         name = look
         night = when (look) {
             "light" -> false
-            "dark", "sanctum" -> true
+            "dark", "sanctum", "silver" -> true
             else -> null
         }
         generation++

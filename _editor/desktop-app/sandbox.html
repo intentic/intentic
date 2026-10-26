@@ -32,7 +32,7 @@
                 // The look the reader was last seen in on any of the app's pages (windows.rs `look_init_script`),
                 // adopted while this origin holds none of its own, as _editor/web/index.html does: the workspace is
                 // another origin, and a look chosen there was nothing here.
-                var LOOK_PAIRS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"] };
+                var LOOK_PAIRS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"], silver: ["dark", "silver"] };
                 var appLook = window.__INTENTIC_LOOK__;
                 if (typeof appLook === "string" && Object.prototype.hasOwnProperty.call(LOOK_PAIRS, appLook) && localStorage.getItem("ui-color-scheme") === null && localStorage.getItem("ui-skin") === null) {
                     localStorage.setItem("ui-color-scheme", LOOK_PAIRS[appLook][0]);
@@ -42,7 +42,8 @@
                 var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
                 if (dark) document.documentElement.setAttribute("data-mode", "dark");
                 var uiSkin = localStorage.getItem("ui-skin");
-                if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+                var wornSkin = uiSkin === "sanctum" || uiSkin === "silver" ? uiSkin : uiSkin !== "none" && dark ? "sanctum" : null;
+                if (wornSkin) document.documentElement.setAttribute("data-skin", wornSkin);
             } catch (e) {}
         </script>
 <!-- The runtime config the editor reads while its modules evaluate (src/app/environments/environment.ts). Its platform

@@ -87,17 +87,22 @@ const diffOpenOptions = computed(
 // with no way back; the mapping between the row and the two preferences is themeRow.ts. To remove skins: delete this
 // block and the useSkin import, keep system/light/dark, and wire the row back to schemeChoice/setScheme.
 const { skin, choice: skinChoice, handed: handedSkin, setSkin, hand: handSkin } = useSkin();
-// Only two of the four rows explain themselves; the key exists for all four so the lookup below stays a plain one.
-const THEME_TITLED: ReadonlySet<ThemeRow> = new Set([`system`, `sanctum`]);
+// Its own row rather than another look: a wallpaper is worn under any of them, in its dark or light version.
+const { wallpaper } = useWallpaper();
+// The plain light and dark say what they are; the other three explain themselves.
+const THEME_HINT = new Map<ThemeRow, string>([
+    [`system`, `systemHint`],
+    [`sanctum`, `sanctumHint`],
+    [`silver`, `silverHint`],
+]);
 const themeOptions = computed(() =>
-    THEME_ROW.map((value) => ({
-        label: t(`settings.appearance.theme.${value}`),
-        value,
-        ...(THEME_TITLED.has(value) ? { title: t(`settings.appearance.theme.${value === `system` ? `systemHint` : `sanctumHint`}`) } : {}),
-    })),
+    THEME_ROW.map((value) => {
+        const hint = THEME_HINT.get(value);
+        return { label: t(`settings.appearance.theme.${value}`), value, ...(hint === undefined ? {} : { title: t(`settings.appearance.theme.${hint}`) }) };
+    }),
 );
 // Icon names the look, not the light level: what the row now chooses.
-const THEME_ICON: Record<ThemeRow, IconName> = { system: `desktop`, light: `sun`, dark: `moon`, sanctum: `star-fill` };
+const THEME_ICON: Record<ThemeRow, IconName> = { system: `desktop`, light: `sun`, dark: `moon`, sanctum: `star-fill`, silver: `cloud` };
 // A look the window was handed (the Android app's, app/environments/nativeApp.ts) is the one on screen, so it is the one
 // the row shows.
 const themeChoice = computed<ThemeRow>(() =>
@@ -113,12 +118,15 @@ const setThemeChoice = (value: ThemeRow): void => {
         handScheme(look.scheme);
         return;
     }
-    // The skin goes first: pinning sanctum drags the scheme dark with it, and the line below then says so outright.
+    // The skin goes first: pinning a skin drags the scheme dark with it, and the line below then says so outright.
     setSkin(look.skin);
     setScheme(look.scheme);
+    // Silver is drawn as frosted glass over its valley, so arriving at it brings the valley along; a reader who turned
+    // wallpapers off keeps them off, and the row below can change it back at once.
+    if (value === `silver` && wallpaper.value !== `none`) {
+        wallpaper.value = `valley`;
+    }
 };
-// Its own row rather than a fifth look: a wallpaper is worn under any of them, in its dark or light version.
-const { wallpaper } = useWallpaper();
 const wallpaperOptions = computed(() => WALLPAPERS.map((value) => ({ label: t(`settings.appearance.wallpaper.${value}`), value })));
 const explorerOptions = computed(() => explorerStyles.map((value) => ({ label: t(`settings.appearance.explorer.${value}`), value })));
 const iconRailOptions = computed(() => [
@@ -225,12 +233,19 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 </template>
             </Row>
             <!-- wide-control lets this wrap to a second line in a narrow pane rather than stretch the row. -->
-            <!-- Sanctum's accent ramp is its gold (skins/sanctum.css), so there the pick reaches only the stone: said, or the picker looks broken. -->
+            <!-- Sanctum's accent ramp is its gold and Silver's its silver (skins/*.css), so there the pick reaches only the
+                 surfaces: said, or the picker looks broken. -->
             <Row
                 data-setting="accent-colour"
                 icon="palette"
                 :title="t(`settings.appearance.look.colour`)"
-                :description="skin === `sanctum` ? t(`settings.appearance.look.colourSanctumHint`) : undefined"
+                :description="
+                    skin === `sanctum`
+                        ? t(`settings.appearance.look.colourSanctumHint`)
+                        : skin === `silver`
+                          ? t(`settings.appearance.look.colourSilverHint`)
+                          : undefined
+                "
                 wide-control
             >
                 <template #control>

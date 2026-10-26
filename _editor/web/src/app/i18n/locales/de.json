@@ -10524,6 +10524,7 @@
             "look": {
                 "colour": "Farbe",
                 "colourSanctumHint": "In Sanctum bleiben Hervorhebungen golden, und diese Farbe tönt nur den Stein.",
+                "colourSilverHint": "In Silber bleiben Hervorhebungen silbern, und diese Farbe tönt nur das Glas.",
                 "group": "Aussehen",
                 "iconRail": "Symbolschiene",
                 "language": "Sprache",
@@ -10540,12 +10541,15 @@
                 "light": "Hell",
                 "sanctum": "Sanctum",
                 "sanctumHint": "Das Aussehen von intentic.dev: Aschestein, eine goldene Linie um jedes Panel, gemeißelte und gegossene Tafeln und die eigene Schrift der Website.",
+                "silver": "Silber",
+                "silverHint": "Kühler Schiefer und Milchglas über einem nebligen Tal, mit Silber für jede Hervorhebung.",
                 "system": "System",
                 "systemHint": "Folgt Ihrem Betriebssystem: Sanctum, wenn es dunkel ist, sonst das helle Aussehen."
             },
             "wallpaper": {
                 "mist": "Nebel",
-                "none": "Keins"
+                "none": "Keins",
+                "valley": "Tal"
             },
             "work": {
                 "developerHint": "Gits eigene Worte, der Dateibaum als Startseite, alle Panels.",

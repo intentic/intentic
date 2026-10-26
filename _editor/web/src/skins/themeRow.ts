@@ -2,14 +2,14 @@ import type { SchemeChoice } from "@intentic/ui";
 import type { Skin, SkinChoice } from "./useSkin";
 
 // ONE ROW OVER TWO STORED CHOICES. The app's look is a scheme (`system`/`light`/`dark`) and a skin
-// (`system`/`none`/`sanctum`), but two controls could show a light scheme under a dark skin with no way back, so
-// Appearance offers four looks and this module is the map between them. Kept out of the SFC because the mapping has
+// (`system`/`none`/`sanctum`/`silver`), but two controls could show a light scheme under a dark skin with no way back, so
+// Appearance offers five looks and this module is the map between them. Kept out of the SFC because the mapping has
 // a side the row cannot show: pairs nobody picked here — a scheme pinned from the design kit, a profile link, a
 // value already in storage — still have to name a look, and naming the wrong one is invisible until someone reads
 // the row against the screen.
 
-/** The four looks the Theme row offers. */
-export type ThemeRow = "system" | "light" | "dark" | "sanctum";
+/** The five looks the Theme row offers. */
+export type ThemeRow = "system" | "light" | "dark" | "sanctum" | "silver";
 
 /** The pair of preferences one look is made of. */
 export interface ThemeLook {
@@ -17,7 +17,7 @@ export interface ThemeLook {
     readonly skin: SkinChoice;
 }
 
-export const THEME_ROW: readonly ThemeRow[] = [`system`, `light`, `dark`, `sanctum`];
+export const THEME_ROW: readonly ThemeRow[] = [`system`, `light`, `dark`, `sanctum`, `silver`];
 
 /**
  * Which look the row should show, given both stored choices and the skin they resolve to. `system` is the pair
@@ -29,8 +29,8 @@ export const themeRowValue = (scheme: SchemeChoice, skinChoice: SkinChoice, skin
     if (scheme === `system` && skinChoice === `system`) {
         return `system`;
     }
-    if (skin === `sanctum`) {
-        return `sanctum`;
+    if (skin === `sanctum` || skin === `silver`) {
+        return skin;
     }
     return scheme === `system` ? `system` : scheme;
 };
@@ -40,9 +40,10 @@ export const themeRowLook = (row: ThemeRow): ThemeLook => {
     switch (row) {
         case `system`:
             return { scheme: `system`, skin: `system` };
-        // Sanctum is built on a near-black canvas PrimeVue keys off, so choosing it is choosing dark as well.
+        // Both skins are built on a dark canvas PrimeVue keys off, so choosing one is choosing dark as well.
         case `sanctum`:
-            return { scheme: `dark`, skin: `sanctum` };
+        case `silver`:
+            return { scheme: `dark`, skin: row };
         default:
             return { scheme: row, skin: `none` };
     }

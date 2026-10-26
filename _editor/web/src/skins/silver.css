@@ -1,0 +1,507 @@
+/* SILVER — the editor as frosted glass over a misty valley: cool slate where Sanctum is warm ash, hairline light
+   where Sanctum carves, and polished silver for the one metal. Every rule is scoped to `[data-skin="silver"]`, so the
+   file is inert until the look is picked on the Theme row (themeRow.ts). It is a dark look, like Sanctum: picking it
+   pins the dark scheme, and the dark scheme's own rules (semantic-colors.css) are what this file re-answers. */
+
+/* THE ACCENT IS SILVER. One signal colour per look (ui README, "One signal colour"): the whole primary ramp is
+   restated, so a component that names a step (`border-b-primary-500` under a tab, `bg-primary-600/15` on a pressed
+   toggle) wears the metal too. A breath of blue in it (hue 245) is what keeps a silver mark apart from silver-white
+   ink. `:root` in the selector so these outrank the `[data-mode="dark"]` answers they replace. */
+:root[data-skin="silver"] {
+    --color-primary-0: oklch(98.5% 0.003 245);
+    --color-primary-50: oklch(96.5% 0.006 245);
+    --color-primary-100: oklch(93.5% 0.01 245);
+    --color-primary-200: oklch(89% 0.015 245);
+    --color-primary-300: var(--silver-bright);
+    --color-primary-400: oklch(79% 0.024 245);
+    --color-primary-500: var(--silver);
+    --color-primary-600: oklch(64% 0.024 245);
+    --color-primary-700: oklch(55% 0.022 245);
+    --color-primary-800: oklch(46% 0.02 245);
+    --color-primary-900: oklch(38% 0.017 245);
+    --color-primary-950: oklch(29% 0.014 245);
+
+    --color-selection-edge: var(--silver-bright);
+
+    /* THE SLATE. Cool and fixed, with a sixth of the picked colour's neutral stirred in, so the Appearance colour still
+       tints the glass (and its row says so) without ever warming it back to ash. */
+    --color-surface-0: color-mix(in oklab, oklch(98% 0.003 245) 84%, var(--color-neutral-0));
+    --color-surface-50: color-mix(in oklab, oklch(96.5% 0.004 245) 84%, var(--color-neutral-50));
+    --color-surface-100: color-mix(in oklab, oklch(93% 0.006 245) 84%, var(--color-neutral-100));
+    --color-surface-200: color-mix(in oklab, oklch(87% 0.008 245) 84%, var(--color-neutral-200));
+    --color-surface-300: color-mix(in oklab, oklch(79% 0.01 245) 84%, var(--color-neutral-300));
+    --color-surface-400: color-mix(in oklab, oklch(66% 0.012 245) 84%, var(--color-neutral-400));
+    --color-surface-500: color-mix(in oklab, oklch(54% 0.013 245) 84%, var(--color-neutral-500));
+    --color-surface-600: color-mix(in oklab, oklch(44% 0.013 245) 84%, var(--color-neutral-600));
+    --color-surface-700: color-mix(in oklab, oklch(35.5% 0.013 245) 84%, var(--color-neutral-700));
+    --color-surface-800: color-mix(in oklab, oklch(28.5% 0.012 245) 84%, var(--color-neutral-800));
+    --color-surface-900: color-mix(in oklab, oklch(23% 0.011 245) 84%, var(--color-neutral-900));
+    --color-surface-950: color-mix(in oklab, oklch(17.5% 0.01 245) 84%, var(--color-neutral-950));
+
+    color-scheme: dark;
+
+    /* THE METAL, and its two lights. */
+    --silver: oklch(72% 0.022 245);
+    --silver-bright: oklch(85% 0.018 245);
+
+    /* LIGHT, NOT LINES. Every edge in this look is the room's light caught on a pane: a cool white at an alpha, so one
+       rule reads on the canvas, on a card and on glass over the valley alike. */
+    --silver-hairline: rgb(226 233 240 / 0.085);
+    --silver-hairline-strong: rgb(226 233 240 / 0.15);
+    --silver-glint: inset 0 1px 0 rgb(255 255 255 / 0.06);
+    --silver-glass: color-mix(in oklab, var(--color-surface-900) 72%, transparent);
+    --silver-glass-deep: color-mix(in oklab, var(--color-surface-950) 84%, transparent);
+    --silver-frost: blur(18px) saturate(1.25);
+
+    /* The polished plate: the loud button, and nothing else that shouts. */
+    --silver-plate: linear-gradient(180deg, #f3f5f7 0%, #dde2e7 44%, #c3cad1 56%, #d4d9df 100%);
+    --silver-plate-lit: linear-gradient(180deg, #ffffff 0%, #e8ecf0 44%, #ced4da 56%, #dfe4e9 100%);
+    --silver-plate-ink: #161a1f;
+    --silver-plate-bevel:
+        inset 0 1px 0 rgb(255 255 255 / 0.85), inset 0 -1px 0 rgb(30 38 46 / 0.22), 0 1px 2px rgb(0 0 0 / 0.45);
+    --silver-sheen: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 0.55) 48%, transparent 66%);
+
+    /* A fine cool grain on the room, so the canvas reads as frosted rather than flat. */
+    --silver-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.82 0 0 0 0 0.86 0 0 0 0 0.9 0.05 0 0 0 -0.012'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23f)'/%3E%3C/svg%3E");
+
+    /* THE ROLES. */
+    --role-canvas: color-mix(in oklab, var(--color-surface-950) 86%, black);
+    --role-card: color-mix(in oklab, var(--color-surface-900) 82%, var(--color-surface-800));
+    --role-overlay: var(--color-surface-800);
+    --role-line: var(--silver-hairline);
+    --role-line-strong: var(--silver-hairline-strong);
+    --role-line-subtle: rgb(226 233 240 / 0.05);
+
+    /* Ink is cool paper-white, a little short of white so a long read does not glare. */
+    --role-content: oklch(92.5% 0.006 245);
+    --role-muted: oklch(75% 0.012 245);
+    --role-subtle: oklch(64% 0.013 245);
+    --role-faint: color-mix(in oklab, var(--role-subtle) 70%, var(--role-card));
+    --silver-heading-ink: oklch(96.5% 0.005 245);
+
+    --role-link: var(--silver-bright);
+    --role-accent: var(--silver-bright);
+
+    /* Status, cooled and softened so it sits in the mist rather than on it. */
+    --role-success: oklch(75% 0.085 160);
+    --role-warning: oklch(81% 0.09 82);
+    --role-danger: oklch(69% 0.115 24);
+    --role-info: oklch(77% 0.06 238);
+    --role-success-fill: var(--role-success);
+    --role-warning-fill: var(--role-warning);
+    --role-danger-fill: var(--role-danger);
+
+    --role-primary-fill: var(--color-primary-200);
+    --role-primary-fill-hover: var(--color-primary-100);
+    --role-fill-content: var(--silver-plate-ink);
+    --role-primary-plate: var(--color-primary-300);
+
+    --role-terminal: color-mix(in oklab, var(--color-surface-950) 72%, black);
+
+    /* Fields are wells in the glass. */
+    --silver-well: color-mix(in oklab, var(--color-surface-950) 78%, black);
+
+    /* Overlays and the dialog: a pane a step lighter than the card, under a scrim of the valley's own blue-black. */
+    --ui-scrim: rgb(8 11 15 / 0.5);
+    --ui-dialog-fill: color-mix(in oklab, var(--color-surface-900) 45%, var(--color-surface-800));
+    --ui-dialog-line: var(--silver-hairline-strong);
+    --ui-field-focus-line: var(--silver-bright);
+
+    --ui-shadow-tint: 2 5 9;
+
+    /* Softer corners than the plain look, as panes of glass are cut. */
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5625rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 0.875rem;
+    --ui-radius: 0.5625rem;
+}
+
+@layer components {
+    /* THE ROOM: a faint cool light from above, the corners let down into the dark, and the grain over all of it. */
+    [data-skin="silver"] body,
+    [data-skin="silver"] #app > :first-child:not(.entry) {
+        background-image:
+            radial-gradient(120% 70% at 50% -12%, rgb(196 210 224 / 0.07), transparent 62%),
+            radial-gradient(130% 105% at 50% 40%, transparent 55%, rgb(0 0 0 / 0.32) 100%),
+            var(--silver-grain);
+        background-repeat: no-repeat, no-repeat, repeat;
+        background-size: auto, auto, 240px 240px;
+        background-attachment: fixed;
+    }
+
+    [data-skin="silver"] .bg-canvas {
+        background-image: var(--silver-grain);
+        background-size: 240px 240px;
+        background-attachment: fixed;
+    }
+
+    /* PANES. A card is set off by light on its top edge and a soft drop, not by a drawn border. */
+    [data-skin="silver"] .ui-card,
+    [data-skin="silver"] section > .bg-card.divide-y {
+        background-image: linear-gradient(180deg, rgb(255 255 255 / 0.025), transparent 40%);
+        box-shadow:
+            var(--silver-glint),
+            0 0 0 1px var(--silver-hairline),
+            0 2px 4px -1px rgb(0 0 0 / 0.4),
+            0 14px 30px -14px rgb(0 0 0 / 0.55);
+    }
+
+    [data-skin="silver"] .ui-card-dashed {
+        box-shadow: none;
+        border-color: var(--silver-hairline-strong);
+    }
+
+    [data-skin="silver"] .session-card {
+        --card-ledge: var(--silver-glint);
+        --card-ring: inset 0 0 0 1px var(--silver-hairline);
+        --card-drop: 0 1px 3px -1px rgb(0 0 0 / 0.45), 0 10px 22px -14px rgb(0 0 0 / 0.6);
+    }
+    [data-skin="silver"] .session-card.session-card-on {
+        --card-ring: inset 0 0 0 1px var(--silver-hairline-strong);
+    }
+
+    [data-skin="silver"] .view-header:not(.view-header-wrap) {
+        border-bottom-color: var(--silver-hairline);
+        box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+    }
+
+    /* OVERLAYS ARE OPAQUE PANES, lit like glass but not see-through: a model menu over the empty chat showed the chat's
+       line through its rows at 86% and still at 95%, blur and all. The glass stays where only the picture is behind. */
+    [data-skin="silver"] .p-popover,
+    [data-skin="silver"] .p-menu,
+    [data-skin="silver"] .p-select-overlay,
+    [data-skin="silver"] .p-multiselect-overlay,
+    [data-skin="silver"] .p-autocomplete-overlay,
+    [data-skin="silver"] .ui-anchored-surface {
+        background-color: var(--color-surface-800);
+        background-image: linear-gradient(180deg, rgb(255 255 255 / 0.04), transparent 50%);
+        border: 1px solid var(--silver-hairline-strong);
+        box-shadow:
+            var(--silver-glint),
+            0 18px 48px rgb(0 0 0 / 0.55);
+    }
+    [data-skin="silver"] .ui-anchored-menu {
+        --ui-anchored-line: var(--silver-hairline-strong);
+    }
+
+    [data-skin="silver"] :is(.p-dialog, .ui-dialog-surface) {
+        background-image: linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 30%);
+        box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.08),
+            0 24px 64px rgb(0 0 0 / 0.6);
+    }
+
+    [data-skin="silver"] .ui-tooltip {
+        --ui-tooltip-fill: var(--color-surface-700);
+        --ui-tooltip-border: var(--silver-hairline-strong);
+    }
+
+    /* FIELDS are wells in the glass, rimmed in the hairline, and catch a silver rim when focused. */
+    [data-skin="silver"] .ui-field-box,
+    [data-skin="silver"] .p-inputtext {
+        background-color: var(--silver-well);
+        box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4);
+    }
+    [data-skin="silver"] .ui-field-box:not(.ui-field-inline, .ui-field-error-box),
+    [data-skin="silver"] .p-inputtext {
+        border-color: var(--silver-hairline-strong);
+    }
+    [data-skin="silver"] .ui-field-box:focus,
+    [data-skin="silver"] .p-inputtext:focus,
+    [data-skin="silver"] .p-inputtext:focus-visible {
+        outline: none;
+        border-color: var(--ui-field-focus-line);
+        box-shadow:
+            inset 0 1px 2px rgb(0 0 0 / 0.4),
+            0 0 0 3px color-mix(in oklab, var(--silver-bright) 16%, transparent);
+    }
+
+    [data-skin="silver"] button:not(.ui-field-box):focus-visible,
+    [data-skin="silver"] a:focus-visible,
+    [data-skin="silver"] [tabindex]:not([data-quiet-focus]):focus-visible {
+        outline: 2px solid color-mix(in oklab, var(--silver-bright) 80%, transparent);
+        outline-offset: -2px;
+    }
+
+    /* The search is the deepest well: the header's one field, as on the mood board. */
+    [data-skin="silver"] .ui-search {
+        --ui-search-fill: var(--silver-well);
+        --ui-search-fill-hover: color-mix(in oklab, var(--silver-bright) 4%, var(--silver-well));
+        --ui-search-fill-focus: color-mix(in oklab, var(--silver-bright) 6%, var(--silver-well));
+        border-color: var(--silver-hairline);
+        box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4);
+    }
+    [data-skin="silver"] .ui-search:hover {
+        border-color: var(--silver-hairline-strong);
+    }
+    [data-skin="silver"] .ui-search:focus-within {
+        border-color: color-mix(in oklab, var(--silver-bright) 60%, transparent);
+    }
+    [data-skin="silver"] .ui-search-band {
+        background-color: var(--silver-well);
+        box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4);
+    }
+
+    [data-skin="silver"] .ui-keycap {
+        border-color: var(--silver-hairline-strong);
+        background-color: color-mix(in oklab, white 5%, var(--color-card));
+        color: var(--color-muted);
+    }
+
+    /* BUTTONS. Every tier keeps its own fill and gains the pane's top glint; the quiet tier is clear glass. */
+    [data-skin="silver"] .p-button:where(:not(.p-button-text, .p-button-link, .ui-button-loud, .ui-button-gilded)) {
+        box-shadow:
+            var(--silver-glint),
+            0 1px 2px rgb(0 0 0 / 0.3);
+    }
+    [data-skin="silver"] .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
+        background: rgb(226 233 240 / 0.07);
+        border-color: var(--silver-hairline-strong);
+    }
+    [data-skin="silver"] .p-button-secondary:where(:not(.p-button-text, .p-button-link)):enabled:hover {
+        background: rgb(226 233 240 / 0.12);
+        border-color: rgb(226 233 240 / 0.24);
+    }
+
+    /* THE ACCENT TIER is a pane with the metal in its rim: brighter than the boring tier's clear glass, quieter than
+       the polished plate. */
+    [data-skin="silver"]
+        .p-button:where(
+            :not(
+                    .p-button-secondary,
+                    .p-button-info,
+                    .p-button-contrast,
+                    .p-button-text,
+                    .p-button-outlined,
+                    .p-button-link,
+                    .p-button-danger,
+                    .p-button-warn,
+                    .p-button-success,
+                    .ui-button-loud
+                )
+        ) {
+        color: var(--silver-heading-ink);
+        background: linear-gradient(180deg, rgb(226 233 240 / 0.16), rgb(226 233 240 / 0.08));
+        border-color: color-mix(in oklab, var(--silver-bright) 42%, transparent);
+    }
+    [data-skin="silver"]
+        .p-button:where(
+            :not(
+                    .p-button-secondary,
+                    .p-button-info,
+                    .p-button-contrast,
+                    .p-button-text,
+                    .p-button-outlined,
+                    .p-button-link,
+                    .p-button-danger,
+                    .p-button-warn,
+                    .p-button-success,
+                    .ui-button-loud
+                )
+        ):enabled:hover {
+        color: white;
+        background: linear-gradient(180deg, rgb(226 233 240 / 0.22), rgb(226 233 240 / 0.12));
+        border-color: color-mix(in oklab, var(--silver-bright) 62%, transparent);
+    }
+
+    /* THE LOUD TIER IS POLISHED SILVER, with a sheen that crosses it under the pointer. */
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):where(:not(:disabled), .p-button-loading) {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        color: var(--silver-plate-ink);
+        text-shadow: 0 1px 0 rgb(255 255 255 / 0.5);
+        background: var(--silver-plate);
+        border-color: rgb(20 26 32 / 0.55);
+        box-shadow:
+            var(--silver-plate-bevel),
+            0 6px 18px -8px rgb(205 216 228 / 0.35);
+        transition: box-shadow var(--motion-hover);
+    }
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded))::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: var(--silver-sheen);
+        background-size: 240% 100%;
+        background-position: 110% 0;
+        transition: background-position 0.7s ease;
+    }
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):enabled:hover,
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):focus-visible {
+        color: var(--silver-plate-ink);
+        background: var(--silver-plate-lit);
+        border-color: rgb(20 26 32 / 0.6);
+        box-shadow:
+            var(--silver-plate-bevel),
+            0 0 0 3px rgb(214 224 234 / 0.12),
+            0 8px 22px -8px rgb(214 224 234 / 0.5);
+    }
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):enabled:hover::after,
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):focus-visible::after {
+        background-position: -10% 0;
+    }
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):enabled:active {
+        background: var(--silver-plate);
+        box-shadow:
+            inset 0 1px 3px rgb(20 26 32 / 0.35),
+            0 1px 0 rgb(255 255 255 / 0.06);
+    }
+    [data-skin="silver"] .p-button.ui-button-loud:where(:not(.ui-button-gilded)):focus-visible {
+        outline: 2px solid var(--silver-plate-ink);
+        outline-offset: -4px;
+    }
+    [data-motion="reduced"][data-skin="silver"] .p-button.ui-button-loud::after {
+        transition: none;
+    }
+
+    [data-skin="silver"] .p-checkbox:not(.p-checkbox-checked) .p-checkbox-box,
+    [data-skin="silver"] .p-radiobutton:not(.p-radiobutton-checked) .p-radiobutton-box {
+        background-color: var(--silver-well);
+        box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.4);
+    }
+
+    [data-skin="silver"] .p-progressbar {
+        background-color: var(--silver-well);
+    }
+
+    /* A PICKED ROW is a pane of light with a silver edge. */
+    [data-skin="silver"] .ui-row-select-on,
+    [data-skin="silver"] .ui-row-select-on:hover:not(:disabled) {
+        background: rgb(226 233 240 / 0.08);
+        box-shadow: inset 2px 0 0 var(--color-selection-edge);
+    }
+    [data-skin="silver"] .ui-row-select-horizontal.ui-row-select-on,
+    [data-skin="silver"] .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
+        box-shadow: none;
+    }
+    @media (hover: hover) {
+        [data-skin="silver"] .ui-row-select:hover:not(:disabled) {
+            background: rgb(226 233 240 / 0.045);
+        }
+    }
+    [data-skin="silver"] .ui-row-select:active:not(:disabled) {
+        background: rgb(226 233 240 / 0.045);
+    }
+
+    /* Headings are the brightest ink in the room, and nothing more: no carving. */
+    [data-skin="silver"] :is(h1, h2, h3, h4) {
+        color: var(--silver-heading-ink);
+    }
+    [data-skin="silver"] .md-prose :is(h1, h2, h3, h4) {
+        color: inherit;
+    }
+
+    /* Section labels — the board's ATTENTION · ACTIVE · FINISHED — are small spaced capitals in the muted ink. */
+    [data-skin="silver"] .font-semibold.uppercase.tracking-wide {
+        letter-spacing: 0.12em;
+        color: var(--color-muted);
+    }
+
+    /* THE EDGES OF THE WINDOW: a scrollbar of mist, the selection in the metal. */
+    [data-skin="silver"],
+    [data-skin="silver"] * {
+        scrollbar-color: rgb(210 220 230 / 0.18) transparent;
+    }
+    [data-skin="silver"]::-webkit-scrollbar-thumb,
+    [data-skin="silver"] ::-webkit-scrollbar-thumb {
+        background: rgb(210 220 230 / 0.18);
+    }
+    [data-skin="silver"]::-webkit-scrollbar-thumb:hover,
+    [data-skin="silver"] ::-webkit-scrollbar-thumb:hover {
+        background: rgb(210 220 230 / 0.36);
+    }
+    [data-skin="silver"] .ui-softscroll {
+        scrollbar-color: rgb(210 220 230 / 0.08) transparent;
+    }
+    [data-skin="silver"] .ui-softscroll:hover {
+        scrollbar-color: rgb(210 220 230 / 0.18) transparent;
+    }
+    [data-skin="silver"] ::selection {
+        background: color-mix(in oklab, var(--silver-bright) 28%, transparent);
+        color: white;
+    }
+
+    /* OVER THE VALLEY. The board's picture shows more of itself under Silver than under the other looks — a lighter
+       veil — and every pane on it is frosted glass, as on the mood board, so the mist reads through each card. */
+    [data-skin="silver"][data-wallpaper][data-mode="dark"] {
+        --wallpaper-veil: rgb(9 12 16 / 0.16);
+        --wallpaper-scrim:
+            linear-gradient(180deg, rgb(8 11 15 / 0.62) 0, rgb(8 11 15 / 0.26) 3.25rem, transparent 9rem),
+            radial-gradient(130% 110% at 50% 30%, transparent 58%, rgb(4 6 9 / 0.38) 100%);
+        --wallpaper-card-drop: 0 2px 4px -1px rgb(0 0 0 / 0.45), 0 16px 34px -14px rgb(0 0 0 / 0.65);
+        --wallpaper-tray: rgb(10 13 17 / 0.34);
+        /* A soft dark breath behind the words rather than a hard halo: over bright mist the hard one smeared them. */
+        --wallpaper-ink-shadow: 0 1px 1px rgb(4 6 9 / 0.55), 0 0 12px rgb(8 11 15 / 0.55);
+    }
+    [data-skin="silver"][data-wallpaper] .agents-board .session-card {
+        --session-card-fill-hi: color-mix(in oklab, color-mix(in oklab, white 4%, var(--color-card)) 70%, transparent);
+        --session-card-fill-lo: color-mix(in oklab, var(--color-card) 62%, transparent);
+        --card-rest: color-mix(in oklab, var(--color-card) 66%, transparent);
+        -webkit-backdrop-filter: var(--silver-frost);
+        backdrop-filter: var(--silver-frost);
+    }
+    @media (hover: hover) {
+        [data-skin="silver"][data-wallpaper] .agents-board .session-card:hover {
+            --card-fill: color-mix(in oklab, var(--color-overlay) 78%, transparent);
+        }
+    }
+    [data-skin="silver"][data-wallpaper] .agents-board .session-card:active {
+        --card-fill: color-mix(in oklab, var(--color-overlay) 86%, transparent);
+    }
+    [data-skin="silver"][data-wallpaper] .agents-board [data-lane] .bg-card:not(.session-card) {
+        background-color: var(--silver-glass);
+        -webkit-backdrop-filter: var(--silver-frost);
+        backdrop-filter: var(--silver-frost);
+    }
+}
+
+/* Panes of glass are cut with a tighter corner than the plain look's 20px. Unlayered, to meet styles.css's own. */
+[data-skin="silver"] .session-card {
+    border-radius: 14px;
+}
+
+/* THE RAIL is the darkest glass, the window's own edge; its tiles light as panes, never in a colour. */
+[data-skin="silver"] .icon-rail {
+    --ui-tile-ground: color-mix(in oklab, var(--color-surface-950) 92%, black);
+    background-color: var(--ui-tile-ground);
+    background-image: linear-gradient(180deg, rgb(255 255 255 / 0.03), transparent 40%);
+    box-shadow: inset -1px 0 0 var(--silver-hairline);
+}
+[data-skin="silver"] .icon-rail-tile:hover {
+    background: rgb(226 233 240 / 0.07) !important;
+}
+[data-skin="silver"] .icon-rail-tile:active {
+    background: rgb(226 233 240 / 0.12) !important;
+}
+[data-skin="silver"] .icon-rail-tile.ui-row-select-on {
+    background: rgb(226 233 240 / 0.1) !important;
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.06),
+        inset 0 0 0 1px var(--silver-hairline);
+}
+[data-skin="silver"] .icon-rail-tile.ui-row-select-on > .icon-rail-glyph {
+    color: var(--silver-heading-ink);
+}
+
+[data-skin="silver"] .composer-frame:focus-within {
+    border-color: color-mix(in oklab, var(--silver-bright) 70%, transparent);
+    --tw-ring-color: color-mix(in oklab, var(--silver-bright) 18%, transparent);
+}
+
+[data-skin="silver"] .chat-card-live .chat-card-title,
+[data-skin="silver"] .chat-card-live .chat-question-title {
+    color: var(--silver-heading-ink);
+}
+[data-skin="silver"] .chat-option-picked {
+    background: rgb(226 233 240 / 0.08);
+}
+
+/* Lane names over the valley take the brighter ink: the subtle grey they wear on the canvas sank into the mist.
+   Unlayered, since the names carry `text-subtle` and a utility outranks the components layer. */
+[data-skin="silver"][data-wallpaper] .agents-board [data-lane] .font-semibold.uppercase.tracking-wide {
+    color: color-mix(in oklab, var(--color-content) 82%, transparent);
+}

@@ -122,7 +122,7 @@
                 // written over it: what its object says now, else what its address or this tab last said
                 // (src/app/environments/nativeApp.ts reads the same, and src/bootProfile.test.ts runs this against it).
                 // Each look is the pair of choices the Theme row stores for it (src/skins/themeRow.ts).
-                var EMBED_LOOKS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"] };
+                var EMBED_LOOKS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"], silver: ["dark", "silver"] };
                 var embedLook = null;
                 try {
                     var tab = window.sessionStorage;
@@ -174,7 +174,8 @@
                 // look before the deep one lands — the worst flash of the three. Sanctum is the app's DARK look
                 // and has no daylight dress, so an unpinned skin follows the scheme. See src/skins/README.md.
                 var uiSkin = handed ? handed[1] : localStorage.getItem("ui-skin");
-                if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+                var wornSkin = uiSkin === "sanctum" || uiSkin === "silver" ? uiSkin : uiSkin !== "none" && dark ? "sanctum" : null;
+                if (wornSkin) document.documentElement.setAttribute("data-skin", wornSkin);
                 else document.documentElement.removeAttribute("data-skin");
                 // Browser chrome, last because it is the only line here that reads the document it writes to.
                 var themeMeta = document.querySelector('meta[name="theme-color"]');
@@ -221,6 +222,10 @@
             }
             :where(html[data-skin="sanctum"]) {
                 background-color: #0d0c0a;
+                color-scheme: dark;
+            }
+            :where(html[data-skin="silver"]) {
+                background-color: #121518;
                 color-scheme: dark;
             }
             .boot {

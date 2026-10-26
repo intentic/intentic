@@ -2,19 +2,20 @@ import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { useTheme } from "@intentic/ui/theme";
 
-// A skin (`sanctum`) is the workspace's whole look, applied as one `data-skin` attribute on <html>; a skin's CSS is
-// scoped to `[data-skin=...]`, so `none` writes no attribute. Sanctum is built on a near-black canvas and has no
-// daylight dress, so pinning it forces the dark scheme. A skin used to fetch its own webfont as it was applied; every
+// A skin (`sanctum`, `silver`) is the workspace's whole look, applied as one `data-skin` attribute on <html>; a skin's
+// CSS is scoped to `[data-skin=...]`, so `none` writes no attribute. Both skins are built on a dark canvas and have no
+// daylight dress, so pinning either forces the dark scheme. A skin used to fetch its own webfont as it was applied; every
 // face the app uses is served from this origin now (src/styles/faces.css), so there is nothing left for a skin to load.
 
 /** What is on <html>. */
-export type Skin = "none" | "sanctum";
+export type Skin = "none" | "sanctum" | "silver";
 /** What the setting holds; `system` is the default, and means "whatever the resolved scheme asks for". */
 export type SkinChoice = "system" | Skin;
 
 const STORAGE_KEY = `ui-skin`;
 const ATTRIBUTE = `data-skin`;
-const isSkin = (value: unknown): value is Skin => value === `none` || value === `sanctum`;
+const SKINS: ReadonlySet<unknown> = new Set<Skin>([`none`, `sanctum`, `silver`]);
+const isSkin = (value: unknown): value is Skin => SKINS.has(value);
 
 const apply = (value: Skin): void => {
     if (value === `none`) {
@@ -38,7 +39,7 @@ const { scheme, set: setScheme } = useTheme();
 const given = ref<SkinChoice | undefined>(undefined);
 
 // THE APP'S OWN LOOK, IN EACH LIGHT: sanctum is the dark one and there is no light one, so daylight is the app
-// undressed. Derived rather than stored, so an OS that flips at dusk carries the whole look with it.
+// undressed. Silver is only ever worn when picked. Derived rather than stored, so an OS that flips at dusk carries the whole look with it.
 const skin: ComputedRef<Skin> = computed(() => {
     const asked = given.value ?? choice.value;
     return asked === `system` ? (scheme.value === `dark` ? `sanctum` : `none`) : asked;
@@ -50,7 +51,7 @@ const setSkin = (value: SkinChoice): void => {
     choice.value = value;
     // Only an explicit pick of the skin drags the scheme with it: `system` is already agreeing with the scheme, and
     // forcing dark there would pin the very setting the reader just handed back to the OS.
-    if (value === `sanctum`) {
+    if (value === `sanctum` || value === `silver`) {
         setScheme(`dark`);
     }
 };

@@ -32,6 +32,7 @@ describe(`what the row shows`, () => {
         expect(rowFor(`light`, `none`)).toBe(`light`);
         expect(rowFor(`dark`, `none`)).toBe(`dark`);
         expect(rowFor(`dark`, `sanctum`)).toBe(`sanctum`);
+        expect(rowFor(`dark`, `silver`)).toBe(`silver`);
     });
 });
 
@@ -45,6 +46,10 @@ describe(`what a press stores`, () => {
 
     it(`takes sanctum's scheme with it, since sanctum has no daylight dress`, () => {
         expect(themeRowLook(`sanctum`)).toEqual({ scheme: `dark`, skin: `sanctum` });
+    });
+
+    it(`takes silver's scheme with it, for the same reason`, () => {
+        expect(themeRowLook(`silver`)).toEqual({ scheme: `dark`, skin: `silver` });
     });
 
     it(`hands both halves back to the OS for System`, () => {

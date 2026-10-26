@@ -9931,6 +9931,7 @@
             "look": {
                 "colour": "Kolor",
                 "colourSanctumHint": "W Sanctum wyróżnienia pozostają złote, a ten kolor tylko zabarwia kamień.",
+                "colourSilverHint": "W motywie Srebro wyróżnienia pozostają srebrne, a ten kolor barwi tylko szkło.",
                 "group": "Wygląd",
                 "iconRail": "Pasek ikon",
                 "language": "Język",
@@ -9955,12 +9956,15 @@
                 "light": "Jasny",
                 "sanctum": "Sanctum",
                 "sanctumHint": "Wygląd intentic.dev: popielaty kamień, złota linia wokół każdego panelu, ryte i odlewane tablice oraz własny krój pisma strony.",
+                "silver": "Srebro",
+                "silverHint": "Chłodny łupek i matowe szkło nad zamgloną doliną, ze srebrem w każdym wyróżnieniu.",
                 "system": "Systemowy",
                 "systemHint": "Podąża za systemem operacyjnym: Sanctum, gdy jest ciemny, jasny wygląd, gdy nie."
             },
             "wallpaper": {
                 "mist": "Mgła",
-                "none": "Brak"
+                "none": "Brak",
+                "valley": "Dolina"
             },
             "work": {
                 "developerHint": "Własne słowa gita, drzewo plików jako strona główna, wszystkie panele.",

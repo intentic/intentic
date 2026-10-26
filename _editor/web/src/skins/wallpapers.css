@@ -11,12 +11,24 @@
     [data-wallpaper="mist"][data-mode="dark"] {
         --wallpaper-art: url("/assets/wallpaper/mist-dark-1600.avif");
     }
+    [data-wallpaper="valley"] {
+        --wallpaper-art: url("/assets/wallpaper/valley-light-1600.avif");
+    }
+    [data-wallpaper="valley"][data-mode="dark"] {
+        --wallpaper-art: url("/assets/wallpaper/valley-dark-1600.avif");
+    }
     @media (max-width: 40rem) and (max-resolution: 1.5dppx) {
         [data-wallpaper="mist"] {
             --wallpaper-art: url("/assets/wallpaper/mist-light-900.avif");
         }
         [data-wallpaper="mist"][data-mode="dark"] {
             --wallpaper-art: url("/assets/wallpaper/mist-dark-900.avif");
+        }
+        [data-wallpaper="valley"] {
+            --wallpaper-art: url("/assets/wallpaper/valley-light-900.avif");
+        }
+        [data-wallpaper="valley"][data-mode="dark"] {
+            --wallpaper-art: url("/assets/wallpaper/valley-dark-900.avif");
         }
     }
 

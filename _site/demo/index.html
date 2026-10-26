@@ -36,7 +36,8 @@
                     var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
                     if (dark) document.documentElement.setAttribute("data-mode", "dark");
                     var uiSkin = localStorage.getItem("ui-skin");
-                    if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+                    var wornSkin = uiSkin === "sanctum" || uiSkin === "silver" ? uiSkin : uiSkin !== "none" && dark ? "sanctum" : null;
+                    if (wornSkin) document.documentElement.setAttribute("data-skin", wornSkin);
                     var themeMeta = document.querySelector('meta[name="theme-color"]');
                     if (themeMeta) themeMeta.setAttribute("content", dark ? "#141210" : "#f4f1ec");
                 }

@@ -47,6 +47,7 @@ describe(`the boot frame`, () => {
         expect(painted(`html`)).toEqual([`background-color: #f4f1ec`, `color-scheme: light`]);
         expect(painted(`html\\[data-mode="dark"\\]`)).toEqual([`background-color: #141210`, `color-scheme: dark`]);
         expect(painted(`html\\[data-skin="sanctum"\\]`)).toEqual([`background-color: #0d0c0a`, `color-scheme: dark`]);
+        expect(painted(`html\\[data-skin="silver"\\]`)).toEqual([`background-color: #121518`, `color-scheme: dark`]);
     });
 
     // A start that is merely slow must never be called broken, so the second line ships hidden and arrives late; a

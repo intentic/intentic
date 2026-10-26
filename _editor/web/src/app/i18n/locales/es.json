@@ -10524,6 +10524,7 @@
             "look": {
                 "colour": "Color",
                 "colourSanctumHint": "En Sanctum, los resaltados siguen siendo dorados y este color solo tiñe la piedra.",
+                "colourSilverHint": "En Plata, los resaltes siguen en plata y este color solo tiñe el cristal.",
                 "group": "Aspecto",
                 "iconRail": "Barra de iconos",
                 "language": "Idioma",
@@ -10540,12 +10541,15 @@
                 "light": "Claro",
                 "sanctum": "Sanctum",
                 "sanctumHint": "El aspecto de intentic.dev: piedra ceniza, una regla dorada alrededor de cada panel, placas talladas y fundidas, y la tipografía del propio sitio.",
+                "silver": "Plata",
+                "silverHint": "Pizarra fría y cristal esmerilado sobre un valle con niebla, con plata en cada resalte.",
                 "system": "Sistema",
                 "systemHint": "Sigue a tu sistema operativo: Sanctum cuando está en oscuro, el aspecto claro cuando no."
             },
             "wallpaper": {
                 "mist": "Niebla",
-                "none": "Ninguno"
+                "none": "Ninguno",
+                "valley": "Valle"
             },
             "work": {
                 "developerHint": "Las palabras de git, el árbol de archivos como inicio, todos los paneles.",

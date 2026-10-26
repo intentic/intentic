@@ -14,8 +14,8 @@ const LOOK_KEY = `intentic.embed.look`;
 /** The tab's keys, which a self-heal's wipe keeps (selfHeal.ts). */
 export const EMBED_TAB_KEYS: readonly string[] = [EMBED_KEY, LOOK_KEY];
 
-/** The looks the app can hand over: Settings ▸ Appearance's four (skins/themeRow.ts). */
-export const NATIVE_LOOKS = [`system`, `light`, `dark`, `sanctum`] as const;
+/** The looks the app can hand over: Settings ▸ Appearance's five (skins/themeRow.ts). */
+export const NATIVE_LOOKS = [`system`, `light`, `dark`, `sanctum`, `silver`] as const;
 export type NativeLook = (typeof NATIVE_LOOKS)[number];
 
 /** A look by name, as an address, the tab or the app spells it; undefined for any other word. */

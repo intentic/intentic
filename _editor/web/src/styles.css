@@ -24,6 +24,7 @@
 
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one is selected in Appearance. */
 @import "./skins/sanctum.css";
+@import "./skins/silver.css";
 /* WALLPAPERS — a picture behind the agents board and supported extension pages, scoped to `data-wallpaper` on <html>; inert until one is picked. */
 @import "./skins/wallpapers.css";
 

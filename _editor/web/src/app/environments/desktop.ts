@@ -104,7 +104,7 @@ export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "d
 
 // The app's own screens are drawn in the light this page last announced, by link since it cannot read this storage; the
 // look rides beside it, handed to every page the app builds next, each its own origin (windows.rs `look_init_script`).
-export const announceDesktopMode = (scheme: `light` | `dark`, look?: `system` | `light` | `dark` | `sanctum`): void => {
+export const announceDesktopMode = (scheme: `light` | `dark`, look?: `system` | `light` | `dark` | `sanctum` | `silver`): void => {
     if (desktopVersion() === undefined) {
         return;
     }

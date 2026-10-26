@@ -272,8 +272,8 @@ describe(`the first frame inside the Android app`, () => {
     const worn = (row: ThemeRow, os: `light` | `dark`) => {
         const { scheme, skin } = themeRowLook(row);
         const dark = scheme === `system` ? os === `dark` : scheme === `dark`;
-        const sanctum = skin === `system` ? dark : skin === `sanctum`;
-        return { mode: dark ? `dark` : undefined, skin: sanctum ? `sanctum` : undefined };
+        const wornSkin = skin === `system` ? (dark ? `sanctum` : `none`) : skin;
+        return { mode: dark ? `dark` : undefined, skin: wornSkin === `none` ? undefined : wornSkin };
     };
     const chosen = { [PROFILE_KEYS.scheme]: `light`, [PROFILE_KEYS.skin]: `none` };
 
@@ -311,8 +311,8 @@ describe(`the first frame of a page the desktop app built`, () => {
     const worn = (row: ThemeRow, os: `light` | `dark`) => {
         const { scheme, skin } = themeRowLook(row);
         const dark = scheme === `system` ? os === `dark` : scheme === `dark`;
-        const sanctum = skin === `system` ? dark : skin === `sanctum`;
-        return { mode: dark ? `dark` : undefined, skin: sanctum ? `sanctum` : undefined };
+        const wornSkin = skin === `system` ? (dark ? `sanctum` : `none`) : skin;
+        return { mode: dark ? `dark` : undefined, skin: wornSkin === `none` ? undefined : wornSkin };
     };
     const SIGN_IN = `https://app.intentic.dev/desktop-auth/complete?handoff=h&verifier=v&profile=desk`;
 

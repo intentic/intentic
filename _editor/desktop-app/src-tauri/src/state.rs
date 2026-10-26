@@ -104,6 +104,7 @@ pub enum Look {
     Light,
     Dark,
     Sanctum,
+    Silver,
 }
 
 impl Look {
@@ -114,6 +115,7 @@ impl Look {
             "light" => Some(Look::Light),
             "dark" => Some(Look::Dark),
             "sanctum" => Some(Look::Sanctum),
+            "silver" => Some(Look::Silver),
             _ => None,
         }
     }
@@ -124,6 +126,7 @@ impl Look {
             Look::Light => "light",
             Look::Dark => "dark",
             Look::Sanctum => "sanctum",
+            Look::Silver => "silver",
         }
     }
 }
@@ -990,7 +993,7 @@ mod tests {
             "same answer, nothing to write"
         );
         assert_eq!(state_in(&dir).ui_look(), Some(Look::Sanctum));
-        for look in [Look::System, Look::Light, Look::Dark, Look::Sanctum] {
+        for look in [Look::System, Look::Light, Look::Dark, Look::Sanctum, Look::Silver] {
             assert_eq!(Look::parse(look.id()), Some(look));
         }
         assert_eq!(Look::parse("sepia"), None);

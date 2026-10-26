@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { PROFILES } from "@intentic/constants";
 import { auditPage, WCAG_22_AA } from "./audit.js";
 
-const looks = [`light`, `dark`, `sanctum`] as const;
+const looks = [`light`, `dark`, `sanctum`, `silver`] as const;
 
 test.describe(`composer model controls`, () => {
     for (const width of [1440, 375]) {
@@ -116,7 +116,7 @@ for (const look of looks) {
         test.beforeEach(async ({ page }) => {
             await page.addInitScript((selected) => {
                 localStorage.setItem(`ui-color-scheme`, selected === `light` ? `light` : `dark`);
-                localStorage.setItem(`ui-skin`, selected === `sanctum` ? `sanctum` : `none`);
+                localStorage.setItem(`ui-skin`, selected === `sanctum` || selected === `silver` ? selected : `none`);
                 localStorage.setItem(`ui-locale`, `en`);
             }, look);
         });
