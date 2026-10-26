@@ -15,7 +15,7 @@ import {
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { t } from "@intentic/ui/i18n";
 import { z } from "zod";
-import { passkeyNudgeKey, removeStoredValue, storedKeys, storedValue, storeValue } from "../../app/storage/browserStorage";
+import { removeStoredValue, storedKeys, storedValue, storeValue } from "../../app/storage/browserStorage";
 import { accountWaysIn, emailOnly, signsInByEmail } from "../auth/signInMethods";
 import { useGoogleIdentity } from "../auth/useGoogleIdentity";
 import { healthAnswers, sandboxIdOf } from "../endpoint/endpoint";
@@ -409,30 +409,12 @@ const ownerRefusalHolds = (sandboxId: string): boolean => {
 // What the no-access gate says for a person this sandbox has not opted in to email sign-in.
 const refusedByOwner = (): SandboxSessionError => new SandboxSessionError(403, t(`sandbox.sandboxSession.emailSignInOff`), EMAIL_SIGN_IN_OFF);
 
-// A first session this browser got on a sandbox by email code: the nudge to add a passkey, which opens the sandbox even
-// while intentic cannot vouch for anybody (shell/notifications/notificationSources.ts). Put away per sandbox, once.
-// allow(module-state): the one sandbox a passkey is being suggested for
-const passkeyNudge = ref<string | undefined>(undefined);
-const nudgePasskey = (sandboxId: string): void => {
-    if (storedValue(passkeyNudgeKey(sandboxId)) === undefined) {
-        passkeyNudge.value = sandboxId;
-    }
-};
-const dismissPasskeyNudge = (): void => {
-    const sandboxId = passkeyNudge.value;
-    if (sandboxId !== undefined) {
-        storeValue(passkeyNudgeKey(sandboxId), `dismissed`);
-    }
-    passkeyNudge.value = undefined;
-};
-
 // "Continue as" on the wall: a fresh assertion, its refusal thrown in the words the wall shows.
 const spendForWall =
     (target: ScopedTarget) =>
     async (): Promise<EmailAnswer> => {
         const outcome = await spendAssertion(target, retirementOf(target.sandboxId));
         if (isSession(outcome)) {
-            nudgePasskey(target.sandboxId);
             return { session: outcome };
         }
         if (`stepUp` in outcome) {
@@ -480,7 +462,6 @@ const assertionLink = async (target: ScopedTarget, signal: AbortSignal, withoutG
         return undefined;
     }
     if (isSession(outcome)) {
-        nudgePasskey(target.sandboxId);
         return outcome;
     }
     if (`stepUp` in outcome) {
@@ -828,8 +809,6 @@ export function useSandboxSession() {
         sessionExpiresAt,
         emailRefusal,
         retryEmailSignIn,
-        passkeyNudge,
-        dismissPasskeyNudge,
         heldSessionEmail,
         getSessionToken,
         rejectSessionToken,

@@ -14,7 +14,6 @@ import { hold, type NotificationInput, type NotificationTone } from "../../workb
 import { onScreen } from "../../workbench/window/onScreen";
 import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
 import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../models/sandbox/live/sandboxRestart";
-import { accessPath } from "../../models/sandbox/sandboxNav";
 import { useLocalShortcut } from "../../client/endpoint/localShortcut";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -293,7 +292,7 @@ export const startNotificationSources = (): void => {
     // useSandboxAvailability binds to the caller's Vue scope, so this must run from a component's setup.
     const { user } = useAuth();
     const { activeSandboxId, reachable, connection } = useSandbox();
-    const { presentedEmail, invalidateSession, getSessionToken, passkeyNudge, dismissPasskeyNudge } = useSandboxSession();
+    const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
     const { clearCredential } = useGoogleIdentity();
     // The gate's own reading (established.ts): a screen the gate took is its to explain, and every other screen is this
     // lane's.
@@ -379,34 +378,6 @@ export const startNotificationSources = (): void => {
             dismiss: () => {
                 lostDismissed.value = true;
             },
-        };
-    });
-
-    // A first sign-in by email code on the open sandbox: the platform vouched for the address, which it cannot do while
-    // it is down. A passkey is the sandbox's own way to know the reader, so it is suggested once, here, and put away
-    // for that sandbox with either answer (sandboxSession.ts `passkeyNudge`).
-    hold(`passkey-nudge`, () => {
-        const sandboxId = passkeyNudge.value;
-        if (sandboxId === undefined || sandboxId !== activeSandboxId.value || !reachable.value) {
-            return undefined;
-        }
-        return {
-            kind: `question`,
-            tone: `info`,
-            icon: `key`,
-            title: t(`shell.notificationSources.passkeyNudgeTitle`),
-            detail: t(`shell.notificationSources.passkeyNudgeDetail`),
-            actions: [
-                { label: t(`shell.notificationSources.passkeyNudgeLater`), tier: `boring` as const, run: dismissPasskeyNudge },
-                {
-                    label: t(`shell.notificationSources.passkeyNudgeAdd`),
-                    run: async () => {
-                        dismissPasskeyNudge();
-                        await router.push(accessPath(`sign-in`));
-                    },
-                },
-            ],
-            dismiss: dismissPasskeyNudge,
         };
     });
 
@@ -547,9 +518,10 @@ export const startNotificationSources = (): void => {
             title: t(`shell.notificationSources.fasterSandboxRunsOn`),
             detail: t(`shell.notificationSources.browserAskToAllow`),
             actions: [
-                { label: t(`ui.action.no`), tier: `boring` as const, run: (): void => decline(sandboxId) },
+                { label: t(`ui.action.no`), tier: `quiet` as const, run: (): void => decline(sandboxId) },
                 {
                     label: t(`shell.notificationSources.allow`),
+                    tier: `accent` as const,
                     // Probes immediately, inside the click: the friendliest moment to ask a browser for a device
                     // permission.
                     run: async (): Promise<void> => {

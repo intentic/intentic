@@ -690,13 +690,13 @@ it(`spends the platform's assertion for an account that signs in only by email, 
     const fetchMock = daemonAnswering({ proofs: [`google`, `email`], sessions: [() => sessionResponse()] });
     stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
-    const { getSessionToken, passkeyNudge } = useSandboxSession();
+    const { getSessionToken } = useSandboxSession();
 
     expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     expect(identityAssertion).toHaveBeenCalledWith({ sandboxId: `sb-1` });
     // Spent at once on the session route, beside the owner's connect token as a Google proof would be.
     expect(exchanges(fetchMock)[0]?.[1]?.headers).toMatchObject({ authorization: `Bearer pa1.minted`, "x-intentic-connect": `connect` });
-    expect({ minted: state.minted, nudge: passkeyNudge.value }).toEqual({ minted: 0, nudge: `sb-1` });
+    expect(state.minted).toBe(0);
 });
 
 it(`never asks the platform for an assertion in the background`, async () => {

@@ -67,9 +67,9 @@ An answer the sandbox would refuse (chatting with no area, a narrowed scope with
 **Not saved** with the reason. The panel's header holds **Resend** for a pending invite and **Remove**. The invite link
 lasts 7 days and must be accepted by that address. Only the owner adds people or changes their access.
 
-A sandbox older than email sign-in says it needs an update before it accepts one. Right after a first email sign-in
-the app suggests a passkey: passkeys belong to the sandbox itself and keep working while app.intentic.dev is down,
-which email sign-in does not.
+A sandbox older than email sign-in says it needs an update before it accepts one. A passkey, added under
+**Access → Sign-in**, belongs to the sandbox itself and keeps working while app.intentic.dev is down, which email
+sign-in does not. The app does not prompt for one; a person adds it there when they want it.
 
 **People** also holds the AI notice and, while anyone else is connected, who is here now. **Sign-in**
 (`?section=sign-in`) holds passkeys, **Require a passkey to open this sandbox** and its recovery codes, and the

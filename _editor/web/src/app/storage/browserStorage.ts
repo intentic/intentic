@@ -43,8 +43,6 @@ export const commitMessageKey = sandboxKeys(`intentic.commitMessage.`);
 export const commitDraftPaceKey = accountKey(`intentic.commitDraftPace`);
 // The size each markdown document's workspace picture last loaded at, per sandbox (lib/markdown/pictureSizes.ts).
 export const pictureSizesKey = sandboxKeys(`intentic.pictureSizes.`);
-// The passkey nudge put away after a first sign-in by email code, per sandbox (client/session/sandboxSession.ts).
-export const passkeyNudgeKey = sandboxKeys(`intentic.passkeyNudge.`);
 // When a setup last opened a sandbox it had just set up, per sandbox (models/sandbox/live/justSetUp.ts).
 export const justSetUpKey = sandboxKeys(`intentic.justSetUp.`);
 // Whether the chat's usage rail last had anything to show, per sandbox (features/chat/panel/capacity/capacityMemory.ts).
