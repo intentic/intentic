@@ -13,6 +13,7 @@ import type { KeyringLink } from "./device/keyring-link.js";
 import { createKeyringNeeds, fileKeyringNeeds, type KeyringNeeds, keyringNeedsDocument } from "./device/keyring-needs.js";
 import { createKeyringParts } from "./device/keyring-parts.js";
 import type { KeyringSync } from "./device/keyring-sync.js";
+import type { AuthSlice } from "../auth/auth-slice.js";
 import { createProgramGuardGate, type ProgramGuardGate } from "./gates/program-guard-gate.js";
 import { fileSecretProgramGuards, type ProgramGuard, type SecretProgramGuardsStore, secretProgramGuardsDocument } from "./guards/program-guards.js";
 import { createCredentialGate, type CredentialGate } from "./gates/credential-gate.js";
@@ -21,7 +22,9 @@ import {
     type ConversationReachOf,
     type CredentialReachDeps,
     createConversationAccountReach,
+    createConversationCeiling,
     createConversationReach,
+    type ConversationCeilingOf,
 } from "./credential-reach.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
@@ -48,6 +51,9 @@ export interface SecretsSlice {
     // Which AI accounts a conversation may run on as the people it works for may: read by the turn's planning, so a turn
     // never runs on an account outside it (agent/run/decide/account-reach.ts).
     readonly accountReach: ConversationAccountReachOf;
+    // The most a conversation's tools may be, from the same chain (access/principal-chain.ts): the turn's premise caps
+    // its persona's shelves with it, after conversation grants, so neither lifts a shelf the chain withholds.
+    readonly toolCeiling: ConversationCeilingOf;
     // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
     // A secret was stored or removed here, by any door (the sandbox store, or desired-state/.env through the Secrets
@@ -97,6 +103,9 @@ export interface SecretsDeps {
     // The roster each member's reach is written on, and the conversation records that name who a conversation works for.
     readonly members: CredentialReachDeps["members"];
     readonly conversationEntry: CredentialReachDeps["entry"];
+    // The services a conversation's runs act as, the access profiles that bound them, and a bound organisation's
+    // ceiling (access/principal-chain.ts); absent in a composition that has none, where a service named reaches nothing.
+    readonly principals?: Pick<CredentialReachDeps, "services" | "profiles" | "org">;
     // Where a release that could not be kept is said; the release itself still holds for this process.
     readonly warn: (message: string, error: unknown) => void;
     // The owner's computers, for their keyrings: the hub is composed after this slice, so it is read at each call.
@@ -105,6 +114,17 @@ export interface SecretsDeps {
     readonly publicUrl: () => string;
     readonly logger: Pick<Logger, "warn">;
 }
+
+// Who a conversation can act for, as the auth slice keeps them: the owner, the roster, the services and the access
+// profiles, with a bound organisation's ceiling over all of them (access/principal-chain.ts).
+export const principalsOfAuth = (
+    auth: Pick<AuthSlice, "ownerEmail" | "members" | "services" | "accessProfiles">,
+    org: NonNullable<CredentialReachDeps["org"]>,
+): Pick<SecretsDeps, "ownerEmail" | "members" | "principals"> => ({
+    ownerEmail: auth.ownerEmail,
+    members: auth.members,
+    principals: { services: auth.services, profiles: auth.accessProfiles, org },
+});
 
 // Builds the secrets slice.
 export const createSecretsSlice = ({
@@ -119,6 +139,7 @@ export const createSecretsSlice = ({
     ownerEmail,
     members,
     conversationEntry,
+    principals = {},
     warn,
     deviceHub,
     publicUrl,
@@ -136,8 +157,10 @@ export const createSecretsSlice = ({
         }
     };
     const sandboxSecrets = notifyingSandboxSecrets(fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path)), secretsChanged);
-    const credentialReach = createConversationReach({ members, ownerEmail, entry: conversationEntry });
-    const accountReach = createConversationAccountReach({ members, ownerEmail, entry: conversationEntry });
+    const chainDeps: CredentialReachDeps = { members, ownerEmail, entry: conversationEntry, ...principals };
+    const credentialReach = createConversationReach(chainDeps);
+    const accountReach = createConversationAccountReach(chainDeps);
+    const toolCeiling = createConversationCeiling(chainDeps);
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
     const hostGuards = async (): Promise<readonly SecretHostGuard[]> => {
@@ -196,6 +219,7 @@ export const createSecretsSlice = ({
         credentialGrants,
         credentialReach,
         accountReach,
+        toolCeiling,
         // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
         credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, reach: credentialReach, ...cards, hold }),
     };

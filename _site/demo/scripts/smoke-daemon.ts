@@ -411,6 +411,8 @@ const samplesOf = (
             save: { id: `smoke-area`, folders: [`web`] },
             remove: { id: `smoke-area` },
         },
+        accessProfiles: { list: undefined, save: { id: `smoke-profile`, agents: `off` }, remove: { id: `smoke-profile` } },
+        services: { list: undefined, save: { id: `smoke-service`, steward: `ada@acme.dev` }, remove: { id: `smoke-service` } },
         usage: {
             rollup: {},
             refreshPlanLimits: {},

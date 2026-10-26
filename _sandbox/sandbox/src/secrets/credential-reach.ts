@@ -1,22 +1,31 @@
 import type { CapabilityKind } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { CredentialGateKind } from "@intentic/sandbox-contract/schemas/secrets";
-import { aiAccountAllowed, type CredentialReach, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
+import { aiAccountAllowed, REACHABLE_CREDENTIAL_KINDS } from "@intentic/sandbox-contract/schemas/members";
+import { intersectCeilings, type ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { Member } from "../auth/auth.js";
-import { parentOfActor } from "../auth/principal.js";
-import { errorMessage } from "@intentic/base/errors";
+import {
+    type ChainEntry,
+    type ChainLimit,
+    createPrincipalChain,
+    type PrincipalChain,
+    type PrincipalChainDeps,
+    personLimit,
+    principalsOf,
+} from "../access/principal-chain.js";
 
-// WHAT A CONVERSATION MAY SPEND, as the people it works for may. The owner grants each member a reach (the capabilities
-// and stored secrets their conversations may use, auth.ts `Member.credentials`), and a conversation holds only what
-// EVERY person who has asked it for a turn holds: the latched `people` on its identity (agents-registry.ts), with the
-// conversation a spawned child or a peer's message speaks for. Read live from the roster on every use, so a reach the
-// owner narrows holds from the next exit, mid-turn included.
-// This is the hard half of a person's access, the one no card lifts: a capability outside the reach is never mounted
-// for the turn (turn-decision.ts), its variables and skill are left out (honoured.ts), and every exit that spends a
-// credential refuses it at the one gate they share (gates/credential-gate.ts). The approver gates are the soft half:
-// a person's click releases those.
+// WHAT A CONVERSATION MAY SPEND, as everyone it acts for may (docs/architecture/access.md). The owner grants each member a
+// reach (the capabilities and stored secrets their conversations may use, auth.ts `Member.credentials`), a service holds
+// its steward's narrowed by its access profile, and a conversation holds only what EVERY principal it latched holds
+// (access/principal-chain.ts): the people who asked it for a turn and the services its turns ran as, with the
+// conversation a spawned child or a peer's message speaks for. Read live on every use, so a reach the owner narrows
+// holds from the next exit, mid-turn included.
+// This is the hard half of access, the one no card lifts: a capability outside the reach is never mounted for the turn
+// (turn-decision.ts), its variables and skill are left out (honoured.ts), and every exit that spends a credential refuses
+// it at the one gate they share (gates/credential-gate.ts). The approver gates are the soft half: a person's click
+// releases those.
 
-// `all`: nobody in the conversation is limited. `some`: only these, with `who` the people whose reach made it so, and
-// `unreadable` when the roster could not be read, which reaches nothing rather than everything.
+// `all`: nobody in the conversation is limited. `some`: only these, with `who` the principals whose reach made it so, and
+// `unreadable` when a file the answer depends on could not be read, which reaches nothing rather than everything.
 export type ConversationReach =
     | { readonly kind: "all" }
     | {
@@ -29,37 +38,36 @@ export type ConversationReach =
 
 export const REACH_ALL: ConversationReach = { kind: "all" };
 
-const lower = (email: string): string => email.toLowerCase();
-
-// One person's reach: the owner and a maintainer every credential, a member what their row says (absent: every one),
-// and anyone the roster no longer names nothing at all, since a conversation must not keep spending for somebody whose
-// access was taken back.
-const personReach = (email: string, roster: readonly Member[], owner: string | undefined): CredentialReach | "all" => {
-    if (owner !== undefined && lower(owner) === email) {
-        return "all";
-    }
-    const member = roster.find((row) => lower(row.email) === email);
-    if (member === undefined) {
-        return { capabilities: [], secrets: [] };
-    }
-    return member.role === "maintainer" || member.credentials === undefined ? "all" : member.credentials;
-};
-
-/** What a conversation acting for these people may spend: the intersection of each one's reach. */
-export const reachOfPeople = (people: readonly string[], roster: readonly Member[], owner: string | undefined): ConversationReach => {
+/** What a conversation held to these limits may spend: the intersection of every limit that lists any. */
+const reachOfLimits = (limits: readonly ChainLimit[]): ConversationReach => {
     let capabilities: Set<string> | undefined;
     let secrets: Set<string> | undefined;
     const who: string[] = [];
-    for (const email of new Set(people.map(lower))) {
-        const reach = personReach(email, roster, owner);
+    for (const limit of limits) {
+        const reach = limit.credentials;
         if (reach === "all") {
             continue;
         }
-        who.push(email);
+        who.push(limit.who);
         capabilities = new Set(reach.capabilities.filter((id) => capabilities === undefined || capabilities.has(id)));
         secrets = new Set(reach.secrets.filter((name) => secrets === undefined || secrets.has(name)));
     }
-    return capabilities === undefined || secrets === undefined ? REACH_ALL : { kind: "some", capabilities, secrets, who };
+    return capabilities === undefined || secrets === undefined ? REACH_ALL : { kind: "some", capabilities, secrets, who: [...new Set(who)] };
+};
+
+/** What a conversation acting for these people alone may spend: the intersection of each one's reach. */
+export const reachOfPeople = (people: readonly string[], roster: readonly Member[], owner: string | undefined): ConversationReach =>
+    reachOfLimits([...new Set(people.map((email) => email.toLowerCase()))].map((email) => personLimit(email, roster, owner)));
+
+/** A chain's reach: open reaches everything, unreadable nothing. */
+const reachOfChain = (chain: PrincipalChain): ConversationReach => {
+    if (chain.kind === "open") {
+        return REACH_ALL;
+    }
+    if (chain.kind === "unreadable") {
+        return { kind: "some", capabilities: new Set(), secrets: new Set(), who: chain.who, unreadable: chain.detail };
+    }
+    return reachOfLimits(chain.limits);
 };
 
 /** Whether a reach covers one subject, in the gates' own vocabulary: a capability id, or a stored secret's name. */
@@ -88,85 +96,26 @@ export const withinReach = <C extends { readonly id: string; readonly kind: Capa
     return { kept, withheld };
 };
 
-// The parts of a conversation's record this reads: its own people, and the conversation its starter names when an
-// agent opened it (a spawned child's parent).
-interface ReachEntry {
-    readonly identity: { readonly people?: readonly string[] | undefined; readonly startedBy?: string | undefined };
-    readonly social: { readonly owner?: { readonly email: string } | undefined };
-}
-
 /** Everyone a conversation acts for, its own and its parents', read live so a parent's new person reaches its children. */
-export const peopleOf = (entryOf: (id: string) => ReachEntry | undefined, conversationId: string | undefined): string[] => {
-    const people = new Set<string>();
-    const seen = new Set<string>();
-    let id = conversationId;
-    while (id !== undefined && !seen.has(id)) {
-        seen.add(id);
-        const entry = entryOf(id);
-        if (entry === undefined) {
-            break;
-        }
-        // A row written before `people` existed names the member it belongs to.
-        for (const email of entry.identity.people ?? (entry.social.owner === undefined ? [] : [entry.social.owner.email])) {
-            people.add(lower(email));
-        }
-        id = parentOfActor(entry.identity.startedBy);
-    }
-    return [...people];
+export const peopleOf = (entryOf: (id: string) => ChainEntry | undefined, conversationId: string | undefined): string[] =>
+    principalsOf(entryOf, conversationId).people;
+
+export type CredentialReachDeps = PrincipalChainDeps;
+
+// Resolves a conversation's reach, with `also` for a person and `services` for a service whose turn is starting before
+// the conversation has recorded them. No conversation (an automation's own check, a detached shell) and nobody limited
+// both answer `all`, with no roster read; a file that cannot be read answers nothing, never everything.
+export type ConversationReachOf = (conversationId: string | undefined, also?: readonly string[], services?: readonly string[]) => Promise<ConversationReach>;
+
+export const createConversationReach = (deps: CredentialReachDeps): ConversationReachOf => {
+    const chain = createPrincipalChain(deps);
+    return async (conversationId, also = [], services = []) => reachOfChain(await chain(conversationId, { people: also, services }));
 };
 
-export interface CredentialReachDeps {
-    readonly members: { readonly list: () => Promise<readonly Member[]> };
-    readonly ownerEmail: () => Promise<string | undefined>;
-    readonly entry: (id: string) => ReachEntry | undefined;
-}
-
-// Resolves a conversation's reach, with `also` for a person whose turn is starting before the conversation has recorded
-// them. No conversation (an automation's own check, a detached shell) and nobody limited both answer `all`, with no
-// roster read; a roster that cannot be read answers nothing, never everything.
-export type ConversationReachOf = (conversationId: string | undefined, also?: readonly string[]) => Promise<ConversationReach>;
-
-// The people a conversation acts for and the roster their reach is read off: `nobody` when nobody limited could be in it
-// (no one, or the owner alone), `unreadable` when the roster or the owner could not be read.
-type PeopleRoster =
-    | { readonly kind: "nobody" }
-    | { readonly kind: "unreadable"; readonly people: readonly string[]; readonly detail: string }
-    | { readonly kind: "read"; readonly people: readonly string[]; readonly roster: readonly Member[]; readonly owner: string | undefined };
-
-const peopleRoster = async (deps: CredentialReachDeps, conversationId: string | undefined, also: readonly string[]): Promise<PeopleRoster> => {
-    const people = [...new Set([...peopleOf(deps.entry, conversationId), ...also.map(lower)])];
-    if (people.length === 0) {
-        return { kind: "nobody" };
-    }
-    try {
-        const owner = await deps.ownerEmail();
-        const ownerAddress = owner === undefined ? undefined : lower(owner);
-        if (people.every((email) => email === ownerAddress)) {
-            return { kind: "nobody" };
-        }
-        return { kind: "read", people, roster: await deps.members.list(), owner };
-    } catch (error) {
-        return { kind: "unreadable", people, detail: errorMessage(error) };
-    }
-};
-
-export const createConversationReach =
-    (deps: CredentialReachDeps): ConversationReachOf =>
-    async (conversationId, also = []) => {
-        const read = await peopleRoster(deps, conversationId, also);
-        if (read.kind === "nobody") {
-            return REACH_ALL;
-        }
-        if (read.kind === "unreadable") {
-            return { kind: "some", capabilities: new Set(), secrets: new Set(), who: read.people, unreadable: read.detail };
-        }
-        return reachOfPeople(read.people, read.roster, read.owner);
-    };
-
-// WHICH AI ACCOUNTS A CONVERSATION MAY RUN ON, as the people it works for may (auth.ts `Member.aiAccounts`): the same
-// people, the same live roster read and the same rule as the reach above, applied to the model accounts that pay for
-// its turns rather than to what its agent works with. Kept as one list per limited person rather than one intersected
-// set, since a key may name a whole provider (`claude`) where another person's names one account of it
+// WHICH AI ACCOUNTS A CONVERSATION MAY RUN ON, as everyone it acts for may (auth.ts `Member.aiAccounts`, a profile's
+// `aiAccounts`, an organisation's ceiling): the same chain and the same rule as the reach above, applied to the model
+// accounts that pay for its turns rather than to what its agent works with. Kept as one list per limit rather than one
+// intersected set, since a key may name a whole provider (`claude`) where another limit names one account of it
 // (`claude:work`): an account is allowed when every list allows it (agent/run/decide/account-reach.ts decides the turn).
 
 export type AccountReach =
@@ -180,52 +129,65 @@ export type AccountReach =
 
 export const ACCOUNTS_ALL: AccountReach = { kind: "all" };
 
-// One person's AI accounts: the owner and a maintainer every one, a member what their row says (absent: every one),
-// and anyone the roster no longer names none at all.
-const personAccounts = (email: string, roster: readonly Member[], owner: string | undefined): readonly string[] | "all" => {
-    if (owner !== undefined && lower(owner) === email) {
-        return "all";
-    }
-    const member = roster.find((row) => lower(row.email) === email);
-    if (member === undefined) {
-        return [];
-    }
-    return member.role === "maintainer" || member.aiAccounts === undefined ? "all" : member.aiAccounts;
-};
-
-/** The AI accounts a conversation acting for these people may run on: every limited person's list, each of which must allow. */
-export const accountReachOfPeople = (people: readonly string[], roster: readonly Member[], owner: string | undefined): AccountReach => {
+/** The AI accounts a conversation held to these limits may run on: every list that limits, each of which must allow. */
+const accountReachOfLimits = (limits: readonly ChainLimit[]): AccountReach => {
     const lists: ReadonlySet<string>[] = [];
     const who: string[] = [];
-    for (const email of new Set(people.map(lower))) {
-        const accounts = personAccounts(email, roster, owner);
-        if (accounts !== "all") {
-            lists.push(new Set(accounts));
-            who.push(email);
+    for (const limit of limits) {
+        if (limit.aiAccounts !== "all") {
+            lists.push(new Set(limit.aiAccounts));
+            who.push(limit.who);
         }
     }
-    return lists.length === 0 ? ACCOUNTS_ALL : { kind: "some", lists, who };
+    return lists.length === 0 ? ACCOUNTS_ALL : { kind: "some", lists, who: [...new Set(who)] };
+};
+
+/** The AI accounts a conversation acting for these people alone may run on. */
+export const accountReachOfPeople = (people: readonly string[], roster: readonly Member[], owner: string | undefined): AccountReach =>
+    accountReachOfLimits([...new Set(people.map((email) => email.toLowerCase()))].map((email) => personLimit(email, roster, owner)));
+
+/** A chain's AI accounts: open runs on every one, unreadable on none. */
+const accountReachOfChain = (chain: PrincipalChain): AccountReach => {
+    if (chain.kind === "open") {
+        return ACCOUNTS_ALL;
+    }
+    if (chain.kind === "unreadable") {
+        return { kind: "some", lists: [], who: chain.who, unreadable: chain.detail };
+    }
+    return accountReachOfLimits(chain.limits);
 };
 
 /** Whether a reach lets a turn run on one account of a provider; `account` undefined asks about the provider as a whole. */
 export const accountReachAllows = (reach: AccountReach, provider: string, account: string | undefined): boolean =>
     reach.kind === "all" || (reach.unreadable === undefined && reach.lists.every((list) => aiAccountAllowed(list, provider, account)));
 
-export type ConversationAccountReachOf = (conversationId: string | undefined, also?: readonly string[]) => Promise<AccountReach>;
+export type ConversationAccountReachOf = (
+    conversationId: string | undefined,
+    also?: readonly string[],
+    services?: readonly string[],
+) => Promise<AccountReach>;
 
-// No conversation and nobody limited both answer `all`; a roster that cannot be read answers no account, never every one.
-export const createConversationAccountReach =
-    (deps: CredentialReachDeps): ConversationAccountReachOf =>
-    async (conversationId, also = []) => {
-        const read = await peopleRoster(deps, conversationId, also);
-        if (read.kind === "nobody") {
-            return ACCOUNTS_ALL;
-        }
-        if (read.kind === "unreadable") {
-            return { kind: "some", lists: [], who: read.people, unreadable: read.detail };
-        }
-        return accountReachOfPeople(read.people, read.roster, read.owner);
-    };
+// No conversation and nobody limited both answer `all`; a file that cannot be read answers no account, never every one.
+export const createConversationAccountReach = (deps: CredentialReachDeps): ConversationAccountReachOf => {
+    const chain = createPrincipalChain(deps);
+    return async (conversationId, also = [], services = []) => accountReachOfChain(await chain(conversationId, { people: also, services }));
+};
+
+// THE MOST A CONVERSATION'S TOOLS MAY BE, from the same chain: every limit's ceiling held together. Undefined is no
+// ceiling. A chain that cannot be read answers no ceiling here: its AI accounts already answer none, so no turn runs on it.
+const ceilingOfChain = (chain: PrincipalChain): ToolCeiling | undefined =>
+    chain.kind === "limits" ? chain.limits.reduce<ToolCeiling | undefined>((held, limit) => intersectCeilings(held, limit.tools), undefined) : undefined;
+
+export type ConversationCeilingOf = (
+    conversationId: string | undefined,
+    also?: readonly string[],
+    services?: readonly string[],
+) => Promise<ToolCeiling | undefined>;
+
+export const createConversationCeiling = (deps: CredentialReachDeps): ConversationCeilingOf => {
+    const chain = createPrincipalChain(deps);
+    return async (conversationId, also = [], services = []) => ceilingOfChain(await chain(conversationId, { people: also, services }));
+};
 
 const naming = (who: readonly string[]): string =>
     who.length <= 1 ? (who[0] ?? "the person this conversation works for") : `${who.slice(0, -1).join(", ")} and ${who.at(-1) ?? ""}`;
@@ -236,8 +198,8 @@ export const reachWho = (who: readonly string[]): string => naming(who);
 /** The refusal an exit answers with for a subject outside the reach: final, and nothing to ask anybody for. */
 export const outOfReachReason = (reach: Extract<ConversationReach, { kind: "some" }>, subject: string): string =>
     reach.unreadable !== undefined
-        ? `"${subject}" was not used: the sandbox's member roster could not be read, so what this conversation may spend is unknown and nothing is spent on a guess. Do not retry: tell the user the roster is unreadable.`
-        : `"${subject}" is not available in this conversation: ${naming(reach.who)} ${reach.who.length > 1 ? "were" : "was"} not given it, and a conversation can use only what every person in it may. ` +
+        ? `"${subject}" was not used: the sandbox's record of who this conversation acts for (its roster, services or access profiles) could not be read, so what it may spend is unknown and nothing is spent on a guess. Do not retry: tell the user that record is unreadable.`
+        : `"${subject}" is not available in this conversation: ${naming(reach.who)} ${reach.who.length > 1 ? "were" : "was"} not given it, and a conversation can use only what everyone it acts for may. ` +
           `No card can release it and \`secrets request\` cannot ask for it: only the sandbox owner can change who may use what, on the Access page. ` +
           `Do not retry and do not look for another way to it: carry on without it and say plainly what you left undone.`;
 
@@ -269,8 +231,8 @@ export const outOfReachNote = (
         title: OUT_OF_REACH_TITLE,
         text:
             `${(reach.unreadable === undefined
-                ? `${naming(reach.who)} ${reach.who.length > 1 ? "were" : "was"} given access to only some of this sandbox's connected accounts and stored secrets, and a conversation can use only what every person in it may. `
-                : "The sandbox's member roster could not be read, so no connected account or stored secret is available in this conversation until it can be. ") +
+                ? `${naming(reach.who)} ${reach.who.length > 1 ? "were" : "was"} given access to only some of this sandbox's connected accounts and stored secrets, and a conversation can use only what everyone it acts for may. `
+                : "The sandbox's record of who this conversation acts for could not be read, so no connected account or stored secret is available in this conversation until it can be. ") +
             (names === "" ? "" : `Not loaded here: ${names}. They are connected and working; they are left out on purpose. `) 
             }A \`{{secret:…}}\` reference to anything outside what this conversation may use is refused. Do not ask to connect these again, do not raise \`secrets request\` or \`capabilities request\` for them, and do not look for another way to them: ` +
             `only the sandbox owner decides who may use what, on the Access page. Carry on without them and say plainly what you left undone.`,

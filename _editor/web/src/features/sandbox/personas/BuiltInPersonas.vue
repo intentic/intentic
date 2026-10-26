@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic/ui";
+import { Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { builtInPersonaViews } from "../../../models/sandbox/personas/builtInPersonas";
 
@@ -13,6 +13,7 @@ const builtIns = builtInPersonaViews();
 
 <template>
     <RowGroup :label="t(`sandbox.builtInPersonas.title`)">
+        <RowNote variant="block">{{ t(`sandbox.accessProfiles.posture`) }}</RowNote>
         <Row v-for="persona in builtIns" :key="persona.id" :icon="persona.icon" :title="persona.label" :description="`${persona.note} ${persona.when}`" />
     </RowGroup>
 </template>

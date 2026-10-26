@@ -4,7 +4,8 @@
         "whatAgentTold": "Co zostanie powiedziane agentowi"
     },
     "approvalMeta": {
-        "as": "jako"
+        "as": "jako",
+        "runsAs": "Działa jako"
     },
     "approvalRail": {
         "approvalSlice": "Wycinek zatwierdzeń",

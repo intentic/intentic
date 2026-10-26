@@ -207,7 +207,7 @@ export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectio
  * box with nobody signing in, and what conversations were allowed past their persona or area. One page of ten groups until
  * 2026-10-19, which read as one long list of everything that has to do with getting in.
  */
-export const ACCESS_PARTS = [`people`, `sign-in`, `programs`, `allowed`] as const;
+export const ACCESS_PARTS = [`people`, `profiles`, `sign-in`, `programs`, `allowed`] as const;
 export type AccessPart = (typeof ACCESS_PARTS)[number];
 
 /** The parts drawn below maintainer: the reader's own card, the people here now, and their own passkeys. */

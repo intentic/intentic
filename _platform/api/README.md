@@ -258,7 +258,7 @@ flowchart LR
   `{ sandbox, key }`. The code stays redeemable until it expires; unknown, expired, removed and hosted all answer 404.
   Neither route is rate-limited, and a fix code carries the setup code's 65 bits. Releasing
   a hosted machine rotates the connect token, so it clears both columns with the setup ones.
-- Organisation policy (`src/org/`) pins public-office preset groups and can restrict bound sandboxes to organisation
+- Organisation policy (`src/org/`) delivers central access profiles and a turn ceiling with its rules. Stored profiles are parsed individually and capped at 50; an invalid ceiling is dropped. It pins public-office preset groups and can restrict bound sandboxes to organisation
   members. Admin mutations lock the organisation row before checking the caller's current role and the last-admin
   rule. Binding also locks the sandbox row, shared with deletion and account erasure, so concurrent requests cannot
   delete a bound sandbox. An organisation admin must release it first. The personal owner remains; ownership transfer

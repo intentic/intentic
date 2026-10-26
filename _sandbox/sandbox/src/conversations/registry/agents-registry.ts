@@ -22,7 +22,7 @@ import { activateLoadedFleet } from "./fleet-activation.js";
 import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } from "./land-marks.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
-import { identityOf, peopleOfConversation } from "../actor/identity-latch.js";
+import { identityOf, peopleOfConversation, servicesOfConversation } from "../actor/identity-latch.js";
 import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import { type AgentsStore, type AgentTitleSource, type Composition, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
@@ -160,7 +160,7 @@ const openedEntry = (
     const held = existing ?? freshEntry(turn, now);
     return {
         ...held,
-        identity: { ...identityOf(held.identity, turn, entryOf), ...peopleOfConversation(held, turn, entryOf) },
+        identity: { ...identityOf(held.identity, turn, entryOf), ...peopleOfConversation(held, turn, entryOf), ...servicesOfConversation(held, turn, entryOf) },
         profile: settingsOf(held.profile, turn.profile),
         // Retire the old binding before a new runtime can fail without minting a session of its own.
         sessionId: routingFor(held.profile, turn.profile).continues ? held.sessionId : undefined,

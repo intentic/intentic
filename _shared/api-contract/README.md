@@ -13,6 +13,7 @@ flowchart LR
 - Both ends are typed from the same `apiContract`: the browser's `OpenAPILink` client in `_editor/web` and the
   per-domain handlers in `_platform/api`, mounted under `API_BASE_PATH` (`/rpc`). It covers accounts, the sandbox
   registry, invites, hosted plans, push relay, wallet, admin reads and API tokens.
+- `org.setPolicy` accepts access profiles and a turn ceiling from the shared schemas. Profile ids must be unique.
 - `org.removeMember` returns the updated organisation, or `null` when the caller removed themselves. That success
   closes their organisation console; fetching its detail again would require the membership they just left.
 - `hostedOffer.startJourney` advertises the cloud entry protocol: `sandbox.create` accepts an optional UUID

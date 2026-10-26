@@ -27,6 +27,12 @@ export const LinkTermsSchema = z.object({
         .describe(
             "The persona every task through this link wears: its accounts, its shelves, its folders, its model. Absent, the task runs with no signed-in account and the full toolbox, as any unattended wake does.",
         ),
+    // Who the link's tasks act for (schemas/services.ts), the hard half beside the persona's posture.
+    runAs: entryId
+        .optional()
+        .describe(
+            "The service every task through this link acts as: whose authority it uses, held to that service's access profile. Absent means this sandbox's owner, limited only by the persona.",
+        ),
     approve: z
         .boolean()
         .default(false)
@@ -84,8 +90,13 @@ export type InboundLinkMint = z.infer<typeof InboundLinkMintSchema>;
 // The raw token, shown exactly once.
 export const InboundLinkMintedSchema = z.object({ id: z.string(), token: z.string() });
 export type InboundLinkMinted = z.infer<typeof InboundLinkMintedSchema>;
-// POST /system/links/{id}: new terms, whole fields replaced, the rest kept.
-export const InboundLinkTermsUpdateSchema = LinkTermsSchema.partial().extend({ label: z.string().trim().min(1).max(60).optional() });
+// POST /system/links/{id}: new terms, whole fields replaced, the rest kept. `null` on the persona or the service takes it
+// off (2026-10-26): absence keeps a field, so before this neither could be cleared once set.
+export const InboundLinkTermsUpdateSchema = LinkTermsSchema.partial().extend({
+    label: z.string().trim().min(1).max(60).optional(),
+    actsAs: entryId.nullable().optional().describe("The persona every task wears; null takes it off."),
+    runAs: entryId.nullable().optional().describe("The service every task acts as; null takes it off, so tasks act for this sandbox's owner."),
+});
 export type InboundLinkTermsUpdate = z.infer<typeof InboundLinkTermsUpdateSchema>;
 // POST /system/links/{id}/requests/{request}: the owner's answer to one waiting task.
 export const LinkRequestDecisionSchema = z.object({ approve: z.boolean() });

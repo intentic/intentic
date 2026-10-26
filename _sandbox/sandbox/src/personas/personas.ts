@@ -15,6 +15,7 @@ import {
     PersonaPowersSchema,
 } from "@intentic/sandbox-contract/schemas/personas";
 import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
+import { capPowers, ceilingLimits, type ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import { VISITOR_CHAT_GUIDANCE } from "./visitor-chat.js";
 
@@ -145,6 +146,20 @@ export const widenPersona = (persona: TurnPersona, grant: ConversationGrant | un
         // An unfenced turn reaches the whole workspace already; a fenced one gains the granted folders.
         fence: persona.fence === undefined || grant.folders.length === 0 ? persona.fence : [...new Set([...persona.fence, ...grant.folders])],
     };
+};
+
+// What a turn's principals allow its tools, laid over the persona once grants have widened it (access/principal-chain.ts,
+// docs/architecture/access.md): each shelf the lower of the two, so neither a card nor a conversation grant lifts what
+// the people or the service the conversation acts for are held to. The two capabilities a shelf decides (making
+// sandboxes on the sandbox shelf, a linked sandbox on the delegate one) follow the capped shelves too.
+export const capPersona = (persona: TurnPersona, ceiling: ToolCeiling | undefined): TurnPersona => {
+    if (!ceilingLimits(ceiling)) {
+        return persona;
+    }
+    const powers = capPowers(persona.powers, ceiling);
+    const shelfAllows = (capability: Capability): boolean =>
+        capability.kind === "fleet" ? powers.sandbox : capability.kind === "link" ? powers.delegate : true;
+    return { ...persona, powers, allows: (capability) => persona.allows(capability) && shelfAllows(capability) };
 };
 
 // Whether this persona may start agents elsewhere: a child is a whole agent holding shell and write, so a narrowed

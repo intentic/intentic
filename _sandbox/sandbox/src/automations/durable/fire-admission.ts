@@ -67,7 +67,12 @@ export const journalledFire = (
         ...opt("payload", carried.payload),
         ...opt("origin", carried.origin),
         ...opt("title", carried.title),
-        ...opt("lane", carried.lane === undefined ? undefined : { ...opt("actsAs", carried.lane.actsAs), requireApproval: carried.lane.requireApproval }),
+        ...opt(
+            "lane",
+            carried.lane === undefined
+                ? undefined
+                : { ...opt("actsAs", carried.lane.actsAs), ...opt("runAs", carried.lane.runAs), requireApproval: carried.lane.requireApproval },
+        ),
         ...opt("thread", carried.thread),
         ...opt("sessionId", carried.sessionId),
     };

@@ -30,7 +30,8 @@ export const personaLimitsRefusal = (persona: TurnPersona, runtime: TurnRuntime)
     if (limits.length === 0) {
         return undefined;
     }
-    const name = persona.persona?.label ?? persona.persona?.id ?? "this persona";
+    // A built-in wears no limits of its own, so on one the limits are the access its principals hold (capPersona).
+    const name = persona.persona?.label ?? persona.persona?.id ?? (persona.builtIn === undefined ? "this persona" : "the access this conversation runs under");
     const said = { provider: runtime.provider, harness: runtime.harness, persona: persona.persona?.id, limits: limits.length };
     return {
         ok: false,

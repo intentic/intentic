@@ -8,6 +8,8 @@ import {
 import { Button, Code, CopyButton, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { formatDate, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
+import ServicePicker from "./profiles/ServicePicker.vue";
+import { useServices } from "./profiles/useServices";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -28,6 +30,7 @@ const SNIPPETS: readonly (`curl` | `github` | `acp`)[] = [`curl`, `github`, `acp
 const DEFAULT_EXPIRY: Expiry = `90`;
 
 interface MintRequest {
+    readonly runAs?: string | undefined;
     readonly label: string;
     readonly scope: ControlScope;
     // Epoch ms; undefined mints a token that lives until revoked.
@@ -38,9 +41,9 @@ const { daemonUrl, active } = useSandbox();
 // Unfiltered by scope: hiding tokens minted elsewhere would let a leaked one stay live unnoticed.
 const { tokens, minted, minting, notice, mint, forgetMinted, revoke } = useMintedTokens({
     list: async () => (await sandboxRaw(`GET /system/control/tokens`)).tokens,
-    mint: async ({ label, scope, expiresAt }: MintRequest) => {
+    mint: async ({ label, scope, expiresAt, runAs }: MintRequest) => {
         const named = label.trim();
-        const input: ControlTokenMint = { scope };
+        const input: ControlTokenMint = { scope, ...(runAs === undefined ? {} : { runAs }) };
         if (named !== ``) {
             input.label = named;
         }
@@ -95,6 +98,8 @@ const EXPIRY_OPTIONS = computed((): readonly PickerOption<Expiry>[] => [
     },
 ]);
 
+const runAs = ref<string>();
+const { available: servicesAvailable, labelOf: serviceName } = useServices();
 const label = ref(``);
 const scope = ref<ControlScope | undefined>(SCOPES[0]);
 const expiry = ref<Expiry | undefined>(DEFAULT_EXPIRY);
@@ -117,7 +122,7 @@ const submit = async (): Promise<void> => {
     if (scope.value === undefined || minting.value) {
         return;
     }
-    await mint({ label: label.value, scope: scope.value, expiresAt: expiresAtOf(expiry.value) });
+    await mint({ runAs: runAs.value, label: label.value, scope: scope.value, expiresAt: expiresAtOf(expiry.value) });
     if (minted.value !== undefined) {
         label.value = ``;
         creating.value = false;
@@ -206,6 +211,7 @@ const describe = (token: ControlTokenSummary): string =>
                 ? t(`sandbox.controlTokensSection.mintedOn`, { date: formatDate(token.createdAt) })
                 : t(`sandbox.controlTokensSection.mintedOnBy`, { date: formatDate(token.createdAt), who: token.createdBy })
         }`,
+        ...(servicesAvailable.value ? [t(`sandbox.accessServices.runsAsValue`, { name: token.runAs === undefined ? t(`sandbox.accessServices.owner`) : serviceName(token.runAs) })] : []),
         lifetime(token),
         lastUsed(token),
     ].join(` · `);
@@ -255,6 +261,7 @@ const describe = (token: ControlTokenSummary): string =>
                             />
                         </div>
                     </div>
+                    <ServicePicker v-model="runAs" />
                     <!-- The cost of the rung, in the picker's own words, under the form where the choice is made. -->
                     <div class="flex flex-wrap items-center justify-end gap-2">
                         <p class="mr-auto min-w-0 text-2xs text-subtle">{{ scopeHint }}</p>

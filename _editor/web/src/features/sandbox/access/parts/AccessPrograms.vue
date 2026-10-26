@@ -2,6 +2,7 @@
 import { Await, type IconName, Row, RowGroup, SkeletonRows } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import ServicesSection from "../profiles/ServicesSection.vue";
 import ControlTokensSection from "../ControlTokensSection.vue";
 import LinkedSandboxesSection from "../LinkedSandboxesSection.vue";
 import { useAccessInventory } from "../useAccessInventory";
@@ -73,6 +74,7 @@ const doors = computed(() => {
 
 <template>
     <div class="flex flex-col gap-6">
+        <ServicesSection />
         <!-- Program credentials, every sandbox token whoever minted it. -->
         <ControlTokensSection />
 

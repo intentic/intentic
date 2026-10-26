@@ -1,5 +1,6 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { PersonaPowers } from "@intentic/sandbox-contract/schemas/personas";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { ConversationActors } from "./conversation-actors.js";
 import type { Holding } from "./conversation-holdings.js";
 
@@ -25,8 +26,11 @@ export interface TurnStanding {
     readonly withheldByReach: readonly string[];
     // The folders this turn's file tools may touch; undefined is the whole workspace.
     readonly fence: readonly string[] | undefined;
-    // The shelves open to it, fully resolved.
+    // The shelves open to it, fully resolved: the persona's, widened by grants, then held under `ceiling`.
     readonly powers: PersonaPowers;
+    // The most its tools may be, as the principals it acts for are held to (access/principal-chain.ts). A shelf it
+    // withholds is final for this conversation: no grant lifts it. Undefined is no ceiling.
+    readonly ceiling?: ToolCeiling | undefined;
     // Which runtime serves it, and whether that runtime resolves `{{secret:NAME}}` references at execution.
     readonly runtime: AgentCapabilities["runtime"];
     readonly secrets: AgentCapabilities["secrets"];

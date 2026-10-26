@@ -4,21 +4,26 @@ import { computed } from "vue";
 import { destinationOf } from "./postText";
 import { t } from "./i18n.js";
 
-const { name, target, actsAs, note } = defineProps<{
+const { name, target, actsAs, runAs, note } = defineProps<{
     /** The platform's display name, or "Action": capitalized here, since an unknown platform arrives as its bare id. */
     name: string;
     target?: string;
     /* The metadata identifies the persona acting on the item. */
     actsAs?: string;
+    runAs?: string;
     /** One trailing fact the section cares about ("proposed 3h ago"). */
     note?: string;
 }>();
 
 const destination = computed(() => (target === undefined ? undefined : destinationOf(target)));
-const full = computed<string | undefined>(() =>
-    target === undefined
-        ? undefined
-        : [name, target, actsAs === undefined ? undefined : `${t(`approvalMeta.as`)} ${actsAs}`, note].filter(Boolean).join(` · `),
+const full = computed(() =>
+    [
+        name,
+        target,
+        actsAs === undefined ? undefined : `${t(`approvalMeta.as`)} ${actsAs}`,
+        runAs === undefined ? undefined : `${t(`approvalMeta.runsAs`)} ${runAs}`,
+        note,
+    ].filter(Boolean).join(` · `),
 );
 </script>
 
@@ -34,6 +39,7 @@ const full = computed<string | undefined>(() =>
             <template v-else>{{ destination.label }}</template>
         </template>
         <template v-if="actsAs"> <span class="text-subtle"> · </span>{{ t(`approvalMeta.as`) }} {{ actsAs }} </template>
+        <template v-if="runAs"> <span class="text-subtle"> · </span>{{ t(`approvalMeta.runsAs`) }} {{ runAs }} </template>
         <template v-if="note"> <span class="text-subtle"> · </span>{{ note }} </template>
     </span>
 </template>

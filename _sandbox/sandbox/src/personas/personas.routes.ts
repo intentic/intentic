@@ -6,7 +6,7 @@ import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { stateRelPath } from "../state-paths.js";
-import { reachablePersonas } from "./persona-reach.js";
+import { assistantsOf, reachablePersonas } from "./persona-reach.js";
 import { personasDocument } from "./personas-store.js";
 import { refuseBuiltInId, refuseUnlessRemovable } from "./persona-wearers.js";
 import {
@@ -50,10 +50,10 @@ export const createPersonasRoutes = (services: Services) => {
             // A fenced member is shown the personas that work in the part of the workspace they hold, and nothing about
             // the others, down to the accounts they name.
             const [personas, capabilities] = await Promise.all([
-                reachablePersonas(services, context.identity?.areas),
+                reachablePersonas(services, context.identity?.areas, assistantsOf(context.identity)),
                 services.capabilities.list(),
             ]);
-            const fenced = context.identity?.areas !== undefined;
+            const fenced = context.identity?.areas !== undefined || assistantsOf(context.identity) !== undefined;
             const reachable = fenced ? new Set(personas.flatMap((persona) => persona.capabilities)) : undefined;
             // `hasSession`, not manifest presence: exists before login finishes, a cloned workspace's usual state. The
             // owner's own browser is a persona's account too (policy/persona-capability.ts), connected while its

@@ -350,7 +350,7 @@ export const dispatchListenerMessage = async (
             services.logger.warn({ automation: automation.id, provider: message.provider, author: message.author.id }, "listener: sender over the minute's limit, message dropped");
             continue;
         }
-        const key = threadKey(message.provider, automation.id, roomOf(message), lane.actsAs);
+        const key = threadKey(message.provider, automation.id, roomOf(message), lane.actsAs, lane.runAs);
         const context = messageContext(message, automation.id, key, lane, makeStream?.(automation.id));
         // Durable before the sender is answered: what waits in the debounce or behind a running fire survives a restart.
         const inboxId = randomUUID();
@@ -458,7 +458,7 @@ export const resumeListenerInbox = async (services: Services, rows: readonly Lis
         const sink = services.outboxStreamFor(origin) ?? channelAnswerSink(services, origin);
         pushListener(services, entry.automationId, origin.provider, DEBOUNCE_MS, thread, entry.line, {
             ...entry.context,
-            lane: { actsAs: lane.actsAs, requireApproval: lane.requireApproval },
+            lane: { actsAs: lane.actsAs, ...opt("runAs", lane.runAs), requireApproval: lane.requireApproval },
             inboxIds: [entry.id],
             ...opt("stream", sink?.stream),
         });

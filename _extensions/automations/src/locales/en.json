@@ -90,8 +90,8 @@
         "onlyOnce": "Only once",
         "onlyRepoOptional": "Only this repo (optional)",
         "peopleRuleNames": "People rule {index} names",
-        "persona": "Persona",
-        "personaAutomationRuns": "Persona this automation runs as",
+        "persona": "Speaks as",
+        "personaAutomationRuns": "Speaks as",
         "personaRuleAnswers": "Persona rule {index} answers as",
         "pickAtLeastOne": "Pick at least one day.",
         "pickModel": "Pick a model",
@@ -121,7 +121,7 @@
         "strangersWritePromptsSaving": "Strangers write these prompts, so saving adds a read-only visitor chat to your personas.",
         "sun": "Sun",
         "then": "Then",
-        "theyTalkTo": "They talk to",
+        "theyTalkTo": "Speaks as",
         "thu": "Thu",
         "toolNamesCommaSeparated": "Tool names, comma-separated. Empty leaves the persona's own list alone.",
         "toolNamesJobMay": "Tool names this job may call",
@@ -538,7 +538,7 @@
         "trigger": "Starts on"
     },
     "personaProperty": {
-        "runsAs": "Runs as"
+        "runsAs": "Speaks as"
     },
     "modelProperty": {
         "cannotRunOn": "An automation can't run on {model}.",
@@ -588,5 +588,31 @@
     "automationEditor": {
         "allSettings": "All settings",
         "back": "Back"
+    },
+    "service": {
+        "runsAs": "Runs as",
+        "owner": "Owner (limited only by its persona)",
+        "authority": "Authority: the steward’s access, narrowed by its profile. Personas only narrow this further.",
+        "inherit": "Same as automation",
+        "steward": "Steward: {email}",
+        "stewardLimits": "All steward access",
+        "profileUnavailable": "Profile unavailable: {id}",
+        "unavailable": "Service unavailable: {id}",
+        "noFiles": "No files",
+        "readFiles": "Read-only files",
+        "allConnections": "All connections",
+        "connections": "Connections: {count}",
+        "aiAccounts": "AI accounts: {accounts}",
+        "all": "All",
+        "none": "None",
+        "ruleSummary": "{rule}: runs as {service}",
+        "tools": {
+            "shell": "No commands",
+            "code": "No scripts",
+            "web": "No web",
+            "browser": "No browser",
+            "delegate": "No subagents",
+            "sandbox": "No sandbox settings"
+        }
     }
 }

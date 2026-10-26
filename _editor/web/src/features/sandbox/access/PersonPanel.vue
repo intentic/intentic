@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { profileAccess } from "@intentic/sandbox-contract/schemas/access-profiles";
+import ProfileAnswers from "./profiles/ProfileAnswers.vue";
+import { useAccessProfiles } from "./profiles/useAccessProfiles";
 import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
-import { Button, Notice, type NoticeModel, Section, SegmentedControl } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, Picker, Section, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import { type AccessDraft, draftGrant, draftProblem, drivesAgents } from "./accessGrant";
@@ -39,6 +42,19 @@ const {
 const emit = defineEmits<{ save: [email: string, draft: AccessDraft]; remove: [email: string]; resend: [email: string] }>();
 
 const draft = ref<AccessDraft>(initial);
+const { available: profilesAvailable, profiles } = useAccessProfiles();
+const profileOptions = computed(() => [{ value: ``, label: t(`sandbox.accessProfiles.ownAnswers`) }, ...profiles.value.map((profile) => ({ value: profile.id, label: profile.label ?? profile.id }))]);
+const chosenProfile = computed(() => profiles.value.find((profile) => profile.id === draft.value.profile));
+const ownAnswers = ref<AccessDraft>(initial);
+const chooseProfile = (id: string | undefined): void => {
+    const profile = profiles.value.find((entry) => entry.id === id);
+    if (profile === undefined) {
+        draft.value = { ...ownAnswers.value, profile: undefined, emailSignIn: draft.value.emailSignIn };
+        return;
+    }
+    if (draft.value.profile === undefined) { ownAnswers.value = draft.value; }
+    draft.value = { ...profileAccess(profile), profile: profile.id, tools: profile.tools, assistants: profile.assistants, credentials: profile.credentials ?? `all`, aiAccounts: profile.aiAccounts ?? `all`, emailSignIn: draft.value.emailSignIn };
+};
 const set = (change: Partial<AccessDraft>): void => {
     draft.value = { ...draft.value, ...change };
 };
@@ -143,7 +159,7 @@ const beforeManage = ref<AccessDraft>();
 const pickManage = (on: boolean): void => {
     if (on) {
         beforeManage.value = draft.value;
-        set({ manage: true });
+        set({ manage: true, profile: undefined });
         return;
     }
     const back = beforeManage.value;
@@ -233,13 +249,17 @@ const signInId = useId();
             />
         </Section>
 
+        <Section v-if="profilesAvailable && !draft.manage" :label="t(`sandbox.accessProfiles.title`)">
+            <Picker :model-value="draft.profile ?? ``" :options="profileOptions" variant="input" :aria-label="t(`sandbox.accessProfiles.title`)" @update:model-value="chooseProfile" />
+        </Section>
+        <ProfileAnswers v-if="chosenProfile && !draft.manage" :profile="chosenProfile" disabled />
         <dl v-if="draft.manage" class="flex flex-col gap-2">
             <div v-for="row in FULL" :key="row.label" class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
                 <dt class="shrink-0 text-xs text-muted sm:w-44 sm:text-sm">{{ row.label }}</dt>
                 <dd class="text-sm text-content">{{ row.value }}</dd>
             </div>
         </dl>
-        <template v-else>
+        <template v-else-if="draft.profile === undefined">
             <Section :label="t(`sandbox.sandboxAccess.agentsSection`)">
                 <div class="flex flex-col gap-2">
                     <SegmentedControl :model-value="draft.agents" :options="AGENTS" @update:model-value="pickAgents" />

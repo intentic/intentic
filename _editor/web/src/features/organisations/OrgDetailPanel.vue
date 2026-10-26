@@ -9,6 +9,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { apiClient } from "../../lib/useApi";
+import OrgAccessPolicy from "./OrgAccessPolicy.vue";
 import { useOrgPolicyDraft } from "./useOrgPolicyDraft";
 
 // One organisation as its console shows it: the policy, section by section; who is in it; which sandboxes it holds.
@@ -43,7 +44,7 @@ const act = async (change: () => Promise<OrgDetail | null>, failure: string): Pr
 // THE POLICY, edited as a draft and saved as one new edition: how each section is held, which groups of the
 // public-office preset every sandbox is pinned to (the daemon holds them on what it reads, whatever its files say), and
 // whether only the organisation's people may be given access (removing someone then removes them everywhere).
-const { draft, pins, membersOnly, dirty, rules, expectedVersion, accept } = useOrgPolicyDraft(() => org);
+const { profiles, ceiling, draft, pins, membersOnly, dirty, rules, expectedVersion, accept } = useOrgPolicyDraft(() => org);
 const MODES: readonly OrgSectionMode[] = [`open`, `locked`, `hidden`];
 const modeOptions = computed(() => MODES.map((mode) => ({ value: mode, label: t(`organisations.mode.${mode}`) })));
 const savePolicy = (): Promise<void> =>
@@ -115,10 +116,12 @@ const sandboxLine = (sandbox: NonNullable<OrgDetail[`sandboxes`]>[number]): stri
                     <span v-else class="text-xs text-subtle">{{ membersOnly ? t(`organisations.preset.pinned`) : t(`organisations.preset.notPinned`) }}</span>
                 </template>
             </Row>
-            <RowNote v-if="admin" variant="block">
-                <Button :label="t(`organisations.detail.savePolicy`)" size="small" :disabled="!dirty || busy" :loading="busy" @click="savePolicy" />
-            </RowNote>
         </RowGroup>
+
+        <OrgAccessPolicy v-model:profiles="profiles" v-model:ceiling="ceiling" :readonly="!admin" />
+        <div v-if="admin">
+            <Button :label="t(`organisations.detail.savePolicy`)" size="small" :disabled="!dirty || busy" :loading="busy" @click="savePolicy" />
+        </div>
 
         <RowGroup v-if="admin" :label="t(`organisations.detail.members`)">
             <Row v-for="member in org.members ?? []" :key="member.email" icon="user" :title="member.email" :description="t(`organisations.role.${member.role}`)">

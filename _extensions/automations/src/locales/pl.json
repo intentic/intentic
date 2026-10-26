@@ -103,8 +103,8 @@
             "ignore": "Każdy, kogo nie wymieniono, nie dostaje odpowiedzi. Nadal pojawia się w sekcji „widziane niedawno”, więc wymienienie go później to jedno kliknięcie."
         },
         "peopleRuleNames": "Nazwy reguły osób {index}",
-        "persona": "Persona",
-        "personaAutomationRuns": "Persona, jako która działa ta automatyzacja",
+        "persona": "Mówi jako",
+        "personaAutomationRuns": "Mówi jako",
         "personaRuleAnswers": "Reguła persony {index} odpowiada jako",
         "pickAtLeastOne": "Wybierz przynajmniej jeden dzień.",
         "pickModel": "Wybierz model",
@@ -136,7 +136,7 @@
         "strangersWritePromptsSaving": "Te prompty piszą obcy, więc zapis dokłada do Twoich person recepcję tylko do odczytu.",
         "sun": "niedz",
         "then": "Wtedy",
-        "theyTalkTo": "Rozmawiają z",
+        "theyTalkTo": "Mówi jako",
         "thu": "czw",
         "toolNamesCommaSeparated": "Nazwy narzędzi, oddzielone przecinkami. Puste zostawia własną listę persony w spokoju.",
         "toolNamesJobMay": "Nazwy narzędzi, które to zadanie może wywoływać",
@@ -538,7 +538,7 @@
         "trigger": "Startuje przy"
     },
     "personaProperty": {
-        "runsAs": "Działa jako"
+        "runsAs": "Mówi jako"
     },
     "modelProperty": {
         "cannotRunOn": "Automatyzacja nie może działać na {model}.",
@@ -588,5 +588,31 @@
     "automationEditor": {
         "allSettings": "Wszystkie ustawienia",
         "back": "Wróć"
+    },
+    "service": {
+        "runsAs": "Działa jako",
+        "owner": "Właściciel (ograniczony tylko przez personę)",
+        "authority": "Uprawnienia: dostęp opiekuna ograniczony profilem. Persony mogą go tylko zawężać.",
+        "inherit": "Tak jak automatyzacja",
+        "steward": "Opiekun: {email}",
+        "stewardLimits": "Pełny dostęp opiekuna",
+        "profileUnavailable": "Profil niedostępny: {id}",
+        "unavailable": "Usługa niedostępna: {id}",
+        "noFiles": "Bez plików",
+        "readFiles": "Pliki tylko do odczytu",
+        "allConnections": "Wszystkie połączenia",
+        "connections": "Liczba połączeń: {count}",
+        "aiAccounts": "Konta AI: {accounts}",
+        "all": "Wszystkie",
+        "none": "Brak",
+        "ruleSummary": "{rule}: działa jako {service}",
+        "tools": {
+            "shell": "Bez poleceń",
+            "code": "Bez skryptów",
+            "web": "Bez sieci",
+            "browser": "Bez przeglądarki",
+            "delegate": "Bez podagentów",
+            "sandbox": "Bez ustawień piaskownicy"
+        }
     }
 }

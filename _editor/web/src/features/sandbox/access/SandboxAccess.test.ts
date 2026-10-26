@@ -1,9 +1,11 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
 // refusal vs silence, must all read differently on screen. The page is four parts drawn as tabs (People, Sign-in,
 // Programs, Allowed); a test about one opens it as a reader would, by its tab.
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import "@intentic/testing/dom";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
+import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
@@ -43,6 +45,13 @@ const unread = async (): Promise<never> => {
     throw new Error(`not answered in this test`);
 };
 type Answer<G extends keyof SandboxRpc, P extends keyof SandboxRpc[G]> = SandboxRpc[G][P] extends (...args: never[]) => Promise<infer A> ? A : never;
+const profileList = ref([{ id: `engineering`, label: `Engineering`, brief: `Build with the team`, origin: `sandbox` as const, agents: `run` as const }]);
+const serviceList = ref([{ id: `nightly`, label: `Nightly review`, steward: `owner@example.com`, profile: `engineering` }]);
+const saveProfile = jest.fn(async (_profile: unknown) => ({ ok: true as const, holders: [{ email: `guest@example.com`, role: `collaborator` as const }] }));
+const saveService = jest.fn(async (_service: unknown) => ({ ok: true as const }));
+const removeService = jest.fn(async (_id: unknown) => {
+    throw new Error(`Used by nightly automation`);
+});
 const doorReads = {
     automations: jest.fn(async (): Promise<Answer<`automations`, `list`>> => unread()),
     workflows: jest.fn(async (): Promise<Answer<`workflows`, `list`>> => unread()),
@@ -67,6 +76,12 @@ const connected = {
 };
 jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
     sandboxRpc: fakeSandboxRpc({
+        accessProfiles: { list: async () => ({ profiles: profileList.value }), save: (profile: unknown) => saveProfile(profile) },
+        services: {
+            list: async () => ({ services: serviceList.value }),
+            save: (service: unknown) => saveService(service),
+            remove: (id: unknown) => removeService(id),
+        },
         automations: { list: () => doorReads.automations() },
         workflows: { list: () => doorReads.workflows() },
         ci: { runs: () => doorReads.ci() },
@@ -127,6 +142,7 @@ const quietGroup = { default: { render: () => null } };
 jest.mock(`../ai-literacy/AiLiteracySettings.vue`, () => quietGroup);
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
+const { setDaemonRoutes } = await import("../../../client/sandbox/useDaemonRoutes");
 const { forgetOperations } = await import("../../../workbench/operations/operations");
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { providerAccounts } = await import("../../../models/providers/providerAccounts");
@@ -142,6 +158,7 @@ const mount = (): void => {
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.use(PrimeVue);
+    app.use(VueQueryPlugin, { queryClient });
     // The area picker links to the pages that fix what it reports (Areas, Personas); any path resolves.
     router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] });
     app.use(router);
@@ -240,6 +257,8 @@ afterEach(() => {
         read.mockImplementation(unread);
     }
     role.value = `owner`;
+    // Nothing advertised reads as every route answered: today's daemon.
+    setDaemonRoutes(undefined);
     create.mockReset();
     setRole.mockReset();
     daemonMembers.mockReset();
@@ -674,7 +693,7 @@ it(`gives a maintainer the token, sign-out and door surfaces, and keeps the rost
     mount();
     await settle();
 
-    expect(pageTabs()).toEqual([`People`, `Sign-in`, `Programs`, `Allowed`]);
+    expect(pageTabs()).toEqual([`People`, `Profiles`, `Sign-in`, `Programs`, `Allowed`]);
     expect(list).not.toHaveBeenCalled();
     expect(document.body.querySelector(`input[type=email]`)).toBeNull();
     expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
@@ -832,7 +851,7 @@ it(`changes a person's email sign-in with the rest of their access kept, at the 
 it(`opens on People, and keeps the part it was switched to in the address`, async () => {
     mount();
     await settle();
-    expect(pageTabs()).toEqual([`People`, `Sign-in`, `Programs`, `Allowed`]);
+    expect(pageTabs()).toEqual([`People`, `Profiles`, `Sign-in`, `Programs`, `Allowed`]);
     expect(shown()).toContain(`Add person`);
     expect(shown()).not.toContain(`Passkeys`);
 
@@ -887,4 +906,79 @@ it(`counts what stands on the Allowed tab, so it is seen from any part`, async (
     await settle();
     const allowed = [...document.body.querySelectorAll(`[role=tab]`)].find((button) => button.textContent?.trim().startsWith(`Allowed`));
     expect(allowed?.textContent?.trim()).toBe(`Allowed2`);
+});
+
+
+it(`hides profiles and services on older daemons`, async () => {
+    // A daemon from before access profiles advertises every route but theirs.
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`accessProfiles.`) && !name.startsWith(`services.`)));
+    mount();
+    await settle();
+    expect(pageTabs()).toEqual([`People`, `Sign-in`, `Programs`, `Allowed`]);
+    await openPart(`Programs`);
+    expect(shown()).not.toContain(`New service`);
+    expect(shown()).not.toContain(`Runs as`);
+});
+
+it(`shows profiles, their tier and service holders, then synchronizes changed holder tiers`, async () => {
+    list.mockResolvedValue({ members: [{ email: `guest@example.com`, role: `viewer` }] });
+    setRole.mockResolvedValue({ members: [] });
+    mount();
+    await openPart(`Profiles`);
+    await waitFor(() => expect(shown()).toContain(`Engineering`));
+    expect(shown()).toContain(`Nightly review`);
+    expect(shown()).toContain(`Collaborator`);
+    buttonLabelled(`Edit`)?.click();
+    await settle();
+    buttonLabelled(`Save`)?.click();
+    await waitFor(() => expect(saveProfile).toHaveBeenCalled());
+    await waitFor(() => expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `collaborator` }));
+});
+
+it(`shows a service deletion refusal with the named dependency`, async () => {
+    mount();
+    await openPart(`Programs`);
+    await waitFor(() => expect(shown()).toContain(`Nightly review`));
+    buttonLabelled(`Delete`)?.click();
+    await waitFor(() => expect(shown()).toContain(`Used by nightly automation`));
+});
+
+
+it(`grants a named profile with its tier and hides editable inline answers`, async () => {
+    // The profile picker's overlay measures its anchor and closes on one of no size, which is every element jsdom lays
+    // out (pick/MultiPick.test.ts does the same); with sizes, a skeleton imprint then reads text lines, which jsdom's
+    // Range lacks (design-system/await.test.ts stubs it the same way).
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function rect(): DOMRect {
+        return { x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 32, width: 320, height: 32, toJSON: () => ({}) };
+    };
+    Range.prototype.getClientRects = (): DOMRectList => Object.assign([], { item: () => null });
+    try {
+        withMember(`viewer`);
+        mount();
+        await settle();
+        await openPerson(`guest@example.com`);
+        await waitFor(() => expect(document.querySelector(`button[aria-label="Profiles"]`)).not.toBeNull());
+        document.querySelector<HTMLButtonElement>(`button[aria-label="Profiles"]`)?.click();
+        await settle();
+        [...document.querySelectorAll<HTMLElement>(`[role=option]`)].find((option) => option.textContent?.includes(`Engineering`))?.click();
+        await autosaved();
+        expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `collaborator`, profile: `engineering`, emailSignIn: false }]);
+        expect(panel()?.querySelector(`fieldset`)?.disabled).toBe(true);
+    } finally {
+        HTMLElement.prototype.getBoundingClientRect = realRect;
+        Reflect.deleteProperty(Range.prototype, `getClientRects`);
+    }
+});
+
+it(`does not re-grade a profile holder whose platform tier already agrees`, async () => {
+    list.mockResolvedValue({ members: [{ email: `guest@example.com`, role: `collaborator` }] });
+    mount();
+    await openPart(`Profiles`);
+    await waitFor(() => expect(shown()).toContain(`Engineering`));
+    buttonLabelled(`Edit`)?.click();
+    await settle();
+    buttonLabelled(`Save`)?.click();
+    await waitFor(() => expect(document.querySelector(`main form`)).toBeNull());
+    expect(setRole).not.toHaveBeenCalled();
 });

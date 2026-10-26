@@ -5,6 +5,8 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRole } from "../../../client/sandbox/useRole";
 import { ACCESS_PARTS, type AccessPart, LINKED_SANDBOXES_ANCHOR, MEMBER_ACCESS_PARTS } from "../../../models/sandbox/sandboxNav";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import AccessProfiles from "./parts/AccessProfiles.vue";
 import AccessAllowed from "./parts/AccessAllowed.vue";
 import AccessPeople from "./parts/AccessPeople.vue";
 import AccessPrograms from "./parts/AccessPrograms.vue";
@@ -32,7 +34,7 @@ const route = useRoute();
 const router = useRouter();
 const { canShip } = useRole();
 
-const parts = computed<readonly AccessPart[]>(() => (canShip.value ? ACCESS_PARTS : MEMBER_ACCESS_PARTS));
+const parts = computed<readonly AccessPart[]>(() => (canShip.value ? ACCESS_PARTS.filter((part) => part !== `profiles` || supportsRoute(`accessProfiles.list`)) : MEMBER_ACCESS_PARTS));
 const first = computed<AccessPart>(() => parts.value[0] ?? `people`);
 
 // Two parts carry a count, so what waits on them is seen from whichever part the reader came for: Programs the tasks a
@@ -43,6 +45,7 @@ const allowedCount = computed(() => conversations.value.length + ownerWide.value
 const COUNTS = computed<Partial<Record<AccessPart, number>>>(() => ({ programs: waitingTasks.value, allowed: allowedCount.value }));
 
 const LABELS = computed<Record<AccessPart, string>>(() => ({
+    profiles: t(`sandbox.accessProfiles.title`),
     people: t(`sandbox.sandboxAccess.partPeople`),
     "sign-in": t(`sandbox.sandboxAccess.partSignIn`),
     programs: t(`sandbox.sandboxAccess.partPrograms`),
@@ -70,6 +73,7 @@ const part = computed<AccessPart>({
         <SegmentedControl v-model="part" :options="options" variant="underline" :aria-label="t(`sandbox.sandboxAccess.parts`)" />
 
         <AccessPeople v-if="part === `people`" :open="open" />
+        <AccessProfiles v-else-if="part === `profiles`" />
         <AccessSignIn v-else-if="part === `sign-in`" />
         <AccessPrograms v-else-if="part === `programs`" />
         <AccessAllowed v-else />

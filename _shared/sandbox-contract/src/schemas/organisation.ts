@@ -1,5 +1,8 @@
 import { z } from "zod";
+import { AccessProfileSchema } from "./access-profiles.js";
 import { PRESET_GROUPS, type PresetGroup, PresetGroupSchema } from "./compliance.js";
+import { AiAccountKeySchema } from "./members.js";
+import { ToolCeilingSchema } from "./tool-ceiling.js";
 
 // An ORGANISATION'S POLICY as a sandbox holds it (docs/architecture/organisations.md). A sandbox that belongs to an
 // organisation is handed this by the platform it is registered with; a personal sandbox never holds one, and nothing
@@ -30,6 +33,20 @@ export type OrgSection = z.infer<typeof OrgSectionSchema>;
 export const OrgSectionModeSchema = z.enum(["open", "locked", "hidden"]);
 export type OrgSectionMode = z.infer<typeof OrgSectionModeSchema>;
 
+// THE ORGANISATION'S CEILING: one more limit in every turn of a bound sandbox, the owner's included
+// (docs/architecture/access.md). Only what means the same in every sandbox: tool shelves, and the AI accounts a turn may
+// run on, by provider (`claude`) or by one provider's account. Connections and areas are each sandbox's own ids, so an
+// organisation holds those through the profiles it hands out instead.
+export const OrgCeilingSchema = z.object({
+    tools: ToolCeilingSchema.optional().describe("The most any turn's tools may be, shelf by shelf. Absent means no limit."),
+    aiAccounts: z
+        .array(AiAccountKeySchema)
+        .max(100)
+        .optional()
+        .describe("The AI accounts any turn may run on, a provider alone or `provider:account`. Absent means every one."),
+});
+export type OrgCeiling = z.infer<typeof OrgCeilingSchema>;
+
 // Omitted policy sections stay open. preset pins effective settings and refuses undoing writes, regardless of underlying files.
 // Unknown preset groups are skipped/reported as unenforced so newer policies still reach older daemons; the platform validates saved names.
 // membersOnly fences roster grants/removals by organisation membership, excluding the owner who is not a roster entry.
@@ -48,6 +65,14 @@ export const OrgPolicyRulesSchema = z.object({
         .boolean()
         .optional()
         .describe("Only the organisation's members may be on a bound sandbox's roster; removing someone from the organisation removes them everywhere."),
+    // Listed in every bound sandbox beside its own profiles, read-only there; a local profile cannot take one's id.
+    // Optional like the rest, so a policy stored before them hands out none.
+    profiles: z
+        .array(AccessProfileSchema)
+        .max(50)
+        .optional()
+        .describe("Access profiles every bound sandbox may grant, read-only there. Areas and connections they name are each sandbox's own ids."),
+    ceiling: OrgCeilingSchema.optional().describe("What no turn in a bound sandbox may exceed, the owner's included."),
 });
 export type OrgPolicyRules = z.infer<typeof OrgPolicyRulesSchema>;
 

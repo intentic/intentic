@@ -4,7 +4,8 @@
         "whatAgentTold": "What the agent will be told"
     },
     "approvalMeta": {
-        "as": "as"
+        "as": "as",
+        "runsAs": "Runs as"
     },
     "approvalRail": {
         "approvalSlice": "Approval slice",

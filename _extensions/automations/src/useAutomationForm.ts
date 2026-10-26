@@ -52,10 +52,20 @@ export interface SenderRuleDraft {
     ids: string;
     groups: string;
     actsAs: string;
+    runAs: string;
     requireApproval: boolean;
 }
 
-const emptySenderRule = (): SenderRuleDraft => ({ label: ``, ids: ``, groups: ``, actsAs: ``, requireApproval: false });
+// A text answer a blank draft takes off the automation rather than storing empty.
+const setOrDrop = (automation: Automation, key: `runAs` | `actsAs`, value: string): void => {
+    if (value === ``) {
+        delete automation[key];
+    } else {
+        automation[key] = value;
+    }
+};
+
+const emptySenderRule = (): SenderRuleDraft => ({ label: ``, ids: ``, groups: ``, actsAs: ``, runAs: ``, requireApproval: false });
 
 // Comma- or newline-separated ids as a list; the same split `allowedTools` uses. Exported so the picker that adds a
 // person to a rule reads the row exactly as the save will.
@@ -70,6 +80,7 @@ const ruleDraftOf = (rule: SenderRule): SenderRuleDraft => ({
     ids: (rule.ids ?? []).join(`, `),
     groups: (rule.groups ?? []).join(`, `),
     actsAs: unwatchedPick(rule.actsAs) ?? ``,
+    runAs: rule.runAs ?? ``,
     requireApproval: rule.requireApproval === true,
 });
 
@@ -82,6 +93,7 @@ const ruleOf = (draft: SenderRuleDraft): SenderRule => {
         ...(ids.length > 0 ? { ids } : {}),
         ...(groups.length > 0 ? { groups } : {}),
         ...(draft.actsAs !== `` ? { actsAs: draft.actsAs } : {}),
+        ...(draft.runAs !== `` ? { runAs: draft.runAs } : {}),
         ...(draft.requireApproval ? { requireApproval: true } : {}),
     };
 };
@@ -150,6 +162,7 @@ export function useAutomationForm(
         account: ``,
         // Persona this wake runs as; blank means no logged-in account but the full toolbox.
         actsAs: ``,
+        runAs: ``,
         // Comma-separated tool names narrowing the persona; held as typed string, not array, split only at save.
         allowedTools: ``,
         requireApproval: false,
@@ -492,6 +505,7 @@ export function useAutomationForm(
             models: [],
             account: ``,
             actsAs: ``,
+            runAs: ``,
             allowedTools: ``,
             requireApproval: false,
             senders: false,
@@ -629,6 +643,7 @@ export function useAutomationForm(
         form.models = (automation.models ?? []).map((pin) => ({ ...pin }));
         form.account = automation.account ?? ``;
         form.actsAs = unwatchedPick(automation.actsAs) ?? ``;
+        form.runAs = automation.runAs ?? ``;
         form.allowedTools = (automation.allowedTools ?? []).join(`, `);
         form.requireApproval = automation.requireApproval === true;
         loadSenders(automation.senders);
@@ -819,12 +834,10 @@ export function useAutomationForm(
         } else {
             automation.account = form.account;
         }
+        // Blank ⇒ absent ⇒ the owner's authority, limited only by the persona.
+        setOrDrop(automation, `runAs`, form.runAs);
         // Blank ⇒ absent ⇒ no outward accounts at all; the one field here whose default takes something away.
-        if (form.actsAs === ``) {
-            delete automation.actsAs;
-        } else {
-            automation.actsAs = form.actsAs;
-        }
+        setOrDrop(automation, `actsAs`, form.actsAs);
         // Empty ⇒ absent ⇒ whatever the persona allows; a list here only narrows, never widens, the toolbox.
         const narrowed = form.allowedTools
             .split(`,`)

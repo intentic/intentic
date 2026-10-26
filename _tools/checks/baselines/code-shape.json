@@ -1592,15 +1592,15 @@
         "count": 1174,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
+    "_sandbox/sandbox/src/automations/fire/run-fire.ts#runFire#cognitive": {
         "count": 79,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cyclomatic": {
+    "_sandbox/sandbox/src/automations/fire/run-fire.ts#runFire#cyclomatic": {
         "count": 70,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/automations/scheduler.ts#runFire#lines": {
+    "_sandbox/sandbox/src/automations/fire/run-fire.ts#runFire#lines": {
         "count": 273,
         "why": "standing when the check arrived (2026-10-16)"
     },

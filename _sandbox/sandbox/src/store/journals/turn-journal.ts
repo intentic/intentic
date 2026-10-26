@@ -54,7 +54,8 @@ const JournalledTurnSchema = z.object({
 export type JournalledTurn = z.infer<typeof JournalledTurnSchema>;
 
 // A sender lane as journalled: an absent persona is the full toolbox reaching no account, as in the lane itself.
-const JournalledLaneSchema = z.object({ actsAs: z.string().optional(), requireApproval: z.boolean() });
+// `runAs` added 2026-10-26, optional: a fire journalled before it re-fires as the automation's own service.
+const JournalledLaneSchema = z.object({ actsAs: z.string().optional(), runAs: z.string().optional(), requireApproval: z.boolean() });
 
 export const JournalledFireSchema = z.object({
     ...inFlightSince,

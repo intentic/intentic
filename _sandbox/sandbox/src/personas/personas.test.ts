@@ -18,6 +18,7 @@ import {
     UNATTENDED_ACCOUNTS_TITLE,
     unattendedAccountsNote,
     widenPersona,
+    capPersona,
 } from "./personas.js";
 
 const personaOf = (id: string, capabilities: readonly string[], extra: Partial<Persona> = {}): Persona => ({
@@ -474,5 +475,29 @@ describe("widenPersona", () => {
     it("keeps an unfenced turn unfenced: it already reaches the whole workspace", () => {
         const open = turnPersona({ personas: [], actsAs: undefined, unattended: false });
         expect(widenPersona(open, { capabilities: [], folders: ["refs/sdk"], shelves: [], installs: false, secrets: [], everything: false, rules: [], updatedAt: 1 }).fence).toBeUndefined();
+    });
+});
+
+describe("capPersona", () => {
+    const fleet: Capability = { id: "my-account", kind: "fleet", config: { token: "itk_x" } };
+
+    it("leaves the persona as it is when nothing caps it", () => {
+        const open = turnPersona({ personas: [], actsAs: undefined, unattended: false });
+        expect(capPersona(open, undefined)).toBe(open);
+        expect(capPersona(open, { shell: true, files: "write" })).toBe(open);
+    });
+
+    it("holds a built-in's whole toolbox under the ceiling, the shelves a capability rides included", () => {
+        const open = turnPersona({ personas: [], actsAs: undefined, unattended: false });
+        const capped = capPersona(open, { files: "read", shell: false, sandbox: false });
+        expect(capped.powers).toEqual({ ...open.powers, files: "read", shell: false, sandbox: false });
+        expect(open.allows(fleet)).toBe(true);
+        expect(capped.allows(fleet)).toBe(false);
+    });
+
+    it("never lifts what a grant opened past the ceiling", () => {
+        const narrow = turnPersona({ personas: [personaOf("p", [], { powers: powers({ shell: false }) })], actsAs: "p", unattended: false });
+        const granted = widenPersona(narrow, { capabilities: [], folders: [], shelves: ["shell"], installs: false, secrets: [], everything: false, rules: [], updatedAt: 1 });
+        expect(capPersona(granted, { shell: false }).powers.shell).toBe(false);
     });
 });

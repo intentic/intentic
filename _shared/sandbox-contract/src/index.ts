@@ -4,6 +4,7 @@ import { RAW_JSON_ROUTES } from "./protocol/raw/raw-json-routes.js";
 import { RAW_ROUTE_LIST } from "./protocol/raw/raw-routes.js";
 import type { ContractRoute } from "./protocol/routes.js";
 import { contractRoutes, rawRouteFingerprintsOf, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes, servedRoute } from "./protocol/routes.js";
+import { accessProfilesContract } from "./contracts/access-profiles.contract.js";
 import { accountsContract } from "./contracts/accounts.contract.js";
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
@@ -42,6 +43,7 @@ import { pushContract } from "./contracts/push.contract.js";
 import { runsContract } from "./contracts/runs.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
+import { servicesContract } from "./contracts/services.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
@@ -59,6 +61,7 @@ export { HISTORY_ROOT, HOST_STATE_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@inten
 // The aggregated contract; implemented server-side by per-domain route factories, consumed by the browser's typed oRPC
 // client. Mounted at the sandbox root, alongside plain Hono routes like /health and /workspace/raw.
 export const sandboxContract = {
+    accessProfiles: accessProfilesContract,
     accounts: accountsContract,
     activity: activityContract,
     agent: agentContract,
@@ -97,6 +100,7 @@ export const sandboxContract = {
     runs: runsContract,
     safety: safetyContract,
     secrets: secretsContract,
+    services: servicesContract,
     sessions: sessionsContract,
     settings: settingsContract,
     share: shareContract,

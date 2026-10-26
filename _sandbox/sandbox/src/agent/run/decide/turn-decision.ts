@@ -7,6 +7,7 @@ import type { AgentHarness, AgentProvider, AgentTurn, RoutedAgentTurn } from "@i
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Rule, SandboxSettings, SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { mayDelegate, personaCapabilities, personaPrompt, type TurnPersona } from "../../../personas/personas.js";
 import { personaLimitsRefusal } from "./persona-limits.js";
 import { withRepoChecks } from "../../../rules/repo-checks.js";
@@ -65,6 +66,8 @@ export interface TurnDecision extends DecidedEffects {
     readonly withheldByGate: readonly string[];
     // Connected capability ids the people this conversation works for were not given; final, nothing raises for them.
     readonly withheldByReach: readonly string[];
+    // The most its tools may be, as the principals it acts for are held to; final like the reach (turn-standing.ts).
+    readonly ceiling?: ToolCeiling | undefined;
     // Where a failing command's dependencies are looked up, the start folder; the planner binds it to the live probe.
     readonly dependencyDir: string;
     readonly briefing: TurnBriefing;
@@ -291,6 +294,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         withheldByPersona: facts.installed.filter((capability) => !reachable.includes(capability)).map((capability) => capability.id),
         withheldByGate: mounts.withheld.map((gate) => gate.subject),
         withheldByReach: withinReach(facts.installed, facts.reach).withheld.map((capability) => capability.id),
+        ...opt("ceiling", facts.ceiling),
         dependencyDir: premise.startIn ?? "",
         spawn,
         briefing: premise.briefing,

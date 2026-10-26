@@ -49,6 +49,8 @@ export const ControlTokenSummarySchema = z.object({
     expiresAt: z.number().optional(),
     // Epoch ms of the last authorized request, coarse on purpose; absent means never used.
     lastUsedAt: z.number().optional(),
+    // The service (schemas/services.ts) the conversations it starts act as; absent, they act for the owner, unlimited.
+    runAs: z.string().optional(),
 });
 export type ControlTokenSummary = z.infer<typeof ControlTokenSummarySchema>;
 export const ControlTokensListSchema = z.object({ tokens: z.array(ControlTokenSummarySchema) });
@@ -58,6 +60,9 @@ export const ControlTokenMintSchema = z.object({
     scope: ControlScopeSchema,
     label: z.string().optional(),
     expiresAt: z.number().optional(),
+    // Who the turns it starts act for: a service's steward, held to its profile. Absent keeps a program acting for the
+    // owner, as every token did before services existed.
+    runAs: z.string().min(1).max(60).optional(),
 });
 export type ControlTokenMint = z.infer<typeof ControlTokenMintSchema>;
 // The raw token, shown exactly once.

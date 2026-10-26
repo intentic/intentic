@@ -65,3 +65,38 @@ it(`accepts a successful save as the next draft's base`, async () => {
     expect(draft.rules.value).toEqual({ sections: {} });
     expect(draft.dirty.value).toBe(true);
 });
+
+it(`isolates nested access edits and keeps them tied to the original edition`, async () => {
+    const initial = detail(1, { sections: {}, profiles: [{ id: `clerk`, tools: { shell: false } }], ceiling: { aiAccounts: [`claude`] } });
+    const { org, draft } = stage(initial);
+    const profile = draft.profiles.value?.[0];
+    if (profile === undefined) { throw new Error(`missing profile`); }
+    profile.label = `Office clerk`;
+    draft.ceiling.value = { tools: { files: `read` }, aiAccounts: [] };
+    expect(initial.policy.profiles).toEqual([{ id: `clerk`, tools: { shell: false } }]);
+    org.value = detail(2);
+    await nextTick();
+    expect(draft.rules.value).toEqual({ sections: {}, profiles: [{ id: `clerk`, label: `Office clerk`, tools: { shell: false } }], ceiling: { tools: { files: `read` }, aiAccounts: [] } });
+    expect(draft.expectedVersion.value).toBe(1);
+    expect(draft.dirty.value).toBe(true);
+    const saved = detail(3, draft.rules.value);
+    draft.accept(saved);
+    expect(draft.dirty.value).toBe(false);
+    expect(draft.expectedVersion.value).toBe(3);
+    draft.profiles.value = undefined;
+    draft.ceiling.value = undefined;
+    expect(draft.rules.value).toEqual({ sections: {} });
+    expect(draft.dirty.value).toBe(true);
+});
+
+it(`follows new access rules while clean and resets removed rules`, async () => {
+    const { org, draft } = stage();
+    org.value = detail(2, { sections: {}, profiles: [{ id: `reader` }], ceiling: { tools: { shell: false } } });
+    await nextTick();
+    expect(draft.rules.value).toEqual({ sections: {}, profiles: [{ id: `reader` }], ceiling: { tools: { shell: false } } });
+    expect(draft.dirty.value).toBe(false);
+    org.value = detail(3);
+    await nextTick();
+    expect(draft.rules.value).toEqual({ sections: {} });
+    expect(draft.dirty.value).toBe(false);
+});

@@ -13,6 +13,8 @@
             "GET /automations/senders/*",
             "GET /agents",
             "GET /personas",
+            "GET /access/services",
+            "GET /access/profiles",
             "GET /settings",
             "GET /ci/runs",
             "POST /automations",

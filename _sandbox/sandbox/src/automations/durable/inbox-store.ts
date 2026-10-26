@@ -21,7 +21,8 @@ const listenerEntry = z.object({
         title: z.string(),
         thread: z.string(),
         ttlMs: z.number(),
-        lane: z.object({ actsAs: z.string().optional(), requireApproval: z.boolean() }),
+        // `runAs` added 2026-10-26, optional: a message kept before it fires as the automation's own service.
+        lane: z.object({ actsAs: z.string().optional(), runAs: z.string().optional(), requireApproval: z.boolean() }),
     }),
 });
 const workspaceEntry = z.object({ id: z.string(), automationId: z.string(), event: WorkspaceEventSchema });

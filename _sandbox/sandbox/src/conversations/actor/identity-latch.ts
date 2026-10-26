@@ -43,6 +43,25 @@ export const peopleOfConversation = (
     return people.length === 0 ? {} : { people };
 };
 
+// Every service this conversation's turns ran as (seams/turn-starter.ts `runAs`), grown like `people` and for the same
+// reason: what it may reach is what every one of them may, so a service joining narrows it and none leaving widens it.
+// A turn an agent speaks brings that conversation's services with it, as it brings its people.
+export const servicesOfConversation = (
+    held: PersistedAgent,
+    turn: BeginTurn,
+    entryOf: (id: string) => PersistedAgent | undefined,
+): { readonly services?: string[] } => {
+    const speaking = parentOfActor(turn.startedBy);
+    const services = [
+        ...new Set([
+            ...(held.identity.services ?? []),
+            ...(turn.runAs === undefined ? [] : [turn.runAs]),
+            ...(speaking === undefined ? [] : (entryOf(speaking)?.identity.services ?? [])),
+        ]),
+    ];
+    return services.length === 0 ? {} : { services };
+};
+
 // Latched with the conversation: each field keeps the first answer it got, and a later turn's differing persona does
 // not move the conversation to another project.
 export const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined): Identity => ({

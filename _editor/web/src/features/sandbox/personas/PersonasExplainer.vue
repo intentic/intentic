@@ -39,6 +39,7 @@ const GLYPH = `grid size-5 shrink-0 place-items-center rounded-md border border-
 <template>
     <InfoHint :label="t(`sandbox.sandboxPersonas.explainer.label`)" wide>
         <div class="flex flex-col gap-3 text-xs">
+            <p class="m-0 text-content">{{ t(`sandbox.accessProfiles.posture`) }}</p>
             <p class="m-0 font-medium text-content">{{ t(`sandbox.sandboxPersonas.explainer.title`) }}</p>
 
             <figure class="m-0 flex flex-col gap-2 rounded-lg border border-line-subtle bg-canvas/60 p-3">

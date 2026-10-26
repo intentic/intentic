@@ -42,6 +42,8 @@ export interface LinkRoutesDeps extends LinkTaskDeps {
     readonly sandboxName: () => string;
     // The personas a link's tasks may wear, by id, with the name each is shown by.
     readonly personas: () => Promise<readonly { readonly id: string; readonly label?: string | undefined }[]>;
+    // The services a link's tasks may act as, by id (docs/architecture/access.md).
+    readonly serviceIds?: () => Promise<readonly string[]>;
 }
 
 /** The routes' deps, read off the daemon's services. */
@@ -50,6 +52,7 @@ export const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" 
     auth: services.auth,
     sandboxName: () => services.info?.name ?? "this sandbox",
     personas: async () => (await services.personas.list()).map((persona) => ({ id: persona.id, label: persona.label })),
+    serviceIds: async () => (await services.services?.list())?.map((service) => service.id) ?? [],
 });
 
 type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly response: Response };
@@ -79,6 +82,15 @@ const unknownPersona = async (deps: LinkRoutesDeps, actsAs: string | undefined):
     }
     const cast = await deps.personas();
     return cast.some((persona) => persona.id === actsAs) ? undefined : `no persona here is called "${actsAs}"`;
+};
+
+// A service the terms name must exist: tasks acting as one that does not would each be refused (link-tasks.ts).
+const unknownService = async (deps: LinkRoutesDeps, runAs: string | null | undefined): Promise<string | undefined> => {
+    if (runAs === undefined || runAs === null) {
+        return undefined;
+    }
+    const known = (await deps.serviceIds?.()) ?? [];
+    return known.includes(runAs) ? undefined : `no service here is called "${runAs}"`;
 };
 
 export const createLinkRoutes = (deps: LinkRoutesDeps) => {
@@ -114,7 +126,7 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
             if (!body.ok) {
                 return body.response;
             }
-            const missing = await unknownPersona(deps, body.value.terms?.actsAs);
+            const missing = (await unknownPersona(deps, body.value.terms?.actsAs)) ?? (await unknownService(deps, body.value.terms?.runAs));
             if (missing !== undefined) {
                 return c.json({ error: missing }, 400);
             }
@@ -134,7 +146,7 @@ export const createLinkRoutes = (deps: LinkRoutesDeps) => {
             if (!body.ok) {
                 return body.response;
             }
-            const missing = await unknownPersona(deps, body.value.actsAs);
+            const missing = (await unknownPersona(deps, body.value.actsAs ?? undefined)) ?? (await unknownService(deps, body.value.runAs));
             if (missing !== undefined) {
                 return c.json({ error: missing }, 400);
             }

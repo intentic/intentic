@@ -10,6 +10,7 @@ import { ManifestUnreadableError } from "../../store/json-file.js";
 import { openDocument } from "../../store/open-document.js";
 import { tokenEquals } from "../auth.js";
 import { routeFloor } from "../role-floor.js";
+import { opt } from "../../opt.js";
 
 // Control tokens: the credential anything outside the browser (an editor bridge, CI, a script) presents via
 // `x-intentic-control`; persisted, hashed at rest (sha256, raw value returned once), revocable per token.
@@ -32,6 +33,9 @@ const StoredTokenSchema = z.object({
     expiresAt: z.number().optional(),
     // Epoch ms of the last authorized request, coarse on purpose; flags a token that's never been used.
     lastUsedAt: z.number().optional(),
+    // Added 2026-10-26, optional: the service the conversations it starts act as (docs/architecture/access.md). A token
+    // minted before it acts for the owner, unlimited, as every token did.
+    runAs: z.string().optional(),
 });
 const StoredTokensSchema = z.object({ tokens: z.array(StoredTokenSchema) });
 type StoredToken = z.infer<typeof StoredTokenSchema>;
@@ -56,11 +60,14 @@ export interface ResolvedControlToken {
     readonly scope: ControlScope;
     // Whose authority it carries, when a signed-in person minted it.
     readonly createdBy?: string;
+    // The service the turns it starts act as, when it was minted with one.
+    readonly runAs?: string;
 }
 
 export interface MintOptions {
     readonly createdBy?: string;
     readonly expiresAt?: number;
+    readonly runAs?: string;
 }
 
 // How often lastUsedAt is written; per-request writes would make the token file a hot path.
@@ -115,6 +122,7 @@ export const fileControlTokens = (path: string): ControlTokens => {
                         createdAt: Date.now(),
                         ...(options.createdBy !== undefined ? { createdBy: options.createdBy } : {}),
                         ...(options.expiresAt !== undefined ? { expiresAt: options.expiresAt } : {}),
+                        ...opt("runAs", options.runAs),
                     },
                 ],
             }));
@@ -134,7 +142,7 @@ export const fileControlTokens = (path: string): ControlTokens => {
             const entry = stored.value.tokens.find((candidate) => tokenEquals(candidate.hash, hash));
             return entry === undefined || !live(entry, now)
                 ? undefined
-                : { id: entry.id, label: entry.label, scope: entry.scope, ...(entry.createdBy !== undefined ? { createdBy: entry.createdBy } : {}) };
+                : { id: entry.id, label: entry.label, scope: entry.scope, ...opt("createdBy", entry.createdBy), ...opt("runAs", entry.runAs) };
         },
         touch: async (id, now = Date.now()) => {
             await file.update((stored) => {

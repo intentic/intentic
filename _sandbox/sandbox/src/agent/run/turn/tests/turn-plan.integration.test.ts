@@ -86,6 +86,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         credentialGrants: createCredentialGrants(),
         credentialReach: async () => REACH_ALL,
         accountReach: async () => ACCOUNTS_ALL,
+        toolCeiling: async () => undefined,
         // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
         conversations: memoryFleet().conversations,
         // No conversation-level grants: what a conversation nobody has widened reads.

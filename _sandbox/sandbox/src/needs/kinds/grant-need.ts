@@ -10,6 +10,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/needs";
 import { isBuiltInPersona, type Persona, type PersonaPowers, PersonaPowersSchema } from "@intentic/sandbox-contract/schemas/personas";
 import type { ConversationGrants } from "../../personas/conversation-grants.js";
+import { ceilingWithholds } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 
 // Reach a conversation's persona or area withholds (docs/architecture/needs.md): a connected capability, a folder, a
@@ -124,6 +125,40 @@ const capabilityGrant = (
     return { kind: "raise", subject, title: `Let this conversation use "${capability.id}"` };
 };
 
+// A folder outside the conversation's fence: met when the fence already holds it, a card when it does not.
+const folderGrant = (asked: string, standing: AskContext["standing"], withPersona: { readonly persona?: string }): Resolved => {
+    const folder = folderOf(asked);
+    if (folder === "" || folder.split("/").includes("..")) {
+        return { kind: "refused", code: "invalid", message: "Name a folder inside the workspace, relative to its root, such as `refs/other-repo`." };
+    }
+    if (standing?.fence === undefined || within(folder, standing.fence)) {
+        return { kind: "met", message: `This conversation already reaches ${folder}.` };
+    }
+    const subject: GrantNeed = { kind: "grant", subject: "folder", what: folder, label: `the folder ${folder}`, ...withPersona };
+    return { kind: "raise", subject, title: `Let this conversation reach ${folder}` };
+};
+
+// A shelf the persona switched off: met when it is open, a card when the persona holds it back, and refused when the
+// access the conversation runs under does (docs/architecture/access.md), since a grant widens the persona and never
+// that: a card for it would promise what the next turn withholds.
+const shelfGrant = (asked: string, standing: AskContext["standing"], withPersona: { readonly persona?: string }): Resolved => {
+    if (!isShelf(asked)) {
+        return { kind: "refused", code: "invalid", message: `No shelf is named "${asked}". The shelves: ${GRANT_SHELVES.join(", ")}.` };
+    }
+    if (standing === undefined || shelfOpen(standing.powers, asked)) {
+        return { kind: "met", message: `This conversation may already ${SHELF_WORDS[asked].verb}.` };
+    }
+    if (ceilingWithholds(standing.ceiling, asked)) {
+        return {
+            kind: "refused",
+            code: "out_of_reach",
+            message: `This conversation may not ${SHELF_WORDS[asked].verb}: the people or the service it acts for are held back from it, and no grant changes that, only the sandbox owner does, on the Access page. Carry on without it.`,
+        };
+    }
+    const subject: GrantNeed = { kind: "grant", subject: "shelf", what: asked, label: SHELF_WORDS[asked].label, ...withPersona };
+    return { kind: "raise", subject, title: `Let this conversation ${SHELF_WORDS[asked].verb}` };
+};
+
 // The card a grant could be written onto, by its name. A built-in (Full access, No accounts) is no card, so a turn wearing
 // one is offered the conversation alone.
 const cardOf = (standing: AskContext["standing"]): { readonly persona?: string } => {
@@ -142,29 +177,10 @@ export const grantNeed = (deps: GrantNeedDeps): NeedKindHandler => {
             return capabilityGrant(await deps.capabilities(), ask.what, standing, withPersona);
         }
         if (ask.subject === "folder") {
-            const folder = folderOf(ask.what);
-            if (folder === "" || folder.split("/").includes("..")) {
-                return {
-                    kind: "refused",
-                    code: "invalid",
-                    message: "Name a folder inside the workspace, relative to its root, such as `refs/other-repo`.",
-                };
-            }
-            if (standing?.fence === undefined || within(folder, standing.fence)) {
-                return { kind: "met", message: `This conversation already reaches ${folder}.` };
-            }
-            const subject: GrantNeed = { kind: "grant", subject: "folder", what: folder, label: `the folder ${folder}`, ...withPersona };
-            return { kind: "raise", subject, title: `Let this conversation reach ${folder}` };
+            return folderGrant(ask.what, standing, withPersona);
         }
         if (ask.subject === "shelf") {
-            if (!isShelf(ask.what)) {
-                return { kind: "refused", code: "invalid", message: `No shelf is named "${ask.what}". The shelves: ${GRANT_SHELVES.join(", ")}.` };
-            }
-            if (standing === undefined || shelfOpen(standing.powers, ask.what)) {
-                return { kind: "met", message: `This conversation may already ${SHELF_WORDS[ask.what].verb}.` };
-            }
-            const subject: GrantNeed = { kind: "grant", subject: "shelf", what: ask.what, label: SHELF_WORDS[ask.what].label, ...withPersona };
-            return { kind: "raise", subject, title: `Let this conversation ${SHELF_WORDS[ask.what].verb}` };
+            return shelfGrant(ask.what, standing, withPersona);
         }
         return {
             kind: "refused",

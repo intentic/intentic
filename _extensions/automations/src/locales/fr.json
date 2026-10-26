@@ -90,8 +90,8 @@
         "onlyOnce": "Une seule fois",
         "onlyRepoOptional": "Ce dépôt uniquement (facultatif)",
         "peopleRuleNames": "Noms de la règle de personnes {index}",
-        "persona": "Persona",
-        "personaAutomationRuns": "Persona sous lequel cette automatisation s'exécute",
+        "persona": "Parle en tant que",
+        "personaAutomationRuns": "Parle en tant que",
         "personaRuleAnswers": "La règle de persona {index} répond en tant que",
         "pickAtLeastOne": "Choisissez au moins un jour.",
         "pickModel": "Choisissez un modèle",
@@ -121,7 +121,7 @@
         "strangersWritePromptsSaving": "Ce sont des inconnus qui écrivent ces consignes : enregistrer ajoute donc un accueil en lecture seule à vos personas.",
         "sun": "Dim",
         "then": "Alors",
-        "theyTalkTo": "Ils parlent à",
+        "theyTalkTo": "Parle en tant que",
         "thu": "Jeu",
         "toolNamesCommaSeparated": "Noms d'outils, séparés par des virgules. Vide laisse la liste propre du persona telle quelle.",
         "toolNamesJobMay": "Noms d'outils que cette tâche peut appeler",
@@ -538,7 +538,7 @@
         "trigger": "Démarre sur"
     },
     "personaProperty": {
-        "runsAs": "Agit en tant que"
+        "runsAs": "Parle en tant que"
     },
     "modelProperty": {
         "cannotRunOn": "Une automatisation ne peut pas tourner sur {model}.",
@@ -588,5 +588,31 @@
     "automationEditor": {
         "allSettings": "Tous les réglages",
         "back": "Retour"
+    },
+    "service": {
+        "runsAs": "Exécuter en tant que",
+        "owner": "Propriétaire (limité uniquement par son persona)",
+        "authority": "Autorité : accès du responsable, restreint par son profil. Les personas le restreignent davantage.",
+        "inherit": "Comme l’automatisation",
+        "steward": "Responsable : {email}",
+        "stewardLimits": "Tous les accès du responsable",
+        "profileUnavailable": "Profil indisponible : {id}",
+        "unavailable": "Service indisponible : {id}",
+        "noFiles": "Aucun fichier",
+        "readFiles": "Fichiers en lecture seule",
+        "allConnections": "Toutes les connexions",
+        "connections": "Connexions : {count}",
+        "aiAccounts": "Comptes IA : {accounts}",
+        "all": "Tous",
+        "none": "Aucun",
+        "ruleSummary": "{rule} : exécuter en tant que {service}",
+        "tools": {
+            "shell": "Aucune commande",
+            "code": "Aucun script",
+            "web": "Aucun accès web",
+            "browser": "Aucun navigateur",
+            "delegate": "Aucun sous-agent",
+            "sandbox": "Aucun réglage du sandbox"
+        }
     }
 }

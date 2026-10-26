@@ -14,7 +14,9 @@ import { orgMembersOnlyRefusal } from "@intentic/sandbox-contract/policy/org-loc
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
-import { type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
+import { assistantsRefusal, type PersonaReachDeps, reachablePersonas } from "../../personas/persona-reach.js";
+import { profileGrant } from "../../access/profile-grant.js";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { ownershipDenied, unavailableIfUnreadable } from "../owner-gates.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { orgAdmits } from "../../org/org-roster.js";
@@ -27,7 +29,7 @@ import { opt } from "../../opt.js";
 // revokable grant must not change.
 
 export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas"> &
-    Partial<Pick<Services, "orgPolicy">>;
+    Partial<Pick<Services, "orgPolicy" | "accessProfiles">>;
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -45,8 +47,8 @@ const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> 
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts } = body.data;
-    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts };
+    const { email, role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile } = body.data;
+    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials, aiAccounts, tools, assistants, profile };
 };
 
 // A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, what their
@@ -61,6 +63,9 @@ interface MemberGrantRequest {
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
     readonly aiAccounts?: readonly string[] | "all" | undefined;
+    readonly tools?: ToolCeiling | "all" | undefined;
+    readonly assistants?: readonly string[] | "all" | undefined;
+    readonly profile?: string | undefined;
 }
 
 // What the audit trail keeps of a grant: the tier it made and the one it replaced, and the shape of the fence (area ids
@@ -70,6 +75,7 @@ const grantDetails = (grant: MemberGrantRequest, previous: GrantedRole | undefin
     previousRole: previous ?? "none",
     areas: grant.areas ?? "all",
     ...opt("home", grant.agents === "home" ? (grant.lands === true ? "lands" : "asks") : undefined),
+    ...opt("profile", grant.profile),
 });
 
 // The refusals an access makes on its face, in the order a reader fixes them: a writer named with nowhere to write (what
@@ -113,16 +119,43 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: MemberGrant
 // A maintainer reads every credential the sandbox holds and operates the box as the owner does, so a list of what its
 // conversations may spend would be a line on a screen rather than a boundary, as a folder fence over it would be. The
 // same holds for the AI accounts it runs on: it connects and disconnects them.
-const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "credentials" | "aiAccounts">): string | undefined => {
+const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "credentials" | "aiAccounts" | "tools" | "profile">): string | undefined => {
     if (grant.role !== "maintainer") {
         return undefined;
+    }
+    if (grant.profile !== undefined) {
+        return "a maintainer holds the owner's operating authority, which is granted to a person and never through a shared access profile";
     }
     if (grant.credentials !== undefined && grant.credentials !== "all") {
         return "a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them";
     }
+    if (grant.tools !== undefined && grant.tools !== "all") {
+        return "a maintainer holds the owner's operating authority and runs every tool, so its tools cannot be limited";
+    }
     return grant.aiAccounts !== undefined && grant.aiAccounts !== "all"
         ? "a maintainer holds the owner's operating authority and manages every AI account, so it cannot be limited to some of them"
         : undefined;
+};
+
+// A grant naming a profile, read as the grant that profile writes (access/profile-grant.ts): its answers replace the
+// ones sent beside it, so a row holding a profile always says what the profile says. The role sent must still be the
+// tier the profile makes, as any grant's must, so a client never grants a tier it did not mean.
+const resolvedGrant = async (
+    services: MembersRoutesDeps,
+    grant: MemberGrantRequest,
+): Promise<{ readonly grant: MemberGrantRequest } | { readonly refusal: string }> => {
+    if (grant.profile === undefined || grant.role === "maintainer") {
+        return { grant };
+    }
+    const profile = await services.accessProfiles?.get(grant.profile);
+    if (profile === undefined) {
+        return { refusal: `no such access profile: ${grant.profile}` };
+    }
+    const written = profileGrant(profile);
+    if (written.role !== grant.role) {
+        return { refusal: `the role does not match the access profile "${profile.label ?? profile.id}", which makes a ${written.role}` };
+    }
+    return { grant: { ...written, email: grant.email, emailSignIn: grant.emailSignIn } };
 };
 
 // Why a guest's fence cannot be granted even though its areas exist: no card works in the folders it names. A guest
@@ -130,10 +163,15 @@ const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "credentials" | "
 // Checked only for a chatting guest: every other tier, and a home-only guest whose home is the one it talks to, has
 // business in a workspace with no card homed in its folders.
 const guestReachRefusal = async (services: PersonaReachDeps, grant: MemberGrantRequest): Promise<string | undefined> => {
+    const listed = grant.assistants === "all" ? undefined : grant.assistants;
+    const assistants = await assistantsRefusal(services, grant.areas, listed);
+    if (assistants !== undefined) {
+        return assistants;
+    }
     if (grant.role !== "guest" || memberAccess(grant).agents !== "chat") {
         return undefined;
     }
-    const reached = await reachablePersonas(services, grant.areas);
+    const reached = await reachablePersonas(services, grant.areas, listed);
     return reached.length > 0
         ? undefined
         : "no assistant works in those areas, so a guest fenced to them would have nobody to talk to; give an assistant a starting folder inside one, or fence the guest to an area that already has one";
@@ -163,6 +201,15 @@ const selfAccess = async (services: Pick<Services, "members">, c: Context<AppEnv
     if (row?.aiAccounts !== undefined) {
         self.aiAccounts = [...row.aiAccounts];
     }
+    if (row?.tools !== undefined) {
+        self.tools = { ...row.tools };
+    }
+    if (row?.assistants !== undefined) {
+        self.assistants = [...row.assistants];
+    }
+    if (row?.profile !== undefined) {
+        self.profile = row.profile;
+    }
     return c.json(self);
 };
 
@@ -187,10 +234,15 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         if (denied !== undefined) {
             return denied;
         }
-        const grant = await memberGrant(c);
-        if (grant === undefined) {
+        const asked = await memberGrant(c);
+        if (asked === undefined) {
             return c.json({ error: "email and role required" }, 400);
         }
+        const resolved = await resolvedGrant(services, asked);
+        if ("refusal" in resolved) {
+            return c.json({ error: resolved.refusal }, 400);
+        }
+        const { grant } = resolved;
         // The free refusal first, then the two that read a manifest; reach last, since it needs both of them.
         const refusal = accessRefused(grant) ?? reachRefusal(grant) ?? (await areaRefusal(services, grant)) ?? (await guestReachRefusal(services, grant));
         if (refusal !== undefined) {

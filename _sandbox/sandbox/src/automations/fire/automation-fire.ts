@@ -218,13 +218,13 @@ export const fireOnThread = async (
 
 // The snapshot as fire options: each field absent rather than undefined, so replaying a hold cannot set one the
 // original fire did not carry.
-// The persona rides back as a lane so the approved run wears what was decided when it was held, not what the
-// automation says now; the hold itself was answered, so the lane asks for none.
+// The persona and the service ride back as a lane so the approved run wears and acts as what was decided when it was
+// held, not what the automation says now; the hold itself was answered, so the lane asks for none.
 const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined): ThreadFireOptions => ({
     overlap: "queue",
     cleared: "both",
     held: held.id,
-    lane: { actsAs: held.actsAs, requireApproval: false },
+    lane: { actsAs: held.actsAs, runAs: held.runAs, requireApproval: false },
     ...(held.payload !== undefined ? { payload: held.payload } : {}),
     ...(held.observed !== undefined ? { observed: held.observed } : {}),
     ...(held.origin !== undefined ? { origin: held.origin } : {}),

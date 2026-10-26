@@ -58,6 +58,8 @@ import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
 import { createOffloadRoutes } from "./offload/offload.routes.js";
+import { createAccessProfilesRoutes } from "./access/access-profiles.routes.js";
+import { createServicesRoutes } from "./access/services.routes.js";
 import { createAgentContinueRoutes } from "./agent/routes/agent-continue.routes.js";
 import { createAgentQueueRoutes } from "./agent/routes/agent-queue.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
@@ -72,6 +74,7 @@ import { pruneStore } from "./workspace/watch/state-janitor.js";
 export type SandboxRouter = Router<typeof sandboxContract, OrpcContext>;
 
 export const createRouter = (services: Services): SandboxRouter => ({
+    accessProfiles: createAccessProfilesRoutes(services),
     accounts: createAccountsRoutes(services),
     activity: createActivityRoutes(services),
     audit: createAuditRoutes(services),
@@ -86,6 +89,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services),
+    services: createServicesRoutes(services),
     org: createOrgRoutes(services),
     privacy: createPrivacyRoutes(services),
     safety: createSafetyRoutes(services),

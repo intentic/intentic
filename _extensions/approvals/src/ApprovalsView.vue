@@ -225,6 +225,9 @@ const startsIn = (autoRunAt: number): string => {
     return seconds <= 0 ? t(`approvalsView.starting`) : t(`approvalsView.startsInUnlessCancel`, { seconds });
 };
 const wakeName = (wake: AutomationApproval): string => wake.title ?? wake.automationId;
+// A held wake's line under its name: which automation it came from, and when it fired.
+const wakeAutomation = (wake: AutomationApproval): string => t(`approvalsView.automation`, { automationId: wake.automationId });
+const wakeFired = (wake: AutomationApproval): string => `${t(`approvalsView.fired`)} ${timeAgo(wake.createdAt)}`;
 
 // Release runs the wake now; drop means never. Both report through the same error strip as the rest of the queue.
 const releaseWake = (wake: AutomationApproval): Promise<void> =>
@@ -625,10 +628,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="clock" /></span>
                                 </template>
                                 <template #description>
-                                    <span class="block truncate">
-                                        <span>{{ t(`approvalsView.automation`, { automationId: wake.automationId }) }}</span>
-                                        <span class="text-subtle"> · </span>{{ t(`approvalsView.fired`) }} {{ timeAgo(wake.createdAt) }}
-                                    </span>
+                                    <ApprovalMeta :name="wakeAutomation(wake)" :acts-as="wake.actsAs" :run-as="wake.runAs" :note="wakeFired(wake)" />
                                 </template>
                                 <template #meta>
                                     <span v-if="wake.autoRunAt !== undefined" class="tabular-nums text-warning">{{ startsIn(wake.autoRunAt) }}</span>

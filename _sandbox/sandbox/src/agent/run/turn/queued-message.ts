@@ -11,7 +11,7 @@ type Turn = TurnInput & { readonly conversationId: string };
 // The message as the queue keeps it, named: a sender that gave no id gets one, since the queue and a rewind name it.
 export const queuedMessageOf = (said: Said): Omit<QueuedItem, "revision"> => {
     // The booking is the admission's to act on (bookingFor), never a field the started turn carries.
-    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _at, sendAfter: _after, sendAtReopen: _reopen, ...turn } = said.turn;
+    const { actor, owner, areas, runAs, unseenRuns: _unseen, speaker, sendAt: _at, sendAfter: _after, sendAtReopen: _reopen, ...turn } = said.turn;
     const id = turn.messageId ?? randomUUID();
     return {
         id,
@@ -21,6 +21,7 @@ export const queuedMessageOf = (said: Said): Omit<QueuedItem, "revision"> => {
         ...opt("speaker", speaker ?? (said.voice === "sandbox" ? { kind: "sandbox" as const } : undefined)),
         ...opt("owner", owner),
         ...opt("areas", areas),
+        ...opt("runAs", runAs),
         ...opt("outside", said.outside),
         queuedAt: Date.now(),
         turn: { ...turn, messageId: id },
@@ -34,5 +35,6 @@ export const requestOf = (item: Omit<QueuedItem, "revision">): Turn => ({
     ...opt("actor", item.actor),
     ...opt("owner", item.owner),
     ...opt("areas", item.areas),
+    ...opt("runAs", item.runAs),
     ...opt("outsideWake", item.outside),
 });

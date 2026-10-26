@@ -153,6 +153,7 @@ export const conversationIdentity = (
     ...opt("startedBy", input.freshOf === undefined ? input.actor : childActor(input.freshOf.conversationId)),
     ...opt("owner", input.owner),
     ...opt("areas", input.areas),
+    ...opt("runAs", input.runAs),
     ...opt("startIn", input.startIn),
     // A fork names its source once; `keep` is the cut's index in the source's own record.
     ...(input.forkOf !== undefined ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } } : {}),

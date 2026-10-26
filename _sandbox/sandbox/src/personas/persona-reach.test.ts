@@ -2,7 +2,7 @@ import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import { FULL_ACCESS_PERSONA, NO_ACCOUNTS_PERSONA, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import type { ProvenCaller } from "../auth/auth.js";
 import { memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
-import { reachablePersonas, refuseUnlessReachable } from "./persona-reach.js";
+import { assistantsRefusal, reachablePersonas, refuseUnlessReachable } from "./persona-reach.js";
 
 // Which personas a fence hands over, resolved through the manifest. The rule itself is the contract's persona-home
 // test; what is pinned here is that area ids become folders through the LIVE manifest, and what each tier is refused.
@@ -85,5 +85,28 @@ describe("refuseUnlessReachable", () => {
         await expect(refuseUnlessReachable(services(), caller("collaborator"), undefined)).resolves.toBeUndefined();
         await expect(refuseUnlessReachable(services(), caller("collaborator", ["support"]), undefined)).resolves.toBeUndefined();
         await expect(refuseUnlessReachable(services(), undefined, "books")).resolves.toBeUndefined();
+    });
+});
+
+describe("a chatting guest's own assistants", () => {
+    const AREAS_PERSONAS: readonly Persona[] = [...PERSONAS, { id: "desk", capabilities: [], workspace: { startIn: "support/desk" } }];
+
+    test("narrow what the areas hold, and never add one outside them", async () => {
+        const reached = await reachablePersonas(services(AREAS_PERSONAS), ["support"], ["desk", "books"]);
+        expect(reached.map((persona) => persona.id)).toEqual(["desk"]);
+    });
+
+    test("are refused when one is unknown or works outside the areas", async () => {
+        await expect(assistantsRefusal(services(AREAS_PERSONAS), ["support"], ["desk"])).resolves.toBeUndefined();
+        await expect(assistantsRefusal(services(AREAS_PERSONAS), ["support"], ["nobody"])).resolves.toBe("no such assistant: nobody");
+        await expect(assistantsRefusal(services(AREAS_PERSONAS), ["support"], ["books"])).resolves.toBe(
+            "books does not work in those areas: a guest's chat works inside the guest's own areas, so an assistant has to start in one of them",
+        );
+    });
+
+    test("hold a guest to the ones listed when it names a persona", async () => {
+        const guest: ProvenCaller = { ...caller("guest", ["support"]), assistants: ["desk"] };
+        await expect(refuseUnlessReachable(services(AREAS_PERSONAS), guest, "desk")).resolves.toBeUndefined();
+        await expect(refuseUnlessReachable(services(AREAS_PERSONAS), guest, "helper")).rejects.toThrow(/"helper" does not work in the part of the workspace you hold; yours are: desk/);
     });
 });

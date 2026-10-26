@@ -1,5 +1,6 @@
 import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
 import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import type { Member, MemberGrant } from "../auth.js";
 
 // The row a grant writes: an area list is kept whatever the tier, and its absence is the whole workspace, so an
@@ -16,6 +17,9 @@ interface MemberRowDraft {
     emailSignIn?: boolean;
     credentials?: CredentialReach;
     aiAccounts?: string[];
+    tools?: ToolCeiling;
+    assistants?: string[];
+    profile?: string;
 }
 
 // The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's. A
@@ -36,6 +40,25 @@ const aiAccountsOfRow = (grant: MemberGrant, previous: Member | undefined): stri
         return undefined;
     }
     const kept = grant.aiAccounts ?? previous?.aiAccounts;
+    return kept === undefined ? undefined : [...new Set(kept)];
+};
+
+// The tool ceiling and the assistants a grant leaves on the row, by the same rule again: `all` lifts it, a value replaces
+// it, silence keeps the previous row's, and a maintainer holds neither, since the tier holds every tool and talks to
+// whoever it likes.
+const toolsOfRow = (grant: MemberGrant, previous: Member | undefined): ToolCeiling | undefined => {
+    if (grant.role === "maintainer" || grant.tools === "all") {
+        return undefined;
+    }
+    const kept = grant.tools ?? previous?.tools;
+    return kept === undefined ? undefined : { ...kept };
+};
+
+const assistantsOfRow = (grant: MemberGrant, previous: Member | undefined): string[] | undefined => {
+    if (grant.role === "maintainer" || grant.assistants === "all") {
+        return undefined;
+    }
+    const kept = grant.assistants ?? previous?.assistants;
     return kept === undefined ? undefined : [...new Set(kept)];
 };
 
@@ -65,6 +88,18 @@ export const memberRow = (email: string, grant: MemberGrant, previous?: Member):
     const aiAccounts = aiAccountsOfRow(grant, previous);
     if (aiAccounts !== undefined) {
         row.aiAccounts = aiAccounts;
+    }
+    const tools = toolsOfRow(grant, previous);
+    if (tools !== undefined) {
+        row.tools = tools;
+    }
+    const assistants = assistantsOfRow(grant, previous);
+    if (assistants !== undefined) {
+        row.assistants = assistants;
+    }
+    // Written as the grant said it, never kept: a grant that names no profile is answers of the row's own.
+    if (grant.profile !== undefined && grant.role !== "maintainer") {
+        row.profile = grant.profile;
     }
     return row;
 };

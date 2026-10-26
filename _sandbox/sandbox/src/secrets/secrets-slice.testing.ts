@@ -102,6 +102,8 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
         credentialReach: async () => REACH_ALL,
         // Every AI account, likewise; tested where it lives (credential-reach.test.ts, account-reach.test.ts).
         accountReach: async () => ACCOUNTS_ALL,
+        // No ceiling: what an owner-driven turn holds.
+        toolCeiling: async () => undefined,
         // Every host guard off until a suite writes one through the store, and no connector declares hosts: a suite that
         // wants a connector's default overrides `hostGuards`.
         secretHostGuards: {

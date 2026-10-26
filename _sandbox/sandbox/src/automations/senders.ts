@@ -8,6 +8,9 @@ import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/
 export interface SenderLane {
     // The persona the wake wears; undefined is no persona, the full toolbox reaching no account.
     readonly actsAs: string | undefined;
+    // The service the wake acts as (docs/architecture/access.md): a rule's own, else the automation's; undefined acts for
+    // the owner, as a wake always did.
+    readonly runAs?: string | undefined;
     // Held for a person on top of whatever the automation and the admission floor already say.
     readonly requireApproval: boolean;
 }
@@ -21,18 +24,18 @@ const named = (rule: NonNullable<Automation["senders"]>["rules"][number], author
 export const senderLane = (automation: Automation, author: ListenerMessage["author"]): SenderLane | undefined => {
     const senders = automation.senders;
     if (senders === undefined) {
-        return { actsAs: automation.actsAs, requireApproval: false };
+        return { actsAs: automation.actsAs, runAs: automation.runAs, requireApproval: false };
     }
     const rule = senders.rules.find((candidate) => named(candidate, author));
     if (rule !== undefined) {
-        return { actsAs: rule.actsAs, requireApproval: rule.requireApproval === true };
+        return { actsAs: rule.actsAs, runAs: rule.runAs ?? automation.runAs, requireApproval: rule.requireApproval === true };
     }
     switch (senders.others) {
         case "ignore":
             return undefined;
         case "hold":
-            return { actsAs: automation.actsAs, requireApproval: true };
+            return { actsAs: automation.actsAs, runAs: automation.runAs, requireApproval: true };
         case "allow":
-            return { actsAs: automation.actsAs, requireApproval: false };
+            return { actsAs: automation.actsAs, runAs: automation.runAs, requireApproval: false };
     }
 };

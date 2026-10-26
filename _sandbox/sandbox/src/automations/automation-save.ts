@@ -1,3 +1,4 @@
+import { refuseServiceMismatch } from "../access/automation-runs-as.js";
 import type { Automation, AutomationCatalog } from "@intentic/sandbox-contract/schemas/automations";
 import { cronOptions } from "@intentic/sandbox-contract/time/zone";
 import { isBuiltInPersona, VISITOR_CHAT_PERSONA } from "@intentic/sandbox-contract/schemas/personas";
@@ -114,6 +115,7 @@ export const refuseInvalidAutomation = async (services: Services, automation: Au
     refusePastEnd(automation, Date.now());
     refuseMisshapenWatch(services, automation);
     await refuseUnknownPersona(services, automation);
+    await refuseServiceMismatch(services, automation);
     if (automation.trigger.kind === "schedule") {
         // Both halves matter: a pattern that won't parse, and one that parses into a moment that can never
         // come (a fixed date in the past, the 30th of February). The second used to be accepted and then sit

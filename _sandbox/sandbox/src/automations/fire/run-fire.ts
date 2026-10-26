@@ -1,3 +1,4 @@
+import { type ServiceStanding, serviceStanding } from "../../access/service-standing.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentTurn, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import type { AutomationApproval, Trigger } from "@intentic/sandbox-contract/schemas/automations";
@@ -152,7 +153,7 @@ const heldWakeSnapshot = (
     automationId: string,
     // Only a pure-countdown hold carries autoRunAfterS; an "ask me" hold never auto-runs.
     autoRunAfterS: number | undefined,
-    fire: Pick<AutomationApproval, "payload" | "observed" | "origin" | "title" | "conversationId" | "sessionId" | "thread" | "actsAs">,
+    fire: Pick<AutomationApproval, "payload" | "observed" | "origin" | "title" | "conversationId" | "sessionId" | "thread" | "actsAs" | "runAs">,
 ): Omit<AutomationApproval, "id"> => ({
     automationId,
     ...(autoRunAfterS !== undefined ? { autoRunAt: Date.now() + autoRunAfterS * 1_000 } : {}),
@@ -164,6 +165,7 @@ const heldWakeSnapshot = (
     ...(fire.sessionId !== undefined ? { sessionId: fire.sessionId } : {}),
     ...(fire.thread !== undefined ? { thread: fire.thread } : {}),
     ...(fire.actsAs !== undefined ? { actsAs: fire.actsAs } : {}),
+    ...opt("runAs", fire.runAs),
     createdAt: Date.now(),
 });
 
@@ -234,6 +236,27 @@ const tellStream = (stream: TurnStream | undefined, progress: TurnProgressReader
     }
 };
 
+// The service a fire acts as, standing; or `skipped`, recorded with why, when it can no longer act (its steward left, it
+// or its profile is gone), before any check, hold or model is spent on a run that would reach nothing
+// (docs/architecture/access.md). Undefined for a fire that acts for the owner, as one naming no service does.
+const standingOrSkip = async (
+    services: Services,
+    automationId: string,
+    runAs: string | undefined,
+    stream: TurnStream | undefined,
+): Promise<Extract<ServiceStanding, { ok: true }> | "skipped" | undefined> => {
+    if (runAs === undefined) {
+        return undefined;
+    }
+    const standing = await serviceStanding(services, runAs);
+    if (standing.ok) {
+        return standing;
+    }
+    await services.automations.recordRun(automationId, { at: Date.now(), outcome: "skipped", detail: standing.reason });
+    stream?.failed(standing.reason);
+    return "skipped";
+};
+
 // Guard, then wake, then record the run; reached only through fireAutomation, which guarantees no two runs on one
 // conversation overlap here, and none at all of an automation whose fire runs alone (FireLanes).
 export const runFire = async (
@@ -275,9 +298,13 @@ export const runFire = async (
         let observed = replayedObservation;
         let observedOutside = replayedObservation === undefined ? undefined : conditionOutside(automation);
         let observedValue: string | undefined = admissionEntry?.observedValue;
-        // The persona this fire wears: the sender's lane when someone sent it, else the automation's own. Resolved once
-        // here so the hold snapshot and the turn cannot disagree.
-        const actsAs = lane !== undefined ? lane.actsAs : automation.actsAs;
+        // The persona this fire wears and the service it acts as: the sender's lane when someone sent it, else the
+        // automation's own. Resolved once here so the hold snapshot and the turn cannot disagree.
+        const { actsAs, runAs } = lane ?? automation;
+        const standing = await standingOrSkip(services, automation.id, runAs, stream);
+        if (standing === "skipped") {
+            return {};
+        }
         // Admission runs on every fire, even cleared: a deny still refuses; a hold is what `cleared` already answered.
         // A lane's hold only ever adds to the automation's, most-restrictive-wins like the floor.
         const { admission } = await services.sandboxSettings.get();
@@ -286,7 +313,7 @@ export const runFire = async (
             source: wakeSourceOf(automation.trigger),
             admission,
             ...(requireApproval ? { requireApproval } : {}),
-            ...(automation.holdForSeconds !== undefined ? { holdForSeconds: automation.holdForSeconds } : {}),
+            ...opt("holdForSeconds", automation.holdForSeconds),
         });
         if (verdict.effect === "deny") {
             await services.automations.recordRun(automation.id, {
@@ -340,6 +367,7 @@ export const runFire = async (
                         sessionId: resumedSessionId,
                         thread,
                         actsAs,
+                        runAs,
                     }),
                     admissionEntry?.id,
                 );
@@ -437,6 +465,9 @@ export const runFire = async (
             ...opt("account", account),
             // Absence here is deliberate: the resolver reads no pin as no account on an unattended turn, not all.
             ...(actsAs !== undefined ? { actsAs } : {}),
+            // Who the turn acts for, and the fence it is born inside: the service's steward held to its profile.
+            ...opt("runAs", runAs),
+            ...opt("areas", standing?.areas),
             // Nobody presses Send again on a wake: it answers a spent allowance or a stop itself (wake-fallback.ts).
             postures: wakePostures((await services.sandboxSettings.get()).limitPolicy),
         };

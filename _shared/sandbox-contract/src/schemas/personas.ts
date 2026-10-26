@@ -6,11 +6,13 @@ import { type ModelPin, ModelPinSchema } from "./agent.js";
 import { entryId } from "./internal.js";
 import { SkillDraftSchema, SkillNameSchema, SYSTEM_PROMPT_MAX, SystemPromptModeSchema } from "./settings.js";
 // A named face the sandbox shows outward: who it speaks as, what it may do, where it works, what it's told, what it
-// runs on. No credential lives on the card; accounts stay private, per-sandbox. Not a security boundary for a watched
-// chat — a real fence only for an unattended turn, whose resolver defaults to nothing.
-// Enforced by absence (`connectors`/`devices`/`mcp`: no credential injected) or by removing tools from context; `shell`
-// decides, since with it a session can reach anything else fenced off, turning the rest into defaults, not limits.
-// Absent `powers` means the full toolbox.
+// runs on. No credential lives on the card; accounts stay private, per-sandbox. POSTURE, NOT ACCESS
+// (docs/architecture/access.md): what a turn may reach is decided by who it acts for, the people in its conversation
+// or the service an unattended run acts as, each held to an access profile. A card only narrows inside that, for a
+// watched chat and an unattended run alike, and never widens it.
+// Narrowing is enforced by absence (`connectors`/`devices`/`mcp`: no credential injected) or by removing tools from
+// context; `shell` decides, since with it a session can reach anything else fenced off, turning the rest into defaults,
+// not limits. Absent `powers` means the full toolbox, inside whatever the principals allow.
 export const PersonaPowersSchema = z.object({
     // "read" is look-and-search only; "write" adds creating and changing; "none" removes both.
     files: z
@@ -208,7 +210,7 @@ export const PersonaSchema = z.object({
         .array(entryId)
         .max(50)
         .describe(
-            "Which connected accounts are its hands. Named individually rather than by site, because two accounts on one site is the whole problem this solves. Naming one that is not connected yet is not an error: it is a card describing an account this sandbox has still to sign into.",
+            "Which connected accounts it speaks through. Named individually rather than by site, because two accounts on one site is the whole problem this solves. It narrows: an account here is still reached only when whoever the turn acts for may use it. Naming one that is not connected yet is not an error: it is a card describing an account this sandbox has still to sign into.",
         ),
     // Owner-written, not derived: a classifier routes better on prose than on a list of account ids. Absent, the router
     // has less to go on but still tries.
@@ -220,7 +222,7 @@ export const PersonaSchema = z.object({
             "What this persona is for, in one line. A new chat is routed onto a persona by this sentence, and the Personas page shows it under the name.",
         ),
     powers: PersonaPowersSchema.optional().describe(
-        "What a conversation wearing it may do. Absent means the full toolbox, so a card written before this existed behaves exactly as it did.",
+        "What a conversation wearing it may do, inside what whoever it acts for may. Absent means the full toolbox, so a card written before this existed behaves exactly as it did.",
     ),
     workspace: PersonaWorkspaceSchema.optional().describe("Where it works. Absent means the whole workspace."),
     context: PersonaContextSchema.optional().describe(
@@ -253,10 +255,12 @@ export const personaModels = (card: Pick<Persona, "models">, sources: readonly M
 // The one stock persona id; lives here because the daemon and the automations form are separate packages that must
 // agree on it exactly, or a Visitor chat pins to a card nobody creates.
 export const VISITOR_CHAT_PERSONA = "visitor-chat";
-// THE TWO BUILT-IN PERSONAS. Every turn acts as somebody: a turn naming no card wears one of these, picked by whether a
-// person is watching (personas.ts `turnPersona` in the daemon). They are constants rather than cards in personas.json:
-// that file is tracked in git, and "every account" is not something a card's account list can say, since the list is
-// written once and accounts are connected later. Neither can be edited or removed, and no card may take either id.
+// THE TWO BUILT-IN PERSONAS, postures like any card: every turn wears one, and a turn naming no card wears one of these,
+// picked by whether a person is watching (personas.ts `turnPersona` in the daemon). They are constants rather than cards
+// in personas.json: that file is tracked in git, and "every account" is not something a card's account list can say,
+// since the list is written once and accounts are connected later. Neither can be edited or removed, and no card may
+// take either id. Both stay inside what the turn's principals may (docs/architecture/access.md): "every account" is
+// every account they may use.
 // Full access: every tool and every signed-in account, what a chat a person starts without picking anyone acts as.
 export const FULL_ACCESS_PERSONA = "full-access";
 // No accounts: every tool but no signed-in account, what a run nobody watches acts as when it names no one, since

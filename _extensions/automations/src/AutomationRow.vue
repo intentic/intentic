@@ -21,6 +21,7 @@ import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
 import { useConversations, useSandboxZone } from "./useAutomations";
 import { isWatch, sourceLabel, watchLine } from "./watch";
+import { useServices } from "./service/useServices";
 import { usePersonaReach } from "./persona/usePersonaReach";
 import { answersCard } from "./senderSummary";
 import { visitorChatOf } from "./detail/visitorChat";
@@ -29,6 +30,8 @@ import { t } from "./i18n.js";
 // Two lines only: what it's called, and what it does when; everything else (prompt, URL, wake settings, run ledger,
 // edit form) sits behind the disclosure (AutomationDetail), so a page of thirty reads as states, not paragraphs. The
 // trigger glyph doubles as the health light. Shared by every shelf, since an enabled chore is an ordinary automation.
+
+const service = useServices();
 
 const props = defineProps<{
     automation: AutomationSummary;
@@ -247,6 +250,7 @@ const verbs = computed((): ActionItem[] => [
                     v-tooltip.top="t(`automationRow.needsApproval`)"
                     class="shrink-0 text-2xs text-subtle"
                 />
+                <span v-if="automation.runAs" class="text-2xs text-subtle" v-tooltip.top="service.summary(automation.runAs)">{{ t(`service.runsAs`) }} {{ service.label(automation.runAs) }}</span>
                 <!-- Its wakes reach less than expected: a persona that is gone (nothing at all), or none (no signed-in account). -->
                 <Icon
                     v-if="reachTip"

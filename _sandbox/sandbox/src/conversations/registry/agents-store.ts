@@ -94,6 +94,9 @@ const IdentitySchema = z.object({
     startedBy: z.string().optional(),
     areas: z.array(z.string()).optional(),
     people: z.array(z.string()).optional(),
+    // Added 2026-10-26, optional: every service a turn of it ran as (schemas/services.ts), grown like `people` and never
+    // shrinking (access/principal-chain.ts). A row written before it acts for no service.
+    services: z.array(z.string()).optional(),
     startIn: z.string().optional(),
     actsAs: z.string().optional(),
     forkedFrom: ForkedFromSchema.optional(),

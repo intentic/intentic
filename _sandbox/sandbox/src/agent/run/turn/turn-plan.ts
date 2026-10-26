@@ -88,6 +88,7 @@ const standingOf = (decision: TurnDecision, input: TurnInput): TurnStanding => {
         withheldByReach: decision.withheldByReach,
         fence: persona?.fence,
         powers: persona?.powers ?? PersonaPowersSchema.parse({}),
+        ...opt("ceiling", decision.ceiling),
         runtime: runtime.runtime,
         secrets: runtime.secrets,
     };

@@ -26,6 +26,7 @@ import { useCiDelivery } from "./useCiDelivery";
 import { useConversations, useSenders, useWatchCheck } from "./useAutomations";
 import { type AutomationFormState, type ConditionKind, type SenderRuleDraft, splitIds, type TargetKind, type TriggerKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
+import ServicePicker from "./service/ServicePicker.vue";
 import { usePersonaOptions } from "./persona/personaOptions";
 
 // Shared create/edit fields use useAutomationForm, with content-sized When, Then and Runs as steps in a label rail.
@@ -1066,6 +1067,7 @@ const setProvider = (provider: string): void => {
                         <!-- Its error is about spending, not syntax, so it's shown here, not only on the disabled save button. -->
                         <p v-if="modelsError !== undefined && touched.has(`models`)" class="text-2xs text-danger">{{ modelsError }}</p>
                     </div>
+                    <ServicePicker v-model="form.runAs" />
                     <div class="ui-field min-w-0">
                         <span class="ui-field-label">{{ t(`automationFields.persona`) }}</span>
                         <!-- A pick by hand ends the trigger's default for a new automation (usePersonaDefault.ts). -->
@@ -1163,6 +1165,7 @@ const setProvider = (provider: string): void => {
                                         class="w-full"
                                     />
                                 </div>
+                                <ServicePicker v-model="rule.runAs" inherit class="w-full max-w-xs" />
                                 <label class="flex items-center gap-2 text-xs text-content">
                                     <ToggleSwitch
                                         v-model="rule.requireApproval"

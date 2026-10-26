@@ -1,4 +1,6 @@
 import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
+import { type ToolCeiling, ToolCeilingSchema } from "@intentic/sandbox-contract/schemas/tool-ceiling";
+import { entryId } from "@intentic/sandbox-contract/schemas/internal";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { ProofMethod } from "@intentic/sandbox-contract/schemas/system";
 import {
@@ -151,6 +153,14 @@ export interface Member {
     // The AI accounts their conversations may run on, keyed as the contract's `aiAccountKey` (agent/run/decide/
     // account-reach.ts). Absent means every one, which is what a row written before it meant; never on a maintainer.
     readonly aiAccounts?: readonly string[];
+    // The most their conversations' tools may be (access/principal-chain.ts). Absent is no limit; never on a maintainer.
+    readonly tools?: ToolCeiling;
+    // A chatting guest's assistants, by persona id, inside the ones their areas hold (personas/persona-reach.ts).
+    // Absent is every one their areas hold.
+    readonly assistants?: readonly string[];
+    // The access profile the answers above were written from (docs/architecture/access.md); saving that profile writes
+    // them again. Absent is answers of the row's own.
+    readonly profile?: string;
 }
 
 // What a grant decides, in the shape both the store and the route pass it around in. `emailSignIn` and `credentials`
@@ -165,6 +175,10 @@ export interface MemberGrant {
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
     readonly aiAccounts?: readonly string[] | "all" | undefined;
+    readonly tools?: ToolCeiling | "all" | undefined;
+    readonly assistants?: readonly string[] | "all" | undefined;
+    // The profile these answers were written from; absent unlinks the row (sandbox-contract MemberGrantSchema).
+    readonly profile?: string | undefined;
 }
 
 export interface MembersStore {
@@ -196,6 +210,11 @@ const MemberSchema = z
         edit: EditScopeSchema.optional(),
         // Added 2026-10-22, optional: a row written before it is nobody whose work lands by itself.
         lands: z.literal(true).optional(),
+        // Added 2026-10-26, optional: a row written before them has no tool ceiling, every assistant its areas hold, and
+        // answers of its own (docs/architecture/access.md).
+        tools: ToolCeilingSchema.optional(),
+        assistants: z.array(entryId).optional(),
+        profile: entryId.optional(),
     })
     .refine((member) => accessRefusal(memberAccess(member)) === undefined && tierOf(memberAccess(member)) === member.role, {
         message: "a row's access must be one a grant could write, and its role the tier that access makes",
@@ -310,6 +329,8 @@ export interface Caller extends VerifiedIdentity {
     // of the area manifest per request answers it freshly: editing an area narrows its holders on their very next
     // call, like a re-grade does.
     readonly areas?: readonly string[];
+    // A chatting guest's assistants by persona id, inside what their areas hold; absent is every one they hold.
+    readonly assistants?: readonly string[];
 }
 
 // What authorize() hands the middleware: the caller and the proof behind them, so a session renewal keeps its methods
@@ -509,7 +530,8 @@ export const createAuthorizer = (deps: {
         // The tier is the one the access makes, never the row's own word for it: every floor reads it.
         const access = memberAccess(member);
         const areas = access.see === undefined ? {} : { areas: access.see };
-        const caller: ProvenCaller = { ...proof, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas };
+        const assistants = member.assistants === undefined ? {} : { assistants: member.assistants };
+        const caller: ProvenCaller = { ...proof, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas, ...assistants };
         return access.lands === true ? { ...caller, lands: true } : caller;
     };
     // The require-passkey policy, read per request like the roster (proof-methods.ts says which proofs pass it).

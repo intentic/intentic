@@ -13,13 +13,13 @@ import { type QueueChange, queueView } from "../../conversations/actor/conversat
 import { rewindConversation } from "../checkpoints/rewind.js";
 import { commandListOf, commandsOf } from "../providers/agent-commands.js";
 import { switchAccount } from "../providers/accounts/switch-account.js";
-import { areasOf } from "../../auth/principal.js";
+import { areasOf, runAsOf } from "../../auth/principal.js";
 import { operatorHere } from "../../auth/operator.js";
 import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { runToAttach } from "./next-run.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
-import { refuseUnlessReachable } from "../../personas/persona-reach.js";
+import { assistantsOf, refuseUnlessReachable } from "../../personas/persona-reach.js";
 import { opt } from "../../opt.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
 import { applyReply } from "../run/turn/turn-interactions.js";
@@ -133,6 +133,7 @@ export const createAgentRoutes = (services: Services) => {
                     conversationId,
                     ...spokenBy(speaker),
                     ...opt("areas", areasOf(context.identity)),
+                    ...opt("runAs", runAsOf(context.principal)),
                 });
                 if (started === undefined) {
                     throw new ORPCError("CONFLICT", { message: "a turn is already running in that conversation" });
@@ -148,6 +149,7 @@ export const createAgentRoutes = (services: Services) => {
                     conversationId,
                     ...spokenBy(speaker),
                     ...opt("areas", areasOf(context.identity)),
+                    ...opt("runAs", runAsOf(context.principal)),
                 },
             });
             if ("invalid" in receipt) {
@@ -361,6 +363,8 @@ export const createAgentRoutes = (services: Services) => {
         // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the
         // composer waits on this before the first turn goes out, so a failure here must cost that turn nothing but a
         // sentence. Read within the asker's own fence, so a persona it lands on is one they may actually send through.
-        routeChat: i.routeChat.handler(({ input, context, signal }) => routeChat(services, input, context.identity?.areas, signal)),
+        routeChat: i.routeChat.handler(({ input, context, signal }) =>
+            routeChat(services, input, context.identity?.areas, signal, assistantsOf(context.identity)),
+        ),
     };
 };

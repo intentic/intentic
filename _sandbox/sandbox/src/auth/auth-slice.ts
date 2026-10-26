@@ -38,6 +38,8 @@ import { type ControlTokens, controlTokensDocument, fileControlTokens, minterBou
 import { type DoorTokens, doorTokensDocument, fileDoorTokens } from "./tokens/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./tokens/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./tokens/ws-tickets.js";
+import { type AccessProfiles, accessProfilesDocument, fileAccessProfiles } from "./principals/access-profiles-store.js";
+import { fileServices, servicesDocument, type ServicesStore } from "./principals/services-store.js";
 
 // What authenticates a caller: sessions, per-boot and per-extension tokens, passkeys and the member roster.
 export interface AuthSlice {
@@ -58,6 +60,10 @@ export interface AuthSlice {
     readonly passkeyCeremonies: PasskeyCeremonies;
     // Shared-access grants besides the owner; the daemon enforces these, the platform only mirrors them.
     readonly members: MembersStore;
+    // The access profiles people and services hold, the sandbox's own and its organisation's (docs/architecture/access.md).
+    readonly accessProfiles: AccessProfiles;
+    // Who unattended work runs as: each a steward's authority narrowed by a profile.
+    readonly services: ServicesStore;
     // Bound owner's email, read-only; undefined before the first trust-on-first-use sign-in; binding is elsewhere.
     readonly ownerEmail: () => Promise<string | undefined>;
     // The platform's identity key the authorizer verifies assertions with; the announcer hands it each key it is answered.
@@ -222,6 +228,14 @@ export const createAuthSlice = (
         passkeys,
         passkeyCeremonies,
         members,
+        accessProfiles: fileAccessProfiles({
+            path: join(config.historyRoot, accessProfilesDocument.path),
+            orgPolicy,
+            onInvalid: (id, reason) => logger.warn(`access profiles: skipping unreadable profile "${id}" (${reason}); whoever holds it reaches nothing until it parses`),
+        }),
+        services: fileServices(join(config.historyRoot, servicesDocument.path), (id, reason) =>
+            logger.warn(`services: skipping unreadable service "${id}" (${reason}); whatever runs as it is skipped until it parses`),
+        ),
         ownerEmail: () => ownerStore.read(),
         platformIdentityKey,
         auth,

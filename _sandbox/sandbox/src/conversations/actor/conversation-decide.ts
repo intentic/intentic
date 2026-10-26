@@ -70,9 +70,9 @@ export interface BeginTurn {
     readonly origin?: AgentOrigin;
     readonly startIn?: string;
     readonly startedBy?: string; // Who asked for this turn, as the daemon verified it.
-    // The member the conversation belongs to when this turn opens it.
-    readonly owner?: Pick<SessionOwner, "email" | "name">;
+    readonly owner?: Pick<SessionOwner, "email" | "name">; // The member the conversation belongs to when this turn opens it.
     readonly areas?: readonly string[]; // The fence that member holds, as area ids.
+    readonly runAs?: string; // The service this turn acts as, latched into the conversation's `services`.
     readonly forkedFrom?: ForkedFrom;
     // A fresh session's origin and kind (`startedBy` then names that origin as its parent), and whether this opens its
     // owner's home conversation, which only the route that verified whose it is says (agent.routes.ts homeTurn).

@@ -78,8 +78,11 @@ export const ORG_SECTION_ROUTES = {
             "extensions.devReload",
         ],
     },
-    // Leaving (`DELETE /members/self`) stays open: nobody can be held in a sandbox by a policy.
-    access: { changes: ["POST /members", "DELETE /members"] },
+    // Leaving (`DELETE /members/self`) stays open: nobody can be held in a sandbox by a policy. Profiles and services
+    // decide what people and unattended work may reach, so they are Access's too (docs/architecture/access.md).
+    access: {
+        changes: ["POST /members", "DELETE /members", "accessProfiles.save", "accessProfiles.remove", "services.save", "services.remove"],
+    },
     areas: { changes: ["areas.save", "areas.remove"] },
     personas: { changes: ["personas.save", "personas.remove", "personas.savePrompt", "personas.saveSkill", "personas.removeSkill"] },
     updates: { changes: ["system.autoUpdate", "system.skipUpdate"] },

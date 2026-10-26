@@ -1,6 +1,9 @@
 import type { Member } from "../auth/auth.js";
 import {
+    createConversationAccountReach,
+    createConversationCeiling,
     createConversationReach,
+    accountReachAllows,
     outOfReachNote,
     peopleOf,
     REACH_ALL,
@@ -117,4 +120,46 @@ test("the model is told what is left out and that nobody can be asked for it, on
     expect(note?.text).toContain("`reddit`");
     expect(note?.text).toContain("cy@example.com");
     expect(note?.text).toContain("do not raise `secrets request`");
+});
+
+// A service acts for its steward, held to its profile: a turn running as one spends what both allow, on AI accounts both
+// allow, with tools under its profile's ceiling; one whose steward left spends nothing.
+describe("a conversation running as a service", () => {
+    const deps = {
+        members: { list: async () => roster },
+        ownerEmail: async () => OWNER,
+        entry: () => undefined,
+        services: {
+            list: async () => [
+                { id: "bot", steward: OWNER, profile: "posting" },
+                { id: "bobs", steward: "bob@example.com", profile: "posting" },
+                { id: "orphan", steward: "gone@example.com" },
+            ],
+        },
+        profiles: { list: async () => [{ id: "posting", credentials: { capabilities: ["reddit"], secrets: [] }, aiAccounts: ["claude:work"], tools: { shell: false } }] },
+    };
+
+    test("spends what its steward and its profile both allow", async () => {
+        const reach = await createConversationReach(deps)(undefined, [], ["bobs"]);
+        expect(reachAllows(reach, "capability", "reddit")).toBe(true);
+        expect(reachAllows(reach, "capability", "github")).toBe(false);
+        expect(reachAllows(reach, "secret", "DATABASE_URL")).toBe(false);
+        const owners = await createConversationReach(deps)(undefined, [], ["bot"]);
+        expect(reachAllows(owners, "capability", "reddit")).toBe(true);
+        expect(reachAllows(owners, "capability", "fly")).toBe(false);
+    });
+
+    test("runs only on AI accounts its profile allows, and under its tool ceiling", async () => {
+        const accounts = await createConversationAccountReach(deps)(undefined, [], ["bot"]);
+        expect(accountReachAllows(accounts, "claude", "work")).toBe(true);
+        expect(accountReachAllows(accounts, "claude", "personal")).toBe(false);
+        await expect(createConversationCeiling(deps)(undefined, [], ["bot"])).resolves.toEqual({ shell: false });
+        await expect(createConversationCeiling(deps)(undefined, [OWNER])).resolves.toBeUndefined();
+    });
+
+    test("spends nothing once its steward has left", async () => {
+        const reach = await createConversationReach(deps)(undefined, [], ["orphan"]);
+        expect(reachAllows(reach, "capability", "github")).toBe(false);
+        expect(reach).toMatchObject({ kind: "some", who: [`the service "orphan" (for gone@example.com)`] });
+    });
 });

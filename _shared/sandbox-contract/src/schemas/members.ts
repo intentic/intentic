@@ -1,7 +1,9 @@
 // members: the daemon's shared-access roster (GET/POST/DELETE /members), who besides the owner reaches this sandbox
 import { z } from "zod";
 import type { CapabilityKind } from "./capabilities.js";
+import { entryId } from "./internal.js";
 import { type GrantedRole, GrantedRoleSchema, MemberRoleSchema } from "./shared.js";
+import { ToolCeilingSchema } from "./tool-ceiling.js";
 
 // WHAT A PERSON'S CONVERSATIONS MAY SPEND: the connected capabilities (by id) and the stored secrets (by name) an agent
 // working for them is handed. Enforced by the daemon, not told to the model: a capability outside it is never mounted
@@ -191,6 +193,21 @@ export const MemberSchema = z.object({
         .describe(
             "The AI accounts their conversations may run on, each `provider:account`, or a provider's id alone for every account of it (how an API-key endpoint is named). Absent means every one, including any connected later.",
         ),
+    tools: ToolCeilingSchema.optional().describe(
+        "The most their conversations' tools may be, shelf by shelf; a persona only narrows inside it. Absent means no limit.",
+    ),
+    assistants: z
+        .array(entryId)
+        .max(50)
+        .optional()
+        .describe(
+            "For a guest who chats: which of the assistants working in their areas they may talk to, by persona id. Absent means every one that works there.",
+        ),
+    profile: entryId
+        .optional()
+        .describe(
+            "The access profile their answers come from (docs/architecture/access.md). Its answers are written out on this row too, and saving the profile rewrites them. Absent means answers of their own.",
+        ),
 });
 export type Member = z.infer<typeof MemberSchema>;
 
@@ -214,7 +231,12 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 // them still grants what it always did. `lands` is written as sent: absent is no, so a re-grade that never mentions it
 // can never hand a home-only person's agent the authority to land. The role sent must be the tier the access makes (`tierOf`): two answers to one
 // question are refused rather than one of them guessed away. `aiAccounts` reads as `credentials` does: `all` lifts it, a
-// list sets it, absent keeps the row's; a maintainer is refused a list, since the tier runs on every account.
+// list sets it, absent keeps the row's; a maintainer is refused a list, since the tier runs on every account. `tools` and
+// `assistants` read the same way.
+// `profile` names an access profile instead of answering on the row: the daemon writes that profile's answers out on
+// the row and ignores the access fields sent beside it, and the role sent must still be the tier the profile makes.
+// Absent is answers of the row's own, so a re-grade from an editor that predates profiles unlinks the row, keeping
+// the answers it carried, rather than leaving a link the grant did not mean. A maintainer is refused one.
 export const MemberGrantSchema = z.object({
     email: z.string(),
     role: GrantedRoleSchema,
@@ -225,6 +247,9 @@ export const MemberGrantSchema = z.object({
     emailSignIn: z.boolean().optional(),
     credentials: z.union([z.literal("all"), CredentialReachSchema]).optional(),
     aiAccounts: z.union([z.literal("all"), z.array(AiAccountKeySchema).max(500)]).optional(),
+    tools: z.union([z.literal("all"), ToolCeilingSchema]).optional(),
+    assistants: z.union([z.literal("all"), z.array(entryId).max(50)]).optional(),
+    profile: entryId.optional(),
 });
 export type MemberGrant = z.infer<typeof MemberGrantSchema>;
 
@@ -243,6 +268,9 @@ export const MemberSelfSchema = z.object({
         .array(AiAccountKeySchema)
         .optional()
         .describe("The AI accounts their conversations may run on, as the roster keys them, so a picker offers only those. Absent means every one."),
+    tools: ToolCeilingSchema.optional().describe("The most their conversations' tools may be. Absent means no limit."),
+    assistants: z.array(entryId).optional().describe("For a guest who chats: the assistants they may talk to. Absent means every one in their areas."),
+    profile: entryId.optional().describe("The access profile their access comes from. Absent means answers of their own."),
 });
 export type MemberSelf = z.infer<typeof MemberSelfSchema>;
 

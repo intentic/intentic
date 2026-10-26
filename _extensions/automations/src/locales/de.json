@@ -90,8 +90,8 @@
         "onlyOnce": "Nur einmal",
         "onlyRepoOptional": "Nur dieses Repo (optional)",
         "peopleRuleNames": "Namen für Personenregel {index}",
-        "persona": "Persona",
-        "personaAutomationRuns": "Persona, als die diese Automation läuft",
+        "persona": "Spricht als",
+        "personaAutomationRuns": "Spricht als",
         "personaRuleAnswers": "Persona-Regel {index} antwortet als",
         "pickAtLeastOne": "Wählen Sie mindestens einen Tag.",
         "pickModel": "Ein Modell wählen",
@@ -121,7 +121,7 @@
         "strangersWritePromptsSaving": "Fremde schreiben diese Prompts, deshalb fügt das Speichern Ihren Personas einen Nur-Lese-Empfang hinzu.",
         "sun": "So",
         "then": "Dann",
-        "theyTalkTo": "Sie sprechen mit",
+        "theyTalkTo": "Spricht als",
         "thu": "Do",
         "toolNamesCommaSeparated": "Werkzeugnamen, durch Komma getrennt. Leer lässt die eigene Liste der Persona unangetastet.",
         "toolNamesJobMay": "Werkzeugnamen, die dieser Job aufrufen darf",
@@ -538,7 +538,7 @@
         "trigger": "Startet bei"
     },
     "personaProperty": {
-        "runsAs": "Läuft als"
+        "runsAs": "Spricht als"
     },
     "modelProperty": {
         "cannotRunOn": "Eine Automation kann nicht auf {model} laufen.",
@@ -588,5 +588,31 @@
     "automationEditor": {
         "allSettings": "Alle Einstellungen",
         "back": "Zurück"
+    },
+    "service": {
+        "runsAs": "Läuft als",
+        "owner": "Eigentümer (nur durch seine Persona begrenzt)",
+        "authority": "Befugnisse: Zugriff der verantwortlichen Person, begrenzt durch das Profil. Personas schränken ihn weiter ein.",
+        "inherit": "Wie die Automation",
+        "steward": "Verantwortlich: {email}",
+        "stewardLimits": "Gesamter Zugriff der verantwortlichen Person",
+        "profileUnavailable": "Profil nicht verfügbar: {id}",
+        "unavailable": "Dienst nicht verfügbar: {id}",
+        "noFiles": "Keine Dateien",
+        "readFiles": "Dateien nur lesen",
+        "allConnections": "Alle Verbindungen",
+        "connections": "Verbindungen: {count}",
+        "aiAccounts": "KI-Konten: {accounts}",
+        "all": "Alle",
+        "none": "Keine",
+        "ruleSummary": "{rule}: läuft als {service}",
+        "tools": {
+            "shell": "Keine Befehle",
+            "code": "Keine Skripte",
+            "web": "Kein Web",
+            "browser": "Kein Browser",
+            "delegate": "Keine Unteragenten",
+            "sandbox": "Keine Sandbox-Einstellungen"
+        }
     }
 }

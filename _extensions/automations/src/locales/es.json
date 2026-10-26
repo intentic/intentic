@@ -90,8 +90,8 @@
         "onlyOnce": "Solo una vez",
         "onlyRepoOptional": "Solo este repo (opcional)",
         "peopleRuleNames": "Nombres de la regla de personas {index}",
-        "persona": "Persona",
-        "personaAutomationRuns": "Persona como la que se ejecuta esta automatización",
+        "persona": "Habla como",
+        "personaAutomationRuns": "Habla como",
         "personaRuleAnswers": "La regla de persona {index} responde como",
         "pickAtLeastOne": "Elige al menos un día.",
         "pickModel": "Elige un modelo",
@@ -121,7 +121,7 @@
         "strangersWritePromptsSaving": "Estas indicaciones las escriben desconocidos, así que guardar añade una recepción de solo lectura a tus personas.",
         "sun": "Dom",
         "then": "Entonces",
-        "theyTalkTo": "Hablan con",
+        "theyTalkTo": "Habla como",
         "thu": "Jue",
         "toolNamesCommaSeparated": "Nombres de herramientas, separados por comas. Vacío deja en paz la lista propia de la persona.",
         "toolNamesJobMay": "Nombres de herramientas que esta tarea puede llamar",
@@ -538,7 +538,7 @@
         "trigger": "Empieza con"
     },
     "personaProperty": {
-        "runsAs": "Actúa como"
+        "runsAs": "Habla como"
     },
     "modelProperty": {
         "cannotRunOn": "Una automatización no puede ejecutarse en {model}.",
@@ -588,5 +588,31 @@
     "automationEditor": {
         "allSettings": "Todos los ajustes",
         "back": "Volver"
+    },
+    "service": {
+        "runsAs": "Se ejecuta como",
+        "owner": "Propietario (limitado solo por su persona)",
+        "authority": "Autoridad: acceso del responsable, limitado por su perfil. Las personas solo lo restringen más.",
+        "inherit": "Igual que la automatización",
+        "steward": "Responsable: {email}",
+        "stewardLimits": "Todo el acceso del responsable",
+        "profileUnavailable": "Perfil no disponible: {id}",
+        "unavailable": "Servicio no disponible: {id}",
+        "noFiles": "Sin archivos",
+        "readFiles": "Archivos de solo lectura",
+        "allConnections": "Todas las conexiones",
+        "connections": "Conexiones: {count}",
+        "aiAccounts": "Cuentas de IA: {accounts}",
+        "all": "Todas",
+        "none": "Ninguna",
+        "ruleSummary": "{rule}: se ejecuta como {service}",
+        "tools": {
+            "shell": "Sin comandos",
+            "code": "Sin scripts",
+            "web": "Sin web",
+            "browser": "Sin navegador",
+            "delegate": "Sin subagentes",
+            "sandbox": "Sin ajustes del entorno"
+        }
     }
 }

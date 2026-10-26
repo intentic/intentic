@@ -391,3 +391,47 @@ describe(`the stored rules`, () => {
         await expect(refuseWhenOrgHolds(admin.prisma, { orgId: null }, `access`)).resolves.toBeUndefined();
     });
 });
+
+it(`stores profiles and the ceiling and delivers them with the policy`, async () => {
+    const { admin, org, orgs } = await started();
+    const rules = {
+        sections: {},
+        profiles: [{ id: `clerk`, agents: `chat` as const, tools: { shell: false }, aiAccounts: [`claude:work`], areas: [`office`], credentials: { capabilities: [`mail`], secrets: [] }, assistants: [`helper`] }],
+        ceiling: { tools: { files: `read` as const, web: false }, aiAccounts: [`claude`] },
+    };
+    const saved = await call(orgRoutes.setPolicy, { orgId: org.id, rules, expectedVersion: 1 }, { context: admin });
+    expect(saved.policy).toEqual(rules);
+    expect(orgs[0]?.policy).toEqual(rules);
+    await call(orgRoutes.bindSandbox, { orgId: org.id, sandboxId: `sbx-1` }, { context: admin });
+    expect((await orgPolicyForToken(admin.prisma, `digest-1`, undefined))?.policy).toEqual({ orgId: org.id, orgName: org.name, version: 2, ...rules });
+    const member = await call(orgRoutes.addMember, { orgId: org.id, email: `reader@gmina.test`, role: `member` }, { context: admin });
+    expect(member.policy).toEqual(rules);
+    const seen = await call(orgRoutes.get, { orgId: org.id }, { context: as(admin.prisma, `reader@gmina.test`) });
+    expect(seen.policy).toEqual(rules);
+    await expect(call(orgRoutes.setPolicy, { orgId: org.id, rules, expectedVersion: 2 }, { context: as(admin.prisma, `reader@gmina.test`) })).rejects.toMatchObject({ code: `FORBIDDEN` });
+});
+
+it.each([
+    { profiles: [{ id: `same` }, { id: `same` }] },
+    { profiles: [{ id: `bad id` }] },
+    { profiles: Array.from({ length: 51 }, (_, n) => ({ id: `p${n}` })) },
+    { ceiling: { tools: { files: `execute` } } },
+    { ceiling: { aiAccounts: [``] } },
+])(`refuses invalid access policy rules %j without saving`, async (invalid) => {
+    const { admin, org, orgs } = await started();
+    // SAFETY: malformed wire input intentionally exercises the route's schema validation.
+    const rules = { sections: {}, ...invalid } as never;
+    await expect(call(orgRoutes.setPolicy, { orgId: org.id, rules, expectedVersion: 1 }, { context: admin })).rejects.toMatchObject({ code: `BAD_REQUEST` });
+    expect(orgs[0]?.policyVersion).toBe(1);
+    expect(orgs[0]?.policy).toEqual({});
+});
+
+it(`reads stored access rules independently, drops invalid profiles and caps valid profiles`, () => {
+    expect(rulesOf({ profiles: [null, { id: `bad id` }, { id: `reader`, tools: { files: `read` } }], ceiling: { tools: { shell: false }, aiAccounts: [] } })).toEqual({
+        sections: {}, profiles: [{ id: `reader`, tools: { files: `read` } }], ceiling: { tools: { shell: false }, aiAccounts: [] },
+    });
+    expect(rulesOf({ profiles: `bad`, ceiling: { tools: { shell: `no` } } })).toEqual({ sections: {} });
+    expect(rulesOf({ profiles: [], ceiling: {} })).toEqual({ sections: {}, profiles: [], ceiling: {} });
+    expect(rulesOf({ profiles: [null, ...Array.from({ length: 51 }, (_, n) => ({ id: `p${n}` }))] }).profiles).toEqual(Array.from({ length: 50 }, (_, n) => ({ id: `p${n}` })));
+    expect(rulesOf({ sections: {} })).toEqual({ sections: {} });
+});

@@ -4,6 +4,8 @@ import type { AppEnv } from "../../app-env.js";
 import { CONTROL_SCOPES, type ControlScope } from "./control-tokens.js";
 import { ownerDenied, unavailableIfUnreadable } from "../owner-gates.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { ServiceRefSchema } from "@intentic/sandbox-contract/schemas/services";
+import { opt } from "../../opt.js";
 
 // Control tokens, minted by the owner or a maintainer, durable and revocable; raw value returned exactly once. Plain
 // routes before the oRPC catch-all. A token file this build cannot read refuses a mint or a revoke (control-tokens.ts),
@@ -12,9 +14,11 @@ import { defineRawRoutes } from "../../http/raw-route-server.js";
 // Expiry is optional and absent means never, since the same shape serves both a laptop-bound editor token and a
 // self-expiring CI secret.
 
-export type ControlTokenRoutesDeps = Pick<Services, "auth" | "controlTokens">;
+export type ControlTokenRoutesDeps = Pick<Services, "auth" | "controlTokens"> & Partial<Pick<Services, "services">>;
 
-type MintRequest = { readonly label: string; readonly scope: ControlScope; readonly expiresAt?: number } | { readonly error: string };
+type MintRequest =
+    | { readonly label: string; readonly scope: ControlScope; readonly expiresAt?: number; readonly runAs?: string }
+    | { readonly error: string };
 
 // A usable expiry is a finite epoch-ms instant still ahead of now; anything else could never authorize a call.
 const futureInstant = (value: unknown, now: number): value is number => typeof value === "number" && Number.isFinite(value) && value > now;
@@ -24,7 +28,7 @@ const labelOf = (value: unknown, fallback: string): string => (typeof value === 
 // The mint body, checked field by field: a bad scope or a past expiry both ask for a token that could never work.
 // Refused before anything is stored.
 const parseMint = (body: unknown, now: number): MintRequest => {
-    const fields = typeof body === "object" && body !== null ? (body as { label?: unknown; scope?: unknown; expiresAt?: unknown }) : {};
+    const fields = typeof body === "object" && body !== null ? (body as { label?: unknown; scope?: unknown; expiresAt?: unknown; runAs?: unknown }) : {};
     const scope = CONTROL_SCOPES.find((candidate) => candidate === fields.scope);
     if (scope === undefined) {
         return { error: `scope must be one of: ${CONTROL_SCOPES.join(", ")}` };
@@ -32,7 +36,16 @@ const parseMint = (body: unknown, now: number): MintRequest => {
     if (fields.expiresAt !== undefined && !futureInstant(fields.expiresAt, now)) {
         return { error: "expiresAt must be a future time in epoch milliseconds, or absent for a token that lives until revoked" };
     }
-    return { label: labelOf(fields.label, scope), scope, ...(futureInstant(fields.expiresAt, now) ? { expiresAt: fields.expiresAt } : {}) };
+    const runAs = ServiceRefSchema.optional().safeParse(fields.runAs);
+    if (!runAs.success) {
+        return { error: "runAs must name a service, or be absent for a token that acts for the owner" };
+    }
+    return {
+        label: labelOf(fields.label, scope),
+        scope,
+        ...(futureInstant(fields.expiresAt, now) ? { expiresAt: fields.expiresAt } : {}),
+        ...opt("runAs", runAs.data),
+    };
 };
 
 const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
@@ -46,6 +59,10 @@ const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
         if ("error" in request) {
             return c.json({ error: request.error }, 400);
         }
+        // A token naming a service nobody wrote would start turns that reach nothing (access/principal-chain.ts).
+        if (request.runAs !== undefined && (await services.services?.get(request.runAs)) === undefined) {
+            return c.json({ error: `no such service: ${request.runAs}` }, 400);
+        }
         // The minter's identity is what the middleware verified for this request, never a field of the body.
         const createdBy = c.get("identity")?.email;
         return unavailableIfUnreadable(c, async () =>
@@ -53,6 +70,7 @@ const createControlTokenRoutes = (services: ControlTokenRoutesDeps) => ({
                 await services.controlTokens.mint(request.label, request.scope, {
                     ...(createdBy !== undefined ? { createdBy } : {}),
                     ...(request.expiresAt !== undefined ? { expiresAt: request.expiresAt } : {}),
+                    ...opt("runAs", request.runAs),
                 }),
             ),
         );

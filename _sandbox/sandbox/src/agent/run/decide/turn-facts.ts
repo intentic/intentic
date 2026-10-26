@@ -15,6 +15,7 @@ import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceab
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import type { ConversationReach } from "../../../secrets/credential-reach.js";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
@@ -89,6 +90,8 @@ export interface AdmittedTurnFacts {
     readonly releases: CredentialGrants;
     // What the people this conversation works for may spend; outside it, nothing is mounted and nothing is released.
     readonly reach: ConversationReach;
+    // The most its tools may be, from the same principals; the premise caps the persona with it (turn-premise.ts).
+    readonly ceiling: ToolCeiling | undefined;
     readonly iqTeaching: IqSearchTeaching | undefined;
     // Read on both arms of its experiment, so a control turn can still name the revision it was withheld from.
     readonly fieldNotes: FieldNotes | undefined;
@@ -256,6 +259,14 @@ const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry:
     }
 };
 
+// Who a turn acts for before its conversation has recorded it: the person asking, the service it runs as. Begin records
+// both, and planning must not lean on its order.
+const principalsOfTurn = (input: RoutedTurn): [string | undefined, readonly string[], readonly string[]] => [
+    input.conversationId,
+    input.owner === undefined ? [] : [input.owner.email],
+    input.runAs === undefined ? [] : [input.runAs],
+];
+
 // The route a turn takes once the people it works for have their say over the account (account-reach.ts): asked after
 // the blocked-account route, which it can only narrow. Unreadable verdicts route as before, as above: the account the
 // turn runs on is still one the reach was asked about, since the reach refuses rather than guesses when it cannot read.
@@ -267,7 +278,7 @@ const reachedRouteOf = async (
 ): Promise<ReachedRoute> => {
     const [route, reach] = await Promise.all([
         accountRouteOf(services, input, entry),
-        services.accountReach(input.conversationId, input.owner === undefined ? [] : [input.owner.email]),
+        services.accountReach(...principalsOfTurn(input)),
     ]);
     if (reach.kind === "all") {
         return route;
@@ -298,6 +309,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "credentialGrants"
     | "credentialReach"
     | "accountReach"
+    | "toolCeiling"
     | "cursorStore"
     | "dependencies"
     | "endpointModels"
@@ -352,15 +364,16 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     );
     // The stored releases are in before they are copied, so a yes from before a restart reaches this turn. The reach
     // names this turn's person beside the conversation's own: begin records them, and this must not lean on its order.
-    const [gates, accountRoute, reach] = await Promise.all([
+    const [gates, accountRoute, reach, ceiling] = await Promise.all([
         gatesOf(services),
         reachedRouteOf(services, input, entry, installed),
-        services.credentialReach(input.conversationId, input.owner === undefined ? [] : [input.owner.email]),
+        services.credentialReach(...principalsOfTurn(input)),
+        services.toolCeiling(...principalsOfTurn(input)),
         services.credentialGrants.ready,
     ]);
     // A conversation's own grants (personas/conversation-grants.ts) widen its persona from the turn after they are given.
     const grant = input.conversationId === undefined ? undefined : await services.conversationGrants.of(input.conversationId);
-    const premise = premiseOf({ entry, settings, personas, areas, grant }, input, runtime);
+    const premise = premiseOf({ entry, settings, personas, areas, grant, ceiling }, input, runtime);
     const iqTeaching = await iqTeachingFor(services, premise);
     // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
@@ -393,6 +406,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         gates,
         releases: releasesOf(services.credentialGrants, gates, input.conversationId),
         reach,
+        ceiling,
         iqTeaching,
         fieldNotes: brief,
         personaPrompt,

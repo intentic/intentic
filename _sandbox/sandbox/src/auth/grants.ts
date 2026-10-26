@@ -1,3 +1,4 @@
+import { opt } from "../opt.js";
 import { type ExtensionReach, extensionRouteReach, listenerSegmentOf } from "@intentic/extension-manifest";
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
@@ -175,7 +176,7 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
             }
             // allow(silent-catch): a failed last-used stamp must not reject an otherwise valid request.
             await controlTokens.touch(token.id).catch(() => undefined);
-            return { verdict: "ok", principal: { kind: "control", id: token.id, label: token.label, scope: token.scope } };
+            return { verdict: "ok", principal: { kind: "control", id: token.id, label: token.label, scope: token.scope, ...opt("runAs", token.runAs) } };
         },
     },
     {

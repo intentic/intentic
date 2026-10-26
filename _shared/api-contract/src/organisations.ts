@@ -68,7 +68,10 @@ const OrgNameSchema = z.string().trim().min(2).max(120);
 
 export const orgContract = {
     list: oc.route({ method: "GET", path: "/org" }).output(OrgListSchema),
-    create: oc.route({ method: "POST", path: "/org/create" }).input(z.object({ name: OrgNameSchema })).output(OrgDetailSchema),
+    create: oc
+        .route({ method: "POST", path: "/org/create" })
+        .input(z.object({ name: OrgNameSchema }))
+        .output(OrgDetailSchema),
     get: oc.route({ method: "POST", path: "/org/get" }).input(orgIdInput).output(OrgDetailSchema),
     // A new edition of the rules. `expectedVersion` is the edition the admin edited, so two admins saving at once
     // cannot silently undo each other: the second is answered CONFLICT and reloads.
@@ -78,7 +81,10 @@ export const orgContract = {
         .route({ method: "POST", path: "/org/policy" })
         .input(
             orgIdInput.extend({
-                rules: OrgPolicyRulesSchema.extend({ preset: z.array(PresetGroupSchema).max(20).optional() }),
+                rules: OrgPolicyRulesSchema.extend({ preset: z.array(PresetGroupSchema).max(20).optional() }).refine(
+                    (rules) => new Set(rules.profiles?.map((profile) => profile.id)).size === (rules.profiles?.length ?? 0),
+                    { message: "Profile ids must be unique", path: ["profiles"] },
+                ),
                 expectedVersion: z.number().int().min(1),
             }),
         )

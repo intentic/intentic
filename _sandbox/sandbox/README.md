@@ -56,7 +56,7 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | Layer | Holds | Directories |
 | --- | --- | --- |
 | foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` |
-| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `intentic/` `activity/` `audit/` `org/` |
+| host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `personas/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `intentic/` `activity/` `audit/` `org/` |
 | connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
 | orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `inventory/` `portability/` `migrations/` `history/` `retention/` |
@@ -363,6 +363,15 @@ flowchart LR
   (`landsHere` in the contract's `schemas/members.ts`; `POST /agents/{id}/land` carries `home: "land"`, read by
   `auth/role-floor.ts`). For every home, that answer is read from its owner's grant at the land, not latched when the
   home opened, so a re-grade holds the next land (`turn-landing.ts decideLanding`).
+- Who a turn acts for decides what it reaches (2026-10-26, [access.md](../../docs/architecture/access.md)). A
+  conversation latches `people` and `services` (`conversations/actor/identity-latch.ts`); `access/principal-chain.ts`
+  turns each into limits (a roster row; a service's steward held to its access profile; a bound organisation's
+  ceiling), and credentials, AI accounts and the tool ceiling are the intersection of them all
+  (`secrets/credential-reach.ts`, capped onto the persona in `agent/run/decide/turn-premise.ts`). A persona only narrows
+  inside that. Automations, sender rules, inbound links and control tokens name a service in `runAs`; a fire or a link
+  task whose service can no longer act is skipped with the reason (`access/service-standing.ts`). Profiles and
+  services live on the history volume beside the roster, and a person holding a profile carries its answers written on
+  their row, rewritten whenever the profile is saved (`access/access-profiles.routes.ts`).
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

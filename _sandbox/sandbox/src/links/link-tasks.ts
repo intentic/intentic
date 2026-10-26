@@ -1,3 +1,4 @@
+import { type ServiceStanding, serviceStanding } from "../access/service-standing.js";
 import { join } from "node:path";
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { isAwaitingDecision, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
@@ -51,9 +52,13 @@ export interface LinkTaskDeps {
     readonly notify: (notification: PushNotification) => void;
     readonly logger: Pick<Logger, "info" | "warn">;
     readonly now?: () => number;
+    // Whether the service a link's tasks run as may still act (access/service-standing.ts); absent in a composition with
+    // no services, where a link naming one is refused.
+    readonly standing?: (service: string) => Promise<ServiceStanding>;
 }
 
-export type LinkServices = Pick<Services, "inboundLinks" | "turns" | "conversations" | "pushSender" | "logger" | "config">;
+export type LinkServices = Pick<Services, "inboundLinks" | "turns" | "conversations" | "pushSender" | "logger" | "config"> &
+    Partial<Pick<Services, "services" | "accessProfiles" | "members" | "ownerEmail">>;
 
 /** What a link's tasks run on, read off the daemon's services: the doors' and the boot pass's alike. */
 export const linkTaskDepsOf = (services: LinkServices): LinkTaskDeps => ({
@@ -63,7 +68,31 @@ export const linkTaskDepsOf = (services: LinkServices): LinkTaskDeps => ({
     starts: fileStartWindow(join(services.config.historyRoot, turnStartsDocument.path)),
     notify: (notification) => void services.pushSender.notifyIfAway(notification),
     logger: services.logger,
+    ...opt("standing", standingOf(services)),
 });
+
+// The standing check off the daemon's services, when it has everything the check reads.
+const standingOf = (services: LinkServices): ((service: string) => Promise<ServiceStanding>) | undefined => {
+    const { services: stored, accessProfiles, members, ownerEmail } = services;
+    if (stored === undefined || accessProfiles === undefined || members === undefined || ownerEmail === undefined) {
+        return undefined;
+    }
+    return (service) => serviceStanding({ services: stored, accessProfiles, members, ownerEmail }, service);
+};
+
+// Whether a link's tasks may act now: the fence their conversation is born inside when they run as a service, or why
+// they cannot (its steward left, it or its profile is gone), said to the asking sandbox rather than run on nothing.
+const linkStanding = async (deps: LinkTaskDeps, link: ResolvedLink): Promise<{ readonly areas?: readonly string[] } | { readonly refused: string }> => {
+    const service = link.terms.runAs;
+    if (service === undefined) {
+        return {};
+    }
+    const standing = deps.standing === undefined ? undefined : await deps.standing(service);
+    if (standing === undefined) {
+        return { refused: `It runs as the service "${service}", which this sandbox cannot check.` };
+    }
+    return standing.ok ? opt("areas", standing.areas) : { refused: standing.reason };
+};
 
 // A refusal, with the status the link door answers it with: a task that cannot go (400), no such task of this link (404),
 // one that cannot be acted on now (409), or a link past its hourly allowance (429).
@@ -104,7 +133,13 @@ const followUpPrompt = (label: string, message: string): string =>
 const outsideOf = (label: string, tainted: string | undefined): string =>
     tainted === undefined ? `the linked sandbox "${label}"` : `the linked sandbox "${label}", whose own turn had taken in ${tainted}`;
 
-const turnOf = (link: ResolvedLink, task: StoredLinkTask, prompt: string, messageId: string): TurnInput & { readonly conversationId: string } => ({
+const turnOf = (
+    link: ResolvedLink,
+    task: StoredLinkTask,
+    prompt: string,
+    messageId: string,
+    areas?: readonly string[],
+): TurnInput & { readonly conversationId: string } => ({
     prompt,
     conversationId: task.conversationId,
     messageId,
@@ -118,6 +153,9 @@ const turnOf = (link: ResolvedLink, task: StoredLinkTask, prompt: string, messag
     // No run role of its own: the link's persona names the model its tasks run on, else the sandbox's default does, so
     // everything about what a link's tasks are is set on the link (Sandbox ▸ Access), not on a second page.
     ...opt("actsAs", link.terms.actsAs),
+    // Who it acts for: the link's service, its steward held to its profile, inside the fence they make together.
+    ...opt("runAs", link.terms.runAs),
+    ...opt("areas", areas),
     ...spokenBy({ kind: "program", token: speakerToken(link.label) }),
 });
 
@@ -160,8 +198,13 @@ export const statusOf = (deps: Pick<LinkTaskDeps, "conversations">, task: Stored
 
 // Says the task's words into its conversation, starting the turn; a refusal from the turn port fails the task.
 const startTurn = async (deps: LinkTaskDeps, link: ResolvedLink, task: StoredLinkTask, words: string): Promise<StoredLinkTask | undefined> => {
+    const standing = await linkStanding(deps, link);
+    if ("refused" in standing) {
+        deps.logger.warn({ link: link.id, conversation: task.conversationId, why: standing.refused }, "link: a task's service cannot act");
+        return deps.links.moveTask(link.id, task.conversationId, { state: "failed", error: standing.refused, forgetTask: true }, nowOf(deps));
+    }
     const said = await deps.turns.say({
-        turn: turnOf(link, task, linkTaskPrompt({ label: link.label, task: words, hops: task.hops }), `link-${task.requestId}`),
+        turn: turnOf(link, task, linkTaskPrompt({ label: link.label, task: words, hops: task.hops }), `link-${task.requestId}`, standing.areas),
         voice: "agent",
         outside: outsideOf(link.label, task.tainted),
     });
@@ -261,6 +304,10 @@ export const messageTask = async (
     }
     if (task.state === "declined") {
         return refusal(409, "This sandbox's owner declined the task, so nothing of it runs here. Ask a person instead.");
+    }
+    const standing = await linkStanding(deps, link);
+    if ("refused" in standing) {
+        return refusal(409, standing.refused);
     }
     // Words into a turn already running cost nothing; only a turn they would start is counted against the allowance.
     const live = liveRunOf(deps.conversations, task.conversationId) !== undefined;

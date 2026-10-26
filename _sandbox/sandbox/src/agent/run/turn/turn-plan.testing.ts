@@ -116,6 +116,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         credentialGrants: createCredentialGrants(),
         credentialReach: nobodyLimited,
         accountReach: everyAccount,
+        // No ceiling on tools: what an owner's own turn holds.
+        toolCeiling: async () => undefined,
         // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
         conversations: memoryFleet().conversations,
         // No conversation-level grants: what a conversation nobody has widened reads.

@@ -6,6 +6,10 @@ import type { AutomationRecord } from "../automations/automations-store.js";
 import type { PersonasStore } from "../personas/personas-store.js";
 import type { AreasStore } from "../areas/areas-store.js";
 import type { SshKeyStore } from "../capabilities/ssh-key-store.js";
+import type { AccessProfile, AccessProfileEntry } from "@intentic/sandbox-contract/schemas/access-profiles";
+import type { Service } from "@intentic/sandbox-contract/schemas/services";
+import type { AccessProfiles } from "../auth/principals/access-profiles-store.js";
+import type { ServicesStore } from "../auth/principals/services-store.js";
 
 // In-memory stores, one real implementation per persistence seam the routes and the turn read, so a suite can seed
 // state and read back what a route wrote without touching the filesystem. A store a slice holds lives beside that
@@ -24,6 +28,50 @@ export const memoryPersonasStore = (initial: Persona[] = []): PersonasStore => {
             const next = personas.filter((persona) => persona.id !== id);
             const existed = next.length !== personas.length;
             personas = next;
+            return existed;
+        },
+    };
+};
+
+// In-memory services (access/services-store.ts): who unattended work runs as.
+export const memoryServicesStore = (initial: Service[] = []): ServicesStore => {
+    let services = [...initial];
+    return {
+        list: async () => services,
+        get: async (id) => services.find((service) => service.id === id),
+        upsert: async (service) => {
+            services = [...services.filter((existing) => existing.id !== service.id), service];
+        },
+        remove: async (id) => {
+            const next = services.filter((service) => service.id !== id);
+            const existed = next.length !== services.length;
+            services = next;
+            return existed;
+        },
+    };
+};
+
+// In-memory access profiles (access/access-profiles-store.ts): the sandbox's own, then `org` ones an organisation's
+// policy would bring, which read as read-only and hide a local one with their id.
+export const memoryAccessProfiles = (initial: AccessProfile[] = [], org: AccessProfile[] = []): AccessProfiles => {
+    let own = [...initial];
+    const list = async (): Promise<AccessProfileEntry[]> => {
+        const held = new Set(org.map((profile) => profile.id));
+        return [
+            ...own.filter((profile) => !held.has(profile.id)).map((profile): AccessProfileEntry => ({ ...profile, origin: "sandbox" })),
+            ...org.map((profile): AccessProfileEntry => ({ ...profile, origin: "org" })),
+        ];
+    };
+    return {
+        list,
+        get: async (id) => (await list()).find((profile) => profile.id === id),
+        upsert: async (profile) => {
+            own = [...own.filter((existing) => existing.id !== profile.id), profile];
+        },
+        remove: async (id) => {
+            const next = own.filter((profile) => profile.id !== id);
+            const existed = next.length !== own.length;
+            own = next;
             return existed;
         },
     };

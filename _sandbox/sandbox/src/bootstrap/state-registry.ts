@@ -22,6 +22,8 @@ import { auditCheckpointDocument } from "../audit/audit-store.js";
 import { membersDocument, ownerDocument } from "../auth/auth.js";
 import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
+import { accessProfilesDocument } from "../auth/principals/access-profiles-store.js";
+import { servicesDocument } from "../auth/principals/services-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
 import { automationRunsDocument, automationWatchDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
@@ -142,6 +144,8 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     membersDocument,
     ownerDocument,
     passkeysDocument,
+    accessProfilesDocument,
+    servicesDocument,
     controlTokensDocument,
     doorTokensDocument,
     automationRunsDocument,
@@ -168,10 +172,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
-    enginePolicyDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
     extensionSettingsDocument,

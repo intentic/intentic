@@ -65,6 +65,10 @@ A platform reads a stored mode it does not recognise as `locked`, so a newer pla
 
 **Members only (`membersOnly`).** The organisation's member list becomes the outer fence of every bound sandbox's roster. The platform sends the members as `people`, each a sha256 of the organisation id and the lowercased address (`orgPersonPreimage`), so a daemon can test an address without being handed the staff list in clear. A policy without `people` fences nothing. When this is on, adding or removing a person raises the policy version, so the console's applied or waiting state shows the change reaching each sandbox.
 
+**Access profiles (`profiles`).** Up to 50 named profiles travel with the policy. Each bound daemon lists them beside its own profiles as read-only, with `origin: org`. People and services can hold them. A local profile cannot take an organisation profile's id. Areas, credentials and assistants name each sandbox's own ids. AI accounts use provider or account keys such as `claude` or `claude:work`.
+
+**Ceiling (`ceiling`).** Tool shelves and AI accounts set one more limit in every turn's chain. No turn in a bound sandbox exceeds it, the owner's included. A field left out adds no limit. An empty AI account list allows none. Local profiles, personas and conversation grants cannot lift the organisation's ceiling.
+
 ### Delivery
 
 The policy reaches a sandbox over the same channel as its announce: the sandbox's own connect token, on the ingress route `orgPolicy` (`POST /sandbox/org-policy`). The daemon ([`org/org-policy.ts`](../../_sandbox/sandbox/src/org/org-policy.ts)) asks at boot and every five minutes after, and says which version it already holds. The platform records that in `orgPolicyApplied`, and the console shows each sandbox as "in force" or "waiting". A separate route is used instead of the announce answer because the announce repeats only every hour and is shared by every daemon release. A lock an admin sets reaches every sandbox within five minutes.
@@ -96,7 +100,7 @@ The platform enforces the policy in one place of its own. The invite routes (`in
 ### The editor
 
 - The sandbox hub reads the policy from the daemon (`GET /org/policy`, [`useOrgPolicy.ts`](../../_editor/web/src/features/organisations/useOrgPolicy.ts)) rather than from the platform, so it draws what the daemon will actually refuse. A hidden section is removed from the hub index and the palette. A locked section is wrapped in [`OrgHeldSection.vue`](../../_editor/web/src/features/organisations/OrgHeldSection.vue), which shows "{org} manages this part of the sandbox" and puts the section inside a disabled `<fieldset>`. That disables every control in the section at once, without each page having to know about organisations. A daemon too old to have the route reads as unbound.
-- Settings ▸ Organisation ([`OrgConsole.vue`](../../_editor/web/src/features/organisations/OrgConsole.vue), [`OrgDetailPanel.vue`](../../_editor/web/src/features/organisations/OrgDetailPanel.vue)) is the organisation admin's console. It lists the organisations you are in, lets you start one where the platform allows it, edits the policy (sections, required settings and the members-only switch) and saves it as a new version, manages the people, and binds and releases sandboxes with each one's applied or waiting state and any policy reset. A member sees the policy read-only.
+- Settings ▸ Organisation ([`OrgConsole.vue`](../../_editor/web/src/features/organisations/OrgConsole.vue), [`OrgDetailPanel.vue`](../../_editor/web/src/features/organisations/OrgDetailPanel.vue)) is the organisation admin's console. It lists the organisations you are in, lets you start one where the platform allows it, edits the policy (sections, required settings, the members-only switch, access profiles and the ceiling) and saves it as a new version, manages the people, and binds and releases sandboxes with each one's applied or waiting state and any policy reset. A member sees the policy read-only.
 - The `updates` lock has no UI of its own yet. The Overview switch is still drawn, and the daemon refuses the change. A pinned setting is not marked on the settings pages either: the page shows the pinned value, and a save that would loosen it is refused with a message naming the item.
 
 ### What the protection does not cover
@@ -129,9 +133,11 @@ Pinned settings, read-time enforcement with write-back and drift records, the me
 
 > 2026-10-15: signing the policy with the platform's identity key was planned here and is not built. The policy already arrives over the authenticated channel to the platform. At rest, a signature only stops a held file being forged, and anyone who can forge it can also delete it, which loosens it just as much. The signature would protect nothing until the agent domain takes the auth root out of an agent's reach. Detection on the platform (`orgPolicyResetAt`) and the authoritative refresh were built instead.
 
-### Phase 3: central personas and assistant templates
+### Phase 3: central access profiles and ceiling
 
-An organisation keeps persona cards and kits on the platform as a versioned bundle, in the same shape as `.intentic/config/personas.json`. Bound daemons fetch it beside the policy and install the cards as org-owned and read-only (`origin: org`), next to the sandbox's own cards. The `personas` lock then means "only the organisation's cards".
+Central access profiles and the ceiling are built (2026-10-26). Admins edit them in the organisation console. They travel with the policy over its existing delivery channel. The daemon lists organisation profiles read-only beside local profiles. A local profile cannot take an organisation profile's id. The ceiling is one more limit in every turn's chain, including the owner's.
+
+Central persona cards and kits remain a later phase. They would carry the organisation's prompts, skills and assistant templates, rather than the access a person or service holds.
 
 ### Phase 4: provisioning
 

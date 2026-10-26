@@ -42,6 +42,9 @@ const QueuedItemSchema = z.object({
     owner: SessionOwnerSchema.pick({ email: true, name: true }).optional(),
     // The fence its sender works behind, which a conversation this message opens is born inside.
     areas: z.array(z.string()).readonly().optional(),
+    // Added 2026-10-26, optional: the service the turn it starts acts as (seams/turn-starter.ts `runAs`), latched into the
+    // conversation's `services` when it is taken off the queue. A message queued before it acts for nobody extra.
+    runAs: z.string().optional(),
     // The source of outside words in it; whatever turn it reaches is tainted by it.
     outside: z.string().optional(),
     queuedAt: z.number(),

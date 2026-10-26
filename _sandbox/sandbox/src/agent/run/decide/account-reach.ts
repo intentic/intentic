@@ -6,8 +6,9 @@ import { type AccountReach, accountReachAllows, reachWho } from "../../../secret
 import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import type { AccountRoute } from "../../providers/accounts/blocked-account.js";
 
-/* WHICH ACCOUNT A TURN MAY RUN ON, as the people its conversation works for may (Access ▸ People, a person's AI
-   accounts: auth.ts `Member.aiAccounts`, read live through secrets/credential-reach.ts `AccountReach`).
+/* WHICH ACCOUNT A TURN MAY RUN ON, as everyone its conversation acts for may (Access ▸ People, a person's AI accounts:
+   auth.ts `Member.aiAccounts`; a service's access profile; a bound organisation's ceiling; read live through
+   secrets/credential-reach.ts `AccountReach`, docs/architecture/access.md).
 
    Asked after the blocked-account route, of the account the turn would run on as routed, and enforced there rather than
    told to the model, since the account is the one thing a turn spends before any tool runs:
@@ -55,13 +56,13 @@ const pickAmong = (allowed: readonly NamedRow[]): NamedRow | undefined => prefer
 const listed = (rows: readonly NamedRow[]): string => rows.map((row) => `"${row.label}"`).join(", ");
 
 const UNREADABLE =
-    "The sandbox's member roster could not be read, so which AI accounts this conversation may run on is unknown, and no turn is run on a guess. Try again in a moment; if it keeps happening, tell the sandbox owner.";
+    "The sandbox's record of who this conversation acts for (its roster, services or access profiles) could not be read, so which AI accounts it may run on is unknown, and no turn is run on a guess. Try again in a moment; if it keeps happening, tell the sandbox owner.";
 
 // What every refusal ends with: who decides, and what to do instead.
-const OWNER_DECIDES = "Only the sandbox owner can change which AI accounts a person may use, on the Access page.";
+const OWNER_DECIDES = "Only the sandbox owner can change which AI accounts a person or a service may use, on the Access page.";
 
 const notAllowed = (reach: Extract<AccountReach, { kind: "some" }>, label: string, what: string, allowed: readonly NamedRow[]): string =>
-    `${reach.who.length > 1 ? `${reachWho(reach.who)} were` : `${reachWho(reach.who)} was`} not given ${what}, and a conversation runs only on AI accounts every person in it may use. ${ 
+    `${reach.who.length > 1 ? `${reachWho(reach.who)} were` : `${reachWho(reach.who)} was`} not given ${what}, and a conversation runs only on AI accounts everyone it acts for may use. ${ 
     allowed.length === 0 ? `No ${label} account is available to this conversation: pick another model in the composer. ` : `Pick ${allowed.length === 1 ? "it" : "one of them"} in the composer: ${listed(allowed)}. ` 
     }${OWNER_DECIDES}`;
 

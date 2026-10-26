@@ -53,3 +53,16 @@ test("a rule can hold its own people for a person", () => {
     const guest = automation({ senders: { rules: [{ ids: [martha.id], actsAs: "guest", requireApproval: true }], others: "allow" } });
     expect(senderLane(guest, martha)).toEqual({ actsAs: "guest", requireApproval: true });
 });
+
+test("a lane acts as its rule's service, else the automation's, and never loses the automation's to an unnamed sender", () => {
+    const guest = automation({
+        runAs: "reception",
+        senders: {
+            rules: [{ ids: [mark.id], runAs: "staff" }, { ids: [martha.id] }],
+            others: "allow",
+        },
+    });
+    expect(senderLane(guest, mark)).toEqual({ actsAs: undefined, runAs: "staff", requireApproval: false });
+    expect(senderLane(guest, martha)).toEqual({ actsAs: undefined, runAs: "reception", requireApproval: false });
+    expect(senderLane(guest, bob)).toEqual({ actsAs: undefined, runAs: "reception", requireApproval: false });
+});

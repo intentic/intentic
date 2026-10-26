@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ServicePicker from "./profiles/ServicePicker.vue";
+import { useServices } from "./profiles/useServices";
 import type { InboundLinkSummary, InboundLinkTermsUpdate, LinkRequest, LinkTerms } from "@intentic/sandbox-contract/schemas/links";
 import { Button, CopyButton, InfoHint, Notice, Picker, type PickerOption, Row, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -24,6 +26,8 @@ const t = useT();
 const { daemonUrl, active } = useSandbox();
 const { canShip } = useRole();
 const { personas } = usePersonas();
+const { available: servicesAvailable, labelOf: serviceName } = useServices();
+const runAs = ref<string>();
 
 interface MintRequest {
     readonly label: string;
@@ -98,6 +102,7 @@ const termsLine = (terms: LinkTerms): string =>
         terms.actsAs === undefined
             ? t(`sandbox.linkedSandboxes.wearsNothing`)
             : t(`sandbox.linkedSandboxes.wears`, { persona: personaName(terms.actsAs) ?? `` }),
+        ...(servicesAvailable.value ? [t(`sandbox.accessServices.runsAsValue`, { name: terms.runAs === undefined ? t(`sandbox.accessServices.owner`) : serviceName(terms.runAs) })] : []),
         terms.approve ? t(`sandbox.linkedSandboxes.eachWaits`) : t(`sandbox.linkedSandboxes.startsAtOnce`),
         t(`sandbox.linkedSandboxes.perHour`, { count: terms.turnsPerHour }),
     ].join(` · `);
@@ -123,18 +128,19 @@ const decide = (link: InboundLinkSummary, request: LinkRequest, approve: boolean
 
 // One link's terms, edited in place under its row.
 const editing = ref<string>();
-const draft = ref<{ actsAs: string; approve: boolean; turnsPerHour: number }>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20 });
+const draft = ref<{ runAs?: string | undefined; actsAs: string; approve: boolean; turnsPerHour: number }>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20 });
 const edit = (link: InboundLinkSummary): void => {
     if (editing.value === link.id) {
         editing.value = undefined;
         return;
     }
     editing.value = link.id;
-    draft.value = { actsAs: link.terms.actsAs ?? NO_PERSONA, approve: link.terms.approve, turnsPerHour: link.terms.turnsPerHour };
+    draft.value = { runAs: link.terms.runAs, actsAs: link.terms.actsAs ?? NO_PERSONA, approve: link.terms.approve, turnsPerHour: link.terms.turnsPerHour };
 };
 const save = async (link: InboundLinkSummary): Promise<void> => {
-    const { actsAs, approve, turnsPerHour } = draft.value;
-    const input: InboundLinkTermsUpdate = { approve, turnsPerHour };
+    const { actsAs, approve, turnsPerHour, runAs } = draft.value;
+    // Owner again is a null, which takes the service off; absence would keep the one the link had.
+    const input: InboundLinkTermsUpdate = { approve, turnsPerHour, runAs: runAs ?? null };
     if (actsAs !== NO_PERSONA) {
         input.actsAs = actsAs;
     }
@@ -157,7 +163,7 @@ const submit = async (): Promise<void> => {
     if (named === `` || minting.value) {
         return;
     }
-    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20 };
+    const terms: LinkTerms = { approve: approve.value, turnsPerHour: 20, ...(runAs.value === undefined ? {} : { runAs: runAs.value }) };
     if (actsAs.value !== undefined && actsAs.value !== NO_PERSONA) {
         terms.actsAs = actsAs.value;
     }
@@ -208,6 +214,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                             :header="t(`sandbox.linkedSandboxes.persona`)"
                             class="ui-field-sm w-44"
                         />
+                        <ServicePicker v-model="runAs" />
                         <label class="flex items-center gap-2 text-xs text-content">
                             <ToggleSwitch v-model="approve" class="ui-switch-sm" />
                             {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
@@ -291,6 +298,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                                 :header="t(`sandbox.linkedSandboxes.persona`)"
                                 class="ui-field-sm w-48"
                             />
+                            <ServicePicker v-model="draft.runAs" />
                             <label class="flex items-center gap-2 text-sm text-content">
                                 <ToggleSwitch v-model="draft.approve" class="ui-switch-sm" />
                                 {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}

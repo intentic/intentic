@@ -124,7 +124,8 @@ import { authRootOf, statePath } from "./state-paths.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { connectorHostDefaults } from "./capabilities/contributions.js";
-import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
+import { createSecretsSlice, principalsOfAuth, type SecretsSlice } from "./secrets/secrets-slice.js";
+import { accessRosterOf } from "./access/invariant.js";
 import { type BrokerSlice, createBrokerSlice } from "./capabilities/broker/broker-slice.js";
 import { createPrivacySlice, type PrivacySlice } from "./privacy/privacy-slice.js";
 import { grantsChanged } from "./needs/standing-grants.js";
@@ -655,8 +656,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         conversationGrants,
         // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
         connectorHosts: () => connectorHostDefaults({ workspace, files: workspaceSlice.files, capabilities, config }),
-        ownerEmail: authSlice.ownerEmail,
-        members: authSlice.members,
+        ...principalsOfAuth(authSlice, orgPolicy),
         conversationEntry: agents.entry,
         warn: (message, error) => logger.warn({ err: error }, message),
         ...keyringReach(whole, config),
@@ -837,7 +837,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         conversations,
         agentWorktrees: services.agentWorktrees,
         areas,
-        members: services.members,
+        ...accessRosterOf(services),
         personas,
         manifest: capabilitiesParts.manifest,
         connectors: capabilitiesParts.connectors,

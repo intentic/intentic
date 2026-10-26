@@ -29,6 +29,7 @@ export const answersPhrase = (senders: Senders): string | undefined => {
     return [
         named.length > 0 ? t(`automationRow.named`, { who: named.join(t(`automationRow.and`)) }) : t(`automationRow.nobodyNamed`),
         othersPhrase(senders.others),
+        ...senders.rules.flatMap((rule) => rule.runAs ? [t(`service.ruleSummary`, { rule: rule.label ?? [...(rule.ids ?? []), ...(rule.groups ?? [])].join(`, `), service: rule.runAs })] : []),
     ].join(` · `);
 };
 

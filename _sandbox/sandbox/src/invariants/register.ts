@@ -17,6 +17,7 @@ import { checks as orgChecks, owner as orgOwner } from "../org/invariant.js";
 import { checks as runnerChecks, owner as runnerOwner } from "../runners/invariant.js";
 import { checks as linkChecks, owner as linkOwner } from "../links/invariant.js";
 import { checks as areaChecks, owner as areaOwner, type AreaRosterDeps } from "../areas/invariant.js";
+import { checks as accessChecks, owner as accessOwner, type AccessRosterDeps } from "../access/invariant.js";
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
 import { checks as runtimeChecks, owner as runtimeOwner } from "../runtimes/invariant.js";
 import { checks as seamChecks, owner as seamOwner } from "../seams/invariant.js";
@@ -38,6 +39,7 @@ export type DaemonInvariantDeps = TurnJournalDeps &
     PeerRegistryDeps &
     IssuesInboxDeps &
     AreaRosterDeps &
+    AccessRosterDeps &
     CommandGuardDeps;
 
 export const registerDaemonInvariants = (registry: InvariantRegistry, deps: DaemonInvariantDeps): void => {
@@ -50,6 +52,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(issueOwner, issueChecks(deps));
     registry.register(cursorOwner, cursorChecks(deps));
     registry.register(areaOwner, areaChecks(deps));
+    registry.register(accessOwner, accessChecks(deps));
     registry.register(childrenOwner, childrenChecks(deps));
     // Read their subjects off module state and the volume rather than off a service.
     registry.register(hostOwner, hostChecks());

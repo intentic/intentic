@@ -1,5 +1,7 @@
+import { AccessProfileSchema } from "@intentic/sandbox-contract/schemas/access-profiles";
 import {
     ORG_SECTIONS,
+    OrgCeilingSchema,
     type OrgPolicy,
     type OrgPolicyRules,
     type OrgSection,
@@ -29,10 +31,12 @@ const StoredRulesSchema = z
         sections: z.record(z.string(), z.unknown()).catch({}),
         preset: z.array(z.unknown()).catch([]).optional(),
         membersOnly: z.unknown().optional(),
+        profiles: z.array(z.unknown()).optional().catch(undefined),
+        ceiling: z.unknown().optional(),
     })
     .catch({ sections: {} });
 export const rulesOf = (stored: Prisma.JsonValue): OrgPolicyRules => {
-    const { sections, preset, membersOnly } = StoredRulesSchema.parse(stored);
+    const { sections, preset, membersOnly, profiles, ceiling } = StoredRulesSchema.parse(stored);
     const read: Partial<Record<OrgSection, OrgSectionMode>> = {};
     for (const section of ORG_SECTIONS) {
         const mode = sections[section];
@@ -47,6 +51,18 @@ export const rulesOf = (stored: Prisma.JsonValue): OrgPolicyRules => {
     }
     if (membersOnly === true) {
         rules.membersOnly = true;
+    }
+    if (profiles !== undefined) {
+        rules.profiles = profiles
+            .flatMap((profile) => {
+                const parsed = AccessProfileSchema.safeParse(profile);
+                return parsed.success ? [parsed.data] : [];
+            })
+            .slice(0, 50);
+    }
+    const parsedCeiling = OrgCeilingSchema.safeParse(ceiling);
+    if (parsedCeiling.success) {
+        rules.ceiling = parsedCeiling.data;
     }
     return rules;
 };
@@ -100,7 +116,10 @@ export const orgPolicyForToken = async (
     const reset = sandbox.org !== null && policyWasReset(sandbox.orgPolicyApplied, applied, sandbox.org.policyVersion);
     // Written only when it moved (or a reset is to be recorded): this is asked every few minutes by every bound sandbox.
     if (held !== sandbox.orgPolicyApplied || reset) {
-        await prisma.sandbox.update({ where: { id: sandbox.id }, data: reset ? { orgPolicyApplied: held, orgPolicyResetAt: now } : { orgPolicyApplied: held } });
+        await prisma.sandbox.update({
+            where: { id: sandbox.id },
+            data: reset ? { orgPolicyApplied: held, orgPolicyResetAt: now } : { orgPolicyApplied: held },
+        });
     }
     return { policy: sandbox.org === null ? null : policyOf(sandbox.org, sandbox.org.members) };
 };

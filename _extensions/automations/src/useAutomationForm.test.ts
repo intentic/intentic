@@ -469,10 +469,11 @@ describe(`sender rules`, () => {
         prompt: `Answer the team.`,
         models: LADDER,
         actsAs: `customer-service`,
+        runAs: `support-service`,
         senders: {
             rules: [
                 { label: `The boss`, ids: [`u-mark`] },
-                { ids: [`u-martha`, `u-annie`], groups: [`r-support`], actsAs: `customer-service`, requireApproval: true },
+                { ids: [`u-martha`, `u-annie`], groups: [`r-support`], actsAs: `customer-service`, runAs: `support-service`, requireApproval: true },
             ],
             others: `hold`,
         },
@@ -482,10 +483,11 @@ describe(`sender rules`, () => {
     it(`round-trips rules, their personas and what everyone else gets`, () => {
         const { form, load, build } = formState();
         load(frontLine);
+        expect(form.runAs).toBe(`support-service`);
         expect(form.senders).toBe(true);
         expect(form.senderRules).toEqual([
-            { label: `The boss`, ids: `u-mark`, groups: ``, actsAs: ``, requireApproval: false },
-            { label: ``, ids: `u-martha, u-annie`, groups: `r-support`, actsAs: `customer-service`, requireApproval: true },
+            { label: `The boss`, ids: `u-mark`, groups: ``, actsAs: ``, runAs: ``, requireApproval: false },
+            { label: ``, ids: `u-martha, u-annie`, groups: `r-support`, actsAs: `customer-service`, runAs: `support-service`, requireApproval: true },
         ]);
         expect(form.senderOthers).toBe(`hold`);
         expect(build()).toEqual(frontLine);
@@ -518,7 +520,7 @@ describe(`sender rules`, () => {
         form.prompt = `Fix it.`;
         form.models = [...LADDER];
         form.senders = true;
-        form.senderRules.push({ label: ``, ids: `u-mark`, groups: ``, actsAs: ``, requireApproval: false });
+        form.senderRules.push({ label: ``, ids: `u-mark`, groups: ``, actsAs: ``, runAs: ``, requireApproval: false });
         expect(sendersOffered.value).toBe(false);
         expect(build().senders).toBeUndefined();
     });
@@ -734,5 +736,26 @@ describe(`a stored watch`, () => {
         load({ id: `x`, trigger: { kind: `event` }, prompt: `Go.`, models: LADDER, note: `Old`, enabled: true });
         form.note = `   `;
         expect(build().note).toBeUndefined();
+    });
+});
+
+
+describe(`service authority`, () => {
+    it(`defaults to owner and clears a service without changing its persona`, () => {
+        const { form, load, build } = formState();
+        load({ id: `nightly`, trigger: { kind: `schedule`, cron: `0 1 * * *` }, prompt: `Review`, models: LADDER, enabled: true, runAs: `review-service`, actsAs: `reviewer` });
+        expect(form.runAs).toBe(`review-service`);
+        expect(build().runAs).toBe(`review-service`);
+        form.runAs = ``;
+        expect(build().runAs).toBeUndefined();
+        expect(build().actsAs).toBe(`reviewer`);
+    });
+    it(`clears a rule override to inherit automation authority`, () => {
+        const { form, load, build } = formState();
+        load({ id: `support`, trigger: { kind: `listener`, provider: `discord`, eventType: `message` }, prompt: `Answer`, models: LADDER, enabled: true, runAs: `support-service`, senders: { rules: [{ ids: [`person`], runAs: `special-service` }], others: `ignore` } });
+        expect(form.senderRules[0]?.runAs).toBe(`special-service`);
+        form.senderRules[0]!.runAs = ``;
+        expect(build().senders).toEqual({ rules: [{ ids: [`person`] }], others: `ignore` });
+        expect(build().runAs).toBe(`support-service`);
     });
 });

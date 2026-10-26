@@ -38,7 +38,12 @@ const refireOptions = (entry: JournalledFire): ThreadFireOptions => {
         ...opt("payload", entry.payload),
         ...opt("origin", entry.origin),
         ...opt("title", entry.title),
-        ...opt("lane", entry.lane === undefined ? undefined : { actsAs: entry.lane.actsAs, requireApproval: queued(entry) && entry.lane.requireApproval }),
+        ...opt(
+            "lane",
+            entry.lane === undefined
+                ? undefined
+                : { actsAs: entry.lane.actsAs, ...opt("runAs", entry.lane.runAs), requireApproval: queued(entry) && entry.lane.requireApproval },
+        ),
     };
 };
 

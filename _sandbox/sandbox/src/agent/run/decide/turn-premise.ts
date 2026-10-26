@@ -8,7 +8,8 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { conversationFence } from "../../../areas/area-scope.js";
 import { parentOfActor } from "../../../auth/principal.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
-import { type TurnPersona, turnPersona, widenPersona } from "../../../personas/personas.js";
+import { capPersona, type TurnPersona, turnPersona, widenPersona } from "../../../personas/personas.js";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { armOf, EXPERIMENTS } from "./experiments.js";
 
@@ -43,6 +44,8 @@ export interface PremiseFacts {
     readonly areas: readonly Area[];
     // What a person allowed this conversation beyond its persona (personas/conversation-grants.ts), if anything.
     readonly grant?: ConversationGrant | undefined;
+    // The most its tools may be, as everyone it acts for is held to (access/principal-chain.ts); undefined is no ceiling.
+    readonly ceiling?: ToolCeiling | undefined;
 }
 
 export interface TurnPremise {
@@ -106,14 +109,18 @@ const iqTeachingDue = (runtime: TurnRuntime, enabled: boolean): boolean =>
 export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRuntime): TurnPremise => {
     const { settings, entry } = facts;
     // The fence goes through the area manifest every turn, not frozen at birth, so editing an area moves its conversations.
-    const persona = widenPersona(
-        turnPersona({
-            personas: facts.personas,
-            actsAs: input.actsAs,
-            unattended: input.unattended === true,
-            fence: conversationFence(facts.areas, entry?.identity),
-        }),
-        facts.grant,
+    // The card is posture: grants widen what it withheld, and then the principals' ceiling holds both (access.md).
+    const persona = capPersona(
+        widenPersona(
+            turnPersona({
+                personas: facts.personas,
+                actsAs: input.actsAs,
+                unattended: input.unattended === true,
+                fence: conversationFence(facts.areas, entry?.identity),
+            }),
+            facts.grant,
+        ),
+        facts.ceiling,
     );
     const briefing = briefingOf(persona.persona);
     const search = armOf(EXPERIMENTS.iqSearch, settings, input.conversationId);

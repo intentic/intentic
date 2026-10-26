@@ -58,7 +58,7 @@ test("a guest whose areas hold no assistant is named, since it can sign in and t
             // Homed at the root, which no fence covers: the card exists and this guest still reaches none.
             [{ id: "helper", capabilities: [] }],
         ),
-    ).rejects.toThrow(/dee@example.com.*no assistant works in/s);
+    ).rejects.toThrow(/dee@example.com.*none of their assistants works in/s);
 });
 
 test("an unfenced maintainer reports nothing", async () => {

@@ -94,6 +94,11 @@ export interface ResolvedLink {
 
 // New terms as a request carries them: any field left out (or undefined) keeps what the link has.
 export type LinkTermsPatch = { readonly [K in keyof LinkTerms]?: LinkTerms[K] | undefined };
+// An update may also take the persona or the service off, with null.
+export type LinkTermsChange = Omit<LinkTermsPatch, "actsAs" | "runAs"> & {
+    readonly actsAs?: string | null | undefined;
+    readonly runAs?: string | null | undefined;
+};
 
 export interface MintedLink {
     readonly id: string;
@@ -129,7 +134,7 @@ export interface InboundLinks {
     readonly touch: (id: string, now?: number) => Promise<void>;
     readonly list: () => Promise<InboundLinkSummary[]>;
     readonly summary: (id: string) => Promise<InboundLinkSummary | undefined>;
-    readonly update: (id: string, change: LinkTermsPatch & { readonly label?: string | undefined }) => Promise<InboundLinkSummary | undefined>;
+    readonly update: (id: string, change: LinkTermsChange & { readonly label?: string | undefined }) => Promise<InboundLinkSummary | undefined>;
     readonly revoke: (id: string) => Promise<boolean>;
     // The task this link opened under that request id or that conversation id, or undefined: the link's whole reach.
     readonly task: (linkId: string, key: { readonly requestId?: string; readonly conversationId?: string }) => Promise<StoredLinkTask | undefined>;
@@ -263,12 +268,18 @@ export const fileInboundLinks = (path: string): InboundLinks => {
             return link === undefined ? undefined : summaryOf(link);
         },
         update: async (id, change) => {
-            const { label, ...terms } = change;
-            const link = await changeLink(id, (current) => ({
-                ...current,
-                ...opt("label", label),
-                terms: LinkTermsSchema.parse({ ...current.terms, ...definedOf(terms) }),
-            }));
+            const { label, actsAs, runAs, ...terms } = change;
+            const link = await changeLink(id, (current) => {
+                // null takes the field off; absence keeps it.
+                const { actsAs: wornBefore, runAs: ranBefore, ...kept } = current.terms;
+                const worn = actsAs === null ? undefined : (actsAs ?? wornBefore);
+                const ran = runAs === null ? undefined : (runAs ?? ranBefore);
+                return {
+                    ...current,
+                    ...opt("label", label),
+                    terms: LinkTermsSchema.parse({ ...kept, ...definedOf(terms), ...opt("actsAs", worn), ...opt("runAs", ran) }),
+                };
+            });
             return link === undefined ? undefined : summaryOf(link);
         },
         revoke: async (id) => {

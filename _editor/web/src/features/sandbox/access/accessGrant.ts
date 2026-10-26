@@ -9,6 +9,7 @@ import {
     tierOf,
 } from "@intentic/sandbox-contract/schemas/members";
 import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
+import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { googleMailbox } from "../../../client/auth/signInMethods";
 
 // One person's access as the People panel edits it, and the grant that writes it. Pure, since the panel, the roster's
@@ -25,6 +26,9 @@ export type AiAccountsDraft = `all` | readonly string[];
 // how they sign in, and what their agents may spend. Each control in the panel changes one of these, and the whole of it
 // is sent as one grant, so no half-made access ever reaches the daemon.
 export interface AccessDraft extends MemberAccess {
+    readonly profile?: string | undefined;
+    readonly tools?: ToolCeiling | undefined;
+    readonly assistants?: readonly string[] | undefined;
     readonly emailSignIn: boolean;
     readonly credentials: ReachDraft;
     readonly aiAccounts: AiAccountsDraft;
@@ -50,6 +54,9 @@ export const newPerson = (email: string): AccessDraft => ({
 
 /** What the daemon holds for a person, or the platform's tier alone for a row the daemon never wrote. */
 export const draftOf = (row: Member | undefined, recorded: GrantedRole): AccessDraft => ({
+    profile: row?.profile,
+    tools: row?.tools,
+    assistants: row?.assistants,
     ...memberAccess(row ?? { role: recorded }),
     emailSignIn: row?.emailSignIn === true,
     credentials: row?.credentials ?? `all`,
@@ -65,6 +72,12 @@ export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
     if (draft.manage) {
         return body;
     }
+    if (draft.profile !== undefined) {
+        body.profile = draft.profile;
+        return body;
+    }
+    if (draft.tools !== undefined) { body.tools = draft.tools; }
+    if (draft.assistants !== undefined) { body.assistants = [...draft.assistants]; }
     body.agents = draft.agents;
     if (draft.see !== undefined) {
         body.areas = [...draft.see];

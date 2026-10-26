@@ -84,6 +84,7 @@ flowchart LR
 - **Deleted sandboxes.** Removal receipts and the palette open `/deleted-sandboxes`, an account page that remains
   available after the last sandbox is removed. Devices also embeds the list; older `/devices#deleted` links redirect
   to the account page. Restoring a sandbox reads only the platform and refreshes the account's registry.
+- **Access profiles and services.** Access ▸ Profiles names reusable access for people and service principals, including tool ceilings and guest assistants. Organisation profiles are read-only; only the owner writes sandbox profiles. Profile saves synchronize changed holder tiers with the platform after the daemon rewrite. Programs manages services, stewards and optional profiles; tokens and inbound links choose the service their work runs as. These controls stay hidden on daemons without the corresponding routes. A link already assigned a service cannot return to Owner through the current terms patch API.
 - **AI literacy notice.** When enabled in Sandbox ▸ Access ▸ People, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.
 - **Sandbox logo.** The owner presses the logo on Sandbox ▸ Overview to upload an image, stylize it with a preset icon and the Appearance color swatches, or remove it. The styling dialog previews the result and saves only on Save. Presets are ordinary SVG data-URL images, so the same logo appears in every sandbox list and rail; reopening the dialog restores its icon and color.
 - **Keyboard shortcuts per platform.** Every built-in command declares its chord once (`workbench/commands/builtinCommands.ts`),
@@ -576,6 +577,8 @@ the sandbox's account catalogs. Browsing refreshes never rewrite a conversation'
 filters. A session is one agent conversation; its rows are summed before calculating either statistic, and main-tree
 usage without a conversation ID is excluded. Sessions with unpriced turns remain included, with both figures marked
 as lower bounds. An empty selection shows no average or median.
+
+The organisation console (`features/organisations/`) edits central access profiles and the ceiling alongside section locks and pins. They share one policy draft and its edition check. Members see the policy read-only. Optional lists distinguish no limit from an empty list that allows none.
 
 ## Key files
 

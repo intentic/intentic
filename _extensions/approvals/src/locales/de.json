@@ -4,7 +4,8 @@
         "whatAgentTold": "Was dem Agenten gesagt wird"
     },
     "approvalMeta": {
-        "as": "als"
+        "as": "als",
+        "runsAs": "Läuft als"
     },
     "approvalRail": {
         "approvalSlice": "Genehmigungsscheibe",

@@ -76,7 +76,7 @@ const guardEnv = async (services: Services, automation: AutomationRecord, payloa
 // this automation would get, so a connected GitHub card answers for a releases check (watch-sources.ts githubApi).
 export const sourceEnv = async (
     services: Services,
-    automation: Pick<AutomationRecord, "id" | "actsAs">,
+    automation: Pick<AutomationRecord, "id" | "actsAs" | "runAs">,
 ): Promise<Record<string, string | undefined>> => ({
     ...process.env,
     ...(await guardCapabilityEnv(services, automation).catch((error: unknown) => {

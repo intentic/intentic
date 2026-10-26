@@ -9,7 +9,7 @@ import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { type FixtureRouter, refuse } from "@intentic/contract-serve";
 import { clearingSentDraft, draftDoors } from "./drafts";
 import { BROWSER_SESSIONS, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../browser";
-import { demoSecretInventory } from "../fixture/access";
+import { accessDoors, demoSecretInventory } from "../fixture/access";
 import { demoAuditExport, demoAuditList, demoAuditStatus, demoAuditVerify } from "../fixture/audit";
 import { demoApprovals, removeDemoApproval, upsertDemoApproval } from "../fixture/approvals";
 import {
@@ -103,7 +103,6 @@ let gettingStarted: GettingStarted = freshEdition ? {} : { hidden: true };
 let settingsNow = DEMO_SETTINGS;
 const extensionSettingsNow = new Map<string, Record<string, string | number | boolean>>();
 const NO_TRANSLATOR_ACCOUNTS = Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])) as unknown as TranslatorAccounts;
-
 const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
 
 // The handshake `state` a routed sign-in issues; ConnectFlow only accepts a pasted address carrying this one.
@@ -518,6 +517,7 @@ export const procedures = {
     org: {
         policy: () => ({ bound: false as const }),
     },
+    ...accessDoors,
     areas: {
         list: () => ({ areas: demoAreas }),
         save: (area) => okAfter(() => saveArea(area)),

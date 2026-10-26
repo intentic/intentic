@@ -308,6 +308,11 @@ export const SenderRuleSchema = z
             .optional()
             .describe("Group ids the service reports on a sender, a Discord role. Only for a source whose messages carry them."),
         actsAs: entryId.optional().describe("Which persona their wakes speak as. Absent is no persona: the full toolbox, reaching no account."),
+        // The service (schemas/services.ts) their wakes act as, in place of the automation's own: a narrower one for
+        // strangers, a wider one for people the owner trusts. Never more than that service's steward may.
+        runAs: entryId
+            .optional()
+            .describe("Which service their wakes act as, in place of the automation's own. Absent means the automation's own service."),
         // Tightens, never loosens: the automation's own `requireApproval` still holds everyone.
         requireApproval: z.boolean().optional().describe("Hold their wakes for a person, even when the automation itself does not."),
     })
@@ -397,8 +402,15 @@ export const AutomationSchema = z.object({
     // is watching to notice a stuck one.
     account: z.string().optional().describe("Which account pays for it."),
     // Absent means the wake reaches no logged-in account at all, the strictest default here, since nobody is at the
-    // composer when it fires.
+    // composer when it fires. Posture only: what the wake may reach is `runAs`'s (docs/architecture/access.md).
     actsAs: entryId.optional().describe("Which persona it speaks as. An unwatched turn naming none reaches no signed-in account at all."),
+    // Who its wakes act for (schemas/services.ts): that service's steward, held to the service's access profile. Absent
+    // keeps what a wake always did: it acts for the sandbox's owner with no profile, its persona the only narrowing.
+    runAs: entryId
+        .optional()
+        .describe(
+            "Which service it acts as: whose authority its wakes use, held to that service's access profile. Absent means the sandbox's owner, limited only by its persona.",
+        ),
     // Listener triggers on a source that identifies senders only (TriggerSource.sender); refused elsewhere at upsert.
     // Absent means everyone the filters admit, wearing `actsAs`.
     senders: SendersSchema.optional().describe(
@@ -462,6 +474,8 @@ export const AutomationApprovalSchema = z.object({
     // The persona the fire resolved to (a sender rule's, or the automation's), snapshotted at hold time and worn by the
     // approved run; also what a project-scoped board files the wake under.
     actsAs: entryId.optional().describe("Which persona the approved run speaks as, decided when it was held."),
+    // The service the fire resolved to (a sender rule's, or the automation's), snapshotted beside the persona.
+    runAs: entryId.optional().describe("Which service the approved run acts as, decided when it was held."),
     createdAt: z.number().describe("When it started waiting, in milliseconds."),
     // When the daemon may run this itself, for a `holdForSeconds` hold; absent for a `requireApproval` hold, which only
     // the owner releases.

@@ -11,6 +11,8 @@ export interface ControlPrincipal {
     readonly id: string;
     readonly label: string;
     readonly scope: ControlScope;
+    // The service the turns it starts act as (docs/architecture/access.md); absent, they act for the owner, unlimited.
+    readonly runAs?: string;
 }
 
 export type Principal = ControlPrincipal;
@@ -26,6 +28,9 @@ export const actorOf = (identity: Caller | undefined, principal: Principal | und
 // claimable.
 export const ownerOf = (identity: Caller | undefined): Pick<SessionOwner, "email" | "name"> | undefined =>
     identity === undefined ? undefined : { email: identity.email, ...(identity.name !== undefined ? { name: identity.name } : {}) };
+
+// The service a turn acts as, from the principal that asked for it: a control token minted with one. Never from a body.
+export const runAsOf = (principal: Principal | undefined): string | undefined => principal?.runAs;
 
 // The fence a conversation is born with, from whoever opened it. Undefined for an unfenced member and for a program's
 // wake, which is the whole workspace; a fenced member hands over exactly the areas they hold.

@@ -48,11 +48,17 @@ export const checks = ({ areas, members, personas }: AreaRosterDeps): readonly I
             const stranded = roster
                 // A home-only guest talks to its own home conversation, which needs no card.
                 .filter((member) => member.role === "guest" && memberAccess(member).agents === "chat")
-                .filter((member) => !cards.some((card) => fenceHoldsPersona(foldersOf(manifest, member.areas), card)))
+                .filter(
+                    (member) =>
+                        !cards.some(
+                            (card) =>
+                                (member.assistants === undefined || member.assistants.includes(card.id)) && fenceHoldsPersona(foldersOf(manifest, member.areas), card),
+                        ),
+                )
                 .map((member) => member.email);
             if (stranded.length > 0) {
                 fail(
-                    `${stranded.join(", ")}: each holds a guest whose areas no assistant works in, so they can sign in and then talk to nobody; give an assistant a starting folder inside one of those areas, or move the guest onto an area that has one`,
+                    `${stranded.join(", ")}: each holds a guest whose areas none of their assistants works in, so they can sign in and then talk to nobody; give an assistant a starting folder inside one of those areas, list one that works there, or move the guest onto an area that has one`,
                 );
             }
         },

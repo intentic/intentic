@@ -5,7 +5,7 @@ import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/br
 import type { VoicesView } from "@intentic/sandbox-contract/schemas/voice";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
-import { type DemoGrant, grantAccess, grants, revokeAccess } from "../fixture/access";
+import { type DemoGrant, grantProfile, grantAccess, grants, revokeAccess } from "../fixture/access";
 import { SEPTEMBER_PRINT_DOCX, SEPTEMBER_PRINT_PATH, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "../fixture/desk";
 import { HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_DOCX_BEFORE, HANDOVER_PATH } from "../fixture/document";
 import {
@@ -63,6 +63,10 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
         credentials?: DemoGrant["credentials"] | `all`;
         aiAccounts?: DemoGrant["aiAccounts"] | `all`;
     };
+    if (grant.profile !== undefined) {
+        grantProfile(grant.email, grant.profile, grant.emailSignIn);
+        return json({ members: grants() });
+    }
     const access = memberAccess(grant);
     const refused = accessRefusal(access);
     if (refused !== undefined) {
@@ -197,7 +201,7 @@ export const raw = {
     // them, so the demo runs the published bytes rather than a compiled-in copy.
     "GET /extensions/{id}/bundle": ({ param }) => vendoredBundle(param(`id`)),
     // The enforced roster, mutable: the Access tab pushes its grant here first, and a guest's chips come back from it.
-    "GET /members": () => json({ members: grants() }),
+    "GET /members": () => json({ owner: `ada@acme.dev`, members: grants() }),
     "POST /members": grantMember,
     "DELETE /members": revokeMember,
     // The demo's reader is the owner, who manages everything.

@@ -79,6 +79,18 @@ describe("grant need", () => {
         expect(await kind.resolve({ kind: "grant", subject: "folder", what: "refs/sdk" }, context({ fence: undefined }))).toMatchObject({ kind: "met" });
     });
 
+    it("refuses a shelf the access the conversation runs under holds back, since no grant lifts it", async () => {
+        const { kind } = harness();
+        expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "shell" }, context({ ceiling: { shell: false } }))).toEqual({
+            kind: "refused",
+            code: "out_of_reach",
+            message:
+                "This conversation may not run commands: the people or the service it acts for are held back from it, and no grant changes that, only the sandbox owner does, on the Access page. Carry on without it.",
+        });
+        // A ceiling over another shelf leaves this one to the persona, which a grant may open.
+        expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "shell" }, context({ ceiling: { web: false } }))).toMatchObject({ kind: "raise" });
+    });
+
     it("asks for a shelf only when it is shut, and refuses one that does not exist", async () => {
         const { kind } = harness();
         expect(await kind.resolve({ kind: "grant", subject: "shelf", what: "web" }, context())).toMatchObject({ kind: "met" });
