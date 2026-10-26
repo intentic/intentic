@@ -7332,8 +7332,7 @@
         },
         "moveOutPanel": {
             "compareSandboxToml": "Comparer sandbox.toml",
-            "connectGithub": "Connecter GitHub",
-            "connectGithubGitlabAccount": "Connectez d'abord un compte GitHub ou GitLab.",
+            "connectGithubGitlabAccount": "Connectez d'abord un compte {github} ou {gitlab}.",
             "copyCloneUrl": "Copier l'URL de clonage",
             "copyUrl": "Copier l'URL",
             "couldntListSandboxsBundles": "Impossible de lister les bundles de ce sandbox.",

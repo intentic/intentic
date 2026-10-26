@@ -6763,8 +6763,7 @@
         },
         "moveOutPanel": {
             "compareSandboxToml": "Porównaj sandbox.toml",
-            "connectGithub": "Połącz GitHub",
-            "connectGithubGitlabAccount": "Najpierw podłącz konto GitHub albo GitLab.",
+            "connectGithubGitlabAccount": "Najpierw podłącz konto {github} albo {gitlab}.",
             "copyCloneUrl": "Kopiuj adres do klonowania",
             "copyUrl": "Kopiuj URL",
             "couldntListSandboxsBundles": "Nie udało się wypisać paczek tego sandboxa.",

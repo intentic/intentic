@@ -222,10 +222,10 @@ const compare = async (event: Event): Promise<void> => {
             <!-- The anchor "No repository to push this work to" lands on; without an account the way to one is linked here. -->
             <Row v-else :id="PUBLISH_ANCHOR" icon="cloud-upload" :title="t(`sandbox.moveOutPanel.notPublished`)">
                 <template #description>
-                    <template v-if="host === undefined">
-                        {{ t(`sandbox.moveOutPanel.connectGithubGitlabAccount`) }}
-                        <RouterLink to="/capabilities/github" :class="ui.textButton()">{{ t(`sandbox.moveOutPanel.connectGithub`) }}</RouterLink>
-                    </template>
+                    <i18n-t v-if="host === undefined" keypath="sandbox.moveOutPanel.connectGithubGitlabAccount" tag="span" scope="global">
+                        <template #github><RouterLink to="/capabilities/github" :class="ui.textButton({ size: `xs`, flush: true }, `inline`)">GitHub</RouterLink></template>
+                        <template #gitlab><RouterLink to="/capabilities/gitlab" :class="ui.textButton({ size: `xs`, flush: true }, `inline`)">GitLab</RouterLink></template>
+                    </i18n-t>
                     <template v-else>{{ t(`ui.action.publish`) }} <span class="font-mono">/work</span>.</template>
                 </template>
                 <template #control>
