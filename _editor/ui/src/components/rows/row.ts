@@ -135,3 +135,10 @@ export const provideRowFlushInline = (flush: boolean): void => provide(ROW_FLUSH
 
 /** Whether this row's text starts at its container's edge rather than inside the tier's padding. */
 export const useRowFlushInline = (): boolean => inject(ROW_FLUSH_INLINE, false);
+
+// A FLUSH ROW THAT WASHES. Flush, a row's box ends where its text does, so a hover or open wash drawn on that box ran
+// right up against the lead mark and the chevron. The washing box bleeds past the text by this much on both sides and
+// pays it back as padding, so the text stays aligned with the words around it and the wash gets its own margin.
+// `ROW_WASH_BLEED_FULL` is for a box that also sets `w-full`, whose 100% would otherwise fall short on the right.
+export const ROW_WASH_BLEED = `-mx-2.5 px-2.5 rounded-lg`;
+export const ROW_WASH_BLEED_FULL = `-mx-2.5 !px-2.5 rounded-lg !w-[calc(100%+1.25rem)]`;

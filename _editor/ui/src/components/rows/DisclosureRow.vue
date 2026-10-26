@@ -5,7 +5,7 @@ import { FACE_SIZES } from "../brand/personaFace.js";
 import Icon from "../primitives/Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../../icons/iconSets.js";
-import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
+import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_SIZES, ROW_WASH_BLEED, type RowDensity, type RowTone, useRowDensity, useRowFlushInline } from "./row.js";
 
 const {
     open = false,
@@ -113,13 +113,15 @@ const tint = computed(() => {
 const slots = useSlots();
 const washesHeaderOnly = computed(() => body === `drawer` && slots[`before`] === undefined);
 const wrapperSelect = computed(() => (disabled || washesHeaderOnly.value ? `` : `ui-row-select`));
+// Flush on a surface, the wrapper's wash would end where the lead mark and the chevron do; it bleeds past them instead.
+const wrapperBleed = computed(() => (flushInline && (wrapperSelect.value !== `` || tint.value !== ``) ? ROW_WASH_BLEED : ``));
 </script>
 
 <template>
     <!-- With a selection column, a grid: the column and <Row> share its first line and the drawer spans both under them. -->
     <div
         class="group"
-        :class="[tint, wrapperSelect, $slots[`before`] ? `grid grid-cols-[auto_minmax(0,1fr)] items-center` : ``]"
+        :class="[tint, wrapperSelect, wrapperBleed, $slots[`before`] ? `grid grid-cols-[auto_minmax(0,1fr)] items-center` : ``]"
         @pointerdown="onPointerDown"
     >
         <!-- The selection column, outside the toggle: a checkbox can't nest in the button that opens the row. -->

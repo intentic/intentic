@@ -8,6 +8,7 @@ import {
     ROW_TIERS as TIERS,
     ROW_TONES as TONES,
     ROW_TOGGLE_SIZES,
+    ROW_WASH_BLEED_FULL,
     type RowDensity,
     type RowTone,
     useRowDensity,
@@ -26,6 +27,7 @@ const {
     wideControl = false,
     headerButton = false,
     headlineGuard = false,
+    href,
 } = defineProps<{
     icon?: IconName;
     title?: string;
@@ -117,6 +119,9 @@ const onHeadlineClick = (event: MouseEvent): void => {
 // A row you pick from stays muted until reached for; keyed on `as="button"`, the signal that this row
 // is one of a set.
 const picked = as === `button`;
+
+// Whether this row draws the hover/selected wash itself; a flush one then bleeds past its text (ROW_WASH_BLEED_FULL).
+const washes = computed(() => interactive || selected || href !== undefined || as !== `div`);
 </script>
 
 <template>
@@ -130,10 +135,10 @@ const picked = as === `button`;
         class="group flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 text-left"
         :class="[
             flush ? `` : pad,
-            flushInline ? `!px-0` : ``,
+            flushInline ? (washes ? ROW_WASH_BLEED_FULL : `!px-0`) : ``,
             // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
             // its own `hover:bg-content/5`: the same 5% by luck rather than by reference.
-            interactive || selected || href !== undefined || as !== `div` ? `ui-row-select` : ``,
+            washes ? `ui-row-select` : ``,
             selected ? `ui-row-select-on` : ``,
         ]"
     >
