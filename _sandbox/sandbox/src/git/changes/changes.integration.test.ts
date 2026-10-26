@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -683,6 +683,23 @@ test("either side being binary flags the whole diff", async () => {
     expect(await unstagedFileDiff(dir, "blob.bin")).toEqual({ binary: true });
 });
 
+test.each(["folder", "a.txt", "missing-target"])(
+    "a symlink diff reads its target text for %s, including after staging and retargeting",
+    async (target) => {
+        const dir = await tempRepo();
+        await mkdir(join(dir, "folder"));
+        const link = join(dir, "link");
+        await symlink(target, link);
+        expect(await workingFileDiff(dir, "link", "HEAD")).toEqual({ after: target });
+        await sh(dir, "add", "link");
+        expect(await stagedFileDiff(dir, "link")).toEqual({ after: target });
+        expect(await unstagedFileDiff(dir, "link")).toEqual({ before: target, after: target });
+        await rm(link);
+        await symlink("other-target", link);
+        expect(await unstagedFileDiff(dir, "link")).toEqual({ before: target, after: "other-target" });
+    },
+);
+
 test("workingFileDiff against a fixed base sees committed work as changed", async () => {
     const dir = await tempRepo();
     const base = await sh(dir, "rev-parse", "HEAD");
@@ -990,7 +1007,9 @@ test("statusPaths names what changedFiles names in one git run, where changedFil
     expect(runs).toHaveLength(1);
     const { conflicted, staged, unstaged } = await changedFiles(dir, counted);
     expect(runs).toHaveLength(4);
-    const named = [...conflicted, ...staged, ...unstaged].flatMap((change) => (change.from === undefined ? [change.path] : [change.path, change.from]));
+    const named = [...conflicted, ...staged, ...unstaged].flatMap((change) =>
+        change.from === undefined ? [change.path] : [change.path, change.from],
+    );
     expect(paths.toSorted()).toEqual([...new Set(named)].toSorted());
     expect(paths.toSorted()).toEqual(["fresh.txt", "kept.txt", "new.txt", "old.txt"]);
 });

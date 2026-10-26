@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitRunner } from "@intentic/base/git";
-import { commonDirOf, gitDirOf } from "../git-dir.js";
+import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 
 // Where a repo's code lives: its remote urls and the host/project each names. Read by two independent callers (CI's
 // account mapping, the capability scan) neither of which owns the other, so it lives here.

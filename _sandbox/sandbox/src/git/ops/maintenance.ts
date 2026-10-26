@@ -6,7 +6,7 @@ import type { Logger } from "pino";
 import type { Chore } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { commonDirOf, gitDirOf } from "../git-dir.js";
+import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 import { repairShallow } from "./shallow-repair.js";
 import type { GitQuietProbe } from "./stale-git-locks.js";
 

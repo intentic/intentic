@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { watch, type FSWatcher } from "chokidar";
 import type { Logger } from "pino";
 import { Coalescer } from "@intentic/base/async";
-import { commonDirOf, gitDirOf } from "../git-dir.js";
+import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 
 // A third change feed (beside the file watcher and repo-set differ): the git dir is often relocated off /work and the
 // file watcher ignores `.git`, so nothing else can say a commit landed. Watches only where a ref or operation marker is
@@ -24,7 +24,7 @@ export interface RefWatch {
     subscribe(listener: (repos: string[]) => void): () => void;
 }
 
-// A repo's git dir and common dir, absolute; read off the filesystem (git/git-dir.ts) rather than guessed, so a
+// A repo's git dir and common dir, absolute; read off the filesystem (store/git/git-dir.ts) rather than guessed, so a
 // relocated dir, a linked worktree and a plain `.git` all work, and a repo-set frame spawns no git per repo.
 const gitDirsOf = async (dir: string): Promise<{ gitDir: string; commonDir: string } | undefined> => {
     // Not a repo yet, mid-removal, or a clone still being written: undefined, and the next repo-set frame retries.

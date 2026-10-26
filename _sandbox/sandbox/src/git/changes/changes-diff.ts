@@ -1,4 +1,6 @@
+import { lstat, readlink } from "node:fs/promises";
 import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
@@ -38,6 +40,12 @@ const blobSide = async (dir: string, spec: string, git: GitRunner): Promise<Diff
 
 // The file as it sits on disk. The route has already validated that `path` stays inside `dir` (resolveWithin).
 const worktreeSide = async (abs: string): Promise<DiffSide> => {
+    // Git versions a symlink's target text, not what it points at. Following a directory link used to give no side
+    // at all, so an untracked skill link appeared as "No changes: both sides are identical".
+    if ((await lstat(abs).catch(undefinedIfMissing))?.isSymbolicLink() === true) {
+        const text = await readlink(abs);
+        return { text, bytes: Buffer.byteLength(text) };
+    }
     const bytes = await statWorkspaceFileSize(abs);
     if (bytes === undefined) {
         return {};

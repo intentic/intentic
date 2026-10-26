@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { defaultGit, type GitRunner, politeGit } from "@intentic/base/git";
-import { commonDirOf, gitDirOf } from "../git-dir.js";
+import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 import type { NetdLink } from "../../netd/netd-link.js";
 
 // netd counts each watched checkout's changes (_sandbox/netd, feed.rs): a generation that moves whenever anything

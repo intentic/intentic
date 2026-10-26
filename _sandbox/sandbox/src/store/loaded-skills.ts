@@ -4,6 +4,7 @@ import { keyedLock } from "@intentic/base/async";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js";
+import { syncSkillLinkExcludes } from "./git/skill-link-excludes.js";
 
 // `.agents/skills/` is canonical; Codex reads it directly, other runtimes get a generated catalogue. `.claude/skills/`
 // is a derived, per-workspace-serialized symlink projection for Claude Code, never the source of truth. AGENTS.md is
@@ -115,6 +116,7 @@ const converge = async (root: string): Promise<void> => {
             await rm(link, { force: true });
         }
     }
+    await syncSkillLinkExcludes(root);
 };
 
 // One pass per root at a time; a failed pass fails only its own caller and never blocks later writes.

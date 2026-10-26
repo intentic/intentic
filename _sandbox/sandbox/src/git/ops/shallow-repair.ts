@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
-import { commonDirOf, gitDirOf } from "../git-dir.js";
+import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 
 /* Hourly, undo an accidental shallow cut only after rev-list proves every object behind it still exists, before gc can prune hidden history.
  * Remove the shallow file under git's lock. Intentionally shallow/missing-history clones remain untouched, with one report per cut.

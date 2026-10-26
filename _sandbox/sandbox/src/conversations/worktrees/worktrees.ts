@@ -6,7 +6,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { Logger } from "pino";
-import { commonDirOf, gitDirOf } from "../../git/git-dir.js";
+import { commonDirOf, gitDirOf } from "../../store/git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { reserveCompositionSpace, selectedComposition } from "./composition-space.js";
 import type { HistorySpace } from "../../system/resources/storage/checkout-space.js";

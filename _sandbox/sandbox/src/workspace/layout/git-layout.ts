@@ -4,6 +4,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { VERSIONED_STATE_PATHS } from "@intentic/sandbox-contract/state/workspace-state";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
+import { skillLinkExcludeBlock } from "../../store/git/skill-link-excludes.js";
+import { textFile } from "../../store/plain-files/text-file.js";
 
 // Where the workspace's git lives and what its root repo leaves out: each repo's real git dir on the history volume,
 // and the one exclude list the /work repo and the history root scope share (history/history.ts), so history and the
@@ -77,16 +79,22 @@ const trackedStateExcludes = (): string[] => {
 // Converges the root exclude list onto both consumers (the /work repo's git dir and the history root scope) so history
 // and the Changes review agree; skips a target whose git dir does not exist yet.
 export const syncRootExcludes = async (historyRoot: string, repoIds: readonly string[]): Promise<void> => {
-    const content = `${rootExcludes(repoIds).join("\n")}\n`;
-    for (const gitDir of [repoGitDir(historyRoot, "root"), join(historyRoot, "scopes", "root.git")]) {
+    const rootGitDir = repoGitDir(historyRoot, "root");
+    const base = `${rootExcludes(repoIds).join("\n")}\n`;
+    let links = "";
+    for (const gitDir of [rootGitDir, join(historyRoot, "scopes", "root.git")]) {
         try {
             await access(join(gitDir, "info"));
         } catch {
             continue;
         }
         const target = join(gitDir, "info", "exclude");
-        if ((await readFile(target, "utf8").catch(() => undefined)) !== content) {
-            await writeFile(target, content);
+        const content = await textFile(target).update((current) => {
+            const next = `${base}${gitDir === rootGitDir ? skillLinkExcludeBlock(current) : links}`;
+            return next === current ? undefined : next;
+        });
+        if (gitDir === rootGitDir) {
+            links = skillLinkExcludeBlock(content);
         }
     }
 };

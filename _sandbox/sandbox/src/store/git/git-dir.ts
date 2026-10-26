@@ -18,6 +18,7 @@ export const gitDirOf = async (checkout: string): Promise<string | undefined> =>
     if (stats.isDirectory()) {
         return entry;
     }
+    // allow(silent-catch): an unreadable pointer has always meant no usable checkout to this filesystem probe.
     const named = (await readFile(entry, "utf8").catch(() => "")).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
     const gitDir = named === undefined || named === "" ? undefined : resolve(checkout, named);
     return gitDir !== undefined && (await pathExists(gitDir)) ? gitDir : undefined;
@@ -26,6 +27,7 @@ export const gitDirOf = async (checkout: string): Promise<string | undefined> =>
 // The common dir behind an admin dir: `commondir`'s target resolved against the admin dir, or the admin dir itself
 // when it has none (a main checkout, a submodule).
 export const commonDirOf = async (gitDir: string): Promise<string> => {
+    // allow(silent-catch): preserve the probe's fallback to the admin directory when no common directory can be read.
     const named = (await readFile(join(gitDir, "commondir"), "utf8").catch(() => "")).trim();
     return named === "" ? gitDir : resolve(gitDir, named);
 };
