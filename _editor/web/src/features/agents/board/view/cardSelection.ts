@@ -24,7 +24,7 @@ import { openLinkedSubagent } from "../../../../models/fleet/linkedSubagent";
 // A click must put the chat's turns on screen: with the chat's home on the rail, the look used to land in the quick
 // bar's pill, which named the agent and showed nothing, so readers clicked three and four times. It opens /chat
 // there now (showParkedChat).
-// A double-click is two clicks and nothing more; it used to open the review page, while the chat rail's renamed.
+// A double-click on a card opens its page (AgentCard.openPage), on every lane alike.
 
 // The keys that turn a click on a card into a pane gesture.
 export type PaneKeys = Pick<MouseEvent, `shiftKey` | `altKey` | `ctrlKey` | `metaKey`>;

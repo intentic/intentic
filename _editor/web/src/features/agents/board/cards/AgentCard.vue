@@ -33,7 +33,7 @@ import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
-import { attentionReason, retryLand, reviewAction, reviewBesideDrill, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
@@ -112,8 +112,7 @@ const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
     open: [event?: MouseEvent];
     review: [];
-    // The agent's diff itself, whatever its drill-in says: the change count, Review & land, and Review changes beside a
-    // drill-in that leads to the chat.
+    // The agent's page with its diff, whatever its drill-in says: the change count, Review & land, and a double-click.
     changes: [];
     resolve: [];
     // A land held by the owner's own deletion: keep it deleted (the agent drops its edits) or put it back and land.
@@ -235,9 +234,6 @@ const resendable = computed(
 // unless Send again holds that seat. Nothing is lost there: a stranded card's drill-in is "Open chat" (drillTarget),
 // exactly where a click on the card already goes, so it earns no header seat taken out of the title's width.
 const rowDrill = computed(() => review.value !== undefined && lane.value === `attention` && !resendable.value);
-// Work a chat-bound drill-in would walk past (a spent allowance or an ask that stopped it halfway): the diff gets a press
-// of its own in the same row, so partial work is read without answering or resuming first.
-const rowChanges = computed(() => lane.value === `attention` && reviewBesideDrill(props.agent));
 
 // Asks laneDrop the same question the drag already answers, so a second reading can't disagree with it on the same
 // card.
@@ -376,7 +372,7 @@ const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // No "Completed" here: the word was the drill-in's stand-in from when this row carried the drill-in on every lane, so
 // once that moved to the header it said itself only where the drill-in was missing (any phone, a card with no branch),
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
-const summary = computed(() => stats.value || rowDrill.value || rowChanges.value || resendable.value || dated.value || working.value || reactable.value);
+const summary = computed(() => stats.value || rowDrill.value || resendable.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // What vouches for its work, as stamps in its corner (useCardStamps.ts): its own last check, then each kind of check a
 // fresh session ran on it.
@@ -442,13 +438,23 @@ const openCard = (event?: MouseEvent): void => {
     emit(`open`, event);
 };
 
-// Never a side effect of a plain click: the drill-in and a desktop double-click fire this, and it goes where the drill-in's
-// label says (useCardFocus.drillIn). A phone has no drill-in (`review` is undefined there), so a double-tap stays two taps.
+// Never a side effect of a plain click: the drill-in fires this, and it goes where the drill-in's label says
+// (useCardFocus.drillIn). A phone has no drill-in (`review` is undefined there).
 const reviewCard = (): void => {
     if (edit.editing || review.value === undefined) {
         return;
     }
     emit(`review`);
+};
+
+// A desktop double-click opens the agent's page (/agents/<id>) on every card alike, whatever the drill-in's label says:
+// a chat-bound drill-in (an ask, a spent allowance) is where a single click already went, so the double-click there
+// would have been a no-op. A phone has no drill-in, so a double-tap stays two taps.
+const openPage = (): void => {
+    if (edit.editing || review.value === undefined) {
+        return;
+    }
+    emit(`changes`);
 };
 
 // One shared class for the header's icon affordances (rename, archive, etc), differing only by glyph and opacity rule.
@@ -510,7 +516,7 @@ const cardActions = computed((): ActionItem[] => {
 // on a card about 300px wide (three lanes on a small laptop) the title kept some 60px. Where the board offers its menu
 // (`menus`), which names every press in words, the header keeps the presses that are one click on purpose: a look's
 // keep, with its deadline, and the filing press (archive, close or restore) a lane is tidied with; rename, react and the
-// drill-in move behind one ⋯ opening that menu, and the drill-in keeps its double-click. A touch screen with the room of
+// drill-in move behind one ⋯ opening that menu, and a double-click opens the agent's page. A touch screen with the room of
 // a tablet has no hover to reveal glyphs on and swipes a card to file it (cardSwipe.ts), so there the ⋯ alone stays,
 // drawn. A phone folds them into its own sheet (OverflowActions).
 const DIRECT_PRESSES: ReadonlySet<string> = new Set([`keep`, `archive`, `close`, `restore`]);
@@ -591,7 +597,7 @@ const grab = (event: PointerEvent): void => {
         @pointerdown="grab"
         @dragstart.prevent
         @click="openCard"
-        @dblclick="reviewCard"
+        @dblclick="openPage"
         @contextmenu="openMenu"
     >
         <!-- THE TITLE COMES FIRST: it keeps a readable width (basis-28) and what trails it (the presses, the chip, the marks)
@@ -630,7 +636,7 @@ const grab = (event: PointerEvent): void => {
                     class="min-w-0 grow basis-28 rounded-sm text-left font-semibold text-content"
                     :class="live ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
                     @click.stop="openCard"
-                    @dblclick.stop="reviewCard"
+                    @dblclick.stop="openPage"
                 >
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
@@ -924,15 +930,6 @@ const grab = (event: PointerEvent): void => {
 
                 <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
                 <span class="inline-flex min-w-max flex-[1_1_0] items-center justify-end gap-2 text-subtle">
-                    <!-- Partial work behind a chat-bound drill-in (see `rowChanges`): its diff, one press away. -->
-                    <button
-                        v-if="rowChanges"
-                        type="button"
-                        class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline"
-                        @click.stop="emit('changes')"
-                    >
-                        {{ t(`agents.agentStatus.reviewChanges`) }}
-                    </button>
                     <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
                     <button
                         v-if="resendable"

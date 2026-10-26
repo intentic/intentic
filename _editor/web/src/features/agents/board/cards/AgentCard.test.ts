@@ -245,12 +245,9 @@ it(`opens the diff from the change count, a named press that does not also open 
     expect([changes.mock.calls.length, opened.mock.calls.length]).toEqual([1, 0]);
 });
 
-it(`offers a stranded card's partial work beside its chat-bound drill-in`, () => {
-    const changes = jest.fn();
+it(`draws no separate review press beside a stranded card's chat-bound drill-in`, () => {
     const stranded: FleetAgent = { ...written(), status: `error`, failureCode: `rate_limit` };
-    const el = mount(stranded, undefined, { onChanges: changes });
-    buttonNamed(el, `Review changes`)!.click();
-    expect(changes).toHaveBeenCalledTimes(1);
+    expect(buttonNamed(mount(stranded), `Review changes`)).toBeUndefined();
 });
 
 // The card's own face, which is also the press that opens the chat.
@@ -764,16 +761,25 @@ it(`marks words left unsent in a running conversation with a pencil among its co
     expect(el.querySelector(`[data-unsent-mark="stamp"]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
 });
 
-// On desktop a double-click drills in, opening the agent's changes, after its two clicks opened the chat.
-it(`drills in to the review on a double-click`, () => {
+// On desktop a double-click opens the agent's page, after its two clicks opened the chat.
+it(`opens the agent's page on a double-click`, () => {
     const onOpen = jest.fn();
-    const onReview = jest.fn();
-    const el = mount(ready(`error`), undefined, { onOpen, onReview });
+    const onChanges = jest.fn();
+    const el = mount(ready(`error`), undefined, { onOpen, onChanges });
     const face = el.querySelector<HTMLElement>(`.session-card`)!;
     face.click();
     face.click();
     face.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
-    expect([onOpen.mock.calls.length, onReview.mock.calls.length]).toEqual([2, 1]);
+    expect([onOpen.mock.calls.length, onChanges.mock.calls.length]).toEqual([2, 1]);
+});
+
+// A chat-bound card (a spent allowance) goes to the same page on a double-click, not to the chat its click already showed.
+it(`opens a stranded card's page on a double-click like any other`, () => {
+    const onChanges = jest.fn();
+    const onReview = jest.fn();
+    const el = mount({ ...written(), status: `error`, failureCode: `rate_limit` }, undefined, { onChanges, onReview });
+    el.querySelector<HTMLElement>(`.session-card`)!.dispatchEvent(new MouseEvent(`dblclick`, { bubbles: true }));
+    expect([onChanges.mock.calls.length, onReview.mock.calls.length]).toEqual([1, 0]);
 });
 
 // TABULARIUM's lands failed on a checkout git no longer recognised, and its card sat in Finished with a check mark (B6).
