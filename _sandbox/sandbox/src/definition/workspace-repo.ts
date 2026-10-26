@@ -10,6 +10,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { isPublicPath } from "@intentic/workspace-ignore";
 import { z } from "zod";
 import { type GitHost, gitHostOf, githubHeaders } from "../capabilities/cli/git-access.js";
+import { createGitlabProject } from "./gitlab-project.js";
 import { parseExtensionManifest, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import { extensionEnablementDocument } from "../capabilities/extension-inventory/extension-enablement.js";
@@ -396,21 +397,7 @@ export const githubLogin = async (host: Pick<GitHost, "apiBase" | "token">, warn
 
 const created = async (host: GitHost, name: string, owner: string | undefined, warn: LoginLookupWarn): Promise<string> => {
     if (host.provider === "gitlab") {
-        const response = await fetch(`${host.apiBase}/projects`, {
-            method: "POST",
-            headers: { "PRIVATE-TOKEN": host.token, "Content-Type": "application/json" },
-            body: JSON.stringify({ name, path: name, visibility: "private" }),
-        });
-        if (!response.ok) {
-            throw new WorkspaceRemoteError(
-                `${host.host} refused to create "${name}": ${response.status} ${await response.text().catch(() => "")}`.trim(),
-            );
-        }
-        const body = (await response.json().catch(() => ({}))) as { http_url_to_repo?: string };
-        if (typeof body.http_url_to_repo !== "string" || body.http_url_to_repo === "") {
-            throw new WorkspaceRemoteError(`${host.host} created the project but returned no clone URL`);
-        }
-        return body.http_url_to_repo;
+        return createGitlabProject(host, name, owner);
     }
     // github: an owner other than the authenticated user is an organization, with its own endpoint. No owner named is
     // the token's own account, with nothing to look up.

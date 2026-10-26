@@ -219,7 +219,7 @@ const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown):
             : "a token with the api scope";
     const reason = errorMessage(err);
     return [
-        `Git access is on and works over HTTPS (ssh-form remotes are routed there too), but registering a native SSH key failed: ${reason}`,
+        `Git access is on and works over ${host.scheme.toUpperCase()} (ssh-form remotes are routed there too), but registering a native SSH key failed: ${reason}`,
         `Native ssh://git needs ${scopeHint}. Fix the token and re-add, or add this public key to your ${host.provider} account manually:`,
         publicKey,
     ].join("\n");

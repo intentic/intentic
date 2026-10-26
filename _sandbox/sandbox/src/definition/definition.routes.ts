@@ -6,6 +6,7 @@ import type { AppEnv } from "../app-env.js";
 import { createDefinitions } from "./apply-definition.js";
 import { DefinitionFormatError } from "./definition.js";
 import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./workspace-repo.js";
+import { GitlabProjectError } from "./gitlab-project.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Outbound definition (sandbox.toml); definition.ts covers the bundle half. Owner-gated: derive and diff only read;
@@ -59,7 +60,7 @@ const createDefinitionRoutes = (services: Services) => {
                 return c.json(await publishWorkspace(services, parsed.data));
             } catch (error) {
                 // Owner-actionable failures (already published, no host, refused create, rejected push), not breakage.
-                if (error instanceof WorkspaceRemoteError) {
+                if (error instanceof WorkspaceRemoteError || error instanceof GitlabProjectError) {
                     return c.json({ error: error.message }, 409);
                 }
                 throw error;
