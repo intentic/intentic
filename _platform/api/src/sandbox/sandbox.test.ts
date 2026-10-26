@@ -9,6 +9,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../context.js";
 import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
+import { identityKeyOf } from "../sign-in.js";
 import { FIX_CODE_TTL_MS } from "./host-report.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 import { verifyAdoptionTicket } from "./recovery.js";
@@ -752,11 +753,11 @@ describe(`sandbox.identityAssertion`, () => {
         publicKeyEncoding: { type: `spki`, format: `pem` },
         privateKeyEncoding: { type: `pkcs8`, format: `pem` },
     });
-    const signing = (signingKey: string): Partial<OrpcContext> => ({
+    const signingConfig = (signingKey: string, email = true): OrpcContext[`config`] =>
         // SAFETY: the route reads only these sections of config, and the suite's context() builds its config as the same
         // partial object.
-        config: { ...context().config, signIn: { email: true }, identity: { signingKey } } as OrpcContext[`config`],
-    });
+        ({ ...context().config, signIn: { email }, identity: { signingKey }, betterAuth: { secret: `s` } }) as OrpcContext[`config`];
+    const signing = (signingKey: string): Partial<OrpcContext> => ({ config: signingConfig(signingKey) });
     const owned = (found: { token: string } | null, googleAccounts = 0) => {
         const findFirst = jest.fn().mockResolvedValue(found);
         return {
@@ -793,12 +794,27 @@ describe(`sandbox.identityAssertion`, () => {
         expect(verifyIdentityAssertion(keys.publicKey, minted.assertion, Date.now())).toMatchObject({ method: `google` });
     });
 
-    it(`vouches for nothing without an identity key, for an unconfirmed address, or for a sandbox the caller is not in`, async () => {
+    // 2026-10-26: production had no IDENTITY_SIGNING_KEY, and this answered NOT_FOUND to every invited email member.
+    it(`signs with the key derived from the session secret when none is configured`, async () => {
+        const unset = signingConfig(``);
+        const minted = await call(
+            sandboxRoutes.identityAssertion,
+            { sandboxId: `s1` },
+            { context: context({ config: unset, prisma: owned({ token: `tok` }).prisma }) },
+        );
+        expect(verifyIdentityAssertion(identityKeyOf(unset), minted.assertion, Date.now())).toMatchObject({
+            sandboxId: sandboxIdFromToken(`tok`),
+        });
+    });
+
+    it(`vouches for nothing where email sign-in is off, for an unconfirmed address, or for a sandbox the caller is not in`, async () => {
         await expect(
             call(
                 sandboxRoutes.identityAssertion,
                 { sandboxId: `s1` },
-                { context: context({ ...signing(``), prisma: owned({ token: `tok` }).prisma }) },
+                {
+                    context: context({ config: signingConfig(keys.privateKey, false), prisma: owned({ token: `tok` }).prisma }),
+                },
             ),
         ).rejects.toMatchObject({
             code: `NOT_FOUND`,

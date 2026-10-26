@@ -176,7 +176,7 @@ export const hostedMachineConfig = (
                 [ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf(config.ingress.signingKey)],
                 // The identity key's public half, so the daemon verifies the platform's identity assertions from its
                 // first boot, before its first announce would hand it over (sign-in.ts identityKeyOf).
-                [ENV_PLATFORM_IDENTITY_KEY, identityKeyOf(config) ?? ``],
+                [ENV_PLATFORM_IDENTITY_KEY, identityKeyOf(config)],
                 [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
                 // Re-applied on every claim, overlay and restart, like the rest of this config; the daemon applies it
                 // only to a workspace that arrived empty, so re-applying it cannot run over work.

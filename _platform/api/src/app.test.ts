@@ -7,6 +7,7 @@ import { configSchema, type Config } from "./config.js";
 import type { OrpcContext } from "./context.js";
 import { HOST_REPORT_INTERVAL_MS, reporterOf } from "./sandbox/host-report.js";
 import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
+import { identityKeyOf } from "./sign-in.js";
 import { localWakeSignals, type WakeSignals } from "./sandbox/local-wake/wake-signals.js";
 import { INGRESS_TEST_PRIVATE_KEY, testIngressConfig } from "./testing.js";
 import { mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
@@ -859,7 +860,12 @@ describe(`POST /sandbox/announce`, () => {
             },
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
-        expect(await res.json()).toEqual({ ok: true, identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`, platformId: `s1` });
+        expect(await res.json()).toEqual({
+            ok: true,
+            identity: `a0028692-7cf2-4ef4-8429-86a98d60be8a`,
+            platformId: `s1`,
+            identityKey: identityKeyOf(config),
+        });
     });
 
     // Every sandbox learns the key that verifies the platform's identity assertions from its announces, so one started
@@ -891,7 +897,7 @@ describe(`POST /sandbox/announce`, () => {
         });
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
-        expect(await res.json()).toEqual({ ok: true, platformId: `s1` });
+        expect(await res.json()).toEqual({ ok: true, platformId: `s1`, identityKey: identityKeyOf(config) });
     });
 
     it(`404s an unknown token with no oracle`, async () => {

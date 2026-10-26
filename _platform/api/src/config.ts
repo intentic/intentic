@@ -47,7 +47,7 @@ export const configSchema = z.object({
         })
         .prefault({}),
     // The key this platform signs identity assertions with (sandbox-contract policy/identity-assertion.ts), Ed25519 in
-    // PKCS8 PEM; empty mints none, and a sandbox then opens for an email account only on a hosted machine's owner ticket.
+    // PKCS8 PEM; empty signs with a key derived from BETTER_AUTH_SECRET instead (sign-in.ts identitySigningKeyOf).
     // Its own key, never the ingress key, so neither credential can stand in for the other or be rotated with it.
     identity: z
         .object({

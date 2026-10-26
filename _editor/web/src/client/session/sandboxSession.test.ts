@@ -1,5 +1,6 @@
 import { waitFor, stubGlobal, unstubAllGlobals, freshImport } from "@intentic/testing/bun";
 import * as endpointOriginal from "../endpoint/endpoint";
+import { ORPCError } from "@orpc/client";
 import { computed, ref } from "vue";
 
 // useSandboxSession picks the bearer for a call: a valid stored session needs no Google or network, a refusal
@@ -784,6 +785,28 @@ it(`names a key the daemon has not learned yet on the wall, and its "Continue as
 
     await expect(pending).resolves.toEqual({ token: `sess-retried`, kind: `session` });
     expect({ asked: identityAssertion.mock.calls.length, minted: state.minted }).toEqual({ asked: 2, minted: 0 });
+});
+
+// 2026-10-26: the platform's NOT_FOUND (no membership for this account) read as "try again in a moment", and a member
+// pressed "Continue as" against it over and over. It is named on the wall instead, before and after a press.
+it(`names a platform that does not count the account in the sandbox, before and after "Continue as"`, async () => {
+    accountWaysIn.value = EMAIL_ONLY;
+    const notFound = new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
+    identityAssertion.mockRejectedValueOnce(notFound).mockRejectedValueOnce(notFound);
+    const fetchMock = daemonAnswering({ proofs: [`email`], sessions: [() => sessionResponse()] });
+    stubGlobal(`fetch`, fetchMock);
+    const { useSandboxSession } = await load();
+    const pending = useSandboxSession().getSessionToken();
+
+    await waitFor(() => expect(prompts.useSignInPrompt().prompt.value?.kind).toBe(`choose`));
+    const shown = prompts.useSignInPrompt().prompt.value;
+    expect(shown).toMatchObject({ withoutGoogle: true, email: { kind: `offered`, refusal: `not-a-member` } });
+    const road = shown?.kind === `choose` ? shown.email : undefined;
+    await expect(road?.kind === `offered` ? road.spend() : Promise.resolve()).rejects.toThrow(`member of this sandbox`);
+    prompts.dismissSignIn();
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(exchanges(fetchMock)).toHaveLength(0);
 });
 
 // An account that also signs in with Google has that road: a sandbox that has not opted it in by email falls back to

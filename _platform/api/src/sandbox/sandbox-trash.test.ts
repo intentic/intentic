@@ -15,6 +15,7 @@ const config = () =>
         secrets: { key: `` },
         google: { clientId: `gcid` },
         identity: { signingKey: `` },
+        betterAuth: { secret: `s` },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,

@@ -23,13 +23,13 @@ export type EmailAnswer = { readonly session: DaemonSession } | { readonly stepU
 // The account's road by email on this sandbox, as the session module found it (sandboxSession.ts).
 export type EmailRoad =
     // The daemon takes the platform's assertion: "Continue as" spends a fresh one. `refusal` is what the last one met:
-    // the person is not opted in here (only the owner can change that), or the daemon has not learned the platform's
-    // key yet (worth another try in a minute).
+    // the person is not opted in here (only the owner can change that), the daemon has not learned the platform's
+    // key yet (worth another try in a minute), or the platform does not count them in this sandbox (a new invitation).
     | {
           readonly kind: `offered`;
           readonly address: string;
           readonly spend: () => Promise<EmailAnswer>;
-          readonly refusal?: `email-sign-in-off` | `platform-key-unknown`;
+          readonly refusal?: `email-sign-in-off` | `platform-key-unknown` | `not-a-member`;
       }
     // A daemon from before email sign-in: a gap said by name (app-plane.md: never an older path taken silently).
     | { readonly kind: `outdated`; readonly address: string };

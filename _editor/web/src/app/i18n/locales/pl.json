@@ -8603,6 +8603,7 @@
             "platformKeyUnknown": "Ten sandbox nie połączył się jeszcze z intentic, więc nie może sprawdzić logowania przez e-mail. Spróbuj ponownie za minutę.",
             "assertionRejected": "Sandbox nie przyjął potwierdzenia twojego adresu od intentic.",
             "assertionUnavailable": "intentic nie może teraz potwierdzić twojego adresu temu sandboxowi. Spróbuj ponownie za chwilę.",
+            "notAMember": "intentic nie widzi cię wśród członków tego sandboxa: zaproszenie zostało wycofane albo jeszcze nie przyjęte. Otwórz ponownie link z zaproszenia albo poproś właściciela o nowe.",
             "passkeyFirst": "Ten sandbox otwiera się tylko kluczem dostępu. Najpierw otwórz go i potwierdź swoim kluczem."
         },
         "passkeySignIn": {

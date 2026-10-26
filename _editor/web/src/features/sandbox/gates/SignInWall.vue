@@ -9,6 +9,7 @@ import { useAuth } from "../../../client/auth/useAuth";
 import { useBrowserHandoff } from "../../auth/browserHandoff";
 import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
 import { browserSupportsPasskeys, recoverWithCode, registerPasskey, signInWithPasskey } from "../../../client/session/passkeySignIn";
+import { emailRefusalText } from "../../../client/session/emailRefusal";
 import { useSignInPrompt } from "../../../client/session/signInPrompt";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { desktopVersion } from "../../../app/environments/desktop";
@@ -63,9 +64,7 @@ const roadNotice = computed<NoticeModel | undefined>(() => {
     if (road?.kind !== `offered` || road.refusal === undefined) {
         return undefined;
     }
-    return noticeOf(road.refusal === `email-sign-in-off` ? t(`sandbox.sandboxSession.emailSignInOff`) : t(`sandbox.sandboxSession.platformKeyUnknown`), {
-        tone: `warning`,
-    });
+    return noticeOf(emailRefusalText(road.refusal), { tone: `warning` });
 });
 // A refusal from a press here, else what the email road met before the wall went up.
 const shownNotice = computed(() => notice.value ?? roadNotice.value);

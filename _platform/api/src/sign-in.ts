@@ -1,3 +1,4 @@
+import { createPrivateKey, hkdfSync } from "node:crypto";
 import type { SignInMethod, SignInOptions } from "@intentic/api-contract";
 import type { PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -133,17 +134,42 @@ export const signInMethodsOf = (hasGoogle: boolean, config: Config): SignInMetho
     return methods;
 };
 
-// The public half of the identity key, answered to every announce so each sandbox can verify assertions; undefined on a
-// platform that signs none. Derived rather than configured, so the two halves cannot drift.
-let derivedFrom: string | undefined;
-let derived: string | undefined;
-export const identityKeyOf = (config: Config): string | undefined => {
-    if (config.identity.signingKey === ``) {
-        return undefined;
+/* THE IDENTITY KEY: what the platform signs identity assertions with (sandbox.identityAssertion), and its public half,
+answered to every announce so each sandbox can verify them. IDENTITY_SIGNING_KEY when it is set; otherwise a key derived
+from BETTER_AUTH_SECRET with HKDF and a fixed label, as the hosted-standing hash key is (README), so a deployment that
+leaves it unset still lets the people it signs in by email into their sandboxes. (2026-10-26: production ran without
+one, and every member who signed in with a code met "try again in a moment" on every press, for good.) Rotating
+BETTER_AUTH_SECRET rotates a derived key; sandboxes learn the new public half at their next announce. */
+
+const IDENTITY_KEY_LABEL = `intentic identity assertion signing key v1`;
+// An Ed25519 private key in PKCS8 DER is this prefix and then its 32-byte seed (RFC 8410).
+const ED25519_PKCS8_PREFIX = Buffer.from(`302e020100300506032b657004220420`, `hex`);
+
+let derivedFor: string | undefined;
+let derivedKey: string | undefined;
+const derivedSigningKey = (secret: string): string => {
+    if (derivedFor !== secret || derivedKey === undefined) {
+        const seed = Buffer.from(hkdfSync(`sha256`, secret, ``, IDENTITY_KEY_LABEL, 32));
+        derivedKey = createPrivateKey({ key: Buffer.concat([ED25519_PKCS8_PREFIX, seed]), format: `der`, type: `pkcs8` })
+            .export({ format: `pem`, type: `pkcs8` })
+            .toString();
+        derivedFor = secret;
     }
-    if (derivedFrom !== config.identity.signingKey) {
-        derived = publicKeyPemOf(config.identity.signingKey);
-        derivedFrom = config.identity.signingKey;
+    return derivedKey;
+};
+
+// The private half, Ed25519 in PKCS8 PEM: the configured key, else the derived one.
+export const identitySigningKeyOf = (config: Config): string =>
+    config.identity.signingKey === `` ? derivedSigningKey(config.betterAuth.secret) : config.identity.signingKey;
+
+// Its public half; derived rather than configured, so the two halves cannot drift.
+let publicFrom: string | undefined;
+let publicKey: string | undefined;
+export const identityKeyOf = (config: Config): string => {
+    const signingKey = identitySigningKeyOf(config);
+    if (publicFrom !== signingKey || publicKey === undefined) {
+        publicKey = publicKeyPemOf(signingKey);
+        publicFrom = signingKey;
     }
-    return derived;
+    return publicKey;
 };

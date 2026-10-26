@@ -5,7 +5,7 @@ import { ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../context.js";
 import { decryptSecret } from "../crypto.js";
 import { requireUser } from "../guards.js";
-import { emailSignInEnabled, hasGoogleAccount } from "../sign-in.js";
+import { emailSignInEnabled, hasGoogleAccount, identitySigningKeyOf } from "../sign-in.js";
 
 // The platform's signed word that the caller controls their address, for one sandbox they own or accepted an invitation
 // to (sandbox-contract policy/identity-assertion.ts). It is how an account that signs in by email reaches its sandboxes,
@@ -14,7 +14,7 @@ import { emailSignInEnabled, hasGoogleAccount } from "../sign-in.js";
 // platform's word alone never opens a sandbox for a person who signs in there with Google.
 export const mintIdentityAssertionFor = async (context: OrpcContext, sandboxId: string): Promise<MintedIdentityAssertion> => {
     const user = requireUser(context);
-    if (context.config.identity.signingKey === `` || !emailSignInEnabled(context.config)) {
+    if (!emailSignInEnabled(context.config)) {
         throw new ORPCError(`NOT_FOUND`, { message: `this platform vouches for no sign-in to sandboxes` });
     }
     if (!user.emailVerified) {
@@ -36,7 +36,7 @@ export const mintIdentityAssertionFor = async (context: OrpcContext, sandboxId: 
     const issuedAtMs = Date.now();
     const method = (await hasGoogleAccount(context.prisma, user.id)) ? `google` : `email`;
     return {
-        assertion: mintIdentityAssertion(context.config.identity.signingKey, { sandboxId: tunnelId, email, method, issuedAtMs }),
+        assertion: mintIdentityAssertion(identitySigningKeyOf(context.config), { sandboxId: tunnelId, email, method, issuedAtMs }),
         expiresAt: new Date(issuedAtMs + IDENTITY_ASSERTION_TTL_MS).toISOString(),
     };
 };

@@ -57,8 +57,9 @@ const config = (over?: Record<string, unknown>): Config =>
     ({
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
-        // No identity key: a machine's env carries an empty one, as on a platform that signs no assertions.
+        // No identity key configured: the machine's env carries the one derived from the session secret.
         identity: { signingKey: `` },
+        betterAuth: { secret: `s` },
         api: { url: `https://api.test`, trustedIpHeader: `` },
         secrets: { key: `` },
         intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true },

@@ -1,4 +1,6 @@
 import { parseJsonOr } from "@intentic/base/json";
+import { ORPCError } from "@orpc/client";
+import { type EmailRefusal, emailRefusalText, NOT_A_MEMBER } from "./emailRefusal";
 import { anySignal, SingleFlight } from "@intentic/base/async";
 import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../app/hotReload";
@@ -122,9 +124,6 @@ export class SandboxSessionError extends Error {
     }
 }
 
-// The daemon's named refusals of the platform's identity assertion (sandbox-contract schemas/system.ts), and the two this
-// module adds for an assertion that never reached it: the platform would not mint one, or the daemon refused it bare.
-export type EmailRefusal = typeof EMAIL_SIGN_IN_OFF | typeof PLATFORM_KEY_UNKNOWN | `rejected` | `unavailable`;
 interface Refused {
     readonly refused: EmailRefusal;
 }
@@ -373,10 +372,10 @@ const spendAssertion = async (target: ScopedTarget, signal: AbortSignal): Promis
     try {
         assertion = await mintAssertion(target.sandboxId, signal);
     } catch (error) {
-        // The platform would not vouch (an account that is not an email one after all, a platform that signs none) or
-        // could not be asked: the road is closed for now, and said so, rather than read as the daemon's refusal.
+        // NOT_FOUND: not in the sandbox (emailRefusal.ts). Anything else closes the road for now, said so rather than read
+        // as the daemon's refusal.
         console.warn(`[session] the platform minted no identity assertion:`, error);
-        return { refused: `unavailable` };
+        return { refused: error instanceof ORPCError && error.code === `NOT_FOUND` ? NOT_A_MEMBER : `unavailable` };
     }
     const minted = await exchange(target, assertion, signal);
     if (minted === `unauthorized`) {
@@ -384,24 +383,6 @@ const spendAssertion = async (target: ScopedTarget, signal: AbortSignal): Promis
     }
     // The assertion this exchange took is spent; each call of the step-up that follows mints its own.
     return `stepUp` in minted ? { stepUp: minted.stepUp, bearer: () => mintAssertion(target.sandboxId, AbortSignal.timeout(STEP_UP_MINT_MS)) } : minted;
-};
-
-// Words are built when read (languages.md), so a refusal is said in the language of the moment it is shown.
-const emailRefusalText = (refusal: EmailRefusal): string => {
-    switch (refusal) {
-        case EMAIL_SIGN_IN_OFF: {
-            return t(`sandbox.sandboxSession.emailSignInOff`);
-        }
-        case PLATFORM_KEY_UNKNOWN: {
-            return t(`sandbox.sandboxSession.platformKeyUnknown`);
-        }
-        case `rejected`: {
-            return t(`sandbox.sandboxSession.assertionRejected`);
-        }
-        default: {
-            return t(`sandbox.sandboxSession.assertionUnavailable`);
-        }
-    }
 };
 
 // The last refusal an email sign-in met, per sandbox, and when: the no-access gate names it, and the one only the owner
@@ -471,7 +452,7 @@ const emailRoadFor = (target: ScopedTarget, door: DaemonDoor, refusal: EmailRefu
     if (!takesEmailProof(door)) {
         return emailOnly(ways.methods) ? { kind: `outdated`, address: ways.email } : undefined;
     }
-    const known = refusal === EMAIL_SIGN_IN_OFF || refusal === PLATFORM_KEY_UNKNOWN ? refusal : undefined;
+    const known = refusal === EMAIL_SIGN_IN_OFF || refusal === PLATFORM_KEY_UNKNOWN || refusal === NOT_A_MEMBER ? refusal : undefined;
     return { kind: `offered`, address: ways.email, spend: spendForWall(target), refusal: known };
 };
 

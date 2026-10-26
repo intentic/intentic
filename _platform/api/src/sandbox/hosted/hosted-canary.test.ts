@@ -21,6 +21,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         email: { apiKey: ``, from: `` },
         google: { clientId: `gcid` },
         identity: { signingKey: `` },
+        betterAuth: { secret: `s` },
         secrets: { key: `` },
         ingress: { ...testIngressConfig },
         hosted: {

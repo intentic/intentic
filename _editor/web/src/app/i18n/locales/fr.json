@@ -9194,6 +9194,7 @@
             "platformKeyUnknown": "Ce sandbox n'a pas encore joint intentic : il ne peut donc pas vérifier une connexion par e-mail. Réessayez dans une minute.",
             "assertionRejected": "Le sandbox n'a pas accepté la confirmation de votre adresse par intentic.",
             "assertionUnavailable": "intentic n'a pas pu confirmer votre adresse à ce sandbox pour le moment. Réessayez dans un instant.",
+            "notAMember": "Pour intentic, tu n'es pas membre de ce sandbox : l'invitation a été retirée ou n'a pas encore été acceptée. Rouvre le lien d'invitation ou demande-en une nouvelle au propriétaire.",
             "passkeyFirst": "Ce sandbox ne s'ouvre qu'avec une passkey. Ouvrez-le et confirmez d'abord avec la vôtre."
         },
         "passkeySignIn": {

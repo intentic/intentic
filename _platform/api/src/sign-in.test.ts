@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import { mintIdentityAssertion, verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { pino } from "pino";
 import { z } from "zod";
 import { configSchema, type Config } from "./config.js";
@@ -7,6 +8,7 @@ import {
     type CodeAllowances,
     emailSignInEnabled,
     identityKeyOf,
+    identitySigningKeyOf,
     sendSignInCode,
     signInCodeLink,
     signInMethodsOf,
@@ -123,9 +125,22 @@ describe(`email sign-in`, () => {
         expect(signInMethodsOf(true, configWith({ signIn: { email: `false` } }))).toEqual([`google`]);
     });
 
-    it(`answers announces with the identity key's public half, and nothing on a platform that signs none`, () => {
+    it(`answers announces with the identity key's public half`, () => {
         const pair = generateKeyPairSync(`ed25519`, { publicKeyEncoding: { type: `spki`, format: `pem` }, privateKeyEncoding: { type: `pkcs8`, format: `pem` } });
         expect(identityKeyOf(configWith({ signingKey: pair.privateKey }))).toBe(pair.publicKey);
-        expect(identityKeyOf(configWith())).toBeUndefined();
+        expect(identitySigningKeyOf(configWith({ signingKey: pair.privateKey }))).toBe(pair.privateKey);
+    });
+
+    // Production ran without IDENTITY_SIGNING_KEY (2026-10-26) and turned every invited email member away for good.
+    it(`signs with a key derived from the session secret when none is configured: stable, and its own per secret`, () => {
+        const derived = identitySigningKeyOf(configWith());
+        const claim = { sandboxId: `0123456789ab`, email: `ada@example.org`, method: `email` as const, issuedAtMs: Date.now() };
+        expect(verifyIdentityAssertion(identityKeyOf(configWith()), mintIdentityAssertion(derived, claim), Date.now())).toMatchObject({
+            email: `ada@example.org`,
+        });
+        expect(identitySigningKeyOf(configWith())).toBe(derived);
+        const other: Config = { ...configWith(), betterAuth: { secret: `another` } };
+        expect(identitySigningKeyOf(other)).not.toBe(derived);
+        expect(identityKeyOf(other)).not.toBe(identityKeyOf(configWith()));
     });
 });

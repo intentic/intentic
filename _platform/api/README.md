@@ -49,10 +49,13 @@ flowchart LR
   ([identity-assertion.ts](../../_shared/sandbox-contract/src/policy/identity-assertion.ts),
   `src/sandbox/identity-assertion.ts`). The editor asks for one only for an account that signs in by email, and a
   Google account spends its Google ID token. The claim names how the address was confirmed (`google` when a Google account is
-  linked, `email` otherwise). The route answers FORBIDDEN for an address not yet confirmed, and NOT_FOUND on a
-  platform that signs none (no `IDENTITY_SIGNING_KEY`, or email sign-in off), where an email account reaches a sandbox
-  only with a passkey or, for a hosted one it owns, the owner ticket. The key is an Ed25519 private key (PKCS8 PEM)
-  of its own, never `INGRESS_SIGNING_KEY`, so neither can stand in for the other. Every accepted announce carries its
+  linked, `email` otherwise). The route answers FORBIDDEN for an address not yet confirmed, and NOT_FOUND where email
+  sign-in is off or the caller is not in the sandbox. The key is an Ed25519 private key (PKCS8 PEM) of its own, never
+  `INGRESS_SIGNING_KEY`, so neither can stand in for the other: `IDENTITY_SIGNING_KEY` when set, otherwise one derived
+  from `BETTER_AUTH_SECRET` with HKDF and a fixed label (`src/sign-in.ts`). (2026-10-26: production ran without the
+  variable, and every invited member who signed in by code met "try again in a moment" on every press. Deriving it
+  means a platform can no longer let people sign in by email and then turn them away from their sandboxes. A derived
+  key rotates with `BETTER_AUTH_SECRET`.) Every accepted announce carries its
   public half (`identityKey`, derived from the private key), which is how a daemon on its owner's machine learns it,
   and a hosted machine also gets it in its environment as `PLATFORM_IDENTITY_KEY`. Whether an assertion opens anything
   is the daemon's decision ([topology.md](../../docs/architecture/topology.md#trust-model)).

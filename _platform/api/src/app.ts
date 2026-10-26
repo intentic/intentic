@@ -325,9 +325,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         }
         // The identity key rides along so the daemon can verify the platform's identity assertions (sign-in.ts), and the
         // row's own id, so the machine that runs it can open it by that id with no network (ingress-schemas.ts).
-        const identityKey = identityKeyOf(config);
-        const answer = { ok: true as const, ...(await identityField(prisma)), platformId: sandbox.id };
-        return kit.answer(identityKey === undefined ? answer : { ...answer, identityKey });
+        return kit.answer({ ok: true as const, ...(await identityField(prisma)), platformId: sandbox.id, identityKey: identityKeyOf(config) });
     });
 
     // The doors a platform that forgot a sandbox needs: adoption, and which database this is (recovery.routes.ts).
