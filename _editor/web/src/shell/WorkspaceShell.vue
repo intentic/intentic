@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { loadChunk, useDevice } from "@intentic/ui";
-import { defineAsyncComponent, onMounted, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../models/fleet/board/agentsTile";
 import { watchDeviceReturns } from "../features/sandbox/devices/useDeviceReturns";
@@ -16,7 +16,16 @@ import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
 import { markBoot } from "../app/perf/boot";
-import { ADD_SANDBOX_HOME_PATH, ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE, addSandboxAsked, askAddSandbox, closeAddSandbox } from "../models/sandbox/addSandbox";
+import {
+    ADD_SANDBOX_HOME_PATH,
+    ADD_SANDBOX_QUERY,
+    ADD_SANDBOX_VALUE,
+    addSandboxAsked,
+    askAddSandbox,
+    closeAddSandbox,
+    useAddsOnHome,
+} from "../models/sandbox/addSandbox";
+import { newSandboxBusy, newSandboxGeneration, newSandboxShownBy } from "../features/home/newSandbox/newSandbox";
 import { useAuth } from "../client/auth/useAuth";
 import { signInAt } from "../lib/routes/signIn";
 import { loadShellDesktop, loadShellMobile } from "./shellChunks";
@@ -29,6 +38,8 @@ const ShellDesktop = defineAsyncComponent(() => loadChunk(loadShellDesktop));
 const ShellMobile = defineAsyncComponent(() => loadChunk(loadShellMobile));
 // Fetched the first time somebody presses "Add sandbox", not with the shell.
 const AddSandboxDialog = defineAsyncComponent(() => import(`../features/setup/add/AddSandboxDialog.vue`));
+// Home's new sandbox's run, fetched the first time Home is asked for one (features/home/newSandbox/newSandbox.ts).
+const NewSandboxHost = defineAsyncComponent(() => import(`../features/home/newSandbox/NewSandboxHost.vue`));
 
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
@@ -72,16 +83,25 @@ watch(mobile, (isMobile) => {
     }
 });
 
-// The desktop app's folder window hands "Add sandbox" here as an address (switcherPlace.ts): the dialog opens over the
-// workspace, and the address loses its ask so a reload does not raise it again.
+// THE ASK FOR A NEW SANDBOX AS AN ADDRESS: every press on a desktop (models/sandbox/addSandbox.ts), the desktop app's
+// folder window handing its "Add sandbox" here (switcherPlace.ts), a sign-in coming back. On a desktop it is Home's own
+// address while the new sandbox's page is up, so it stays, and anywhere else it is taken to Home. Where there is no Home
+// to make it on, the dialog opens over the workspace and the address loses its ask, so a reload does not raise it again.
+const addsOnHome = useAddsOnHome();
 watch(
-    () => route.query[ADD_SANDBOX_QUERY],
-    (value) => {
+    () => [route.query[ADD_SANDBOX_QUERY], route.name, mobile.value] as const,
+    ([value, name]) => {
         if (value !== ADD_SANDBOX_VALUE) {
             return;
         }
         if (user.value === null) {
             void router.replace(signInAt(ADD_SANDBOX_HOME_PATH));
+            return;
+        }
+        if (addsOnHome()) {
+            if (name !== `home`) {
+                void router.replace(ADD_SANDBOX_HOME_PATH);
+            }
             return;
         }
         askAddSandbox();
@@ -90,6 +110,9 @@ watch(
     },
     { immediate: true },
 );
+// The new sandbox's run is held here, above Home, so another tile pressed or a sandbox entered meanwhile leaves it going;
+// a fresh host for each run, and none once a run has ended and Home no longer asks for one.
+const newSandboxHosted = computed(() => user.value !== null && (newSandboxBusy.value || (!mobile.value && newSandboxShownBy(route))));
 
 // A dead sandbox no longer bounces the shell to /setup, which now only creates a new one.
 // SandboxSwitcher and the liveness probe handle switching or adding one instead.
@@ -100,4 +123,5 @@ watch(
     <ShellMobile v-if="mobile" />
     <ShellDesktop v-else />
     <AddSandboxDialog v-if="addSandboxAsked" @close="closeAddSandbox" />
+    <NewSandboxHost v-if="newSandboxHosted" :key="newSandboxGeneration" />
 </template>

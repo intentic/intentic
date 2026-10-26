@@ -1,11 +1,15 @@
+import { useDevice } from "@intentic/ui";
 import { readonly, ref } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useAccount } from "../../client/auth/useAccount";
+import { useRole } from "../../client/sandbox/useRole";
 import { signInAt } from "../../lib/routes/signIn";
 
-// ONE "ADD SANDBOX" ACTION, over the home or workspace the reader is already in. The dialog is mounted once by the
-// shell (features/setup/add/AddSandboxDialog.vue), including for the account's first sandbox. Signing in is the only
-// detour: it returns to the home address whose query asks that same dialog to open.
+// ONE "ADD SANDBOX" ACTION, wherever it is pressed. On a desktop it is made on Home, in a tile of its own rail with its
+// page in the chat's place (features/home/newSandbox/newSandbox.ts), whatever the press was in; the address of that
+// page is the ask. Where there is no Home to make it on (a phone, which has no rail, and a guest's window, whose way in
+// is a box's chat) it is the dialog the shell mounts (features/setup/add/AddSandboxDialog.vue). Signing in is the only
+// detour: it returns to the home address whose query asks for either.
 //
 // The ask lives here, below the features, so the switcher, the home rail and the phone's menu can raise a dialog that
 // is setup's without importing it (layers.json: no two features may form a cycle, and setup already reads sandbox's).
@@ -35,18 +39,30 @@ export const closeAddSandbox = (): void => {
     asked.value = false;
 };
 
-/** Adds in place once signed in; otherwise asks for sign-in and returns to this same dialog on home. */
-export const requestAddSandbox = (authenticated: boolean, navigate: (destination: RouteLocationRaw) => void): void => {
-    if (!authenticated) {
-        navigate(signInAt(ADD_SANDBOX_HOME_PATH));
+/** Whether a window adds on Home rather than through the dialog: a desktop shell, for anyone who has a Home. */
+export const addsOnHome = (input: { readonly mobile: boolean; readonly isGuest: boolean; readonly homeOnly: boolean }): boolean =>
+    !input.mobile && (!input.isGuest || input.homeOnly);
+
+/** Adds on Home or in the dialog once signed in; otherwise asks for sign-in and returns to the same ask on home. */
+export const requestAddSandbox = (authenticated: boolean, onHome: boolean, navigate: (destination: RouteLocationRaw) => void): void => {
+    if (!authenticated || onHome) {
+        navigate(authenticated ? ADD_SANDBOX_HOME_PATH : signInAt(ADD_SANDBOX_HOME_PATH));
         return;
     }
     askAddSandbox();
+};
+
+/** Whether this window adds on Home (above), as its shell and its role stand now. */
+export const useAddsOnHome = (): (() => boolean) => {
+    const { mobile } = useDevice();
+    const { isGuest, homeOnly } = useRole();
+    return () => addsOnHome({ mobile: mobile.value, isGuest: isGuest.value, homeOnly: homeOnly.value });
 };
 
 /** The add action shared by the home rail, sandbox switcher, phone menu and command palette. */
 export const useRequestAddSandbox = (): (() => void) => {
     const { user } = useAccount();
     const router = useRouter();
-    return () => requestAddSandbox(user.value !== null, (destination) => void router.push(destination));
+    const onHome = useAddsOnHome();
+    return () => requestAddSandbox(user.value !== null, onHome(), (destination) => void router.push(destination));
 };

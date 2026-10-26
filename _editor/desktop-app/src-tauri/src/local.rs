@@ -796,9 +796,19 @@ fn home_folder(state: &AppState) -> Result<PathBuf, Trouble> {
 /// [`open_home`], off the calling thread: it may wait on the sidecar's first start, and the thread asking is often the
 /// one that draws every window (a launch, the tray). What fails is said in a dialog.
 pub fn open_home_later(app: &AppHandle, route: Option<String>) {
+    open_home_off_thread(app, route, true);
+}
+
+/// The main window built where nobody sees it, for work it runs out of sight: a setup the workspace draws on its own
+/// page (windows/links.rs `park_setup`). Showing it later is the swap every other road takes, onto a page already up.
+pub fn open_home_hidden_later(app: &AppHandle) {
+    open_home_off_thread(app, None, false);
+}
+
+fn open_home_off_thread(app: &AppHandle, route: Option<String>, shown: bool) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Err(trouble) = open_home(&app, route.as_deref()) {
+        if let Err(trouble) = open_home(&app, route.as_deref(), shown) {
             eprintln!(
                 "intentic: the main window did not open: {}",
                 trouble.detail()
@@ -811,17 +821,17 @@ pub fn open_home_later(app: &AppHandle, route: Option<String>) {
 
 /// Build the main window on its folder, at `route` when given, in the frame the workspace holds when it is on
 /// screen (windows.rs). Never twice: a second caller while the first is still building finds it being built.
-fn open_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
+fn open_home(app: &AppHandle, route: Option<&str>, shown: bool) -> Result<(), Trouble> {
     let files = app.state::<LocalFiles>();
     if files.home_opening.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
-    let opened = build_home(app, route);
+    let opened = build_home(app, route, shown);
     files.home_opening.store(false, Ordering::SeqCst);
     opened
 }
 
-fn build_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
+fn build_home(app: &AppHandle, route: Option<&str>, shown: bool) -> Result<(), Trouble> {
     if crate::frame::face(app, crate::windows::HOME).is_some() {
         return Ok(());
     }
@@ -841,9 +851,12 @@ fn build_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
         face_init(Some(&grant.face)),
         route.map(route_init).unwrap_or_default()
     );
-    if let Err(error) =
-        crate::windows::local_pages::show_home_face(app, &format!("{name} · Intentic"), &init)
-    {
+    if let Err(error) = crate::windows::local_pages::show_home_face(
+        app,
+        &format!("{name} · Intentic"),
+        &init,
+        shown,
+    ) {
         files.windows.lock().unwrap().remove(crate::windows::HOME);
         let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
         return Err(Trouble::Failed(error));

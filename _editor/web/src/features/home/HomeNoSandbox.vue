@@ -1,10 +1,11 @@
 <!-- HOME'S FIRST RUN: what the person sees before their first sandbox, which since Home became the first screen
      (2026-10-25) is the first thing a new account sees at all. It says what a sandbox is and how the master view is
-     used, in three steps, and makes one on a press: the Add sandbox dialog over this page, which stays up until the new
-     sandbox's home conversation is on screen here (features/setup/add/). It used to be a disabled composer and a coach
+     used, in three steps, and makes one on a press: the new sandbox's tile and page in this one's place, which stays
+     until its home conversation is on screen here (newSandbox/newSandbox.ts; a phone's dialog, features/setup/add/). It
+     used to be a disabled composer and a coach
      mark pointing at the rail's +, and before that a setup page that started a machine the moment it arrived.
      - A setup of the person's own that never finished is offered first, by name: it resumes on /setup.
-     - Signed out (anonymous Home), Create signs in first and comes back to the dialog (models/sandbox/addSandbox.ts),
+     - Signed out (anonymous Home), Create signs in first and comes back to the same ask (models/sandbox/addSandbox.ts),
        and a returning person whose session ended is told plainly that signing in brings their sandboxes back. -->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";

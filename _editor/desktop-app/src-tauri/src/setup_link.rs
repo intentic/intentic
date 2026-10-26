@@ -656,7 +656,13 @@ fn shell_target(url: &url::Url) -> Option<ShellTarget> {
 pub enum Link {
     Shell(ShellTarget),
     AnalyticsConsent(bool),
-    Setup(Box<SetupArgs>),
+    /// `stay`: the page that asked keeps the window, and draws the run itself from the reports it hears
+    /// (windows/links.rs `park_setup`). Only the app's own window may ask it: a stranger's link that ran
+    /// out of sight is exactly what [`Source::External`]'s confirmation is for.
+    Setup {
+        args: Box<SetupArgs>,
+        stay: bool,
+    },
     Recreate(RecreateArgs),
     Fix(FixArgs),
     Sync(SyncArgs),
@@ -801,18 +807,21 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             let project = get("project")
                 .filter(|_| from_app)
                 .filter(|name| crate::project::is_project_dir_name(name));
-            Some(Link::Setup(Box::new(SetupArgs {
-                code: get("code")?,
-                sandbox_id: get("sandbox"),
-                name: get("name"),
-                cf_token: get("cfToken").filter(|_| from_app),
-                sync_dir: get("syncDir").filter(|_| project.is_none()),
-                platform_url: get("platform").filter(|_| from_app),
-                project,
-                slug: None,
-                minted_at: None,
-                profile: get("profile").filter(|name| PROFILES.contains(&name.as_str())),
-            })))
+            Some(Link::Setup {
+                stay: from_app && get("stay").as_deref() == Some("1"),
+                args: Box::new(SetupArgs {
+                    code: get("code")?,
+                    sandbox_id: get("sandbox"),
+                    name: get("name"),
+                    cf_token: get("cfToken").filter(|_| from_app),
+                    sync_dir: get("syncDir").filter(|_| project.is_none()),
+                    platform_url: get("platform").filter(|_| from_app),
+                    project,
+                    slug: None,
+                    minted_at: None,
+                    profile: get("profile").filter(|name| PROFILES.contains(&name.as_str())),
+                }),
+            })
         }
         "shell" => shell_target(&parsed).map(Link::Shell),
         "signin" => Some(Link::SignIn {
@@ -1076,7 +1085,7 @@ mod tests {
 
     fn setup_of(url: &str) -> Option<SetupArgs> {
         match parse_link(url, APP)? {
-            Link::Setup(args) => Some(*args),
+            Link::Setup { args, .. } => Some(*args),
             _ => None,
         }
     }
@@ -1106,6 +1115,20 @@ mod tests {
         assert_eq!(desk.profile.as_deref(), Some("desk"));
         let forged = setup_of("intentic://setup?code=abc&sandbox=sbx_7&profile=..%2Fevil").unwrap();
         assert_eq!(forged.profile, None);
+    }
+
+    /// The workspace's Home draws an install it started on its own page, so its link asks the app to stay out of
+    /// sight; nothing else may: an outside link always comes forward, to be confirmed.
+    #[test]
+    fn only_the_apps_own_window_keeps_a_setup_out_of_sight() {
+        let stays = |url: &str, source| match parse_link(url, source) {
+            Some(Link::Setup { stay, .. }) => stay,
+            other => panic!("expected a setup link, got {other:?}"),
+        };
+        assert!(stays("intentic://setup?code=abc&stay=1", APP));
+        assert!(!stays("intentic://setup?code=abc", APP));
+        assert!(!stays("intentic://setup?code=abc&stay=yes", APP));
+        assert!(!stays("intentic://setup?code=abc&stay=1", Source::External));
     }
 
     #[test]
@@ -1697,7 +1720,7 @@ L"}"#,
     #[test]
     fn an_external_link_cannot_choose_the_platform_or_supply_a_cloudflare_token() {
         let url = "intentic://setup?code=abc123&syncDir=%2Fhome%2Fme&cfToken=cf&platform=https%3A%2F%2Fevil.example";
-        let Some(Link::Setup(args)) = parse_link(url, Source::External) else {
+        let Some(Link::Setup { args, .. }) = parse_link(url, Source::External) else {
             panic!("expected a setup link");
         };
         assert_eq!(args.platform_url, None);
@@ -1707,7 +1730,7 @@ L"}"#,
         assert_eq!(args.sync_dir.as_deref(), Some("/home/me"));
 
         // …and the same link from the app's own window keeps both, which is the local-dev path.
-        let Some(Link::Setup(args)) = parse_link(url, APP) else {
+        let Some(Link::Setup { args, .. }) = parse_link(url, APP) else {
             panic!("expected a setup link");
         };
         assert_eq!(args.platform_url.as_deref(), Some("https://evil.example"));
@@ -1724,7 +1747,7 @@ L"}"#,
         let args = setup_of("intentic://setup?code=abc&project=my-app&syncDir=%2Fetc").unwrap();
         assert_eq!(args.project.as_deref(), Some("my-app"));
         assert_eq!(args.sync_dir, None);
-        let Some(Link::Setup(outside)) =
+        let Some(Link::Setup { args: outside, .. }) =
             parse_link("intentic://setup?code=abc&project=my-app", Source::External)
         else {
             panic!("an external setup link still parses");

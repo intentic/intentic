@@ -35,7 +35,7 @@ const failure = shallowRef(false);
 const now = useNow(() => true);
 const retry = shallowRef(0);
 // The panel the page lends draws exactly this one (models/home/homeChat.ts), and the sandbox it belongs to is said to be
-// on screen, which is what the Add sandbox dialog opened from here waits on.
+// on screen, which is what a new sandbox's first start waits on (newSandbox/HomeNewSandbox.vue).
 watch(
     conversation,
     (open) => {

@@ -17,9 +17,9 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     match parse_link(link, source) {
         Some(Link::Shell(target)) => crate::shell::open(app, target),
-        Some(Link::Setup(args)) => match source {
+        Some(Link::Setup { args, stay }) => match source {
             // A project's setup gets the folder this app parked for it, and only here (project.rs).
-            Source::App { .. } => park_setup(app, crate::project::bind(app, *args)),
+            Source::App { .. } => park_setup(app, crate::project::bind(app, *args), stay),
             Source::External => confirm_setup(app, *args),
             // Never parsed from a local window (setup_link.rs); named so a new source is a decision here too.
             Source::Files { .. } => {}
@@ -155,7 +155,14 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
 /// Hand a setup to This device, which runs it on arrival (src/device/useDevice.ts says why), in the main window, in
 /// the frame the workspace that asked for it was occupying: the same handover every other screen of this app makes.
 /// A link does not say when its code was minted, so its arrival stands in for that (`SetupArgs::minted_at`).
-fn park_setup(app: &AppHandle, mut args: SetupArgs) {
+///
+/// `stay` (2026-10-26): the workspace's Home asked, and it draws the run on its own page, in a tile of its own rail,
+/// from the reports this app sends it (setup.rs `announce_setup`). Swapping This device in over it took the reader
+/// out of Home into another part of the app to watch a bar Home already shows. So the main window takes the run out
+/// of sight: the page it already has hears the parked setup, and one not built yet is built hidden and finds it on
+/// its start. What only this app can ask (a consent, a restart) or a run that stops still brings the card forward
+/// (setup.rs `alert_setup`), as after "Back to your workspace".
+fn park_setup(app: &AppHandle, mut args: SetupArgs, stay: bool) {
     args.minted_at = args.minted_at.or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -166,7 +173,13 @@ fn park_setup(app: &AppHandle, mut args: SetupArgs) {
         .pending
         .lock()
         .unwrap() = Some(args);
-    show_device(app);
+    if !stay {
+        show_device(app);
+    } else if crate::frame::face(app, super::HOME).is_none() {
+        // Its page takes the parked setup as it starts (useDevice.ts `takeParkedWork`), so no event is needed.
+        crate::local::open_home_hidden_later(app);
+        return;
+    }
     let _ = tauri::Emitter::emit(app, "desktop://pending-setup", ());
 }
 
@@ -195,7 +208,7 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
         ))
         .show(move |confirmed| {
             if confirmed {
-                park_setup(&handle, args);
+                park_setup(&handle, args, false);
             }
         });
 }

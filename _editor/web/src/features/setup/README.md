@@ -2,7 +2,7 @@
 
 The `/setup` page: it makes the sandbox row a visit sets up, decides by itself where that sandbox runs, and opens its workspace once the sandbox answers.
 Since Home became the first screen (2026-10-25) a browser account with nothing to open is not sent here: it lands on
-Home's first run, which makes its first sandbox with the Add sandbox dialog below. This page is where an unfinished
+Home's first run, which makes its first sandbox in place on Home (below). This page is where an unfinished
 setup of the reader's own is resumed, where "More ways" and cloud pricing lead, and what the desktop app opens.
 
 - **Starting from cloud pricing** opens `/start/hosted` (`hosted/HostedStart.vue`), outside the workspace gate. It reads
@@ -58,22 +58,26 @@ setup of the reader's own is resumed, where "More ways" and cloud pricing lead, 
   `progress/`, and draws the run with `<StagedProgress>`, the card every long run on a machine uses: the steps, a bar
   sized by them, the time left, and the raw output behind "Show log", which opens by itself when the run fails.
 
-- **Adding a sandbox** is not this page. "Add sandbox" (the switcher, the home rail, the phone's Menu and the command
-  palette) opens a dialog over the current place instead (`add/AddSandboxDialog.vue`, `add/useAddSandbox.ts`), for the
-  first and every later sandbox. Signed-out home first asks for sign-in, then returns with this dialog open: a
-  name and where it runs (this computer in the app, a connected machine, a machine of ours with room), then one press.
-  It runs this page's own flows on the row (`useSetupRow`, `useHostedLane`, `useSetupOnMachine`, `useRegistryWatch`),
-  so `/setup?sandbox=<id>` resumes the same run, and the getting-started ring's "Finish setting up" reaches it once the
-  dialog is closed. Once the sandbox reports in it is selected behind the dialog, which stays up through its first start
-  (`add/AddSandboxOpening.vue`, the daemon's boot steps) and closes only once the workspace is on screen, so the
-  connecting and starting gates are never shown. Opened from Home (the first sandbox always is), the
-  dialog closes onto Home with the new sandbox selected, once its home conversation is on screen
-  (`models/home/homeChat.ts` `homeShownFor`), and that conversation is where the first session starts; a finished
-  setup here lands there too (`landingAfterSetup`), a folder's project inside its sandbox. Opened from inside a
-  sandbox, the workspace opens on the new one's full-screen chat (`/chat`). The dialog draws the run itself and links to no
-  `/setup`: that page cannot pick up a press on a machine mid-stream, so it showed only the install picker. Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`,
-  which skips the "You already have a sandbox" question and opens the picker. The shared add action and its return
-  address live in `models/sandbox/addSandbox.ts`.
+- **Adding a sandbox** is not this page. On a desktop every "Add sandbox" (the home rail's +, Home's first run, the
+  switcher, the command palette, the desktop app's folder window) makes it on Home, in a tile of its own with its page
+  in the chat's place (`features/home/newSandbox/`, which says why). A phone, with no rail, and a guest of a box, with no
+  Home, get a dialog over the current place instead (`add/AddSandboxDialog.vue`). Both draw the same pieces: the form
+  (`add/AddSandboxForm.vue`: a name and where it runs, this computer in the app, a connected machine, a machine of ours
+  with room), the run (`add/AddSandboxRun.vue`), and one wiring of this window's platform, app and credential
+  (`add/useAddSandboxHere.ts`) around the press (`add/useAddSandbox.ts`). Signed out, the press asks for sign-in and
+  returns to the same ask. It runs this page's own flows on the row (`useSetupRow`, `useHostedLane`,
+  `useSetupOnMachine`, `useRegistryWatch`), so `/setup?sandbox=<id>` resumes the same run, and the getting-started
+  ring's "Finish setting up" reaches it once it is put away. Once the sandbox reports in it is selected, unless Home's
+  reader went back to another sandbox meanwhile, and the run waits out its first start (`add/AddSandboxOpening.vue`, the
+  daemon's boot steps), so the connecting and starting gates are never shown: on Home until its home conversation is on
+  screen (`models/home/homeChat.ts` `homeShownFor`), where the first session starts; a finished setup here lands there
+  too (`landingAfterSetup`), a folder's project inside its sandbox. The dialog opened inside a sandbox opens the new
+  one's full-screen chat (`/chat`). Home asks the desktop app to run an install on this computer out of sight
+  (`DesktopSetupArgs.stay`), since it draws the run itself; the dialog leaves the app its card. Neither links to
+  `/setup` for the run: that page cannot pick up a press on a machine mid-stream, so it showed only the install picker.
+  Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`, which skips the "You
+  already have a sandbox" question and opens the picker. The shared add action and its return address live in
+  `models/sandbox/addSandbox.ts`.
 
 ## Key files
 
@@ -90,6 +94,6 @@ setup of the reader's own is resumed, where "More ways" and cloud pricing lead, 
   is slow enough to offer a machine of ours instead. Taking that offer inside the app first sends `intentic://setup-stop`,
   so the PC stops downloading for a sandbox whose address the machine of ours takes over.
 - [Setup.vue](Setup.vue) — the page that wires the flows together.
-- [add/useAddSandbox.ts](add/useAddSandbox.ts) — the Add sandbox dialog's press, over the same flows.
+- [add/useAddSandbox.ts](add/useAddSandbox.ts) — the Add sandbox press, Home's and the dialog's, over the same flows.
 - [SetupAccount.vue](SetupAccount.vue) — the masthead's account and its sign-out, the page being outside the shell's
   account menu; the page discards its draft row first, while the session can still delete it.

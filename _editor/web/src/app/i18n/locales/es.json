@@ -13134,6 +13134,24 @@
         "view": {
             "back": "Volver al chat",
             "continueInChat": "Seguir en el chat"
+        },
+        "newSandbox": {
+            "title": "Nuevo sandbox",
+            "settingUp": "Configurando {name}",
+            "meanwhile": "Mientras tanto, vuelve a cualquier otro sandbox. Este icono sigue mostrando cuánto ha avanzado, y {name} se abre aquí en cuanto esté listo.",
+            "failedLine": "Se detuvo antes de estar listo. Abajo está lo que pasó.",
+            "create": "Crear sandbox",
+            "dismiss": "Descartar",
+            "ready": "Listo · doble clic para abrir",
+            "tile": {
+                "draft": "Aún no creado",
+                "running": "Configurando…",
+                "runningPercent": "Configurando · {percent}%",
+                "asking": "Necesita tu respuesta",
+                "failed": "Se detuvo antes de estar listo",
+                "refused": "No se pudo crear",
+                "opening": "Arrancando por primera vez"
+            }
         }
     },
     "hostedStart": {

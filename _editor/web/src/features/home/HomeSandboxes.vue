@@ -18,6 +18,8 @@ import { goInside } from "../../lib/routes/homeDetour";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
+import NewSandboxTile from "./newSandbox/NewSandboxTile.vue";
+import { newSandbox, newSandboxShownBy, readySandboxes, seenReady } from "./newSandbox/newSandbox";
 
 defineOptions({ inheritAttrs: false });
 const { phone = false } = defineProps<{ phone?: boolean }>();
@@ -28,18 +30,26 @@ const { homeOnly } = useRole();
 const { user } = useAuth();
 // The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
 // daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
-const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)));
+// The sandbox Home is making (newSandbox.ts) is its own tile until its run ends, not a second one beside it.
+const making = computed(() => newSandbox.value?.here.add.created.value?.id);
+const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)).filter((box) => box.id !== making.value));
 // Before the first sandbox the + wears getting started's beacon, a quiet second way to the press the page itself leads
 // with (HomeNoSandbox.vue). No coach mark beside it any more: the page says what it would have said, and a popover over
 // a page that already asks for the same press is two voices for one thing.
 const readings = useHomeAttention();
 const badgeOf = (id: string): ViewBadge | undefined => {
     const count = readings.value.get(id)?.needsYou ?? 0;
-    return count > 0 ? { count, tooltip: t(`home.sandboxAttention`, { name: boxes.value.find((box) => box.id === id)?.name ?? ``, count }) } : undefined;
+    if (count > 0) {
+        return { count, tooltip: t(`home.sandboxAttention`, { name: boxes.value.find((box) => box.id === id)?.name ?? ``, count }) };
+    }
+    // Made while its reader was in another sandbox's chat: it says it is ready until it is opened.
+    return readySandboxes.value.has(id) ? { mark: `check`, tone: `info` } : undefined;
 };
+const noteOf = (id: string): string => (readySandboxes.value.has(id) ? t(`home.newSandbox.ready`) : t(`home.doubleClickToEnter`));
 // The tile of the sandbox whose chat the page shows; on a page of the person's own (settings), none is.
 const route = useRoute();
-const selected = (id: string): boolean => route.name === `home` && sandbox.activeSandboxId.value === id;
+// While the new sandbox's page stands in the chat's place, its tile is the selected one.
+const selected = (id: string): boolean => route.name === `home` && sandbox.activeSandboxId.value === id && !newSandboxShownBy(route);
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
 // The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
 const add = useRequestAddSandbox();
@@ -49,6 +59,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
     // A home-only guest has no sandbox to enter: its home is the whole of what it reaches there.
     const action = homeOnly.value ? `select` : tileAction(input, last?.id === id, last === undefined ? Infinity : now - last.at);
     last = { id, at: now };
+    seenReady(id);
     sandbox.select(id);
     if (action === `enter`) {
         // Into the sandbox, where it was last left: `/` alone is Home itself (lib/routes/firstScreens.ts). Inside for real,
@@ -122,13 +133,14 @@ const choose = (id: string, input: `click` | `enter`): void => {
             :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ui-row-select-on': selected(box.id) }"
             :aria-label="labelOf(box.id, box.name)"
             :aria-current="selected(box.id) ? 'true' : undefined"
-            v-tooltip.right="{ title: box.name, note: t(`home.doubleClickToEnter`) }"
+            v-tooltip.right="{ title: box.name, note: noteOf(box.id) }"
             @click="choose(box.id, 'click')"
             @keydown.enter.prevent="choose(box.id, 'enter')"
         >
             <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
         </button>
+        <NewSandboxTile />
         <span class="relative flex shrink-0">
             <button
                 type="button"
@@ -139,7 +151,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             >
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
             </button>
-            <Beacon v-if="!boxes.length" size="sm" class="absolute right-1 top-1" />
+            <Beacon v-if="!boxes.length && !making && !newSandbox" size="sm" class="absolute right-1 top-1" />
         </span>
     </div>
 </template>

@@ -13134,6 +13134,24 @@
         "view": {
             "back": "Zurück zum Chat",
             "continueInChat": "Im Chat weitermachen"
+        },
+        "newSandbox": {
+            "title": "Neue Sandbox",
+            "settingUp": "{name} wird eingerichtet",
+            "meanwhile": "Wechseln Sie solange zu einer anderen Sandbox. Diese Kachel zeigt weiter, wie weit es ist, und {name} öffnet sich hier, sobald sie bereit ist.",
+            "failedLine": "Sie hat angehalten, bevor sie bereit war. Was passiert ist, steht unten.",
+            "create": "Sandbox erstellen",
+            "dismiss": "Verwerfen",
+            "ready": "Bereit · zum Öffnen doppelklicken",
+            "tile": {
+                "draft": "Noch nicht erstellt",
+                "running": "Wird eingerichtet…",
+                "runningPercent": "Wird eingerichtet · {percent} %",
+                "asking": "Wartet auf Ihre Antwort",
+                "failed": "Angehalten, bevor sie bereit war",
+                "refused": "Konnte nicht erstellt werden",
+                "opening": "Startet zum ersten Mal"
+            }
         }
     },
     "hostedStart": {

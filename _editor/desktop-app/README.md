@@ -719,7 +719,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 
 | Link | Accepted from | Does |
 | --- | --- | --- |
-| `setup?code=…[&sandbox=…][&name=…][&syncDir=…]` | anywhere; outside asks first | Devices, in the main window, runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. |
+| `setup?code=…[&sandbox=…][&name=…][&syncDir=…][&stay=1]` | anywhere; outside asks first | Devices, in the main window, runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. `stay=1`, also only from the app, is the workspace's Home drawing the run itself: the main window runs it out of sight (built hidden when it is not up yet) rather than swapping in over the page, and comes forward only for a question it alone can ask or a run that stops (`windows/links.rs` `park_setup`). |
 | `signin[?switch=1]` | anywhere | Opens platform sign-in in the default browser; `switch` asks for the account chooser. |
 | `auth?handoff=…&state=…[&profile=…]` | anywhere | Completes a sign-in this app started and opens the workspace at `/desktop-auth/complete`. A sign-in pressed in a local window carries `back=agent` on that path, and the page sends `launcher?to=agent` once it is redeemed and before it opens a sandbox of its own, so a folder's "Work on this with an agent" ends on that folder rather than on the account's sandbox list. The app remembers which local window pressed it, for the way back. |
 | `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync from Devices; the folder is picked in a system dialog. |

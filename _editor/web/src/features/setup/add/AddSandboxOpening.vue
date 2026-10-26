@@ -1,8 +1,9 @@
-<!-- THE NEW SANDBOX'S FIRST START, SEEN FROM THE DIALOG. Once it reports in, the setup row selects it and the workspace
-     behind the dialog connects to it, then waits out its boot chain (SandboxGate's "Connecting" and "Starting" pages).
-     Nobody needs to watch those: this keeps the dialog up, says how far the boot has got from the daemon's own declared
-     steps (useDaemonBoot.ts, the ones SandboxWarming lists), and says `shown` once the workspace is on screen ready to use,
-     or, opened from Home, the new sandbox's home conversation (models/home/homeChat.ts `homeShownFor`).
+<!-- THE NEW SANDBOX'S FIRST START, SEEN FROM WHERE IT WAS MADE: the dialog, or Home's page for it. Once it reports in,
+     the setup row selects it and the workspace (or Home's chat) behind connects to it, then waits out its boot chain
+     (SandboxGate's "Connecting" and "Starting" pages). Nobody needs to watch those: this keeps the run on screen, says how
+     far the boot has got from the daemon's own declared steps (useDaemonBoot.ts, the ones SandboxWarming lists), and says
+     `shown` once the workspace is on screen ready to use, or on Home the new sandbox's home conversation
+     (models/home/homeChat.ts `homeShownFor`).
      A start that outlasts OPEN_ANYWAY_MS is handed over as it is, so the gate behind can say why. -->
 <script setup lang="ts">
 import { Meter } from "@intentic/ui";

@@ -21,12 +21,15 @@ const {
     putAway = false,
     stepSince = undefined,
     hostedOffered = false,
+    inPlace = false,
 } = defineProps<{
     report: DesktopSetupReport;
     heardAt: number | undefined;
     putAway?: boolean;
     stepSince?: number | undefined;
     hostedOffered?: boolean;
+    // Drawn on Home's new sandbox, whose page says for itself that the run goes on without it: no card to close here.
+    inPlace?: boolean;
 }>();
 const emit = defineEmits<{ reopen: []; elsewhere: []; hosted: [] }>();
 
@@ -118,7 +121,7 @@ const asking = computed(() => report.state === `waiting` && sessionEnd.value ===
                     <template v-else-if="asking">
                         {{ t(`setup.desktopSetupProgress.foundThingsPcNeeds`) }}
                     </template>
-                    <template v-else>{{ t(`setup.desktopSetupProgress.closingSetupCardDidnt`) }}</template>
+                    <template v-else-if="!inPlace">{{ t(`setup.desktopSetupProgress.closingSetupCardDidnt`) }}</template>
                 </span>
                 <Button
                     size="small"

@@ -6,10 +6,15 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeSandboxes from "./HomeSandboxes.vue";
 import HomeChat from "./HomeChat.vue";
+import HomeNewSandbox from "./newSandbox/HomeNewSandbox.vue";
+import { newSandboxShownBy } from "./newSandbox/newSandbox";
 const route = useRoute();
 const { mobile } = useDevice();
 const sandbox = useSandbox();
 const list = computed(() => mobile.value && route.params[`sandbox`] === undefined);
+// The new sandbox's page in the chat's place (newSandbox.ts); a phone adds through its dialog instead. The chat stays
+// mounted underneath, hidden, so going back to it finds its draft as it was.
+const making = computed(() => !mobile.value && newSandboxShownBy(route));
 watch(
     () => [route.params[`sandbox`], sandbox.sandboxes.value] as const,
     ([id, boxes]) => {
@@ -25,6 +30,9 @@ watch(
 <template>
     <div class="flex h-full min-h-0 overflow-hidden" data-home-view>
         <HomeSandboxes v-if="list" :phone="true" class="w-full" />
-        <HomeChat v-else :key="sandbox.activeSandboxId.value" />
+        <template v-else>
+            <HomeNewSandbox v-if="making" />
+            <HomeChat v-show="!making" :key="sandbox.activeSandboxId.value" />
+        </template>
     </div>
 </template>

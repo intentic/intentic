@@ -418,12 +418,12 @@ export interface DesktopSetupArgs {
      * a code it mints later for the same setup (one that ran out across a restart) asks for the same profile.
      */
     profile?: string;
+    stay?: boolean; // Home draws the run itself, so the app runs it out of sight (desktop-app links.rs `park_setup`).
 }
 
 // No `mode` on this link: the script learns its reachability target by redeeming the code, so naming the mode here
-// would be a second, driftable copy of that decision. The Cloudflare token rides only inside the desktop webview
-// (the nav never reaches the OS); an external deep link can be logged by the protocol handler, so it's omitted
-// there.
+// would be a second, driftable copy of that decision. The Cloudflare token rides only inside the desktop webview (the
+// nav never reaches the OS); an external deep link can be logged by the protocol handler, so it's omitted there.
 export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     const params = new URLSearchParams({ code: args.code });
     // Empty is absent: a blank name or folder on the link is a value the app would otherwise act on.
@@ -439,9 +439,9 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     carry(`syncDir`, args.project === undefined || args.project === `` ? args.syncDir : undefined);
     carry(`project`, args.project);
     carry(`profile`, args.profile);
-    if (args.platformUrl !== undefined) {
-        params.set(`platform`, args.platformUrl);
-    }
+    carry(`stay`, args.stay === true ? `1` : undefined);
+    // An empty one is no platform either: the app reads a blank value as absent (setup_link.rs).
+    carry(`platform`, args.platformUrl);
     return `intentic://setup?${params.toString()}`;
 };
 

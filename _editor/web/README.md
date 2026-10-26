@@ -314,7 +314,7 @@ flowchart LR
   **Home** (`/home`, the master view below) for everyone but a guest of a box, whose way in is its chat, and the
   Android app's WebView, which keeps the board it draws itself (`lib/routes/firstScreens.ts` `rootLanding`). `/home` alone
   also opens signed out, with its first run and no account registry or plan reads. Its Add sandbox action asks for
-  sign-in and returns to `/home?add=sandbox`, whose query opens the usual dialog. The shell renders `ShellDesktop.vue`
+  sign-in and returns to `/home?add=sandbox`, the address of Home's new sandbox (below). The shell renders `ShellDesktop.vue`
   (rail, side panel, terminal and status bar) or `ShellMobile.vue` (one screen at a time). In a browser an account
   with nothing to open lands on Home's first run rather than on setup (which used to start a machine the moment it
   arrived), and an unfinished setup of the reader's own is resumed on `/setup`. In the desktop app it is put on This
@@ -562,8 +562,18 @@ the list. Inside a sandbox, Home has **no rail tile** either, also by decision: 
 the sandbox switcher's Sandboxes header (on a phone, the Menu page's), and `Mod+Alt+H`. The master view's own rail is
 `shell/rail/MasterRail.vue`. Going in is never `/`: that is Home itself
 (`lib/routes/firstScreens.ts`). `features/home/` draws the surface; `models/home/` holds attention polling, the pure work
-ledger projection and which sandbox's home is on screen (`homeShownFor`, which the Add sandbox dialog waits on when
-it was opened here).
+ledger projection and which sandbox's home is on screen (`homeShownFor`, which a new sandbox's first start waits on).
+**A new sandbox is made on Home, in a tile of its own** (2026-10-26, `features/home/newSandbox/`): every "Add sandbox" on
+a desktop (the rail's +, the first run's Create, the switcher inside a sandbox, the palette, the desktop app's folder
+window) opens `/home?add=sandbox`, which puts a temporary tile at the end of the rail, selected, and in the chat's place
+a name, where it runs and Create. The same page then draws the run (the app's install, a connected machine's steps, a
+machine of ours starting, the first start) while the tile wears the rail's spinning mark, or a warning mark when the run
+waits on the reader or stopped. Any other tile can be pressed meanwhile: the run is held above Home
+(`NewSandboxHost.vue`, mounted by `WorkspaceShell.vue`), so it carries on. A reader watching lands on the new sandbox's
+home conversation once it is up; one who went elsewhere is not moved, and finds its tile marked ready. Picked to run on
+this computer, the desktop app runs the install out of sight (`intentic://setup?…&stay=1`, the app's `park_setup`)
+instead of swapping its window over to This device; only a question it alone can ask, or a run that stops, brings its
+card forward. A phone (no rail) and a guest of a box (no Home) keep the Add sandbox dialog (`models/sandbox/addSandbox.ts`).
 **Home shows a sandbox's own view in place** (2026-10-25, `lib/routes/homeDetour.ts`): a navigation from Home to a view
 it lists (Sandbox ▸ Models, today) stays on Home as `/home[/:sandbox]?show=<view>`, drawn where the chat was
 (`HomeDetour.vue`) under a labelled "Back to chat"; Esc and the browser's Back return too. The chat stays mounted,
@@ -581,7 +591,7 @@ them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. In the desktop app, the account menu
 offers This computer beside Settings; the Home rail holds only sandboxes and Add (2026-10-26). Computer tools stay
 available without becoming a primary destination during onboarding. Before the first sandbox, Home is the first run (`HomeNoSandbox.vue`): what a sandbox
-is, three steps, and Create, which opens the Add sandbox dialog over the page; a setup of the reader's own that never
+is, three steps, and Create, which opens the new sandbox's tile and page in its place; a setup of the reader's own that never
 finished is offered first, and signed out it also offers sign-in, at the rail's foot too. The rail's + wears a beacon.
 
 A **home-only** member (Access ▸ People, Agents: Home only) reaches nothing else: the shell fence

@@ -193,7 +193,12 @@ pub fn show_files_window(
 /// The main window: the local face of the frame on `init`'s folder ([`local_page`]), added out of sight and drawn in
 /// the workspace's place. Like the workspace, its × hides the frame rather than closing anything (`request_close`), so
 /// nothing it holds unsaved is lost and the tray brings it back as it was.
-pub fn show_home_face(app: &AppHandle, title: &str, init: &str) -> Result<Webview, String> {
+pub fn show_home_face(
+    app: &AppHandle,
+    title: &str,
+    init: &str,
+    shown: bool,
+) -> Result<Webview, String> {
     let builder = local_page!(
         WebviewBuilder::new(HOME, WebviewUrl::App("files/local".into())),
         app,
@@ -205,7 +210,10 @@ pub fn show_home_face(app: &AppHandle, title: &str, init: &str) -> Result<Webvie
     crate::frame::set_title(app, HOME, title);
     settle_face_background(&face, app.state::<AppState>().ui_mode());
     arm_frame_fallback(app, HOME);
-    swap_in(app, HOME, Keyboard::Take);
+    // Built for work it runs out of sight (local.rs `open_home_hidden_later`), it stays where `add_face` put it.
+    if shown {
+        swap_in(app, HOME, Keyboard::Take);
+    }
     Ok(face)
 }
 

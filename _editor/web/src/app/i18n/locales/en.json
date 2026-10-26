@@ -13134,6 +13134,24 @@
         "view": {
             "back": "Back to chat",
             "continueInChat": "Continue in chat"
+        },
+        "newSandbox": {
+            "title": "New sandbox",
+            "settingUp": "Setting up {name}",
+            "meanwhile": "Go back to any other sandbox meanwhile. This tile keeps showing how far it has got, and {name} opens here once it's ready.",
+            "failedLine": "It stopped before it was ready. What happened is below.",
+            "create": "Create sandbox",
+            "dismiss": "Dismiss",
+            "ready": "Ready · double-click to open",
+            "tile": {
+                "draft": "Not created yet",
+                "running": "Setting up…",
+                "runningPercent": "Setting up · {percent}%",
+                "asking": "Needs your answer",
+                "failed": "Stopped before it was ready",
+                "refused": "Could not be created",
+                "opening": "Starting for the first time"
+            }
         }
     },
     "hostedStart": {

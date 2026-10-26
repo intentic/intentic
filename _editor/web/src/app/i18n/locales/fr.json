@@ -13134,6 +13134,24 @@
         "view": {
             "back": "Retour au chat",
             "continueInChat": "Continuer dans le chat"
+        },
+        "newSandbox": {
+            "title": "Nouveau sandbox",
+            "settingUp": "Configuration de {name}",
+            "meanwhile": "En attendant, revenez à n'importe quel autre sandbox. Cette tuile continue d'indiquer où il en est, et {name} s'ouvre ici dès qu'il est prêt.",
+            "failedLine": "Il s'est arrêté avant d'être prêt. Ce qui s'est passé est indiqué ci-dessous.",
+            "create": "Créer le sandbox",
+            "dismiss": "Ignorer",
+            "ready": "Prêt · double-cliquez pour ouvrir",
+            "tile": {
+                "draft": "Pas encore créé",
+                "running": "Configuration…",
+                "runningPercent": "Configuration · {percent} %",
+                "asking": "Attend votre réponse",
+                "failed": "Arrêté avant d'être prêt",
+                "refused": "N'a pas pu être créé",
+                "opening": "Premier démarrage"
+            }
         }
     },
     "hostedStart": {

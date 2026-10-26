@@ -54,6 +54,9 @@ test("the setup link carries a project in place of a sync folder, and a blank on
     ]);
     expect(new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7`, profile: `desk` })).searchParams.get(`profile`)).toBe(`desk`);
     expect(new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7` })).searchParams.has(`profile`)).toBe(false);
+    // Home draws the install itself, so it asks the app to keep it out of sight; nothing else does.
+    expect(new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7`, stay: true })).searchParams.get(`stay`)).toBe(`1`);
+    expect(new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7`, stay: false })).searchParams.has(`stay`)).toBe(false);
     const blank = new URL(desktopSetupLink({ code: `abc`, project: ``, syncDir: `~/intentic/work-7` }));
     expect([...blank.searchParams]).toEqual([
         [`code`, `abc`],

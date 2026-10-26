@@ -13134,6 +13134,24 @@
         "view": {
             "back": "Wróć do czatu",
             "continueInChat": "Kontynuuj w czacie"
+        },
+        "newSandbox": {
+            "title": "Nowy sandbox",
+            "settingUp": "Konfigurowanie {name}",
+            "meanwhile": "W międzyczasie wróć do dowolnego innego sandboxa. Ten kafelek dalej pokazuje postęp, a {name} otworzy się tutaj, gdy będzie gotowy.",
+            "failedLine": "Zatrzymał się, zanim był gotowy. Co się stało, widać poniżej.",
+            "create": "Utwórz sandbox",
+            "dismiss": "Odrzuć",
+            "ready": "Gotowy · kliknij dwukrotnie, aby otworzyć",
+            "tile": {
+                "draft": "Jeszcze nie utworzony",
+                "running": "Konfigurowanie…",
+                "runningPercent": "Konfigurowanie · {percent}%",
+                "asking": "Czeka na Twoją odpowiedź",
+                "failed": "Zatrzymał się, zanim był gotowy",
+                "refused": "Nie udało się utworzyć",
+                "opening": "Pierwsze uruchomienie"
+            }
         }
     },
     "hostedStart": {

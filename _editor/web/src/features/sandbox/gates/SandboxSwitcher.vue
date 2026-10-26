@@ -180,7 +180,8 @@ const placementTip = (option: SandboxSummary): Tip => {
         : tip;
 };
 
-// Every add opens over the current place; a signed-out home asks for sign-in first and returns to the same dialog.
+// Every add is made on Home on a desktop, in the dialog on a phone (models/sandbox/addSandbox.ts); a signed-out reader
+// signs in first and comes back to the same ask.
 const requestAddSandbox = useRequestAddSandbox();
 const addHere = (): void => {
     open.value = false;

@@ -40,6 +40,9 @@ export interface AddSandboxHost {
     readonly buildsFromCheckout: boolean;
     // The local-dev platform this build runs against, carried to the app as /setup carries it.
     readonly platformUrl: string | undefined;
+    // This page draws the app's install itself (Home's new sandbox), so the app runs it out of sight rather than
+    // swapping This device in over the page (desktop.ts `DesktopSetupArgs.stay`).
+    readonly appStays?: boolean;
     readonly mobile: Readonly<Ref<boolean>>;
     readonly openDesktopLink: (link: string) => void;
     // One silent try at the browser's sandbox credential while a machine of ours boots (Setup.vue's own).
@@ -143,6 +146,9 @@ const handToApp = (host: AddSandboxHost, minted: SetupCode, sandboxId: string, s
     };
     if (host.platformUrl !== undefined) {
         link.platformUrl = host.platformUrl;
+    }
+    if (host.appStays === true) {
+        link.stay = true;
     }
     host.openDesktopLink(desktopSetupLink(link));
 };
