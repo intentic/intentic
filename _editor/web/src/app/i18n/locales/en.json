@@ -10444,7 +10444,7 @@
             "removeFailed": "Could not delete the profile",
             "empty": "Name reusable access for people and unattended work.",
             "incomplete": "Give it access that reaches at least one area, assistant and AI account when required.",
-            "ownAnswers": "Answers of their own",
+            "ownAnswers": "Custom settings",
             "noLimit": "No limit",
             "unavailable": "Unavailable",
             "files": "Files",

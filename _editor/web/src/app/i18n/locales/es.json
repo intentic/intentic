@@ -10444,7 +10444,7 @@
             "removeFailed": "No se pudo eliminar el perfil",
             "empty": "Define acceso reutilizable para personas y trabajo desatendido.",
             "incomplete": "Elige al menos un área, asistente y cuenta de IA cuando sea necesario.",
-            "ownAnswers": "Respuestas propias",
+            "ownAnswers": "Configuración personalizada",
             "noLimit": "Sin límite",
             "unavailable": "No disponible",
             "files": "Archivos",
