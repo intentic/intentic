@@ -551,7 +551,7 @@
             "pressureValue": "CPU {cpu} · memoria {memory} · E/S {io}",
             "daemonLabel": "Daemon",
             "loop": "bucle {percent}",
-            "rolesLabel": "Memoria de procesos por tipo",
+            "rolesLabel": "Memoria por tipo",
             "smallRoles": "{count} tipo menor · {size} | {count} tipos menores · {size}",
             "smallRolesHide": "Ocultar los tipos menores",
             "role": {
@@ -569,7 +569,7 @@
                 "other": "otros"
             },
             "cpu": "{percent} de CPU",
-            "sessionsLabel": "Memoria de procesos por sesión",
+            "sessionsLabel": "Memoria por sesión",
             "smallSessions": "{count} sesión más · {size} | {count} sesiones más · {size}",
             "smallSessionsHide": "Ocultar las sesiones más ligeras",
             "swapFullNote": "Casi lleno: cuenta como usado",

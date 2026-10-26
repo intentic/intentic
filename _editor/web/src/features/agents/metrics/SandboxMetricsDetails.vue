@@ -68,58 +68,65 @@ const open = (key: string): void => {
 </script>
 
 <template>
-    <div class="flex flex-wrap items-start gap-x-8 gap-y-3 pt-1">
-        <!-- The figures that run out, each a meter: its fill says how close, its track the rest of the room. -->
-        <div role="group" data-section="gauges" class="flex w-64 max-w-full shrink-0 flex-col gap-2.5">
-            <div v-for="gauge in readout.gauges" :key="gauge.key" class="flex flex-col gap-1">
-                <div v-tooltip.left="warned(gauge.hint, gauge.warn)" data-figure class="flex cursor-help flex-col gap-1">
-                    <div class="flex items-baseline gap-2 text-2xs">
-                        <span class="shrink-0 text-muted">{{ gauge.label }}</span>
-                        <span class="ml-auto truncate tabular-nums" :class="gauge.warn ? `text-warning` : `text-content`">{{ gauge.detail }}</span>
-                    </div>
-                    <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `accent`" :label="gauge.label" :valuetext="gauge.detail" />
-                </div>
-                <template v-if="gauge.key === `memory`">
-                    <dl
-                        v-if="readout.memoryRows.length > 0"
-                        data-section="memory-accounting"
-                        v-tooltip.left="{ title: t(`agents.liveMetrics.accountingLabel`), note: t(`agents.liveMetrics.accountingNote`) }"
-                        :aria-label="t(`agents.liveMetrics.accountingLabel`)"
-                        class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 pt-1 text-2xs"
-                    >
-                        <template v-for="row in readout.memoryRows" :key="row.key">
-                            <dt class="text-muted">{{ row.label }}</dt>
-                            <dd class="text-right whitespace-nowrap tabular-nums" :class="row.excluded ? `text-muted` : `text-content`">
-                                {{ row.value }}
-                            </dd>
+    <div class="flex flex-wrap items-start gap-x-8 gap-y-3">
+        <div class="flex w-xl max-w-full shrink-0 flex-col gap-1.5">
+            <slot name="header" />
+            <div class="flex flex-wrap items-start gap-x-8 gap-y-3">
+                <!-- The figures that run out, each a meter: its fill says how close, its track the rest of the room. -->
+                <div role="group" data-section="gauges" class="flex w-64 max-w-full shrink-0 flex-col gap-2.5">
+                    <div v-for="gauge in readout.gauges" :key="gauge.key" class="flex flex-col gap-1">
+                        <div v-tooltip.left="warned(gauge.hint, gauge.warn)" data-figure class="flex cursor-help flex-col gap-1">
+                            <div class="flex items-baseline gap-2 text-2xs">
+                                <span class="shrink-0 text-muted">{{ gauge.label }}</span>
+                                <span class="ml-auto truncate tabular-nums" :class="gauge.warn ? `text-warning` : `text-content`">{{ gauge.detail }}</span>
+                            </div>
+                            <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `accent`" :label="gauge.label" :valuetext="gauge.detail" />
+                        </div>
+                        <template v-if="gauge.key === `memory`">
+                            <dl
+                                v-if="readout.memoryRows.length > 0"
+                                data-section="memory-accounting"
+                                v-tooltip.left="{ title: t(`agents.liveMetrics.accountingLabel`), note: t(`agents.liveMetrics.accountingNote`) }"
+                                :aria-label="t(`agents.liveMetrics.accountingLabel`)"
+                                class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 pt-1 text-2xs"
+                            >
+                                <template v-for="row in readout.memoryRows" :key="row.key">
+                                    <dt class="text-muted">{{ row.label }}</dt>
+                                    <dd class="text-right whitespace-nowrap tabular-nums" :class="row.excluded ? `text-muted` : `text-content`">
+                                        {{ row.value }}
+                                    </dd>
+                                </template>
+                            </dl>
                         </template>
-                    </dl>
-                </template>
+                    </div>
+                </div>
+
+                <dl role="group" data-section="figures" class="grid w-72 max-w-full shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs">
+                    <template v-for="figure in readout.figures" :key="figure.key">
+                        <dt v-tooltip.left="warned(figure.hint, figure.warn)" class="cursor-help text-muted">{{ figure.label }}</dt>
+                        <dd
+                            class="truncate text-right tabular-nums"
+                            :class="figure.warn ? `text-warning` : `text-content`"
+                            v-tooltip.bottom.overflow="figure.value"
+                        >
+                            {{ figure.value }}
+                        </dd>
+                    </template>
+                </dl>
             </div>
         </div>
 
-        <dl role="group" data-section="figures" class="grid w-72 max-w-full shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs">
-            <template v-for="figure in readout.figures" :key="figure.key">
-                <dt v-tooltip.left="warned(figure.hint, figure.warn)" class="cursor-help text-muted">{{ figure.label }}</dt>
-                <dd
-                    class="truncate text-right tabular-nums"
-                    :class="figure.warn ? `text-warning` : `text-content`"
-                    v-tooltip.bottom.overflow="figure.value"
-                >
-                    {{ figure.value }}
-                </dd>
-            </template>
-        </dl>
-
         <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
         <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 max-w-full shrink-0 flex-col gap-1.5">
-            <SectionHeader
-                :label="t(`agents.liveMetrics.rolesLabel`)"
-                density="dense"
-                :heading="4"
-                class="cursor-help self-start"
-                v-tooltip.left="rolesTip"
-            />
+            <div class="flex h-8 shrink-0 items-center">
+                <SectionHeader
+                    :label="t(`agents.liveMetrics.rolesLabel`)"
+                    density="dense"
+                    :heading="4"
+                    class="cursor-help"
+                    v-tooltip.left="rolesTip"
+                />
+            </div>
             <div
                 v-for="role in shownRoles"
                 :key="role.key"
@@ -154,13 +161,15 @@ const open = (key: string): void => {
         <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
              quarter of the box. Its title opens it; its whole reading is on hover. -->
         <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 max-w-full shrink-0 flex-col gap-1.5">
-            <SectionHeader
-                :label="t(`agents.liveMetrics.sessionsLabel`)"
-                density="dense"
-                :heading="4"
-                class="cursor-help self-start"
-                v-tooltip.left="sessionsTip"
-            />
+            <div class="flex h-8 shrink-0 items-center">
+                <SectionHeader
+                    :label="t(`agents.liveMetrics.sessionsLabel`)"
+                    density="dense"
+                    :heading="4"
+                    class="cursor-help"
+                    v-tooltip.left="sessionsTip"
+                />
+            </div>
             <div
                 v-for="session in shownSessions"
                 :key="session.key"

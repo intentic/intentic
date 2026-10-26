@@ -646,10 +646,10 @@
                 "translator": "tłumacze"
             },
             "cpu": "{percent} CPU",
-            "sessionsLabel": "Pamięć procesów według sesji",
+            "sessionsLabel": "Pamięć według sesji",
             "smallSessions": "jeszcze {count} sesja · {size} | jeszcze {count} sesje · {size} | jeszcze {count} sesji · {size}",
             "smallSessionsHide": "Ukryj lżejsze sesje",
-            "rolesLabel": "Pamięć procesów według rodzaju",
+            "rolesLabel": "Pamięć według rodzaju",
             "rolesNote": "Tylko RSS; demon pokazany osobno. Wspólne strony są liczone w każdym procesie; niemapowany cache, pamięć jądra i swap są wyłączone. Te wiersze nie sumują się do pamięci sandboxa.",
             "sandboxLabel": "Zasoby sandboxa",
             "cpuLabel": "CPU",

@@ -259,9 +259,9 @@ describe("the sandbox panel", () => {
         expect(el.querySelectorAll<HTMLElement>(`[data-section="gauges"] [data-figure]`)[1]!.dataset[`tip`]).toContain(
             `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
         );
-        expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);
+        expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Memory by kind`);
         expect(el.querySelector(`[data-section="roles"] h4`)!.closest<HTMLElement>(`[data-tip]`)!.dataset[`tip`]).toBe(
-            `Process memory by kind · RSS only; daemon shown separately. Shared pages count in each process; unmapped cache, kernel memory and swap are excluded. These rows do not add up to sandbox memory.`,
+            `Memory by kind · RSS only; daemon shown separately. Shared pages count in each process; unmapped cache, kernel memory and swap are excluded. These rows do not add up to sandbox memory.`,
         );
         expect(el.querySelector(`[data-section="sessions"] h4`)!.closest<HTMLElement>(`[data-tip]`)!.dataset[`tip`]).toContain(
             `Another grouping of the same processes, not additional memory. CPU: 100% = 1 core.`,
@@ -282,8 +282,8 @@ describe("the sandbox panel", () => {
         expect(el.querySelectorAll<HTMLElement>(`[data-section="gauges"] [data-figure]`)[1]!.dataset[`tip`]).toContain(
             `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
         );
-        expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);
-        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Process memory by session`);
+        expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Memory by kind`);
+        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Memory by session`);
     });
 
     it("names all-core sandbox CPU separately from the daemon's single-core percentage", () => {
@@ -377,7 +377,7 @@ describe("the sandbox panel", () => {
                 },
             },
         });
-        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Process memory by session`);
+        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Memory by session`);
         expect(figuresOf(el, `sessions`)).toEqual([`Translate the notes 1.3 GiB 179%`, `Wire the checkout 412 MiB 37%`, `fresh 40 MiB –`]);
         const rows = [...el.querySelectorAll<HTMLElement>(`[data-section="sessions"] [data-figure]`)];
         expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(

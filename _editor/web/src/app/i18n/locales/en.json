@@ -551,7 +551,7 @@
             "pressureValue": "CPU {cpu} · memory {memory} · I/O {io}",
             "daemonLabel": "Daemon",
             "loop": "loop {percent}",
-            "rolesLabel": "Process memory by kind",
+            "rolesLabel": "Memory by kind",
             "smallRoles": "{count} smaller kind · {size} | {count} smaller kinds · {size}",
             "smallRolesHide": "Hide the smaller kinds",
             "role": {
@@ -569,7 +569,7 @@
                 "other": "other"
             },
             "cpu": "{percent} CPU",
-            "sessionsLabel": "Process memory by session",
+            "sessionsLabel": "Memory by session",
             "smallSessions": "{count} more session · {size} | {count} more sessions · {size}",
             "smallSessionsHide": "Hide the lighter sessions",
             "swapFullNote": "Nearly full: counts as used",

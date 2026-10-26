@@ -551,7 +551,7 @@
             "pressureValue": "CPU {cpu} · Speicher {memory} · E/A {io}",
             "daemonLabel": "Daemon",
             "loop": "Schleife {percent}",
-            "rolesLabel": "Prozessspeicher nach Art",
+            "rolesLabel": "Speicher nach Art",
             "smallRoles": "{count} kleinere Art · {size} | {count} kleinere Arten · {size}",
             "smallRolesHide": "Kleinere Arten ausblenden",
             "role": {
@@ -569,7 +569,7 @@
                 "other": "Sonstiges"
             },
             "cpu": "{percent} CPU",
-            "sessionsLabel": "Prozessspeicher nach Session",
+            "sessionsLabel": "Speicher nach Session",
             "smallSessions": "{count} weitere Sitzung · {size} | {count} weitere Sitzungen · {size}",
             "smallSessionsHide": "Die leichteren Sitzungen ausblenden",
             "swapFullNote": "Fast voll: zählt als belegt",

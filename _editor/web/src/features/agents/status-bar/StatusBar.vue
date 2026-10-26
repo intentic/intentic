@@ -61,22 +61,25 @@ const close = (): void => {
                 :title="t(`ui.resizeSeam.doubleClickResets`)"
             />
             <section :id="panelId" data-panel="metrics" :aria-labelledby="headingId" class="flex min-w-0 flex-1 flex-col" @keydown.esc.stop="close">
-                <header class="flex h-8 shrink-0 items-center gap-2 pr-1.5 pl-3">
-                    <Icon name="server" class="shrink-0 text-2xs text-subtle" />
-                    <SectionHeader :label="t(`agents.liveMetrics.sandboxLabel`)" density="dense" :heading="3" :id="headingId" />
-                    <button
-                        type="button"
-                        :class="ui.iconButton(`ml-auto hover:bg-content/10`)"
-                        :aria-label="t(`agents.statusBar.close`, { title: t(`agents.liveMetrics.sandboxLabel`) })"
-                        v-tooltip.top="t(`ui.action.close`)"
-                        @click="close"
-                    >
-                        <Icon name="times" class="text-2xs" />
-                    </button>
-                </header>
-                <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-                    <SandboxMetricsDetails :metrics="metrics" />
+                <div class="min-h-0 flex-1 overflow-y-auto pr-9 pb-3 pl-3">
+                    <SandboxMetricsDetails :metrics="metrics">
+                        <template #header>
+                            <header class="flex h-8 shrink-0 items-center gap-2">
+                                <Icon name="server" class="shrink-0 text-2xs text-subtle" />
+                                <SectionHeader :label="t(`agents.liveMetrics.sandboxLabel`)" density="dense" :heading="3" :id="headingId" />
+                            </header>
+                        </template>
+                    </SandboxMetricsDetails>
                 </div>
+                <button
+                    type="button"
+                    :class="ui.iconButton(`absolute top-1 right-1.5 hover:bg-content/10`)"
+                    :aria-label="t(`agents.statusBar.close`, { title: t(`agents.liveMetrics.sandboxLabel`) })"
+                    v-tooltip.top="t(`ui.action.close`)"
+                    @click="close"
+                >
+                    <Icon name="times" class="text-2xs" />
+                </button>
             </section>
         </div>
         <!-- One line, never two: a chip arriving or a long figure is cut, not wrapped, so the bar keeps its height. -->
