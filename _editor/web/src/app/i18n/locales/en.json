@@ -8258,7 +8258,7 @@
             "updateAvailable": "Update available",
             "sandboxImage": "Sandbox image",
             "offerTitle": "Intentic {version} is here",
-            "improvementCount": "one improvement | {count} improvements",
+            "runsVersion": "This sandbox runs {version}",
             "factDowntime": "About 30 seconds of downtime",
             "factFilesStay": "Files and conversations stay",
             "factUndo": "Undo within 24 hours",

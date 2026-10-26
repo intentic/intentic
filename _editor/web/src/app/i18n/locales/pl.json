@@ -7764,7 +7764,7 @@
             "updateAvailable": "Dostępna aktualizacja",
             "sandboxImage": "Obraz sandboxa",
             "offerTitle": "Intentic {version} jest już dostępny",
-            "improvementCount": "jedno usprawnienie | {count} usprawnienia | {count} usprawnień",
+            "runsVersion": "Ten sandbox działa na {version}",
             "factDowntime": "Około 30 sekund przerwy",
             "factFilesStay": "Pliki i rozmowy zostają",
             "factUndo": "Cofnięcie możliwe przez 24 godziny",

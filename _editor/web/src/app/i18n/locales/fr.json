@@ -8258,7 +8258,7 @@
             "updateAvailable": "Mise à jour disponible",
             "sandboxImage": "Image du sandbox",
             "offerTitle": "Intentic {version} est là",
-            "improvementCount": "une amélioration | {count} améliorations",
+            "runsVersion": "Ce sandbox tourne sous {version}",
             "factDowntime": "Environ 30 secondes d'interruption",
             "factFilesStay": "Fichiers et conversations conservés",
             "factUndo": "Annulable pendant 24 heures",

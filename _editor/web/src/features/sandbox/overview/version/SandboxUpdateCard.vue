@@ -10,7 +10,6 @@ import {
     SectionHeader,
     StatusBadge,
     toneDot,
-    toneWash,
     ui,
     useOsPreference,
 } from "@intentic/ui";
@@ -50,10 +49,11 @@ import { useT } from "@intentic/ui/i18n";
 // AN UPDATE ON OFFER IS GOOD NEWS, AND IS DRAWN AS SOME. It used to be a wall: two full terminal walkthroughs (one of
 // them for the secondary "download first"), the same cost sentence twice, three paragraphs of reassurance, the release
 // notes as one run of large text, and the developer notes in a red box under a heading that called the whole update a
-// danger. Now the offer is its own card, in reading order: what you get (the version, and how much is in it), the one
+// danger. Now the offer is its own card, in reading order: what you get (the version, and the one it replaces), the one
 // gold button that takes it (or, while the update downloads in the background, how far it has got), what it costs and
-// keeps as three short facts, then what is new. Everything a reader might need but most never do (the command for a
-// machine this page cannot reach, what developers must change, the way back) is one line that opens.
+// keeps as three short facts, then what is new, beside all that on a card wide enough to hold both. Everything a reader
+// might need but most never do (the command for a machine this page cannot reach, what developers must change, the way
+// back) is one line that opens.
 
 const t = useT();
 
@@ -241,15 +241,15 @@ const throughIc = computed(() => hosted.value === undefined && !serverManaged.va
 // UPDATES THAT TAKE THEMSELVES. Where the daemon can (self-hosted, through the machine's ic), a downloaded update waits
 // for a quiet moment and installs by itself (UpdateAutoStatus says when, and what it waits for); the gold button stays,
 // as "Update now", for whoever would rather not wait. The switch says whether it does any of that.
-const { auto } = useAutoUpdate();
+const { auto, served: autoServed } = useAutoUpdate();
 const autoOn = computed(() => auto.value?.enabled === true);
 const autoPaused = computed(() => autoOn.value && auto.value?.pausedUntil !== undefined && auto.value.pausedUntil > Date.now());
 const retryLabel = computed(() =>
     plan.value.retry ? t(`sandbox.sandboxUpdateCard.tryAgain`) : autoOn.value && updateStaged.value ? t(`sandbox.autoUpdate.updateNow`) : undefined,
 );
 
-// How much is in it: every note in the gap, including the ones the daemon held back for the changelog.
-const improvements = computed(() => updateNotes.value.length + moreUpdateNotes.value);
+// What is new takes the card's right half on a wide card, so the offer lays itself out by whether there is any.
+const hasNotes = computed(() => updateNotes.value.length > 0);
 
 // WHAT TAKING IT COSTS AND KEEPS, as three facts short enough to read at a glance beside the button; the sentence each
 // one stands for is on hover. Nothing here promises the machine goes back by itself.
@@ -328,9 +328,12 @@ const quietBody = computed(
         troubleAtFoot.value ||
         rollbackShown.value,
 );
-// The developer notes, the stored-file conversions and the way back: the offer's fine print, below what is new.
+// The developer notes, the stored-file conversions, the switch for updates that take themselves and the way back: the
+// offer's foot, below what is new. The switch is a standing choice about every update rather than a step in taking this
+// one, so it shares the foot's last line with "Having trouble?" instead of a line of its own under the button.
 const finePrint = computed(
     () =>
+        autoServed.value ||
         breakingNotes.value.length > 0 ||
         convertedFiles.value.length > 0 ||
         stagedPlan.value?.downgrade === true ||
@@ -354,8 +357,8 @@ const finePrint = computed(
                 class="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-primary-500/60 to-transparent"
             />
 
-            <div class="flex flex-col gap-5 p-4 @md/update:p-6">
-                <!-- What there is to know about the version that runs, before what there is to take. -->
+            <!-- What there is to know about the version that runs, before what there is to take: across the whole card. -->
+            <div v-if="withdrawnNotice || newsNotice || skipNotice" class="flex flex-col gap-3 px-4 pt-4 @md/update:px-6 @md/update:pt-6">
                 <Notice v-if="withdrawnNotice" :of="withdrawnNotice" />
                 <div v-if="newsNotice" class="flex flex-col gap-1.5">
                     <Notice :of="newsNotice" />
@@ -367,99 +370,88 @@ const finePrint = computed(
                     </p>
                 </div>
                 <Notice v-if="skipNotice" :of="skipNotice" />
+            </div>
 
-                <!-- WHAT YOU GET: the version, where it takes you from, and how much is in it. -->
-                <header class="flex items-start gap-3.5">
-                    <span
-                        class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-500/10 text-base text-accent ring-1 ring-inset ring-primary-500/25"
-                        aria-hidden="true"
+            <!-- THE DECISION BESIDE WHAT IS IN IT. Narrow, one column: the version, the button, what is new. From @xl the
+                 version and the button share a row; from @4xl, when there is anything new, the decision is a column of
+                 its own on the left and what is new takes the rest, so neither leaves the other half of the card empty. -->
+            <div class="flex flex-col @4xl/update:flex-row">
+                <div class="flex min-w-0 flex-col gap-5 p-4 @md/update:p-6" :class="hasNotes ? `@4xl/update:w-96 @4xl/update:shrink-0` : `@4xl/update:flex-1`">
+                    <div
+                        class="flex min-w-0 flex-col gap-5 @xl/update:flex-row @xl/update:items-start @xl/update:justify-between @xl/update:gap-8"
+                        :class="hasNotes && `@4xl/update:flex-col @4xl/update:justify-start @4xl/update:gap-5`"
                     >
-                        <Icon name="sparkles" />
-                    </span>
-                    <div class="flex min-w-0 flex-col gap-1">
-                        <!-- The card's eyebrow is the kit's header over the offer: a ready update heads itself in the done state's ink. -->
-                        <SectionHeader
-                            density="dense"
-                            :tone="updateStaged ? `success` : `neutral`"
-                            :label="
-                                updateStaged
-                                    ? t(`sandbox.sandboxUpdateCard.updateReady`)
-                                    : isDownloading
-                                      ? t(`sandbox.sandboxUpdateCard.updateDownloading`)
-                                      : t(`sandbox.sandboxUpdateCard.updateAvailable`)
-                            "
-                        >
-                            <template v-if="updateStaged" #mark><Icon name="check-circle" class="text-2xs text-success" aria-hidden="true" /></template>
-                        </SectionHeader>
-                        <h2 class="text-xl font-semibold leading-tight tracking-tight text-content [overflow-wrap:anywhere]">
-                            {{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}
-                        </h2>
-                        <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
-                            <span class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 font-mono text-2xs">
-                                <span class="ui-status-pill ui-status-pill-inline min-w-0 max-w-full break-all whitespace-normal" :class="toneWash(`neutral`)">{{
-                                    installed ?? `?`
-                                }}</span>
-                                <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
-                                    <Icon name="arrow-right" class="shrink-0 text-subtle" aria-hidden="true" />
-                                    <span class="ui-status-pill ui-status-pill-inline min-w-0 break-all whitespace-normal font-medium" :class="toneWash(`primary`)">{{ latest }}</span>
-                                </span>
-                            </span>
-                            <span v-if="improvements > 0">{{
-                                t(`sandbox.sandboxUpdateCard.improvementCount`, { count: improvements }, improvements)
-                            }}</span>
-                        </p>
-                    </div>
-                </header>
-
-                <!-- THE STEP: the button (or the download it waits on), then what it costs and keeps. The switcher's update
-                     row points at this block by id and focuses the first button in it, which is the gold one. -->
-                <div :id="UPDATE_ACTION_ANCHOR" class="flex flex-col gap-3.5">
-                    <p v-if="serverManaged" class="text-xs text-muted">
-                        {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono text-content">intentic deploy apply</span>
-                        {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
-                    </p>
-                    <template v-else-if="hosted">
-                        <!-- Own block so the column's stretch doesn't draw the button at full width. -->
-                        <div v-if="isOwner">
-                            <Button
-                                :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)"
-                                tier="loud"
-                                gilded
-                                :loading="restarting"
-                                @click="restartHosted"
+                        <!-- WHAT YOU GET: the version, and the one it replaces. -->
+                        <header class="flex min-w-0 flex-col gap-1">
+                            <!-- The card's eyebrow is the kit's header over the offer: a ready update heads itself in the done state's ink. -->
+                            <SectionHeader
+                                density="dense"
+                                :tone="updateStaged ? `success` : `neutral`"
+                                :label="
+                                    updateStaged
+                                        ? t(`sandbox.sandboxUpdateCard.updateReady`)
+                                        : isDownloading
+                                          ? t(`sandbox.sandboxUpdateCard.updateDownloading`)
+                                          : t(`sandbox.sandboxUpdateCard.updateAvailable`)
+                                "
                             >
-                                <template #icon><Icon name="arrow-circle-up" /></template>
-                            </Button>
+                                <template v-if="updateStaged" #mark><Icon name="check-circle" class="text-2xs text-success" aria-hidden="true" /></template>
+                            </SectionHeader>
+                            <h2 class="text-xl font-semibold leading-tight tracking-tight text-content [overflow-wrap:anywhere]">
+                                {{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}
+                            </h2>
+                            <p v-if="installed" class="text-xs text-muted [overflow-wrap:anywhere]">{{ t(`sandbox.sandboxUpdateCard.runsVersion`, { version: installed }) }}</p>
+                        </header>
+
+                        <!-- THE STEP: the button, then what it costs and keeps. The switcher's update row points at this block
+                             by id and focuses the first button in it, which is the gold one. -->
+                        <div
+                            :id="UPDATE_ACTION_ANCHOR"
+                            class="flex min-w-0 flex-col gap-3.5 @xl/update:max-w-72 @xl/update:shrink-0"
+                            :class="hasNotes && `@4xl/update:max-w-none`"
+                        >
+                            <p v-if="serverManaged" class="text-xs text-muted">
+                                {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono text-content">intentic deploy apply</span>
+                                {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
+                            </p>
+                            <template v-else-if="hosted">
+                                <!-- Own block so the column's stretch doesn't draw the button at full width. -->
+                                <div v-if="isOwner">
+                                    <Button
+                                        :label="t(`sandbox.sandboxUpdateCard.restartUpdate`)"
+                                        tier="loud"
+                                        gilded
+                                        :loading="restarting"
+                                        @click="restartHosted"
+                                    >
+                                        <template #icon><Icon name="arrow-circle-up" /></template>
+                                    </Button>
+                                </div>
+                                <p v-else class="text-xs text-muted">{{ t(`sandbox.sandboxUpdateCard.ownerRestartsHosted`) }}</p>
+                                <Notice v-if="restartNotice" :of="restartNotice" />
+                            </template>
+                            <!-- Downloaded already, the gold button is the restart; otherwise it downloads, builds and restarts.
+                                 While the download runs there is nothing to press, and its progress is drawn under this row. -->
+                            <HostRecreate v-else-if="slug && !isDownloading" :slug="slug" action="Update" :ready="updateStaged" gilded bare keeps-said :label="retryLabel" />
+
+                            <!-- In a row under the button while it has the card's width; a short list once it is a column. -->
+                            <ul class="flex flex-wrap gap-x-5 gap-y-1.5 @xl/update:flex-col">
+                                <li v-for="fact in facts" :key="fact.icon" v-tooltip.top="fact.tip" class="flex items-center gap-1.5 text-2xs text-muted">
+                                    <Icon :name="fact.icon" class="shrink-0 text-subtle" aria-hidden="true" />{{ fact.label }}
+                                    <!-- The sentence behind the fact, for a reader who never hovers. -->
+                                    <span class="sr-only">{{ fact.tip }}</span>
+                                </li>
+                            </ul>
                         </div>
-                        <p v-else class="text-xs text-muted">{{ t(`sandbox.sandboxUpdateCard.ownerRestartsHosted`) }}</p>
-                        <Notice v-if="restartNotice" :of="restartNotice" />
-                    </template>
-                    <!-- Downloading in the background: nothing to press until it is in, so its progress stands in the
-                         buttons' place, and the card turns to the restart by itself once it is. -->
-                    <template v-else-if="isDownloading">
-                        <UpdateDownloadProgress :step="downloadStep(preparing)" :percent="downloadPercent(preparing)" :version="latest" />
-                        <UpdateAutoStatus downloading />
-                    </template>
-                    <!-- Downloaded already, the gold button is the restart; otherwise it downloads, builds and restarts. Above it,
-                         when updates take themselves, when this one will and what it is politely waiting for. -->
-                    <template v-else-if="slug">
-                        <UpdateAutoStatus />
-                        <HostRecreate :slug="slug" action="Update" :ready="updateStaged" gilded bare keeps-said :label="retryLabel" />
-                    </template>
+                    </div>
 
-                    <ul class="flex flex-wrap gap-x-5 gap-y-1.5">
-                        <li v-for="fact in facts" :key="fact.icon" v-tooltip.top="fact.tip" class="flex items-center gap-1.5 text-2xs text-muted">
-                            <Icon :name="fact.icon" class="shrink-0 text-subtle" aria-hidden="true" />{{ fact.label }}
-                            <!-- The sentence behind the fact, for a reader who never hovers. -->
-                            <span class="sr-only">{{ fact.tip }}</span>
-                        </li>
-                    </ul>
-                    <UpdateAutoSwitch />
-
-                    <!-- Only the restart costs a turn, and only a press starts one: said beside the button, never under a
-                         download that interrupts nothing. -->
-                    <!-- Said only when the update waits for a press: one that takes itself already lists, above, the agents it is
-                         waiting for, and never cuts them. -->
+                    <!-- WHERE IT STANDS, under the row rather than squeezed into the button's side of it: the download the
+                         card turns to the restart by itself once it is in, and, when updates take themselves, when this one
+                         will and what it is politely waiting for. -->
+                    <UpdateDownloadProgress v-if="isDownloading" :step="downloadStep(preparing)" :percent="downloadPercent(preparing)" :version="latest" />
+                    <UpdateAutoStatus v-if="!serverManaged && !hosted && (isDownloading || slug)" :downloading="isDownloading" />
+                    <!-- Only the restart costs a turn, and only a press starts one: never said under a download that interrupts
+                         nothing, nor when the update takes itself, which lists the agents it waits for and never cuts them. -->
                     <p v-if="midTurn > 0 && !isDownloading && !autoOn" class="flex items-start gap-1.5 text-2xs text-warning">
                         <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
                         <span>
@@ -472,15 +464,16 @@ const finePrint = computed(
                         {{ t(`sandbox.sandboxUpdateCard.alreadyDownloadedHereReleased`, { stagedBehind, latest }) }}
                     </p>
                 </div>
-            </div>
 
-            <!-- WHAT IS NEW, for whoever weighs it: under the button, never in the way of it. -->
-            <UpdateWhatsNew
-                v-if="updateNotes.length > 0"
-                :notes="updateNotes"
-                :more="moreUpdateNotes"
-                class="border-t border-line-subtle px-4 py-5 @md/update:px-6"
-            />
+                <!-- WHAT IS NEW, for whoever weighs it: beside the decision on a wide card, under it otherwise, never in the
+                     way of the button. -->
+                <UpdateWhatsNew
+                    v-if="hasNotes"
+                    :notes="updateNotes"
+                    :more="moreUpdateNotes"
+                    class="min-w-0 flex-1 border-t border-line-subtle p-4 @md/update:p-6 @4xl/update:border-l @4xl/update:border-t-0"
+                />
+            </div>
 
             <!-- THE FINE PRINT: each a line that opens. The developer notes gate nothing and are for whoever builds on
                  the sandbox's API or config, so they are named, counted and folded, not painted as a danger. -->
@@ -530,16 +523,19 @@ const finePrint = computed(
                         </ul>
                     </div>
                 </details>
-                <!-- The way back, tucked away: there for whoever comes looking and never pitched to whoever doesn't. -->
-                <button
-                    v-if="troubleAtFoot"
-                    type="button"
-                    :class="ui.textButton({ tone: `subtle`, size: `xs` }, `self-end`)"
-                    :aria-expanded="rollbackOpen"
-                    @click="toggleRollback"
-                >
-                    {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
-                </button>
+                <div v-if="autoServed || troubleAtFoot" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div class="min-w-0"><UpdateAutoSwitch /></div>
+                    <!-- The way back, tucked away: there for whoever comes looking and never pitched to whoever doesn't. -->
+                    <button
+                        v-if="troubleAtFoot"
+                        type="button"
+                        :class="ui.textButton({ tone: `subtle`, size: `xs` }, `ml-auto`)"
+                        :aria-expanded="rollbackOpen"
+                        @click="toggleRollback"
+                    >
+                        {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
+                    </button>
+                </div>
                 <UpdateRollbackPanel
                     v-if="rollbackShown"
                     :lead="rollbackLead"

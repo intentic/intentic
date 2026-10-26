@@ -225,7 +225,7 @@ it(`asks the machine for the download only while an update on offer is neither d
     expect(asked()).toBeUndefined();
 });
 
-it(`leads with the version it takes you to and how much is in it, then what is new, the rest a link away`, () => {
+it(`leads with the version it takes you to and the one it replaces, then what is new, the rest a link away`, () => {
     updateNotes.value = [
         `Approve a waiting plan from the bar above the composer; those buttons no longer appear on the plan card.`,
         `Desktop sign-in completes again instead of showing an incomplete link.`,
@@ -233,7 +233,9 @@ it(`leads with the version it takes you to and how much is in it, then what is n
     moreUpdateNotes.value = 5;
     const el = mount();
     expect(el.querySelector(`h2`)?.textContent).toBe(`Intentic 1.54.0 is here`);
-    expect(el.textContent).toContain(`7 improvements`);
+    expect(el.textContent).toContain(`This sandbox runs 1.53.0`);
+    // What is new is listed right there, so a count of it says nothing the list does not.
+    expect(el.textContent).not.toContain(`improvements`);
     const heading = [...el.querySelectorAll(`h3`)].find((node) => node.textContent === `What's new`)!;
     // Each change as its own line, what it replaced a line of its own under it.
     const items = [...heading.parentElement!.nextElementSibling!.querySelectorAll(`li`)];
