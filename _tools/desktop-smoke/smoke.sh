@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Exercise deb/AppImage installation, startup and real xdg-open deep links on the bare smoke host, with artifacts under /artifacts.
 # Test both running and stopped app states: single-instance forwarding and startup argv use different paths.
-# Confirm external-link prompts and screen-specific window titles; a window count cannot distinguish a dropped link from success.
+# Confirm external-link prompts and the setup's local CLI invocation; a window count cannot distinguish a dropped link from success.
 # Keep the host bare so the deb's Depends and AppImage's bundled libraries must satisfy runtime dependencies.
 set -euo pipefail
 # Placed next to the artifacts by verify-desktop-install.sh — see its `docker cp`. The artifact names carry a
@@ -12,8 +12,7 @@ set -euo pipefail
 KIND="${1:?usage: smoke.sh deb|appimage}"
 DISPLAY_NUM=99
 export DISPLAY=":${DISPLAY_NUM}"
-# A UTF-8 locale, because the assertions read WINDOW TITLES and they carry an em dash ("Intentic — Setting up
-# your sandbox").
+# A UTF-8 locale, because the assertions read window titles, which can contain non-ASCII characters.
 # X11 window names are transcoded into the client's locale charset, so under the container's default C locale
 # xdotool reads that title as "(failure in conversion from UTF8_STRING to ANSI_X3.4-1968)" — the window is
 # there, correct and mapped, and every search for it misses. C.UTF-8 is built into glibc; no locales package.
@@ -75,38 +74,38 @@ until_true() {
 }
 
 window_titled() { xdotool search --name "$1"; }
-# Mapped windows only — `hide()` unmaps, which is how the two screens take turns in one frame. Without
-# `--onlyvisible` xdotool finds the one that stepped aside and "there is only ever one window" never fails.
-# The app's own windows END in its name: the main one is named after its folder ("<folder> · Intentic", local.rs),
-# a setup in it "Setting up <name> · Intentic" (src/device/title.ts), the workspace bare "Intentic". The
-# confirmation is not one of them, and does not.
+# Mapped windows only: the main window can run a setup while hidden. The app's own windows end in its name;
+# the confirmation does not. Counting hidden windows would reject the background setup the app is meant to run.
 APP_WINDOW='Intentic$'
 mapped_windows() { xdotool search --onlyvisible --name "$APP_WINDOW"; }
 
-# The link every tier fires. A setup link, because it is the one a first-time user meets and the only one whose
-# arrival is VISIBLE without a test hook: it asks whether to run, then parks a pending setup and raises the
-# setup screen.
-LINK="intentic://setup?code=smoke-test-code&name=Smoke"
-# What that screen calls itself. Matched on the distinctive half rather than the whole title, so the assertion
-# survives the copy being reworded around it.
-SETUP_TITLE="Setting up"
+# Like the Windows install tier, run only a local CLI stand-in: a confirmed setup runs in the background,
+# without opening a setup screen. Its invocation proves the answer reached the setup, without redeeming a code
+# or downloading the real CLI. A docker command keeps connect.sh from installing Docker on this bare host.
+SETUP_MARKER=/tmp/intentic-smoke-setup-started
+export IC_BIN=/tmp/intentic-smoke-ic
+cat >"$IC_BIN" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" > /tmp/intentic-smoke-setup-started
+exit 1
+EOF
+chmod +x "$IC_BIN"
+printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/docker
+chmod +x /usr/local/bin/docker
 
-# TWO WINDOWS NOW, AND THE FIRST ONE IS THE BETTER PROOF.
-# Every link this script fires goes through xdg-open, which is the OS handler path — so all of them are
-# EXTERNAL by construction, and windows.rs asks before running any of them (a setup link is one anybody can
-# send, on nothing more than a browser's "Open Intentic?"). That confirmation is now what says a link arrived,
-# and it says it better than the setup screen ever did: it is a window that exists for no other reason, where
-# the old assertion had to lean on a title to tell "the link arrived" apart from "the link was dropped and the
-# app opened on the workspace".
+LINK="intentic://setup?code=smoke-test-code&name=Smoke"
+setup_started() { [ -f "$SETUP_MARKER" ] && grep -Fxq 'smoke-test-code' "$SETUP_MARKER"; }
+
+# Every link goes through the external OS handler path, so the app must ask before running it.
 CONFIRM_TITLE="Set up a sandbox on this device"
 
 # Say yes to it. GTK focuses the first button in the action area and rfd adds the affirmative one first, so
-# Return is "Set up" — which this never assumes: the setup-screen assertion after it is what proves it landed.
+# Return is "Set up" — the CLI invocation after it proves the answer landed.
 answer_confirm() {
     local attempt id
     # A cold start is still creating and destroying windows when the dialog appears, and xdotool exits on the
     # X error it gets when a window vanishes mid-search or mid-focus (BadWindow on X_GetProperty). Under
-    # errexit that ended the whole tier on a bare `X Error` line, so look again instead: the setup-screen
+    # errexit that ended the whole tier on a bare `X Error` line, so look again instead: the CLI invocation
     # assertion after this is still what proves the answer landed.
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
         id=$(window_titled "$CONFIRM_TITLE" 2>/dev/null | head -1 || true)
@@ -127,6 +126,7 @@ answer_confirm() {
 # the app then has to read that url back at startup, from a plugin that captured it before any listener of ours
 # existed. Neither half is exercised by firing a link at an app that is already up.
 cold_link() {
+    rm -f "$SETUP_MARKER"
     xdg-open "$LINK" >/tmp/xdg-open-cold.log 2>&1 || true
     until_true 60 "the setup link reached the app, which asked before running it" window_titled "$CONFIRM_TITLE" || {
         echo "--- xdg-open output ---" >&2
@@ -134,12 +134,14 @@ cold_link() {
         return 1
     }
     answer_confirm
-    until_true 30 "$1" window_titled "$SETUP_TITLE"
+    until_true 120 "$1" setup_started || {
+        cat /tmp/xdg-open-cold.log >&2 || true
+        return 1
+    }
 }
 
 # Leave no window behind — and ASSERT it, because this is the precondition the cold tiers rest on. Every
-# assertion here reads the X tree by title: a setup screen left over from the phase before satisfies the next
-# search instantly, and a cold-start tier that never actually started anything cold reports a pass. Matched on the
+# window left over from the phase before can satisfy the next search instantly. Matched on the
 # binary name rather than "$BINARY", which for an AppImage is the bundle path and not what the extracted process
 # is running under.
 quit_app() {
@@ -307,8 +309,9 @@ if [ "$KIND" = "deb" ]; then
     # than the build's. With this, the wait is a property of the tier instead of a property of the day.
     printf '#!/bin/sh\nsleep 60\nexit 1\n' >/usr/local/bin/docker
     chmod +x /usr/local/bin/docker
-    cold_link "the setup link started the app straight onto the setup screen"
+    cold_link "the setup link started the app and ran only the local CLI stand-in"
     quit_app
+    printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/docker
 fi
 
 # 5. launch
@@ -341,6 +344,8 @@ fi
 # 7. the deep link, into the app that is already running
 # xdg-open, not a direct argv call: this is the route a link takes from an external browser, and it exercises
 # the MIME entry and the handler lookup along with the app's own forwarding.
+WORKSPACE_WINDOW=$(mapped_windows | head -1 || true)
+rm -f "$SETUP_MARKER"
 xdg-open "$LINK" >/tmp/xdg-open.log 2>&1 || true
 
 if until_true 45 "the setup link reached the running app, which asked before running it" window_titled "$CONFIRM_TITLE"; then
@@ -358,7 +363,7 @@ if until_true 45 "the setup link reached the running app, which asked before run
         fail "one setup link raised $asked confirmations — external links are being handled more than once"
     fi
     answer_confirm
-    until_true 30 "the setup link opened the setup screen" window_titled "$SETUP_TITLE" || {
+    until_true 120 "answering the link ran only the local CLI stand-in" setup_started || {
         echo "--- app output ---" >&2
         cat "$LOG" >&2 || true
     }
@@ -369,24 +374,17 @@ else
     cat "$LOG" >&2 || true
 fi
 
-# ...IN THE WORKSPACE'S PLACE, not beside it — the whole window model as one assertion, and worth one because
-# the failure it guards is invisible to every other assertion here. A setup screen that opens as a second
-# window somewhere else on screen satisfies the title search above perfectly well, and what the user gets is an
-# unasked-for window beside the one they were reading. That is what shipped: the setup face was exempted from
-# the swap and came up as a small window over the workspace, so onboarding — the one flow where a new user has
-# no idea which window is the product — was the one flow that put two of them on screen.
-#
-# Counted rather than measured, because the number IS the property now. Earlier versions of this assertion
-# compared rectangles (equal, for a chromeless sheet; then smaller-and-centred, for a dialog), and both of
-# those could be satisfied by a second mapped window, which is the thing being ruled out.
-one_window_showing_setup() {
+# The setup runs out of sight: the workspace stays in its original window. Check identity as well as count,
+# so a setup that replaces the workspace with another face cannot pass by showing just one window.
+workspace_kept() {
     local ids count
     ids=$(mapped_windows)
     count=$(printf '%s\n' "$ids" | grep -c .)
     [ "$count" -eq 1 ] || return 1
-    xdotool getwindowname "$ids" 2>/dev/null | grep -q "$SETUP_TITLE"
+    [ -n "$WORKSPACE_WINDOW" ] && [ "$ids" = "$WORKSPACE_WINDOW" ] || return 1
+    [ "$(xdotool getwindowname "$ids" 2>/dev/null)" = "Intentic" ]
 }
-until_true 15 "the setup screen took the workspace's window rather than opening a second one" one_window_showing_setup || {
+until_true 15 "the setup ran out of sight, leaving the workspace its original window" workspace_kept || {
     echo "--- mapped windows ---" >&2
     # A vanished window is the most useful failure to diagnose. Do not let the empty search's
     # status escape through pipefail before the process-survival check below can report it.
@@ -409,7 +407,7 @@ fi
 # again and still arrive.
 if [ "$KIND" = "appimage" ]; then
     quit_app
-    cold_link "the setup link restarted the app straight onto the setup screen"
+    cold_link "the setup link restarted the app and ran only the local CLI stand-in"
 fi
 
 kill "$APP_PID" 2>/dev/null || true
