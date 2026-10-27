@@ -8,7 +8,7 @@
     <string name="auth_email_sign_in_address_label">Adresse e-mail</string>
     <string name="auth_email_sign_in_address_placeholder">vous@exemple.com</string>
     <string name="auth_email_sign_in_email_me_code">M\'envoyer un code de connexion par e-mail</string>
-    <string name="auth_email_sign_in_sent_to">Nous avons envoyé un code à 6 chiffres à %1$s.</string>
+    <string name="auth_email_sign_in_sent_to">Nous avons envoyé un code à %1$s chiffres à %2$s.</string>
     <string name="auth_email_sign_in_type_it_here_in_app">Saisissez-le ici. Le lien de l\'e-mail ouvre votre navigateur, pas cette application.</string>
     <string name="auth_email_sign_in_code_label">Code de connexion</string>
     <string name="ui_action_sign_in">Se connecter</string>

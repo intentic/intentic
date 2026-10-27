@@ -133,7 +133,7 @@ class EmailSignIn(private val ui: Ui, private val say: (String?) -> Unit, privat
     }
 
     private fun showEnter() {
-        sentTo.text = context.getString(R.string.auth_email_sign_in_sent_to, email)
+        sentTo.text = context.getString(R.string.auth_email_sign_in_sent_to, CODE_LENGTH.toString(), email)
         code.text.clear()
         ask.visibility = View.GONE
         enter.visibility = View.VISIBLE
