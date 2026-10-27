@@ -1,6 +1,6 @@
 import { ref, shallowRef } from "vue";
 import { type FleetLane, NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
-import type { ActivePhase } from "../../../../../models/fleet/board/activePhase";
+import { type ActivePhase, ANY_MOMENT } from "../../../../../models/fleet/board/activePhase";
 import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
 import { readFolds, useLaneGroups } from "../laneGroups";
 
@@ -54,6 +54,12 @@ describe(`the Active lane's groups`, () => {
         const { groupsFor } = boardOf({ active: [card(`r`), booked(`late`, 900), booked(`soon`, 300)] }, [`next`]);
         const next = groupsFor(`active`)[1];
         expect([next?.folded, ids(next?.shown ?? []), next?.cards.length, next?.goesAt]).toEqual([true, [], 2, 300]);
+    });
+
+    it(`names a memory hold under the fold as due now, ahead of any booked time`, () => {
+        const held = card(`held`, { status: `idle`, next: { kind: `room` } });
+        const { groupsFor } = boardOf({ active: [card(`r`), booked(`soon`, 300), held] }, [`next`]);
+        expect(groupsFor(`active`)[1]?.goesAt).toBe(ANY_MOMENT);
     });
 
     it(`keeps the card wearing the ring in sight under its fold`, () => {

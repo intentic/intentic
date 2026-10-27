@@ -8,8 +8,11 @@ import type { FleetAgent } from "../useAgents-fleet";
 //    under way?" Newest started first, the order Attention and Finished read in, and fixed for a turn's life, so a
 //    streaming card never climbs.
 //  - next: nothing running, but it goes by itself (`next`: a booked message, a spent allowance's resend, a memory
-//    hold, a land it waits on) or an armed watch wakes it. "What starts by itself, and when?" Soonest first, by the
-//    instant its corner names, so the corners read as a timetable; what names no instant follows, newest first.
+//    hold, a land it waits on) or an armed watch wakes it. "What starts by itself, and when?" Read as a timetable, by
+//    how soon it goes rather than by whether it names a time: first what goes any moment (a memory hold, a booked
+//    instant already past), the longest waiting first; then what goes at a time, soonest first; last what waits on
+//    another conversation landing, which nobody can put a time on, newest first. A memory hold sorted with the untimed
+//    used to sit under a message booked for 3am, though it usually goes within the minute (2026-10-27).
 //  - draft: never sent. "What did I leave unwritten?" Last, as it moves nothing, newest first.
 export type ActivePhase = `working` | `next` | `draft`;
 
@@ -31,12 +34,17 @@ export const activePhase = (agent: PhaseFacts): ActivePhase => {
     return `working`;
 };
 
-// The soonest instant the card goes again by itself: a resend or booked message's own time, or the deadline a watch
-// wakes it by at the latest. Infinity for what names none (a memory hold, a land it waits on).
+// An instant already past, which is how the contract writes "any moment now" (AgentNext's `at`): a memory hold goes
+// as soon as memory stays free, so it sorts ahead of every time, and a folded head reads it as due now.
+export const ANY_MOMENT = 0;
+
+// The soonest instant the card goes again by itself: a resend or booked message's own time, ANY_MOMENT for a memory
+// hold, or the deadline a watch wakes it by at the latest. Infinity for a land it waits on, which no clock answers.
 export const goesAt = (agent: Pick<FleetAgent, "next" | "watches">): number => {
     const next = agent.next;
-    const booked = next !== undefined && (next.kind === `rerun` || next.kind === `send`) ? next.at : Number.POSITIVE_INFINITY;
-    return Math.min(booked, ...(agent.watches ?? []).map((watch) => watch.deadlineAt));
+    const own =
+        next?.kind === `room` ? ANY_MOMENT : next !== undefined && (next.kind === `rerun` || next.kind === `send`) ? next.at : Number.POSITIVE_INFINITY;
+    return Math.min(own, ...(agent.watches ?? []).map((watch) => watch.deadlineAt));
 };
 
 // The instant each phase sorts by within itself, newest first unless the phase says otherwise (see above).
@@ -57,8 +65,13 @@ export const activeLaneOrder = (a: FleetAgent, b: FleetAgent): number => {
     switch (activePhase(a)) {
         case `working`:
             return startedOf(b) - startedOf(a) || byId(a, b);
-        case `next`:
-            return compareAt(goesAt(a), goesAt(b)) || b.updatedAt - a.updatedAt || byId(a, b);
+        case `next`: {
+            // Two memory holds go in the order they were held, so the longest waiting reads first; anything else that
+            // shares an instant (two lands awaited, a batch booked together) reads newest first, as the other lanes do.
+            const at = goesAt(a);
+            const held = at === ANY_MOMENT ? a.updatedAt - b.updatedAt : b.updatedAt - a.updatedAt;
+            return compareAt(at, goesAt(b)) || held || byId(a, b);
+        }
         case `draft`:
             return draftedOf(b) - draftedOf(a) || byId(a, b);
     }

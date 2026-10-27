@@ -4,6 +4,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { countdownTo } from "../../../models/agent-status/agentStatus-clock";
 import { sandboxNow } from "../../../models/agent-status/sandboxClock";
+import { ANY_MOMENT } from "../../../models/fleet/board/activePhase";
 import { type LaneGroup, toggleFold } from "./view/laneGroups";
 
 // The head of one of the Active lane's groups (activePhase.ts): its name, and a press that folds it. Quiet type over the
@@ -32,8 +33,9 @@ const label = computed(() => {
     }
 });
 
-// Ticks only while it says a time, at the minute grain that time is written in.
-const tick = useNow(() => props.group.folded && Number.isFinite(props.group.goesAt), 30_000);
+// Ticks only while it counts to a time, at the minute grain that time is written in: "due now" for a memory hold
+// (ANY_MOMENT) never changes.
+const tick = useNow(() => props.group.folded && props.group.goesAt > ANY_MOMENT && Number.isFinite(props.group.goesAt), 30_000);
 const when = computed(() => {
     if (!props.group.folded || !Number.isFinite(props.group.goesAt)) {
         return undefined;

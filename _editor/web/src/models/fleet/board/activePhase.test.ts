@@ -1,6 +1,6 @@
 import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
 import { type FleetAgent, laneGroups } from "../useAgents-fleet";
-import { activeGroups, activePhase, goesAt } from "./activePhase";
+import { ANY_MOMENT, activeGroups, activePhase, goesAt } from "./activePhase";
 import { foldChildren } from "./childFold";
 
 // Pins the Active lane's one order: what is working, newest started first; then what goes by itself, soonest first;
@@ -41,10 +41,18 @@ describe(`the Active lane's order`, () => {
         expect(ids(ticked)).toEqual([`new`, `mid`, `old`]);
     });
 
-    test(`what goes by itself reads as a timetable: soonest first, then what names no time`, () => {
+    test(`what goes by itself reads as a timetable: any moment, then soonest first, then what waits on a land`, () => {
         const room = card(`room`, { next: { kind: `room` } });
-        const lane = laneGroups([room, booked(`late`, 9_000), watch(`w`, 5_000), resend(`soon`, 2_000)]).active;
-        expect(ids(lane)).toEqual([`soon`, `w`, `late`, `room`]);
+        const land = card(`land`, { next: { kind: `land`, after: `other`, count: 1 } });
+        const lane = laneGroups([land, booked(`late`, 9_000), watch(`w`, 5_000), room, resend(`soon`, 2_000)]).active;
+        expect(ids(lane)).toEqual([`room`, `soon`, `w`, `late`, `land`]);
+    });
+
+    test(`memory holds go longest waiting first, and lands awaited newest first`, () => {
+        const room = (id: string, updatedAt: number): FleetAgent => card(id, { updatedAt, next: { kind: `room` } });
+        const land = (id: string, updatedAt: number): FleetAgent => card(id, { updatedAt, next: { kind: `land`, after: `other`, count: 1 } });
+        const lane = laneGroups([room(`room-new`, 300), land(`land-old`, 100), room(`room-old`, 100), land(`land-new`, 300)]).active;
+        expect(ids(lane)).toEqual([`room-old`, `room-new`, `land-new`, `land-old`]);
     });
 
     test(`drafts read newest written first`, () => {
@@ -66,7 +74,8 @@ describe(`the Active lane's order`, () => {
     test(`goesAt names the soonest instant its corner promises`, () => {
         expect(goesAt(booked(`b`, 9_000))).toBe(9_000);
         expect(goesAt({ ...booked(`b`, 9_000), watches: [{ id: `w`, note: `ci`, intervalSeconds: 60, deadlineAt: 4_000 }] })).toBe(4_000);
-        expect(goesAt(card(`room`, { next: { kind: `room` } }))).toBe(Number.POSITIVE_INFINITY);
+        expect(goesAt(card(`room`, { next: { kind: `room` } }))).toBe(ANY_MOMENT);
+        expect(goesAt(card(`land`, { next: { kind: `land`, after: `other`, count: 1 } }))).toBe(Number.POSITIVE_INFINITY);
     });
 });
 

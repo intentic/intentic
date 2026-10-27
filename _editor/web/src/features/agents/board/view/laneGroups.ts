@@ -28,7 +28,7 @@ export interface LaneGroup {
     // The head folds it: never under a query, whose matches must all be on screen.
     readonly foldable: boolean;
     readonly folded: boolean;
-    // Up next's soonest instant (goesAt), which its folded head names; Infinity when none of it names one.
+    // Up next's soonest instant (goesAt), which its folded head names: ANY_MOMENT reads as due now, Infinity as no time.
     readonly goesAt: number;
 }
 
