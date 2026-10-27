@@ -120,7 +120,7 @@ describe(`a sign-in asked for in the desktop app's workspace`, () => {
         expect(enter).not.toHaveBeenCalled();
     });
 
-    it(`closes on Not now and leaves the reader where they are`, async () => {
+    it(`closes without signing in and leaves the reader where they are`, async () => {
         const { askSignIn, dismissSignIn, signInAsk, useBrowserHandoff } = await load();
         askSignIn(`/home`, `asked`);
         useBrowserHandoff().start(`/home`);
@@ -148,7 +148,7 @@ describe(`a session that ends under the page`, () => {
         expect(enter).not.toHaveBeenCalled();
     });
 
-    it(`leaves the lost account's view for Home's first run on Not now`, async () => {
+    it(`leaves the lost account's view for Home's first run when closed`, async () => {
         const { askSignIn, dismissSignIn } = await load();
         askSignIn(`/agents`, `lapsed`);
         dismissSignIn();

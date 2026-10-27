@@ -1116,7 +1116,8 @@
             "ledeAsked": "Twoje sandboksy i agenci są na Twoim koncie.",
             "ledeNeeded": "To wymaga Twojego konta. Zaloguj się, a otworzy się właśnie tutaj.",
             "ledeLapsed": "Twoja sesja wygasła. Zaloguj się ponownie, by kontynuować w tym samym miejscu.",
-            "notNow": "Nie teraz"
+            "waitingTitle": "Czekamy na Google w przeglądarce",
+            "waitingDetail": "Dokończ w otwartej karcie. To okno samo przejdzie dalej, gdy skończysz."
         },
         "login": {
             "acceptableUsePolicy": "Zasady dopuszczalnego użytkowania",

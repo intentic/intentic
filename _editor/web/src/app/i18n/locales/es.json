@@ -1116,7 +1116,8 @@
             "ledeAsked": "Tus sandboxes y agentes están en tu cuenta.",
             "ledeNeeded": "Eso necesita tu cuenta. Inicia sesión y se abrirá aquí mismo.",
             "ledeLapsed": "Tu sesión terminó. Vuelve a iniciar sesión y sigue donde lo dejaste.",
-            "notNow": "Ahora no"
+            "waitingTitle": "Esperando a Google en tu navegador",
+            "waitingDetail": "Termina en la pestaña que se abrió. Esta ventana sigue sola cuando acabes."
         },
         "login": {
             "acceptableUsePolicy": "Política de uso aceptable",

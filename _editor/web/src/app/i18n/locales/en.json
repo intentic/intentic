@@ -1116,7 +1116,8 @@
             "ledeAsked": "Your sandboxes and agents live in your account.",
             "ledeNeeded": "That needs your account. Sign in and it opens right here.",
             "ledeLapsed": "Your session ended. Sign in again and carry on where you were.",
-            "notNow": "Not now"
+            "waitingTitle": "Waiting for Google in your browser",
+            "waitingDetail": "Finish in the tab it opened. This window carries on by itself once you're done."
         },
         "login": {
             "acceptableUsePolicy": "Acceptable Use Policy",

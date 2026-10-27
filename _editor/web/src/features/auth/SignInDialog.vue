@@ -2,7 +2,7 @@
      down to the frame, and drawn in the same entry material, so the two read as one place in either light. -->
 <script setup lang="ts">
 import type { SignInOptions } from "@intentic/api-contract";
-import { AppBrand, Button, Notice } from "@intentic/ui";
+import { AppBrand, Button, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import FocusTrap from "primevue/focustrap";
 import { computed, nextTick, ref, useId, watch } from "vue";
@@ -49,7 +49,7 @@ const arrive = async (): Promise<void> => {
     await signedIn(ask.value?.returnTo ?? `/`);
 };
 
-const notNow = (): void => {
+const close = (): void => {
     if (!arriving.value) {
         dismissSignIn();
     }
@@ -91,7 +91,7 @@ watch(
                 v-if="ask"
                 class="sign-in-scrim ui-scrim fixed inset-0 z-[1150] flex overflow-y-auto p-4 sm:p-6"
                 data-testid="sign-in-dialog"
-                @keydown.esc.stop="notNow"
+                @keydown.esc.stop="close"
             >
                 <section
                     ref="surface"
@@ -109,6 +109,18 @@ watch(
                     <span class="entry-corner entry-corner-bl"></span>
                     <span class="entry-corner entry-corner-br"></span>
                     <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
+
+                    <!-- The way out, where every dialog keeps it: the reader stays on the view behind (Home's first run, after a
+                         lapse). Not while the hand-off is being redeemed, which has nothing to leave. -->
+                    <button
+                        v-if="!arriving"
+                        type="button"
+                        :class="ui.iconButton({ size: `lg`, tone: `subtle` }, `sign-in-close`)"
+                        :aria-label="t(`ui.action.close`)"
+                        @click="close"
+                    >
+                        <Icon name="times" />
+                    </button>
 
                     <!-- THE HAND-OFF COMING BACK: one wait, with nothing to press. -->
                     <div v-if="arriving" class="arrival" role="status">
@@ -139,16 +151,18 @@ watch(
                         </div>
 
                         <template v-if="options.google">
-                            <!-- After the press: the sign-in is in the browser now, and this says so until it returns. -->
+                            <!-- After the press: the sign-in is in the browser now, and the button's place says so until it
+                                 returns. Words on the plate, not a panel inside it; the one thing to do is open the tab again. -->
                             <div v-if="waiting" class="handoff" role="status">
-                                <p class="handoff-title">{{ t(`auth.words.finishInBrowser`) }}</p>
-                                <p class="handoff-detail">{{ t(`auth.words.finishInBrowserDetail`) }}</p>
-                                <div class="handoff-actions">
-                                    <Button :label="t(`auth.words.openBrowserAgain`)" tier="boring" @click="continueInBrowser">
-                                        <template #icon><Icon name="external-link" /></template>
-                                    </Button>
-                                    <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="handoff.cancel" />
-                                </div>
+                                <p class="handoff-title">
+                                    <Icon name="spinner" spin class="handoff-spinner" />
+                                    <span>{{ t(`auth.signInDialog.waitingTitle`) }}</span>
+                                </p>
+                                <p class="handoff-detail">{{ t(`auth.signInDialog.waitingDetail`) }}</p>
+                                <button type="button" :class="ui.textButton({ size: `sm` }, `handoff-again mx-auto`)" @click="continueInBrowser">
+                                    <Icon name="external-link" />
+                                    <span>{{ t(`auth.words.openBrowserAgain`) }}</span>
+                                </button>
                             </div>
                             <Button tier="accent" v-else :label="t(`auth.words.continueGoogleInBrowser`)" class="w-full justify-center" @click="continueInBrowser">
                                 <template #icon><Icon name="google" /></template>
@@ -171,9 +185,6 @@ watch(
                             <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener">{{ t(`auth.login.privacyPolicy`) }}</a
                             >.
                         </p>
-
-                        <!-- The way out, always there: the reader stays on the view behind (Home's first run, after a lapse). -->
-                        <Button :label="t(`auth.signInDialog.notNow`)" tier="quiet" class="not-now" @click="notNow" />
                     </template>
                 </section>
             </div>
@@ -194,7 +205,7 @@ watch(
     max-width: 27rem;
     min-height: 0;
     margin: auto;
-    padding: 2.25rem 2rem 1rem;
+    padding: 2.25rem 2rem 1.5rem;
     background: var(--plate);
     text-align: center;
     outline: none;
@@ -232,32 +243,43 @@ watch(
     text-wrap: balance;
 }
 
-/* The wait for the browser: the frame's own words, then the two ways on. */
+/* The wait for the browser: in the button's place, as words on the plate, so nothing nests. */
 .handoff {
     display: flex;
     width: 100%;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--rule);
-    background: color-mix(in oklab, var(--rule) 30%, transparent);
-    text-align: left;
+    align-items: center;
+    gap: 0.35rem;
 }
 .handoff-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     font-size: 0.9375rem;
     font-weight: var(--font-weight-semibold);
     color: var(--ink);
 }
+.handoff-spinner {
+    color: var(--gold);
+}
 .handoff-detail {
+    max-width: 34ch;
     font-size: 0.8125rem;
     line-height: 1.5;
     color: var(--ink-subtle);
+    text-wrap: balance;
 }
-.handoff-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.25rem;
+.handoff-again {
+    margin-top: 0.15rem;
+    color: var(--gold-bright);
+}
+
+/* Inside the frame's turned corner, clear of its ornament. */
+.sign-in-close {
+    position: absolute;
+    top: 0.85rem;
+    right: 0.85rem;
+    z-index: 1;
 }
 
 /* A hairline either side of the word, as on /login: the two ways in are peers, not a list. */
@@ -291,10 +313,6 @@ watch(
 .fine a {
     color: var(--gold-bright);
     text-decoration: underline;
-}
-
-.not-now {
-    margin-top: 0.5rem;
 }
 
 .arrival {

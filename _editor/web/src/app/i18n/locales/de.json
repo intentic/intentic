@@ -1116,7 +1116,8 @@
             "ledeAsked": "Deine Sandboxes und Agenten liegen in deinem Konto.",
             "ledeNeeded": "Dafür brauchst du dein Konto. Melde dich an, und es öffnet sich genau hier.",
             "ledeLapsed": "Deine Sitzung ist abgelaufen. Melde dich erneut an und mach dort weiter, wo du warst.",
-            "notNow": "Nicht jetzt"
+            "waitingTitle": "Warte auf Google in deinem Browser",
+            "waitingDetail": "Schließ die Anmeldung im geöffneten Tab ab. Dieses Fenster macht danach von selbst weiter."
         },
         "login": {
             "acceptableUsePolicy": "Richtlinie zur akzeptablen Nutzung",

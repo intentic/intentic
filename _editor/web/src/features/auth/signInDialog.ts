@@ -90,7 +90,7 @@ export const askSignIn = (returnTo: string, reason: SignInReason): void => {
     asked.value = { returnTo, reason: current?.reason === `lapsed` ? `lapsed` : reason, stage: { kind: `choose` } };
 };
 
-/** "Not now". The view behind a lapse belonged to the account that left, so that one gives way to Home's first run. */
+/** The dialog closed without signing in. The view behind a lapse belonged to the account that left, so that one gives way to Home's first run. */
 export const dismissSignIn = (): void => {
     const current = asked.value;
     if (current === undefined || current.stage.kind === `arriving`) {
