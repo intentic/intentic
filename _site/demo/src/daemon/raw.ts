@@ -1,10 +1,14 @@
 import { AccessAskSchema, accessRefusal, MemberEmailSchema, memberAccess, tierOf } from "@intentic/sandbox-contract/schemas/members";
-import { EnvironmentRemoveSchema } from "@intentic/sandbox-contract/schemas/environment";
-import type { PasskeysList } from "@intentic/sandbox-contract/schemas/system";
 import { ProviderKeysApplySchema } from "@intentic/sandbox-contract/state/arrival";
 import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import type { VoicesView } from "@intentic/sandbox-contract/schemas/voice";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
+import { workspaceRoutes } from "./workspace/workspace.routes";
+import { workspaceRaw } from "./workspace/rawFile";
+import { webchatRoutes } from "./extensions/webchat.routes";
+import { linksRoutes } from "./machine/links.routes";
+import { machineRoutes } from "./machine/machine.routes";
+import { signInRoutes } from "./account/signIn.routes";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
 import {
     accessRequests,
@@ -17,8 +21,8 @@ import {
     settleAccess,
 } from "../fixture/access";
 import { DEMO_USER } from "../platform";
-import { SEPTEMBER_PRINT_DOCX, SEPTEMBER_PRINT_PATH, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "../fixture/desk";
-import { HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_DOCX_BEFORE, HANDOVER_PATH } from "../fixture/document";
+import { healthAt } from "../world/addresses";
+import { HANDOVER_DOCX, HANDOVER_DOCX_BEFORE } from "../fixture/document";
 import {
     deleteKnowledgeNote,
     knowledgeGraph,
@@ -28,44 +32,18 @@ import {
     knowledgeSearch,
     saveKnowledgeNote,
 } from "../fixture/knowledge";
-import { PAGE_FILES } from "../fixture/pages";
 import { officeResponse } from "../fixture/offices/office";
-import { demoEnvironment, demoEnvironmentContents, removeDemoBlock, vendoredBundle } from "../fixture/sandbox";
-import { fileBody, writeFile } from "../fixture/workspace";
-import { demoQuiet } from "../mode";
+import { vendoredBundle } from "../fixture/sandbox";
 import { demoSelf } from "../floors";
 import { json } from "../transport";
-import { STARTED_AT } from "./roster";
+import { STARTED_AT } from "./board/roster";
 
 // The routes the daemon serves outside oRPC that the app reaches here: file bytes, the members roster, control
-// tokens, passkeys, arrivals, and the knowledge extension's own namespace.
+// tokens, model keys found on the owner's devices, and the knowledge extension's own namespace.
 
 // The document's bytes, as a viewer parses them: a picture of text would not do.
 const documentBytes = (bytes: Uint8Array<ArrayBuffer>): Response =>
     new Response(bytes, { status: 200, headers: { "content-type": `application/vnd.openxmlformats-officedocument.wordprocessingml.document` } });
-
-// Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the Word documents, the only paths here
-// whose bytes are bytes: a viewer parses them, so text would not do.
-const workspaceRaw = (path: string): Response => {
-    const page = PAGE_FILES.get(path);
-    if (page !== undefined) {
-        return new Response(page, { status: 200, headers: { "content-type": `text/html; charset=utf-8` } });
-    }
-    if (path === SUPPLIER_LETTER_PATH) {
-        return documentBytes(SUPPLIER_LETTER_DOCX);
-    }
-    if (path === SEPTEMBER_PRINT_PATH) {
-        return documentBytes(SEPTEMBER_PRINT_DOCX);
-    }
-    if (path === HANDOVER_PATH || path === HANDOVER_CHANGE_PATH) {
-        return documentBytes(HANDOVER_DOCX);
-    }
-    const body = fileBody(path) ?? refuse(`No such file: ${path}`, 404);
-    return new Response(body, { status: 200, headers: { "content-type": path.endsWith(`.svg`) ? `image/svg+xml` : `text/plain; charset=utf-8` } });
-};
-
-// Every picture in this fixture is already small, so a tile is the file itself; only SVG is refused, as the daemon does.
-const workspaceThumb = (path: string): Response => (path.endsWith(`.svg`) ? refuse(`not a picture this can draw`, 415) : workspaceRaw(path));
 
 // The refusals the real daemon makes on the spot (auth/members/members.routes.ts), through the contract's own rules: an
 // access no grant could make, a role that is not the tier the access makes, and a maintainer carrying a fence. A
@@ -155,14 +133,8 @@ const DEMO_KEYS = [
 ] as const;
 const demoKeysAdded = new Set<string>();
 
-/** A mutation with nothing to report: do it, then answer the daemon's own `{ ok: true }`. */
-const okAfter = (write: () => void): { ok: true } => {
-    write();
-    return { ok: true };
-};
-
 // The voices a sandbox speaks with, as the Voice settings list them: a few of Kokoro's and Piper's, none of them
-// installed yet, which is how a fresh sandbox reads. Speaking itself needs a real machine (unserved.ts).
+// installed yet, which is how a fresh sandbox reads. Speaking itself is daemon/voiceSay.ts.
 const DEMO_VOICES: VoicesView = {
     voices: [
         { id: `kokoro/af_heart`, label: `Heart`, languages: [`en`], accent: `US`, gender: `female`, model: `kokoro-multi-lang-v1_0`, bytes: 349_906_910, installed: false },
@@ -179,33 +151,14 @@ const DEMO_VOICES: VoicesView = {
 
 // The routes the daemon serves outside oRPC that the app reaches here, keyed as the contract declares them.
 export const raw = {
-    // No loopback shortcut here; the demo daemon is only ever at its own origin.
-    "GET /health": () => json({ error: `The demo has no local daemon to shortcut to.` }, 404),
+    // A booted daemon at a sandbox's address; no loopback shortcut, since nothing listens on this computer's ports.
+    "GET /health": ({ url }) => {
+        const health = healthAt(url);
+        return health === undefined ? json({ error: `The demo has no local daemon to shortcut to.` }, 404) : json(health);
+    },
     // A WebSocket can't carry a bearer header, so this ticket stands in for one per upgrade.
     "POST /system/ws-ticket": () => json({ ticket: `demo-ticket` }),
-    // No phone is paired in the demo, but adding the Android card mints a pairing, so its QR code can be seen; nothing
-    // can ever redeem this one.
-    "GET /system/phones": () => json({ phones: [] }),
-    // The support desk's own sandbox hands this one tasks as Maya, one of them waiting for the owner's yes: the Access tab's
-    // linked sandboxes section and the map's left column both have one to show.
-    "GET /system/links": () =>
-        json({
-            links: [
-                {
-                    id: `lnk_support`,
-                    label: `support-desk`,
-                    from: { sandboxId: `sbx_support`, url: `https://support-desk.acme.dev` },
-                    terms: { actsAs: `maya-support`, approve: true, turnsPerHour: 20 },
-                    createdAt: Date.now() - 20 * 24 * 3_600_000,
-                    createdBy: `ada@acme.dev`,
-                    lastUsedAt: Date.now() - 2 * 3_600_000,
-                    conversations: 4,
-                    requests: [{ id: `req_1`, conversationId: `link-refund-macro`, task: `Draft the refund macro for damaged parcels`, askedAt: Date.now() - 40 * 60_000 }],
-                },
-            ],
-        }),
     "GET /speech/voices": () => json(DEMO_VOICES),
-    "POST /system/phones/pair": () => json({ token: `demo-pairing-never-redeemable`, expiresIn: 600_000 }),
     // intentic-netd's own answer in a real sandbox: a daemon that is up, idle and never restarted.
     "GET /system/vitals": () =>
         json({
@@ -215,18 +168,10 @@ export const raw = {
             uptimeS: Math.floor((Date.now() - STARTED_AT) / 1000),
             pressure: { cpu: 0.3, memory: 0, io: 0.1 },
         } satisfies SandboxVitals),
-    // Screenshot bytes for an <img>, served here rather than from /public.
-    "GET /workspace/raw": ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``),
     // A conversation's recorded document: the same bytes, since the fixture keeps one tree and every result is in it.
     "GET /agents/{id}/documents/raw": ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``),
-    // A picture at tile size, answered as the daemon answers it: SVG is refused (415) for the client to draw the file.
-    "GET /workspace/thumb": ({ url }) => workspaceThumb(url.searchParams.get(`path`) ?? ``),
     // Pre-flight for the upload queue; nothing here is ever a re-drop, so it always reports none to skip.
     "POST /workspace/upload-diff": () => json({ skip: [] }),
-    "POST /workspace/upload": async ({ request, url }) => {
-        const body = await request.text();
-        return json(okAfter(() => writeFile(url.searchParams.get(`path`) ?? ``, body)));
-    },
     // The one binary diff the demo carries whole: the handover document, both versions built in code.
     "GET /diff/raw": ({ url }) => documentBytes(url.searchParams.get(`which`) === `before` ? HANDOVER_DOCX_BEFORE : HANDOVER_DOCX),
     // The listed extensions' bundles, served as a daemon serves an installed checkout's `entry`; the loader blob-imports
@@ -260,38 +205,6 @@ export const raw = {
         }),
     "POST /system/control/tokens": () => json({ id: `ct_new`, token: `***` }),
     "DELETE /system/control/tokens/{id}": () => json({ ok: true }),
-    // Read by the Access tab on first render, so a refusal here painted an error box into every picture of it. One
-    // passkey the owner added from a laptop that syncs it, and no rule that a passkey is the only way in; registering
-    // another still refuses, since the demo's session is seeded and there is nothing for an authenticator to prove.
-    "GET /system/passkeys": () =>
-        json({
-            passkeys: [
-                {
-                    id: `pk_demo_macbook`,
-                    email: `ada@acme.dev`,
-                    label: `MacBook Air`,
-                    rpId: `app.intentic.dev`,
-                    createdAt: Date.now() - 41 * 24 * 3_600_000,
-                    lastUsedAt: Date.now() - 2 * 3_600_000,
-                    backedUp: true,
-                },
-            ],
-            required: false,
-        } satisfies PasskeysList),
-    "GET /environment": () => json(demoEnvironment({ proposal: !demoQuiet(`proposal`) })),
-    "GET /environment/contents": () => json(demoEnvironmentContents({ settled: demoQuiet(`proposal`) })),
-    // Taking a tool out answers as the daemon does, with the environment it leaves; remembered for the tab.
-    "POST /environment/remove": async ({ request }) => {
-        const block = EnvironmentRemoveSchema.safeParse(await request.json()).data?.block;
-        return block !== undefined && removeDemoBlock(block)
-            ? json(demoEnvironment({ proposal: !demoQuiet(`proposal`) }))
-            : refuse(`no such block in the environment`, 404);
-    },
-    // Read on first render; a published workspace and empty exports/computers are the tab's default states
-    // before the visitor clicks anything.
-    "GET /definition/workspace": () => json({ remote: `https://github.com/acme/intentic-sandbox-ada.git`, branch: `main`, hosts: [`github.com`] }),
-    "GET /bundles": () => json({ exports: [] }),
-    "GET /arrivals/hosts": () => json({ hosts: [] }),
     // A model key on the visitor's laptop, offered by the connect view's "Found on this computer"; adding it is
     // remembered for the tab, though no endpoint joins the picker, since the demo serves no models of its own.
     "GET /arrivals/keys": () => json({ keys: DEMO_KEYS.map((key) => ({ ...key, added: demoKeysAdded.has(key.id) })) }),
@@ -306,64 +219,12 @@ export const raw = {
             failed: ids.filter((id) => !known.includes(id)).map((id) => ({ id, error: `that key is no longer on a connected device` })),
         });
     },
-    // The checklist an upload produces: one row per repo, one for workspace files, one for history, plus two
-    // steps the arrival can't do for the owner.
-    "POST /arrivals/plan": () =>
-        json({
-            source: `bundle`,
-            token: `demo-arrival`,
-            name: `acme-shop`,
-            carriesSecrets: true,
-            items: [
-                {
-                    id: `bundle:files`,
-                    group: `files`,
-                    label: `Workspace files`,
-                    detail: `Everything in /work that is not one of the repositories below, and the workspace repo's own history — 4,213 files, 41.8 MB`,
-                    applicable: true,
-                    recommended: true,
-                    secrets: [`STRIPE_SECRET_KEY`],
-                },
-                {
-                    id: `repo:acme-shop`,
-                    group: `repo`,
-                    label: `Repository acme-shop`,
-                    detail: `Its working tree and its full git history — 1,904 files, 12.2 MB`,
-                    applicable: true,
-                    recommended: true,
-                    secrets: [],
-                },
-                {
-                    id: `repo:design-system`,
-                    group: `repo`,
-                    label: `Repository design-system`,
-                    detail: `Its working tree and its full git history — 22,610 files, 6.1 GB`,
-                    applicable: true,
-                    recommended: true,
-                    secrets: [],
-                },
-                {
-                    id: `bundle:history`,
-                    group: `history`,
-                    label: `Sandbox history`,
-                    detail: `Transcripts, checkpoint timelines and ledgers, the part nothing else can reproduce — 8,802 files, 310.4 MB`,
-                    applicable: true,
-                    recommended: true,
-                    secrets: [],
-                },
-            ],
-            refused: [`history/session-secret (this sandbox does not accept identity files)`],
-            needsAction: [
-                {
-                    subject: `Rebuild the environment image`,
-                    detail: `The overlay Dockerfile travels, but the IMAGE it describes is built outside the container. Open the Environment card and run the rebuild command it shows.`,
-                },
-                {
-                    subject: `Reconnect capabilities`,
-                    detail: `Each connection arrives listed but unauthenticated. Open these on the Capabilities view and re-enter the credential each one asks for: github (git), linear (mcp).`,
-                },
-            ],
-        }),
     // The two office cards and knowledge share the same namespace their real backends use.
     "ALL /x/*": (context) => officeResponse(context.request, context.url) ?? knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
+    // Each area's routes from a file of its own (`<area>/<name>.routes.ts`), so they can be answered without touching this table.
+    ...workspaceRoutes,
+    ...webchatRoutes,
+    ...linksRoutes,
+    ...machineRoutes,
+    ...signInRoutes,
 } satisfies RawRoutes;

@@ -8,6 +8,7 @@
         "build": "node scripts/sync-extensions.mjs && vite build",
         "sync": "node scripts/sync-extensions.mjs",
         "smoke": "node scripts/smoke-daemon.ts",
+        "smoke:platform": "node scripts/smoke-platform.ts",
         "typecheck": "node --max-old-space-size=8192 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.json"
     },
     "dependencies": {

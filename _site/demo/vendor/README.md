@@ -22,7 +22,7 @@ flowchart LR
 - [knowledge/source.json](knowledge/source.json) — the commit the committed engine copy came from.
 - [knowledge/wire-types.ts](knowledge/wire-types.ts) — the knowledge backend's response shapes the fixture answers in.
 - [../scripts/sync-extensions.mjs](../scripts/sync-extensions.mjs) — fetches bundles and the engine at the pins.
-- [../src/fixture/sandbox.ts](../src/fixture/sandbox.ts) — globs the vendored manifests and serves their bundles.
+- [../src/daemon/extensions/extensionList.ts](../src/daemon/extensions/extensionList.ts) — globs the vendored manifests and serves their bundles.
 
 ## Commands
 

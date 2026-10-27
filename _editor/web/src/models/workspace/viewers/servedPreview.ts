@@ -1,4 +1,5 @@
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
+import { elementAddress } from "../../../client/endpoint/elementAddress";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import type { ViewScope } from "../../../app/workspaceScope";
@@ -26,7 +27,7 @@ export const canServePreview = (): boolean => {
 export const mintPreview = async (path: string, scope: ViewScope, source: string | undefined): Promise<PreviewAddress> => {
     const minted = await sandboxRpc.workspace.previewTicket({ path, agent: scope.agent, source });
     const base = useEndpoint().daemonBase.value ?? ``;
-    return { url: `${base}${minted.page}`, root: minted.root };
+    return { url: elementAddress(`${base}${minted.page}`), root: minted.root };
 };
 
 // A path the page told of, relative to the served folder, as the workspace path it names.

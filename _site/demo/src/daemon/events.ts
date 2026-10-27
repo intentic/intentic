@@ -5,7 +5,7 @@ import { homeSandboxOf } from "../fixture/home/sandboxes";
 import { watchOwnBrowser } from "../browser";
 import { REPOS } from "../fixture/workspace";
 import { demoMode } from "../mode";
-import { boardAgents, listeners, OWNER, roster, STARTED_AT, TEAMMATE } from "./roster";
+import { boardAgents, listeners, OWNER, roster, STARTED_AT, TEAMMATE } from "./board/roster";
 
 // The /events stream: the boot frame, the board, presence, a heartbeat inside the browser's 10s watchdog, and a
 // synthetic runtime tick, since the fixture's data doesn't change on its own.

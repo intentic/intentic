@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
+import { elementAddress } from "../../../client/endpoint/elementAddress";
 import { t } from "@intentic/ui/i18n";
 import { BUNDLE_EXPORTS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
@@ -51,5 +52,5 @@ export const bundleDownloadUrl = async (name: string): Promise<string> => {
     if (base === undefined || base === ``) {
         throw new Error(t(`sandbox.useBundleExports.notReachableYet`));
     }
-    return `${base}${rawRouteUrl(`GET /bundles/download`)}?${new URLSearchParams({ name, ticket }).toString()}`;
+    return elementAddress(`${base}${rawRouteUrl(`GET /bundles/download`)}?${new URLSearchParams({ name, ticket }).toString()}`);
 };

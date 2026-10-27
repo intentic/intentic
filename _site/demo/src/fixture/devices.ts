@@ -1,4 +1,5 @@
 import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { EgressOwnerKeysRead } from "@intentic/sandbox-contract/schemas/egress";
 import { demoQuiet, deskEdition } from "../mode";
 
@@ -452,6 +453,26 @@ const allDevices = (now: number): Device[] => [
             engine: { memoryBytes: 16 * GIB, cpus: 8 },
         },
         sandboxes: [{ slug: `side-project`, name: `side-project`, container: `intentic-sandbox-side-project`, running: false, image: `ghcr.io/intentic/sandbox:latest` }],
+    },
+];
+
+// The office network this sandbox reaches into: a FortiGate tunnel to the warehouse LAN and the NAS on it, where the
+// supplier price lists live. The two connections the VPN and disk tiles draw their rows from; daemon/liveLinks.ts
+// keeps whether each is up. Secret-stripped as the daemon echoes them.
+export const linkCapabilities: CapabilitySummary[] = [
+    {
+        id: `office-vpn`,
+        kind: `vpn`,
+        status: { state: `active` },
+        config: { provider: `fortinet`, server: `vpn.acme.dev`, port: 443, username: `ada`, autoConnect: `off` },
+        secrets: [`password`],
+    },
+    {
+        id: `warehouse-nas`,
+        kind: `netdisk`,
+        status: { state: `active` },
+        config: { provider: `smb`, server: `nas.acme.internal`, share: `suppliers`, username: `acme-agent`, access: `read`, version: `auto`, autoMount: `off` },
+        secrets: [`password`],
     },
 ];
 

@@ -14,6 +14,7 @@ import { frameSandbox, type PreviewTarget } from "../../models/preview/previewMo
 import { loopbackPreviewUrl } from "./previewLane";
 import type { PhoneModel } from "./phoneModels";
 import PreviewStage from "./PreviewStage.vue";
+import { elementAddress } from "../../client/endpoint/elementAddress";
 import { usePreviewPass } from "./usePreviewPass";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
@@ -212,7 +213,8 @@ onUnmounted(() => {
     probeGeneration += 1;
 });
 
-// The frame's address: where the reader went, carried onto the lane the frame is served on, else the app's own.
+// The frame's address: where the reader went, carried onto the lane the frame is served on, else the app's own. The frame
+// is handed it as the host names it (elementAddress.ts); every path and host comparison here reads the address itself.
 const frameSrc = computed<string | undefined>(() => {
     const base = previewSrc.value;
     if (base === undefined || visited.value === undefined) {
@@ -449,7 +451,7 @@ watch(
                 <iframe
                     ref="frameEl"
                     :key="`${previewEpoch}-${previewSrc}-${passLink ?? ``}`"
-                    :src="passLink ?? frameSrc"
+                    :src="elementAddress(passLink ?? frameSrc)"
                     :title="t(`preview.previewPanel.preview2`, { label: target.label })"
                     :sandbox="frameSandbox(target.kind)"
                     :style="frame"

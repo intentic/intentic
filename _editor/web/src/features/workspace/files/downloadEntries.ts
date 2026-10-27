@@ -3,6 +3,7 @@ import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
+import { elementAddress } from "../../../client/endpoint/elementAddress";
 import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
 import { mediaUrl } from "../../../models/workspace/files/mediaUrl";
 
@@ -63,6 +64,6 @@ export const downloadEntries = async (targets: readonly DownloadTarget[], scope:
     if (base === undefined || base === ``) {
         throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
     }
-    hand(`${base}/workspace/download?${new URLSearchParams({ ticket }).toString()}`);
+    hand(elementAddress(`${base}/workspace/download?${new URLSearchParams({ ticket }).toString()}`));
     return filename;
 };

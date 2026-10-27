@@ -1,21 +1,28 @@
 # demo
 
-The interactive demo at intentic.dev/demo/: the real editor built from `@intentic/web` source, with its network replaced by an in-browser fixture of the platform and a sandbox daemon.
+The interactive demo at intentic.dev/demo/: the real editor built from `@intentic/web` source, with its network replaced by an in-browser world of the platform, the sandbox daemons and the services around them.
 
 ```mermaid
 flowchart LR
     visitor["Visitor at /demo/"] --> app["Real editor<br/>@intentic/web"]
     app -->|"fetch · XHR · WebSocket · WebTransport"| demo(["demo<br/>transports"])
-    demo --> platform["platform.ts<br/>account, sandbox row"]
-    demo --> daemon["daemon.ts<br/>contract-typed fixture"]
+    app -->|"window.google · element addresses"| world
+    demo --> platform["platform.ts<br/>api-contract-typed answers"]
+    demo --> daemon["daemon.ts<br/>sandbox-contract-typed fixture"]
     demo --> recorded["terminal.ts · browser.ts<br/>recorded sockets"]
+    platform --> world["world/<br/>account, sandbox registry, machines,<br/>addresses, Google, elements"]
+    daemon --> world
+    daemon --> areas["daemon/&lt;area&gt;/<br/>board · git · workspace · machine<br/>extensions · account"]
     daemon --> fixture["fixture/<br/>workspace, fleet, transcripts"]
-    daemon --> turn["turn.ts<br/>scripted agent turn"]
 ```
 
 - Runs entirely in the visitor's browser. `main.ts` swaps `fetch`, `XMLHttpRequest` and `WebSocket` for handlers bound to `*.demo.invalid` origins, and answers a `WebTransport` session there as one that never opens, so terminals take the socket shim, seeds a session and open chat tabs into the storage keys the app already reads, then imports the app's own `main.ts`. No app module knows the demo exists, and a request that escapes the handlers dies on the reserved `.invalid` TLD.
 - The fixture daemon is typed by `@intentic/sandbox-contract`. `@intentic/contract-serve` resolves a request with the contract's own route matcher and parses its input, so a contract change breaks this package's typecheck before it breaks the landing page.
-- `unserved.ts` lists every contract route the fixture doesn't answer, each with its reason: not an editor call, real sign-in or real infrastructure, or not simulated yet (the gaps a visitor can reach). The typecheck holds it to the contract both ways, so a new route fails here by name until it is served or listed, and a listed route the fixture starts serving fails as an unknown key. An unanswered request answers 404 and logs its reason, and the console boot line reports how many routes are served.
+- `unserved.ts` lists every contract route the fixture doesn't answer, each with its reason, and none of them is a gap a visitor can reach: every route the editor calls is answered, a machine's and a sign-in's included (2026-10-27). What is left is what the editor never sends: the `ic` CLI's, an agent's tools', a paired machine's, a listener's, the owner's site's widgets. The typecheck holds the list to the contract both ways, so a new route fails here by name until it is served or listed, and a listed route the fixture starts serving fails as an unknown key. An unanswered request answers 404 and logs its reason, and the console boot line reports how many routes are served.
+- **The world** (`src/world/`) is the state both fakes write: the account and its sandbox registry (`sandboxRegistry.ts`: create, rename, delete, restore, attach, setup codes), the machines behind those rows (`machines.ts`: a code redeemed stage by stage, a machine of ours provisioned, woken, released), the plan, tokens, organisations and invites, and which addresses a sandbox answers at (`addresses.ts`). So Add sandbox works on every lane: a connected machine streams `ic sandbox connect` and the new sandbox checks in; a machine of ours walks its boot; the command for a server is "run" a few seconds after it is shown, since nobody can paste it from a web page; and an address typed into "One already running" is answered as the visitor's own sandbox (one with `offline`, `down` or `nothing` among its labels answers as nothing, so the failure card is there to see too). A sandbox made on the page answers as its own first day (`world/fresh.ts`): its name, an empty board, nothing waiting; the rest it shares with the demo's fixture.
+- **The platform** (`platform.ts`, `src/platform/`) is held to `@intentic/api-contract` the way the daemon is held to its contract: `platform/serve.ts` resolves `/rpc/*` by the contract's own routes, parses each input with the procedure's schema and types each handler by its output, and `platform/platformUnserved.ts` lists what it leaves out, held both ways by the typecheck. `pnpm smoke:platform` sends one request per served procedure and parses each answer.
+- **Google** is the demo's too (`world/identity.ts`): Google Identity Services on `window.google.accounts.id`, the global the editor reads before it would load Google's script, signs the visitor in as the demo account, and a credential is seeded where the editor caches one. Without it every press that needs a Google token (attaching an address, a machine of ours, a new sandbox's first session) waited for good.
+- **Addresses handed to elements** (a `<video>`'s source, a download link, a preview frame) go through the editor's one seam for them, `client/endpoint/elementAddress.ts`: a host that reaches its sandbox through a channel elements cannot use puts a resolver on `window.__INTENTIC_ELEMENT_ADDRESS__` before boot. The demo's (`world/elements.ts`) maps them onto `/demo/__sandbox/…`, which its service worker (`world/element-worker.js`, served and built by the `elementWorker` plugin in `vite.config.ts`) relays to the page's own handlers, byte ranges included; a preview frame, whose opaque origin no worker sees, gets one self-contained document.
 - The switcher chrome picks a mode: `Minimal`, `Curated`, `Everything`, `Showcase`, `Desk`, a documents-instead-of-code workspace, or `Fresh`, a sandbox on its first day with nothing in it and only the free trial to run on, which is where the getting-started checklist and the first-run board are seen (`?mode=minimal|default|full|showcase|desk|fresh`). `?mode=first` is an account with no sandbox at all, and `?mode=welcome` the same before signing in: the two faces of Home's first run (`HomeNoSandbox.vue`), which no other mode reaches since each serves at least one sandbox. `?as=maintainer|collaborator|viewer|guest` shows the app as a lesser grant, and its daemon holds that grant to every route's floor with the daemon's own check, answering what it would refuse with the daemon's own refusal and logging it (`src/floors.ts`): the editor foresees those and never sends them, which `_tools/e2e/access/` checks screen by screen. `?ai=<keys>` holds that lesser grant to some AI accounts, as Access ▸ People writes them (`?ai=codex:chatgpt-ada`, or `?ai=gemini` for every account of a provider), which is how the model picker's "not shared with you" states are looked at; `?ai=all` lifts it. All three stick per tab, and switching reloads. `Showcase` is what the site's and the repository README's screenshots are taken of. Every mode but `Everything` is served quiet: the same agents, files and conversations without the states the recording otherwise packs in to be explored (cooling caches, reactions, open needs, a failing pipeline, a plugin's warning). `Everything` keeps them all; the screenshots harness can quiet it too, through a session key only it writes (`src/mode.ts`, `demoQuiet`). `?outage=busy|restarting|down|fixing|needs-you|fixed|hosted|asleep` acts out a sandbox that stops answering, at the same seams a real one does (`src/outage.ts`), so the diagnosis and the recovery panel can be looked at; `?outage=none` ends it. `?models=none` serves a sandbox with nothing a chat can run on (no account, no trial, no endpoint), the first run the chat's account notice and Home's in-place Models are checked against (`src/mode.ts`, `noModels`); `?models=any` ends it.
 - `vite.config.ts` reuses the app's `vite.shared.ts` and builds into `_site/site/public/demo/` (gitignored), so the demo ships same-origin with the site. The marketing screenshots (`_tools/e2e/shots/capture.mts`) and the promo recording (`_tools/e2e/promo/record.mjs`) are taken from the demo.
 - `/demo/home?mode=home` shows three sandboxes with custom marks in the left rail (a shop, Research, Personal), connected Claude and Codex plan limits on the right, and a home conversation per sandbox that **plays a turn of real work** when it is first opened: the shop's agent walks the checkout in the browser, finds Germany shipping free, fixes the rate table, tests it and asks before putting it live; Research sends three subagents to rival shops at once and writes a brief; Personal checks the calendar, finds trains, asks before paying, books them and sends them on. Each story is a list of agent events (`fixture/home/shop.ts`, `research.ts`, `personal.ts`, written with `story.ts`), played by `turn.ts` through `/agent/attach` as a real run streams, so the real chat draws it; a question it parks on answers itself with its first choice after seven seconds unless the visitor answers first. The sandboxes are told apart by their daemon addresses (`fixture/home/sandboxes.ts`: each has its own `*.demo.invalid` origin, and a handler reads the one it was asked at from `ProcedureCall.url`), so a switch in the rail switches the conversation, the turn and the home card the board and the chat's status line read (`daemon/homeCards.ts`); a turn keeps playing while another sandbox is on screen. `fixture/home/logos.ts` supplies the sandbox images. `?mode=hero` serves the same home recording with the showcase's board behind it, so every place a visitor clicks next has something in it; the screenshot harness captures it as `hero-home` in both site themes, on the shop's first frame, before its first step.
@@ -29,26 +36,30 @@ labels as the fake daemon. A fresh sandbox therefore exercises disconnected brow
 
 ## Key files
 
-- [src/main.ts](src/main.ts) — boot order: transports, seeded storage, switcher, then the app.
+- [src/main.ts](src/main.ts) — boot order: transports, Google, seeded storage, switcher, then the app.
 - [src/transport.ts](src/transport.ts) — which requests the demo claims and which pass through.
-- [src/daemon.ts](src/daemon.ts) — every served procedure, raw route and recorded socket, plus the live state `/events` re-broadcasts.
+- [src/daemon/procedures.ts](src/daemon/procedures.ts) — every contract group the fixture daemon answers, by the area file that answers it.
 - [src/unserved.ts](src/unserved.ts) — every route the demo leaves unanswered, and why: its real coverage.
-- [src/platform.ts](src/platform.ts) — the platform's answers: session, sandbox list, billing plan and fictional organisation policy reads.
-- [src/mode.ts](src/mode.ts) — the modes, the viewer tier and the extension override.
-- [src/embed.ts](src/embed.ts) — the landing page's hero: how the demo knows it is embedded, and what changes when it is.
+- [src/platform.ts](src/platform.ts) — the platform's answers, each group from `src/platform/`, held to the api contract.
+- [src/world/sandboxRegistry.ts](src/world/sandboxRegistry.ts) — the account's sandboxes as live state, written by the platform and the machines alike.
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
+| `src/daemon/<area>/` | The fixture daemon by area (`board`, `git`, `workspace`, `machine`, `extensions`, `account`): each contract group's `<group>.handler.ts` beside the stores it reads and writes, and the raw routes as `<name>.routes.ts` |
+| `src/daemon/procedures.ts`, `raw.ts`, `doors.ts` | The tables that assemble the areas, and the type each group's handlers are held to |
+| `src/world/` | The state outside one sandbox: account, registry, machines, plan, tokens, organisations, addresses, Google, element addresses |
+| `src/platform/` | The platform's answers per group (`<group>.handler.ts`), its dispatcher and its unserved list |
 | `src/turn.ts` | Scripted agent turns streamed on `/agent/attach`, parking on plans and questions |
 | `@intentic/contract-serve` | The dispatcher standing in for the daemon's OpenAPI handler, and the event-iterator wire format |
 | `src/terminal.ts`, `src/browser.ts` | Recorded terminal and browser-view sockets |
 | `src/switcher.ts` | The mode buttons, plain DOM, mounted before the app |
 | `src/fixture/` | The data: files, repos, fleet, transcripts, automations, the desk workspace |
-| `vite.config.ts` | Shared app build, base path, port, output directory, the shared optimizer cache and a managed preview's idle stop |
+| `vite.config.ts` | Shared app build, base path, port, output directory, the shared optimizer cache, a managed preview's idle stop and the element worker |
 | `scripts/dev.mjs` | `pnpm dev`: Vite in the foreground by hand, this conversation's managed preview in an agent's turn |
-| `scripts/smoke-daemon.ts` | One request per served procedure, answers parsed by the contract schemas |
+| `scripts/smoke-daemon.ts`, `scripts/samples/` | One request per served daemon procedure, its input from `<group>.samples.ts`, answers parsed by the contract schemas |
+| `scripts/smoke-platform.ts` | The same for the platform's procedures |
 | `vendor/` | [Pinned first-party extensions](vendor) the demo runs |
 
 ## Dev server: by hand, or one managed preview per conversation
@@ -84,6 +95,7 @@ pnpm -C _site/demo dev        # by hand: http://127.0.0.1:47146/demo/; in a turn
 pnpm -C _site/demo dev --stop # in a turn: stop this conversation's preview
 pnpm -C _site/demo build      # into _site/site/public/demo/
 pnpm -C _site/demo smoke
+pnpm -C _site/demo smoke:platform
 pnpm -C _site/demo typecheck
 ```
 

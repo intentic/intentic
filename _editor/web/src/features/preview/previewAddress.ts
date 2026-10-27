@@ -1,10 +1,12 @@
 import { probePreviewOnce } from "@intentic/ui";
+import { elementAddress } from "../../client/endpoint/elementAddress";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { loopbackPreviewUrl } from "./previewLane";
 
 // The address to frame or open a preview at, for this browser: the loopback twin when the app is on the daemon's
 // loopback lane and that lane answers as this sandbox's preview proxy, else the public address as given. Kept apart
-// from the pure rewrite in previewLane.ts, since this one reads the shell's endpoint state.
+// from the pure rewrite in previewLane.ts, since this one reads the shell's endpoint state. Either is handed over as the
+// host names it (elementAddress.ts): a frame or a tab requests it, not the editor's transport.
 
 // One probe per loopback origin per page load, misses included: a loopback lane that does not answer as this sandbox's
 // preview proxy will not start to mid-session, and a hit is a hit.
@@ -14,10 +16,10 @@ export const previewAddress = async (publicUrl: string): Promise<string> => {
     const { daemonBase, usingLocal } = useEndpoint();
     const local = loopbackPreviewUrl(publicUrl, daemonBase.value, usingLocal.value);
     if (local === undefined) {
-        return publicUrl;
+        return elementAddress(publicUrl);
     }
     const origin = new URL(local).origin;
     const known = answered.get(origin) ?? probePreviewOnce(local).then((probe) => probe.outcome === `reached`);
     answered.set(origin, known);
-    return (await known) ? local : publicUrl;
+    return elementAddress((await known) ? local : publicUrl);
 };

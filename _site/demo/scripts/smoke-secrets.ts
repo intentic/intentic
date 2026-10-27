@@ -3,7 +3,8 @@ import type { Samples } from "./smoke-daemon.ts";
 // The Secrets page's doors (src/daemon/secrets.ts), kept out of smoke-daemon.ts for its length: a throwaway value is
 // stored, gated, guarded, typed into a computer and deleted last; a held one is revealed, and a connection's policy is
 // set to the gateway it already uses.
-export const SECRET_SAMPLES: Samples[`secrets`] = {
+// The Passwords reads, the key list and Generate are sampled beside this in samples/secrets.ts.
+export const SECRET_SAMPLES: Omit<Samples[`secrets`], `list` | `generate` | `passwords` | `passwordNeeds` | `passwordActivity`> = {
     inventory: undefined,
     reveal: { key: `DATABASE_URL` },
     set: { key: `SMOKE_SECRET`, value: `smoke` },
@@ -19,4 +20,5 @@ export const SECRET_SAMPLES: Samples[`secrets`] = {
     policy: { subject: `github` },
     setPolicy: { subject: `github`, delivery: `gateway` },
     remove: { key: `SMOKE_SECRET` },
+    keyringPair: { a: `rog`, b: `omen` },
 };

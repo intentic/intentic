@@ -1,597 +1,104 @@
-import { capabilitiesOf, loopsOf, TRIAL_LABEL, TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
-import { DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract/schemas/privacy";
-import type { Info } from "@intentic/sandbox-contract/schemas/system";
-import { NATIVE_PROVIDERS, PROVIDER_SPECS, TRANSLATOR_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
-import type { GettingStarted } from "@intentic/sandbox-contract/schemas/settings";
-import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import type { TrialStatusResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
-import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
-import { type FixtureRouter, refuse } from "@intentic/contract-serve";
-import { clearingSentDraft, draftDoors } from "./drafts";
-import { BROWSER_SESSIONS, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../browser";
+import type { FixtureRouter } from "@intentic/contract-serve";
 import { accessDoors } from "../fixture/access";
-import { secretDoors } from "./secrets";
-import { demoAuditExport, demoAuditList, demoAuditStatus, demoAuditVerify } from "../fixture/audit";
-import { demoApprovals, removeDemoApproval, upsertDemoApproval } from "../fixture/approvals";
-import {
-    automationApprovals,
-    automationCatalog,
-    automationsList,
-    checkDemoSource,
-    deleteAutomation,
-    resolveApproval,
-    saveAutomation,
-} from "../fixture/automations";
-import { choresReport, writeLedger } from "../fixture/chores";
-import { demoComplianceReport, demoPresetItems } from "../fixture/data-protection/compliance";
-import { ciJobs, ciRunsResponse } from "../fixture/ci";
-import { DESK_SANDBOX_NAME } from "../fixture/desk";
-import { demoCommandSaid, demoDevices, demoEgressOwnerKeys, switchDemoPairings } from "../fixture/devices";
-import { inProcessSubagents } from "../fixture/fleet";
-import { demoHealth } from "../fixture/health";
-import { demoLoops } from "../fixture/loops";
-import { demoMetrics } from "../fixture/metrics";
-import { demoNameDictionary } from "../fixture/nameDictionary";
-import { answerDemoNeed, demoGrants, demoNeeds, provideDemoSecret, revokeDemoGrant } from "../fixture/needs";
-import { demoRegistry } from "../fixture/registry";
-import {
-    demoCapabilities,
-    demoExtensions,
-    demoLocalModelFit,
-    demoPanels,
-    demoStartPrefetch,
-    demoUsageRollup,
-    setExtensionEnabled,
-} from "../fixture/sandbox";
-import { skillDoors } from "./skills";
-import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../fixture/storage";
-import { subagentTranscriptFor } from "../fixture/subagentTranscripts";
-import { homeSandboxOf } from "../fixture/home/sandboxes";
-import { documentsFor, transcriptFor } from "../fixture/transcripts";
-import { demoRuns, demoWorkflows } from "../fixture/workflows";
-import {
-    agentChanges,
-    copyAgentIgnored,
-    deleteEntry,
-    fileDiff,
-    pictureDimensions,
-    PUBLISH_REFUSAL,
-    readFile,
-    resolveReference,
-    REMOTE_REPOS,
-    REPOS,
-    restoreEntry,
-    searchWorkspace,
-    workspaceChildren,
-    workspaceTree,
-} from "../fixture/workspace";
-import { commit, discard, gitChanges, indexRunState, stage, startIndexRun, unstage } from "./gitIndex";
-import { demoMode, demoQuiet, deskEdition, freshEdition, noModels } from "../mode";
-import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
-import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS, demoRefusals, demoSignInStart } from "./accounts";
-import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
-import { agentFlow, sandboxFlow } from "./deviceFlows";
-import { events } from "./events";
-import { demoAreas, demoPersonas, removeArea, saveArea, savePersona } from "./personas";
-import { queueDoors, sayOrBook, switchAccount } from "./queue";
-import { agentAnswer, amendAgent, boardAgents, broadcastRoster, heldApprovals, homeDoors, patchAgent, roster, STARTED_AT } from "./roster";
-import { DEMO_REPO_CHECKS, DEMO_RUN_TARGETS, DEMO_SAFETY_POLICY, DEMO_SAVINGS, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
-import { attach, reply, stopTurn } from "./turns";
+import { secretDoors } from "./account/secrets";
+import { skillDoors } from "./extensions/skills";
+import { accountsDoors } from "./account/accounts.handler";
+import { activityDoors } from "./board/activity.handler";
+import { agentDoors } from "./board/agent.handler";
+import { agentsDoors } from "./board/agents.handler";
+import { approvalsDoors } from "./board/approvals.handler";
+import { areasDoors } from "./account/areas.handler";
+import { auditDoors } from "./account/audit.handler";
+import { automationsDoors } from "./board/automations.handler";
+import { capabilitiesDoors } from "./account/capabilities.handler";
+import { choresDoors } from "./board/chores.handler";
+import { ciDoors } from "./board/ci.handler";
+import { complianceDoors } from "./account/compliance.handler";
+import { diffDoors } from "./git/diff.handler";
+import { endpointsDoors } from "./account/endpoints.handler";
+import { extensionsDoors } from "./extensions/extensions.handler";
+import { gitDoors } from "./git/git.handler";
+import { historyDoors } from "./git/history.handler";
+import { intenticDoors } from "./machine/intentic.handler";
+import { issuesDoors } from "./extensions/issues.handler";
+import { logsDoors } from "./machine/logs.handler";
+import { inventoryDoors } from "./machine/inventory.handler";
+import { loopsDoors } from "./board/loops.handler";
+import { needsDoors } from "./board/needs.handler";
+import { netdiskDoors } from "./machine/netdisk.handler";
+import { offloadDoors } from "./machine/offload.handler";
+import { orgDoors } from "./account/org.handler";
+import { pagesDoors } from "./board/pages.handler";
+import { panelsDoors } from "./extensions/panels.handler";
+import { personasDoors } from "./extensions/personas.handler";
+import { portsDoors } from "./machine/ports.handler";
+import { privacyDoors } from "./account/privacy.handler";
+import { providersDoors } from "./account/providers.handler";
+import { publicDoors } from "./extensions/public.handler";
+import { pushDoors } from "./machine/push.handler";
+import { runsDoors } from "./board/runs.handler";
+import { safetyDoors } from "./account/safety.handler";
+import { sessionsDoors } from "./board/sessions.handler";
+import { settingsDoors } from "./account/settings.handler";
+import { shareDoors } from "./extensions/share.handler";
+import { systemDoors } from "./machine/system.handler";
+import { translatorDoors } from "./account/translator.handler";
+import { usageDoors } from "./account/usage.handler";
+import { vpnDoors } from "./machine/vpn.handler";
+import { workflowsDoors } from "./board/workflows.handler";
+import { workspaceDoors } from "./workspace/workspace.handler";
 
-/** A mutation with nothing to report: do it, then answer the daemon's own `{ ok: true }`. */
-const okAfter = (write: () => void): { ok: true } => {
-    write();
-    return { ok: true };
-};
-
-// Filters runs to steps whose still-running agent is on this board's roster; a board missing an agent
-// must not see the run it's a step of.
-const runsOnBoard = (now: number): WorkflowRun[] =>
-    demoRuns(now).filter((run) =>
-        run.steps.every((step) => step.state !== `running` || roster.agents.some((agent) => agent.id === step.conversationId)),
-    );
-
-// A fresh sandbox has signed nothing in: the daemon-provisioned free trial is the one thing a chat can run on, with
-// its whole day ahead of it. Every other recording runs on its connected Claude and has no trial to offer.
-const DEMO_TRIAL: TrialStatusResponse = freshEdition && !noModels
-    ? { available: true, allowance: 30, used: 0, remaining: 30, health: `healthy` }
-    : { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
-// What the visitor said about the getting-started checklist, for this page load: put away, steps passed over. Every
-// recording but the fresh one is an established sandbox whose owner put the list away long ago, so screenshots of it
-// carry no beginner's ring; `?mode=fresh` is where the list is seen.
-let gettingStarted: GettingStarted = freshEdition ? {} : { hidden: true };
-// The sandbox's settings, and each extension's, as this page load has written them: a press on a settings control sticks until a reload, the
-// way it would against a daemon, rather than being put back by the 404 a refused write gets.
-let settingsNow = DEMO_SETTINGS;
-const extensionSettingsNow = new Map<string, Record<string, string | number | boolean>>();
-const NO_TRANSLATOR_ACCOUNTS = Object.fromEntries(TRANSLATOR_PROVIDERS.map((provider) => [provider, []])) as unknown as TranslatorAccounts;
-const info: Info = { name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`, version: `demo`, latest: `demo`, updateAvailable: false };
-
-// The handshake `state` a routed sign-in issues; ConnectFlow only accepts a pasted address carrying this one.
-const DEMO_CONNECT_STATE = `demo-connect-state`;
-
-// One version of the document as the text a daemon's fileq would render from it (the diff's Text reading).
-const derivedSide = (content: string) => ({ present: true as const, content, deriver: `docx v2`, notes: [], truncated: false });
-
-const DEMO_COMMANDS = [
-    { name: `plan`, description: `Think a change through before touching anything` },
-    { name: `review`, description: `Review the working diff` },
-    { name: `test`, description: `Run the affected tests`, hint: `[path]` },
-];
-
+// THE FIXTURE DAEMON'S PROCEDURES, assembled: each contract group is answered in <area>/<group>.handler.ts (or, for the
+// stores shared with other seams, in the module that holds that store), and this table only names them.
 // Every procedure the fixture serves; an empty-but-real area answers its contract's empty shape, not a 404.
 export const procedures = {
-    system: {
-        events,
-        info: () => info,
-        session: () => ({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: `ada@acme.dev` }),
-        presence: () => ({ ok: true }),
-        usage: () => ({ accounts: [] }),
-        // Asked only while geek metrics are on (the status bar's gauges); it drifts per request, so the polling is visible.
-        metrics: () => demoMetrics(Date.now(), roster.agents),
-        // The Overview's Disk card: a scan already on hand, a rescan on request, and a clean that frees its category.
-        storage: () => demoStorageReport(),
-        scanStorage: () => demoStorageScan(),
-        cancelStorageScan: () => demoStorageCancel(),
-        cleanStorage: ({ category }) => demoStorageClean(category),
-        terminals: () => ({
-            sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
-        }),
-        // One still-driven browser session and one already closed, rendered as history, not a broken stream.
-        // Quiet, the agent has put its browser down: the session is history, so the status bar has no open one to count.
-        browsers: () => {
-            const now = Date.now();
-            const mine = ownSession(now);
-            return {
-                sessions: [
-                    ...(mine === undefined ? [] : [mine]),
-                    ...BROWSER_SESSIONS(now).map((session) =>
-                        demoQuiet() && session.running ? { ...session, running: false, finishedAt: session.activityAt } : session,
-                    ),
-                ],
-            };
-        },
-        // The visitor's own window opens for real (browser.ts): a tab per call, its picture drawn from the address.
-        openBrowser: ({ url }) => openOwnBrowser(url),
-        // The owner's own computers. Without this the Devices tab could only say it had nothing to show, so nothing
-        // under a paired folder — the sync switches, and the two answers to a conflict — was ever drawn.
-        devices: () => ({ devices: demoDevices(Date.now()) }),
-        // The agent's own two verbs, streamed as the daemon streams them: progress lines, then the machine's sentence.
-        // Each environment of a PC answers for itself, which is what a machine-wide update walks through — without this
-        // the only state that page could show was the refusal of a route nobody serves.
-        runDeviceAgentFlow: ({ id, op }) => agentFlow(id, op),
-        egressOwnerKeys: () => demoEgressOwnerKeys(),
-        // The container verbs and the unpair a removal ends with, answered the way a machine does, so a batch over
-        // several rows can be pressed and watched rather than refused as a route nobody serves.
-        manageDeviceSandbox: ({ slug, op }) => sandboxFlow(slug, op),
-        runDeviceCommand: ({ id, command, sandboxId }) => {
-            switchDemoPairings(id, command, sandboxId);
-            return { ok: true, refused: false, message: demoCommandSaid(command, sandboxId) };
-        },
-        closeBrowser: ({ name }) => {
-            if (name !== OWN_SESSION) {
-                return refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`);
-            }
-            closeOwnBrowser();
-            return { ok: true };
-        },
-        closeBrowserPage: ({ name, pageId }) => {
-            if (name !== OWN_SESSION) {
-                return refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`);
-            }
-            closeOwnTab(pageId);
-            return { ok: true };
-        },
-        // The demo has no desktop to show (its picture is not simulated, unserved.ts), and says so: no status bar chip
-        // for it, and no claim that it is empty.
-        desktop: () => ({ running: false }),
-        subagents: () => ({ sessions: deskEdition || demoQuiet() ? [] : inProcessSubagents(STARTED_AT) }),
-    },
-    agents: {
-        // `held` mirrors /automations/pending's approval queue, projected onto the board.
-        list: (_input, call) => ({ agents: boardAgents(homeSandboxOf(call.url)), rev: roster.rev, held: heldApprovals() }),
-        archived: () => ({ agents: [], rev: roster.rev, held: [] }),
-        search: ({ query, caseSensitive }) => searchAgents(query, caseSensitive === true),
-        seenAll: () => ({ agents: roster.agents, rev: roster.rev, held: heldApprovals() }),
-        diff: ({ id }) => agentChanges(id),
-        copyIgnored: ({ id, repo, paths }) => {
-            copyAgentIgnored(id, repo, paths);
-            return { ok: true as const };
-        },
-        // A card that is not mid-turn reads its transcript instead of attaching.
-        transcript: ({ id }, call) => transcriptFor(id, homeSandboxOf(call.url)),
-        documents: ({ id }) => ({ paths: documentsFor(id) }),
-        // The checkout agent's in-process subagents, read as transcripts of their own from its tray and its cards.
-        subagentTranscript: ({ subagentId }) => subagentTranscriptFor(subagentId),
-        systemPrompt: () => DEMO_SYSTEM_PROMPT,
-        fileDiff: ({ repo, path }) => fileDiff(repo, path),
-        rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),
-        seen: ({ id }) => agentAnswer(patchAgent(id, { seenAt: Date.now() })),
-        ...draftDoors,
-        ...homeDoors,
-        // As the daemon does for a client keeping its words to itself: records since when a composer held them.
-        unsent: ({ id, at }) => agentAnswer(amendAgent(id, ({ unsentAt: _cleared, ...card }) => (at === null ? card : { ...card, unsentAt: at }))),
-        react: reactToAgent,
-        assign: assignAgent,
-        // As the registry does: `null` clears the conversation's own answer back to the sandbox's.
-        autoLand: ({ id, autoLand }) =>
-            agentAnswer(amendAgent(id, ({ autoLand: _held, ...card }) => (autoLand === null ? card : { ...card, autoLand }))),
-        breakPolicy: setBreakPolicy,
-        keepWarm: keepWarmAgent,
-        stopJob,
-        land: ({ id }) => land(id),
-        discard: () => refuse(`This is the demo workspace: there is no worktree to discard.`),
-        archive: archiveAgents,
-        unarchive: () => ({ moved: [], rev: roster.rev }),
-    },
-    agent: {
-        run: (input, call) => clearingSentDraft(sayOrBook)(input, homeSandboxOf(call.url)),
-        ...queueDoors,
-        switchAccount,
-        attach: ({ conversationId }, call) => attach(conversationId, homeSandboxOf(call.url)),
-        reply,
-        steer: () => ({ delivered: `steered` as const }),
-        stop: (input, call) => stopTurn(input, homeSandboxOf(call.url)),
-        commands: () => ({ commands: DEMO_COMMANDS }),
-        refusals: demoRefusals,
-    },
-    sessions: {
-        list: ({ query = ``, caseSensitive }) => ({ sessions: searchSessions(query, caseSensitive === true) }),
-        get: () => ({ messages: [] }),
-    },
-    // Serves the recording's filesystem like the real daemon: a tree, lazy per-directory listing, and real
-    // writes that hold until the tab reloads.
-    workspace: {
-        tree: () => workspaceTree(),
-        children: ({ path }) => workspaceChildren(path),
-        // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to check existence.
-        file: ({ path }) => readFile(path),
-        dimensions: ({ paths }) => pictureDimensions(paths),
-        resolve: ({ path }) => resolveReference(path),
-        delete: ({ path }) => deleteEntry(path),
-        restore: ({ trashed }) => restoreEntry(trashed) ?? refuse(`That is no longer in the trash.`, 404),
-        repos: () => ({ repos: [...REPOS] }),
-        // The Health tab's report: hotspots and key modules for the shop's repositories (fixture/health.ts).
-        health: ({ repo, since }) => demoHealth(repo, since, Date.now()),
-        search: ({ query, mode, literal, word, caseSensitive, include = ``, dir = `` }) =>
-            searchWorkspace(query, {
-                smart: mode === `q`,
-                literal: literal === true,
-                word: word === true,
-                caseSensitive: caseSensitive === true,
-                include,
-                dir,
-            }),
-    },
-    git: {
-        repos: () => ({ repos: [...REPOS] }),
-        changes: () => gitChanges(),
-        fileDiff: ({ repo, path }) => fileDiff(repo, path),
-        branches: () => ({ branches: [{ name: `main`, current: true, ahead: 0, behind: 0, at: STARTED_AT }], remotes: [] }),
-        // Index moves and commits are simulated for the page load (daemon/gitIndex.ts); there is no log to show them in.
-        stage: ({ repo, ...target }) => stage(repo, target),
-        unstage: ({ repo, ...target }) => unstage(repo, target),
-        commit: ({ repo, stage: stageFirst }) => commit(repo, stageFirst),
-        indexRunStart: (start) => startIndexRun(start),
-        indexRunState: ({ repo }) => indexRunState(repo),
-        indexRunCancel: () => ({ ok: true }),
-        discard: ({ repo, ...target }) => discard(repo, target),
-        push: () => refuse(`This is the demo workspace: there is no remote to push to.`),
-        // Where each repo lives online, matched against the registry for the publish path picker.
-        remoteRepos: () => ({ repos: [...REMOTE_REPOS] }),
-        // Refused like push: there is no remote to publish to.
-        publishFile: () => PUBLISH_REFUSAL,
-    },
-    diff: {
-        derived: () => ({ before: derivedSide(HANDOVER_TEXT_BEFORE), after: derivedSide(HANDOVER_TEXT) }),
-    },
-    // One connected Claude subscription; the composer's account gate needs at least one to stop waiting. The path is
-    // the daemon's own `/accounts/{provider}` (provider-module.ts). It used to be `/{provider}/accounts` here, and
-    // when the app moved, every read 404'd: `accountsLoaded` never flipped, so the Agent tab drew skeleton rows for as
-    // long as you left it open — including in the marketing shots.
-    accounts: {
-        accounts: ({ provider }) => ({
-            accounts: provider === `claude` && !freshEdition && !noModels ? [DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND] : [],
-        }),
-        // Starts a provider-account sign-in (Cursor's, Grok's) in its device shape, so the connect view's card can be seen
-        // holding one: a page to open, a code to copy, the wait for approval. Like the routed one below it never lands.
-        start: ({ provider, variant }) => demoSignInStart(provider, variant, DEMO_CONNECT_STATE),
-        status: () => ({ status: `wait` }),
-        cancel: () => ({ ok: true }),
-    },
-    translator: {
-        // Codex authenticates only through the translator, not an oauth account.
-        accounts: () => (freshEdition || noModels ? NO_TRANSLATOR_ACCOUNTS : DEMO_TRANSLATOR_ACCOUNTS),
-        // Starts a routed sign-in so ConnectFlow is reachable here: without it the panel a new user meets first
-        // could only be seen against a real daemon. `redirect` is the shape Google uses (a loopback dead-end).
-        connect: ({ provider }) => ({
-            url: `https://accounts.google.com/o/oauth2/auth?demo=${provider}`,
-            code: ``,
-            state: DEMO_CONNECT_STATE,
-            flow: `redirect`,
-        }),
-        // Never resolves: the demo has no browser trip to complete, and "waiting" is the state worth being able to look at.
-        status: () => ({ status: `wait` }),
-        complete: () => ({ ok: true }),
-    },
-    providers: {
-        // An unconnected provider answers empty, matching the real daemon's behavior.
-        models: ({ provider }) => DEMO_CATALOGS[provider] ?? { models: [], default: `` },
-        // The recorded workspace adds no ACP agent and no endpoint of its own, but the composer's gate waits on this read
-        // as much as on the accounts above it.
-        // The recording is a box with Claude connected, which is what its chats are addressed to; `native` is how a
-        // reader who cannot open /accounts learns that.
-        // Every loop the catalog offers, as a daemon of this build would advertise them.
-        list: () => ({
-            ...(freshEdition || noModels
-                ? { native: [], agents: [], endpoints: noModels ? [] : [{ id: TRIAL_PROVIDER, label: TRIAL_LABEL, kind: `endpoint` as const }] }
-                : { native: [`claude`], agents: [], endpoints: [] }),
-            loops: Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, [...loopsOf(provider)]])),
-        }),
-    },
-    endpoints: {
-        trial: () => DEMO_TRIAL,
-        // What the connect view's local lane draws: a 32 GB laptop with nothing downloaded yet.
-        localModelFit: () => demoLocalModelFit(),
-        // Nothing is really fetched here; the press flips the fixture so the lane draws the state it has the most to say
-        // about — a transfer under way, with the Stop that declines it.
-        localModelPrefetch: ({ action }) => demoStartPrefetch(action === `start`),
-        // Ollama on the laptop, serving two models and not yet pointed at: the row the panel has the most to say about.
-        hostServers: () => ({
-            servers: [{ kind: `ollama`, label: `Ollama`, baseUrl: `http://host.docker.internal:11434/v1`, models: [`qwen3:32b`, `llama3.2:latest`] }],
-        }),
-    },
-    settings: {
-        get: () => settingsNow,
-        set: (settings) => okAfter(() => (settingsNow = settings)),
-        gettingStarted: () => gettingStarted,
-        setGettingStarted: (choices) => {
-            gettingStarted = choices;
-            return gettingStarted;
-        },
-        savings: () => DEMO_SAVINGS,
-        // A brief that exists, is maintained, and does not entirely fit the budget: the state the row has the most to say
-        // about, and the only one where "ranks 1-5 of 12" means anything.
-        fieldNotes: () => ({
-            present: true,
-            writtenAt: STARTED_AT - 19 * 24 * 60 * 60_000,
-            ranksSent: 5,
-            ranksTotal: 12,
-            chars: 2_784,
-            automation: `enabled`,
-            nextRunAt: STARTED_AT + 11 * 24 * 60 * 60_000,
-        }),
-        // No rule has ever fired in a recorded demo; an empty table is the honest answer.
-        firings: () => ({}),
-        // What the two repositories in this workspace declare for themselves, in the three states the group has to be
-        // able to show: running, waiting on the owner, and held because the file changed under an adoption.
-        repoChecks: () => DEMO_REPO_CHECKS,
-        adoptRepoChecks: () => refuse(`This is the demo workspace: there is no repository here to run a check on.`),
-    },
-    // Long enough to overflow its section, because that is the only state the policy's surface has a decision to make
-    // in: without it the demo drew "Loading…" here forever and the section could not be looked at at all.
-    safety: {
-        policy: () => ({ text: DEMO_SAFETY_POLICY, custom: false }),
-    },
-    // A fresh sandbox's shield: off, nothing learned, no reader installed, and this catalog's providers to trust. Its
-    // writes refuse: it guards a sandbox's own model traffic, and a recording sends none.
-    privacy: {
-        status: () => ({
-            policy: DEFAULT_PRIVACY_SHIELD,
-            known: 0,
-            tokens: 0,
-            readers: { ocr: false, model: false },
-            providers: PROVIDER_SPECS.map((spec) => ({
-                id: spec.id,
-                label: spec.label,
-                shieldable: loopsOf(spec.id).some((loop) => capabilitiesOf(spec.id, loop).privacy === `gateway`),
-                local: false,
-            })),
-        }),
-        setPolicy: () => refuse(`This is the demo workspace: the privacy shield guards a sandbox's own model traffic, and this one sends none.`),
-        log: () => [],
-        // Nothing is logged, so there is no token to read back.
-        reveal: () => ({}),
-        image: () => refuse(`This is the demo workspace: its privacy shield has painted over no image.`),
-        dictionary: ({ query }) => demoNameDictionary(query),
-        preview: () => refuse(`This is the demo workspace: its privacy shield reads no text here, so it has nothing to try.`),
-        sources: () => [],
-        forget: () => refuse(`This is the demo workspace: nothing has been taught to its privacy shield.`),
-    },
-    // The data protection page over a fresh sandbox; the documents and the preset's apply refuse, since they read and
-    // write a real sandbox's configuration.
-    compliance: {
-        report: () => demoComplianceReport(),
-        preset: () => ({ items: demoPresetItems() }),
-        document: () => refuse(`This is the demo workspace: its documents are drafted from a real sandbox's configuration, and this one has none.`),
-        applyPreset: () => refuse(`This is the demo workspace: the preset changes a real sandbox's settings, and this one has none to change.`),
-    },
-    vpn: {
-        list: () => ({ links: [] }),
-    },
-    // The kinds a fresh sandbox sorts heavy work into, so "Where heavy work runs" draws its rows; nothing ever ran on a
-    // runner in a recording, and sending a command to one needs a machine this demo does not have.
-    offload: {
-        kinds: () => ({
-            kinds: [
-                { id: `repo-verify`, pattern: `\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b` },
-                { id: `typechecker`, pattern: `(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])` },
-                { id: `package-script`, pattern: `\\b(pnpm|npm|yarn|bun)\\b[^&|;]*\\b(test|typecheck|verify|check|build)\\b` },
-            ],
-        }),
-        runs: () => ({ runs: [] }),
-        // Where a new chat should start: the demo pairs no runner, so this machine is the only one, and it has room.
-        placement: () => ({
-            mode: `suggest` as const,
-            here: {
-                standing: `calm` as const,
-                strain: [],
-                cpus: 8,
-                load: 0.18,
-                memoryFreeMb: 11_264,
-                memoryLimitMb: 16_384,
-                agents: 1,
-                slots: 6,
-                headroom: 0.83,
-            },
-            machines: [],
-        }),
-    },
-    // A repository's "Run on <device>" dialog. Starting a run refuses: it builds here and starts a program on a real computer.
-    runs: {
-        targets: () => DEMO_RUN_TARGETS,
-        start: () => refuse(`This is the demo workspace: a run builds here and starts the program on your own computer. Connect one to a sandbox and this button runs it.`),
-    },
-    // CI board data is real; the badge reflects the fixture's own state. Rerun, cancel and Fix-with-agent
-    // refuse: a recording can't act on a real pipeline. Main is failing, with its fix agents, only in the whole recording,
-    // the one roster that carries them.
-    ci: {
-        runs: () => ciRunsResponse(Date.now(), { mainFailing: demoMode.id === `full`, green: demoQuiet() }),
-        jobs: ({ repo, runId }) => ({ jobs: ciJobs(repo, runId, Date.now(), demoQuiet()) }),
-        rerun: () => refuse(`This is the demo workspace: rerunning would start a pipeline on a repo that isn't yours.`),
-        cancel: () => refuse(`This is the demo workspace: there is no live pipeline to cancel.`),
-        fix: () => refuse(`This is the demo workspace: a fix agent needs your repo and its CI logs. Start a sandbox and this button opens one.`),
-    },
-    // GET /chores computes rows in the browser from fixture/chores.ts; the ledger is real state. Re-running
-    // a probe refuses: it needs a subprocess this recording lacks.
-    chores: {
-        list: () => choresReport(Date.now()),
-        record: (entry) => okAfter(() => writeLedger(Date.now(), entry)),
-        probe: () => refuse(`This is the demo workspace: a probe runs pnpm audit or knip against a real checkout.`),
-    },
-    // Enabling, editing, deleting and clearing a held wake are real (the fixture is the store); firing one
-    // refuses, since a wake is a real agent turn.
-    automations: {
-        list: () => ({ automations: automationsList(Date.now()) }),
-        // What can wake an agent and what it can start from, for the composer's source picker.
-        catalog: () => automationCatalog(),
-        // A source's check, answered from the fixture: the demo reaches no registry, GitHub or page.
-        check: ({ source }) => checkDemoSource(source),
-        pendingList: () => ({ approvals: automationApprovals(Date.now()), unreadable: [] }),
-        upsert: (automation) => okAfter(() => saveAutomation(Date.now(), automation)),
-        remove: ({ id }) => okAfter(() => deleteAutomation(Date.now(), id)),
-        run: () => refuse(`This is the demo workspace: firing an automation runs a real turn against real systems.`),
-        approve: () => refuse(`This is the demo workspace: approving a held wake would start the turn it is holding.`),
-        reject: ({ id }) => okAfter(() => resolveApproval(Date.now(), id)),
-    },
-    // Reading is real; running one refuses, since a run is several real agent sessions. Saving/deleting also
-    // refuse: a kept design must not vanish on reload.
-    workflows: {
-        list: () => ({ workflows: demoWorkflows(runsOnBoard(Date.now())) }),
-        runs: () => ({ runs: runsOnBoard(Date.now()) }),
-        save: () => refuse(`This is the demo workspace: designs are read-only here.`),
-        remove: () => refuse(`This is the demo workspace: designs are read-only here.`),
-        run: () => refuse(`This is the demo workspace: running a workflow starts several agent sessions on a real tree.`),
-        stopRun: () => refuse(`This is the demo workspace: nothing is really running to stop.`),
-        // Archiving is one-way here with no way back, so it refuses instead of losing sessions silently.
-        archiveRun: () => refuse(`This is the demo workspace: the archive here has no way back, so a run stays on the board.`),
-        unarchiveRun: () => refuse(`This is the demo workspace: nothing has been archived to restore.`),
-    },
-    // Reading is real, showing two ways a message can rerun. Saving/deleting refuse, like every design here:
-    // a kept one would vanish on reload.
-    loops: {
-        designs: () => ({ designs: demoLoops() }),
-        saveDesign: () => refuse(`This is the demo workspace: saved loops are read-only here.`),
-        removeDesign: () => refuse(`This is the demo workspace: saved loops are read-only here.`),
-    },
-    capabilities: {
-        list: () => ({ capabilities: demoCapabilities() }),
-        // Every registry URL answers the same joined data; the real route would clone a repo and read two JSON
-        // files from it.
-        marketplace: () => demoRegistry(),
-    },
+    system: systemDoors,
+    agents: agentsDoors,
+    agent: agentDoors,
+    sessions: sessionsDoors,
+    workspace: workspaceDoors,
+    git: gitDoors,
+    diff: diffDoors,
+    accounts: accountsDoors,
+    translator: translatorDoors,
+    providers: providersDoors,
+    endpoints: endpointsDoors,
+    settings: settingsDoors,
+    safety: safetyDoors,
+    privacy: privacyDoors,
+    compliance: complianceDoors,
+    vpn: vpnDoors,
+    offload: offloadDoors,
+    runs: runsDoors,
+    ci: ciDoors,
+    chores: choresDoors,
+    automations: automationsDoors,
+    workflows: workflowsDoors,
+    loops: loopsDoors,
+    capabilities: capabilitiesDoors,
     skills: skillDoors,
-    // The persona picker's data; three personas make the point without turning the column into a directory. A save
-    // is real (the fixture is the store), so the project persona New agent makes under a scope shows in the picker.
-    personas: {
-        list: () => ({ personas: demoPersonas, connected: [`gmail-support`, `intercom`, `x-brand`, `linkedin`, `github`, `stripe-ops`] }),
-        save: (card) => okAfter(() => savePersona(card)),
-    },
-    // The named parts of the workspace a grant can be fenced to; a save is real, like a persona's, so the Areas
-    // page edits what the Access tab's picker then offers.
-    // A short sample trail, so the Audit log page draws its list, its intact verdict and an export.
-    audit: {
-        list: (query) => demoAuditList(query),
-        verify: () => demoAuditVerify(),
-        status: () => demoAuditStatus(),
-        export: ({ from, to }) => demoAuditExport(from, to),
-    },
-    // The demo sandbox is a person's own: no organisation holds any section of its hub (docs/architecture/organisations.md).
-    org: {
-        policy: () => ({ bound: false as const }),
-    },
+    personas: personasDoors,
+    audit: auditDoors,
+    org: orgDoors,
     ...accessDoors,
-    areas: {
-        list: () => ({ areas: demoAreas }),
-        save: (area) => okAfter(() => saveArea(area)),
-        remove: ({ id }) => okAfter(() => removeArea(id)),
-    },
-    usage: {
-        rollup: () => ({
-            rows: demoUsageRollup(
-                STARTED_AT,
-                (model) => roster.agents.filter((agent) => agent.startedBy?.startsWith(`agent:`) !== true && agent.model === model).map((agent) => agent.id),
-            ),
-        }),
-        // What every connection read posts, on arrival and on the rail's refresh control alike. Nothing held: every demo
-        // reading is taken, so the press moves the age rather than explaining why it couldn't.
-        refreshPlanLimits: () => ({ ok: true, held: [] }),
-    },
+    areas: areasDoors,
+    usage: usageDoors,
     // The values a person keeps and the rules on each, answered for real against the fixture store (daemon/secrets.ts).
     secrets: secretDoors,
-    // What the agents wait on people for, answered for real against the fixture store (docs/architecture/needs.md).
-    needs: {
-        list: ({ conversationId, open }) => ({
-            needs: demoNeeds().filter(
-                (need) =>
-                    (conversationId === undefined || need.conversationId === conversationId) &&
-                    (open !== true || need.status === `open` || need.status === `working`),
-            ),
-        }),
-        answer: ({ id, answer }) => {
-            const need = answerDemoNeed(id, answer);
-            broadcastRoster();
-            return need;
-        },
-        release: ({ id, answer }) => {
-            const need = answerDemoNeed(id, { kind: answer });
-            broadcastRoster();
-            return need;
-        },
-        provideSecret: ({ id }) => {
-            const need = provideDemoSecret(id);
-            broadcastRoster();
-            return need;
-        },
-        grants: () => demoGrants(),
-        revokeGrant: (grant) => {
-            revokeDemoGrant(grant);
-            return { ok: true };
-        },
-    },
-    ports: {
-        list: () => ({ ports: [] }),
-    },
-    // Facts each extension's detect() runs over, for which tiles the rail carries; starting a dev server refuses.
-    panels: {
-        list: () => ({ panels: demoPanels() }),
-        start: () => refuse(`This is the demo workspace: a dev server needs the repository on your own machine.`),
-        stop: () => refuse(`This is the demo workspace: nothing is running to stop.`),
-    },
-    extensions: {
-        // `invalid` and `pending` are required by the contract; omitting either fails the whole list to parse.
-        list: () => ({ extensions: demoExtensions(), invalid: [], pending: [] }),
-        setEnabled: ({ id, enabled }) => okAfter(() => setExtensionEnabled(id, enabled)),
-        // Loaded before an extension's activate(), so `api.settings.get` is synchronous; missing here means the
-        // extension never activates.
-        settings: ({ id }) => ({ settings: extensionSettingsNow.get(id) ?? {}, secretsSet: [] }),
-        setSettings: ({ id, settings }) => okAfter(() => extensionSettingsNow.set(id, settings)),
-    },
-    approvals: {
-        list: () => ({ approvals: [...demoApprovals()], invalid: [] }),
-        upsert: (item) => okAfter(() => upsertDemoApproval(item)),
-        remove: ({ id }) => okAfter(() => removeDemoApproval(id)),
-        // The demo's Claude settings declare no hooks, so no turn ever held one for approval.
-        hookRequests: () => ({ requests: [] }),
-    },
+    needs: needsDoors,
+    ports: portsDoors,
+    panels: panelsDoors,
+    extensions: extensionsDoors,
+    approvals: approvalsDoors,
+    activity: activityDoors,
+    history: historyDoors,
+    intentic: intenticDoors,
+    inventory: inventoryDoors,
+    netdisk: netdiskDoors,
+    pages: pagesDoors,
+    public: publicDoors,
+    push: pushDoors,
+    share: shareDoors,
+    issues: issuesDoors,
+    logs: logsDoors,
 } satisfies FixtureRouter;

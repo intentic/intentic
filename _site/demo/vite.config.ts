@@ -30,6 +30,30 @@ const spaFallback = (): Plugin => ({
     },
 });
 
+// The demo's element worker (src/world/element-worker.js), served and built at the base itself, since a service worker
+// controls only what sits under its own script's folder and every editor route is under the base.
+const ELEMENT_WORKER = `element-worker.js`;
+const elementWorker = (): Plugin => {
+    const source = (): string => readFileSync(here(`src/world/${ELEMENT_WORKER}`), `utf8`);
+    return {
+        name: `demo-element-worker`,
+        configureServer: (server) => {
+            server.middlewares.use((request, response, next) => {
+                if (request.url?.split(`?`)[0] !== `${server.config.base}${ELEMENT_WORKER}`) {
+                    next();
+                    return;
+                }
+                response.setHeader(`Content-Type`, `text/javascript; charset=utf-8`);
+                response.setHeader(`Cache-Control`, `no-cache`);
+                response.end(source());
+            });
+        },
+        generateBundle() {
+            this.emitFile({ type: `asset`, fileName: ELEMENT_WORKER, source: source() });
+        },
+    };
+};
+
 // SERVE ONLY, and only for a managed preview (scripts/dev.mjs names its record in INTENTIC_PREVIEW_RECORD): keeps the
 // record's lastActiveAt current while the server is used, and stops the server once it has gone PREVIEW_IDLE_MS with no
 // request for the app and no page holding its HMR socket. The reason is noted beside the record first, so the conversation's next
@@ -109,7 +133,7 @@ const cache = sharedCacheConfig(
 
 export default defineConfig({
     ...shared,
-    plugins: [...shared.plugins, spaFallback(), cache.plugin, previewKeeper()],
+    plugins: [...shared.plugins, elementWorker(), spaFallback(), cache.plugin, previewKeeper()],
     // The shared resolve, its source-first conditions with it; only the aliases above are added.
     resolve: { ...shared.resolve, alias },
     optimizeDeps,

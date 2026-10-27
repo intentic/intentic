@@ -9,6 +9,12 @@ import { DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_USER, platform } from "./platform";
 import { readsNote, withReads } from "./reads";
 import { withFloors } from "./floors";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
+import { sandboxAddress, sandboxSocket } from "./world/addresses";
+import { withWorld } from "./world/fresh";
+import { declineLocalShortcut } from "./world/browserSeeds";
+import { installIdentity } from "./world/identity";
+import { installElementAddresses } from "./world/elements";
+import { withPreviewSites } from "./daemon/workspace/previewSites";
 import { coverage } from "./unserved";
 
 // Everything that must be true before the real app's entry runs. Transports and credentials must be in place first,
@@ -25,7 +31,7 @@ const seedCredentials = (): void => {
         localStorage.setItem(`intentic.session.${sandbox.id}`, JSON.stringify({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: DEMO_USER.email }));
         // Declines the local-shortcut offer for every sandbox the rail switches to: no real sandbox here for it to
         // reach faster, and the card would otherwise open on the first switch.
-        localStorage.setItem(`intentic.localShortcut.declined.${sandbox.id}`, `yes`);
+        declineLocalShortcut(sandbox.id);
     }
 };
 
@@ -52,12 +58,20 @@ const openOnFleet = (): void => {
 };
 
 // The outage outside the reads: a sandbox that does not answer has no reads to slow. The tier's floors outside both: a
-// refused request is refused before the sandbox is reached, as the daemon's bearer middleware refuses it.
-const answering = withFloors(withOutage(withReads(daemon)));
-installFetch({ platform, daemon: answering });
-installXhr({ platform, daemon: answering });
-installWebSocket((url) => SOCKETS.get(url.pathname));
+// refused request is refused before the sandbox is reached, as the daemon's bearer middleware refuses it. The world
+// innermost: which sandbox an address is (one the visitor made answers as its own) is the daemon's own knowledge.
+// The preview proxy in front of all of it: its hostnames are a started dev server's, not the daemon's API.
+const answering = withPreviewSites(withFloors(withOutage(withReads(withWorld(daemon)))));
+const handlers = { platform, daemon: answering, sandboxAt: sandboxAddress };
+installFetch(handlers);
+installXhr(handlers);
+installWebSocket((url) => SOCKETS.get(url.pathname), sandboxSocket);
 installWebTransport();
+// What the editor hands an element rather than fetching (a media source, a download, a preview's frame), answered from the
+// same handlers through the demo's element worker (world/elements.ts).
+installElementAddresses();
+// Google, as the demo's world has it: the visitor is signed in as the demo account (world/identity.ts).
+installIdentity();
 seedCredentials();
 seedOpenChats();
 openOnFleet();

@@ -390,6 +390,52 @@ const ownGroup = computed<StripGroup>(() =>
 // A tab of the person's own on its way: drawn at once where it will land, right beside the +, and in front, the way a
 // browser's new tab is there the moment it's pressed rather than once the page behind it answers.
 const OPENING_ID = `${PAGE}opening`;
+// The opening's state (the Opening section below says how an open goes), declared before the strip's computeds that read
+// it: those are read while this setup still runs, and a `const` read before its line throws.
+const opener = useOperation<Awaited<ReturnType<typeof openBrowser>>>(`browsers/open`);
+const opening = opener.busy;
+const openError = computed(() => opener.failure.value?.title);
+// What the last open asked for, so Try again asks for it again whichever field it came from.
+const lastOpen = computed(() => opener.operation.value?.tag);
+// A tab to put in front once its window is the one streaming and the list carries it, and where the keyboard goes then:
+// the address bar of a blank tab, the page of one opened at an address, either for a tab picked on the strip.
+interface PendingTab {
+    readonly name: string;
+    readonly pageId: string;
+    readonly focus: `address` | `stage` | `page`;
+    // Opened blank: drawn as a new tab until it arrives, and where an address typed meanwhile goes (`queued`).
+    readonly blank?: boolean;
+    // The strip key of the tab drawn while it was on its way, which it takes over on arrival (StripTab's `key`).
+    readonly key?: string;
+}
+const pendingTab = shallowRef<PendingTab | undefined>();
+// A tab that never came (closed as it opened) gives up after a while, so one the same window lists later can't grab the
+// front and the keyboard out of nowhere.
+const PENDING_MS = 10_000;
+let pendingTimer: number | undefined;
+const awaitTab = (pending: PendingTab | undefined): void => {
+    pendingTab.value = pending;
+    window.clearTimeout(pendingTimer);
+    pendingTimer = window.setTimeout(() => {
+        if (pendingTab.value === pending) {
+            pendingTab.value = undefined;
+        }
+    }, PENDING_MS);
+};
+// A blank tab asked for and not answered yet: set on the press itself, since the ledger's run says it is busy only a
+// tick later, after the address bar has already been focused on the address being left. Once answered, the pending
+// tab's `blank` says it instead.
+const blankAsked = ref(false);
+// An address Enter sent from a blank tab still on its way, sent to that tab by id once it arrives (takePendingTab).
+const queued = ref<string | undefined>();
+// One strip key per open, and the ones tabs took over on arrival, by strip id: the tab drawn at once and the tab that
+// arrives are one tab on the strip, filled in, rather than one folding away while another grows in beside it.
+let opens = 0;
+const openingKey = ref(`${OPENING_ID}:0`);
+// The person's own tabs as the open found them, by strip id: whichever else the list carries before the open answers is
+// the one on its way.
+const ownBefore = shallowRef<ReadonlySet<string> | undefined>();
+const arrivedKeys = shallowRef<ReadonlyMap<string, string>>(new Map());
 // Held until the tab itself is listed and put in front, so the strip never shows neither.
 const tabOnTheWay = computed(
     () => current.value !== undefined && (opening.value || blankAsked.value || (pendingTab.value !== undefined && pendingTab.value.focus !== `page`)),
@@ -568,52 +614,9 @@ const focusAddress = (): void => omnibox.value?.focus();
 
 // Opening in the person's own window: the window starts on the first call, and every call answers which tab it opened,
 // which goes in front once the list carries it. A blank tab hands the keyboard to the address bar, as a new tab does.
-// The ledger's (operations.ts), tagged with the address asked for: a window takes seconds to start, and one asked for
-// from a view left meanwhile is still starting, or failed, when the view comes back.
-const opener = useOperation<Awaited<ReturnType<typeof openBrowser>>>(`browsers/open`);
-const opening = opener.busy;
-const openError = computed(() => opener.failure.value?.title);
-// What the last open asked for, so Try again asks for it again whichever field it came from.
-const lastOpen = computed(() => opener.operation.value?.tag);
-// A tab to put in front once its window is the one streaming and the list carries it, and where the keyboard goes then:
-// the address bar of a blank tab, the page of one opened at an address, either for a tab picked on the strip.
-interface PendingTab {
-    readonly name: string;
-    readonly pageId: string;
-    readonly focus: `address` | `stage` | `page`;
-    // Opened blank: drawn as a new tab until it arrives, and where an address typed meanwhile goes (`queued`).
-    readonly blank?: boolean;
-    // The strip key of the tab drawn while it was on its way, which it takes over on arrival (StripTab's `key`).
-    readonly key?: string;
-}
-const pendingTab = shallowRef<PendingTab | undefined>();
-// A tab that never came (closed as it opened) gives up after a while, so one the same window lists later can't grab the
-// front and the keyboard out of nowhere.
-const PENDING_MS = 10_000;
-let pendingTimer: number | undefined;
-const awaitTab = (pending: PendingTab | undefined): void => {
-    pendingTab.value = pending;
-    window.clearTimeout(pendingTimer);
-    pendingTimer = window.setTimeout(() => {
-        if (pendingTab.value === pending) {
-            pendingTab.value = undefined;
-        }
-    }, PENDING_MS);
-};
-// A blank tab asked for and not answered yet: set on the press itself, since the ledger's run says it is busy only a
-// tick later, after the address bar has already been focused on the address being left. Once answered, the pending
-// tab's `blank` says it instead.
-const blankAsked = ref(false);
-// An address Enter sent from a blank tab still on its way, sent to that tab by id once it arrives (takePendingTab).
-const queued = ref<string | undefined>();
-// One strip key per open, and the ones tabs took over on arrival, by strip id: the tab drawn at once and the tab that
-// arrives are one tab on the strip, filled in, rather than one folding away while another grows in beside it.
-let opens = 0;
-const openingKey = ref(`${OPENING_ID}:0`);
-// The person's own tabs as the open found them, by strip id: whichever else the list carries before the open answers is
-// the one on its way.
-const ownBefore = shallowRef<ReadonlySet<string> | undefined>();
-const arrivedKeys = shallowRef<ReadonlyMap<string, string>>(new Map());
+// The press is the ledger's (operations.ts, `opener` with the opening's state above), tagged with the address asked for:
+// a window takes seconds to start, and one asked for from a view left meanwhile is still starting, or failed, when the
+// view comes back.
 const openOwn = async (url?: string): Promise<void> => {
     if (opening.value || blankAsked.value) {
         return;

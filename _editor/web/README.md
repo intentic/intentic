@@ -39,6 +39,11 @@ flowchart LR
   through `sandboxRpc`, with a daemon-minted session that a proof establishes (`sandboxSession.ts`). The platform is not
   in that path. The daemon is reached over its tunnel, or over a certified loopback name when it runs on this machine
   (`client/endpoint/endpoint.ts`).
+- **Addresses an element loads.** A few sandbox URLs are not fetched by the editor but handed to the browser: a media
+  file's `src`, a served page's frame, a running app's preview, a download link. Each passes through one seam last,
+  `client/endpoint/elementAddress.ts`, where a host whose sandbox is reached through a channel elements cannot use names a
+  stand-in address it can serve (`window.__INTENTIC_ELEMENT_ADDRESS__`, injected before the entry runs). The interactive
+  demo (`_site/demo`) is one such host; an ordinary browser injects nothing and the address is used as it is.
 - **Two ways to sign in.** Google (one ID token minted in the browser, spent on the platform and on each daemon), or a
   six-digit code mailed to an address on any domain (Better Auth's email-OTP plugin, `client/auth/useAuth.ts`). One
   mail carries one code, offered two ways: typed on `/login` or in the desktop app's sign-in dialog

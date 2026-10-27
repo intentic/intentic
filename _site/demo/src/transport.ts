@@ -1,6 +1,7 @@
 // Globals every browser call resolves at call time: `fetch` covers the platform, the daemon and the typed client;
 // `WebSocket` the terminal and browser view, `WebTransport` the terminal's session. No app module knows the demo exists.
-// Both demo origins sit under the reserved `.invalid` TLD, so an escaped request dies rather than reaching a real host.
+// Both demo origins sit under the reserved `.invalid` TLD, so an escaped request dies rather than reaching a real host;
+// the one exception, an address a visitor names as their own sandbox's, is world/addresses.ts's to claim.
 
 // Platform origin; useApi appends /rpc, better-auth appends /api/auth.
 const DEMO_API_ORIGIN = `https://api.demo.invalid`;
@@ -17,25 +18,34 @@ const urlOf = (input: RequestInfo | URL): URL | undefined => {
     }
 };
 
-// Claims two extra cases beyond the origins above: the endpoint selector's loopback probes (`local-<digest>.<zone>` and
-// `127.0.0.1:<port>`/health), answered here so they fail fast instead of hanging.
-const claimed = (url: URL, handlers: { platform: DemoHandler; daemon: DemoHandler }): DemoHandler | undefined => {
+// The handlers the transports route to, and the world's word on which addresses a sandbox answers at
+// (world/addresses.ts): the demo's own `.demo.invalid` hosts, and any the visitor named as their own sandbox's.
+export interface DemoHandlers {
+    readonly platform: DemoHandler;
+    readonly daemon: DemoHandler;
+    readonly sandboxAt: (url: URL, method: string) => boolean;
+}
+
+// Claims one extra case beyond the sandboxes' addresses: the endpoint selector's loopback probe (`127.0.0.1:<port>`/health),
+// answered here so it fails fast instead of hanging.
+const claimed = (url: URL, method: string, handlers: DemoHandlers): DemoHandler | undefined => {
     if (url.origin === DEMO_API_ORIGIN) {
         return handlers.platform;
     }
     // `hostname`, not `host`: the loopback candidate carries a port on purpose.
-    if (url.hostname.endsWith(`demo.invalid`) || (url.hostname === `127.0.0.1` && url.pathname === `/health`)) {
+    if (handlers.sandboxAt(url, method) || (url.hostname === `127.0.0.1` && url.pathname === `/health`)) {
         return handlers.daemon;
     }
     return undefined;
 };
 
 /** Routes the demo's own addresses to their handlers; every other request (the app's assets) passes through. */
-export const installFetch = (handlers: { platform: DemoHandler; daemon: DemoHandler }): void => {
+export const installFetch = (handlers: DemoHandlers): void => {
     const passThrough = globalThis.fetch.bind(globalThis);
     globalThis.fetch = (input, init) => {
         const url = urlOf(input);
-        const handler = url === undefined ? undefined : claimed(url, handlers);
+        const method = init?.method ?? (input instanceof Request ? input.method : `GET`);
+        const handler = url === undefined ? undefined : claimed(url, method.toUpperCase(), handlers);
         if (handler === undefined || url === undefined) {
             return passThrough(input, init);
         }
@@ -45,7 +55,7 @@ export const installFetch = (handlers: { platform: DemoHandler; daemon: DemoHand
 
 // Third transport: `sandboxUpload` posts files via XHR, since streaming fetch needs HTTP/2 but the loopback shortcut is
 // HTTP/1.1. Subclassing keeps an unclaimed URL untouched; a claimed one fires progress/load/loadend in wire order.
-export const installXhr = (handlers: { platform: DemoHandler; daemon: DemoHandler }): void => {
+export const installXhr = (handlers: DemoHandlers): void => {
     globalThis.XMLHttpRequest = class DemoXhr extends XMLHttpRequest {
         #handler: DemoHandler | undefined;
         #url = ``;
@@ -54,7 +64,7 @@ export const installXhr = (handlers: { platform: DemoHandler; daemon: DemoHandle
 
         override open(method: string, url: string | URL, async = true, username?: string | null, password?: string | null): void {
             const parsed = urlOf(url);
-            this.#handler = parsed === undefined ? undefined : claimed(parsed, handlers);
+            this.#handler = parsed === undefined ? undefined : claimed(parsed, method.toUpperCase(), handlers);
             if (this.#handler === undefined) {
                 super.open(method, url, async, username, password);
                 return;
@@ -165,12 +175,12 @@ class DemoSocket extends EventTarget {
 export type DemoSession = (socket: DemoSocket) => void;
 export type { DemoSocket };
 
-/** Claims the demo daemons' WebSocket URLs (every sandbox the home recording switches between has its own); anything else gets a real socket. */
-export const installWebSocket = (session: (url: URL) => DemoSession | undefined): void => {
+/** Claims the WebSocket URLs of the world's sandboxes (each has its own address); anything else gets a real socket. */
+export const installWebSocket = (session: (url: URL) => DemoSession | undefined, sandboxSocket: (url: URL) => boolean): void => {
     globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
         construct: (target, args: [string | URL, (string | string[])?]) => {
             const url = urlOf(args[0]);
-            const replay = url?.protocol === `wss:` && url.hostname.endsWith(`demo.invalid`) ? session(url) : undefined;
+            const replay = url !== undefined && sandboxSocket(url) ? session(url) : undefined;
             return replay === undefined ? new target(...args) : new DemoSocket(String(args[0]), replay);
         },
     });

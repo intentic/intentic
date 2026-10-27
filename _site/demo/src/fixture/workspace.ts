@@ -45,17 +45,6 @@ export const REMOTE_REPOS: readonly { repo: string; host: string; project: strin
             { repo: `api`, host: `github.com`, project: `acme-internal/shop-api` },
         ];
 
-// A push the demo can't make; reported in the daemon's shape (`wrote`/`committed`/`pushed`), all false here.
-export const PUBLISH_REFUSAL = {
-    ok: false,
-    wrote: false,
-    committed: false,
-    pushed: false,
-    branch: `main`,
-    defaultBranch: `main`,
-    reason: `this is the demo workspace, there is no remote to push to`,
-} as const;
-
 // Paths here are repo-relative; tool locations and the tree are root-relative instead.
 // Every row carries both readings: git's own count, and the same change with comments stripped (`code`).
 const CODE_CHANGES: RepoChanges[] = [
@@ -856,6 +845,12 @@ export const readFile = (
         ? { present: false, path }
         : { present: true, path, content, size: content.length, offset: 0, bytes: content.length, shared: true };
 };
+
+/** The live table itself, for the stores that move, copy and unpack entries (daemon/workspace/). */
+export const workspaceEntries = (): Map<string, string | number> => FILES;
+
+/** What a dropped archive holds, by the archive's own path; undefined for anything that is not one. */
+export const archiveMembers = (path: string): readonly [string, string | number][] | undefined => ARCHIVES.get(path);
 
 /** POST /workspace/upload: writes panels make, an acknowledgement, a story, a published document. */
 export const writeFile = (path: string, content: string): void => {

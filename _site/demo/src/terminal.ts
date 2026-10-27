@@ -1,4 +1,5 @@
 import type { TerminalServerMessage } from "@intentic/sandbox-contract/browser-wire";
+import { jobScript } from "./daemon/workspace/jobs";
 import type { DemoSession, DemoSocket } from "./transport";
 
 /* THE TERMINAL, recorded. */
@@ -32,10 +33,12 @@ const frame = (message: TerminalServerMessage): string => JSON.stringify(message
 // The pane's bytes, as the daemon sends them: UTF-8 in a binary frame, which the panel hands to xterm whole.
 const bytes = (text: string): ArrayBuffer => new TextEncoder().encode(text).buffer as ArrayBuffer;
 
-/** The recorded session, played on the socket the panel just opened. */
+/** The recorded session, played on the socket the panel just opened; a session a workspace verb started (an app's dev
+ * server, a test run, an install: daemon/workspace/jobs.ts) plays what that one prints instead. */
 export const terminalSession: DemoSession = (socket: DemoSocket) => {
     let elapsed = 0;
-    for (const line of SCRIPT) {
+    const session = new URL(socket.url).searchParams.get(`session`) ?? ``;
+    for (const line of jobScript(session) ?? SCRIPT) {
         elapsed += line.after;
         setTimeout(() => socket.emit(bytes(line.text)), elapsed);
     }

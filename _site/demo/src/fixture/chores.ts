@@ -286,9 +286,30 @@ const seedLedger = (now: number): ChoreLedgerEntry[] => {
 // Built once, then live: snoozes and promoted runs write here and persist across reads.
 let ledger: ChoreLedgerEntry[] | undefined;
 
+// Probes retaken from the panel this page load, by repo and probe id: when each last ran.
+const reprobed = new Map<string, number>();
+
+const withReprobes = (repos: ChoresReport["repos"]): ChoresReport["repos"] =>
+    repos.map((repo) => ({
+        ...repo,
+        probes: repo.probes.map((reading) => {
+            const ranAt = reprobed.get(`${repo.repo}#${reading.id}`);
+            return ranAt === undefined ? reading : { ...reading, ranAt };
+        }),
+    }));
+
+/** A probe retaken ahead of its schedule: its reading is now as of `now`. False for a repo or probe nobody measures. */
+export const reprobe = (now: number, repo: string, id: string): boolean => {
+    const known = evidence(now).some((held) => held.repo === repo && held.probes.some((reading) => reading.id === id));
+    if (known) {
+        reprobed.set(`${repo}#${id}`, now);
+    }
+    return known;
+};
+
 // No runner behind this demo; `running` stays empty rather than spin forever.
 export const choresReport = (now: number): ChoresReport => ({
-    repos: evidence(now),
+    repos: withReprobes(evidence(now)),
     ledger: (ledger ??= seedLedger(now)),
     running: [],
     node: NODE,

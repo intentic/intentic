@@ -7,6 +7,7 @@ import { useLatest } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useViewScope } from "../../app/workspaceScope";
+import { elementAddress } from "../../client/endpoint/elementAddress";
 import { changeEpochOf } from "../../models/workspace/changes/useWorkspaceLive";
 import { type AssetLoader, buildPreviewDocument, type PreviewDocument, PreviewAskSchema } from "../../models/workspace/viewers/htmlDocument";
 import {
@@ -170,7 +171,8 @@ const onMessage = (event: MessageEvent): void => {
         if (`pointer` in saying) {
             pointerIn.value = saying.pointer;
         } else if (`href` in saying) {
-            window.open(saying.href, `_blank`, `noopener,noreferrer`);
+            // Handed over as the host names it: a link the page could not follow in its frame can be the sandbox's own.
+            window.open(elementAddress(saying.href), `_blank`, `noopener,noreferrer`);
         } else if (`loaded` in saying) {
             const next = new Map(loaded.value);
             for (const path of saying.loaded) {

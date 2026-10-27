@@ -74,6 +74,8 @@
                     "__INTENTIC_OPEN__",
                     // The desktop app's bundled editor on this computer's sandboxes, offline (desktop-app local/sandbox.ts).
                     "__INTENTIC_SANDBOX_FACE__",
+                    // A host's stand-in for a sandbox address an element loads (web client/endpoint/elementAddress.ts).
+                    "__INTENTIC_ELEMENT_ADDRESS__",
                     "__termFrames",
                     "__name",
                     "_core",

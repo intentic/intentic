@@ -1,4 +1,5 @@
-import type { ComplianceReport, DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
+import type { ComplianceReport, DataFlow, Measure, PresetApplyResult, PresetItem, PresetValue } from "@intentic/sandbox-contract/schemas/compliance";
+import { setShieldPolicy, shieldPolicy } from "./shield";
 
 // The data protection page's answers for the demo workspace: a fresh sandbox reached through Intentic's tunnel, with
 // Claude connected and a Discord bot listening, and nothing of the public-office preset applied yet. Hand-written
@@ -132,7 +133,28 @@ const measures: Measure[] = [
     measure(`webchat-ai-disclosure`, `transparency`, `on`),
 ];
 
-export const demoComplianceReport = (): ComplianceReport => ({ generatedAt: new Date().toISOString(), flows, measures });
+// What the preset has changed this page load, by item id: its value now, which the next preview reads as current.
+const applied = new Map<string, PresetValue>();
+
+// Which measure each preset item moves, and so turns on once applied: an exact id, or a whole group by its prefix.
+const MOVES: readonly (readonly [string, Measure[`id`]])[] = [
+    [`privacy.mode`, `privacy-shield`],
+    [`privacy.images`, `privacy-images`],
+    [`audit.recordReads`, `audit-reads`],
+    [`productAnalytics`, `product-analytics`],
+    [`aiNotice.show`, `ai-notice`],
+    [`retention.`, `retention`],
+    [`actionRules.`, `action-rules`],
+    [`admission.`, `admission`],
+];
+const measureOf = (id: string): Measure[`id`] | undefined => MOVES.find(([key]) => (key.endsWith(`.`) ? id.startsWith(key) : id === key))?.[1];
+
+const liveMeasures = (): Measure[] => {
+    const moved = new Set([...applied.keys()].map(measureOf));
+    return measures.map((row) => (moved.has(row.id) ? { ...row, status: `on` } : row));
+};
+
+export const demoComplianceReport = (): ComplianceReport => ({ generatedAt: new Date().toISOString(), flows, measures: liveMeasures() });
 
 const item = (id: string, group: PresetItem[`group`], current: PresetItem[`current`], proposed: PresetItem[`proposed`], extra: Partial<PresetItem> = {}): PresetItem => ({
     id,
@@ -145,7 +167,7 @@ const item = (id: string, group: PresetItem[`group`], current: PresetItem[`curre
     ...extra,
 });
 
-export const demoPresetItems = (): PresetItem[] => [
+const seededItems = (): PresetItem[] => [
     item(`privacy.mode`, `privacy`, `off`, `on`),
     item(`privacy.images`, `privacy`, `mask`, `mask`),
     item(`privacy.names`, `privacy`, `dictionary`, `model`, { available: false }),
@@ -166,3 +188,31 @@ export const demoPresetItems = (): PresetItem[] => [
     item(`admission.issues`, `admission`, `hold`, `hold`),
     item(`commandJudge`, `judge`, `on`, `on`),
 ];
+
+export const demoPresetItems = (): PresetItem[] =>
+    seededItems().map((row) => {
+        if (!applied.has(row.id)) {
+            return row;
+        }
+        const current = applied.get(row.id) ?? null;
+        return { ...row, current, changes: current !== row.proposed };
+    });
+
+/** Applies the named items: each that can change does, the rest are skipped with why, as the daemon answers. */
+export const applyPresetItems = (ids: readonly string[]): PresetApplyResult => {
+    const items = demoPresetItems();
+    const result: PresetApplyResult = { applied: [], skipped: [] };
+    for (const id of ids) {
+        const row = items.find((candidate) => candidate.id === id);
+        if (row === undefined || !row.available || !row.changes) {
+            result.skipped.push({ id, reason: row === undefined ? `unknown` : row.available ? `unchanged` : `unavailable` });
+            continue;
+        }
+        applied.set(id, row.proposed);
+        result.applied.push(id);
+        if (id === `privacy.mode` && (row.proposed === `on` || row.proposed === `watch` || row.proposed === `off`)) {
+            setShieldPolicy({ ...shieldPolicy(), mode: row.proposed });
+        }
+    }
+    return result;
+};

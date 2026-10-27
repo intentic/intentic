@@ -328,9 +328,16 @@ const runningJobs = (base: number, runId: number): PipelineJob[] =>
     );
 
 export const ciJobs = (repo: string, runId: number, now: number, green = false): PipelineJob[] => {
+    const rerun = reruns.find((candidate) => candidate.repo === repo && candidate.runId === runId);
+    if (rerun !== undefined) {
+        return rerunJobs(rerun, now);
+    }
     const run = allRuns(now, green).find((candidate) => candidate.repo === repo && candidate.runId === runId);
     if (run === undefined) {
         return [];
+    }
+    if (cancelled.has(keyOf(run))) {
+        return halted(runningJobs(run.createdAt, run.runId));
     }
     if (run.status === `running`) {
         return runningJobs(run.createdAt, run.runId);
@@ -346,8 +353,84 @@ export const ciRunsResponse = (
     { mainFailing = false, green = false }: { mainFailing?: boolean; green?: boolean } = {},
 ): CiRunsResponse => ({
     repos: CI_REPOS,
-    runs: mainFailing
-        ? [...branchRuns(now, green), ...mainFailureRuns(now)].toSorted((left, right) => right.createdAt - left.createdAt)
-        : branchRuns(now, green),
+    runs: [...reruns.map((run) => rerunAt(run, now)), ...(mainFailing ? [...branchRuns(now, green), ...mainFailureRuns(now)] : branchRuns(now, green))]
+        .map((run) => withCancel(run, now))
+        .toSorted((left, right) => right.createdAt - left.createdAt),
     failures: mainFailing ? mainFailures(now) : [],
 });
+
+// RERUN AND CANCEL: what the board's buttons do here. A rerun is a new run of the same commit, played at ten pipeline
+// seconds per real one (the whole graph in about forty seconds), and it passes: the failures on this board are flaky
+// or fixed. A cancel stops a running run where it stands.
+
+const PIPELINE_SPEED = 10;
+const reruns: PipelineRun[] = [];
+const cancelled = new Map<string, number>();
+const keyOf = (run: Pick<PipelineRun, `repo` | `runId`>): string => `${run.repo}#${run.runId}`;
+
+// A finished job graph seen at a moment: what has not started is queued, what has not ended is still running.
+const asOf = (jobs: PipelineJob[], at: number): PipelineJob[] =>
+    jobs.map((job) => {
+        if (job.status === `skipped` || job.startedAt === undefined || job.startedAt > at) {
+            const { startedAt: _start, finishedAt: _end, durationSeconds: _took, ...waiting } = job;
+            return { ...waiting, status: job.status === `skipped` ? `skipped` : `queued` };
+        }
+        if (job.finishedAt !== undefined && job.finishedAt > at) {
+            const { finishedAt: _end, durationSeconds: _took, ...going } = job;
+            return { ...going, status: `running` };
+        }
+        return job;
+    });
+
+// Whatever was still going when the run was cancelled stops with it.
+const halted = (jobs: PipelineJob[]): PipelineJob[] =>
+    jobs.map((job) => (job.status === `running` || job.status === `queued` ? { ...job, status: `canceled` } : job));
+
+const pipelineClock = (run: PipelineRun, now: number): number => run.createdAt + (Math.min(now, cancelled.get(keyOf(run)) ?? now) - run.createdAt) * PIPELINE_SPEED;
+
+const rerunJobs = (run: PipelineRun, now: number): PipelineJob[] => {
+    const graph = run.host === `gitlab` ? gitlabJobs(run.createdAt, []) : githubJobs(run.createdAt, [], run.runId);
+    const seen = asOf(graph, pipelineClock(run, now));
+    return cancelled.has(keyOf(run)) ? halted(seen) : seen;
+};
+
+const rerunAt = (run: PipelineRun, now: number): PipelineRun => {
+    const jobs = rerunJobs(run, now);
+    if (cancelled.has(keyOf(run)) || jobs.some((job) => job.status === `running` || job.status === `queued`)) {
+        return run;
+    }
+    const ended = Math.max(...jobs.map((job) => job.finishedAt ?? run.createdAt));
+    return { ...run, status: `success`, durationSeconds: Math.round((ended - run.createdAt) / 1000) };
+};
+
+const withCancel = (run: PipelineRun, now: number): PipelineRun => {
+    const at = cancelled.get(keyOf(run));
+    return at === undefined || (run.status !== `running` && run.status !== `queued`)
+        ? run
+        : { ...run, status: `canceled`, durationSeconds: Math.round((Math.min(now, at) - run.createdAt) / 1000) };
+};
+
+/** Starts the run again on the same commit, as a new run with the forge's next id. */
+export const rerunCi = (repo: string, runId: number, now: number): PipelineRun | undefined => {
+    const base = [...reruns, ...allRuns(now)].find((run) => run.repo === repo && run.runId === runId);
+    if (base === undefined) {
+        return undefined;
+    }
+    const next = Math.max(...[...reruns, ...allRuns(now)].filter((run) => run.repo === repo).map((run) => run.runId)) + 1;
+    const { failedJobs: _failed, durationSeconds: _took, ...rest } = base;
+    const run: PipelineRun = { ...rest, runId: next, status: `running`, createdAt: now, trigger: `retry`, url: base.url.replace(String(runId), String(next)) };
+    reruns.unshift(run);
+    return run;
+};
+
+/** Cancels a run still going; one that has ended answers as it was. */
+export const cancelCi = (repo: string, runId: number, now: number): boolean => {
+    const run = ciRunsResponse(now, { mainFailing: true }).runs.find((candidate) => candidate.repo === repo && candidate.runId === runId);
+    if (run === undefined) {
+        return false;
+    }
+    if (run.status === `running` || run.status === `queued`) {
+        cancelled.set(keyOf(run), now);
+    }
+    return true;
+};
