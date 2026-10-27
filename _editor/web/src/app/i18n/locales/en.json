@@ -13426,7 +13426,6 @@
         },
         "retry": "Try again",
         "open": "All sandboxes",
-        "noSandboxTitle": "Start with a sandbox",
         "noSandboxLine": "A sandbox is a private computer, on our machines or on your own, where agents work on your project. You talk to it from here.",
         "doubleClickToEnter": "Double-click to open",
         "heldConflict": "Nothing landed yet: it clashed with the workspace. Your home resolves it and lands it again.",
@@ -13434,22 +13433,28 @@
         "heldYourEdits": "Nothing landed yet: your own uncommitted edits are in the way. Commit or stash them, and it lands when your home's next turn ends.",
         "heldNextTurn": "Nothing landed yet. It lands when your home's next turn ends.",
         "firstRun": {
+            "title": "Meet your sandbox",
+            "line": "A private computer where AI agents work on your projects.",
+            "figure": "How a sandbox works",
             "create": "Create a sandbox",
             "finish": "Finish setting up {name}",
             "signIn": "Sign in",
             "signedOut": "Already have sandboxes? Sign in to see them.",
             "steps": {
-                "create": {
-                    "title": "Create a sandbox",
-                    "line": "Name it and pick where it runs."
-                },
                 "ask": {
-                    "title": "Say what you want",
-                    "line": "Its home conversation plans the work and hands it to agents."
+                    "title": "You say what you want",
+                    "example": "Add a dark mode to my app"
                 },
-                "open": {
-                    "title": "Look inside whenever you like",
-                    "line": "Every agent, file and change is one press away."
+                "work": {
+                    "title": "Agents do it in your sandbox",
+                    "sandbox": "Sandbox",
+                    "agent": "An agent at work",
+                    "files": "Your files",
+                    "where": "In our cloud or on your own machine"
+                },
+                "keep": {
+                    "title": "You keep what you like",
+                    "kept": "Kept"
                 }
             }
         },

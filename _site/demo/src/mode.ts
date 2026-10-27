@@ -12,7 +12,7 @@ import {
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `busy` | `showcase` | `home` | `hero` | `desk` | `fresh`;
+export type DemoModeId = `minimal` | `default` | `full` | `busy` | `showcase` | `home` | `hero` | `desk` | `fresh` | `first` | `welcome`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -32,6 +32,10 @@ export interface DemoMode {
     readonly quiet?: true;
     /** Serves the home recording: the person's home conversation, three sandboxes in the rail and connected plan usage. */
     readonly homeRecording?: true;
+    /** An account with no sandbox at all: Home's first run (`@intentic/web` features/home/HomeNoSandbox.vue). */
+    readonly noSandboxes?: true;
+    /** No session either: the anonymous Home a visitor lands on before signing in. */
+    readonly signedOut?: true;
 }
 
 // One agent kept: the featured run, since its card is the one with a real conversation behind it.
@@ -139,7 +143,23 @@ const HERO: DemoMode = {
     homeRecording: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, BUSY, SHOWCASE, HOME, HERO, DESK, FRESH];
+// Before the first sandbox, which every other mode is past: Home's first run, what a new account opens on. Signed in it
+// is someone who has just made an account; signed out, the visitor who has not, on the anonymous Home.
+const FIRST: DemoMode = {
+    id: `first`,
+    label: `First run`,
+    note: `A new account with no sandbox yet.`,
+    agents: [],
+    extensions: [],
+    teammate: false,
+    openChats: false,
+    quiet: true,
+    noSandboxes: true,
+};
+
+const WELCOME: DemoMode = { ...FIRST, id: `welcome`, label: `Welcome`, note: `A visitor before signing in.`, signedOut: true };
+
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, BUSY, SHOWCASE, HOME, HERO, DESK, FRESH, FIRST, WELCOME];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;
@@ -195,6 +215,10 @@ export const freshEdition = demoMode.id === `fresh`;
 
 /** Whether this page load serves the home recording (home conversation, three sandboxes, plan usage). */
 export const homeRecording = demoMode.homeRecording === true;
+
+/** Whether this page load's account has no sandbox (Home's first run), and whether it has no session either. */
+export const noSandboxes = demoMode.noSandboxes === true;
+export const signedOut = demoMode.signedOut === true;
 
 // WHETHER ANYTHING IS CONNECTED TO RUN A CHAT ON this page load, from `?models=`, sticky per tab like the mode and the
 // outage: `?models=none` is a sandbox with no account, no subscription, no trial and no endpoint, the first run the

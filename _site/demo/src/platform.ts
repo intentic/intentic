@@ -5,7 +5,7 @@ import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { homeSandboxLogos } from "./fixture/home/logos";
 import { HOME_SANDBOXES } from "./fixture/home/sandboxes";
 import { officeOrganisation, officeOrganisations } from "./fixture/offices/organisation";
-import { deskEdition, demoTier, homeRecording } from "./mode";
+import { deskEdition, demoTier, homeRecording, noSandboxes, signedOut } from "./mode";
 import { demoOutage, outageHosted, outageReport } from "./outage";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 import { ingressPath, type BrowsingCatalog } from "@intentic/api-contract/ingress";
@@ -47,7 +47,9 @@ export const DEMO_SANDBOX: SandboxSummary = {
     hostReport: outageReport(),
 };
 
-export const DEMO_SANDBOXES: SandboxSummary[] = homeRecording
+export const DEMO_SANDBOXES: SandboxSummary[] = noSandboxes
+    ? []
+    : homeRecording
     ? [
         { ...DEMO_SANDBOX, image: homeSandboxLogos.shop },
         // Each at its own daemon address, so the home conversation it opens on is its own (fixture/home/sandboxes.ts).
@@ -185,7 +187,7 @@ const ANSWERS: PlatformAnswers = {
     // Plan's on/off answer decides whether Settings shows the Billing tab.
     hostedPlan: { state: () => DEMO_HOSTED_PLAN },
     // Both ways in, as the live platform offers them: the sign-in screens and the desktop app's dialog draw both.
-    me: { get: () => DEMO_USER, signInOptions: () => ({ google: true, email: true }) },
+    me: { get: () => (signedOut ? null : DEMO_USER), signInOptions: () => ({ google: true, email: true }) },
     invite: {
         list: roster,
         setRole: roster,
@@ -228,7 +230,7 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
 
     if (path.startsWith(`/api/auth/`)) {
         // Only get-session matters; others must not 404 or better-auth reads it as signed-out.
-        return json(path.endsWith(`/get-session`) ? SESSION : { ok: true });
+        return json(path.endsWith(`/get-session`) ? (signedOut ? null : SESSION) : { ok: true });
     }
 
     const answer = ROUTED.get(path);

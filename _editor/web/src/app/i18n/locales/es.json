@@ -13426,7 +13426,6 @@
         },
         "retry": "Reintentar",
         "open": "Todos los sandboxes",
-        "noSandboxTitle": "Empieza con un sandbox",
         "noSandboxLine": "Un sandbox es un ordenador privado, en nuestras máquinas o en las tuyas, donde los agentes trabajan en tu proyecto. Hablas con él desde aquí.",
         "doubleClickToEnter": "Doble clic para abrir",
         "heldConflict": "Aún no se integró nada: chocó con el espacio de trabajo. Tu conversación de inicio lo resuelve y lo vuelve a integrar.",
@@ -13434,22 +13433,28 @@
         "heldYourEdits": "Aún no se integró nada: tus propios cambios sin confirmar estorban. Confírmalos o guárdalos con stash, y se integrará cuando termine el próximo turno de tu conversación de inicio.",
         "heldNextTurn": "Aún no se integró nada. Se integrará cuando termine el próximo turno de tu conversación de inicio.",
         "firstRun": {
+            "title": "Conoce tu sandbox",
+            "line": "Un ordenador privado donde agentes de IA trabajan en tus proyectos.",
+            "figure": "Cómo funciona un sandbox",
             "create": "Crear un sandbox",
             "finish": "Terminar de configurar {name}",
             "signIn": "Iniciar sesión",
             "signedOut": "¿Ya tienes sandboxes? Inicia sesión para verlos.",
             "steps": {
-                "create": {
-                    "title": "Crea un sandbox",
-                    "line": "Ponle nombre y elige dónde se ejecuta."
-                },
                 "ask": {
-                    "title": "Di lo que quieres",
-                    "line": "Su conversación de inicio planifica el trabajo y se lo pasa a los agentes."
+                    "title": "Dices lo que quieres",
+                    "example": "Añade un modo oscuro a mi app"
                 },
-                "open": {
-                    "title": "Mira dentro cuando quieras",
-                    "line": "Cada agente, archivo y cambio está a un clic."
+                "work": {
+                    "title": "Los agentes lo hacen en tu sandbox",
+                    "sandbox": "Sandbox",
+                    "agent": "Un agente trabajando",
+                    "files": "Tus archivos",
+                    "where": "En nuestra nube o en tu propia máquina"
+                },
+                "keep": {
+                    "title": "Te quedas con lo que te gusta",
+                    "kept": "Aceptado"
                 }
             }
         },

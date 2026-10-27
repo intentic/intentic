@@ -13426,7 +13426,6 @@
         },
         "retry": "Erneut versuchen",
         "open": "Alle Sandboxes",
-        "noSandboxTitle": "Beginne mit einer Sandbox",
         "noSandboxLine": "Eine Sandbox ist ein privater Computer, auf unseren Maschinen oder deinen eigenen, auf dem Agenten an deinem Projekt arbeiten. Du sprichst von hier aus mit ihr.",
         "doubleClickToEnter": "Doppelklicken zum Öffnen",
         "heldConflict": "Noch nichts übernommen: Es kollidierte mit dem Arbeitsbereich. Deine Home-Unterhaltung löst das und übernimmt es erneut.",
@@ -13434,22 +13433,28 @@
         "heldYourEdits": "Noch nichts übernommen: Deine eigenen nicht committeten Änderungen stehen im Weg. Committe oder stashe sie, dann wird es am Ende des nächsten Zugs deiner Home-Unterhaltung übernommen.",
         "heldNextTurn": "Noch nichts übernommen. Es wird am Ende des nächsten Zugs deiner Home-Unterhaltung übernommen.",
         "firstRun": {
+            "title": "Lerne deine Sandbox kennen",
+            "line": "Ein privater Computer, auf dem KI-Agenten an deinen Projekten arbeiten.",
+            "figure": "So funktioniert eine Sandbox",
             "create": "Sandbox erstellen",
             "finish": "Einrichtung von {name} abschließen",
             "signIn": "Anmelden",
             "signedOut": "Du hast schon Sandboxes? Melde dich an, um sie zu sehen.",
             "steps": {
-                "create": {
-                    "title": "Sandbox erstellen",
-                    "line": "Gib ihr einen Namen und wähle, wo sie läuft."
-                },
                 "ask": {
-                    "title": "Sag, was du möchtest",
-                    "line": "Ihre Home-Unterhaltung plant die Arbeit und gibt sie an Agenten weiter."
+                    "title": "Du sagst, was du möchtest",
+                    "example": "Füge meiner App einen Dunkelmodus hinzu"
                 },
-                "open": {
-                    "title": "Schau jederzeit hinein",
-                    "line": "Jeder Agent, jede Datei und jede Änderung ist einen Klick entfernt."
+                "work": {
+                    "title": "Agenten erledigen es in deiner Sandbox",
+                    "sandbox": "Sandbox",
+                    "agent": "Ein Agent bei der Arbeit",
+                    "files": "Deine Dateien",
+                    "where": "In unserer Cloud oder auf deinem eigenen Rechner"
+                },
+                "keep": {
+                    "title": "Du behältst, was dir gefällt",
+                    "kept": "Übernommen"
                 }
             }
         },

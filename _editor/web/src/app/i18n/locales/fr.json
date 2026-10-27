@@ -13426,7 +13426,6 @@
         },
         "retry": "Réessayer",
         "open": "Tous les sandboxes",
-        "noSandboxTitle": "Commencez par un sandbox",
         "noSandboxLine": "Un sandbox est un ordinateur privé, sur nos machines ou sur les vôtres, où des agents travaillent sur votre projet. Vous lui parlez d'ici.",
         "doubleClickToEnter": "Double-cliquez pour ouvrir",
         "heldConflict": "Rien n’est encore intégré : il est entré en conflit avec l’espace de travail. Votre conversation d’accueil le résout et l’intègre à nouveau.",
@@ -13434,22 +13433,28 @@
         "heldYourEdits": "Rien n’est encore intégré : vos propres modifications non validées gênent. Validez-les ou mettez-les de côté (stash), et il sera intégré à la fin du prochain tour de votre conversation d’accueil.",
         "heldNextTurn": "Rien n’est encore intégré. Il le sera à la fin du prochain tour de votre conversation d’accueil.",
         "firstRun": {
+            "title": "Découvrez votre sandbox",
+            "line": "Un ordinateur privé où des agents IA travaillent sur vos projets.",
+            "figure": "Comment fonctionne un sandbox",
             "create": "Créer un sandbox",
             "finish": "Terminer la configuration de {name}",
             "signIn": "Se connecter",
             "signedOut": "Vous avez déjà des sandboxes ? Connectez-vous pour les voir.",
             "steps": {
-                "create": {
-                    "title": "Créez un sandbox",
-                    "line": "Nommez-le et choisissez où il tourne."
-                },
                 "ask": {
-                    "title": "Dites ce que vous voulez",
-                    "line": "Sa conversation d'accueil planifie le travail et le confie à des agents."
+                    "title": "Vous dites ce que vous voulez",
+                    "example": "Ajoute un mode sombre à mon app"
                 },
-                "open": {
-                    "title": "Regardez à l'intérieur quand vous voulez",
-                    "line": "Chaque agent, fichier et modification est à un clic."
+                "work": {
+                    "title": "Des agents s'en chargent dans votre sandbox",
+                    "sandbox": "Sandbox",
+                    "agent": "Un agent au travail",
+                    "files": "Vos fichiers",
+                    "where": "Dans notre cloud ou sur votre propre machine"
+                },
+                "keep": {
+                    "title": "Vous gardez ce qui vous plaît",
+                    "kept": "Gardé"
                 }
             }
         },
