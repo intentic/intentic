@@ -184,11 +184,11 @@ RUN arch="$(dpkg --print-architecture)" \
 # it at 2.46.0 (March 2024, still the version in unstable), and gh is a client for an API that keeps moving under it.
 # A static Go binary, sha256-checked per architecture like ripgrep and jq; the tool bumper
 # (_tools/scripts/tools/bump-tools.mjs) moves the version and both checksums together.
-ARG GH_VERSION=2.103.0
+ARG GH_VERSION=2.103.2
 RUN set -eu; arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) gh_sha=fdd768eb70f6409f80fcfa9f3a1c0adf0fc98d827ab3ce0bed2ac22762c5d786 ;; \
-      arm64) gh_sha=7f322df34e624d14f5ec0c4acb121fd6dfa14392fdbbd1066aa8e0a05ac3721e ;; \
+      amd64) gh_sha=62ccf747115ddc61237efffdde66a3c8f70ba249433dc64f70801089b59c59c8 ;; \
+      arm64) gh_sha=4c3e99a50bd8b181a3fe9d69b25dd978bac768148d88f01507c6b4d1ef61a443 ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz; \
