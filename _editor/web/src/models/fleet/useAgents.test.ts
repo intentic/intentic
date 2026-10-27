@@ -2373,14 +2373,6 @@ describe("tabs the daemon retired", () => {
         expect(openTabs()).toEqual([`here`, `b`]);
     });
 
-    it("spares a pinned chat on that first roster, as every unattended close does", () => {
-        restoredTab(`a`).pinned.value = true;
-
-        setAgents([], 5);
-
-        expect(openTabs()).toEqual([`here`, `a`]);
-    });
-
     // Absence answers only for what this box's roster would list: a chat the roster never filed, and another box's
     // chat, are not its to retire.
     it("leaves a chat the roster never filed, and another box's, to their own rules", () => {

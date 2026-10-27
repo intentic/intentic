@@ -2,7 +2,8 @@ import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, stopAgent } from "../../../models/fleet/agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, stopAgent } from "../../../models/fleet/agentActions";
+import { landByHand } from "../../../models/fleet/presses/landPress";
 import { refreshAcross } from "../../../models/sandbox/live/fleetAcross";
 import { otherFleet } from "../../../models/fleet/fleetScope";
 import { unregistered } from "../../../models/agent-status/agentStatus-standing";
@@ -92,21 +93,12 @@ const cancel = (): void => {
     over.value = undefined;
 };
 
-// One runner for land and reland: same claim on the card, same refusal notice, same refresh. Only the rung it measures
-// from differs, as one argument rather than a parallel path free to drift.
-const runLand = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
-    const result = await landAgent(id, `check`, chosen === `reland` ? `cumulative` : `outstanding`, false, at);
-    await invalidateAgentAction(id, at);
-    if (!result.landed) {
-        // Reachable from an errored card's drop or a ready card's button; either way a first refusal with a report to
-        // read, not a repeat.
-        notice.value = t(`agents.useAgentDrag.landingHitConflict`);
-        return;
-    }
-    if (!result.changed) {
-        // Merged with nothing to show for it. The card carries no trace of that either way, so an unsaid one leaves the
-        // press looking like it worked; a receipt, not the danger strip, since nothing was refused.
-        say(nothingLanded());
+// One runner for land and reland (landPress.landByHand, which the chat list's menu shares): same claim on the card, same
+// refusal notice, same refresh. Only the rung it measures from differs, as one argument rather than a parallel path.
+const runLand = async (id: string, chosen: `land` | `reland`, at?: string): Promise<void> => {
+    const refused = await landByHand(id, chosen, at);
+    if (refused !== undefined) {
+        notice.value = refused;
     }
 };
 

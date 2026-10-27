@@ -5,6 +5,7 @@ import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { reviewAction } from "../../../../../models/agent-status/agentStatus-attention";
 import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
+import { useVocabulary } from "../../../../../workbench/views/vocabulary";
 import { type MenuActions, type MenuFacts, menuItemsFor, useCardMenu } from "../cardMenu";
 
 // Pins what the one card menu offers for each card: opening and its page, the look's keep, the session name, the crossing
@@ -27,6 +28,7 @@ const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
 const facts = (over: Partial<MenuFacts> = {}): MenuFacts => ({
     mobile: false,
     here: true,
+    canShip: true,
     peeked: false,
     href: () => `/agents/a1`,
     boxName: undefined,
@@ -44,6 +46,7 @@ const actions = (): { [K in keyof MenuActions]: ReturnType<typeof jest.fn> & Men
     restore: jest.fn(async () => undefined),
     archive: jest.fn(async () => undefined),
     startFresh: jest.fn(),
+    land: jest.fn(),
 });
 // The rows as a reader sees them: a label, or a rule between groups.
 const rows = (items: readonly MenuItem[]): string[] => items.map((item) => (item.separator === true ? `—` : String(item.label)));
@@ -102,6 +105,28 @@ describe(`what a card's menu offers`, () => {
             `—`,
             t(`agents.agentsView.archive`),
         ]);
+    });
+
+    // The card's own Land now, beside the review it would otherwise send the reader to: a maintainer's press, and Land
+    // again in its place where landed work left the workspace, since a plain land would leave that part missing.
+    it(`lands a ready card from its menu, and lands again where landed work went missing`, () => {
+        const words = useVocabulary().value;
+        const ready = card(`r`, { status: `ready`, branch: `agent/r`, diff: { files: 1, insertions: 1, deletions: 0 } });
+        const act = actions();
+        const items = menuItemsFor(ready, facts(), act);
+        expect(rows(items).slice(0, 3)).toEqual([t(`ui.action.open`), reviewAction(ready)!, words.land]);
+        press(items, words.land);
+        const away = card(`a`, { branch: `agent/a`, landedPresence: { landed: 2, present: 0 } });
+        press(menuItemsFor(away, facts(), act), words.landAgain);
+        expect(act.land.mock.calls).toEqual([
+            [ready, `land`],
+            [away, `reland`],
+        ]);
+        // An agent took it out on purpose, a collaborator may not land, and work filed away waits for its restore.
+        const takenByAgent = { ...away, landedPresence: { landed: 2, present: 0, removedBy: { kind: `agent` as const, id: `o` } } };
+        expect(rows(menuItemsFor(takenByAgent, facts(), act))).not.toContain(words.landAgain);
+        expect(rows(menuItemsFor(ready, facts({ canShip: false }), act))).not.toContain(words.land);
+        expect(rows(menuItemsFor({ ...ready, archivedAt: 9 }, facts(), act))).not.toContain(words.land);
     });
 
     it(`restores an archived card, and closes a draft that has nothing to file`, () => {

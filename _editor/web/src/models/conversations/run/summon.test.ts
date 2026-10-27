@@ -302,19 +302,16 @@ it(`keeps the landed chat the reader is looking at until they move on`, () => {
     expect(openIds()).not.toContain(`cnv-landed`);
 });
 
-// The same exceptions the roster's own release keeps: held on purpose, or words that would be stranded.
-it(`keeps a landed chat that is pinned, or holds words not yet sent`, async () => {
-    show(knownTab(`cnv-pinned`));
+// The same exception the roster's own release keeps: words that would be stranded.
+it(`keeps a landed chat that holds words not yet sent`, async () => {
     show(knownTab(`cnv-typing`));
     show(knownTab(`cnv-reading`));
-    useChat().setPinned(`cnv-pinned`, true);
     tabOf(`cnv-typing`)!.draft.value = `one more thing`;
     await nextTick();
 
-    deliver(wireSummons({ kind: `release`, conversationIds: [`cnv-pinned`, `cnv-typing`] }));
+    deliver(wireSummons({ kind: `release`, conversationIds: [`cnv-typing`] }));
 
-    expect(openIds()).toEqual(expect.arrayContaining([`cnv-pinned`, `cnv-typing`]));
-    expect(tabOf(`cnv-pinned`)?.peek.value).toBe(false);
+    expect(openIds()).toContain(`cnv-typing`);
     expect(tabOf(`cnv-typing`)?.peek.value).toBe(false);
 });
 

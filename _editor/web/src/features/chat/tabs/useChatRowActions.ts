@@ -1,10 +1,10 @@
-import type { IconName } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, inject, type InjectionKey, provide, ref, shallowReactive } from "vue";
-import { canArchive } from "../../../models/fleet/useAgents-fleet";
+import { joinGroups } from "../../../models/fleet/presses/agentMenu";
 import { useAgents } from "../../../models/fleet/useAgents";
+import { useChatRowAgentRows } from "./chatRowAgentRows";
 import type HoverCard from "./HoverCard.vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
@@ -31,8 +31,8 @@ const KEY: InjectionKey<ChatRowActions> = Symbol(`chat-row-actions`);
 
 export const createChatRowActions = (host: ChatRowHost) => {
     const t = useT();
-    const { conversations, activeId, panes, openBeside, closePane, collapsePanes, setPanes, keepChat, setPinned } = useChat();
-    const { agentById, rename, archive } = useAgents();
+    const { conversations, activeId, panes, openBeside, closePane, collapsePanes, setPanes, keepChat } = useChat();
+    const { rename } = useAgents();
     const { floats } = useChatFloating();
 
     // Broadcasts the same reveal to other windows (relaySummons) so their fleet boards ring the conversation this rail
@@ -139,16 +139,13 @@ export const createChatRowActions = (host: ChatRowHost) => {
         }
     };
 
-    // Archivable from a row exactly when its board card is: this sandbox's, filed, and not mid-turn or asking.
-    const archivableRow = (id: string): boolean => {
-        const conversation = conversations.value.find((entry) => entry.conversationId === id);
-        const agent = agentById(id);
-        return conversation?.box.value === undefined && agent !== undefined && canArchive(agent);
-    };
-
     // Acts on the right-clicked card (menuId), never the active one — its keyboard commands live with the panel header.
     const menu = ref<{ show: (event: Event) => void } | undefined>();
     const menuId = ref<string>();
+    // The row pressed, whose own document the clipboard is asked of (clipboardOf): the list may be in a popped-out window.
+    const menuAnchor = ref<Element>();
+
+    const agentRowsOf = useChatRowAgentRows(menuAnchor);
     // One array for every closed menu: a fresh one each pass is a changed prop, and the menu redraws for it.
     const NO_ITEMS: MenuItem[] = [];
     const menuItems = computed<MenuItem[]>(() => {
@@ -160,51 +157,51 @@ export const createChatRowActions = (host: ChatRowHost) => {
         const others = othersOf(id);
         const toRight = toRightOf(id);
         const finished = tabsInLane(`finished`);
-        const pinned = conversation.pinned.value;
-        return [
+        const agent = agentRowsOf(conversation);
+        return joinGroups([
             // Keep Open leads the menu on a preview tab: same convention and wording as WorkspaceDesktop.
-            ...(conversation.peek.value ? [{ label: t(`ui.action.keepOpen`), command: () => keepChat(id) }] : []),
-            {
-                label: pinned ? t(`chat.chatTabList.unpin`) : t(`chat.chatTabList.pin`),
-                icon: `pin` as IconName,
-                shortcut: commandShortcut(`chat.togglePin`),
-                command: () => setPinned(id, !pinned),
-            },
-            { label: t(`ui.action.rename`), icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
-            // Share opens a dialog rather than acting directly; it renders a frozen snapshot, the conversation is unchanged.
-            { label: t(`chat.chatTabList.share`), icon: `globe`, command: () => openShare(id) },
-            { separator: true },
+            conversation.peek.value ? [{ label: t(`ui.action.keepOpen`), command: () => keepChat(id) }] : [],
+            agent.review,
+            agent.fresh,
+            [
+                { label: t(`ui.action.rename`), icon: `pencil`, shortcut: commandShortcut(`chat.rename`), command: () => beginRename(id) },
+                // Share opens a dialog rather than acting directly; it renders a frozen snapshot, the conversation is unchanged.
+                { label: t(`chat.chatTabList.share`), icon: `globe`, command: () => openShare(id) },
+                ...agent.name,
+            ],
+            agent.watch,
             // Open Beside/Close Pane mirror Ctrl+click; unlike Close, they give back the column without ending the chat.
-            ...(paneable.value
-                ? [
+            !paneable.value
+                ? []
+                : [
                       showing(id) && split.value
                           ? { label: t(`chat.words.closePane`), shortcut: commandShortcut(`chat.closePane`), command: () => closePane(id) }
                           : { label: t(`chat.chatTabList.openBeside`), shortcut: commandShortcut(`chat.splitView`), command: () => openBeside(id) },
-                      { separator: true },
-                  ]
-                : []),
-            { label: t(`ui.action.close`), icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => host.close(new Set([id])) },
-            // Done with it everywhere, not just here: the board's own Archive, offered where the board would offer it.
-            ...(archivableRow(id)
-                ? [{ label: t(`chat.chatTabList.archive`), icon: `box` as IconName, shortcut: commandShortcut(`chat.archive`), command: () => void archive([id]) }]
-                : []),
-            { separator: true },
-            { label: t(`chat.words.closeOthers`), disabled: others.size === 0, shortcut: commandShortcut(`chat.closeOtherTabs`), command: () => host.close(others) },
-            { label: t(`ui.action.closeToRight`), disabled: toRight.size === 0, shortcut: commandShortcut(`chat.closeTabsToRight`), command: () => host.close(toRight) },
-            {
-                label: t(`chat.words.closeFinished`),
-                disabled: finished.size === 0,
-                shortcut: commandShortcut(`chat.closeFinishedTabs`),
-                command: () => host.close(finished),
-            },
-            { label: t(`chat.words.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => host.close(allTabs()) },
-            { separator: true },
-            {
-                label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
-                shortcut: commandShortcut(`chat.toggleFloating`),
-                command: (): void => toggleChatFloating(),
-            },
-        ];
+                  ],
+            // Done with it everywhere, not just here: the board's own Archive (or Restore), offered where the board would.
+            [
+                { label: t(`ui.action.close`), icon: `times`, shortcut: commandShortcut(`chat.closeTab`), command: () => host.close(new Set([id])) },
+                ...agent.filing,
+            ],
+            [
+                { label: t(`chat.words.closeOthers`), disabled: others.size === 0, shortcut: commandShortcut(`chat.closeOtherTabs`), command: () => host.close(others) },
+                { label: t(`ui.action.closeToRight`), disabled: toRight.size === 0, shortcut: commandShortcut(`chat.closeTabsToRight`), command: () => host.close(toRight) },
+                {
+                    label: t(`chat.words.closeFinished`),
+                    disabled: finished.size === 0,
+                    shortcut: commandShortcut(`chat.closeFinishedTabs`),
+                    command: () => host.close(finished),
+                },
+                { label: t(`chat.words.closeAll`), shortcut: commandShortcut(`chat.closeAllTabs`), command: () => host.close(allTabs()) },
+            ],
+            [
+                {
+                    label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
+                    shortcut: commandShortcut(`chat.toggleFloating`),
+                    command: (): void => toggleChatFloating(),
+                },
+            ],
+        ]);
     });
     // The row goes out from under the pointer, so it never gets the leave that would take its hover preview with it.
     const closeRow = (id: string): void => {
@@ -215,6 +212,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
         // Pointer stays on the card, so the hover preview would otherwise never leave on its own.
         hidePreview();
         menuId.value = id;
+        menuAnchor.value = event.currentTarget instanceof Element ? event.currentTarget : event.target instanceof Element ? event.target : undefined;
         menu.value?.show(event);
     };
 

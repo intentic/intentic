@@ -67,9 +67,6 @@ export class Conversation {
     // changes the conversation clears it; only the roster sets it again (useChat-tabs.releaseDone).
     readonly peek = ref(false);
 
-    // Held on purpose: never tidied, never folded, skipped by every bulk close; only its own Close takes it.
-    readonly pinned = ref(false);
-
     // When focus last left this chat (epoch ms); the tidy clock counts from it, undefined while never left.
     readonly leftAt = ref<number | undefined>();
 

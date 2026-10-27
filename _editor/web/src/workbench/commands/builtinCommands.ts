@@ -148,7 +148,7 @@ export const BUILTIN_COMMANDS = {
     "side.openInSection": { title: () => t(`shell.sidePanel.openInSection`), category: SIDE_PANEL, icon: `expand` },
     "side.toggleSplit": { title: () => t(`shell.sidePanel.toggleSplit`), category: SIDE_PANEL, icon: `split-columns`, when: onSurface(`side`) },
 
-    // The chat's tabs (ChatTabs.vue). Close Finished, Pin, Archive, Reopen, Close Pane and Switch are unbound: no file-tab
+    // The chat's tabs (ChatTabs.vue). Close Finished, Archive, Reopen, Close Pane and Switch are unbound: no file-tab
     // twin, and no chord left free for them; the palette and this page reach them.
     "chat.rename": { title: () => t(`ui.action.renameEllipsis`), category: CHAT, icon: `pencil`, keybinding: `F2`, when: onSurface(`chat`) },
     "chat.closeTab": { title: () => t(`ui.action.close`), category: CHAT, icon: `times`, ...CLOSE_TAB, when: onSurface(`chat`) },
@@ -156,7 +156,6 @@ export const BUILTIN_COMMANDS = {
     "chat.closeTabsToRight": { title: () => t(`ui.action.closeToRight`), category: CHAT, icon: `times`, keybinding: `Ctrl+Shift+.`, when: onSurface(`chat`) },
     "chat.closeFinishedTabs": { title: () => t(`chat.words.closeFinished`), category: CHAT, icon: `times`, when: onSurface(`chat`) },
     "chat.closeAllTabs": { title: () => t(`chat.words.closeAll`), category: CHAT, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, when: onSurface(`chat`) },
-    "chat.togglePin": { title: () => t(`chat.chatTabs.togglePin`), category: CHAT, icon: `pin`, when: onSurface(`chat`) },
     "chat.archive": { title: () => t(`chat.chatTabs.archiveChat`), category: CHAT, icon: `box`, when: onSurface(`chat`) },
     "chat.reopenClosed": { title: () => t(`chat.words.reopenClosedChat`), category: CHAT, icon: `history`, when: onSurface(`chat`) },
     "chat.nextNeedsYou": { title: () => t(`chat.chatTabs.nextNeedsYou`), category: CHAT, icon: `exclamation-circle` },

@@ -3670,7 +3670,6 @@
         },
         "chatTabList": {
             "anotherSandbox": "eine andere Sandbox",
-            "archive": "Archivieren",
             "chats": "Chats",
             "clearActive": "{count} arbeitenden Chat schließen | Alle {count} arbeitenden Chats schließen",
             "clearAttention": "{count} wartenden Chat schließen | Alle {count} wartenden Chats schließen",
@@ -3682,13 +3681,10 @@
             "openBeside": "Daneben öffnen",
             "openWorkflowRun": "Den Workflow-Lauf {name} öffnen",
             "otherSandbox": "Andere Sandbox",
-            "pin": "Anheften",
-            "pinned": "Angeheftet",
             "runsIn": "Läuft in {sandbox}",
             "sandbox": "Sandbox",
             "share": "Teilen…",
-            "stepsDone": "{done}/{total} Schritte",
-            "unpin": "Lösen"
+            "stepsDone": "{done}/{total} Schritte"
         },
         "chatTabs": {
             "archiveChat": "Chat archivieren",
@@ -3703,8 +3699,7 @@
             "previous": "Vorheriger",
             "running": "{runningCount} laufen",
             "switch": "Wechseln…",
-            "switchChatOpen": "Chat wechseln: {count} offen",
-            "togglePin": "Chat anheften oder lösen"
+            "switchChatOpen": "Chat wechseln: {count} offen"
         },
         "chatTodoList": {
             "added": "{count} hinzugefügt",

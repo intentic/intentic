@@ -117,10 +117,6 @@ const closeRow = (event: Event): void => {
                 :members="viewersOfSession(props.conversation.session.value!.id)"
                 :label="t(`chat.words.inChat`)"
             />
-            <!-- A pinned chat says so at rest, not only on hover: it is the one row no sweep will take. -->
-            <span v-if="props.conversation.pinned.value" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabList.pinned`)">
-                <Icon name="pin" class="text-2xs text-subtle" />
-            </span>
             <!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
             <span
                 v-if="props.closable"

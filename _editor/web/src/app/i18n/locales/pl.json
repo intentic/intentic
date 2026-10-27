@@ -3670,7 +3670,6 @@
         },
         "chatTabList": {
             "anotherSandbox": "innym sandboxie",
-            "archive": "Zarchiwizuj",
             "chats": "Czaty",
             "clearActive": "Zamknij {count} pracujący czat | Zamknij wszystkie {count} pracujące czaty | Zamknij wszystkie {count} pracujących czatów",
             "clearAttention": "Zamknij {count} czekający czat | Zamknij wszystkie {count} czekające czaty | Zamknij wszystkie {count} czekających czatów",
@@ -3682,13 +3681,10 @@
             "openBeside": "Otwórz obok",
             "openWorkflowRun": "Otwórz przebieg workflow {name}",
             "otherSandbox": "Inny sandbox",
-            "pin": "Przypnij",
-            "pinned": "Przypięty",
             "runsIn": "Działa w {sandbox}",
             "sandbox": "Sandbox",
             "share": "Udostępnij…",
-            "stepsDone": "kroki: {done}/{total}",
-            "unpin": "Odepnij"
+            "stepsDone": "kroki: {done}/{total}"
         },
         "chatTabs": {
             "archiveChat": "Zarchiwizuj czat",
@@ -3703,8 +3699,7 @@
             "previous": "Poprzedni",
             "running": "W toku: {runningCount}",
             "switch": "Przełącz…",
-            "switchChatOpen": "Przełącz czat (otwarte: {count})",
-            "togglePin": "Przypnij lub odepnij czat"
+            "switchChatOpen": "Przełącz czat (otwarte: {count})"
         },
         "chatTodoList": {
             "added": "dodano: {count}",

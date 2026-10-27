@@ -1,25 +1,34 @@
-import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
+import { useRole } from "../../../../client/sandbox/useRole";
 import { drillTarget, reviewAction, reviewBesideDrill } from "../../../../models/agent-status/agentStatus-attention";
-import { unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
+import { unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import {
+    type AgentMenuActions,
+    type AgentMenuFacts,
+    copySessionName,
+    filingRows,
+    freshRows,
+    joinGroups,
+    landRows,
+    sessionNameRows,
+    watchRows,
+} from "../../../../models/fleet/presses/agentMenu";
 import { boxNameOf, isRemote, openInSandbox } from "../../../../models/fleet/fleetScope";
-import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
-import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
-import { FRESH_KINDS, type FreshKind } from "@intentic/sandbox-contract/schemas/agent";
-import { FRESH_ICONS } from "../../../../models/fleet/freshKinds";
-import { bareBranch } from "../session/sessionChip";
+import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
+import { draftFreshSession } from "../../../../models/fleet/freshSession";
+import { useAgentDrag } from "../useAgentDrag";
 
 // One menu for every card (forty cards cost one node, and only one is ever open), since a card's surface is otherwise
 // all press and drag. It adds no actions, only a place to find the ones the card already offers, including glyphs that
-// only appear on hover, and the occasional ones a small button would be mis-hit for.
+// only appear on hover, and the occasional ones a small button would be mis-hit for. The rows any agent offers wherever
+// its menu is drawn (land, a fresh session, its session name, a watch, filing) are models/fleet/agentMenu's, which the
+// chat list's menu draws too; this file adds only the board's own around them.
 
 // What the menu is told about a card beyond the card itself.
-export interface MenuFacts {
+export interface MenuFacts extends AgentMenuFacts {
     readonly mobile: boolean;
-    // The card is this sandbox's, so writes through the active daemon's roster reach it.
-    readonly here: boolean;
     // Its chat is open only as a look.
     readonly peeked: boolean;
     // The agent's page, read only when the menu offers it.
@@ -45,68 +54,19 @@ export interface CardOwnPresses {
 }
 
 // What each row does.
-export interface MenuActions {
+export interface MenuActions extends AgentMenuActions {
     readonly focusAgent: (agent: FleetAgent) => void;
     readonly keepAgent: (agent: FleetAgent) => void;
     readonly reviewAgent: (agent: FleetAgent) => void;
     // The card's own drill-in (useCardFocus.drillIn): the chat for an ask, the review page otherwise.
     readonly drillIn: (agent: FleetAgent) => void;
     readonly closeAgent: (agent: FleetAgent) => void;
-    readonly copySessionName: (branch: string) => Promise<void>;
     readonly openInSandbox: (sandboxId: string, agentId: string) => void;
-    readonly stopWatching: (id: string) => Promise<void>;
-    readonly restore: (ids: readonly string[]) => Promise<void>;
-    readonly archive: (ids?: readonly string[]) => Promise<void>;
-    // A new chat on the card's work without its conversation, its ask in the composer (freshSession.ts).
-    readonly startFresh: (agent: FleetAgent, kind: FreshKind) => void;
 }
 
-// The verb+count form ("Stop watching (3)") the card has no room for beside its own truncating note; one row however
-// many are armed, since the daemon disarms them together (agents.stopWatching).
-const watchRow = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem[] => {
-    const armed = agent.watches?.length ?? 0;
-    if (!watching(agent) || !here) {
-        return [];
-    }
-    return [
-        {
-            label: armed === 1 ? t(`agents.words.stopWatching`) : t(`agents.cardMenu.stopWatchingCount`, { count: armed }),
-            icon: `eye`,
-            command: () => void act.stopWatching(agent.id),
-        },
-    ];
-};
-
-// Filing away and restoring write through the active box's fleet store, so only its cards get them; closing a
-// never-registered card is just this browser's tab.
-const filingRow = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem[] => {
-    const filing = !here
-        ? []
-        : agent.archivedAt !== undefined
-          ? [{ label: t(`ui.action.restore`), icon: `history`, command: () => act.restore([agent.id]) }]
-          : canArchive(agent)
-            ? [{ label: t(`agents.agentsView.archive`), icon: `box`, command: () => act.archive([agent.id]) }]
-            : [];
-    return [...filing, ...(unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => act.closeAgent(agent) }] : [])];
-};
-
-// A second look at the card's work by a session that never read how it was made: one row, opening onto each kind there
-// is (a code review, a test pass, the reader's own ask, any added later), none of them first or required. Its work must
-// be here to cut a copy from.
-const freshRows = (agent: FleetAgent, here: boolean, act: MenuActions): MenuItem[] =>
-    !here || !canStartFresh(agent)
-        ? []
-        : [
-              {
-                  label: t(`agents.freshSession.menuFresh`),
-                  icon: `link`,
-                  items: FRESH_KINDS.map((kind) => ({
-                      label: t(`agents.freshSession.kind.${kind}`),
-                      icon: FRESH_ICONS[kind],
-                      command: () => act.startFresh(agent, kind),
-                  })),
-              },
-          ];
+// Filing is the shared row; closing a never-registered card is just this browser's tab, the board's own.
+const closeRows = (agent: FleetAgent, act: MenuActions): MenuItem[] =>
+    unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => act.closeAgent(agent) }] : [];
 
 // The card's own presses, beside the name they act on.
 const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
@@ -128,24 +88,20 @@ const drillRows = (agent: FleetAgent, review: string | undefined, facts: MenuFac
     return [{ ...diffRow, label: review }];
 };
 
-// Groups rather than a flat list with inline separators: almost every row is conditional, and a separator written inline
-// would draw a line under a group that turned out empty.
 export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActions): MenuItem[] => {
     const review = facts.mobile ? undefined : reviewAction(agent);
-    const { branch, sandboxId } = agent;
-    const groups: MenuItem[][] = [
+    const { sandboxId } = agent;
+    return joinGroups([
         [
             { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
             // The press that stops a look going; the chat rail's menu carries the identical row for the identical state.
             ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
             ...drillRows(agent, review, facts, act),
+            ...landRows(agent, facts, act),
         ],
-        freshRows(agent, facts.here, act),
+        freshRows(agent, facts, act),
         ownRows(facts.presses),
-        // The bare name (`sleek-arrow-uzgj`) `agents show`, Quick Open and the worktree path take; `agent/` is git's spelling.
-        branch === undefined
-            ? []
-            : [{ label: t(`agents.agentsView.copySessionName`), icon: `code`, command: () => void act.copySessionName(branch) }],
+        sessionNameRows(agent, act),
         // The one press here costing the whole shell, so it names where it goes; it reaches what a remote card's menu drops.
         facts.here || sandboxId === undefined
             ? []
@@ -157,17 +113,9 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
                       command: () => act.openInSandbox(sandboxId, agent.id),
                   },
               ],
-        watchRow(agent, facts.here, act),
-        filingRow(agent, facts.here, act),
-    ];
-    const items: MenuItem[] = [];
-    for (const group of groups.filter((candidate) => candidate.length > 0)) {
-        if (items.length > 0) {
-            items.push({ separator: true });
-        }
-        items.push(...group);
-    }
-    return items;
+        watchRows(agent, facts, act),
+        [...filingRows(agent, facts, act), ...closeRows(agent, act)],
+    ]);
 };
 
 // PrimeVue opens a menu where its event says. A press from the keyboard (Enter on the card's ⋯, the menu key on the card)
@@ -201,17 +149,14 @@ export const useCardMenu = (host: MenuHost) => {
     const menuPresses = ref<CardOwnPresses>();
     // The element pressed, whose own document the clipboard is asked of (clipboardOf), not this module's `navigator`.
     const menuAnchor = ref<Element>();
-    const copySessionName = async (branch: string): Promise<void> => {
-        try {
-            await clipboardOf(menuAnchor.value).writeText(bareBranch(branch));
-        } catch {
-            // Clipboard may be unavailable (insecure context); the name is still on the card either way.
-        }
-    };
+    const { canShip } = useRole();
+    const { pressLand } = useAgentDrag();
     const act: MenuActions = {
         ...host.focus,
         ...host.agents,
-        copySessionName,
+        // The card's own Land now and Land again, which asks first on a phone as the card's button does.
+        land: (agent, chosen) => void pressLand(agent, chosen, host.mobile.value),
+        copySessionName: (branch) => copySessionName(branch, menuAnchor.value),
         openInSandbox,
         startFresh: (agent, kind) => void draftFreshSession(agent, kind),
     };
@@ -230,6 +175,7 @@ export const useCardMenu = (host: MenuHost) => {
         const facts: MenuFacts = {
             mobile: host.mobile.value,
             here,
+            canShip: canShip.value,
             peeked: host.peeked(agent.id),
             href: () => host.focus.agentHref(agent),
             boxName: here || agent.sandboxId === undefined ? undefined : boxNameOf.value.get(agent.sandboxId),

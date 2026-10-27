@@ -3670,7 +3670,6 @@
         },
         "chatTabList": {
             "anotherSandbox": "otro sandbox",
-            "archive": "Archivar",
             "chats": "Chats",
             "clearActive": "Cerrar {count} chat en curso | Cerrar los {count} chats en curso",
             "clearAttention": "Cerrar {count} chat en espera | Cerrar los {count} chats en espera",
@@ -3682,13 +3681,10 @@
             "openBeside": "Abrir al lado",
             "openWorkflowRun": "Abrir la ejecución del flujo de trabajo {name}",
             "otherSandbox": "Otro sandbox",
-            "pin": "Fijar",
-            "pinned": "Fijado",
             "runsIn": "Se ejecuta en {sandbox}",
             "sandbox": "Sandbox",
             "share": "Compartir…",
-            "stepsDone": "{done}/{total} pasos",
-            "unpin": "Dejar de fijar"
+            "stepsDone": "{done}/{total} pasos"
         },
         "chatTabs": {
             "archiveChat": "Archivar el chat",
@@ -3703,8 +3699,7 @@
             "previous": "Anterior",
             "running": "{runningCount} en marcha",
             "switch": "Cambiar…",
-            "switchChatOpen": "Cambiar de chat: {count} abiertos",
-            "togglePin": "Fijar o dejar de fijar el chat"
+            "switchChatOpen": "Cambiar de chat: {count} abiertos"
         },
         "chatTodoList": {
             "added": "{count} añadidos",

@@ -1,4 +1,5 @@
-import { bareBranch, shortBranch } from "./sessionChip";
+import { bareBranch } from "../../../../models/fleet/presses/agentMenu";
+import { shortBranch } from "./sessionChip";
 
 describe(`bareBranch`, () => {
     it(`hands back the conversation id, which is the handle every tool takes`, () => {

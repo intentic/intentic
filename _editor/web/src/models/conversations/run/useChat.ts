@@ -16,7 +16,6 @@ import {
     releaseDone,
     setActive,
     setPanes,
-    setPinned,
     tabReveal,
 } from "../tabs/useChat-tabs";
 import { attachStarted, loadSessions, sessions, sessionsFailure } from "./useChat-sessions";
@@ -145,7 +144,6 @@ export function useChat() {
         tabReveal,
         setActive,
         keepChat,
-        setPinned,
         reopenClosed,
         hasClosed,
         closeTabs,

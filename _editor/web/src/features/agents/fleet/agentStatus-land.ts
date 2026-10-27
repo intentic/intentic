@@ -2,6 +2,7 @@ import type { IconName, Tip } from "@intentic/ui";
 import type { DeliveryConflictReason, LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
 import type { LandedRemover } from "@intentic/sandbox-contract/schemas/agents";
 import { t } from "@intentic/ui/i18n";
+import { offersReland } from "../../../models/fleet/presses/landPress";
 
 // What the card says when landed work is no longer in the workspace, in whole or in part. A land arrives as
 // uncommitted changes the user can discard like anything else in the Changes panel, which other readings (taken
@@ -32,7 +33,7 @@ export const landedAway = (
     // doesn't say, the branch still has it. The hover's card counts the files: how many are still in the workspace.
     const inWorkspace = { label: t(`agents.agentStatus.inWorkspace`), value: `${presence.present}/${presence.landed}` };
     const by = removedBy(presence.removedBy, me);
-    const offerReland = presence.removedBy?.kind !== `agent`;
+    const offerReland = offersReland(agent);
     // The common shape: the whole of it, one discard, no arithmetic to read.
     if (presence.present === 0) {
         return {

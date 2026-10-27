@@ -53,18 +53,6 @@ export const keepChat = (conversationId: string): void => {
     }
 };
 
-/** Holds a chat on purpose (Conversation.pinned), or lets it go back to the ordinary rules; pinning also keeps a peek. */
-export const setPinned = (conversationId: string, pinned: boolean): void => {
-    const conversation = conversations.value.find((entry) => entry.conversationId === conversationId);
-    if (conversation === undefined) {
-        return;
-    }
-    conversation.pinned.value = pinned;
-    if (pinned) {
-        conversation.peek.value = false;
-    }
-};
-
 // The demotion, by id, with the two reasons this window still has to hold a chat the roster is done with:
 // - words waiting to be sent, which the sweep would strand
 // - a column of its own beside another, since a split is a deliberate "keep both of these up" and the sweep would
@@ -75,7 +63,6 @@ const releaseChat = (conversationId: string): void => {
     const conversation = conversations.value.find((entry) => entry.conversationId === conversationId);
     if (
         conversation === undefined ||
-        conversation.pinned.value ||
         conversation.unsent.value ||
         (panes.value.length > 1 && panes.value.includes(conversationId))
     ) {
@@ -234,7 +221,6 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.selection.apply({ kind: `set`, picks: restoredPicks(tab, tab.isolated) });
     // A looked-at tab restores as still looking; it's always the focused tab, swept by the next click elsewhere.
     conversation.peek.value = tab.peek === true;
-    conversation.pinned.value = tab.pinned === true;
     conversation.leftAt.value = tab.leftAt;
     // A stand-in blank restores as one too; unflagged, it would board a fresh, selected "New agent" card.
     conversation.standIn.value = tab.standIn === true;
@@ -491,10 +477,9 @@ export const closeConversations = (ids: ReadonlySet<string>): void => {
 };
 
 // The same close, asked by the daemon rather than the user: tabs whose agent left the roster without this
-// browser closing it (a retention sweep, or an archive/discard elsewhere, or while this window was shut). Spares three:
+// browser closing it (a retention sweep, or an archive/discard elsewhere, or while this window was shut). Spares two:
 // - the focused chat, so an unattended sweep can't empty the panel mid-read
 // - one holding unsent input, since a close would lose it
-// - a pinned one, held on purpose: no unattended close takes it, and it waits in Finished (laneOfTab)
 // History still has the transcript either way.
 export const closeRetired = (ids: ReadonlySet<string>): void => {
     const retired = new Set(
@@ -503,8 +488,7 @@ export const closeRetired = (ids: ReadonlySet<string>): void => {
                 (conversation) =>
                     ids.has(conversation.conversationId) &&
                     conversation.conversationId !== activeId.value &&
-                    !conversation.unsent.value &&
-                    !conversation.pinned.value,
+                    !conversation.unsent.value,
             )
             .map((conversation) => conversation.conversationId),
     );
@@ -519,7 +503,7 @@ export const closeRetired = (ids: ReadonlySet<string>): void => {
  * italic, and its menu's Keep Open (or anything typed or sent in it) is what stops it.
  *
  * Takes the whole verdict, not what changed in it, and releases only the newcomers: said twice, it would undo a
- * pin the reader pressed in between. The focused chat is released like any other, since the sweep never takes the
+ * Keep Open the reader pressed in between. The focused chat is released like any other, since the sweep never takes the
  * focused tab: it goes italic where the reader can see it happen rather than vanishing from under them.
  */
 export const releaseDone = (ids: ReadonlySet<string>): void => {
@@ -535,7 +519,7 @@ export const releaseDone = (ids: ReadonlySet<string>): void => {
 /**
  * A land pressed by hand, said to the tabs (summons `release`): accepting the work is the reader's own verdict that
  * they are done with the chat, so it goes now rather than after releaseDone's twelve-hour tidy. The same release, with
- * the same exceptions (pinned, words unsent, a column of its own beside another), then the one writer's sweep at once:
+ * the same exceptions (words unsent, a column of its own beside another), then the one writer's sweep at once:
  * a chat in the background leaves, and the focused one, which the sweep never takes, goes italic where the reader can
  * see it and leaves when they move on. Sending it a follow-up keeps it, as words in any peek do.
  *

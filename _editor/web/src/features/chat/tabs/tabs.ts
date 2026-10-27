@@ -68,19 +68,17 @@ export const laneOfTab = (conversation: Conversation, agent: FleetAgent | undefi
     return laneOf(conversation.standing.value ?? { status: here, attention: NO_ATTENTION });
 };
 
-// Every sweep reads the live list at call time and skips a pinned chat: only a pinned chat's own Close takes it.
-const sweepable = (): Conversation[] => useChat().conversations.value.filter((conversation) => !conversation.pinned.value);
 const idsOf = (list: readonly Conversation[]): ReadonlySet<string> => new Set(list.map((conversation) => conversation.conversationId));
 
-export const othersOf = (id: string): ReadonlySet<string> => idsOf(sweepable().filter((conversation) => conversation.conversationId !== id));
+export const othersOf = (id: string): ReadonlySet<string> => idsOf(useChat().conversations.value.filter((conversation) => conversation.conversationId !== id));
 
 export const toRightOf = (id: string): ReadonlySet<string> => {
     const list = useChat().conversations.value;
     const index = list.findIndex((conversation) => conversation.conversationId === id);
-    return idsOf(index === -1 ? [] : list.slice(index + 1).filter((conversation) => !conversation.pinned.value));
+    return idsOf(index === -1 ? [] : list.slice(index + 1));
 };
 
-export const allTabs = (): ReadonlySet<string> => idsOf(sweepable());
+export const allTabs = (): ReadonlySet<string> => idsOf(useChat().conversations.value);
 
 // Every chat in one lane, for either surface: the sweep Close Others/Close to the Right can't express. An
 // untouched draft is left out (it goes on its own the moment focus leaves), and so is the focused chat: clearing a lane
@@ -89,7 +87,7 @@ export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
     const { agentById } = useAgents();
     const focused = useChat().activeId.value;
     return idsOf(
-        sweepable().filter(
+        useChat().conversations.value.filter(
             (conversation) =>
                 conversation.conversationId !== focused &&
                 !untouchedDraft(conversation) &&

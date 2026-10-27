@@ -56,7 +56,6 @@ const {
     sessions,
     sessionsFailure,
     loadSessions,
-    setPinned,
     reopenClosed,
     hasClosed,
 } = useChat();
@@ -308,7 +307,6 @@ onMounted(() => {
             }
         }),
         registerBuiltin(`chat.closeAllTabs`, () => emit(`close`, allTabs())),
-        registerBuiltin(`chat.togglePin`, () => setPinned(activeId.value, !active.value.pinned.value)),
         registerBuiltin(`chat.archive`, (): void => {
             const agent = agentById(activeId.value);
             if (active.value.box.value === undefined && agent !== undefined && canArchive(agent)) {

@@ -38,8 +38,9 @@ repository.
 Everyone sharing the sandbox sees them and who left each; one per person per emoji, up to 24 different emoji on a
 conversation. The board cannot filter by them.
 
-A chat tab can be pinned (**Pin**), which keeps it open and out of bulk closes. That is this browser's tab state,
-not a label on the agent.
+A chat tab's right-click menu offers what the agent's board card does (**Review changes**, **Land now**, a fresh
+session, **Copy session name**, **Archive**) beside the tab's own closes. There is no pin: a tab is this browser's
+state, not a label on the agent.
 
 ## There are no tags
 

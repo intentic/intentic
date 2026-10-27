@@ -43,10 +43,6 @@ export const laneOrdered = (entries: Iterable<OpenChat>): ChatLanes => {
         }
         return Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a);
     });
-    // Pinned chats lead their lane; the sort is stable, so each side keeps the lane's own order.
-    for (const lane of [grouped.attention, grouped.active, grouped.finished]) {
-        lane.sort((a, b) => Number(b.conversation.pinned.value) - Number(a.conversation.pinned.value));
-    }
     return grouped;
 };
 

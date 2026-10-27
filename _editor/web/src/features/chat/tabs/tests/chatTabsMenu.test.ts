@@ -9,7 +9,9 @@ import ChatTabs from "../ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { useChat } from "../../../../models/conversations/run/useChat";
-import { draftConversation, reveal } from "../../../../models/conversations/panel/useChat-reveal";
+import { draftConversation, openAgentConversation, reveal } from "../../../../models/conversations/panel/useChat-reveal";
+import { setAgents } from "../../../../models/fleet/useAgents-registry";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 // The store half of "New agent" (agentActions.startAgent), used as this suite's fixture for extra tabs.
 const newChat = () => {
     const conversation = draftConversation();
@@ -69,7 +71,7 @@ const openTabs = (count: number): string[] => {
     const ids: string[] = [];
     for (let at = 0; at < count; at++) {
         const conversation = at === 0 ? chat.active.value : newChat();
-        conversation.draft.value = `pinned ${at}`;
+        conversation.draft.value = `words ${at}`;
         ids.push(conversation.conversationId);
     }
     return ids;
@@ -176,7 +178,6 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     // Right-click the second tab: "Close to the Right" takes the two after it, leaving the first two.
     await openMenuOn(ids[1]!);
     expect(labels()).toEqual([
-        `Pin`,
         `Rename`,
         `Share…`,
         `Close`,
@@ -305,45 +306,9 @@ it(`mass closes past a running agent with no confirm: closing detaches from the 
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
 });
 
-// A pinned chat is the one no sweep takes: Close Others and Close All pass it by, and it says so at rest.
-it(`pins a chat from its menu, and every sweep leaves the pinned one standing`, async () => {
-    const chat = useChat();
-    const ids = openTabs(3);
-    await nextTick();
-
-    await openMenuOn(ids[0]!);
-    await clickRow(`Pin`);
-    expect(chat.conversations.value[0]!.pinned.value).toBe(true);
-    expect(tabOf(ids[0]!).querySelector(`[aria-label="Pinned"]`)).not.toBeNull();
-
-    await openMenuOn(ids[2]!);
-    await clickRow(`Close Others`);
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[2]!]);
-
-    await openBarMenu();
-    await clickRow(`Close All`);
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
-
-    await openMenuOn(ids[0]!);
-    expect(labels()).toContain(`Unpin`);
-});
-
-// The row's own Close still takes a pinned chat: pinning guards against sweeps, not against the reader.
-it(`closes a pinned chat from its own Close`, async () => {
+it(`reopens the chat closed last, words included, and disables the row once nothing is left`, async () => {
     const chat = useChat();
     const ids = openTabs(2);
-    chat.setPinned(ids[0]!, true);
-    await nextTick();
-
-    await openMenuOn(ids[0]!);
-    await clickRow(`Close`);
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1]!]);
-});
-
-it(`reopens the chat closed last, words and pin included, and disables the row once nothing is left`, async () => {
-    const chat = useChat();
-    const ids = openTabs(2);
-    chat.setPinned(ids[0]!, true);
     await nextTick();
 
     await openMenuOn(ids[0]!);
@@ -353,10 +318,40 @@ it(`reopens the chat closed last, words and pin included, and disables the row o
     await openBarMenu();
     await clickRow(`Reopen closed chat`);
     const back = chat.conversations.value.find((c) => c.conversationId === ids[0]!);
-    expect(back?.draft.value).toBe(`pinned 0`);
-    expect(back?.pinned.value).toBe(true);
+    expect(back?.draft.value).toBe(`words 0`);
     expect(chat.activeId.value).toBe(ids[0]!);
 
     await openBarMenu();
     expect(row(`Reopen closed chat`).className).toContain(`p-disabled`);
+});
+
+// The row's agent offers from here what its board card's menu does (models/fleet/agentMenu.ts): its review, its land, a
+// fresh session on its work, its session name and filing it away, between the chat's own rename and its closes.
+it(`offers a ready agent's board rows on its chat, Land now among them`, async () => {
+    const ready: AgentSummary = {
+        id: `ready-1`,
+        title: `ship the parser`,
+        status: `ready`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        startedAt: 1,
+        branch: `agent/ready-1`,
+        diff: { files: 2, insertions: 10, deletions: 1 },
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    };
+    setAgents([ready], 1_000_000);
+    openAgentConversation({ id: ready.id, provider: `claude`, harness: `native` });
+    await flush();
+
+    await openMenuOn(ready.id);
+    const shown = labels();
+    expect(shown).not.toContain(`Pin`);
+    // Review and land lead, each once, before the chat's own rename; Archive sits with Close.
+    const at = (label: string): number => shown.indexOf(label);
+    expect(at(`Land now`)).toBeGreaterThan(-1);
+    expect(at(`Land now`)).toBeLessThan(at(`Rename`));
+    expect(at(`Fresh session on this work`)).toBeLessThan(at(`Rename`));
+    expect(at(`Copy session name`)).toBeGreaterThan(at(`Rename`));
+    expect(at(`Archive`)).toBe(at(`Close`) + 1);
 });

@@ -233,11 +233,11 @@ describe(`reading a tab snapshot`, () => {
         });
     });
 
-    // A pin and the tidy clock outlive a reload, or a held chat would come back unheld and an idle one would start over.
-    it(`restores a tab's pin and when focus last left it`, () => {
-        session.set(KEY, blob(`a`, [{ ...tab(`a`), pinned: true, leftAt: 1_700 }]));
+    // The tidy clock outlives a reload, or an idle chat would start over.
+    it(`restores when focus last left a tab`, () => {
+        session.set(KEY, blob(`a`, [{ ...tab(`a`), leftAt: 1_700 }]));
 
-        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ pinned: true, leftAt: 1_700 });
+        expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ leftAt: 1_700 });
     });
 
     // Each field that reads back unusable is left out on its own, so the restore falls back for it and keeps the tab.

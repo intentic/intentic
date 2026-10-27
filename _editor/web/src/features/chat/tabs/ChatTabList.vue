@@ -166,17 +166,11 @@ const clearLane = async (lane: FleetLane): Promise<void> => {
 // A lane holding only a run still counts as occupied.
 const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
 
-// The board's Finished cap as a browsing limit, not a close: the active chat rides in, pinned chats stand outside it,
-// and a filter or the row's own expand lifts it.
-const finishedWindow = computed(() => {
-    const pinned = lanes.value.finished.filter((entry) => entry.conversation.pinned.value);
-    const rest = windowFinished(
-        lanes.value.finished.filter((entry) => !entry.conversation.pinned.value),
-        windowed.value ? activeId.value : undefined,
-        (entry) => entry.conversation.conversationId,
-    );
-    return { shown: [...pinned, ...rest.shown], hidden: rest.hidden };
-});
+// The board's Finished cap as a browsing limit, not a close: the active chat rides in, and a filter or the row's own
+// expand lifts it.
+const finishedWindow = computed(() =>
+    windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
+);
 // Includes hidden runs: hiding a run also hides its chats, so the count must cover the whole workflow.
 const hiddenRuns = computed(
     () => runsInLane(listedRuns.value, `finished`, Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value)).length - runsIn(`finished`).length,
