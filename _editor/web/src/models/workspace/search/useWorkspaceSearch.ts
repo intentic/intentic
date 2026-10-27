@@ -1,10 +1,11 @@
 import { t } from "@intentic/ui/i18n";
-import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
+import type { WorkspaceSearchGroup, WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/sandbox-contract/schemas/workspace/workspace-search";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
 import { useSettled } from "@intentic/ui/async";
 import { computed } from "vue";
 import { type ProcedureInput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { firstTextPages, streamingPages } from "./streamedSearch";
 import { useSearchOptions } from "./useSearchOptions";
 import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -17,15 +18,26 @@ import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 // files → iq's `files`: fuzzy over paths only, the quick-open fallback (useFuzzyFiles).
 // An `include` field carries VSCode's files-to-include glob straight to the daemon for either scope. Results are
 // grouped by file, paginated (`loadMore`), debounced, abort-cancelled, and keep previous data on screen mid-refinement.
+// A text search's first page streams (streamedSearch.ts): the files found so far show while the daemon is still reading
+// the tree, and the finished page replaces them.
 // Every search is confined to the open project, when one is (app/projectScope.ts), so the counts and the pages describe
 // the same body of files the tree beside them lists.
 export type SearchScope = "text" | "smart" | "files";
 
 const VERB: Record<SearchScope, NonNullable<WorkspaceSearchMode>> = { text: `find`, smart: `q`, files: `files` };
 
+// Shared by every search box on the page, so the one answer that says the stream route is missing holds for them all.
+const firstTextPage = firstTextPages({
+    stream: (input, signal) => sandboxRpc.workspace.searchStream(input, { signal }),
+    search: (input, signal) => sandboxRpc.workspace.search(input, { signal }),
+});
+
+const hitsOf = (groups: readonly WorkspaceSearchGroup[]): number => groups.reduce((sum, group) => sum + group.hits.length, 0);
+
 export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>, active: Ref<boolean>, debounceMs = 150) {
     const { reachable } = useSandbox();
     const { includeIgnored, useRegex, matchCase, wholeWord, include } = useSearchOptions();
+    const { pageOf, foundFor } = streamingPages(firstTextPage, (search, signal) => sandboxRpc.workspace.search(search, { signal }));
 
     // Both fields are typed a character at a time, so both wait out the same burst before a search goes out.
     const debounced = useSettled(filter, debounceMs, { trim: true });
@@ -66,7 +78,7 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     const query = useInfiniteQuery({
         // Every switch is in the key: flipping one is a different search, and its previous answer stays cached.
         queryKey: computed(() => WORKSPACE_SEARCH.of(input.value)),
-        queryFn: ({ pageParam, signal }) => sandboxRpc.workspace.search({ ...input.value, after: pageParam }, { signal }),
+        queryFn: ({ pageParam, signal }) => pageOf(input.value, pageParam, signal),
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (last: WorkspaceSearchResult) => last.cursor,
         enabled,
@@ -76,20 +88,24 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     const pages = computed<readonly WorkspaceSearchResult[]>(() => (enabled.value ? (query.data.value?.pages ?? []) : []));
     // Every page carries the same counts, they describe the whole match set, not the slice that came back.
     const head = computed(() => pages.value[0]);
+    // What the search on screen has found so far, while its page is still on the way: it stands in for the answer
+    // before it (kept on screen meanwhile), which no longer describes what was typed.
+    const live = computed(() => (enabled.value ? foundFor(input.value) : undefined));
 
     return {
         // Daemon ranks best-first; `text` results are then sorted by path instead, since every hit matches the pattern
         // equally and path order groups a directory's files like an editor's tree.
         groups: computed(() => {
-            const groups = pages.value.flatMap((page) => page.groups);
+            const groups = live.value ?? pages.value.flatMap((page) => page.groups);
             return scope.value === `text` ? groups.toSorted((a, b) => (a.path < b.path ? -1 : 1)) : groups;
         }),
-        total: computed(() => head.value?.total ?? 0),
-        files: computed(() => head.value?.files ?? 0),
-        // `total` is a floor: some file had more matches than the engine keeps per file.
-        partial: computed(() => head.value?.partial ?? false),
+        total: computed(() => (live.value === undefined ? (head.value?.total ?? 0) : hitsOf(live.value))),
+        files: computed(() => (live.value === undefined ? (head.value?.files ?? 0) : live.value.length)),
+        // `total` is a floor: some file had more matches than the engine keeps per file. While files are still arriving
+        // every count is one, which the spinner beside it already says.
+        partial: computed(() => (live.value === undefined ? (head.value?.partial ?? false) : false)),
         // More pages exist behind the cursor, the panel offers them rather than implying this is everything.
-        truncated: computed(() => query.hasNextPage.value),
+        truncated: computed(() => live.value === undefined && query.hasNextPage.value),
         loadMore: () => void query.fetchNextPage(),
         loadingMore: computed(() => query.isFetchingNextPage.value),
         // Header spinner is about the search itself; a page append has its own loading control.
@@ -97,11 +113,10 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
         error: computed(() => (enabled.value && query.error.value ? query.error.value.message : undefined)),
         // What the engine did unasked (e.g. a regex rerun literally). Search always reads the shared /work tree, not an
         // agent's own copy; the note says so when they differ.
-        note: computed(() =>
-            workspaceAgent.value === undefined
-                ? head.value?.note
-                : [head.value?.note, t(`workspace.useWorkspaceSearch.sharedOnly`)].filter(Boolean).join(` `),
-        ),
+        note: computed(() => {
+            const said = live.value === undefined ? head.value?.note : undefined;
+            return workspaceAgent.value === undefined ? said : [said, t(`workspace.useWorkspaceSearch.sharedOnly`)].filter(Boolean).join(` `);
+        }),
         // True while input hasn't produced a searchable query yet, in either field: too short or still debouncing.
         pending: computed(
             () => filter.value.trim().length >= 2 && (debounced.value !== filter.value.trim() || debouncedInclude.value !== include.value.trim()),

@@ -28,11 +28,11 @@ import { renderList } from "../render/list.js";
 import { renderText, type Rendered } from "../render/text.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb, Verdict } from "../types.js";
-import { classOf, filterScope, langOf, sweep } from "../workspace/scan.js";
+import { classOf, filterScope, langOf, wideSweep } from "../workspace/scan.js";
 import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
 import { catalogFacts, literalAnswer, type LiteralAnswer } from "./literal.js";
 import { routeAnswer } from "./route.js";
-import { bareListingHint, GREP_DIALECT, GREP_DIALECT_NOTE, isPhrase, namedPaths, zeroHitHint } from "./hints.js";
+import { bareListingHint, GREP_DIALECT, GREP_DIALECT_NOTE, namedPaths, phraseWantsMeaning, zeroHitHint } from "./hints.js";
 import { siblingsLine } from "./siblings.js";
 import { confidenceOf, fieldScores, marginOf, sigmoid, WEAK_HINT } from "./verdict.js";
 
@@ -624,10 +624,10 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             note = GREP_DIALECT_NOTE;
         }
         const exactGroups = toGroups([{ engine: "lexical", hits: found.hits, capped: found.capped }], request.query, entries, context.features);
-        // A prose phrase sent to `find` almost always wants the semantic pipeline; --literal is the exact-match escape.
+        // A prose phrase sent to `find` almost always wants the semantic pipeline (phraseWantsMeaning says when not).
         // It passes through the literal pass first: UI text with its placeholders filled in matches no line verbatim,
         // but does match its catalog template.
-        if (exactGroups.length === 0 && !request.options.literal && isPhrase(request.query)) {
+        if (exactGroups.length === 0 && phraseWantsMeaning(request)) {
             const escalated = await naturalOrLiteral(context, request, entries, allowed, rgBase);
             return { ...escalated, headerNote: escalated.verdict?.basis === "literal" ? escalated.headerNote! : "no exact phrase match, answered semantically" };
         }
@@ -973,7 +973,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     let unreadable = context.unreadable;
     if (plan === undefined) {
         // Reuses the sweep from revalidation; `--ignored` needs its own wider, still floor-guarded sweep.
-        const wider = request.scope.ignored === true ? await sweep(context.root, true) : undefined;
+        const wider = request.scope.ignored === true ? await wideSweep(context.root, context.generation) : undefined;
         if (wider !== undefined) {
             unreadable = [...new Set([...wider.unreadable, ...context.unreadable])];
         }

@@ -1,4 +1,5 @@
 import { procedure } from "../protocol/route-meta.js";
+import { streamOf } from "../protocol/stream-of.js";
 import { WorkspaceHealthQuerySchema, WorkspaceHealthSchema } from "../schemas/codebase-health.js";
 import { WorkspaceModulesSchema } from "../schemas/git/git.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -16,7 +17,7 @@ import {
     WorkspaceSyncSchema,
 } from "../schemas/workspace/workspace-repos.js";
 import { PackageModulesParamSchema, PackageModulesSchema, WorkspaceGraphSchema } from "../schemas/workspace/workspace-graph.js";
-import { WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace/workspace-search.js";
+import { WorkspaceSearchFrameSchema, WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace/workspace-search.js";
 import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace/workspace-setup.js";
 import {
     WorkspaceChildrenQuerySchema,
@@ -189,6 +190,19 @@ export const workspaceContract = {
         .meta({ guest: true, control: "editor" })
         .input(WorkspaceSearchQuerySchema)
         .output(WorkspaceSearchResultSchema),
+    // Text search only (`mode` find): the same first page, with the files found streamed ahead of it.
+    searchStream: procedure
+        .route({
+            method: "POST",
+            path: "/workspace/search/stream",
+            summary: "Search the text, watching it as it goes",
+            description:
+                "The plain-text search a search box runs, streamed: every file with a match is sent as soon as it is found, then the first page of the finished answer, exactly as the search route would have given it, with the cursor for the rest. Matches show while a search over a large tree is still reading it.",
+        })
+        // A read, POST only because it streams; held open for as long as the search runs.
+        .meta({ floor: "viewer", guest: true, stream: true, control: "editor" })
+        .input(WorkspaceSearchQuerySchema)
+        .output(streamOf(WorkspaceSearchFrameSchema)),
     // Per-file churn × complexity, index totals, top modules; scoped to a repo, not the whole /work drop.
     health: procedure
         .route({

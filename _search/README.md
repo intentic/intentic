@@ -22,4 +22,4 @@ flowchart LR
 | [lsp](lsp) | The `lsp` CLI: TypeScript rename and diagnostics over the native compiler. |
 | [iq-bench](iq-bench) | Benchmarks retrieval configs and paired agent runs with and without iq. |
 
-All of it runs inside the sandbox: the CLIs are on `PATH`, and the daemon keeps one resident `iq-engine` in a child process for the editor's search box and for the ranked anchors it prepends to each agent turn.
+All of it runs inside the sandbox: the CLIs are on `PATH`, and the daemon keeps one resident `iq-engine` in a child process for the editor's search box and for the ranked anchors it prepends to each agent turn. The search box's plain-text search is the exception: the daemon runs it with ripgrep itself (`@intentic/iq-engine/text`), so it never waits on that child.

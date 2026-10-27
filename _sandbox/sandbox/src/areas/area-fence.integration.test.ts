@@ -121,6 +121,25 @@ test("a fenced search runs inside the fence, and inside a folder outside it runs
     expect(scopes).toEqual([["support"], [], ["support/tickets"], undefined]);
 });
 
+// The text search reads the disk with rg rather than the index, so it meets the fence on its own path: a fenced
+// member's search finds nothing outside their folders, streamed or not, and asking for a folder outside them finds nothing.
+test("a fenced text search finds lines only inside the fence", async () => {
+    const { client, actAs, setCaller } = await guest();
+    actAs(`viewer`, [`support`]);
+    const paths = async (input: { readonly query: string; readonly dir?: string }): Promise<string[]> =>
+        (await client.workspace.search({ ...input, mode: "find" })).groups.map((group) => group.path);
+    expect(await paths({ query: "amount" })).toEqual([]);
+    expect(await paths({ query: "refund" })).toEqual(["support/faq.md"]);
+    expect(await paths({ query: "amount", dir: "finance" })).toEqual([]);
+    const streamed: string[] = [];
+    for await (const frame of await client.workspace.searchStream({ query: "amount", mode: "find" })) {
+        streamed.push(...(frame.kind === "groups" ? frame.groups : frame.result.groups).map((group) => group.path));
+    }
+    expect(streamed).toEqual([]);
+    setCaller(proven(`ada@example.com`, `owner`));
+    expect(await paths({ query: "amount" })).toEqual(["finance/payroll.csv"]);
+});
+
 test("a fenced member may attach a file to a message but may not write into the workspace", async () => {
     const { app, actAs } = await guest();
     actAs(`collaborator`, [`support`]);

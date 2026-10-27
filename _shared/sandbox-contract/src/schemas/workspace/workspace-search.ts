@@ -33,6 +33,8 @@ export const WorkspaceSearchQuerySchema = z.object({
     limit: z.coerce.number().int().positive().optional().describe("How many results to return."),
     after: z.string().optional().describe("Resume from the cursor a previous answer handed back."),
 });
+// A search as its handler reads it, the switches parsed to booleans.
+export type WorkspaceSearchQuery = z.infer<typeof WorkspaceSearchQuerySchema>;
 // The query's verb enum.
 export type WorkspaceSearchMode = NonNullable<z.infer<typeof WorkspaceSearchQuerySchema>["mode"]>;
 export const WorkspaceSearchTagSchema = z.object({
@@ -130,3 +132,17 @@ export const WorkspaceSearchResultSchema = z.object({
     features: z.array(z.string()).optional().describe("Which stages of the search were switched off for this run. Absent means all of them ran."),
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
+// What /workspace/search/stream sends: the files a text search has found so far, as it finds them, then its answer.
+// `groups` frames are provisional (the first ones found, at most a page of them, in no order); `done` is the first page
+// as /workspace/search would have answered it, which replaces them, and whose cursor pages on through the same answer.
+export const WorkspaceSearchFrameSchema = z.discriminatedUnion("kind", [
+    z.object({
+        kind: z.literal("groups"),
+        groups: z.array(WorkspaceSearchGroupSchema).describe("Files found since the last frame, each with all of its matching lines."),
+    }),
+    z.object({
+        kind: z.literal("done"),
+        result: WorkspaceSearchResultSchema.describe("The first page of the finished search; it replaces every file sent before it."),
+    }),
+]);
+export type WorkspaceSearchFrame = z.infer<typeof WorkspaceSearchFrameSchema>;

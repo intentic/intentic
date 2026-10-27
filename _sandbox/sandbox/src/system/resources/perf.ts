@@ -57,6 +57,9 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     // repository's turn check is a type check or a test run, so seconds are its honest cost.
     "hook.Stop": 30_000,
     "hook.SubagentStop": 1_000,
+    // One search of the workspace (workspace/workspace-search.routes.ts), streamed or not: a text search is one rg walk
+    // of the tree (20 to 100 ms warm on this sandbox's /work), an engine one may wait on its child starting.
+    "workspace.search": 1_000,
     // One repository edit check (`file.edited`, .intentic/checks.json) on one file; a lint or a one-file check.
     "edit.rule": 2_000,
 };

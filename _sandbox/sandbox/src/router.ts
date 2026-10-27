@@ -65,6 +65,7 @@ import { createAgentQueueRoutes } from "./agent/routes/agent-queue.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 import { createWorkspaceTicketRoutes } from "./workspace/workspace-tickets.routes.js";
 import { createWorkspaceMediaRoutes } from "./workspace/workspace-media.routes.js";
+import { createWorkspaceSearchRoutes } from "./workspace/workspace-search.routes.js";
 import { pruneStore } from "./workspace/watch/state-janitor.js";
 
 // The implemented oRPC router, the per-domain route factories assembled into the sandboxContract shape. The
@@ -102,7 +103,12 @@ export const createRouter = (services: Services): SandboxRouter => ({
     endpoints: createEndpointsRoutes(services),
     git: createGitRoutes(services),
     history: createHistoryRoutes(services),
-    workspace: { ...createWorkspaceRoutes(services), ...createWorkspaceTicketRoutes(services), ...createWorkspaceMediaRoutes(services) },
+    workspace: {
+        ...createWorkspaceRoutes(services),
+        ...createWorkspaceSearchRoutes(services),
+        ...createWorkspaceTicketRoutes(services),
+        ...createWorkspaceMediaRoutes(services),
+    },
     inventory: createInventoryRoutes(services),
     issues: createIssuesRoutes(services),
     logs: createLogsRoutes(services),

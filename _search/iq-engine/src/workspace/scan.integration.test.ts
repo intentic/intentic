@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { makeFixtureWorkspace } from "../testing.js";
-import { filterScope, langOf, sweep } from "./scan.js";
+import { filterScope, langOf, sweep, wideSweep } from "./scan.js";
 import type { FileEntry } from "../types.js";
 
 let root: string;
@@ -128,4 +128,16 @@ test("langOf maps extensions", () => {
     expect(langOf("a/b.ts")).toBe("ts");
     expect(langOf("a/b.py")).toBe("python");
     expect(langOf("a/b.unknown")).toBeUndefined();
+});
+
+// Quick-open and the search box ask the --ignored sweep on every keystroke; it is walked once per index generation and
+// half minute, not once per character.
+test("the wide sweep is kept while the index stands still, and walked again once it moves or the time runs out", async () => {
+    const now = Date.now();
+    const first = wideSweep(root, 7, now);
+    expect(wideSweep(root, 7, now + 1_000)).toBe(first);
+    expect((await first).entries.map((entry) => entry.path)).toContain("alpha/dist/decoy.js");
+    const moved = wideSweep(root, 8, now + 2_000);
+    expect(moved).not.toBe(first);
+    expect(wideSweep(root, 8, now + 2_000 + 31_000)).not.toBe(moved);
 });

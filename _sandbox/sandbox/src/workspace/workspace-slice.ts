@@ -27,6 +27,7 @@ import {
 import { writeWorkspaceFileStream } from "./files/workspace-files-upload.js";
 import { coalescingWorkspaceTree } from "./files/workspace-tree-coalesce.js";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./files/workspace-tree.js";
+import { createTextSearch, type TextSearch } from "./text-search.js";
 import { residentTreeWritten, residentWorkspaceTree } from "./watch/workspace-watch.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace.js";
 
@@ -73,6 +74,8 @@ export interface WorkspaceSlice {
     readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
     // Resident workspace search: one iq engine, its sweep cached in memory; indexing runs on its own thread.
     readonly iq: ResidentEngine;
+    // The search box's text search: ripgrep from the daemon itself, its answers kept for their later pages.
+    readonly textSearch: TextSearch;
 }
 
 // The members derived/ and scaffold/ build, which composition.ts adds: both import workspace back, so building them
@@ -113,5 +116,6 @@ export const createWorkspaceSlice = ({ config, logger }: { readonly config: Conf
             void residentTreeWritten(absPaths).catch((err: Error) => logger.warn({ err }, "resident tree could not re-list a write")),
         workspaceChildren: listWorkspaceChildren,
         iq: createCodeSearchEngine(config, workspace.root, logger),
+        textSearch: createTextSearch({ rgPath: config.iqRgPath === "" ? undefined : config.iqRgPath }),
     };
 };

@@ -5,7 +5,7 @@ import type { EngineHit } from "../types.js";
 import { DENIED_GLOBS } from "../workspace/floor.js";
 
 // Matching lines kept per file; rg reads one more to tell an exact-cap file from one with more.
-const MAX_PER_FILE = 50;
+export const MAX_PER_FILE = 50;
 // Long lines are shipped as a window around the match so one hit can't eat the whole budget.
 const SNIPPET_MAX = 200;
 const SNIPPET_LEAD = 40;
@@ -41,7 +41,7 @@ const utf8Width = (code: number): number => (code < 0x80 ? 1 : code < 0x800 ? 2 
 
 // rg reports byte offsets into the line; this converts to JS string offsets in one forward walk, not a decode per
 // offset, since a line can carry thousands of submatches and run to 1 MB.
-const charSpans = (text: string, spans: readonly WorkspaceSearchSpan[]): WorkspaceSearchSpan[] => {
+export const charSpans = (text: string, spans: readonly WorkspaceSearchSpan[]): WorkspaceSearchSpan[] => {
     // All-ASCII needs no conversion, but spans are still rebuilt so nothing extra from rg's JSON survives.
     if (Buffer.byteLength(text, "utf8") === text.length) {
         return spans.map((span) => ({ start: span.start, end: span.end }));
@@ -67,9 +67,15 @@ const charSpans = (text: string, spans: readonly WorkspaceSearchSpan[]): Workspa
     return spans.map((span) => ({ start: chars.get(span.start)!, end: chars.get(span.end)! }));
 };
 
+// A matching line as shipped: the text kept of it, and the spans that survive the cut.
+export interface Snippet {
+    readonly text: string;
+    readonly spans: WorkspaceSearchSpan[];
+}
+
 // The slice of a long line worth shipping, anchored on its first match; surviving spans are rebased onto it, and one
 // clipped in half is dropped.
-const window = (line: string, spans: readonly WorkspaceSearchSpan[]): { text: string; spans: WorkspaceSearchSpan[] } => {
+export const snippetWindow = (line: string, spans: readonly WorkspaceSearchSpan[]): Snippet => {
     if (line.length <= SNIPPET_MAX) {
         return { text: line, spans: [...spans] };
     }
@@ -177,7 +183,7 @@ export const rgSearch = async (options: RgOptions): Promise<RgResult> => {
         }
         kept += 1;
         // Every occurrence on the line is kept, not just the first; a client marks them all.
-        const snippet = window(text, charSpans(text, data.submatches));
+        const snippet = snippetWindow(text, charSpans(text, data.submatches));
         hits.push({ path, line: data.line_number, text: snippet.text, spans: snippet.spans, tags: [{ kind: "text" }] });
         if (options.maxHits !== undefined && hits.length >= options.maxHits) {
             stopAtNextFile = true;

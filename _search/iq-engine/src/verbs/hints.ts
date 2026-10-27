@@ -21,7 +21,7 @@ const EXACT_VERBS = new Set<Verb>(["find", "files", "def", "refs", "sym", "ast"]
 const REGEX_INTENT = /[|()[\]*+?^$\\]/;
 // A phrase, not a name: two or more whitespace-separated words. `iq find 'exact text'` also lands here, but only once
 // the literal match already missed.
-export const isPhrase = (query: string): boolean => {
+const isPhrase = (query: string): boolean => {
     // Trims a trailing `?`/`!`/`.` as prose punctuation, not a regex quantifier; other metacharacters still count.
     const trimmed = query.trim();
     let end = trimmed.length;
@@ -35,6 +35,12 @@ export const isPhrase = (query: string): boolean => {
     const candidate = trimmed.slice(0, end);
     return !REGEX_INTENT.test(candidate) && candidate.split(/\s+/).length > 1;
 };
+
+// Whether a `find` that matched nothing should be answered by meaning instead. --literal is the exact-match escape, and a
+// list caller never is one: a search box asked for the text, and lines that only mean something like it, seconds
+// later, are the wrong answer to it.
+export const phraseWantsMeaning = (request: QueryRequest): boolean =>
+    request.render.list === undefined && !request.options.literal && isPhrase(request.query);
 
 // A pattern-less `iq files` truncates the whole workspace to a token budget; naming one word ranks instead of listing
 // alphabetically.

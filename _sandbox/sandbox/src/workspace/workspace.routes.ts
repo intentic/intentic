@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { HEALTH_LIMIT } from "@intentic/sandbox-contract/schemas/codebase-health";
-import { includeGlobs } from "@intentic/sandbox-contract/policy/search-globs";
 import { MAX_REF_CANDIDATES } from "@intentic/sandbox-contract/text/path-refs";
 import { previewUrl } from "@intentic/sandbox-contract/ids/hostnames";
 import { workspaceContract } from "@intentic/sandbox-contract/contracts/workspace.contract";
@@ -42,37 +41,10 @@ import {
     fencedTree,
     refuseFenced,
     refuseUnlistable,
-    searchPaths,
 } from "./layout/workspace-fence.js";
 import { callerEditFence } from "../areas/area-scope.js";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { publicAddressOf } from "../env.config.js";
-
-// Row cap for one /workspace/search page, sized to the virtualized list's visible rows.
-const GUI_SEARCH_HITS = 1_000;
-const GUI_SEARCH_FILES = 300;
-// Token budget for the paths named in a zero-hit hint; nothing else reads it.
-const GUI_SEARCH_BUDGET = 2_000;
-
-// The literal `iq` command a GUI search stands for. It mirrors the CLI's own flag order (echoOf in iq/lib/flags) and
-// seeds the cursor id, so it must stay byte-stable for the same query + mode + scope: two searches that echo alike page
-// as one.
-const searchEcho = (
-    verb: string,
-    query: string,
-    scope: { readonly dir: string; readonly ignored: boolean; readonly globs: readonly string[]; readonly notGlobs: readonly string[] },
-    options: { readonly literal?: boolean; readonly word?: boolean; readonly caseSensitive?: boolean },
-): string =>
-    [
-        `${verb === "q" ? "" : `${verb} `}"${query}"`,
-        ...(scope.dir === "" ? [] : [`--in '${scope.dir}'`]),
-        ...(scope.ignored ? ["--ignored"] : []),
-        ...(options.literal === true ? ["--literal"] : []),
-        ...(options.word === true ? ["--word"] : []),
-        ...(options.caseSensitive === true ? ["--case"] : []),
-        ...scope.globs.map((glob) => `--glob '${glob}'`),
-        ...scope.notGlobs.map((glob) => `--not-glob '${glob}'`),
-    ].join(" ");
 
 // Every shared-tree file a glob matches, from the resident index's in-memory sweep: what a reference is searched with.
 const sharedGlob =
@@ -205,50 +177,6 @@ export const createWorkspaceRoutes = (services: Services) => {
             // Unresolvable, not refused: to a fenced reader a file outside their folders simply is not in the
             // workspace, and a refusal here would confirm that it is.
             return fencedResolve(fence, resolved);
-        }),
-        // Runs the resident iq engine in-process, minus the per-query spawn and sweep. A GUI caller asks for a `list`
-        // page (rows), skipping the capsule, symbol lookup and continuation spool.
-        search: i.search.handler(async ({ input, signal, context }) => {
-            // The index covers the whole tree, so a fenced caller searching it would get snippets out of folders they
-            // cannot open — the leak that makes a file fence decorative if it is left unsaid. The engine's own path
-            // scope is what closes it, narrowed to the caller's folders before the query runs.
-            const fence = await fenceFor(context);
-            const verb = input.mode ?? "q";
-            const ignored = input.includeIgnored === true;
-            const options = {
-                ...(input.literal === true ? { literal: true } : {}),
-                ...(input.word === true ? { word: true } : {}),
-                ...(input.caseSensitive === true ? { caseSensitive: true } : {}),
-            };
-            // Parses the include field the same way the editor does, then hands the globs to the engine's scope.
-            const { globs, notGlobs } = includeGlobs(input.include);
-            // One subtree, normalized here the way the engine's own prefix filter normalizes it, so the scope and the
-            // echo below can't disagree about the same folder.
-            const dir = (input.dir ?? "").replace(/^\.\//, "").replace(/\/+$/, "");
-            // A named subtree meets the fence: outside it the search runs over nothing rather than over the folder,
-            // and inside it the narrower of the two wins.
-            const paths = searchPaths(fence, dir);
-            const outcome = await services.iq.run(
-                {
-                    verb,
-                    query: input.query,
-                    scope: {
-                        ...(ignored ? { ignored: true } : {}),
-                        ...(paths !== undefined ? { paths } : {}),
-                        ...(globs.length > 0 ? { globs } : {}),
-                        ...(notGlobs.length > 0 ? { notGlobs } : {}),
-                    },
-                    render: {
-                        budget: GUI_SEARCH_BUDGET,
-                        list: { hits: GUI_SEARCH_HITS, files: Math.min(input.limit ?? GUI_SEARCH_FILES, GUI_SEARCH_FILES) },
-                        ...(input.after !== undefined ? { after: input.after } : {}),
-                    },
-                    options,
-                    echo: searchEcho(verb, input.query, { dir, ignored, globs, notGlobs }, options),
-                },
-                signal,
-            );
-            return outcome.result;
         }),
         // One repo's churn x complexity, index stats and import graph, keyed like the management panel and git-history
         // graph. An undiscovered repo is NOT_FOUND, not zeros reading as healthy.

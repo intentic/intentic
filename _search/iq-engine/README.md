@@ -53,6 +53,8 @@ flowchart LR
   unchanged. Since the shadow tree is not watched, the daemon marks the index dirty when the keeper writes one.
 - Every engine's output passes through `floor.ts`: inside any `.intentic` directory only the authored, versioned slice is searchable, and `--ignored` cannot lift that.
 - `createEngine` serves one CLI process. `createEngineClient` (`./host`) runs a resident engine in a child process for the daemon, re-indexing on filesystem changes.
+- `findText` (`./text`) is the search box's text search, which needs no index: ripgrep walks the tree itself, in parallel, admitting what the sweep admits (every `.gitignore` at or below the root, the junk folders and the reference shelf pruned) and filtering through `floor.ts`. It stops at 10,000 lines and hands each file over as it completes, which is what the daemon streams. The daemon runs it in its own process, at its own priority. Searches in the child had measured 10 to 20 s on a loaded machine (2026-10-26), while ripgrep alone took 20 to 100 ms on the same tree.
+- A `find` that matches nothing is answered by meaning only for the CLI. A list caller (the search box) gets no results instead (`phraseWantsMeaning`). `--ignored` reads a wider sweep, which is kept for 30 s or until the index applies a change, so quick-open does not walk node_modules on every keystroke.
 - Each retrieval stage is a named entry in `FEATURES`, so [iq-bench](../iq-bench) can switch stages off and compare.
 
 ## Key files
@@ -68,6 +70,7 @@ flowchart LR
 - [src/verify/check.ts](src/verify/check.ts) — what `iq verify` judges, and how it renders.
 - [src/render/text.ts](src/render/text.ts) — the capsule (`answer:`, the `key:`/`route:`/`siblings:` lines under it, `candidates:`, `more:`) and the body under a hard token budget.
 - [src/store/db.ts](src/store/db.ts) — the index schema and its rebuild-on-mismatch version.
+- [src/engines/text-search.ts](src/engines/text-search.ts) — the search box's text search, ripgrep walking the tree itself.
 - [src/workspace/floor.ts](src/workspace/floor.ts) — what no query can ever surface.
 - [src/workspace/shadows.ts](src/workspace/shadows.ts) — documents read through their fileq shadows.
 

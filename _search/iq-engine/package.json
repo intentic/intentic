@@ -40,6 +40,17 @@
                 "default": "./dist/host/client.js"
             }
         },
+        "./text": {
+            "types": "./dist/engines/text-search.d.ts",
+            "import": {
+                "@intentic/src": "./src/engines/text-search.ts",
+                "default": "./dist/engines/text-search.js"
+            },
+            "require": {
+                "@intentic/src": "./src/engines/text-search.ts",
+                "default": "./dist/engines/text-search.js"
+            }
+        },
         "./testing": {
             "types": "./dist/testing.d.ts",
             "import": {

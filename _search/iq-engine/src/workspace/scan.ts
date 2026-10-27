@@ -91,6 +91,30 @@ export const sweep = async (root: string, includeIgnored: boolean): Promise<Swee
     return { entries: await withShadows(root, kept), unreadable: unreadable.toSorted() };
 };
 
+// The sweep `--ignored` reads (node_modules and build output in, the floor still holding), kept for a moment. Quick-open
+// and the search box ask it on every keystroke once "include ignored" is on, and walking 100,000 files into node_modules
+// cost 2.8 s on this sandbox's /work (measured 2026-10-26), paid again for each character. Kept per root until the index
+// applies a change (a new generation) or WIDE_SWEEP_MS passes, so a fresh install under an ignored folder shows up
+// within it.
+const WIDE_SWEEP_MS = 30_000;
+const wideSweeps = new Map<string, { readonly at: number; readonly generation: number; readonly sweep: Promise<Sweep> }>();
+
+export const wideSweep = (root: string, generation: number, now: number = Date.now()): Promise<Sweep> => {
+    const held = wideSweeps.get(root);
+    if (held !== undefined && held.generation === generation && now - held.at < WIDE_SWEEP_MS) {
+        return held.sweep;
+    }
+    const fresh = sweep(root, true);
+    wideSweeps.set(root, { at: now, generation, sweep: fresh });
+    // A walk that failed is not kept: the next ask walks again rather than repeating the failure for the whole window.
+    fresh.catch(() => {
+        if (wideSweeps.get(root)?.sweep === fresh) {
+            wideSweeps.delete(root);
+        }
+    });
+    return fresh;
+};
+
 const CLASS_TESTS = /(^|\/)((__tests__|tests?)\/|test_[^/]*$)|\.(test|spec)\.[^/.]+$/;
 // Documents (pdf, docx, …, searched through their shadows) are prose like a README: the docs prior, wherever they sit.
 const CLASS_DOCS = /(^|\/)(docs?\/)|\.(md|mdx|rst|txt|pdf|docx|xlsx|pptx|odt|ott|ods|ots|odp|otp|odg|rtf|epub)$/i;

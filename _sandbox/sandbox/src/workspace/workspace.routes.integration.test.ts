@@ -60,7 +60,7 @@ test("workspace dependency installs join the coordinator queue instead of starti
     expect(requested).toEqual([["app"]]);
 });
 
-test("workspace.search runs the resident engine in-process, mapping the wire query to a QueryRequest", async () => {
+test("workspace.search runs every kind but text on the resident engine, mapping the wire query to a QueryRequest", async () => {
     const requests: QueryRequest[] = [];
     const groups = [
         { path: "alpha/src/widget.ts", score: 1, hits: [{ line: 3, text: "export const createWidget", spans: [{ start: 13, end: 25 }], tags: [] }] },
@@ -92,7 +92,7 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
     );
     const result = await client.workspace.search({
         query: "createWidget",
-        mode: "find",
+        mode: "def",
         includeIgnored: "true",
         limit: 3,
         literal: "true",
@@ -102,12 +102,12 @@ test("workspace.search runs the resident engine in-process, mapping the wire que
     // The echo seeds the pagination cursor, so two searches differing only by a switch must not share one.
     expect(requests).toEqual([
         {
-            verb: "find",
+            verb: "def",
             query: "createWidget",
             scope: { ignored: true },
             render: { budget: 2_000, list: { hits: 1_000, files: 3 } },
             options: { literal: true, caseSensitive: true },
-            echo: 'find "createWidget" --ignored --literal --case',
+            echo: 'def "createWidget" --ignored --literal --case',
         },
     ]);
 });

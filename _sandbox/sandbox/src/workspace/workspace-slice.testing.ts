@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
+import { createTextSearch } from "./text-search.js";
 import { workspacePaths } from "./workspace.js";
 import type { WorkspaceSlice } from "./workspace-slice.js";
 
@@ -69,4 +70,6 @@ export const workspaceSliceFake = ({ iq }: WorkspaceFakeOverrides) =>
             close: async () => {},
             ...iq,
         }),
+        // The real one: it reads only the root a search names, which a route test sets to its own temp workspace.
+        textSearch: createTextSearch({ rgPath: undefined }),
     }) satisfies Partial<WorkspaceSlice>;
