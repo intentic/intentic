@@ -73,14 +73,15 @@ const shallow = (node: Node): WorkspaceTreeEntry => ({
 
 const entriesOf = (listing: Listing): WorkspaceTreeEntry[] => (listing.nodes ?? []).map(shallow);
 
-// Whether two listings show the same entries; the ignore state is compared through what it decided.
+// Whether two listings show the same entries; the ignore state is compared through what it decided. Re-listing keeps
+// unchanged nodes by identity, so a file event need not allocate and serialize every untouched sibling twice.
 const sameEntries = (left: Listing, right: Listing): boolean =>
     left.nodes === undefined || right.nodes === undefined
         ? left.nodes === right.nodes
         : left.nodes.length === right.nodes.length &&
           left.nodes.every((node, index) => {
               const other = right.nodes![index]!;
-              return node.opened === other.opened && JSON.stringify(shallow(node)) === JSON.stringify(shallow(other));
+              return node === other || (node.opened === other.opened && JSON.stringify(shallow(node)) === JSON.stringify(shallow(other)));
           });
 
 export const createResidentTree = (root: string, { maxEntries = MODEL_MAX_ENTRIES } = {}): ResidentTree => {
