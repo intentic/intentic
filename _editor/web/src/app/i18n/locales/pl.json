@@ -1541,7 +1541,8 @@
             "costRollBack": "Restartuje Twój sandbox na wersji, na której działał wcześniej, co zajmuje jakieś pół minuty.",
             "costRestartOnlyShort": "Jest już pobrana, więc zostaje tylko restart: jakieś pół minuty.",
             "costBuildThenRestartShort": "Najpierw pobiera i buduje, co niczego nie przerywa, a potem restartuje Twój sandbox na jakieś pół minuty.",
-            "runInTerminal": "Uruchom to w terminalu na komputerze, na którym działa Twój sandbox:"
+            "runInTerminal": "Uruchom to w terminalu na komputerze, na którym działa Twój sandbox:",
+            "startedWithCompose": "Ten sandbox został uruchomiony przez Docker Compose? Uruchom to zamiast tego w folderze z jego docker-compose.yml, żeby Compose zachował swój kontener:"
         },
         "normalize": {
             "commit": "commit {value}",
@@ -7875,7 +7876,10 @@
             "downloadBuilding": "Budowanie Twojego środowiska na {version}",
             "downloadChecking": "Sprawdzanie Twoich plików pod kątem {version}",
             "downloadNote": "Twój sandbox dalej działa. Gdy pobieranie się skończy, aktualizacja zajmie około 30 sekund.",
-            "rebuildingBadge": "Przebudowa"
+            "rebuildingBadge": "Przebudowa",
+            "composeUpdateLead": "Ten sandbox działa pod Docker Compose, więc aktualizuje się tak jak Compose. Uruchom to w folderze z jego docker-compose.yml:",
+            "composeUpdateLikelyLead": "Ten sandbox nie został uruchomiony poleceniem konfiguracji ani aplikacją desktopową, więc aktualizuje się tam, gdzie go uruchomiono. W Docker Compose uruchom to w folderze z jego docker-compose.yml:",
+            "composeUpdateLabel": "Polecenie aktualizacji Docker Compose"
         },
         "sandboxHours": {
             "awakeHours": "Godziny czuwania",

@@ -58,6 +58,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 previousImage: "",
                 definitionSeed: "",
                 devRoot: undefined,
+                manager: undefined,
                 prewarm: false,
                 projectDir: "",
             },

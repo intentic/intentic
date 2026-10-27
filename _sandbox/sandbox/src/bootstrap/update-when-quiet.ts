@@ -22,8 +22,8 @@ import { latestVersion } from "../system/updates/version-check.js";
 
 // Where the automatic update (system/updates/auto-update.ts) meets the rest of the daemon: what it reads to judge the moment, and the
 // one door it uses to ask the machine. Started only where a machine's `ic` swaps this container: never on a hosted
-// machine (the platform moves its image), a checkout-built base (an update would replace what the checkout built), a dev
-// build, or a container no machine knows by name.
+// machine (the platform moves its image), a container Docker Compose runs (SANDBOX_MANAGER), a checkout-built base (an
+// update would replace what the checkout built), a dev build, or a container no machine knows by name.
 
 // The soonest moment the sandbox promised somebody (promised-wakes.ts): an automation's next run, a cron's too, unlike
 // idle-stop (a restart landing on its minute would fire it late for nothing), a scheduled message, a held turn booked for
@@ -58,6 +58,8 @@ export const startAutoUpdate = ({ config, traits, role, services, logger, shutdo
         !config.sandbox.vm &&
         !isDevBuild &&
         config.sandbox.name !== ORIGIN_HOST &&
+        // Compose owns the container: an `ic` swap would recreate it out from under Compose.
+        config.sandbox.manager === undefined &&
         !builtFromCheckout(runningBuild(config.sandbox));
     if (!swappedByIc || slug === undefined) {
         return;

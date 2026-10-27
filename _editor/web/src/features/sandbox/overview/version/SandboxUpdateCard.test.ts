@@ -22,6 +22,8 @@ const updateNotes = ref<string[]>([]);
 const moreUpdateNotes = ref(0);
 const preparing = ref<PreparingUpdate | undefined>(undefined);
 const skipServed = ref(true);
+const slug = ref<string | undefined>(`demo`);
+const composeManaged = ref(false);
 const skipVersion = jest.fn(async (_version: string | null): Promise<void> => undefined);
 jest.mock(`../../../../models/sandbox/useSandboxVersion`, () => ({
     useSandboxVersion: () => ({
@@ -37,7 +39,8 @@ jest.mock(`../../../../models/sandbox/useSandboxVersion`, () => ({
         stagedPlan,
         preparing,
         serverManaged: ref(false),
-        slug: ref(`demo`),
+        slug,
+        composeManaged,
         skipServed,
         skipVersion,
         localImage,
@@ -149,6 +152,8 @@ afterEach(() => {
     preparing.value = undefined;
     starting.value = false;
     skipServed.value = true;
+    slug.value = `demo`;
+    composeManaged.value = false;
     skipVersion.mockClear();
     active.value = { id: `sb1`, role: `owner` };
     useOsPreference().cmdOs.value = `unix`;
@@ -367,6 +372,29 @@ it(`says what an update keeps beside the button, and that the version before sta
     expect(el.textContent).toContain(`Your files and conversations stay.`);
     expect(el.textContent).toContain(`The previous version stays ready on this machine for 24 hours afterwards, so going back takes seconds.`);
     expect(el.textContent).not.toContain(`by itself`);
+});
+
+// An `ic` swap would recreate the container behind Compose's back, and nothing on the page reaches that machine anyway.
+it(`hands a sandbox Docker Compose runs Compose's own update, with no button, no download and no way back promised`, () => {
+    composeManaged.value = true;
+    info.value = { ...info.value, previousImage: `ghcr.io/intentic/sandbox@sha256:abc` };
+    const el = mount();
+    expect(recreates(el)).toEqual([]);
+    expect(el.textContent).toContain(`Docker Compose runs this sandbox`);
+    expect(el.textContent).toContain(`docker compose pull && docker compose up -d`);
+    expect(el.textContent).not.toContain(`Undo within 24 hours`);
+    expect(el.textContent).not.toContain(`Having trouble?`);
+    expect(asked()).toBeUndefined();
+});
+
+// Neither the setup command nor the desktop app: a Compose file from before it said so is the likeliest way it runs.
+it(`offers the Compose update as the likely way on a sandbox of the owner's own that has no container name`, () => {
+    slug.value = undefined;
+    const el = mount();
+    expect(recreates(el)).toEqual([]);
+    expect(el.textContent).toContain(`wasn't started by the setup command or the desktop app`);
+    expect(el.textContent).toContain(`docker compose pull && docker compose up -d`);
+    expect(el.textContent).not.toContain(`Undo within 24 hours`);
 });
 
 it(`offers going back on Windows too, where the command spells it -Rollback`, async () => {

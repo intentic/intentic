@@ -1544,7 +1544,8 @@
             "costRollBack": "Ihre Sandbox wird mit der Version neu gestartet, mit der sie vorher lief. Das dauert etwa eine halbe Minute.",
             "costRestartOnlyShort": "Sie ist bereits heruntergeladen, es ist also nur der Neustart: etwa eine halbe Minute.",
             "costBuildThenRestartShort": "Zuerst wird heruntergeladen und gebaut, was nichts unterbricht, dann startet Ihre Sandbox für etwa eine halbe Minute neu.",
-            "runInTerminal": "Führen Sie dies in einem Terminal auf dem Computer aus, auf dem Ihre Sandbox läuft:"
+            "runInTerminal": "Führen Sie dies in einem Terminal auf dem Computer aus, auf dem Ihre Sandbox läuft:",
+            "startedWithCompose": "Diese Sandbox mit Docker Compose gestartet? Führe stattdessen das hier im Ordner mit ihrer docker-compose.yml aus, damit Compose seinen Container behält:"
         },
         "normalize": {
             "commit": "Commit {value}",
@@ -8346,7 +8347,10 @@
             "downloadBuilding": "Ihre Umgebung wird auf {version} gebaut",
             "downloadChecking": "Ihre Dateien werden gegen {version} geprüft",
             "downloadNote": "Ihre Sandbox arbeitet weiter. Sobald der Download fertig ist, dauert das Update etwa 30 Sekunden.",
-            "rebuildingBadge": "Wird neu gebaut"
+            "rebuildingBadge": "Wird neu gebaut",
+            "composeUpdateLead": "Docker Compose betreibt diese Sandbox, also wird sie so aktualisiert wie Compose es tut. Führe das im Ordner mit ihrer docker-compose.yml aus:",
+            "composeUpdateLikelyLead": "Diese Sandbox wurde weder mit dem Setup-Befehl noch mit der Desktop-App gestartet, also wird sie dort aktualisiert, wo sie gestartet wurde. Mit Docker Compose führe das im Ordner mit ihrer docker-compose.yml aus:",
+            "composeUpdateLabel": "Docker-Compose-Update-Befehl"
         },
         "sandboxHours": {
             "awakeHours": "Wachstunden",

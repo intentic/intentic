@@ -472,6 +472,9 @@ it(`folds a gilded update's command behind its gold button on a machine this pag
     await nextTick();
     expect(shown()).toContain(`Run this in a terminal on the computer that runs your sandbox:`);
     expect(el.querySelector(`pre`)?.textContent).toBe(oneLiner(`update`, [`work`], `unix`));
+    // A sandbox Compose runs without saying so is told the update that leaves Compose its container.
+    expect(shown()).toContain(`Started this sandbox with Docker Compose?`);
+    expect(el.textContent).toContain(`docker compose pull && docker compose up -d`);
     expect(buttonNamed(`Update now`)?.getAttribute(`aria-expanded`)).toBe(`true`);
     buttonNamed(`Update now`)?.click();
     await nextTick();

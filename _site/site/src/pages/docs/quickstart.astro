@@ -53,6 +53,7 @@ const composeFile = `services:
             GOOGLE_CLIENT_ID: <shown filled in on the setup page>
             INGRESS_URL: \${INGRESS_URL:-}
             SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}
+            SANDBOX_MANAGER: compose
 networks:
     intentic:
         name: intentic-workspace-<SLUG>
@@ -244,6 +245,13 @@ eval "$RUN"
         <code>LOCAL_PORT</code>, <code>OWNER_EMAIL</code>). After
         that the sandbox is yours to manage with <code>docker compose up -d</code>, <code>down</code>, and <code>logs</code>. Your workspace
         lives in the named volumes, so <code>down</code> then <code>up</code> keeps it.
+    </p>
+    <p>
+        Updates go the same way. Compose owns the container, so the sandbox can't swap itself onto a new version, and its
+        update card shows the command instead: <code>docker compose pull &amp;&amp; docker compose up -d</code>, run in that
+        folder. <code>SANDBOX_MANAGER: compose</code> is what tells the sandbox to offer that rather than the
+        <code>ic</code> update a script-started sandbox takes, which would recreate the container behind Compose's back. A
+        file from before that line was added updates the same way; add the line and the card says so too.
     </p>
     <p>
         Two things this path leaves out on purpose. The <strong>docker capability</strong>'s nested engine needs{" "}

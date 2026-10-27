@@ -1544,7 +1544,8 @@
             "costRollBack": "Cela redémarre votre sandbox sur la version qu'il exécutait avant, ce qui prend environ une demi-minute.",
             "costRestartOnlyShort": "Elle est déjà téléchargée : il ne reste que le redémarrage, environ une demi-minute.",
             "costBuildThenRestartShort": "Elle est d'abord téléchargée et construite, sans rien interrompre, puis votre sandbox redémarre pendant environ une demi-minute.",
-            "runInTerminal": "Exécutez ceci dans un terminal sur l'ordinateur qui fait tourner votre sandbox :"
+            "runInTerminal": "Exécutez ceci dans un terminal sur l'ordinateur qui fait tourner votre sandbox :",
+            "startedWithCompose": "Vous avez lancé ce sandbox avec Docker Compose ? Exécutez plutôt ceci dans le dossier de son docker-compose.yml, pour que Compose garde son conteneur :"
         },
         "normalize": {
             "commit": "commit {value}",
@@ -8346,7 +8347,10 @@
             "downloadBuilding": "Construction de votre environnement sur {version}",
             "downloadChecking": "Vérification de vos fichiers avec {version}",
             "downloadNote": "Votre sandbox continue de fonctionner. Une fois le téléchargement fini, la mise à jour prend environ 30 secondes.",
-            "rebuildingBadge": "Reconstruction"
+            "rebuildingBadge": "Reconstruction",
+            "composeUpdateLead": "Docker Compose exécute ce sandbox, il se met donc à jour comme Compose le fait. Exécutez ceci dans le dossier de son docker-compose.yml :",
+            "composeUpdateLikelyLead": "Ce sandbox n'a été lancé ni par la commande d'installation ni par l'application de bureau, il se met donc à jour là où il a été lancé. Avec Docker Compose, exécutez ceci dans le dossier de son docker-compose.yml :",
+            "composeUpdateLabel": "Commande de mise à jour Docker Compose"
         },
         "sandboxHours": {
             "awakeHours": "Heures d'éveil",

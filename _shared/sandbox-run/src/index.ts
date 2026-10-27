@@ -9,6 +9,13 @@ import { SANDBOX_CONTAINER_PREFIX } from "./slug.js";
 // The in-network hostname the tunnel sidecar dials; every flow must derive it identically.
 export const ORIGIN_HOST = "intentic-sandbox-workspace";
 
+// SANDBOX_MANAGER's value on a container Docker Compose owns (the setup page's Compose file sets it). Such a sandbox
+// updates the way any Compose service does, from the folder holding its file: an `ic` swap would recreate the container
+// with `docker run` and leave Compose holding a name it no longer owns. Deliberately not in REPLAY_VARS, so a sandbox
+// `ic` takes over stops claiming Compose runs it.
+export const COMPOSE_MANAGER = "compose";
+export const COMPOSE_UPDATE_COMMAND = "docker compose pull && docker compose up -d";
+
 export interface SandboxNames {
     readonly container: string;
     readonly tunnelContainer: string;

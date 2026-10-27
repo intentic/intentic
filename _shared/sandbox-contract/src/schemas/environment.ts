@@ -160,6 +160,10 @@ export const EnvironmentSchema = z.object({
     recurring: z.array(EnvironmentRecurringSchema).optional(),
     // Absent on a sandbox running a published image, which is every sandbox but a dogfooding one.
     localImage: EnvironmentLocalImageSchema.optional(),
+    // Set only on a sandbox Docker Compose runs (SANDBOX_MANAGER): it updates with `docker compose pull && up` from the
+    // folder holding its file, so the update card offers that rather than an `ic` swap. Absent from an older daemon too,
+    // which is why the card still names the compose way beside the `ic` one when it cannot tell.
+    manager: z.literal("compose").optional(),
     // A rebuild waiting for the agents to be idle, or started or refused once they were; absent when none is asked.
     rebuildWhenIdle: EnvironmentRebuildWaitSchema.optional(),
     // A checkout rebuild's restart held until no agent is mid-turn; absent when none is asked.

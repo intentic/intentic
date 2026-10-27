@@ -3,7 +3,7 @@
 // alias and names, so a sandbox can move between script-managed and compose-managed without losing /work.
 
 import { LOCAL_PORT, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { ORIGIN_HOST, SANDBOX_CAPABILITIES, SANDBOX_VOLUMES, sandboxNames } from "@intentic/sandbox-run";
+import { COMPOSE_MANAGER, ORIGIN_HOST, SANDBOX_CAPABILITIES, SANDBOX_VOLUMES, sandboxNames } from "@intentic/sandbox-run";
 import { slugOfHostname } from "@intentic/sandbox-run/slug";
 
 export interface ComposeArgs {
@@ -94,6 +94,10 @@ export const composeFile = (args: ComposeArgs): string => {
         // required, URL is optional (falls back to the daemon's default).
         `            INGRESS_URL: \${INGRESS_URL:-}`,
         `            SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`,
+        // Tells the daemon Compose owns this container, so its update card offers `docker compose pull && up` rather
+        // than an `ic` swap that would recreate the container out from under Compose. Not replayed: `ic` taking the
+        // sandbox over drops it, which is the truth then.
+        `            SANDBOX_MANAGER: ${COMPOSE_MANAGER}`,
         ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),
         `networks:`,
         `    intentic:`,

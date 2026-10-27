@@ -1544,7 +1544,8 @@
             "costRollBack": "Reinicia tu sandbox con la versión que ejecutaba antes, lo que tarda alrededor de medio minuto.",
             "costRestartOnlyShort": "Ya está descargada, así que solo falta el reinicio: alrededor de medio minuto.",
             "costBuildThenRestartShort": "Primero descarga y construye, sin interrumpir nada, y luego reinicia tu sandbox durante alrededor de medio minuto.",
-            "runInTerminal": "Ejecuta esto en un terminal del ordenador que ejecuta tu sandbox:"
+            "runInTerminal": "Ejecuta esto en un terminal del ordenador que ejecuta tu sandbox:",
+            "startedWithCompose": "¿Iniciaste este sandbox con Docker Compose? Ejecuta esto en la carpeta de su docker-compose.yml en su lugar, para que Compose conserve su contenedor:"
         },
         "normalize": {
             "commit": "commit {value}",
@@ -8346,7 +8347,10 @@
             "downloadBuilding": "Construyendo tu entorno sobre {version}",
             "downloadChecking": "Comprobando tus archivos con {version}",
             "downloadNote": "Tu sandbox sigue funcionando. Cuando termine, actualizar lleva unos 30 segundos.",
-            "rebuildingBadge": "Reconstruyendo"
+            "rebuildingBadge": "Reconstruyendo",
+            "composeUpdateLead": "Docker Compose ejecuta este sandbox, así que se actualiza como lo hace Compose. Ejecuta esto en la carpeta de su docker-compose.yml:",
+            "composeUpdateLikelyLead": "Este sandbox no se inició con el comando de configuración ni con la app de escritorio, así que se actualiza donde se inició. Con Docker Compose, ejecuta esto en la carpeta de su docker-compose.yml:",
+            "composeUpdateLabel": "Comando de actualización de Docker Compose"
         },
         "sandboxHours": {
             "awakeHours": "Horas despierto",

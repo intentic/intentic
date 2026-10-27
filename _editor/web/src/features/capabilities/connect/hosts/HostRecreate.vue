@@ -26,6 +26,7 @@ import { type Answered, answering, olderAnswer, swapStanding } from "./swapLandi
 import { followSwap, type SwapEnd, SwapGaveUp, type SwapProgress } from "./swapFollow";
 import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
+import ComposeUpdateHint from "../../../../parts/sandbox/ComposeUpdateHint.vue";
 import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
 import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
 import { bashCommand, oneLiner, psCommand } from "../../../../app/environments/scriptCommand";
@@ -563,8 +564,7 @@ const command = (os: CommandOs): string => {
         </template>
 
         <template v-else>
-            <!-- Gilded, the button still leads and the command is the step it opens: what to run is for whoever is
-                 about to run it, not a block of shell at the top of the page for everyone who opens it. -->
+            <!-- Gilded, the button leads and the command is the step it opens, not shell printed at everyone who opens the page. -->
             <div v-if="gilded" :class="row">
                 <Button
                     :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
@@ -583,6 +583,7 @@ const command = (os: CommandOs): string => {
             >
                 <RunCommand :command="command" :explanation="t(`capabilities.hostRecreate.runInTerminal`)" />
                 <p v-if="!gilded" class="text-2xs text-subtle">{{ cost }}</p>
+                <ComposeUpdateHint v-if="action === `Update`" />
                 <!-- The cheaper way out where it exists: the machine is already talking to this sandbox, and one tile turns that into the button above. -->
                 <ConnectDeviceHint :slug="slug" :gains="t(`capabilities.hostRecreate.becomesButtonHere`, { action: verb })" />
                 <!-- Offered here, not just at setup, since this is the moment reaching for the app repeatedly starts to pay off. -->

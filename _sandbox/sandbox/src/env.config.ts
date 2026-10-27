@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, PLATFORM_WEB_ORIGIN, PREVIEW_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { publicUrl, zoneFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
-import { REPLAY_SECRET_ENV } from "@intentic/sandbox-run";
+import { COMPOSE_MANAGER, REPLAY_SECRET_ENV } from "@intentic/sandbox-run";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { type ConfigDefinition, cliArgs, env, envFile, inspectSchema, loadConfig as loadPuristicConfig } from "@puristic/env/index.js";
 import { z } from "zod";
@@ -135,6 +135,13 @@ export const configSchema = z.object({
                 .string()
                 .default("")
                 .transform((value) => (value.trim() === "" ? undefined : value.trim())),
+            // Who owns this container out on its host, when it is not `ic`: `compose` from the setup page's Compose file
+            // (COMPOSE_MANAGER). Such a sandbox updates with `docker compose`, never an `ic` swap, so the update card
+            // offers that and nothing here asks a machine to swap it. Anything else reads as unset.
+            manager: z
+                .string()
+                .default("")
+                .transform((value): typeof COMPOSE_MANAGER | undefined => (value.trim() === COMPOSE_MANAGER ? COMPOSE_MANAGER : undefined)),
             // An unowned pool machine that warms caches then exits; no owner or token, so identity subsystems stay off.
             prewarm: z
                 .string()

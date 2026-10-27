@@ -67,6 +67,9 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
     // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command. A name
     // that is not a sandbox container's gives no slug, rather than the whole name aimed at as if it were one.
     const slug = computed(() => sandboxSlugOf(envState.value?.container));
+    // Docker Compose runs this container (SANDBOX_MANAGER): it updates from the folder holding its compose file, never
+    // through `ic`, which would recreate the container behind Compose's back.
+    const composeManaged = computed(() => envState.value?.manager === `compose`);
 
     // The owner's "not this one" (`null` offers the newest release again). Read back through /info, which the daemon
     // answers from the same record, so the card redraws from the daemon's word rather than a local guess.
@@ -97,5 +100,6 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
         // A checkout-built base: the published release is not this sandbox's update, so the card offers the rebuild
         // that is.
         localImage,
+        composeManaged,
     };
 }

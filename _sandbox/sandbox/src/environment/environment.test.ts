@@ -35,6 +35,12 @@ it("reads the base the runner stamped, not the overlay tag the container runs", 
     expect(facts({ baseImage: DEV_SANDBOX_IMAGE, image: "intentic-sandbox-env-demo:335c0a435247" }).localImage).toEqual({ base: DEV_SANDBOX_IMAGE });
 });
 
+// The update card reads this to offer `docker compose pull && up` instead of an `ic` swap that would fight Compose.
+it("says Compose runs the container when its file said so, and nothing otherwise", () => {
+    expect(facts({ manager: "compose" }).manager).toBe("compose");
+    expect(facts({}).manager).toBeUndefined();
+});
+
 it("passes the overlay hash and container name through as the card's own anchors", () => {
     expect(facts({ environmentHash: "abc", name: "intentic-sandbox-demo" })).toEqual({ appliedHash: "abc", container: "intentic-sandbox-demo" });
 });

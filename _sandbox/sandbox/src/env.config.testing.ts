@@ -50,6 +50,7 @@ export const testConfig: Config = {
         previousImage: "",
         definitionSeed: "",
         devRoot: undefined,
+        manager: undefined,
         prewarm: false,
         projectDir: "",
     },

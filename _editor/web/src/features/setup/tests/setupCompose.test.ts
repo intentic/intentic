@@ -41,6 +41,10 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     expect(yaml).not.toContain(`agent-auth`);
 });
 
+test("the compose file tells the daemon Compose runs it, so its update card offers the compose update", () => {
+    expect(composeFile(base)).toContain(`SANDBOX_MANAGER: compose`);
+});
+
 test("a local-only dev image is marked pull_policy: never so `compose pull` skips it instead of failing", () => {
     expect(composeFile({ ...base, image: `intentic-sandbox:dev`, platformUrl: `https://localhost:6480` })).toContain(`pull_policy: never`);
 });

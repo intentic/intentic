@@ -27,6 +27,8 @@ import RunCommand from "../../../../components/RunCommand.vue";
 import UpdateDownloadProgress from "./UpdateDownloadProgress.vue";
 import UpdateAutoStatus from "./UpdateAutoStatus.vue";
 import UpdateAutoSwitch from "./UpdateAutoSwitch.vue";
+import UpdateComposeCommand from "./UpdateComposeCommand.vue";
+import { useComposeOffer } from "./composeOffer";
 import UpdateRollbackPanel from "./UpdateRollbackPanel.vue";
 import UpdateWhatsNew from "./UpdateWhatsNew.vue";
 import { useAutoUpdate } from "./useAutoUpdate";
@@ -84,6 +86,7 @@ const { cmdOs } = useOsPreference();
 // keeping any environment overlay, and its rollback is the platform's too, offered once it kept an image to go back to.
 const { active } = useSandbox();
 const hosted = computed(() => (active.value?.hosted ? active.value.id : undefined));
+const composeOffer = useComposeOffer(() => hosted.value !== undefined);
 // Both are the platform's, and it restarts or rolls back a machine it runs for the sandbox's owner alone
 // (sandbox.routes.ts `ownedHostedMachine`): a maintainer pressing either was answered "sandbox not found". They are told
 // whose press it is instead. A sandbox on somebody's own machine updates through that machine, which a maintainer reaches.
@@ -147,7 +150,7 @@ const minute = computed(() => Math.floor(clock.value / 60_000));
 // the image the last swap replaced or the version it parked, and a machine to run the rollback on.
 const canRollBack = computed(() =>
     hosted.value === undefined
-        ? (rollbackTo.value !== undefined || parkedReady.value) && slug.value !== undefined && !serverManaged.value
+        ? (rollbackTo.value !== undefined || parkedReady.value) && slug.value !== undefined && !serverManaged.value && composeOffer.value === undefined
         : active.value?.hosted?.canRollBack === true && isOwner.value,
 );
 const plan = computed(() =>
@@ -236,8 +239,8 @@ const planRefused = computed(() => updateAvailable.value && stagedPlan.value?.ok
 
 // The update is actually on offer from this card right now: the offer's own card, rather than the quiet group.
 const offering = computed(() => updateAvailable.value && localImage.value === undefined && !planRefused.value);
-// The previous version stays parked for a day only where `ic` does the swap: not on a hosted machine, not under a deploy.
-const throughIc = computed(() => hosted.value === undefined && !serverManaged.value);
+// The previous version stays parked for a day only where `ic` does the swap: not hosted, under a deploy or under Compose.
+const throughIc = computed(() => hosted.value === undefined && !serverManaged.value && composeOffer.value === undefined);
 // UPDATES THAT TAKE THEMSELVES. Where the daemon can (self-hosted, through the machine's ic), a downloaded update waits
 // for a quiet moment and installs by itself (UpdateAutoStatus says when, and what it waits for); the gold button stays,
 // as "Update now", for whoever would rather not wait. The switch says whether it does any of that.
@@ -276,9 +279,8 @@ const facts = computed((): Fact[] => {
 
 // THE DOWNLOAD IS NOT A BUTTON. The machine that runs this sandbox downloads its next update by itself, and the card
 // asks it to start now rather than within the next few hours (useBackgroundDownload). While it runs, its progress stands
-// where the buttons do; once it is in, the gold button is a half-minute restart. Only a sandbox on its owner's own
-// machine downloads that way: the platform restarts a hosted one onto its image, and a deploy moves a managed one.
-const downloadsHere = computed(() => offering.value && hosted.value === undefined && !serverManaged.value && slug.value !== undefined);
+// where the buttons do; once it is in, the gold button is a half-minute restart. Only where `ic` swaps the sandbox.
+const downloadsHere = computed(() => offering.value && throughIc.value && slug.value !== undefined);
 const { starting } = useBackgroundDownload(() =>
     downloadsHere.value && !updateStaged.value && preparing.value === undefined && slug.value !== undefined && latest.value !== undefined
         ? { slug: slug.value, version: latest.value }
@@ -414,6 +416,7 @@ const finePrint = computed(
                                 {{ t(`sandbox.sandboxUpdateCard.sandboxUpdatesOnNext`) }} <span class="font-mono text-content">intentic deploy apply</span>
                                 {{ t(`sandbox.sandboxUpdateCard.againstHost`) }}
                             </p>
+                            <UpdateComposeCommand v-else-if="composeOffer" :offer="composeOffer" />
                             <template v-else-if="hosted">
                                 <!-- Own block so the column's stretch doesn't draw the button at full width. -->
                                 <div v-if="isOwner">
@@ -449,7 +452,7 @@ const finePrint = computed(
                          card turns to the restart by itself once it is in, and, when updates take themselves, when this one
                          will and what it is politely waiting for. -->
                     <UpdateDownloadProgress v-if="isDownloading" :step="downloadStep(preparing)" :percent="downloadPercent(preparing)" :version="latest" />
-                    <UpdateAutoStatus v-if="!serverManaged && !hosted && (isDownloading || slug)" :downloading="isDownloading" />
+                    <UpdateAutoStatus v-if="throughIc && (isDownloading || slug)" :downloading="isDownloading" />
                     <!-- Only the restart costs a turn, and only a press starts one: never said under a download that interrupts
                          nothing, nor when the update takes itself, which lists the agents it waits for and never cuts them. -->
                     <p v-if="midTurn > 0 && !isDownloading && !autoOn" class="flex items-start gap-1.5 text-2xs text-warning">
