@@ -7189,18 +7189,21 @@
             "waitsOn": "Czeka na"
         },
         "repoCheckRow": {
-            "partlyPaused": "Częściowo wstrzymane: {count} sprawdzenie jest nowe lub zmienione, odkąd to włączyłeś, i czeka na ciebie; te, na które się zgodziłeś, działają dalej. Przeczytaj je poniżej i włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} sprawdzenia są nowe lub zmienione, odkąd to włączyłeś, i czekają na ciebie; te, na które się zgodziłeś, działają dalej. Przeczytaj je poniżej i włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} sprawdzeń jest nowych lub zmienionych, odkąd to włączyłeś, i czeka na ciebie; te, na które się zgodziłeś, działają dalej. Przeczytaj je poniżej i włącz ponownie, żeby je przyjąć.",
-            "waitsForYou": "nowe lub zmienione, czeka na ciebie",
-            "changedSinceSwitchedOn": "Wstrzymane: to się zmieniło, odkąd to włączyłeś. Przeczytaj poniżej i włącz ponownie, żeby to przyjąć.",
+            "partlyPaused": "Częściowo wstrzymane: {count} nowe lub zmienione sprawdzenie czeka na ciebie. Włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} nowe lub zmienione sprawdzenia czekają na ciebie. Włącz ponownie, żeby je przyjąć. | Częściowo wstrzymane: {count} nowych lub zmienionych sprawdzeń czeka na ciebie. Włącz ponownie, żeby je przyjąć.",
+            "waitsForYou": "czeka na ciebie",
+            "changedSinceSwitchedOn": "Wstrzymane: zmienione, odkąd to włączyłeś. Włącz ponownie, żeby to przyjąć.",
             "checksFileCouldNot": "Nie udało się odczytać jego pliku sprawdzeń: {error}",
-            "declaredNotRunningNothing": "Wyłączone. Nic, co deklaruje repozytorium, nie działa, dopóki tego nie włączysz.",
+            "declaredNotRunningNothing": "Wyłączone. Nic stąd nie działa, dopóki tego nie włączysz.",
             "runChecksDeclares": "Uruchom sprawdzenia, które deklaruje {name}",
-            "afterEachEdit": "Po każdej zmianie",
-            "landRetired": "Po scaleniu — już nie działa; CI sprawdza to, co zostało wypchnięte",
-            "whenTurnEnds": "Gdy tura się kończy — przekazane agentowi raz, nigdy nie blokuje",
-            "lastFlagged": "ostatnio zgłosił {ago}",
-            "neverFlagged": "nigdy nic nie zgłosił",
-            "thisWorkspace": "Ta przestrzeń robocza"
+            "lastFlagged": "Ostatnio zgłosił",
+            "neverFlagged": "Nigdy nie zgłosił",
+            "thisWorkspace": "Ta przestrzeń robocza",
+            "scopeTip": "Tylko przy zmianach w",
+            "momentEdit": "Każda zmiana",
+            "momentTurn": "Koniec tury",
+            "momentLand": "Po scaleniu",
+            "momentTurnNote": "Zgłoszone raz, nigdy nie blokuje",
+            "momentLandNote": "Już nie działa"
         },
         "restartWatch": {
             "deviceDidntRun": "To urządzenie nie uruchomiło przebudowy.",
@@ -8414,7 +8417,6 @@
             "writeSkill": "Napisz umiejętność",
             "saveChanges": "Zapisz zmiany",
             "anywhereInWorkspace": "Gdziekolwiek w przestrzeni roboczej",
-            "onlyTouching": "tylko przy dotykaniu",
             "recentDecisions": "Ostatnie decyzje",
             "worthBetterModelThan": "Wart lepszego modelu niż reszta zadań automatycznych: czyta polecenie jako dane, a w turze, która wchłonęła coś z zewnątrz, ten tekst może argumentować za własnym zatwierdzeniem.",
             "youreHere": "Jesteś tutaj"

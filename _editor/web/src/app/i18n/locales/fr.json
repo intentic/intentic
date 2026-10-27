@@ -7755,18 +7755,21 @@
             "waitsOn": "Attend"
         },
         "repoCheckRow": {
-            "partlyPaused": "Partiellement en pause : {count} vérification est nouvelle ou a changé depuis votre activation et vous attend ; celles déjà acceptées continuent. Lisez-la ci-dessous puis réactivez pour l'accepter. | Partiellement en pause : {count} vérifications sont nouvelles ou ont changé depuis votre activation et vous attendent ; celles déjà acceptées continuent. Lisez-les ci-dessous puis réactivez pour les accepter.",
-            "waitsForYou": "nouvelle ou modifiée, vous attend",
-            "changedSinceSwitchedOn": "En pause : ceci a changé depuis que vous l'avez activé. Lisez-le ci-dessous et réactivez-le pour l'accepter.",
+            "partlyPaused": "Partiellement en pause : {count} vérification nouvelle ou modifiée vous attend. Réactivez pour l'accepter. | Partiellement en pause : {count} vérifications nouvelles ou modifiées vous attendent. Réactivez pour les accepter.",
+            "waitsForYou": "vous attend",
+            "changedSinceSwitchedOn": "En pause : modifié depuis votre activation. Réactivez pour l'accepter.",
             "checksFileCouldNot": "Son fichier de vérifications n'a pas pu être lu : {error}",
-            "declaredNotRunningNothing": "Désactivé. Rien de ce qu'un dépôt déclare ne tourne tant que vous ne l'avez pas activé.",
+            "declaredNotRunningNothing": "Désactivé. Rien ici ne tourne tant que vous ne l'activez pas.",
             "runChecksDeclares": "Lancer les vérifications que {name} déclare",
-            "afterEachEdit": "Après chaque modification",
-            "landRetired": "Après son intégration — ne tourne plus ; la CI vérifie ce qui est poussé",
-            "whenTurnEnds": "À la fin d'un tour — signalé une fois à l'agent, ne bloque jamais",
-            "lastFlagged": "dernier signalement {ago}",
-            "neverFlagged": "jamais rien signalé",
-            "thisWorkspace": "Cet espace de travail"
+            "lastFlagged": "Dernier signalement",
+            "neverFlagged": "Jamais signalé",
+            "thisWorkspace": "Cet espace de travail",
+            "scopeTip": "Seulement en touchant",
+            "momentEdit": "Chaque modif.",
+            "momentTurn": "Fin de tour",
+            "momentLand": "À l'intégration",
+            "momentTurnNote": "Signalé une fois, ne bloque jamais",
+            "momentLandNote": "Ne tourne plus"
         },
         "restartWatch": {
             "deviceDidntRun": "Cet appareil n'a pas lancé la reconstruction.",
@@ -9010,7 +9013,6 @@
             "writeSkill": "Écrire un skill",
             "saveChanges": "Enregistrer les modifications",
             "anywhereInWorkspace": "N'importe où dans l'espace de travail",
-            "onlyTouching": "seulement en touchant",
             "recentDecisions": "Décisions récentes",
             "worthBetterModelThan": "Mérite un meilleur modèle que le reste des tâches automatiques : il lit la commande comme des données, et dans un tour qui a absorbé quelque chose de l'extérieur, ce texte plaide peut-être pour sa propre approbation.",
             "youreHere": "Vous êtes ici"

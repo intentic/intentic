@@ -7755,18 +7755,21 @@
             "waitsOn": "Wartet auf"
         },
         "repoCheckRow": {
-            "partlyPaused": "Teilweise pausiert: {count} Prüfung ist neu oder geändert, seit Sie sie eingeschaltet haben, und wartet auf Sie; die, denen Sie zugestimmt haben, laufen weiter. Lesen Sie sie unten und schalten Sie wieder ein, um sie zu übernehmen. | Teilweise pausiert: {count} Prüfungen sind neu oder geändert, seit Sie sie eingeschaltet haben, und warten auf Sie; die, denen Sie zugestimmt haben, laufen weiter. Lesen Sie sie unten und schalten Sie wieder ein, um sie zu übernehmen.",
-            "waitsForYou": "neu oder geändert, wartet auf Sie",
-            "changedSinceSwitchedOn": "Pausiert: Das hat sich geändert, seit Sie es eingeschaltet haben. Lesen Sie es unten und schalten Sie es erneut ein, um es anzunehmen.",
+            "partlyPaused": "Teilweise pausiert: {count} neue oder geänderte Prüfung wartet auf Sie. Schalten Sie wieder ein, um sie anzunehmen. | Teilweise pausiert: {count} neue oder geänderte Prüfungen warten auf Sie. Schalten Sie wieder ein, um sie anzunehmen.",
+            "waitsForYou": "wartet auf Sie",
+            "changedSinceSwitchedOn": "Pausiert: seit dem Einschalten geändert. Schalten Sie erneut ein, um es anzunehmen.",
             "checksFileCouldNot": "Seine Prüfdatei ließ sich nicht lesen: {error}",
-            "declaredNotRunningNothing": "Aus. Nichts, was ein Repository deklariert, läuft, bis Sie es einschalten.",
+            "declaredNotRunningNothing": "Aus. Nichts hiervon läuft, bis Sie es einschalten.",
             "runChecksDeclares": "Die Prüfungen ausführen, die {name} deklariert",
-            "afterEachEdit": "Nach jeder Änderung",
-            "landRetired": "Nachdem es gelandet ist — läuft nicht mehr; das CI prüft, was gepusht wird",
-            "whenTurnEnds": "Wenn ein Zug endet — einmal an den Agenten zurückgemeldet, blockiert nie",
-            "lastFlagged": "zuletzt gemeldet {ago}",
-            "neverFlagged": "nie etwas gemeldet",
-            "thisWorkspace": "Dieser Workspace"
+            "lastFlagged": "Zuletzt gemeldet",
+            "neverFlagged": "Nie gemeldet",
+            "thisWorkspace": "Dieser Workspace",
+            "scopeTip": "Nur bei Änderungen an",
+            "momentEdit": "Je Änderung",
+            "momentTurn": "Zugende",
+            "momentLand": "Beim Landen",
+            "momentTurnNote": "Einmal gemeldet, blockiert nie",
+            "momentLandNote": "Läuft nicht mehr"
         },
         "restartWatch": {
             "deviceDidntRun": "Das Gerät hat den Neubau nicht ausgeführt.",
@@ -9010,7 +9013,6 @@
             "writeSkill": "Einen Skill schreiben",
             "saveChanges": "Änderungen speichern",
             "anywhereInWorkspace": "Überall im Workspace",
-            "onlyTouching": "nur beim Anfassen von",
             "recentDecisions": "Jüngste Entscheidungen",
             "worthBetterModelThan": "Ein besseres Modell wert als der Rest der automatischen Jobs: es liest den Befehl als Daten, und in einem Zug, der etwas von außen aufgenommen hat, argumentiert dieser Text womöglich für seine eigene Freigabe.",
             "youreHere": "Sie sind hier"

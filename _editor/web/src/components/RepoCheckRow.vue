@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RepoCheckMoment, RepoChecksSummary } from "@intentic/sandbox-contract/schemas/settings";
-import { Row, timeAgo } from "@intentic/ui";
+import { Row, type Tip, timeAgo } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import RuleCommand from "./RuleCommand.vue";
@@ -31,21 +31,29 @@ const name = computed((): string => (entry.repo === `root` ? t(`sandbox.repoChec
 
 const MOMENTS: readonly RepoCheckMoment[] = [`edit`, `turn`, `land`];
 
-// A `turn` check runs once as an isolated turn ends, and what it finds is said back to the agent, so its label says it
-// never blocks. `land` is retired: nothing runs after work lands any more (CI checks what is pushed), and a declaration
-// naming it still reads but runs nothing, so its label says so rather than promising a check that never comes.
-const momentWords = (when: RepoCheckMoment): string =>
+// A moment is named in a word or two in its own column; what it means past that (a `turn` check is said back to the agent
+// once and never blocks; `land` is retired, since CI checks what is pushed) rides a hover card rather than a sentence.
+const momentLabel = (when: RepoCheckMoment): string =>
     when === `edit`
-        ? t(`sandbox.repoCheckRow.afterEachEdit`)
+        ? t(`sandbox.repoCheckRow.momentEdit`)
         : when === `turn`
-          ? t(`sandbox.repoCheckRow.whenTurnEnds`)
-          : t(`sandbox.repoCheckRow.landRetired`);
+          ? t(`sandbox.repoCheckRow.momentTurn`)
+          : t(`sandbox.repoCheckRow.momentLand`);
 
-// When a check last flagged something; one that never has is either healthy or aimed at nothing, and worth a look.
-const firedWords = (at: number | null | undefined): string =>
+const momentTip = (when: RepoCheckMoment): Tip | undefined =>
+    when === `edit`
+        ? undefined
+        : {
+              title: momentLabel(when),
+              note: when === `turn` ? t(`sandbox.repoCheckRow.momentTurnNote`) : t(`sandbox.repoCheckRow.momentLandNote`),
+          };
+
+// When a check last flagged something, as a bare age in the trailing column (its hover names it); one that never has is
+// either healthy or aimed at nothing, and reads as a dash.
+const firedNote = (at: number | null | undefined): Note =>
     at === null || at === undefined
-        ? t(`sandbox.repoCheckRow.neverFlagged`)
-        : t(`sandbox.repoCheckRow.lastFlagged`, { ago: timeAgo(at, { days: true }) });
+        ? { words: `—`, tip: t(`sandbox.repoCheckRow.neverFlagged`), waiting: false }
+        : { words: timeAgo(at, { days: true }), tip: t(`sandbox.repoCheckRow.lastFlagged`), waiting: false };
 
 // Whether a check runs: all of them once the owner agreed to the file as it stands, and in a file changed since, each one
 // still word for word what they agreed to. A sandbox that does not say which (no `held`) holds a changed file whole.
@@ -55,7 +63,8 @@ const runs = (index: number): boolean =>
 // New or rewritten since the owner agreed: what switching the row on again would accept.
 const waits = (index: number): boolean => entry.changed && entry.checks[index]?.when !== `land` && (entry.held?.[index] ?? true);
 
-type Line = { key: string; run: string; paths: string; note: string | undefined; waiting: boolean; dim: boolean };
+type Note = { words: string; tip: string | undefined; waiting: boolean };
+type Line = { key: string; run: string; paths: string; note: Note | undefined; dim: boolean };
 type Group = { when: RepoCheckMoment; lines: Line[]; dim: boolean };
 
 // One moment's checks under a single label, in the order the moments come; a label dims only when nothing under it runs.
@@ -72,8 +81,11 @@ const groups = computed((): Group[] =>
                           paths: (check.paths ?? []).join(`, `),
                           // A running check stamps a firing when it reports something; one that waits says so instead,
                           // and a retired one has nothing left to have flagged.
-                          note: runs(index) ? firedWords(entry.fired[index]) : waits(index) ? t(`sandbox.repoCheckRow.waitsForYou`) : undefined,
-                          waiting: waits(index),
+                          note: runs(index)
+                              ? firedNote(entry.fired[index])
+                              : waits(index)
+                                ? { words: t(`sandbox.repoCheckRow.waitsForYou`), tip: undefined, waiting: true }
+                                : undefined,
                           // Only a check's own line dims when it does not run, never the switch that would start it; a
                           // retired check reads as inert as one nobody switched on.
                           dim: !runs(index),
@@ -142,29 +154,43 @@ const statusWords = computed((): string | undefined => status.value?.words);
             />
         </template>
         <!-- No surface of its own: `indent` starts the list under the title, which is what says it belongs to this row, as
-             every other row's sub-block in the sandbox settings does. Type, not boxes, tells the moment, the command and
-             its scope and verdict apart. -->
+             every other row's sub-block in the sandbox settings does. One line per check: the moment in a narrow leading
+             column (named once per moment), the command, and its verdict at the trailing edge. -->
         <template v-if="entry.error === undefined && groups.length > 0" #below>
-            <div class="flex min-w-0 flex-col gap-3 text-xs">
-                <div v-for="group in groups" :key="group.when" class="flex min-w-0 flex-col gap-1.5">
-                    <p class="text-2xs text-subtle" :class="group.dim ? `opacity-60` : ``">{{ momentWords(group.when) }}</p>
-                    <ul class="flex min-w-0 flex-col gap-2">
-                        <li v-for="line in group.lines" :key="line.key" class="flex min-w-0 flex-col gap-0.5" :class="line.dim ? `opacity-60` : ``">
-                            <!-- The command wraps so the approval target remains fully readable. -->
-                            <RuleCommand :command="line.run" wrap />
-                            <!-- Its scope and its verdict share one quiet line, so neither needs a column a narrow pane cannot give. -->
-                            <span
-                                v-if="line.paths !== `` || line.note !== undefined"
-                                class="flex min-w-0 flex-wrap gap-x-1.5 text-2xs text-subtle"
-                            >
-                                <span v-if="line.paths !== ``" class="min-w-0 break-words"
-                                    >{{ t(`sandbox.words.onlyTouching`) }} <span class="font-mono text-muted">{{ line.paths }}</span></span
+            <div class="flex min-w-0 flex-col gap-1.5 text-xs">
+                <div v-for="group in groups" :key="group.when" class="flex min-w-0 items-baseline gap-3">
+                    <p
+                        class="w-16 shrink-0 text-2xs text-subtle"
+                        :class="[group.dim ? `opacity-60` : ``, momentTip(group.when) === undefined ? `` : `cursor-help`]"
+                        v-tooltip.top="momentTip(group.when)"
+                    >
+                        {{ momentLabel(group.when) }}
+                    </p>
+                    <ul class="flex min-w-0 flex-1 flex-col gap-1">
+                        <li
+                            v-for="line in group.lines"
+                            :key="line.key"
+                            class="flex min-w-0 items-baseline justify-between gap-3"
+                            :class="line.dim ? `opacity-60` : ``"
+                        >
+                            <!-- The command wraps so the approval target remains fully readable; its scope follows it. -->
+                            <span class="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                                <RuleCommand :command="line.run" wrap />
+                                <!-- Only when the change touches these; the hover says so, the globs alone read as a scope. -->
+                                <span
+                                    v-if="line.paths !== ``"
+                                    class="min-w-0 cursor-help break-words font-mono text-2xs text-subtle"
+                                    v-tooltip.top="{ title: t(`sandbox.repoCheckRow.scopeTip`), note: line.paths }"
+                                    >{{ line.paths }}</span
                                 >
-                                <span v-if="line.paths !== `` && line.note !== undefined" aria-hidden="true">·</span>
-                                <span v-if="line.note !== undefined" class="tabular-nums" :class="line.waiting ? `text-warning` : ``">{{
-                                    line.note
-                                }}</span>
                             </span>
+                            <span
+                                v-if="line.note !== undefined"
+                                class="shrink-0 whitespace-nowrap text-2xs tabular-nums"
+                                :class="line.note.waiting ? `text-warning` : `text-subtle`"
+                                v-tooltip.top="line.note.tip"
+                                >{{ line.note.words }}</span
+                            >
                         </li>
                     </ul>
                 </div>

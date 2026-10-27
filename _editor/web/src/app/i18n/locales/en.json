@@ -7755,18 +7755,21 @@
             "waitsOn": "Waits on"
         },
         "repoCheckRow": {
-            "partlyPaused": "Partly paused: {count} check is new or changed since you switched it on and waits for you; the ones you agreed to keep running. Read it below, then switch it on again to accept it. | Partly paused: {count} checks are new or changed since you switched it on and wait for you; the ones you agreed to keep running. Read them below, then switch it on again to accept them.",
-            "waitsForYou": "new or changed, waits for you",
-            "changedSinceSwitchedOn": "Paused: this changed since you switched it on. Read it below, then switch it on again to accept it.",
+            "partlyPaused": "Partly paused: {count} new or changed check waits for you. Switch on again to accept it. | Partly paused: {count} new or changed checks wait for you. Switch on again to accept them.",
+            "waitsForYou": "waits for you",
+            "changedSinceSwitchedOn": "Paused: changed since you switched it on. Switch on again to accept it.",
             "checksFileCouldNot": "Its checks file could not be read: {error}",
-            "declaredNotRunningNothing": "Off. Nothing a repository declares runs until you switch it on.",
+            "declaredNotRunningNothing": "Off. Nothing here runs until you switch it on.",
             "runChecksDeclares": "Run the checks {name} declares",
-            "afterEachEdit": "After each edit",
-            "landRetired": "After it lands — no longer runs; CI checks what is pushed",
-            "whenTurnEnds": "When a turn ends — said back to the agent once, never blocks",
-            "lastFlagged": "last flagged {ago}",
-            "neverFlagged": "never flagged",
-            "thisWorkspace": "This workspace"
+            "lastFlagged": "Last flagged",
+            "neverFlagged": "Never flagged",
+            "thisWorkspace": "This workspace",
+            "scopeTip": "Only when touching",
+            "momentEdit": "Each edit",
+            "momentTurn": "Turn end",
+            "momentLand": "On land",
+            "momentTurnNote": "Said back once, never blocks",
+            "momentLandNote": "No longer runs"
         },
         "restartWatch": {
             "deviceDidntRun": "That device didn't run the rebuild.",
@@ -9010,7 +9013,6 @@
             "writeSkill": "Write a skill",
             "saveChanges": "Save changes",
             "anywhereInWorkspace": "Anywhere in the workspace",
-            "onlyTouching": "only when touching",
             "recentDecisions": "Recent decisions",
             "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval.",
             "youreHere": "You're here"

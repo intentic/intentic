@@ -64,20 +64,16 @@ test(`a repository's row prints the command it declares, not a count of them`, (
     expect(host.textContent).toContain(`intentic/.intentic/checks.json`);
 });
 
-// A check is drawn on the row's own surface, not in a box of its own: the command, then one quiet line with its scope and
-// its verdict, under the label of the moment it runs at.
-test(`a check reads as its command, then its scope and verdict on one quiet line, with no surface of its own`, () => {
+// A check is drawn on the row's own surface, not in a box of its own: one line of its command and scope, with its verdict
+// at the trailing edge, beside the label of the moment it runs at.
+test(`a check reads as its command and scope, then its verdict, on one line with no surface of its own`, () => {
     repos.value = [declaring({ checks: [{ when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`, `test/**`] }] })];
     const host = mount();
     const line = host.querySelector(`li`)!;
     expect(line.closest(`[class*="rounded"][class*="border"]`)).toBeNull();
-    expect(line.children[0]!.textContent).toBe(`pnpm exec eslint {file}`);
-    expect([...line.children[1]!.children].map((part) => part.textContent?.trim())).toEqual([
-        `only when touching src/**, test/**`,
-        `·`,
-        `never flagged`,
-    ]);
-    expect(host.textContent).toContain(`After each edit`);
+    expect([...line.children[0]!.children].map((part) => part.textContent?.trim())).toEqual([`pnpm exec eslint {file}`, `src/**, test/**`]);
+    expect(line.children[1]!.textContent).toBe(`—`);
+    expect(host.textContent).toContain(`Each edit`);
     expect(adopt).not.toHaveBeenCalled();
 });
 
@@ -101,12 +97,8 @@ test(`each check is named by the moment it runs at, once per moment`, () => {
         }),
     ];
     const groups = groupsOf(mount());
-    expect(groups.map(([label]) => label)).toEqual([
-        `After each edit`,
-        `When a turn ends — said back to the agent once, never blocks`,
-        `After it lands — no longer runs; CI checks what is pushed`,
-    ]);
-    expect(groups[0]!.slice(1).map((line) => line.split(`never`)[0])).toEqual([`pnpm exec eslint {file}`, `pnpm exec prettier --check {file}`]);
+    expect(groups.map(([label]) => label.trim())).toEqual([`Each edit`, `Turn end`, `On land`]);
+    expect(groups[0]!.slice(1).map((line) => line.replace(/—$/, ``))).toEqual([`pnpm exec eslint {file}`, `pnpm exec prettier --check {file}`]);
     expect(groups[2]!.slice(1)).toEqual([`pnpm test`]);
 });
 
@@ -125,7 +117,7 @@ test(`a turn check runs and says when it last flagged something, and a declared 
     ];
     const host = mount();
     const [turn, land] = [...host.querySelectorAll<HTMLElement>(`li`)];
-    expect([turn?.textContent, land?.textContent]).toEqual([`pnpm lintlast flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`, `pnpm verify`]);
+    expect([turn?.textContent, land?.textContent]).toEqual([`pnpm lint${timeAgo(FIVE_DAYS_AGO, { days: true })}`, `pnpm verify`]);
     expect([turn?.classList.contains(`opacity-60`), land?.classList.contains(`opacity-60`)]).toEqual([false, true]);
     const labels = [...host.querySelectorAll(`ul`)].map((list) => list.previousElementSibling);
     expect(labels.map((label) => label?.classList.contains(`opacity-60`))).toEqual([false, true]);
@@ -146,14 +138,14 @@ test(`a running edit check says when it last flagged something, and a retired la
         }),
     ];
     const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
-    expect(lines.find((line) => line.includes(`eslint`))).toContain(`last flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`);
-    expect(lines.find((line) => line.includes(`prettier`))).toContain(`never flagged`);
-    expect(lines.find((line) => line.includes(`pnpm test`))).not.toContain(`flagged`);
+    expect(lines.find((line) => line.includes(`eslint`))).toBe(`pnpm exec eslint {file}${timeAgo(FIVE_DAYS_AGO, { days: true })}`);
+    expect(lines.find((line) => line.includes(`prettier`))).toBe(`pnpm exec prettier --check {file}—`);
+    expect(lines.find((line) => line.includes(`pnpm test`))).toBe(`pnpm test`);
 });
 
 test(`a check nobody switched on claims no history`, () => {
     repos.value = [declaring({ adopted: false })];
-    expect(mount().textContent).not.toContain(`flagged`);
+    expect(mount().querySelector(`li`)?.textContent).toBe(`pnpm exec eslint {file}`);
 });
 
 test(`switching a row on adopts that repository, by name`, async () => {
@@ -185,13 +177,13 @@ test(`a declaration that gained a check runs what was agreed to, and marks only 
         }),
     ];
     const host = mount();
-    expect(host.textContent).toContain(`Partly paused: 1 check is new or changed`);
+    expect(host.textContent).toContain(`Partly paused: 1 new or changed check waits for you`);
     const lines = [...host.querySelectorAll(`li`)];
     const eslint = lines.find((line) => line.textContent?.includes(`eslint`));
     const warm = lines.find((line) => line.textContent?.includes(`warm.mjs`));
-    expect(eslint?.textContent).toContain(`last flagged`);
+    expect(eslint?.textContent).toContain(timeAgo(FIVE_DAYS_AGO, { days: true }));
     expect(eslint?.className).not.toContain(`opacity-60`);
-    expect(warm?.textContent).toContain(`new or changed, waits for you`);
+    expect(warm?.textContent).toContain(`waits for you`);
     expect(warm?.className).toContain(`opacity-60`);
 });
 
@@ -199,16 +191,16 @@ test(`a declaration that gained a check runs what was agreed to, and marks only 
 test(`a changed declaration that says nothing of which checks wait reads as wholly paused`, () => {
     repos.value = [declaring({ adopted: false, changed: true, fired: [FIVE_DAYS_AGO] })];
     const host = mount();
-    expect(host.textContent).toContain(`Paused: this changed since you switched it on`);
-    expect(host.textContent).not.toContain(`last flagged`);
-    expect(host.textContent).toContain(`new or changed, waits for you`);
+    expect(host.textContent).toContain(`Paused: changed since you switched it on`);
+    expect(host.textContent).not.toContain(timeAgo(FIVE_DAYS_AGO, { days: true }));
+    expect(host.querySelector(`li`)?.textContent).toBe(`pnpm exec eslint {file}waits for you`);
 });
 
 // Said on the row that waits, and only there: a count at the group's foot would repeat it.
 test(`a declaration nobody has answered yet says so on its own row`, () => {
     repos.value = [declaring({ adopted: false })];
     const host = mount();
-    expect(host.textContent).toContain(`Off. Nothing a repository declares runs`);
+    expect(host.textContent).toContain(`Off. Nothing here runs until you switch it on`);
     expect(host.textContent).not.toContain(`waiting on you`);
 });
 

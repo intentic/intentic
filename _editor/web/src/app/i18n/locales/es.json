@@ -7755,18 +7755,21 @@
             "waitsOn": "Espera a"
         },
         "repoCheckRow": {
-            "partlyPaused": "Pausada en parte: {count} comprobación es nueva o ha cambiado desde que la activaste y te espera; las que aceptaste siguen ejecutándose. Léela abajo y vuelve a activarla para aceptarla. | Pausada en parte: {count} comprobaciones son nuevas o han cambiado desde que la activaste y te esperan; las que aceptaste siguen ejecutándose. Léelas abajo y vuelve a activarla para aceptarlas.",
-            "waitsForYou": "nueva o cambiada, te espera",
-            "changedSinceSwitchedOn": "En pausa: esto cambió desde que lo activaste. Léelo abajo y vuelve a activarlo para aceptarlo.",
+            "partlyPaused": "Pausada en parte: {count} comprobación nueva o cambiada te espera. Vuelve a activarla para aceptarla. | Pausada en parte: {count} comprobaciones nuevas o cambiadas te esperan. Vuelve a activarla para aceptarlas.",
+            "waitsForYou": "te espera",
+            "changedSinceSwitchedOn": "En pausa: cambió desde que lo activaste. Vuelve a activarlo para aceptarlo.",
             "checksFileCouldNot": "No se pudo leer su archivo de comprobaciones: {error}",
-            "declaredNotRunningNothing": "Desactivado. Nada de lo que declara un repositorio se ejecuta hasta que lo actives.",
+            "declaredNotRunningNothing": "Desactivado. Nada de esto se ejecuta hasta que lo actives.",
             "runChecksDeclares": "Ejecutar las comprobaciones que declara {name}",
-            "afterEachEdit": "Tras cada edición",
-            "landRetired": "Tras integrarse — ya no se ejecuta; la CI comprueba lo que se envía",
-            "whenTurnEnds": "Cuando acaba un turno — se le comunica al agente una vez, nunca bloquea",
-            "lastFlagged": "último aviso {ago}",
-            "neverFlagged": "nunca avisó",
-            "thisWorkspace": "Este espacio de trabajo"
+            "lastFlagged": "Último aviso",
+            "neverFlagged": "Nunca avisó",
+            "thisWorkspace": "Este espacio de trabajo",
+            "scopeTip": "Solo al tocar",
+            "momentEdit": "Cada edición",
+            "momentTurn": "Fin de turno",
+            "momentLand": "Al integrar",
+            "momentTurnNote": "Se comunica una vez, nunca bloquea",
+            "momentLandNote": "Ya no se ejecuta"
         },
         "restartWatch": {
             "deviceDidntRun": "Ese dispositivo no ejecutó la reconstrucción.",
@@ -9010,7 +9013,6 @@
             "writeSkill": "Escribir una skill",
             "saveChanges": "Guardar los cambios",
             "anywhereInWorkspace": "En cualquier parte del espacio de trabajo",
-            "onlyTouching": "solo al tocar",
             "recentDecisions": "Decisiones recientes",
             "worthBetterModelThan": "Merece un modelo mejor que el resto de tareas automáticas: lee el comando como datos, y en un turno que ha absorbido algo de fuera, ese texto puede estar argumentando a favor de su propia aprobación.",
             "youreHere": "Estás aquí"
