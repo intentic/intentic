@@ -246,6 +246,18 @@ it(`says why there is no rebuild here for a container nobody here started`, () =
     expect(el.querySelector(`#sandbox-rebuild`)?.textContent).toContain(`can't be rebuilt from here`);
 });
 
+// A Komodo-run sandbox was handed the `ic` one-liner, which had nowhere to run and would have taken the container from
+// Compose: under Compose the step is the compose file's edit, and no host command at all.
+it(`gives a sandbox Docker Compose runs the edit to its compose file instead of a host command`, () => {
+    pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\n# intentic:runtime --privileged\n`, hash: `f00d` };
+    state.value = { ...environment, manager: `compose` };
+    const el = mount();
+    expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
+    const step = el.querySelector(`[data-executor="compose"]`);
+    expect(step?.textContent).toContain(`SANDBOX_ENVIRONMENT_HASH=f00d`);
+    expect(step?.textContent).not.toContain(`curl`);
+});
+
 // The daemon marks a block as arriving after a rebuild only while one is pending (contents.ts), so the card has no
 // sentence for "arriving, yet nothing pending": that state once drew one, for a tool whose command sat off PATH.
 it(`draws no rebuild step for contents while nothing approved waits to be built`, () => {

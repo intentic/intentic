@@ -7194,6 +7194,11 @@
             "whereGetsVersion": "Woher {label} seine Version bekommt"
         },
         "environmentCard": {
+            "composeLead": "Diese Sandbox läuft unter Docker Compose, deshalb wird sie über ihre Compose-Datei neu gebaut, nicht mit einem Befehl von hier. Füge dies dem Service der Sandbox hinzu:",
+            "composeServiceLabel": "Zum Service der Sandbox hinzufügen",
+            "composeHashLead": "Und dies zur environment des Service, damit die Sandbox weiß, dass sie dieses Rezept ausführt:",
+            "composeHashOnlyLead": "Diese Sandbox läuft unter Docker Compose, und ihr Image enthält bereits alles hier. Füge dies der environment des Service in ihrer Compose-Datei hinzu, damit die Sandbox es weiß:",
+            "composeRedeploy": "Dann neu bereitstellen: Deploy in Komodo oder Portainer, oder im Ordner mit der Datei:",
             "activeOverlay": "Aktives Overlay",
             "againstSandboxsHost": "gegen den Host dieser Sandbox.",
             "applied": "angewendet",
@@ -8495,7 +8500,7 @@
             "downloadChecking": "Ihre Dateien werden gegen {version} geprüft",
             "downloadNote": "Ihre Sandbox arbeitet weiter. Sobald der Download fertig ist, dauert das Update etwa 30 Sekunden.",
             "rebuildingBadge": "Wird neu gebaut",
-            "composeUpdateLead": "Docker Compose betreibt diese Sandbox, also wird sie so aktualisiert wie Compose es tut. Führe das im Ordner mit ihrer docker-compose.yml aus:",
+            "composeUpdateLead": "Docker Compose betreibt diese Sandbox, also wird sie so aktualisiert wie Compose es tut: Deploy in Komodo oder Portainer, oder führe das im Ordner mit ihrer Compose-Datei aus:",
             "composeUpdateLikelyLead": "Diese Sandbox wurde weder mit dem Setup-Befehl noch mit der Desktop-App gestartet, also wird sie dort aktualisiert, wo sie gestartet wurde. Mit Docker Compose führe das im Ordner mit ihrer docker-compose.yml aus:",
             "composeUpdateLabel": "Docker-Compose-Update-Befehl"
         },

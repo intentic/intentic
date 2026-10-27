@@ -1,7 +1,7 @@
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { packFragment, readPack } from "../../image/packs.js";
 import { registry } from "../registry.js";
-import { addressPoolOf, isPrivileged, optionStatuses, withEngineSettings } from "./docker.handler.js";
+import { addressPoolOf, isPrivileged, notPrivileged, optionStatuses, withEngineSettings } from "./docker.handler.js";
 
 beforeEach(() => stubEnv("SANDBOX_VM", undefined));
 afterEach(unstubAllEnvs);
@@ -105,4 +105,13 @@ test("isPrivileged reads CAP_SYS_MODULE (bit 16) out of CapEff", () => {
     // A plain user process, or an unreadable status.
     expect(isPrivileged("CapEff:\t0000000000000000\n")).toBe(false);
     expect(isPrivileged("")).toBe(false);
+});
+
+// Under Compose no rebuild from the editor grants the privilege; only the compose file does, so that is what is said.
+test("an unprivileged sandbox Docker Compose runs is told to edit its compose file, never to rebuild from the editor", () => {
+    stubEnv("SANDBOX_MANAGER", "compose");
+    expect(notPrivileged()).toContain("`privileged: true`");
+    expect(notPrivileged()).not.toContain("Rebuild");
+    stubEnv("SANDBOX_MANAGER", undefined);
+    expect(notPrivileged()).toContain("Rebuild it from the Environment entry");
 });

@@ -9,6 +9,7 @@ import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { DOCKER_PANEL_KEY } from "../../ports/panel-keys.js";
 import { textFile } from "../../store/plain-files/text-file.js";
 import { parseJsonOr } from "@intentic/base/json";
+import { COMPOSE_MANAGER } from "@intentic/sandbox-run";
 
 // In-sandbox Docker Engine, dormant and unprivileged until this capability is added. Its fragment is a single
 // `--privileged` runtime directive; `apply` starts dockerd as the panel-docker session once privileged, restored on
@@ -109,6 +110,16 @@ export const isPrivileged = (procStatus: string): boolean => {
     return hex !== undefined && (BigInt(`0x${hex}`) & (1n << 16n)) !== 0n;
 };
 const privileged = async (): Promise<boolean> => isPrivileged(await readFile("/proc/self/status", "utf8").catch(() => ""));
+
+// Docker Compose owns this container (SANDBOX_MANAGER): no rebuild from the editor makes it privileged, only its compose
+// file does, so that is what it is told. Read fresh each call, like SANDBOX_GPU.
+const composeRun = (): boolean => process.env["SANDBOX_MANAGER"]?.trim() === COMPOSE_MANAGER;
+
+// What makes the container privileged, said where it is missing.
+export const notPrivileged = (): string =>
+    composeRun()
+        ? "Docker Compose runs this sandbox, so add `privileged: true` to its service in the compose file and redeploy it (the Environment entry shows the exact lines). The Docker Engine starts by itself when it comes back."
+        : "Rebuild it from the Environment entry; the Docker Engine starts automatically when it restarts.";
 
 // Starts dockerd as the panel-docker session and waits for it to answer; false on timeout (output stays in the panel
 // terminal either way).
@@ -237,7 +248,7 @@ export const dockerHandler: CapabilityHandler = {
             await applyEngineSettings(ctx, config);
             yield {
                 kind: "log",
-                message: `Stored ${id}, this sandbox isn't running privileged yet. Rebuild it from the Environment entry; the Docker Engine starts automatically when it restarts.`,
+                message: `Stored ${id}, this sandbox isn't running privileged yet. ${notPrivileged()}`,
             };
             return;
         }
@@ -279,7 +290,7 @@ export const startDockerdIfEnabled = async (ctx: CapabilityCtx): Promise<void> =
         return;
     }
     if (!(await privileged())) {
-        ctx.logger.warn("docker: capability enabled but the container is not privileged, rebuild from the Environment entry");
+        ctx.logger.warn(`docker: capability enabled but the container is not privileged. ${notPrivileged()}`);
         return;
     }
     await startDockerd(ctx);

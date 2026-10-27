@@ -7194,6 +7194,11 @@
             "whereGetsVersion": "D'où {label} tire sa version"
         },
         "environmentCard": {
+            "composeLead": "Docker Compose exécute ce sandbox : il se reconstruit depuis son fichier compose, pas avec une commande d'ici. Ajoutez ceci au service du sandbox :",
+            "composeServiceLabel": "À ajouter au service du sandbox",
+            "composeHashLead": "Et ceci à l'environment du service, pour que le sandbox sache qu'il exécute cette recette :",
+            "composeHashOnlyLead": "Docker Compose exécute ce sandbox, et son image contient déjà tout ce qui est ici. Ajoutez ceci à l'environment du service dans son fichier compose, pour que le sandbox le sache :",
+            "composeRedeploy": "Puis redéployez-le : Deploy dans Komodo ou Portainer, ou dans le dossier du fichier :",
             "activeOverlay": "Surcouche active",
             "againstSandboxsHost": "face à l'hôte de ce sandbox.",
             "applied": "appliquée",
@@ -8495,7 +8500,7 @@
             "downloadChecking": "Vérification de vos fichiers avec {version}",
             "downloadNote": "Votre sandbox continue de fonctionner. Une fois le téléchargement fini, la mise à jour prend environ 30 secondes.",
             "rebuildingBadge": "Reconstruction",
-            "composeUpdateLead": "Docker Compose exécute ce sandbox, il se met donc à jour comme Compose le fait. Exécutez ceci dans le dossier de son docker-compose.yml :",
+            "composeUpdateLead": "Docker Compose exécute ce sandbox, il se met donc à jour comme Compose le fait : Deploy dans Komodo ou Portainer, ou exécutez ceci dans le dossier de son fichier compose :",
             "composeUpdateLikelyLead": "Ce sandbox n'a été lancé ni par la commande d'installation ni par l'application de bureau, il se met donc à jour là où il a été lancé. Avec Docker Compose, exécutez ceci dans le dossier de son docker-compose.yml :",
             "composeUpdateLabel": "Commande de mise à jour Docker Compose"
         },

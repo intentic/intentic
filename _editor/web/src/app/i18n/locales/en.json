@@ -7194,6 +7194,11 @@
             "whereGetsVersion": "Where {label} gets its version"
         },
         "environmentCard": {
+            "composeLead": "Docker Compose runs this sandbox, so it rebuilds from its compose file, not from a command here. Add this to the sandbox's service:",
+            "composeServiceLabel": "Add to the sandbox's service",
+            "composeHashLead": "And this to the service's environment, so the sandbox knows it runs this recipe:",
+            "composeHashOnlyLead": "Docker Compose runs this sandbox, and the image it runs already has everything here. Add this to the service's environment in its compose file, so the sandbox knows:",
+            "composeRedeploy": "Then redeploy it: Deploy in Komodo or Portainer, or in the folder holding the file:",
             "activeOverlay": "Active overlay",
             "againstSandboxsHost": "against this sandbox's host.",
             "applied": "applied",
@@ -8495,7 +8500,7 @@
             "downloadChecking": "Checking your files against {version}",
             "downloadNote": "Your sandbox keeps working. Once it's in, updating takes about 30 seconds.",
             "rebuildingBadge": "Rebuilding",
-            "composeUpdateLead": "Docker Compose runs this sandbox, so it updates the way Compose does. Run this in the folder holding its docker-compose.yml:",
+            "composeUpdateLead": "Docker Compose runs this sandbox, so it updates the way Compose does: Deploy in Komodo or Portainer, or run this in the folder holding its compose file:",
             "composeUpdateLikelyLead": "This sandbox wasn't started by the setup command or the desktop app, so it updates where it was started. With Docker Compose, run this in the folder holding its docker-compose.yml:",
             "composeUpdateLabel": "Docker Compose update command"
         },

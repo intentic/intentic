@@ -180,7 +180,10 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     </p>
     <p>
         On a Compose-managed sandbox that <code>privileged: true</code> stays your own edit to the file. The rebuild flow recreates
-        containers with <code>docker run</code>, and would fight Compose over ownership if it wrote it for you.
+        containers with <code>docker run</code>, and would fight Compose over ownership if it wrote it for you. When the file sets
+        <code>SANDBOX_MANAGER=compose</code> (the setup page's file does), the Environment card shows the exact lines to add to the
+        service instead of a rebuild command, then you redeploy the stack the way you always do (Deploy in Komodo or Portainer, or
+        <code>docker compose up -d</code>).
     </p>
     <p>
         The nested engine also runs <strong>Ollama</strong>, for people who want that runtime specifically: <code>docker run -d -p

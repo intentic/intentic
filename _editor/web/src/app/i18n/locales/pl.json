@@ -6644,6 +6644,11 @@
             "whereGetsVersion": "Skąd {label} bierze swoją wersję"
         },
         "environmentCard": {
+            "composeLead": "Ten sandbox uruchamia Docker Compose, więc przebudowuje się go z jego pliku compose, a nie poleceniem stąd. Dodaj to do usługi sandboxa:",
+            "composeServiceLabel": "Dodaj do usługi sandboxa",
+            "composeHashLead": "I to do environment usługi, żeby sandbox wiedział, że działa na tym przepisie:",
+            "composeHashOnlyLead": "Ten sandbox uruchamia Docker Compose, a jego obraz ma już wszystko, co tu jest. Dodaj to do environment usługi w jego pliku compose, żeby sandbox o tym wiedział:",
+            "composeRedeploy": "Potem wdróż go ponownie: Deploy w Komodo lub Portainerze albo w folderze z plikiem:",
             "activeOverlay": "Aktywna nakładka",
             "againstSandboxsHost": "wobec hosta tego sandboxa.",
             "applied": "zastosowana",
@@ -8020,7 +8025,7 @@
             "downloadChecking": "Sprawdzanie Twoich plików pod kątem {version}",
             "downloadNote": "Twój sandbox dalej działa. Gdy pobieranie się skończy, aktualizacja zajmie około 30 sekund.",
             "rebuildingBadge": "Przebudowa",
-            "composeUpdateLead": "Ten sandbox działa pod Docker Compose, więc aktualizuje się tak jak Compose. Uruchom to w folderze z jego docker-compose.yml:",
+            "composeUpdateLead": "Ten sandbox działa pod Docker Compose, więc aktualizuje się tak jak Compose: Deploy w Komodo lub Portainerze albo uruchom to w folderze z jego plikiem compose:",
             "composeUpdateLikelyLead": "Ten sandbox nie został uruchomiony poleceniem konfiguracji ani aplikacją desktopową, więc aktualizuje się tam, gdzie go uruchomiono. W Docker Compose uruchom to w folderze z jego docker-compose.yml:",
             "composeUpdateLabel": "Polecenie aktualizacji Docker Compose"
         },

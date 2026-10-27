@@ -12,6 +12,7 @@ import { useEnvironmentContents } from "./useEnvironmentContents";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import HostedRebuild from "./rebuild/HostedRebuild.vue";
+import ComposeRebuild from "./rebuild/ComposeRebuild.vue";
 import { rebuildRouteOf } from "./rebuild/rebuildRoute";
 import { REBUILD_ANCHOR } from "./rebuildAnchor";
 import HostRecreate from "../../capabilities/connect/hosts/HostRecreate.vue";
@@ -202,6 +203,7 @@ const route = computed(() =>
         hosted: hosted.value !== undefined,
         owner: isOwner.value,
         serverManaged: serverManaged.value,
+        composeManaged: state.value?.manager === `compose`,
         fromCheckout: fromCheckout.value,
         slug: slug.value,
     }),
@@ -302,6 +304,8 @@ watch(
                     <span class="font-mono">intentic deploy apply</span>
                     {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
                 </p>
+                <!-- Compose owns the container: the edit to its file and Compose's redeploy, never the `ic` one-liner. -->
+                <ComposeRebuild v-else-if="route === `compose` && pending" :hash="pending.hash" :content="pending.content" />
                 <!-- The checkout rebuild itself is on the Sandbox tab; this only points there. -->
                 <p v-else-if="route === `checkout`" data-executor="checkout" class="text-2xs text-subtle">
                     {{ t(`sandbox.environmentCard.buildsWithCheckoutRebuild`) }}
