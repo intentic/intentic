@@ -17,6 +17,7 @@ import { hasReturned, useHostedPlan } from "../../models/hosted-plan/useHostedPl
 import { HOSTED_PLAN } from "../../lib/queryKeys";
 import { apiClient } from "../../lib/useApi";
 import { desktopVersion } from "../../app/environments/desktop";
+import { newSandboxLink } from "../../models/sandbox/addSandbox";
 import { dismissOperation, useOperation, useOperations } from "../../workbench/operations/operations";
 import { onScreen } from "../../workbench/window/onScreen";
 import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
@@ -212,9 +213,9 @@ const moveTo = async (sandboxId: string, tier: string): Promise<void> => {
 // A plan with nothing under it: the one state in which cancelling is the advice rather than the door.
 const planWithoutMachine = computed(() => paying.value && hosted.value !== undefined && machines.value.length === 0);
 
-// Every door out of this page wants the platform's machine, never this computer's: Home's new sandbox, with a machine
-// of ours picked, which is what a page about hosting offers.
-const HOSTED_SETUP = { path: `/home`, query: { add: `sandbox`, machine: `hosted` } } as const;
+// Every door out of this page wants the platform's machine, never this computer's: a new sandbox with a machine of ours
+// picked, which is what a page about hosting offers; made on Home, or in This computer's own window when open there.
+const HOSTED_SETUP = newSandboxLink(`hosted`);
 </script>
 
 <template>

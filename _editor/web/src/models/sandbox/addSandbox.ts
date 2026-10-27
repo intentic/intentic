@@ -1,6 +1,8 @@
 import { useDevice } from "@intentic/ui";
 import { readonly, ref } from "vue";
 import { useRouter, type RouteLocationRaw } from "vue-router";
+import { localFace } from "../../app/environments/local";
+import { localHost } from "../../app/environments/localHost";
 import { useAccount } from "../../client/auth/useAccount";
 import { useRole } from "../../client/sandbox/useRole";
 import { signInAt } from "../../lib/routes/signIn";
@@ -28,6 +30,17 @@ export const ADD_SANDBOX_HOME_PATH = `/home?${ADD_SANDBOX_QUERY}=${ADD_SANDBOX_V
  * a machine of ours.
  */
 export const LOCAL_ADD_SANDBOX_PATH = `/sandbox-new`;
+
+/**
+ * Where a link to a new sandbox goes from this window, the machine picked or not: Home's ask in the workspace, and the
+ * folder window's own page on This computer, which has no Home (its router sends an unknown address to Files).
+ */
+export const newSandboxLink = (machine?: `hosted`): RouteLocationRaw => {
+    if (localFace() !== undefined && localHost().newSandbox !== undefined) {
+        return machine === undefined ? LOCAL_ADD_SANDBOX_PATH : { path: LOCAL_ADD_SANDBOX_PATH, query: { on: machine } };
+    }
+    return machine === undefined ? ADD_SANDBOX_HOME_PATH : { path: `/home`, query: { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, machine } };
+};
 
 // allow(module-state): one Add sandbox dialog for the window, asked for from wherever its press is
 const asked = ref(false);

@@ -3,6 +3,7 @@ import { Button, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
+import { newSandboxLink } from "../../../models/sandbox/addSandbox";
 import HostedTierCard from "./HostedTierCard.vue";
 import type { Rung } from "./planLadder";
 
@@ -27,9 +28,10 @@ const emit = defineEmits<{ checkout: [tier: string] }>();
 
 const maxHours = computed(() => Math.max(...props.ladder.map((rung) => rung.hours)));
 
-// Home's new sandbox, with the machine picked: the platform's from here, and this computer's for the other door.
-const HOSTED_SETUP = { path: `/home`, query: { add: `sandbox`, machine: `hosted` } } as const;
-const OWN_SETUP = { path: `/home`, query: { add: `sandbox` } } as const;
+// A new sandbox, with the machine picked: the platform's from here, and this computer's for the other door. Made on
+// Home, or in This computer's own window when Billing is open there (newSandboxLink).
+const HOSTED_SETUP = newSandboxLink(`hosted`);
+const OWN_SETUP = newSandboxLink();
 
 const assurances = computed(() => [
     { icon: `undo` as const, title: t(`settings.hostedPlanOffer.cancelAnyTime`), body: t(`settings.hostedPlanOffer.cancelAnyTimeBody`) },
