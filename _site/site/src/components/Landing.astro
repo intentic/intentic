@@ -12,6 +12,7 @@ import Corners from "./Corners.astro";
 import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
+import AccessBand from "./landing/AccessBand.astro";
 import Band from "./landing/Band.astro";
 import Economics from "./landing/Economics.astro";
 import FaqList from "./landing/FaqList.astro";
@@ -175,6 +176,9 @@ const { steps: appSteps, alternatives } = content.connect;
 
             <!-- Compare the two working environments side by side. -->
             <Workspace content={content.workspace} />
+
+            <!-- Show who reaches what: how a shared sandbox stays yours. -->
+            <AccessBand />
 
             <!-- Explain the cost model. -->
             <Economics content={content.economics} accountsLabel="Your agent accounts" flatLabel="Flat, not metered" />

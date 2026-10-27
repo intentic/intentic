@@ -1,0 +1,16 @@
+---
+import { accessMapScene } from "@intentic/site-content/access-map";
+import AccessMapFigure from "../figures/AccessMapFigure.astro";
+import Band from "./Band.astro";
+
+/* Who reaches what: the hero promises shared agents, and this band shows how sharing stays safe. */
+const { eyebrow, heading, sub, cta, footnote } = accessMapScene;
+---
+
+<Band id="access" intro={{ eyebrow, heading, sub }}>
+    <AccessMapFigure />
+    <div class="compare-foot">
+        <p>{footnote}</p>
+        <a href={cta.href} class="link">{cta.label} →</a>
+    </div>
+</Band>

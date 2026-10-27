@@ -140,7 +140,9 @@ flowchart LR
   allow (`personaAllowsCapability`, shared with the daemon through the contract). A connection whose tile is not loaded
   still appears under its own id. The roster is the owner's to read, so a maintainer's map shows tokens, links and
   themselves, and says so. It is core rather than an extension for the same reason as the audit log: it describes the
-  security model, and a copy of those rules that drifted, or that someone switched off, would misstate it.
+  security model, and a copy of those rules that drifted, or that someone switched off, would misstate it. The public site redraws it on its home page from a sample sandbox
+  (`_site/site/src/components/figures/AccessMapFigure.astro`, its sample in `_site/site-content/src/access-map.ts`), so a
+  change to what the map tells apart belongs there too.
 - **Oversight: Privacy & safety, then Activity.** The hub's last group (`sandboxNav.ts`), two rows for pages few
   readers open. Privacy & safety is one row standing for four pages, drawn as tabs above whichever is open, each at its
   own address (`HubTab.parts`, `workbench/hub/HubLayout.vue`); every one is still a palette destination by name. They

@@ -1,0 +1,1233 @@
+---
+/* THE ACCESS MAP: the app's Sandbox ▸ Map, redrawn for the home page. The sandbox is a walled precinct: who gets in
+   reaches it through gates in its west wall, its areas are rooms with their personas seated inside, its secrets are a
+   sealed vault, and what it reaches leaves through ports in its east wall. Pointing at a way in lights what it reaches;
+   pointing at a thing lights who reaches it. A tour lights each way in while the figure is on screen.
+
+   Every lighting is worked out at build (`lib/access-lighting.ts`) from the sample in `@intentic/site-content/access-map`;
+   the script only draws the wires where the cards landed and switches which lighting shows. */
+import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
+import { accessMapScene as scene, type AccessClusterKey } from "@intentic/site-content/access-map";
+import { accessLightings, listed, nodeIdsOf, principalKey, reachedBy } from "../../lib/access-lighting";
+import Corners from "../Corners.astro";
+import { LOTUS } from "../ornaments";
+
+const CLUSTER_ORDER: readonly AccessClusterKey[] = ["people", "programs", "sandboxes"];
+const clusters = CLUSTER_ORDER.map((key) => ({ key, label: scene.clusters[key], principals: scene.principals.filter((p) => p.cluster === key) })).filter(
+    (cluster) => cluster.principals.length > 0,
+);
+
+const lights = Object.fromEntries(accessLightings(scene));
+const tour = scene.principals.map(principalKey);
+
+// One caption per thing: who reaches it, with the line that says what it is (a persona's note, an area's folders). A
+// persona is worn rather than reached, so its caption is its own name and who may work as it.
+const nodeCaptions = nodeIdsOf(scene).map((id) => {
+    const persona = scene.personas.find((card) => card.id === id);
+    const area = scene.areas.find((room) => room.id === id);
+    const outward = scene.groups.flatMap((group) => group.items).find((item) => item.id === id);
+    const rows = reachedBy(scene, id).map((row) => ({
+        label: persona === undefined ? row.label : scene.reachedBy.persona.replace("{name}", persona.name),
+        names: listed(row.names),
+    }));
+    return {
+        id,
+        title: persona === undefined ? scene.reachedBy.title.replace("{name}", area?.name ?? outward?.label ?? scene.secrets.called) : `${persona.name}, ${persona.role}`,
+        note: persona?.note ?? area?.folders.join("  ") ?? (id === "secrets" ? scene.secrets.note : undefined),
+        mono: area !== undefined,
+        rows,
+    };
+});
+
+const personasIn = (areaId: string) => scene.personas.filter((persona) => persona.home === areaId);
+const initial = (name: string): string => name.slice(0, 1).toUpperCase();
+
+const GLYPH = {
+    key: '<circle cx="7.5" cy="15.5" r="4"/><path d="m10.4 12.6 9.1-9.1"/><path d="m16.5 6.5 2.6 2.6"/><path d="m13.9 9.1 2 2"/>',
+    link: '<path d="M10 13.5a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4l-1.4 1.4"/><path d="M14 10.5a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.4-1.4"/>',
+    lock: '<rect x="5" y="11" width="14" height="9.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+    pause: '<path d="M9 5v14"/><path d="M15 5v14"/>',
+    play: '<path d="M7 4.5v15l12-7.5z"/>',
+};
+const glyph = (paths: string, size = 14): string =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const mark = (brand: "claude" | "codex"): string =>
+    `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="${PROVIDER_BRAND_PATHS[brand]}"${providerFillRule(brand) === undefined ? "" : ` fill-rule="evenodd"`}/></svg>`;
+---
+
+<figure class="rm" data-rm data-lights={JSON.stringify(lights)} data-tour={JSON.stringify(tour)} data-paused="false" aria-label={scene.label}>
+    <Corners />
+    <div class="rm-board" data-rm-board>
+        {/* The wires and the wall's openings: drawn by the script once the cards have landed, never over a name. */}
+        <svg class="rm-wires" data-rm-wires aria-hidden="true"></svg>
+
+        {/* What the light means: one caption per lighting, stacked in one cell so the drawing never moves under it. */}
+        <div class="rm-caption" data-rm-captions>
+            <div class="rm-cap" data-rm-cap="" data-on="true">
+                <p class="rm-cap-title">{scene.intro.title}</p>
+                <p class="rm-cap-body">{scene.intro.body}</p>
+            </div>
+            {
+                scene.principals.map((principal) => (
+                    <div class="rm-cap" data-rm-cap={`who:${principal.id}`}>
+                        <p class="rm-cap-title">{principal.title}</p>
+                        <p class="rm-cap-body">{principal.body}</p>
+                    </div>
+                ))
+            }
+            {
+                nodeCaptions.map((caption) => (
+                    <div class="rm-cap" data-rm-cap={caption.id}>
+                        <p class="rm-cap-title">{caption.title}</p>
+                        {caption.note !== undefined && <p class:list={["rm-cap-note", { "rm-cap-mono": caption.mono }]}>{caption.note}</p>}
+                        {caption.rows.length === 0 ? (
+                            <p class="rm-cap-body">{scene.reachedBy.nobody}</p>
+                        ) : (
+                            <dl class="rm-cap-rows">
+                                {caption.rows.map((row) => (
+                                    <div>
+                                        <dt>{row.label}</dt>
+                                        <dd>{row.names}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        )}
+                    </div>
+                ))
+            }
+        </div>
+
+        <section class="rm-in" aria-label={scene.columns.in}>
+            <h3 class="rm-col">{scene.columns.in}</h3>
+            {
+                clusters.map((cluster) => (
+                    <div class="rm-cluster" data-rm-cluster={cluster.key}>
+                        <h4 class="rm-cluster-name">{cluster.label}</h4>
+                        <ul class="rm-whos">
+                            {cluster.principals.map((principal) => (
+                                <li>
+                                    <button
+                                        type="button"
+                                        class="rm-who"
+                                        data-rm-focus={`who:${principal.id}`}
+                                        data-rm-who={principal.id}
+                                        aria-pressed="false"
+                                        style={principal.hue === undefined ? undefined : `--hue:${principal.hue}`}
+                                    >
+                                        {cluster.key === "people" ? (
+                                            <span class="rm-face">{initial(principal.name)}</span>
+                                        ) : (
+                                            <span class="rm-face rm-face-glyph" set:html={glyph(cluster.key === "programs" ? GLYPH.key : GLYPH.link, 15)} />
+                                        )}
+                                        <span class="rm-who-text">
+                                            <span class="rm-who-name">{principal.name}</span>
+                                            <span class="rm-who-line">{principal.line}</span>
+                                        </span>
+                                        <span class="rm-beat" aria-hidden="true" />
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ))
+            }
+        </section>
+
+        <div class="rm-box">
+            <div class="rm-wall" data-rm-wall>
+                <div class="rm-plaque">
+                    <span class="rm-plaque-lotus" set:html={LOTUS} />
+                    <span>{scene.sandbox}</span>
+                </div>
+                <div class="rm-court" data-rm-court>
+                    <div class="rm-rooms">
+                        {
+                            scene.areas.map((area) => (
+                                <div class:list={["rm-room", { "rm-room-wide": personasIn(area.id).length === 0 }]} data-rm-node={area.id} data-rm-focus={area.id}>
+                                    <div class="rm-room-head">
+                                        <button type="button" class="rm-room-name" data-rm-focus={area.id} aria-pressed="false">
+                                            {area.name}
+                                        </button>
+                                        <span class="rm-tag" data-rm-tag={area.id} />
+                                    </div>
+                                    <p class="rm-paths">
+                                        {area.folders.map((folder) => (
+                                            <span>{folder}</span>
+                                        ))}
+                                    </p>
+                                    {personasIn(area.id).map((persona) => (
+                                        <button
+                                            type="button"
+                                            class="rm-persona"
+                                            data-rm-node={persona.id}
+                                            data-rm-focus={persona.id}
+                                            aria-pressed="false"
+                                            style={`--hue:${persona.id === "persona:maya" ? 350 : 262}`}
+                                        >
+                                            <span class="rm-face rm-face-ring">{initial(persona.name)}</span>
+                                            <span class="rm-persona-name">{persona.name}</span>
+                                            <span class="rm-persona-role">{persona.role}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ))
+                        }
+                    </div>
+                    <div class="rm-vault" data-rm-node="secrets" data-rm-focus="secrets">
+                        <div class="rm-room-head">
+                            <button type="button" class="rm-room-name rm-vault-name" data-rm-focus="secrets" aria-pressed="false">
+                                <span set:html={glyph(GLYPH.lock, 13)} />
+                                {scene.secrets.label}
+                            </button>
+                            <span class="rm-tag" data-rm-tag="secrets" />
+                        </div>
+                        <p class="rm-paths rm-seals">
+                            {scene.secrets.names.map((name) => (
+                                <span>{name}</span>
+                            ))}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <section class="rm-out" aria-label={scene.columns.out}>
+            <h3 class="rm-col">{scene.columns.out}</h3>
+            {
+                scene.groups.map((group) => (
+                    <div class="rm-group" data-rm-group={group.key}>
+                        <h4 class="rm-group-name">
+                            <span>{group.label}</span>
+                            <span class="rm-count" data-rm-count={group.key} />
+                        </h4>
+                        <ul class="rm-chips">
+                            {group.items.map((item) => (
+                                <li>
+                                    <button type="button" class="rm-chip" data-rm-node={item.id} data-rm-focus={item.id} aria-pressed="false">
+                                        {item.mark !== undefined && <span class="mark rm-mark" set:html={mark(item.mark)} />}
+                                        <span>{item.label}</span>
+                                        {item.detail !== undefined && <span class="rm-chip-detail">{item.detail}</span>}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ))
+            }
+        </section>
+    </div>
+
+    <div class="rm-foot">
+        <span class="rm-legend">
+            <span class="rm-legend-item"><span class="rm-legend-line" aria-hidden="true" />{scene.legend.direct}</span>
+            <span class="rm-legend-item"><span class="rm-legend-line rm-legend-dashed" aria-hidden="true" />{scene.legend.through}</span>
+        </span>
+        <button type="button" class="rm-play" data-rm-play data-label-pause={scene.tour.pause} data-label-play={scene.tour.play} aria-label={scene.tour.pause}>
+            <span class="rm-play-pause" set:html={glyph(GLYPH.pause, 13)} />
+            <span class="rm-play-play" set:html={glyph(GLYPH.play, 13)} />
+        </button>
+    </div>
+</figure>
+
+<script>
+    // Draws the wires from where the cards landed, and switches the lighting: the pointer or keyboard over a thing previews
+    // it, a press keeps it, Escape lets it go. While nothing is kept and the figure is on screen, a tour lights each way
+    // in in turn; a press stops it, the play button carries it on.
+    /** `Lighting` from lib/access-lighting.ts, as it reads back from JSON: looked up by the ids the markup carries. */
+    interface Shown {
+        principals: string[];
+        nodes: Record<string, string | undefined>;
+        tags: Record<string, string | undefined>;
+        wires: Record<string, string | undefined>;
+        counts: Record<string, string | undefined>;
+    }
+
+    const BEAT_MS = 5200;
+    // Leaving one card for the next crosses a gap: the old focus holds a beat, so the map does not flash dark between.
+    const LEAVE_GRACE_MS = 90;
+    const SVG = "http://www.w3.org/2000/svg";
+
+    const focusOf = (target: EventTarget | null): string | undefined =>
+        target instanceof Element ? target.closest<HTMLElement>("[data-rm-focus]")?.dataset.rmFocus : undefined;
+
+    for (const figure of document.querySelectorAll<HTMLElement>("[data-rm]")) {
+        // SAFETY: both attributes are written by this component's frontmatter, from `accessLightings` and its keys.
+        const lights = JSON.parse(figure.dataset.lights ?? "{}") as Record<string, Shown | undefined>;
+        // SAFETY: as above, the tour is the list of lighting keys the frontmatter wrote.
+        const tour = JSON.parse(figure.dataset.tour ?? "[]") as string[];
+        const board = figure.querySelector<HTMLElement>("[data-rm-board]");
+        const wires = figure.querySelector<SVGSVGElement>("[data-rm-wires]");
+        const wall = figure.querySelector<HTMLElement>("[data-rm-wall]");
+        const court = figure.querySelector<HTMLElement>("[data-rm-court]");
+        const captionStack = figure.querySelector<HTMLElement>("[data-rm-captions]");
+        const play = figure.querySelector<HTMLButtonElement>("[data-rm-play]");
+        if (board === null || wires === null || wall === null || court === null) {
+            continue;
+        }
+        const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+        const captions = [...figure.querySelectorAll<HTMLElement>("[data-rm-cap]")];
+        const nodes = [...figure.querySelectorAll<HTMLElement>("[data-rm-node]")];
+        const whos = [...figure.querySelectorAll<HTMLElement>("[data-rm-who]")];
+        const pressables = [...figure.querySelectorAll<HTMLElement>("button[data-rm-focus]")];
+        const tags = [...figure.querySelectorAll<HTMLElement>("[data-rm-tag]")];
+        const counts = [...figure.querySelectorAll<HTMLElement>("[data-rm-count]")];
+
+        let hovered: string | undefined;
+        let pinned: string | undefined;
+        let touring: string | undefined;
+        let playing = !reduced.matches;
+        let visible = false;
+        let held = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let leaving: ReturnType<typeof setTimeout> | undefined;
+        let shown: string | undefined;
+
+        // ── The wires ─────────────────────────────────────────────────────────────────────────────────────────────
+        const add = (tag: string, attributes: Record<string, string | number>, parent: Element = wires): SVGElement => {
+            const element = document.createElementNS(SVG, tag);
+            for (const [name, value] of Object.entries(attributes)) {
+                element.setAttribute(name, String(value));
+            }
+            parent.append(element);
+            return element;
+        };
+        const curve = (x1: number, y1: number, x2: number, y2: number): string => {
+            const bend = (x2 - x1) * 0.55;
+            return `M${x1} ${y1}C${x1 + bend} ${y1} ${x2 - bend} ${y2} ${x2} ${y2}`;
+        };
+        // An opening cut through the wall's hatching, with its two jambs; the wire runs on through it into the court.
+        const opening = (wire: string, x1: number, x2: number, y: number): void => {
+            const group = add("g", { class: "rm-gate", "data-wire": wire });
+            add("rect", { x: Math.min(x1, x2), y: y - 7, width: Math.abs(x2 - x1), height: 14, class: "rm-gate-gap" }, group);
+            add("path", { d: `M${x1} ${y - 7}H${x2}M${x1} ${y + 7}H${x2}`, class: "rm-gate-jamb" }, group);
+            add("path", { d: `M${x1} ${y}H${x2}`, class: "rm-wire rm-gate-pass", "data-wire": wire }, group);
+        };
+
+        const draw = (): void => {
+            wires.replaceChildren();
+            if (getComputedStyle(wires).display === "none") {
+                return;
+            }
+            const origin = board.getBoundingClientRect();
+            const box = (element: Element) => {
+                const rect = element.getBoundingClientRect();
+                return { l: rect.left - origin.left, r: rect.right - origin.left, b: rect.bottom - origin.top, y: (rect.top + rect.bottom) / 2 - origin.top };
+            };
+            wires.setAttribute("width", String(origin.width));
+            wires.setAttribute("height", String(origin.height));
+            const outer = box(wall);
+            const inner = box(court);
+            const courtTop = court.getBoundingClientRect().top - origin.top;
+            const low = courtTop + 26;
+            const high = inner.b - 26;
+            const clamp = (y: number): number => Math.min(high, Math.max(low, y));
+
+            // West: each way in to its cluster's gate, the gate level with its rows, kept off the court's corners.
+            for (const cluster of figure.querySelectorAll<HTMLElement>("[data-rm-cluster]")) {
+                const rows = [...cluster.querySelectorAll<HTMLElement>("[data-rm-who]")];
+                const first = rows[0];
+                const last = rows.at(-1);
+                if (first === undefined || last === undefined) {
+                    continue;
+                }
+                const gate = clamp((box(first).y + box(last).y) / 2);
+                for (const row of rows) {
+                    const at = box(row);
+                    add("path", { d: curve(at.r + 6, at.y, outer.l, gate), class: "rm-wire", "data-wire": `p:${row.dataset.rmWho ?? ""}` });
+                }
+                opening(`c:${cluster.dataset.rmCluster ?? ""}`, outer.l, inner.l, gate);
+            }
+
+            // East: one port per group, level with it where the wall allows, spread evenly where it does not.
+            const groups = [...figure.querySelectorAll<HTMLElement>("[data-rm-group]")];
+            const heads = groups.map((group) => box(group.querySelector(".rm-group-name") ?? group));
+            let ports = heads.map((head) => clamp(head.y));
+            for (let index = 1; index < ports.length; index++) {
+                ports[index] = Math.max(ports[index] ?? 0, (ports[index - 1] ?? 0) + 22);
+            }
+            if ((ports.at(-1) ?? 0) > high) {
+                const step = (high - low) / Math.max(1, ports.length - 1);
+                ports = ports.map((_, index) => low + step * index);
+            }
+            for (const [index, group] of groups.entries()) {
+                const head = heads[index];
+                const port = ports[index];
+                if (head === undefined || port === undefined) {
+                    continue;
+                }
+                const key = `g:${group.dataset.rmGroup ?? ""}`;
+                const whole = box(group);
+                opening(key, inner.r, outer.r, port);
+                // On to the group's name, then down its side: the one line feeds everything in it.
+                add("path", { d: `${curve(outer.r, port, whole.l - 12, head.y)}V${whole.b - 4}`, class: "rm-wire", "data-wire": key });
+            }
+            paint(false);
+        };
+
+        // ── The lighting ──────────────────────────────────────────────────────────────────────────────────────────
+        // A spark runs each newly lit wire, from the way in toward the box and from the box out: the light arriving.
+        const spark = (path: SVGPathElement, delay: number): void => {
+            const dot = document.createElementNS(SVG, "circle");
+            dot.setAttribute("r", "2.6");
+            dot.setAttribute("class", "rm-spark");
+            const motion = document.createElementNS(SVG, "animateMotion");
+            for (const [name, value] of Object.entries({ dur: "0.75s", begin: "indefinite", fill: "freeze", keyPoints: "0;1", keyTimes: "0;1", calcMode: "spline", keySplines: "0.4 0 0.2 1" })) {
+                motion.setAttribute(name, value);
+            }
+            motion.setAttribute("path", path.getAttribute("d") ?? "");
+            dot.append(motion);
+            wires.append(dot);
+            setTimeout(() => {
+                motion.beginElement();
+                dot.classList.add("rm-spark-go");
+            }, delay);
+            setTimeout(() => dot.remove(), delay + 900);
+        };
+
+        // Each part of the drawing takes the lighting on its own: a part with nothing to say about it wears "off".
+        const litOf = (light: Shown | undefined, state: string | undefined): string => (light === undefined ? "" : (state ?? "off"));
+        const lightCaptions = (key: string | undefined): void => {
+            for (const caption of captions) {
+                caption.dataset.on = String((caption.dataset.rmCap ?? "") === (key ?? ""));
+            }
+        };
+        const lightCards = (light: Shown | undefined): void => {
+            for (const node of nodes) {
+                node.dataset.lit = litOf(light, light?.nodes[node.dataset.rmNode ?? ""]);
+            }
+            for (const who of whos) {
+                who.dataset.lit = litOf(light, light?.principals.includes(who.dataset.rmWho ?? "") === true ? "on" : undefined);
+            }
+            for (const tag of tags) {
+                tag.textContent = light?.tags[tag.dataset.rmTag ?? ""] ?? "";
+            }
+            for (const count of counts) {
+                count.textContent = light?.counts[count.dataset.rmCount ?? ""] ?? "";
+            }
+        };
+        // Pressed is kept; shown is what the caption is about now; touring is the row the tour's beat runs under.
+        const lightPresses = (key: string | undefined): void => {
+            for (const button of pressables) {
+                const id = button.dataset.rmFocus ?? "";
+                button.setAttribute("aria-pressed", String(id === pinned));
+                button.dataset.shown = String(id === key);
+                button.dataset.touring = String(id === touring && pinned === undefined);
+            }
+        };
+        const lightWires = (light: Shown | undefined): void => {
+            for (const wire of wires.querySelectorAll<SVGElement>("[data-wire]")) {
+                wire.dataset.state = litOf(light, light?.wires[wire.dataset.wire ?? ""]);
+            }
+        };
+        // The lines into the box spark at once; the lines out of it a beat later, as if the light had crossed the court.
+        const sparkLitWires = (): void => {
+            for (const path of wires.querySelectorAll<SVGPathElement>("path.rm-wire:not(.rm-gate-pass)")) {
+                if (path.dataset.state === "on" || path.dataset.state === "through") {
+                    spark(path, (path.dataset.wire ?? "").startsWith("g:") ? 380 : 0);
+                }
+            }
+        };
+
+        const paint = (animate: boolean): void => {
+            const key = hovered ?? pinned ?? touring;
+            const light = key === undefined ? undefined : lights[key];
+            const changed = key !== shown;
+            shown = key;
+            lightCaptions(key);
+            lightCards(light);
+            lightPresses(key);
+            lightWires(light);
+            if (animate && changed && light !== undefined && !reduced.matches) {
+                sparkLitWires();
+            }
+        };
+
+        // ── The tour ──────────────────────────────────────────────────────────────────────────────────────────────
+        const stop = (): void => {
+            clearTimeout(timer);
+            timer = undefined;
+        };
+        const advance = (): void => {
+            touring = tour[(tour.indexOf(touring ?? "") + 1) % tour.length];
+            // The beat restarts under the new row: its animation is dropped and put back.
+            figure.dataset.beat = figure.dataset.beat === "a" ? "b" : "a";
+            paint(true);
+        };
+        const run = (): void => {
+            stop();
+            if (!playing || !visible || held || pinned !== undefined || tour.length === 0) {
+                return;
+            }
+            if (touring === undefined) {
+                advance();
+            }
+            timer = setTimeout(() => {
+                advance();
+                run();
+            }, BEAT_MS);
+        };
+        const setPlaying = (on: boolean): void => {
+            playing = on;
+            figure.dataset.paused = String(!on);
+            play?.setAttribute("aria-label", (on ? play.dataset.labelPause : play.dataset.labelPlay) ?? "");
+            run();
+        };
+
+        // ── The reader ────────────────────────────────────────────────────────────────────────────────────────────
+        const point = (next: string | undefined): void => {
+            clearTimeout(leaving);
+            if (next !== undefined) {
+                hovered = next;
+                paint(true);
+                return;
+            }
+            leaving = setTimeout(() => {
+                hovered = undefined;
+                paint(true);
+            }, LEAVE_GRACE_MS);
+        };
+
+        // A mouse previews and holds the tour where it is; a finger's tap is a press, below.
+        board.addEventListener("pointerover", (event) => {
+            if (event.pointerType === "mouse") {
+                point(focusOf(event.target));
+            }
+        });
+        board.addEventListener("pointerenter", (event) => {
+            if (event.pointerType === "mouse" && timer !== undefined) {
+                held = true;
+                figure.dataset.held = "true";
+                stop();
+            }
+        });
+        board.addEventListener("pointerleave", () => {
+            point(undefined);
+            if (held) {
+                held = false;
+                delete figure.dataset.held;
+                run();
+            }
+        });
+        board.addEventListener("focusin", (event) => point(focusOf(event.target)));
+        board.addEventListener("focusout", () => point(undefined));
+        board.addEventListener("click", (event) => {
+            const id = focusOf(event.target);
+            pinned = id === undefined || id === pinned ? undefined : id;
+            if (id !== undefined) {
+                setPlaying(false);
+                // From the reader's own press on, a screen reader hears what the light means; the tour alone stays quiet.
+                captionStack?.setAttribute("aria-live", "polite");
+            }
+            paint(true);
+        });
+        figure.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && pinned !== undefined) {
+                pinned = undefined;
+                paint(true);
+            }
+        });
+        play?.addEventListener("click", () => {
+            if (!playing) {
+                pinned = undefined;
+                hovered = undefined;
+                advance();
+            }
+            setPlaying(!playing);
+        });
+
+        figure.dataset.paused = String(!playing);
+        new ResizeObserver(draw).observe(board);
+        void document.fonts.ready.then(draw);
+        new IntersectionObserver(
+            ([entry]) => {
+                visible = entry?.isIntersecting ?? false;
+                if (visible) {
+                    run();
+                } else {
+                    stop();
+                }
+            },
+            { threshold: 0.35 },
+        ).observe(figure);
+    }
+</script>
+
+<style>
+    .rm {
+        /* The light a reach casts, its glow, and how far everything it does not reach falls back. Ember, never the gold:
+           the gold is the one signal colour, and here it marks what is pressed. */
+        --rm-ember: var(--color-primary-400);
+        --rm-ember-soft: color-mix(in oklab, var(--rm-ember) 55%, transparent);
+        --rm-wash: color-mix(in oklab, var(--rm-ember) 9%, transparent);
+        --rm-rest: color-mix(in oklab, var(--color-line-strong) 80%, transparent);
+        --rm-dim: 0.3;
+        --rm-wall: 11px;
+        --rm-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+        --rm-beat: 5200ms;
+
+        position: relative;
+        container-type: inline-size;
+        margin: 2.75rem 0 0;
+        border: 1px solid var(--color-line);
+        background: var(--wash-panel);
+        padding: clamp(1.25rem, 3vw, 2.5rem);
+        color: var(--color-content);
+    }
+
+    /* ── The board: caption over the three columns ─────────────────────────────────────────────────────────── */
+    .rm-board {
+        position: relative;
+        display: grid;
+        grid-template-areas: "in" "cap" "box" "out";
+        gap: 1.75rem;
+    }
+    .rm-wires {
+        position: absolute;
+        inset: 0 auto auto 0;
+        display: none;
+        overflow: visible;
+        pointer-events: none;
+    }
+    .rm-in {
+        grid-area: in;
+        min-width: 0;
+    }
+    .rm-box {
+        grid-area: box;
+        min-width: 0;
+    }
+    .rm-out {
+        grid-area: out;
+        min-width: 0;
+    }
+    .rm-col {
+        margin: 0 0 1rem;
+        font-family: var(--font-display);
+        font-size: 1.125rem;
+        font-weight: var(--font-weight-normal);
+        line-height: 1.3;
+        color: var(--role-display-ink);
+    }
+
+    /* ── The caption ──────────────────────────────────────────────────────────────────────────────────────── */
+    .rm-caption {
+        grid-area: cap;
+        display: grid;
+        border-left: 2px solid var(--color-line-strong);
+        padding: 0.15rem 0 0.15rem 1.1rem;
+    }
+    /* One caption gives way before the next arrives, so two sentences never sit on each other. */
+    .rm-cap {
+        grid-area: 1 / 1;
+        visibility: hidden;
+        opacity: 0;
+        transition:
+            opacity 0.12s ease-out,
+            visibility 0s linear 0.12s;
+    }
+    .rm-cap[data-on="true"] {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 0.24s var(--rm-ease) 0.12s;
+    }
+    .rm-cap-title {
+        margin: 0;
+        max-width: 56ch;
+        font-family: var(--font-display);
+        font-size: clamp(1.2rem, 2.4cqi, 1.45rem);
+        font-weight: var(--font-weight-normal);
+        line-height: 1.3;
+        color: var(--color-content);
+    }
+    .rm-cap-body,
+    .rm-cap-note {
+        margin: 0.45rem 0 0;
+        max-width: 64ch;
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: var(--color-muted);
+    }
+    .rm-cap-mono {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        white-space: pre-wrap;
+        color: var(--color-subtle);
+    }
+    .rm-cap-rows {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 1.75rem;
+        margin: 0.6rem 0 0;
+    }
+    .rm-cap-rows div {
+        display: flex;
+        align-items: baseline;
+        gap: 0.55rem;
+    }
+    .rm-cap-rows dt {
+        font-size: 0.8125rem;
+        color: var(--color-gold);
+    }
+    .rm-cap-rows dd {
+        margin: 0;
+        font-size: 0.9375rem;
+        color: var(--color-content);
+    }
+
+    /* ── Who gets in ──────────────────────────────────────────────────────────────────────────────────────── */
+    .rm-cluster + .rm-cluster {
+        margin-top: 1.1rem;
+    }
+    .rm-cluster-name {
+        margin: 0 0 0.4rem;
+        padding-left: 0.6rem;
+        font-size: 0.75rem;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-subtle);
+    }
+    .rm-whos {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+        gap: 0.2rem 0.75rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .rm-who {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 0.7rem;
+        width: 100%;
+        overflow: hidden;
+        border: 0;
+        background: transparent;
+        padding: 0.45rem 0.6rem;
+        text-align: left;
+        color: inherit;
+        cursor: pointer;
+        transition:
+            background-color 0.3s var(--rm-ease),
+            opacity 0.3s var(--rm-ease);
+    }
+    .rm-who:hover {
+        background: var(--role-nav-row, var(--rm-wash));
+    }
+    .rm-who-text {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+    }
+    .rm-who-name {
+        font-size: 0.9375rem;
+        font-weight: var(--font-weight-medium);
+        line-height: 1.3;
+    }
+    .rm-who-line {
+        font-size: 0.8125rem;
+        line-height: 1.35;
+        color: var(--color-muted);
+    }
+    /* The way in the caption is about wears the gold rule at its edge; under the tour's row runs its beat. */
+    .rm-who[data-shown="true"] {
+        background: color-mix(in oklab, var(--color-accent) 9%, transparent);
+        box-shadow: inset 2px 0 0 var(--color-accent);
+    }
+    .rm-beat {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 1px;
+        background: var(--color-accent);
+        transform: scaleX(0);
+        transform-origin: left;
+    }
+    /* Two names for one keyframe, swapped on every step, so the beat restarts under the next row. */
+    .rm:not([data-paused="true"])[data-beat="a"] .rm-who[data-touring="true"] .rm-beat {
+        animation: rm-beat-a var(--rm-beat) linear forwards;
+    }
+    .rm:not([data-paused="true"])[data-beat="b"] .rm-who[data-touring="true"] .rm-beat {
+        animation: rm-beat-b var(--rm-beat) linear forwards;
+    }
+    .rm[data-held="true"] .rm-beat {
+        animation-play-state: paused;
+    }
+    @keyframes rm-beat-a {
+        to {
+            transform: scaleX(1);
+        }
+    }
+    @keyframes rm-beat-b {
+        to {
+            transform: scaleX(1);
+        }
+    }
+
+    /* Faces: a person is a filled disc in their own hue, a persona the same disc as a ring, a program a glyph. */
+    .rm-face {
+        display: inline-grid;
+        width: 2rem;
+        height: 2rem;
+        flex: none;
+        place-items: center;
+        border-radius: 999px;
+        background: color-mix(in oklab, hsl(var(--hue, 32) 58% 50%) 42%, var(--color-card));
+        font-size: 0.8125rem;
+        font-weight: var(--font-weight-semibold);
+        color: var(--color-content);
+        transition: box-shadow 0.3s var(--rm-ease);
+    }
+    .rm-face-glyph {
+        border-radius: 0;
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-figure-panel);
+        color: var(--color-gold);
+    }
+    .rm-face-ring {
+        width: 1.6rem;
+        height: 1.6rem;
+        background: transparent;
+        box-shadow: inset 0 0 0 1.5px color-mix(in oklab, hsl(var(--hue, 32) 58% 55%) 70%, var(--color-card));
+        font-size: 0.75rem;
+    }
+
+    /* ── The precinct ─────────────────────────────────────────────────────────────────────────────────────── */
+    /* The wall is a plan's poché: two rules with the hatching between them, as a section through stone is drawn. */
+    .rm-wall {
+        position: relative;
+        border: 1px solid var(--color-line-bright);
+        background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--color-gold) 34%, transparent) 0 1px, transparent 1px 6px);
+        padding: var(--rm-wall);
+    }
+    /* The name is cut into the lintel, the lotus over the door. */
+    .rm-plaque {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1px solid var(--color-line-bright);
+        background: var(--color-card);
+        padding: 0.3rem 0.95rem 0.35rem;
+        font-family: var(--font-display);
+        font-size: 1.125rem;
+        line-height: 1.2;
+        white-space: nowrap;
+        color: var(--color-content);
+        transform: translate(-50%, -50%);
+    }
+    .rm-plaque-lotus {
+        display: inline-flex;
+        width: 1rem;
+        color: var(--color-primary-500);
+    }
+    .rm-court {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        border: 1px solid var(--color-line-bright);
+        background: var(--color-card);
+        padding: 1.6rem 1rem 1rem;
+    }
+    .rm-rooms {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        gap: 0.75rem;
+    }
+    .rm-room-wide {
+        grid-column: 1 / -1;
+    }
+
+    /* A room: hairline walls, its name, its folders, and the personas who live there. */
+    .rm-room,
+    .rm-vault {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        border: 1px solid var(--color-line-strong);
+        padding: 0.7rem 0.8rem 0.75rem;
+        transition:
+            border-color 0.3s var(--rm-ease),
+            background-color 0.3s var(--rm-ease);
+    }
+    .rm-room-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem;
+        transition: opacity 0.3s var(--rm-ease);
+    }
+    .rm-room-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        font-family: var(--font-display);
+        font-size: 1.0625rem;
+        line-height: 1.25;
+        text-align: left;
+        color: var(--color-content);
+        cursor: pointer;
+    }
+    .rm-vault-name {
+        font-family: var(--font-sans);
+        font-size: 0.875rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .rm-vault-name :global(svg) {
+        color: var(--color-gold);
+    }
+    .rm-tag {
+        font-size: 0.75rem;
+        white-space: nowrap;
+        color: var(--rm-ember);
+    }
+    .rm-paths {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.2rem 0.7rem;
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--color-subtle);
+        transition: opacity 0.3s var(--rm-ease);
+    }
+    .rm-seals span {
+        border: 1px solid var(--color-line);
+        padding: 0.05rem 0.4rem;
+    }
+    .rm-persona {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr);
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0.15rem -0.35rem 0;
+        border: 0;
+        background: transparent;
+        padding: 0.3rem 0.35rem;
+        text-align: left;
+        color: inherit;
+        cursor: pointer;
+        transition:
+            opacity 0.3s var(--rm-ease),
+            background-color 0.3s var(--rm-ease);
+    }
+    .rm-persona-name {
+        font-size: 0.875rem;
+        font-weight: var(--font-weight-medium);
+    }
+    .rm-persona-role {
+        font-size: 0.8125rem;
+        color: var(--color-muted);
+    }
+    .rm-vault {
+        border-style: double;
+        border-width: 3px;
+        padding-top: 0.6rem;
+    }
+
+    /* ── What it reaches ──────────────────────────────────────────────────────────────────────────────────── */
+    .rm-out {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+        align-content: start;
+        gap: 1rem 1.5rem;
+    }
+    .rm-out .rm-col {
+        grid-column: 1 / -1;
+        margin-bottom: 0;
+    }
+    .rm-group-name {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin: 0 0 0.45rem;
+        font-size: 0.8125rem;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-muted);
+    }
+    .rm-count {
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--rm-ember);
+    }
+    .rm-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .rm-chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        border: 1px solid var(--color-line-strong);
+        background: transparent;
+        padding: 0.28rem 0.55rem 0.32rem;
+        font-size: 0.8125rem;
+        line-height: 1.3;
+        color: var(--color-content);
+        cursor: pointer;
+        transition:
+            border-color 0.3s var(--rm-ease),
+            background-color 0.3s var(--rm-ease),
+            opacity 0.3s var(--rm-ease);
+    }
+    .rm-chip:hover {
+        border-color: var(--color-line-bright);
+    }
+    /* Placed on the line by the site's `.mark`; only its ink is the chip's. */
+    .rm-chip .rm-mark {
+        color: var(--color-muted);
+    }
+    .rm-chip-detail {
+        font-size: 0.75rem;
+        color: var(--color-subtle);
+    }
+
+    /* ── Lit and dimmed ───────────────────────────────────────────────────────────────────────────────────── */
+    .rm-who[data-lit="off"],
+    .rm-chip[data-lit="off"],
+    .rm-persona[data-lit="off"] {
+        opacity: var(--rm-dim);
+    }
+    /* A room dims its own walls and words, never the personas in it: one of them may be lit on its own. */
+    .rm-room[data-lit="off"],
+    .rm-vault[data-lit="off"] {
+        border-color: var(--color-line);
+    }
+    .rm-room[data-lit="off"] > .rm-room-head,
+    .rm-room[data-lit="off"] > .rm-paths,
+    .rm-vault[data-lit="off"] > * {
+        opacity: var(--rm-dim);
+    }
+    .rm-who[data-lit="on"] .rm-face {
+        box-shadow: 0 0 0 2px var(--rm-ember-soft);
+    }
+    .rm-room[data-lit="edit"],
+    .rm-room[data-lit="use"],
+    .rm-vault[data-lit="use"] {
+        border-color: var(--rm-ember);
+        background: var(--rm-wash);
+        box-shadow: var(--role-ember-glow);
+    }
+    .rm-room[data-lit="see"],
+    .rm-room[data-lit="tie"] {
+        border-color: var(--rm-ember-soft);
+    }
+    .rm-room[data-lit="through"],
+    .rm-vault[data-lit="through"] {
+        border-color: var(--rm-ember);
+        border-style: dashed;
+    }
+    .rm-vault[data-lit="through"] {
+        border-width: 1px;
+        padding: 0.7rem 0.8rem 0.75rem;
+    }
+    .rm-persona[data-lit="use"],
+    .rm-persona[data-lit="tie"],
+    .rm-persona[data-lit="focus"] {
+        background: var(--rm-wash);
+    }
+    .rm-persona[data-lit] .rm-face-ring {
+        transition: box-shadow 0.3s var(--rm-ease);
+    }
+    .rm-persona[data-lit="use"] .rm-face-ring,
+    .rm-persona[data-lit="tie"] .rm-face-ring,
+    .rm-persona[data-lit="focus"] .rm-face-ring {
+        box-shadow:
+            inset 0 0 0 1.5px var(--rm-ember),
+            0 0 12px -2px var(--rm-ember-soft);
+    }
+    .rm-chip[data-lit="edit"],
+    .rm-chip[data-lit="use"] {
+        border-color: var(--rm-ember);
+        background: var(--rm-wash);
+    }
+    /* Reached only as a persona, or tied to the persona pointed at: either way, through it. */
+    .rm-chip[data-lit="through"],
+    .rm-chip[data-lit="tie"] {
+        border-color: var(--rm-ember);
+        border-style: dashed;
+    }
+    /* The thing pointed at is state, so it wears the gold. */
+    .rm-room[data-lit="focus"],
+    .rm-vault[data-lit="focus"],
+    .rm-chip[data-lit="focus"] {
+        border-color: var(--color-accent);
+        background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    }
+    .rm-persona[data-lit="focus"] {
+        box-shadow: inset 0 0 0 1px var(--color-accent);
+    }
+
+    .rm-who:focus-visible,
+    .rm-room-name:focus-visible,
+    .rm-persona:focus-visible,
+    .rm-chip:focus-visible,
+    .rm-play:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    /* ── Wires: drawn by the script, so reached through :global ──────────────────────────────────────────── */
+    .rm :global(.rm-wire) {
+        fill: none;
+        stroke: var(--rm-rest);
+        stroke-width: 1.1;
+        stroke-linecap: round;
+        transition:
+            stroke 0.35s var(--rm-ease),
+            stroke-width 0.35s var(--rm-ease),
+            opacity 0.35s var(--rm-ease);
+    }
+    .rm :global(.rm-wire[data-state="off"]) {
+        opacity: 0.22;
+    }
+    .rm :global(.rm-wire[data-state="on"]),
+    .rm :global(.rm-wire[data-state="through"]) {
+        stroke: var(--rm-ember);
+        stroke-width: 1.6;
+        filter: drop-shadow(0 0 3px var(--rm-ember-soft));
+    }
+    .rm :global(.rm-wire[data-state="through"]) {
+        stroke-dasharray: 5 4;
+    }
+    .rm :global(.rm-gate-gap) {
+        fill: var(--color-card);
+    }
+    .rm :global(.rm-gate-jamb) {
+        fill: none;
+        stroke: var(--color-line-bright);
+        stroke-width: 1;
+    }
+    .rm :global(.rm-gate[data-state="on"] .rm-gate-gap),
+    .rm :global(.rm-gate[data-state="through"] .rm-gate-gap) {
+        fill: color-mix(in oklab, var(--rm-ember) 22%, var(--color-card));
+    }
+    .rm :global(.rm-gate[data-state="on"] .rm-gate-jamb),
+    .rm :global(.rm-gate[data-state="through"] .rm-gate-jamb) {
+        stroke: var(--rm-ember);
+    }
+    .rm :global(.rm-spark) {
+        fill: var(--color-primary-200);
+        opacity: 0;
+        filter: drop-shadow(0 0 4px var(--rm-ember));
+    }
+    .rm :global(.rm-spark-go) {
+        animation: rm-spark 0.75s var(--rm-ease) forwards;
+    }
+    @keyframes rm-spark {
+        0% {
+            opacity: 0;
+        }
+        15%,
+        80% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+        }
+    }
+
+    /* ── Foot: the legend, and the tour's button ──────────────────────────────────────────────────────────── */
+    .rm-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem 1.5rem;
+        margin-top: 2rem;
+        border-top: 1px solid var(--color-line);
+        padding-top: 1rem;
+    }
+    .rm-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.5rem;
+        font-size: 0.8125rem;
+        color: var(--color-muted);
+    }
+    .rm-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+    }
+    .rm-legend-line {
+        width: 1.75rem;
+        height: 0;
+        border-top: 1.6px solid var(--rm-ember);
+    }
+    .rm-legend-dashed {
+        border-top-style: dashed;
+    }
+    .rm-play {
+        display: inline-flex;
+        margin-left: auto;
+        width: 2.25rem;
+        height: 2.25rem;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-figure-panel);
+        color: var(--color-muted);
+        cursor: pointer;
+    }
+    .rm-play:hover {
+        border-color: var(--color-line-bright);
+        color: var(--color-content);
+    }
+    .rm-play-play,
+    .rm[data-paused="true"] .rm-play-pause {
+        display: none;
+    }
+    .rm[data-paused="true"] .rm-play-play {
+        display: inline-flex;
+    }
+
+    /* ── Wide: the three columns side by side, the wires across the gutters ───────────────────────────────── */
+    @container (min-width: 60rem) {
+        .rm-board {
+            grid-template-columns: minmax(12rem, 14.5rem) minmax(0, 1fr) minmax(14rem, 18.5rem);
+            grid-template-areas:
+                "cap cap cap"
+                "in box out";
+            column-gap: clamp(3.5rem, 7cqi, 6rem);
+            row-gap: 2.25rem;
+            align-items: start;
+        }
+        .rm-wires {
+            display: block;
+        }
+        .rm-whos {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .rm-out {
+            grid-template-columns: minmax(0, 1fr);
+            gap: 1.1rem;
+        }
+        /* The box stands level with the first way in, below the column names. */
+        .rm-box {
+            padding-top: 2.9rem;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .rm *,
+        .rm :global(*) {
+            transition: none !important;
+            animation: none !important;
+        }
+    }
+</style>

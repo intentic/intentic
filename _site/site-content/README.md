@@ -27,6 +27,7 @@ flowchart LR
 - [src/nav.ts](src/nav.ts) — the nav bar, phone menu and footer as data.
 - [src/site.ts](src/site.ts) — site URL, app URL, demo path and organisation facts.
 - [src/landing.ts](src/landing.ts) — the home page and desk page copy.
+- [src/access-map.ts](src/access-map.ts) — the home page's "Who reaches what" band: its words and the sample sandbox it draws, held to the daemon's access rules by `_site/site/src/lib/access-lighting.test.ts`.
 
 ## Commands
 
