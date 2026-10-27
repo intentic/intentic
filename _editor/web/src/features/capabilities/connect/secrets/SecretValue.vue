@@ -31,9 +31,9 @@ const {
 }>();
 
 // Held by the row, so the header's own buttons on a closed row open it straight onto the same place.
-const revealed = defineModel<string | undefined>(`revealed`, { required: true });
-const replacing = defineModel<boolean>(`replacing`, { required: true });
-const typing = defineModel<boolean>(`typing`, { required: true });
+const revealed = defineModel<string | undefined>("revealed", { required: true });
+const replacing = defineModel<boolean>("replacing", { required: true });
+const typing = defineModel<boolean>("typing", { required: true });
 const emit = defineEmits<{ reveal: [] }>();
 
 const missing = computed(() => row.entry.status === `missing`);

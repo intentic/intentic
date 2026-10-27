@@ -125,6 +125,7 @@ export const pageAt = (pages: readonly PageTarget[], origin: string, path?: stri
             const url = new URL(page.url);
             return url.origin === origin && (path === undefined || url.pathname === path);
         } catch {
+            // allow(silent-catch): a page whose url does not parse is on no origin, so it is not at this one.
             return false;
         }
     });
