@@ -1,5 +1,6 @@
 import { track } from "../../app/analytics";
 import { noteUnreachable } from "./reachability";
+import { pageLeaving } from "@intentic/ui/reload-reason";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { ORPCError } from "@orpc/client";
 import { hashKey } from "@tanstack/vue-query";
@@ -220,7 +221,8 @@ watch(
         if (!(asleep as readonly string[]).includes(state.failure.kind)) {
             return;
         }
-        if (Date.now() < (wakeAfter.get(id) ?? 0)) {
+        // A page on its way out cut that stream itself: nothing went to sleep, and a wake asked now would be for nobody.
+        if (Date.now() < (wakeAfter.get(id) ?? 0) || pageLeaving()) {
             return;
         }
         const box = active.value;

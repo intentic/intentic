@@ -55,7 +55,7 @@ test("a local Retry reads without waking another machine; a refused hosted wake 
 
 test("unreachable telemetry names the cause and is shared once per sandbox in a session", () => {
     const capture = jest.fn();
-    const note = createReachabilityTelemetry(capture);
+    const note = createReachabilityTelemetry(capture, { leaving: () => false, later: (run) => run() });
     const asleep = sandbox({ region: "iad", warm: false, state: "asleep" });
     note(asleep);
     note(asleep);
@@ -68,4 +68,34 @@ test("unreachable telemetry names the cause and is shared once per sandbox in a 
         ["sandbox_unreachable", { cause: "down", hosted: false }],
         ["sandbox_unreachable", { cause: "down", hosted: true }],
     ]);
+});
+
+// In the week to 2026-10-27, 201 of 245 of these reports came from pages within 100 ms of leaving: the page cut its own
+// requests, and each cut read like the sandbox going away.
+test("a page on its way out reports nothing, however its failures arrive", () => {
+    const capture = jest.fn();
+    let leaving = true;
+    const waiting: (() => void)[] = [];
+    const note = createReachabilityTelemetry(capture, { leaving: () => leaving, later: (run) => waiting.push(run) });
+    note(sandbox(null));
+    expect(waiting).toHaveLength(0);
+    // It starts leaving while the failure waits to count: dropped, and once the page turns out to stay, the box's next
+    // failure is reported after all.
+    leaving = false;
+    note(sandbox(null));
+    leaving = true;
+    waiting.shift()?.();
+    leaving = false;
+    note(sandbox(null));
+    waiting.shift()?.();
+    expect(capture.mock.calls).toEqual([["sandbox_unreachable", { cause: "down", hosted: false }]]);
+});
+
+test("a failure counts only after it settles, so a page that leaves first never sends it", () => {
+    const capture = jest.fn();
+    const later = jest.fn();
+    const note = createReachabilityTelemetry(capture, { leaving: () => false, later });
+    note(sandbox(null));
+    expect(capture).not.toHaveBeenCalled();
+    expect(later).toHaveBeenCalledWith(expect.any(Function), 1_000);
 });

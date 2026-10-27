@@ -71,6 +71,28 @@ it(`keeps the tab's being the Android app's WebView across the wipe, and nothing
     expect(reload).toHaveBeenCalledTimes(1);
 });
 
+// The tab-wide ceiling over every reload nobody pressed for (reloadReason.ts): one more wipe-and-reload in a tab already
+// reloading itself would be part of the loop, not its repair.
+it(`does not heal a tab that already reloaded itself three times this minute: storage stays, and no reload`, async () => {
+    const { reportStartupError } = await load();
+    const now = Date.now();
+    sessionStorage.setItem(`intentic.automaticReloads`, [now - 3_000, now - 2_000, now - 1_000].join(`,`));
+    localStorage.setItem(`intentic.workspaceTabs.sbx-1`, `kept`);
+    reportStartupError(new Error(`boom`));
+    expect(localStorage.getItem(`intentic.workspaceTabs.sbx-1`)).toBe(`kept`);
+    expect(localStorage.getItem(`intentic.wipeOnBoot`)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+});
+
+it(`keeps the tab's count of its own reloads across the wipe, so healing does not restart the budget`, async () => {
+    const { reportStartupError } = await load();
+    const before = String(Date.now() - 5_000);
+    sessionStorage.setItem(`intentic.automaticReloads`, before);
+    reportStartupError(new Error(`boom`));
+    expect(sessionStorage.getItem(`intentic.automaticReloads`)?.split(`,`)).toHaveLength(2);
+    expect(reload).toHaveBeenCalledTimes(1);
+});
+
 it(`does not wipe twice: a crash that survives the clean slate surfaces instead of looping`, async () => {
     const { reportStartupError } = await load();
     reportStartupError(new Error(`boom`));

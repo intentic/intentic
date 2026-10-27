@@ -95,7 +95,13 @@ const reloadedRecently = (target: string): boolean => {
     return split !== -1 && note.slice(split + 1) === target && Date.now() - at < RELOAD_SPENT_MS;
 };
 
-/** Reloads onto `target` (the page the reader is on by default), unless this destination had its reload in the last few minutes. */
+// How much of the refused list a report carries: enough for the handful a broken deploy leaves.
+const REFUSED_REPORT_CHARS = 1_000;
+
+/**
+ * Reloads onto `target` (the page the reader is on by default), unless this destination had its reload in the last few
+ * minutes or the tab has spent its budget of reloads nobody pressed for (reloadReason.ts).
+ */
 export const recoverStaleChunk = (target: string = here()): boolean => {
     try {
         if (reloadedRecently(target)) {
@@ -106,8 +112,15 @@ export const recoverStaleChunk = (target: string = here()): boolean => {
         // allow(silent-catch): storage access may be blocked in sandboxed contexts or private windows
         return false;
     }
-    noteReload(`stale-chunk`);
     const refused = refusedFiles();
+    const details = refused.length === 0 ? { target } : { target, refused: refused.join(` `).slice(0, REFUSED_REPORT_CHARS) };
+    if (!noteReload(`stale-chunk`, details)) {
+        // No reload from here, but the one the reader makes by hand then finds fresh copies of what this page was refused.
+        if (refused.length > 0) {
+            void refetch(refused);
+        }
+        return false;
+    }
     if (refused.length === 0) {
         location.assign(target);
     } else {
@@ -119,7 +132,7 @@ export const recoverStaleChunk = (target: string = here()): boolean => {
 /**
  * Loads a lazy chunk. A dead one reloads the page once onto `target` (where the reader is, by default) and the promise
  * then never settles: the page is being replaced, so the caller keeps showing what it showed while loading instead of
- * flashing an error. Any other failure, or a dead chunk whose one reload is spent, rejects as it came. Never cache a
+ * flashing an error. Any other failure, or a dead chunk whose reload is spent or refused, rejects as it came. Never cache a
  * rejected `loadChunk` for the life of the tab: a later call is what retries.
  */
 export const loadChunk = async <T>(load: () => Promise<T>, target?: string): Promise<T> => {

@@ -1,4 +1,5 @@
 import { freshImport, advanceTimersByTimeAsync, stubGlobal } from "@intentic/testing/bun";
+import type { AutomaticReload } from "@intentic/ui/reload-reason";
 
 // Pins the module's three promises to its callers (an error handler, an unload hook, a perf recorder): it never
 // throws, never blocks, and never grows unbounded while the thing it's describing is still going wrong.
@@ -28,6 +29,13 @@ jest.mock(`./buildEpoch`, () => ({ buildId: () => `test-build` }));
 // The SDK's own session id, once it has loaded; undefined is the page before its first idle moment.
 let liveReplay: string | undefined;
 jest.mock(`./analytics`, () => ({ replaySessionId: () => liveReplay }));
+// What the reload gate hands its watcher (reloadReason.ts), caught here so a test can play a reload to it.
+let reloadWatcher: ((reload: AutomaticReload) => void) | undefined;
+jest.mock(`@intentic/ui/reload-reason`, () => ({
+    watchAutomaticReloads: (watch: (reload: AutomaticReload) => void) => {
+        reloadWatcher = watch;
+    },
+}));
 
 let currentTarget: typeof target | undefined = target;
 const { postClientDiagnostics } = await import("../client/sandbox/clientReport");
@@ -91,6 +99,33 @@ test("the post is keepalive, which is what makes a report survive the reload it 
     expect(inits.at(-1)?.keepalive).toBe(true);
 });
 
+// On 2026-10-27 a tab reloaded itself about once a second for minutes, and the log held no word of why.
+test("a reload the tab starts by itself is said and sent before the page goes, and one the budget refused is an error", async () => {
+    const { reportAutomaticReloads } = await load();
+    reportAutomaticReloads();
+    reloadWatcher?.({
+        reason: `stale-chunk`,
+        allowed: true,
+        inLastMinute: 1,
+        details: { target: `/sandbox`, refused: `https://app.example/assets/SectionLink-B4qdwgZq.js`, unknown: undefined },
+    });
+    await advanceTimersByTimeAsync(0);
+    expect(allEvents()).toMatchObject([
+        {
+            level: `warn`,
+            event: `app.reload`,
+            message: `reloading by itself: stale-chunk`,
+            fields: { reason: `stale-chunk`, inLastMinute: 1, target: `/sandbox`, refused: `https://app.example/assets/SectionLink-B4qdwgZq.js` },
+        },
+    ]);
+    expect(allEvents()[0]?.fields).not.toHaveProperty(`unknown`);
+    expect(inits.at(-1)?.keepalive).toBe(true);
+
+    reloadWatcher?.({ reason: `stale-chunk`, allowed: false, inLastMinute: 3, details: { target: `/sandbox` } });
+    await advanceTimersByTimeAsync(0);
+    expect(allEvents().at(-1)).toMatchObject({ level: `error`, event: `app.reload.refused`, fields: { reason: `stale-chunk`, inLastMinute: 3 } });
+});
+
 test("a component looping on the same error sends a few whole reports, then counts, not a flood", async () => {
     const { reportClient } = await load();
     for (let index = 0; index < 400; index++) {
@@ -144,7 +179,10 @@ test("a kind quiet for ten minutes is news again, and its next copy goes whole",
 test("a burst of distinct reports sends early instead of dropping, and what it must drop it names", async () => {
     const { reportClient } = await load();
     for (let index = 0; index < 120; index++) {
-        reportClient(index % 3 === 0 ? `vue.render` : `perf.slow`, `distinct ${String.fromCharCode(65 + (index % 26))}${String.fromCharCode(65 + Math.floor(index / 26))}`);
+        reportClient(
+            index % 3 === 0 ? `vue.render` : `perf.slow`,
+            `distinct ${String.fromCharCode(65 + (index % 26))}${String.fromCharCode(65 + Math.floor(index / 26))}`,
+        );
     }
     // Two batch windows: the one that admits the loss leaves room for its own line, so one report waits for the next.
     await advanceTimersByTimeAsync(10_000);
@@ -234,7 +272,11 @@ test("a script that failed to load is reported by its address, without the query
     reportWindowError(event);
     await advanceTimersByTimeAsync(5_000);
 
-    expect(batch().events[0]).toMatchObject({ event: `resource.error`, level: `warn`, fields: { tag: `script`, url: `https://app.example/assets/chunk-abc.js` } });
+    expect(batch().events[0]).toMatchObject({
+        event: `resource.error`,
+        level: `warn`,
+        fields: { tag: `script`, url: `https://app.example/assets/chunk-abc.js` },
+    });
 });
 
 test("distinct errors are not coalesced into each other", async () => {

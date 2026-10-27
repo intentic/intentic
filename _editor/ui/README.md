@@ -148,6 +148,11 @@ flowchart LR
   redeploy removed reloads the page once onto where the reader is. That page's reload stays spent for five minutes,
   whatever else loads meanwhile, so a chunk that is still missing afterwards fails visibly instead of looping.
   `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.
+- **Reloads the app starts.** Every one goes through `noteReload` (`@intentic/ui/reload-reason`), which leaves the
+  reason for the next load and answers whether the reload may go ahead. A reload nobody pressed for (a dead chunk, a
+  self-heal, the desktop opener's fallback) is refused after three in a minute in the same tab, and the caller's own
+  failure shows instead. A reload the reader pressed for is never refused. `pageLeaving` says whether the page is on
+  its way out, so that a request the page cut while leaving is not reported as the sandbox going away.
 - **Loading placeholders.** A region that is not here yet is drawn by `<Await :of="loaded" imprint="name">`
   (`src/components/feedback/Await.vue`) from its read's `Loaded` (`@intentic/extension-api`: waiting, ready, failed or
   idle), and by nothing else. It draws nothing for a fast answer, then the region exactly as it last looked in this

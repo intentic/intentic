@@ -113,6 +113,14 @@ it(`asks the server again, past the browser's cache, for the files the page was 
     }
 });
 
+// The tab-wide ceiling (reloadReason.ts) has the last word over this path's own once-per-page rule.
+it(`rejects a dead chunk without reloading once the tab has reloaded itself three times this minute`, async () => {
+    const now = Date.now();
+    sessionStorage.setItem(`intentic.automaticReloads`, [now - 3_000, now - 2_000, now - 1_000].join(`,`));
+    await expect(loadChunk(dead)).rejects.toBe(deadChunk);
+    expect(assign.mock.calls).toEqual([]);
+});
+
 it(`catches the preload Vite failed for an import nobody wrapped, and cancels it only when it reloads`, () => {
     const target = new EventTarget() as Window;
     installChunkRecovery(target);

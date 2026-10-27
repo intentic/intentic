@@ -14,7 +14,7 @@
 
 import { sleep } from "@intentic/base/async";
 import { describeError, flushClientDiagnostics, reportClient } from "./clientDiagnostics";
-import { noteReload } from "@intentic/ui/reload-reason";
+import { noteReload, RELOAD_TAB_KEYS } from "@intentic/ui/reload-reason";
 import { storedValue, storeValue } from "@intentic/ui/storage";
 import { TURN_DEFAULT_KEYS } from "./turnDefaultKeys";
 import { EMBED_TAB_KEYS } from "./environments/nativeApp";
@@ -38,7 +38,9 @@ const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`, `intentic.skeletons`];
 const KEPT_KEYS: readonly string[] = Object.values(TURN_DEFAULT_KEYS);
 // And from this tab's session storage, that it is the Android app's WebView (environments/nativeApp.ts): a healed page
 // that forgot would open inside the app as a browser tab, rail, back arrow and all.
-const KEPT_TAB_KEYS: readonly string[] = EMBED_TAB_KEYS;
+// So do this tab's reload notes (reloadReason.ts): the reason the next load reads, and the count its budget is kept by, which
+// a wipe would otherwise reset on every heal.
+const KEPT_TAB_KEYS: readonly string[] = [...EMBED_TAB_KEYS, ...RELOAD_TAB_KEYS];
 
 const startedAt = performance.now();
 let healing = false;
@@ -66,11 +68,17 @@ const marked = (): boolean => {
 
 const heal = (error: unknown): void => {
     healing = true;
+    const { message, fields } = describeError(error);
+    // Asked before anything is wiped: a tab that has already reloaded itself too often this minute keeps its storage and
+    // shows the crash, since one more wipe-and-reload would be part of whatever is looping.
+    if (!noteReload(`self-heal`, { error: message })) {
+        console.error(`[self-heal] startup crashed, but this tab already reloaded itself too often to heal it:`, error);
+        return;
+    }
     console.error(`[self-heal] startup crashed, wiping this origin's stored state and reloading once:`, error);
     // Reported and flushed before the wipe, since the reload would otherwise destroy the only evidence of what
     // crashed. `keepalive` outlives the navigation; best-effort, since a failed report must cost a diagnostic, not the
     // recovery.
-    const { message, fields } = describeError(error);
     reportClient(`self-heal.wipe`, message, { fields });
     flushClientDiagnostics();
     try {
@@ -88,10 +96,8 @@ const heal = (error: unknown): void => {
         localStorage.setItem(WIPE_KEY, `1`);
     } catch {
         // Storage unavailable means storage isn't what crashed us; fall through to the reload, which at worst repeats
-        // and
-        // surfaces the crash.
+        // and surfaces the crash.
     }
-    noteReload(`self-heal`);
     location.reload();
 };
 

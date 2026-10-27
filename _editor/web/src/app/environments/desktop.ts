@@ -234,9 +234,12 @@ const goOrLoad = async (go: (path: string) => Promise<void>, path: string): Prom
     try {
         await go(path);
     } catch (error) {
-        console.error(`[desktop] could not open ${path} in place; loading it:`, error);
-        noteReload(`opener-fallback`);
-        globalThis.location.href = path;
+        // A load nobody pressed for, which the tab's reload budget may refuse (reloadReason.ts); the page then stays put.
+        const loading = noteReload(`opener-fallback`, { path });
+        console.error(`[desktop] could not open ${path} in place; ${loading ? `loading it` : `reloaded too often to load it`}:`, error);
+        if (loading) {
+            globalThis.location.href = path;
+        }
     }
 };
 

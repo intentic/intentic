@@ -4,6 +4,7 @@ import { buildId } from "./buildEpoch";
 import { desktopApp } from "./environments/desktop";
 import { lastFailedRequest } from "./perf/perf";
 import { t } from "@intentic/ui/i18n";
+import { type AutomaticReload, watchAutomaticReloads } from "@intentic/ui/reload-reason";
 import { z } from "zod";
 
 // Posts what the browser saw or measured to the daemon (logs/client.jsonl beside its own records), since
@@ -435,6 +436,24 @@ export const reportWindowError = (event: Event): void => {
     }
 };
 
+// A reload this tab started by itself (reloadReason.ts), said and sent before the page goes: the next page cannot say why
+// it loaded, and this one's queue goes with it. One the budget refused is an error, since it means the tab was reloading
+// itself in a loop. On 2026-10-27 a loop ran about once a second for minutes, and none of this was in the log.
+const reportAutomaticReload = (reload: AutomaticReload): void => {
+    const fields: ReportFields = { reason: reload.reason, inLastMinute: reload.inLastMinute };
+    for (const [field, value] of Object.entries(reload.details)) {
+        if (value !== undefined) {
+            fields[field] = value;
+        }
+    }
+    if (reload.allowed) {
+        reportClient(`app.reload`, `reloading by itself: ${reload.reason}`, { level: `warn`, fields });
+    } else {
+        reportClient(`app.reload.refused`, `stopped reloading by itself: too many automatic reloads in a minute`, { level: `error`, fields });
+    }
+    flushClientDiagnostics();
+};
+
 // Wires the browser's own failure events, once at boot alongside installSelfHeal. Both `error` and
 // `unhandledrejection` are reported, even though selfHeal only heals on `error`: an early rejection (a daemon still
 // waking) is routine enough to log but not to wipe storage for. The `error` listener captures, since a resource's load
@@ -447,4 +466,9 @@ export const installClientDiagnostics = (): void => {
         reportClient(`unhandled.rejection`, message, { fields });
     });
     window.addEventListener(`pagehide`, () => flushClientDiagnostics());
+};
+
+/** Reports every reload this tab starts by itself, once at boot beside installClientDiagnostics. */
+export const reportAutomaticReloads = (): void => {
+    watchAutomaticReloads(reportAutomaticReload);
 };

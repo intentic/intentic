@@ -14,7 +14,7 @@ import { useAuth } from "./client/auth/useAuth";
 import { startAudienceSync } from "./client/sandbox/audienceSync";
 import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { dropTranscriptStore } from "./models/conversations/transcript/transcriptCache";
-import { describeError, installClientDiagnostics, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
+import { describeError, installClientDiagnostics, reportAutomaticReloads, reportClient, sendClientDiagnosticsWith } from "./app/clientDiagnostics";
 import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
@@ -29,6 +29,7 @@ import { installSkeletonPersistence, readImprintsEarly } from "./lib/skeletonPer
 import { activeSandboxId } from "./app/storage/activeSandbox";
 import { loadContract } from "./client/sandbox/daemon/contract";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
+import { watchPageLeaving } from "@intentic/ui/reload-reason";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
 import "./features/sandbox/switching/sandboxScope";
 import "./models/sandbox/sandboxScreen";
@@ -63,6 +64,9 @@ if (localFace() === undefined) {
     sendClientDiagnosticsWith(postClientDiagnostics);
 }
 installClientDiagnostics();
+reportAutomaticReloads();
+// Whether this page is on its way out, for the readers of failures that would otherwise blame the sandbox for its own leaving.
+watchPageLeaving();
 
 // A browser that had a sandbox open (the account's key, gone at sign-out) is about to open the shell, whose guard asks the
 // platform for the session first: asked now, its round trip runs beside everything below instead of after it, and the
