@@ -9,6 +9,7 @@
     "include": ["./src/**/*"],
     "exclude": [
         "./src/**/*.test.ts",
+        "./src/capabilities/conformance/**",
         "./src/fences/engine-fence.ts",
         "./src/fences/tmux-fence.ts",
         "./src/harness/e2e-harness.ts",

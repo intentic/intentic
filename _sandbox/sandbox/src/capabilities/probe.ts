@@ -94,8 +94,8 @@ interface RawAnswer {
 }
 
 // A body past MAX_BODY_BYTES is cut there: what it holds is then not JSON, and the probe reads it as reached, unnamed.
-const send = async (url: URL, probe: HttpProbe): Promise<RawAnswer> => {
-    const answer = await nodeRequest(url, {
+const send = async (url: URL, probe: HttpProbe, request: typeof nodeRequest): Promise<RawAnswer> => {
+    const answer = await request(url, {
         method: probe.method ?? "GET",
         headers: {
             accept: "application/json",
@@ -125,7 +125,7 @@ const whoAnswered = (answer: RawAnswer, path: string): string | undefined => {
     return identityIn(parseJsonOr(answer.body, undefined), path);
 };
 
-const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
+const runHttpProbe = async (probe: HttpProbe, request: typeof nodeRequest): Promise<CapabilityProbe> => {
     let url: URL;
     try {
         url = new URL(probe.url);
@@ -137,7 +137,7 @@ const runHttpProbe = async (probe: HttpProbe): Promise<CapabilityProbe> => {
     }
     let answer: RawAnswer;
     try {
-        answer = await send(url, probe);
+        answer = await send(url, probe, request);
     } catch (error) {
         return { checked: true, ok: false, message: `Could not reach ${url.host}: ${transportReason(error)}.` };
     }
@@ -162,13 +162,13 @@ const NOT_SIGNED_IN: CapabilityProbe = {
     message: "Nothing to test until someone signs in: save this connection, then ask the agent to sign in with it.",
 };
 
-const signedInProbe = async (plan: HttpProbe, oauth: OAuthExchange): Promise<CapabilityProbe> => {
+const signedInProbe = async (plan: HttpProbe, oauth: OAuthExchange, request: typeof nodeRequest): Promise<CapabilityProbe> => {
     if (oauth.form["refresh_token"] === undefined) {
         return NOT_SIGNED_IN;
     }
     try {
         const target = await probeOAuth(oauth, plan.url);
-        return await runHttpProbe({ ...plan, url: target.url, headers: { ...plan.headers, authorization: `Bearer ${target.token}` } });
+        return await runHttpProbe({ ...plan, url: target.url, headers: { ...plan.headers, authorization: `Bearer ${target.token}` } }, request);
     } catch {
         // allow(silent-catch): the authority's answer may echo the credential, so a refusal is said only as one.
         return { checked: true, ok: false, message: "The sign-in was refused: ask the agent to sign in with this connection again." };
@@ -249,11 +249,15 @@ const coreProbe = (capability: Capability): CapabilityProbe | HttpProbe => {
 
 // `registry` is the contribution registry the caller already built, kept as a parameter so this stays a pure function
 // of its inputs.
-export const probeCapability = async (registry: ReadonlyMap<string, ResolvedContribution>, capability: Capability): Promise<CapabilityProbe> => {
+export const probeCapability = async (
+    registry: ReadonlyMap<string, ResolvedContribution>,
+    capability: Capability,
+    request: typeof nodeRequest = nodeRequest,
+): Promise<CapabilityProbe> => {
     const config = capability.config as Record<string, unknown>;
     const plan = capability.kind === "cli" ? contributionProbe(contributionFor(registry, capability.kind, config), config) : coreProbe(capability);
     if ("checked" in plan) {
         return plan;
     }
-    return plan.oauth === undefined ? runHttpProbe(plan) : signedInProbe(plan, plan.oauth);
+    return plan.oauth === undefined ? runHttpProbe(plan, request) : signedInProbe(plan, plan.oauth, request);
 };

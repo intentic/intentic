@@ -39,6 +39,7 @@ on:
           - install-urls
           - demo-live
           - provider-canary
+          - capabilities
           - verify-providers
           - update-survival
           - mobile
@@ -655,6 +656,32 @@ jobs:
       # The versions that were actually tested, printed into the log: a failing canary is only actionable if the
       # run says which release it failed against.
       - run: pnpm e2e:providers
+
+  # A failed live capability contract means the shipped connection card is broken.
+  capabilities:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'capabilities' }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm e2e:capabilities
+        env:
+          GITHUB_E2E_TOKEN: ${{ secrets.GITHUB_E2E_TOKEN }}
+          GITHUB_E2E_REPO: ${{ secrets.GITHUB_E2E_REPO }}
+          CLOUDFLARE_E2E_TOKEN: ${{ secrets.CLOUDFLARE_E2E_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_E2E_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_E2E_ACCOUNT_ID }}
+          CLOUDFLARE_E2E_ZONE: ${{ secrets.CLOUDFLARE_E2E_ZONE }}
 
   # THE UPDATE PROMISES, DRILLED ON A REAL SANDBOX — verify-update-survival.sh connects a sandbox on the
   # published stable image, plants sentinels in /work and /history, then updates, rolls back, forces a FAILED

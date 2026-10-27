@@ -395,15 +395,15 @@ export const githubLogin = async (host: Pick<GitHost, "apiBase" | "token">, warn
     }
 };
 
-const created = async (host: GitHost, name: string, owner: string | undefined, warn: LoginLookupWarn): Promise<string> => {
+export const created = async (host: GitHost, name: string, owner: string | undefined, warn: LoginLookupWarn, fetcher: typeof fetch = fetch): Promise<string> => {
     if (host.provider === "gitlab") {
-        return createGitlabProject(host, name, owner);
+        return createGitlabProject(host, name, owner, fetcher);
     }
     // github: an owner other than the authenticated user is an organization, with its own endpoint. No owner named is
     // the token's own account, with nothing to look up.
-    const login = owner === undefined ? undefined : await githubLogin(host, warn);
+    const login = owner === undefined ? undefined : await githubLogin(host, warn, fetcher);
     const path = owner === undefined || owner === login ? "/user/repos" : `/orgs/${encodeURIComponent(owner)}/repos`;
-    const response = await fetch(`${host.apiBase}${path}`, {
+    const response = await fetcher(`${host.apiBase}${path}`, {
         method: "POST",
         headers: { ...githubHeaders(host.token), "Content-Type": "application/json" },
         body: JSON.stringify({ name, private: true, auto_init: false }),

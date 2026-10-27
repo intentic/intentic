@@ -884,9 +884,13 @@ blob sizes at HEAD, cached per repository and commit, so a large repository's co
 
 ```sh
 pnpm --filter @intentic/sandbox test         # unit and integration suites
+pnpm --filter @intentic/sandbox test github.conformance.integration
+pnpm e2e:capabilities                       # opt-in live capability contracts
 pnpm dev:sandbox                             # repo root: watch loop that rebuilds or restarts a dev sandbox
 sh _sandbox/sandbox/scripts/dev-restart.sh   # recompile and restart the daemon inside a dev container
 ```
+
+Capability [conformance tests](src/capabilities/conformance/README.md) run the same scenarios against local vendor fakes on every push and dedicated accounts nightly. The separate `INTENTIC_E2E_CAPABILITIES` switch keeps the general nightly `e2e` sweep from running them twice. Missing live credentials stand down with their names in the test title.
 
 `dev-restart.sh` runs the compiled daemon's state planner inside the running container before it restarts it, and
 refuses when that cannot load: only compiled code is mounted, never `node_modules`, so a package the image lacks
