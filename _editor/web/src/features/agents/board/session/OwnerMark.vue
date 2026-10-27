@@ -8,7 +8,8 @@ import type { SessionMark } from "../../../../models/agent-status/ownership";
    and the row it used to take costs the lane a card. The full name is in the hover; taking it over or handing it on is
    in the card's menu. The conversation that spawned this one is not whose it is, and has its own line (ParentMark). */
 
-defineProps<{ mark: SessionMark }>();
+// The owner's own login served the turn: said here, in the hover, instead of as a second name on the line (ownersAccount).
+defineProps<{ mark: SessionMark; ownAccount?: string | undefined }>();
 
 const t = useT();
 
@@ -25,6 +26,7 @@ const TOKEN = `inline-flex min-w-0 shrink items-center gap-1`;
             rows: [
                 { label: t(`shared.name`), value: mark.look.name },
                 { label: t(`agents.words.email`), value: mark.look.email === mark.look.name ? `` : mark.look.email },
+                { label: t(`shared.account`), value: ownAccount ?? `` },
             ],
         }"
     >

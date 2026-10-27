@@ -1,5 +1,5 @@
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { accountBadge, shortAccount } from "./accountChip";
+import { accountBadge, ownersAccount, sessionLogin, shortAccount } from "./accountChip";
 
 const account = (over: Partial<OauthAccount> & Pick<OauthAccount, "id" | "label">): OauthAccount => ({ connectedAt: 1, ...over });
 
@@ -68,5 +68,45 @@ describe(`accountBadge`, () => {
         const named = [account({ id: `c`, label: `bob@acme.com`, email: `bob@acme.com` })];
         // The tip card drops a row with an empty value, so the address is said once, as the name.
         expect(accountBadge(named, `c`)?.hint.rows?.map((row) => row.value)).toEqual([`bob@acme.com`, ``, ``]);
+    });
+});
+
+describe(`ownersAccount`, () => {
+    const accounts = [
+        account({ id: `own`, label: `Dawid@Acme.com` }),
+        account({ id: `named`, label: `Work`, email: `dawid@acme.com` }),
+        account({ id: `other`, label: `bob@acme.com`, email: `bob@acme.com` }),
+    ];
+
+    // The owner and the login that served the turn are one person, so the card says them once, on the owner.
+    it(`folds a login named by the owner's address into the owner, whatever its case`, () => {
+        expect(ownersAccount(accounts, `own`, `dawid@acme.com`)).toBe(`Their own`);
+    });
+
+    it(`keeps the name the owner gave their login`, () => {
+        expect(ownersAccount(accounts, `named`, `dawid@acme.com`)).toBe(`Work, their own`);
+    });
+
+    // Somebody else's quota paying for the turn is the fact worth a chip of its own.
+    it(`leaves somebody else's login, and an unnamable one, to the account chip`, () => {
+        expect(ownersAccount(accounts, `other`, `dawid@acme.com`)).toBeUndefined();
+        expect(ownersAccount(accounts, `gone`, `dawid@acme.com`)).toBeUndefined();
+        expect(ownersAccount(accounts, undefined, `dawid@acme.com`)).toBeUndefined();
+    });
+});
+
+describe(`sessionLogin`, () => {
+    const accounts = [account({ id: `own`, label: `dawid@acme.com` }), account({ id: `other`, label: `bob@acme.com` })];
+    const dawid = { kind: `person` as const, look: { email: `dawid@acme.com`, name: `dawid@acme.com`, short: `dawid`, hue: 0, mine: false } };
+
+    // One person, said once: no chip beside the owner who is also the login.
+    it(`moves a colleague's own login into the owner's hover and drops the chip`, () => {
+        expect(sessionLogin(accounts, `own`, dawid)).toEqual({ own: `Their own` });
+    });
+
+    // The reader's own card has no owner mark, so the chip is the only place the login is named.
+    it(`keeps the chip for another person's login and for a card with no owner drawn`, () => {
+        expect(sessionLogin(accounts, `other`, dawid).badge?.label).toBe(`bob`);
+        expect(sessionLogin(accounts, `own`, undefined).badge?.label).toBe(`dawid`);
     });
 });

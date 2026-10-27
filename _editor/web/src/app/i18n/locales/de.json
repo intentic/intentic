@@ -723,6 +723,8 @@
         },
         "ownerMark": {
             "controlToken": "Steuertoken",
+            "ownAccount": "Das eigene",
+            "ownAccountNamed": "{label}, das eigene",
             "ownedBy": "Gehört {name}",
             "owner": "Besitzer",
             "startedByControlToken": "Gestartet vom Steuer-Token {tokenLabel}",

@@ -723,6 +723,8 @@
         },
         "ownerMark": {
             "controlToken": "Token sterujący",
+            "ownAccount": "Własne",
+            "ownAccountNamed": "{label}, własne",
             "ownedBy": "Należy do: {name}",
             "owner": "Właściciel",
             "startedByControlToken": "Uruchomiona przez token sterujący {tokenLabel}",

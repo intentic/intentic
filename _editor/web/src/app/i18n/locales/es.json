@@ -723,6 +723,8 @@
         },
         "ownerMark": {
             "controlToken": "Token de control",
+            "ownAccount": "El suyo propio",
+            "ownAccountNamed": "{label}, el suyo propio",
             "ownedBy": "Pertenece a {name}",
             "owner": "Propietario",
             "startedByControlToken": "Iniciada por el token de control {tokenLabel}",

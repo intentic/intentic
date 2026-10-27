@@ -1,6 +1,7 @@
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Tip } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
+import { sameAddress, type SessionMark } from "../../../../models/agent-status/ownership";
 
 // Which connected account a session's turns run on, as the card spells it (sessionChip.ts's companion); its own module
 // so the string rule stays testable.
@@ -60,4 +61,32 @@ export const accountBadge = (accounts: readonly OauthAccount[], ran: string | un
             ],
         },
     };
+};
+
+/**
+ * What the owner's hover says about the login, when the login that served a session is its owner's own (matched by
+ * address): the card then says that person once, as the owner, rather than once as owner and again as the account,
+ * which read as two people. Nothing when the login is somebody else's or unnamable, and the account chip stays.
+ */
+export const ownersAccount = (accounts: readonly OauthAccount[], ran: string | undefined, ownerEmail: string): string | undefined => {
+    const entry = accounts.find((account) => account.id === ran);
+    if (entry === undefined || !(sameAddress(ownerEmail, entry.email) || sameAddress(ownerEmail, entry.label))) {
+        return undefined;
+    }
+    // A login named by its own address adds nothing to "their own"; one the owner named ("Work") keeps that name.
+    return sameAddress(ownerEmail, entry.label) ? t(`agents.ownerMark.ownAccount`) : t(`agents.ownerMark.ownAccountNamed`, { label: entry.label });
+};
+
+/**
+ * Everything a card says about the login: the owner's hover line when it is a colleague's own (`own`), else the chip
+ * (`badge`). Owner and account side by side read as two people; somebody else's login keeps its chip, since whose
+ * quota paid is then news.
+ */
+export const sessionLogin = (
+    accounts: readonly OauthAccount[],
+    ran: string | undefined,
+    owner: SessionMark | undefined,
+): { readonly badge?: AccountBadge | undefined; readonly own?: string | undefined } => {
+    const own = owner?.kind === `person` ? ownersAccount(accounts, ran, owner.look.email) : undefined;
+    return own === undefined ? { badge: accountBadge(accounts, ran) } : { own };
 };

@@ -723,6 +723,8 @@
         },
         "ownerMark": {
             "controlToken": "Jeton de contrôle",
+            "ownAccount": "Le sien",
+            "ownAccountNamed": "{label}, le sien",
             "ownedBy": "Appartient à {name}",
             "owner": "Propriétaire",
             "startedByControlToken": "Lancée par le jeton de contrôle {tokenLabel}",

@@ -57,7 +57,7 @@ import SessionMetrics from "../../metrics/SessionMetrics.vue";
 import ChildCount from "../../../../parts/fleet/ChildCount.vue";
 import { boxImageOf, boxNameOf } from "../../../../models/fleet/fleetScope";
 import { blockersOf, settingsPagesOf, userBlockers } from "../../../../models/conversations/review/conflictResolution";
-import { accountBadge } from "../session/accountChip";
+import { sessionLogin } from "../session/accountChip";
 import { previewOf } from "../../../../models/conversations/panel/useChat-strip";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 import { providerAccounts } from "../../../../models/providers/providerAccounts";
@@ -399,11 +399,10 @@ const model = computed(() => {
     }
     return props.agent.model === undefined ? providerLabel(props.agent.provider) : modelLabelFor(props.agent.provider, props.agent.model);
 });
-// Which login actually served this turn (from the turn's own session frame), not the composer's current pick, which may
-// differ after a mid-chat switch.
-// The summary carries only a UUID; read against the window's account list, so an unresolvable id (disconnected login)
-// draws nothing.
-const account = computed(() => (maker.value ? undefined : accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account)));
+// Which login actually served this turn (the turn's own session frame, not the composer's pick), read against the
+// window's account list; folded into the owner's hover when it is the owner's own (sessionLogin).
+const login = computed(() => (maker.value ? {} : sessionLogin(providerAccounts.value[props.agent.provider] ?? [], props.agent.account, provenance.value)));
+const account = computed(() => login.value.badge);
 // A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
 // leaves Vue comparing one string, so only the card being typed into redraws.
 const unsentWords = computed(() => previewOf(props.agent.id));
@@ -786,7 +785,7 @@ const grab = (event: PointerEvent): void => {
                         <span class="truncate">{{ box.name }}</span>
                     </span>
                     <!-- Whose it is leads what it runs on: for a card that isn't the reader's own, that outranks the model. -->
-                    <OwnerMark v-if="provenance !== undefined" :mark="provenance" />
+                    <OwnerMark v-if="provenance !== undefined" :mark="provenance" :own-account="login.own" />
                     <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
                         <!-- Pulled back into the line's wider gap, so the dot sits as close to whose it is as to the model. -->
                         <span v-if="provenance !== undefined" class="-ml-1.5">·</span>
