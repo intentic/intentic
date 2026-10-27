@@ -162,6 +162,10 @@ cold_link() {
         cat /tmp/xdg-open-cold.log >&2 || true
         return 1
     }
+    # The deb's stopped-Docker fixture proves startup and confirmation stay responsive. Make the stand-in
+    # ready before accepting setup: an unready Unix daemon selects pkexec, whose administrator prompt this
+    # bare installation tier cannot answer. The setup itself is observed at its local CLI, as on Windows.
+    printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/docker
     answer_confirm
     until_true 120 "$1" setup_started || {
         cat /tmp/xdg-open-cold.log >&2 || true
@@ -342,7 +346,6 @@ if [ "$KIND" = "deb" ]; then
     chmod +x /usr/local/bin/docker
     cold_link "the setup link started the app and ran only the local CLI stand-in"
     quit_app
-    printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/docker
 fi
 
 # 5. launch
