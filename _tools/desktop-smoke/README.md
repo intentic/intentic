@@ -16,10 +16,11 @@ flowchart LR
 - The image carries no GUI libraries, so the `.deb` must pull everything it links against through the `Depends`
   field Tauri's bundler writes, which nothing else in the pipeline reads. The AppImage meets the same bare host,
   plus only the libraries its excludelist leaves to the host.
-- Assertions read window titles with `xdotool`; the app has no test hook. The deep link is fired at a running
-  app (the single-instance plugin forwards it) and at one that is not running (the link arrives in argv).
+- Assertions read window titles with `xdotool`, activate the native “Set up” button through AT-SPI, and observe a local CLI stand-in, selected through `IC_BIN`.
+  Accepting the deep link must run that stand-in in the background and keep the workspace's original window.
+  The link is fired at a running app (single-instance forwarding) and at one that is not running (startup argv).
 - Hermetic: `INTENTIC_APP_URL` points at a stub page baked into the image and `INTENTIC_DISABLE_UPDATE_CHECK=1`
-  keeps the updater off.
+  keeps the updater off. `AGENT_BIN` also keeps the background agent pre-install from downloading a release.
 - `outage.sh`, reached the same way and run by `verify-desktop-install.sh` on the deb when `DESKTOP_SMOKE_OUTAGE=1` (the
   nightly sets it; CI and release leave it out until it has passed there), launches the installed app at a workspace address that does not answer, then at one answering a
   Cloudflare-style 530, each in config, data and cache directories of its own, with the Rust side's calls sent to a
