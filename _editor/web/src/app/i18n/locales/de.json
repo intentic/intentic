@@ -13288,6 +13288,7 @@
         "work": "Arbeit",
         "loading": "Deine Startunterhaltung wird geöffnet…",
         "failed": "Deine Startunterhaltung konnte nicht geöffnet werden.",
+        "tooOld": "Deine Startunterhaltung braucht eine neuere Version. Bis zum Update öffne die Sandbox und arbeite darin wie bisher.",
         "sandboxAttention": "{name} · braucht dich: {count}",
         "stage": {
             "working": "In Arbeit",

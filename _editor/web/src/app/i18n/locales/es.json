@@ -13288,6 +13288,7 @@
         "work": "Trabajo",
         "loading": "Abriendo tu conversación de inicio…",
         "failed": "No se pudo abrir tu conversación de inicio.",
+        "tooOld": "Tu conversación de inicio necesita una versión más reciente. Hasta que actualices, abre el sandbox y trabaja en él como hasta ahora.",
         "sandboxAttention": "{name} · te necesita: {count}",
         "stage": {
             "working": "Trabajando",

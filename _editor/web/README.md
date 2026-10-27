@@ -630,6 +630,9 @@ the sandbox switcher's Sandboxes header (on a phone, the Menu page's), and `Mod+
 `shell/rail/MasterRail.vue`. Going in is never `/`: that is Home itself
 (`lib/routes/firstScreens.ts`). `features/home/` draws the surface; `models/home/` holds attention polling, the pure work
 ledger projection and which sandbox's home is on screen (`homeShownFor`, which a new sandbox's first start waits on).
+Home has no `SandboxGate` in front of it, so `HomeChat.vue` stands the gates it needs itself: connecting and warming, the
+too-old page below the supported floor, and for a sandbox from before home conversations (its hello lists no
+`agents.home`) the update notice with a press that goes inside, rather than a failure whose retry could never succeed.
 **A new sandbox is made on Home, in a tile of its own** (2026-10-26, `features/home/newSandbox/`): every "Add sandbox" on
 a desktop (the rail's +, the first run's Create, the switcher inside a sandbox, the palette, the desktop app's folder
 window) opens `/home?add=sandbox`, which puts a dialog over Home asking for a name and where it runs. Create closes it

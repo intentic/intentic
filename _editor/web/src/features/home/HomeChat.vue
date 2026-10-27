@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import { Button, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -12,26 +13,32 @@ import { workLedger } from "../../models/home/homeFacts";
 import ChatPane from "../chat/panel/ChatPane.vue";
 import HomeChatSlot from "./HomeChatSlot.vue";
 import HomeDetour from "./HomeDetour.vue";
-import { homeViewOf } from "../../lib/routes/homeDetour";
-import { useDevice } from "@intentic/ui";
+import { goInside, homeViewOf } from "../../lib/routes/homeDetour";
 import { useRole } from "../../client/sandbox/useRole";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import { useWorkspaceTree } from "../../models/workspace/tree/useWorkspaceTree";
 import { useSandboxAvailability } from "../sandbox/overview/useSandboxAvailability";
 import SandboxConnecting from "../sandbox/gates/SandboxConnecting.vue";
+import SandboxTooOld from "../sandbox/gates/SandboxTooOld.vue";
 import SandboxWarming from "../sandbox/gates/SandboxWarming.vue";
+import SandboxOutdatedNotice from "../../parts/sandbox/SandboxOutdatedNotice.vue";
+import { daemonTooOld } from "../../client/sandbox/daemon/useDaemonVersion";
+import { folderSurface, readFailure, supportsRoute } from "../../client/sandbox/useDaemonRoutes";
+import { sandboxEntryPath } from "../../models/sandbox/sandboxScreen";
 
 const t = useT();
 const sandbox = useSandbox();
 // A view of this sandbox's own shown where the chat is (lib/routes/homeDetour.ts): the chat stays mounted underneath,
 // hidden, so going back finds its draft, its scroll and its pane as they were.
 const route = useRoute();
+const router = useRouter();
 const shownView = computed(() => homeViewOf(route.query));
 const noSandbox = computed(() => switchableSandboxes(sandbox.sandboxes.value).length === 0);
 const { mobile } = useDevice();
 const conversation = shallowRef<Conversation>();
-const failure = shallowRef(false);
+// Why the home conversation did not open, in the words of whatever refused it; undefined while nothing has failed.
+const failure = shallowRef<string>();
 const now = useNow(() => true);
 const retry = shallowRef(0);
 // The panel the page lends draws exactly this one (models/home/homeChat.ts), and the sandbox it belongs to is said to be
@@ -54,6 +61,21 @@ onUnmounted(() => {
 const { hasSnapshot } = useWorkspaceTree();
 const availability = useSandboxAvailability(hasSnapshot);
 const warming = computed(() => sandbox.reachable.value && availability.value === `warming`);
+// A SANDBOX TOO OLD FOR HOME. Home has no SandboxGate in front of it (shell/ShellDesktop.vue), so it stands the gate's
+// too-old page itself for a daemon below the oldest this app supports. A daemon above that floor but from before home
+// conversations (1.350.0) has no `agents.home` to ask: its hello lists none, and asking anyway answers a 404 no retry
+// mends. Home became the first screen after that (1.361.0), so a sandbox left on an older release opened on a failure
+// whose Retry could never work, and nothing said that the sandbox only needed updating, or how to get inside it, where
+// everything else still works. A folder on this computer lacks routes by nature rather than by age, so no update is
+// offered for it; its call fails and says why like any other.
+const homeMissing = computed(() => !folderSurface.value && !supportsRoute(`agents.home`));
+const tooOldForHome = computed(() => daemonTooOld.value || homeMissing.value);
+const enter = (): void => {
+    const id = sandbox.activeSandboxId.value;
+    if (id !== undefined) {
+        void goInside(() => router.push(sandboxEntryPath(id)));
+    }
+};
 const ledger = computed(() => (conversation.value === undefined ? [] : workLedger(registry.value, conversation.value.conversationId, now.value)));
 // What has not reached the workspace yet. Its person never lands anything (the daemon lands and commits whatever the home
 // merged, turn-landing.ts homeOverride), so this says why, and presses nothing: a clash the home is sent back to resolve
@@ -73,14 +95,14 @@ const heldLine = computed((): string | undefined => {
     return undefined;
 });
 watch(
-    () => [sandbox.activeSandboxId.value, sandbox.reachable.value, noSandbox.value, retry.value] as const,
-    async ([id, reachable, empty], _old, cleanup) => {
+    () => [sandbox.activeSandboxId.value, sandbox.reachable.value, noSandbox.value, tooOldForHome.value, retry.value] as const,
+    async ([id, reachable, empty, tooOld], _old, cleanup) => {
         let current = true;
         cleanup(() => {
             current = false;
         });
-        failure.value = false;
-        if (empty || id === undefined || !reachable) {
+        failure.value = undefined;
+        if (empty || id === undefined || !reachable || tooOld) {
             if (empty) {
                 conversation.value = undefined;
             }
@@ -96,9 +118,9 @@ watch(
                 return;
             }
             conversation.value = homeConversationFor(id, home, t(`home.title`));
-        } catch {
+        } catch (error) {
             if (current) {
-                failure.value = true;
+                failure.value = readFailure(error);
             }
         }
     },
@@ -148,15 +170,29 @@ watch(
                 :closable="false"
             />
         </div>
+        <!-- Before the waits, as SandboxGate orders them: the hello already named the version and the routes, and an update
+             that restarts the sandbox is followed on the update's own page rather than a connecting one. -->
+        <div v-else-if="!shownView && daemonTooOld" class="flex min-h-0 flex-1 overflow-auto">
+            <SandboxTooOld />
+        </div>
+        <div v-else-if="!shownView && homeMissing" class="flex flex-1 items-start justify-center p-6" data-home-too-old>
+            <div class="flex w-full max-w-md flex-col items-start gap-3">
+                <SandboxOutdatedNotice :missing="t(`home.tooOld`)" />
+                <Button tier="boring" size="small" :label="t(`chat.homeDoor.openNamed`, { name: sandbox.active.value?.name ?? `` })" @click="enter" />
+            </div>
+        </div>
         <div v-else-if="!shownView && (!sandbox.reachable.value || warming)" class="flex min-h-0 flex-1 overflow-auto">
             <SandboxWarming v-if="warming" />
             <SandboxConnecting v-else />
         </div>
         <div v-else-if="!shownView" class="flex flex-1 items-start justify-center p-6">
-            <p class="text-sm text-muted" role="status">
-                {{ failure ? t(`home.failed`) : t(`home.loading`) }}
-                <button v-if="failure" type="button" class="ml-3 underline" @click="retry++">{{ t(`home.retry`) }}</button>
-            </p>
+            <div class="max-w-md text-sm text-muted" role="status">
+                <p>
+                    {{ failure === undefined ? t(`home.loading`) : t(`home.failed`) }}
+                    <button v-if="failure !== undefined" type="button" class="ml-3 underline" @click="retry++">{{ t(`home.retry`) }}</button>
+                </p>
+                <p v-if="failure" class="mt-1 text-xs">{{ failure }}</p>
+            </div>
         </div>
     </section>
 </template>

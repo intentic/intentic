@@ -13288,6 +13288,7 @@
         "work": "Work",
         "loading": "Opening your home conversation…",
         "failed": "Could not open your home conversation.",
+        "tooOld": "Your home conversation needs a newer version. Until you update, open the sandbox to work in it as before.",
         "sandboxAttention": "{name} · needs you: {count}",
         "stage": {
             "working": "Working",

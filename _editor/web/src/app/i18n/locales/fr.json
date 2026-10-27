@@ -13288,6 +13288,7 @@
         "work": "Travail",
         "loading": "Ouverture de votre conversation d’accueil…",
         "failed": "Impossible d’ouvrir votre conversation d’accueil.",
+        "tooOld": "Votre conversation d’accueil demande une version plus récente. D’ici la mise à jour, ouvrez la sandbox pour y travailler comme avant.",
         "sandboxAttention": "{name} · a besoin de vous : {count}",
         "stage": {
             "working": "En cours",

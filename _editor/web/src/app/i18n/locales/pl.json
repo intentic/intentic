@@ -13288,6 +13288,7 @@
         "work": "Praca",
         "loading": "Otwieranie twojej rozmowy głównej…",
         "failed": "Nie udało się otworzyć twojej rozmowy głównej.",
+        "tooOld": "Rozmowa główna wymaga nowszej wersji. Do czasu aktualizacji otwórz sandbox i pracuj w nim jak dotąd.",
         "sandboxAttention": "{name} · potrzebuje cię: {count}",
         "stage": {
             "working": "Pracuje",
