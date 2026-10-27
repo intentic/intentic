@@ -112,7 +112,7 @@ const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
     open: [event?: MouseEvent];
     review: [];
-    // The agent's page with its diff, whatever its drill-in says: the change count, Review & land, and a double-click.
+    // The agent's page with its diff: the change count and a double-click.
     changes: [];
     resolve: [];
     // A land held by the owner's own deletion: keep it deleted (the agent drops its edits) or put it back and land.
@@ -310,6 +310,7 @@ const landing = computed(() => props.pending === `land` || props.agent.status ==
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
 const { canReview, canShip } = useRole();
+const landPresses = computed(() => canShip.value ? landable.value || shipping.value : canReview.value && landable.value);
 // The audience's words for the verbs on this card; a maker also loses the branch and runner chips, which name nothing
 // they chose.
 const words = useVocabulary();
@@ -758,7 +759,7 @@ const grab = (event: PointerEvent): void => {
             <WorkflowMark :workflow="agent.workflow" />
             <ParentMark v-if="parent !== undefined" :parent="parent" :sandbox-id="agent.sandboxId" />
 
-            <!-- THE CORNER SHARES THE MODEL LINE: the two wrap along one line, each block between them a whole line, so they meet only when adjacent. Stats (`data-stat`) keep a row of their own, starting in one place on every card. In `dense` the body already is one wrapping line. -->
+            <!-- THE CORNER SHARES SPARE SPACE: with the land presses when present, otherwise the model line. Other blocks and stats (`data-stat`) keep a row of their own. In `dense` the body already is one wrapping line. -->
             <div :class="dense ? 'contents' : 'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 [&>:not([data-shares])]:w-full'">
                 <div
                     v-if="
@@ -768,7 +769,7 @@ const grab = (event: PointerEvent): void => {
                         agent.branch !== undefined ||
                         (account !== undefined && !mobile)
                     "
-                    data-shares
+                    :data-shares="landPresses ? undefined : ''"
                     class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
                 >
                     <!-- NO DOT BEFORE A FACT THAT LEADS WITH ITS OWN GLYPH (the runner's desktop, the branch's code mark, the
@@ -883,18 +884,17 @@ const grab = (event: PointerEvent): void => {
                     <Icon :name="delivery.icon" class="shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
                 </p>
 
-                <!-- Land now, or Review & land ahead of it, or a collaborator's Request land (CardLandPresses). -->
+                <!-- Land now, or a collaborator's Request land; shares spare space with the clock (CardLandPresses). -->
                 <CardLandPresses
-                    v-if="landable || shipping"
+                    v-if="landPresses"
                     :agent="agent"
                     :title="displayTitle"
                     :busy="busy"
                     :landing="landing"
                     @land="emit('land')"
-                    @changes="emit('changes')"
                 />
 
-                <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`); with no stats it grows into what the model line leaves, a running readout asking 10rem to say what it does. -->
+                <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave, a running readout asking 10rem to say what it does. -->
                 <div
                     v-if="summary" data-shares
                     class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
