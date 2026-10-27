@@ -2,11 +2,11 @@ import { ref, shallowRef } from "vue";
 import { type FleetLane, NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import { type ActivePhase, ANY_MOMENT } from "../../../../../models/fleet/board/activePhase";
 import type { FleetAgent } from "../../../../../models/fleet/useAgents-fleet";
-import { readFolds, useLaneGroups } from "../laneGroups";
+import { HEADS_FROM, readFolds, useLaneGroups } from "../laneGroups";
 
-// Pins how the Active lane is drawn once it holds more than one kind of conversation: a head per group, a fold the
-// reader keeps, never a fold under a query, the ringed card kept in sight under a fold, and a Shift+click range that
-// walks only what is drawn.
+// Pins how the Active lane is drawn once it holds more than one kind of conversation: a head per group once the lane is
+// long enough to want folding, a fold the reader keeps (with its head), never a fold under a query, the ringed card kept
+// in sight under a fold, and a Shift+click range that walks only what is drawn.
 
 const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
     id,
@@ -35,12 +35,30 @@ const boardOf = (lanes: Partial<Record<FleetLane, FleetAgent[]>>, folded: Active
 const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
 
 describe(`the Active lane's groups`, () => {
-    it(`heads each kind once the lane holds more than one, drawing all but work in flight as rows`, () => {
-        const { groupsFor } = boardOf({ active: [card(`r`), booked(`b`, 9), draft(`d`)] });
+    it(`heads each kind once a long lane holds more than one, drawing all but work in flight as rows`, () => {
+        const running = Array.from({ length: HEADS_FROM - 2 }, (_, at) => card(`r${at}`));
+        const { groupsFor } = boardOf({ active: [...running, booked(`b`, 9), draft(`d`)] });
         expect(groupsFor(`active`).map((group) => [group.key, group.headed, group.rows, ids(group.shown)])).toEqual([
-            [`working`, true, false, [`r`]],
+            [`working`, true, false, ids(running)],
             [`next`, true, true, [`b`]],
             [`draft`, true, true, [`d`]],
+        ]);
+    });
+
+    it(`leaves a short lane unheaded, still in its groups' order and still drawing what waits as rows`, () => {
+        const { groupsFor } = boardOf({ active: [draft(`d`), card(`r`), booked(`b`, 9)] });
+        expect(groupsFor(`active`).map((group) => [group.key, group.headed, group.foldable, group.rows, ids(group.shown)])).toEqual([
+            [`working`, false, false, false, [`r`]],
+            [`next`, false, false, true, [`b`]],
+            [`draft`, false, false, true, [`d`]],
+        ]);
+    });
+
+    it(`keeps the heads of a short lane whose group the reader folded, so what they put away stays away`, () => {
+        const { groupsFor } = boardOf({ active: [card(`r`), draft(`d`)] }, [`draft`]);
+        expect(groupsFor(`active`).map((group) => [group.key, group.headed, group.folded, ids(group.shown)])).toEqual([
+            [`working`, true, false, [`r`]],
+            [`draft`, true, true, []],
         ]);
     });
 

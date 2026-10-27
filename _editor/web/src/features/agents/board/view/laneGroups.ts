@@ -6,9 +6,15 @@ import { cardKey, type Tray, trayRows } from "../../../../models/fleet/board/chi
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // THE RUNS OF CARDS A LANE DRAWS, EACH UNDER ITS OWN HEAD. A lane is one run, save Active once it holds more than one
-// phase (activePhase.ts): working, up next and drafts each draw under a head the reader can fold. A lane of twenty is
-// mostly one group they are not reading right now (eight messages booked for tonight, drafts from last week), and
-// folding it gives the screen back to the turns under way.
+// phase (activePhase.ts) and is long enough to need folding: working, up next and drafts each draw under a head the
+// reader can fold. A lane of twenty is mostly one group they are not reading right now (eight messages booked for
+// tonight, drafts from last week), and folding it gives the screen back to the turns under way. A lane of three fits on
+// the screen already: heads there are three lines of chrome over three cards, and the order (working first) and the
+// row-sized cards for what waits already say which is which.
+
+// How many cards Active holds before its groups take heads: below it the lane fits on a screen, so nothing needs
+// folding.
+export const HEADS_FROM = 6;
 
 // The lanes left to right, which is also the order a Shift+click range walks.
 export const LANE_ORDER: readonly FleetLane[] = [`attention`, `active`, `finished`];
@@ -72,10 +78,15 @@ export interface LaneGroupsHost {
 export const useLaneGroups = (host: LaneGroupsHost) => {
     const folded = host.folds ?? folds;
     const readingOf = (card: FleetAgent): ActiveReading => host.scope?.boardFamilies.value.get(cardKey(card)) ?? ownReading(card);
-    // Headed only when it holds more than one phase: a lane of one kind needs no heads to say so.
+    // Headed only when it holds more than one phase (a lane of one kind needs no heads to say so) and either is long
+    // enough to want folding or has a group the reader folded: a fold they made keeps its head as the lane shrinks, so
+    // the cards they put away don't spring back open when a turn under way finishes. Under a query nothing is folded,
+    // so only the length counts.
     const active = computed((): readonly LaneGroup[] => {
-        const groups = activeGroups(host.cardsFor(`active`), (card) => readingOf(card).phase);
-        const headed = groups.length > 1;
+        const all = host.cardsFor(`active`);
+        const groups = activeGroups(all, (card) => readingOf(card).phase);
+        const keptFold = !host.filtering.value && groups.some(({ phase }) => folded.value.has(phase));
+        const headed = groups.length > 1 && (all.length >= HEADS_FROM || keptFold);
         const foldable = headed && !host.filtering.value;
         return groups.map(({ phase, cards }) => {
             const shut = foldable && folded.value.has(phase);
