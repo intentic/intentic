@@ -358,10 +358,15 @@ const scheduledWays = useScheduledWays({
     open: laterOpen,
 });
 
-// The row's density cutoffs assume the round send press. A time-labelled schedule press, or a named persona/run-through pill,
-// adds ~100px to the right group, so the model's name drops at a wider container or the row breaks in two first.
+// The row's density cutoffs assume the round send press. A labelled schedule press, persona, run-through or landing pill
+// adds width to the right group, so the model's name drops at a wider container before the row breaks in two.
 const wideActions = computed(
-    () => (sendShown.value && scheduledLabel.value !== undefined && scheduledLabel.value !== ``) || inRow.value.persona || inRow.value.runThrough,
+    () =>
+        (sendShown.value && scheduledLabel.value !== undefined && scheduledLabel.value !== ``) ||
+        inRow.value.persona ||
+        inRow.value.runThrough ||
+        inRow.value.land ||
+        landing.home.value !== undefined,
 );
 // The model pill whose words are its meaning, kept at every width: the press to choose one, and the free trial (see the
 // pill's own note in the template).
