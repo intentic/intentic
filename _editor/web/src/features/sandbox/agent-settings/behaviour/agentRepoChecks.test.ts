@@ -78,7 +78,7 @@ test(`a check reads as its command and scope, then its verdict, on one line with
 });
 
 // Checks sit under the moment they run at, each moment named once however many checks it has.
-const groupsOf = (host: HTMLElement): string[][] =>
+const groupsOf = (host: HTMLElement): [string, ...string[]][] =>
     [...host.querySelectorAll(`ul`)].map((list) => [
         list.previousElementSibling?.textContent ?? ``,
         ...[...list.querySelectorAll(`li`)].map((line) => line.textContent ?? ``),
