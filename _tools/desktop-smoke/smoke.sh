@@ -27,6 +27,9 @@ export XDG_CURRENT_DESKTOP=GNOME
 # The stub SPA (baked into the image) rather than app.intentic.dev: this tier is hermetic, and the workspace
 # window opening at its CONFIGURED origin is what is being asserted, not that the hosted app renders.
 export INTENTIC_APP_URL="http://127.0.0.1:8099"
+export INTENTIC_PLATFORM_URL="$INTENTIC_APP_URL"
+# The background agent pre-install must not fetch a real release while this tier exercises local setup only.
+export AGENT_BIN=/bin/false
 # The other half of hermetic, and it stopped being optional the moment the app started ACTING on what it finds.
 # What used to be one harmless GET is now a background download of the current release — around 100 MB of
 # AppImage, twenty seconds into a tier that is about installing and deep-linking and cares about neither.
@@ -99,26 +102,45 @@ setup_started() { [ -f "$SETUP_MARKER" ] && grep -Fxq 'smoke-test-code' "$SETUP_
 # Every link goes through the external OS handler path, so the app must ask before running it.
 CONFIRM_TITLE="Set up a sandbox on this device"
 
-# Say yes to it. GTK focuses the first button in the action area and rfd adds the affirmative one first, so
-# Return is "Set up" — the CLI invocation after it proves the answer landed.
+# GTK's message labels are selectable, so focusing its window and pressing Return need not activate any button.
+# Activate the actual affirmative button through the native accessibility tree, independent of focus or geometry.
+activate_setup_button() {
+    timeout 10 python3 - "$CONFIRM_TITLE" >/tmp/intentic-confirm.log 2>&1 <<'PY'
+import sys
+import pyatspi
+
+dialog = pyatspi.findDescendant(
+    pyatspi.Registry.getDesktop(0),
+    lambda node: node.getRole() in (pyatspi.ROLE_DIALOG, pyatspi.ROLE_ALERT) and sys.argv[1] in node.name,
+)
+if dialog is None:
+    sys.exit("The native setup confirmation is not in the accessibility tree yet.")
+button = pyatspi.findDescendant(dialog, lambda node: node.getRole() == pyatspi.ROLE_PUSH_BUTTON and node.name == "Set up")
+if button is None or not button.queryAction().doAction(0):
+    sys.exit("The native Set up button could not be activated.")
+PY
+}
+
+confirmation_closed() { ! window_titled "$CONFIRM_TITLE"; }
 answer_confirm() {
-    local attempt id
-    # A cold start is still creating and destroying windows when the dialog appears, and xdotool exits on the
-    # X error it gets when a window vanishes mid-search or mid-focus (BadWindow on X_GetProperty). Under
-    # errexit that ended the whole tier on a bare `X Error` line, so look again instead: the CLI invocation
-    # assertion after this is still what proves the answer landed.
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
-        id=$(window_titled "$CONFIRM_TITLE" 2>/dev/null | head -1 || true)
-        # Xvfb has no window manager to answer windowactivate's EWMH request. Focus the dialog directly
-        # before the real XTEST keypress; otherwise Return can land on the workspace behind it.
-        if [ -n "$id" ] && xdotool windowfocus --sync "$id" 2>/dev/null; then
-            xdotool key --clearmodifiers Return
-            return 0
-        fi
-        sleep 0.5
+    until_true 30 "the native Set up button was activated" activate_setup_button || {
+        cat /tmp/intentic-confirm.log >&2 || true
+        return 1
+    }
+    until_true 15 "the setup confirmation closed after accepting it" confirmation_closed
+}
+
+setup_diagnostics() {
+    local transcript
+    for transcript in "$HOME"/.intentic/logs/desktop-setup-*.log; do
+        [ -f "$transcript" ] || continue
+        echo "--- setup transcript: $transcript ---" >&2
+        cat "$transcript" >&2
     done
-    fail "the confirmation could not be focused to answer it (${attempt} attempts)"
-    return 1
+    if [ -f "$SETUP_MARKER" ]; then
+        echo "--- local CLI arguments ---" >&2
+        cat "$SETUP_MARKER" >&2
+    fi
 }
 
 # A deep link fired at a machine where the app is NOT running — a different mechanism from the one a running
@@ -136,6 +158,7 @@ cold_link() {
     answer_confirm
     until_true 120 "$1" setup_started || {
         cat /tmp/xdg-open-cold.log >&2 || true
+        setup_diagnostics
         return 1
     }
 }
@@ -226,8 +249,9 @@ case "$KIND" in
         # `libgpg-error.so.0: cannot open shared object file` with a ✗ on "the workspace window opened" — a
         # correct bundle on a host that was not what an AppImage assumes (run 34049900600, desktop-verify).
         apt-get update -qq
+        # curl is the setup shim's prerequisite. The deb declares it; an AppImage uses the host's copy.
         apt-get install -y -qq --no-install-recommends \
-            libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 libgpg-error0 libcom-err2 >/dev/null
+            libfribidi0 libharfbuzz0b libasound2 libegl1 libgbm1 libgpg-error0 libcom-err2 curl >/dev/null
         chmod +x "$artifact"
         # No FUSE in a container; the runtime's own self-extract is how CI runs an AppImage.
         export APPIMAGE_EXTRACT_AND_RUN=1
@@ -366,6 +390,7 @@ if until_true 45 "the setup link reached the running app, which asked before run
     until_true 120 "answering the link ran only the local CLI stand-in" setup_started || {
         echo "--- app output ---" >&2
         cat "$LOG" >&2 || true
+        setup_diagnostics
     }
 else
     echo "--- xdg-open output ---" >&2
