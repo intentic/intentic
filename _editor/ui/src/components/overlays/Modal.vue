@@ -38,7 +38,7 @@ const {
     appendTo?: HTMLElement | string;
 }>();
 
-const open = defineModel<boolean>(`open`, { required: true });
+const open = defineModel<boolean>("open", { required: true });
 
 // `show` fires once the box is mounted and visible, the first moment a surface that must put the
 // keyboard somewhere (the palette's field, a rename's input) can focus it.

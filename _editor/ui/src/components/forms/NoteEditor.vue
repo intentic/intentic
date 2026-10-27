@@ -34,9 +34,9 @@ const t = useT();
 const emit = defineEmits<{ edit: []; cancel: []; save: []; remove: [] }>();
 
 /** The source surface's text. The caller binds its draft-or-file computed straight to this. */
-const source = defineModel<string>(`source`, { required: true });
+const source = defineModel<string>("source", { required: true });
 /** Whether the delete confirmation is showing: a model because this component's own trash button opens it. */
-const confirming = defineModel<boolean>(`confirming`, { default: false });
+const confirming = defineModel<boolean>("confirming", { default: false });
 </script>
 
 <template>

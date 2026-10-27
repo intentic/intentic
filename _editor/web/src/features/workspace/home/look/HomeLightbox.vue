@@ -26,7 +26,7 @@ const { entries, tileOf } = defineProps<{
     tileOf: (path: string) => HTMLElement | undefined;
 }>();
 // The entry shown; undefined is closed.
-const path = defineModel<string | undefined>(`path`);
+const path = defineModel<string | undefined>("path");
 // `close` names the entry it ended on, for the home to land the keyboard there.
 const emit = defineEmits<{ close: [last: string | undefined]; open: [entry: WorkspaceTreeEntry] }>();
 

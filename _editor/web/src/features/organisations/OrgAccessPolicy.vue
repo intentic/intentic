@@ -8,8 +8,8 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { idFromName } from "../../lib/idFromName";
 import OrgPolicyList from "./OrgPolicyList.vue";
 import OrgToolCeiling from "./OrgToolCeiling.vue";
-const profiles = defineModel<AccessProfile[]>(`profiles`);
-const ceiling = defineModel<OrgCeiling>(`ceiling`);
+const profiles = defineModel<AccessProfile[]>("profiles");
+const ceiling = defineModel<OrgCeiling>("ceiling");
 defineProps<{ readonly?: boolean }>();
 const t = useT();
 const tools = computed({

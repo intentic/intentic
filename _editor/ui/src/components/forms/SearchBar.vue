@@ -48,7 +48,7 @@ const emit = defineEmits<{
 
 const query = defineModel<string>({ required: true });
 // Presence doubles as the switch: undefined offers no case rule, a boolean draws `Aa` and is the state itself.
-const matchCase = defineModel<boolean | undefined>(`matchCase`, { default: undefined });
+const matchCase = defineModel<boolean | undefined>("matchCase", { default: undefined });
 
 // Fallthrough class lands on the root, twMerge'd so a caller's override always beats the dress; everything else
 // (listeners, `name`, `autofocus`) lands on the input, which is what a caller binding `@keydown` means.

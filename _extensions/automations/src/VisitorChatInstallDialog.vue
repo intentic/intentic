@@ -12,7 +12,7 @@ import { t } from "./i18n.js";
 // button.
 
 const props = defineProps<{ automation: AutomationSummary }>();
-const visible = defineModel<boolean>(`visible`, { default: false });
+const visible = defineModel<boolean>("visible", { default: false });
 
 const { save } = useAutomations();
 const { installs, isLoading, error } = useVisitorChatInstalls(

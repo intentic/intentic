@@ -15,7 +15,7 @@ import { printRendered } from "./printRendered";
 // it. `printOnOpen` prints it as soon as it is drawn, for a Print pressed before the document was open.
 
 const props = defineProps<{ conversationId: string; path: string; at?: string; printOnOpen?: boolean }>();
-const open = defineModel<boolean>(`open`, { default: false });
+const open = defineModel<boolean>("open", { default: false });
 const t = useT();
 const titleId = useId();
 

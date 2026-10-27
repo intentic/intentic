@@ -18,8 +18,8 @@ const props = defineProps<{
     hubs: readonly string[];
 }>();
 const emit = defineEmits<{ lookInside: [name: string] }>();
-const selected = defineModel<string | undefined>(`selected`);
-const focusArea = defineModel<string | undefined>(`focusArea`);
+const selected = defineModel<string | undefined>("selected");
+const focusArea = defineModel<string | undefined>("focusArea");
 
 const showAll = ref(false);
 const showDev = ref(false);

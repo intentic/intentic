@@ -211,6 +211,14 @@ export const CHECKS = [
         about: "a keyboard or click handler in the editor and the extensions reads the primary modifier as one key per platform (primaryHeld), never \"Ctrl or Cmd\"",
     },
     {
+        id: "vue-model-names",
+        file: "vue-model-names.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "every `defineModel` is named with a plain string, which the TypeScript 7 Vue content mappers can read",
+    },
+    {
         id: "reduced-motion",
         file: "reduced-motion.mjs",
         needs: "checkout",

@@ -50,7 +50,7 @@ const props = defineProps<{
 defineEmits<{ dismiss: [] }>();
 
 // Opened by the reader, or by the caller on a failure, where the lines ARE the answer.
-const showLog = defineModel<boolean>(`log`, { default: false });
+const showLog = defineModel<boolean>("log", { default: false });
 
 const now = useNow(() => props.live);
 

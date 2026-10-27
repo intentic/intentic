@@ -22,7 +22,7 @@ const {
     // Why the last bring-back failed, said where it was asked for.
     error?: string | undefined;
 }>();
-const open = defineModel<boolean>(`open`, { required: true });
+const open = defineModel<boolean>("open", { required: true });
 const emit = defineEmits<{ bring: [chosen: ReadonlySet<string>] }>();
 
 const chosen = ref<ReadonlySet<string>>(firstChosen(changes));

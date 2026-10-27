@@ -23,7 +23,7 @@ const props = defineProps<{
     prompts: ReadonlyMap<number, string>;
 }>();
 
-const open = defineModel<boolean>(`open`, { required: true });
+const open = defineModel<boolean>("open", { required: true });
 
 const surface = useChatSurface();
 const titleId = useId();

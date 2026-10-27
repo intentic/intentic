@@ -16,7 +16,7 @@ const t = useT();
 const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean; reason?: string; awaiting?: boolean; blocked?: boolean }>();
 
 // Owned by the card's own action bar (App.vue), which holds every other verb about this transcript.
-const open = defineModel<boolean>(`open`, { default: false });
+const open = defineModel<boolean>("open", { default: false });
 const listOpen = ref(false);
 const logEnd = ref<HTMLElement | undefined>(undefined);
 

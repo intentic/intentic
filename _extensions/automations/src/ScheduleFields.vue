@@ -17,8 +17,8 @@ const props = defineProps<{
     sandboxZone: Zone;
 }>();
 // Blank is not "no zone", it is the sandbox's own; 0 sessions fires on every occurrence.
-const tz = defineModel<string>(`tz`, { required: true });
-const afterSessions = defineModel<number>(`afterSessions`, { required: true });
+const tz = defineModel<string>("tz", { required: true });
+const afterSessions = defineModel<number>("afterSessions", { required: true });
 
 // Every zone ICU knows, which is the only list that cannot go stale against the runtime that will resolve it. Built
 // once: it is ~450 strings and the picker is opened rarely.

@@ -8,7 +8,7 @@ import { t } from "./i18n.js";
 // emits the chosen template/name entries and closes; AppsView owns the install kickoff and terminal.
 
 const props = defineProps<{ templates: TemplateSummary[]; apps: RepoApp[] }>();
-const visible = defineModel<boolean>(`visible`, { default: false });
+const visible = defineModel<boolean>("visible", { default: false });
 const emit = defineEmits<{ submit: [entries: { template: string; name: string }[]] }>();
 
 // Template keys the user has checked, and their per-instance name overrides.

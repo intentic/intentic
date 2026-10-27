@@ -10,7 +10,7 @@ import type { AgentReviewFile } from "./useAgentChanges";
 
 const t = useT();
 
-const filter = defineModel<ReviewFilter>(`filter`, { required: true });
+const filter = defineModel<ReviewFilter>("filter", { required: true });
 const props = defineProps<{
     filters: readonly { label: string; value: ReviewFilter }[];
     rows: readonly AgentReviewFile[];

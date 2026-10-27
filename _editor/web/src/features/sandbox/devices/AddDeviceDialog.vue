@@ -8,7 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const open = defineModel<boolean>(`open`, { required: true });
+const open = defineModel<boolean>("open", { required: true });
 </script>
 
 <template>

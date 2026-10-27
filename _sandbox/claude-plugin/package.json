@@ -39,7 +39,7 @@
         "node": ">=20.11"
     },
     "scripts": {
-        "build": "tsc --noEmit && node build.mjs",
+        "build": "bun check && node build.mjs",
         "typecheck": "bun check -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch",

@@ -49,7 +49,7 @@ const {
 }>();
 
 // The rename field's text; the owner reads it back on commit.
-const draft = defineModel<string>(`draft`, { default: `` });
+const draft = defineModel<string>("draft", { default: `` });
 
 const emit = defineEmits<{
     select: [event: MouseEvent];

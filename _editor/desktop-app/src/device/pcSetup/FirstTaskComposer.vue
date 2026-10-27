@@ -20,8 +20,8 @@ const props = defineProps<{
     busy: boolean;
 }>();
 const emit = defineEmits<{ pick: []; queue: []; edit: []; retry: [] }>();
-const folder = defineModel<string>(`folder`, { required: true });
-const text = defineModel<string>(`text`, { required: true });
+const folder = defineModel<string>("folder", { required: true });
+const text = defineModel<string>("text", { required: true });
 
 const t = useT();
 

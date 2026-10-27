@@ -32,7 +32,7 @@ const subdomainLabel = (raw: string): string =>
         .slice(0, SUBDOMAIN_MAX)
         .replace(/-+$/, ``);
 
-const visible = defineModel<boolean>(`visible`, { default: false });
+const visible = defineModel<boolean>("visible", { default: false });
 const emit = defineEmits<{ added: [] }>();
 
 const { entries, add, refetch } = useInventory();

@@ -47,7 +47,7 @@ const {
     dropDir?: string;
 }>();
 
-const draft = defineModel<string>(`draft`, { default: `` });
+const draft = defineModel<string>("draft", { default: `` });
 
 const emit = defineEmits<{
     select: [event: MouseEvent];

@@ -34,7 +34,7 @@ const {
 const emit = defineEmits<{ save: [SkillDraft]; cancel: [] }>();
 
 /** A new skill's name as typed, shared with the row's head that shows it; ignored for a rewrite, which keeps the stored one. */
-const name = defineModel<string>(`name`, { default: `` });
+const name = defineModel<string>("name", { default: `` });
 // Restricts to what a slug can hold (the name becomes a directory), enforced while typing rather than on save.
 const onName = (event: Event): void => {
     // SAFETY: bound only on the name <input> below, so the event's target is that input.

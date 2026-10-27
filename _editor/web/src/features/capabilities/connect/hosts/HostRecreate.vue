@@ -77,7 +77,7 @@ const props = defineProps<{
 // The sandbox answered again after a swap this ran: the caller's moment to say how it went.
 const emit = defineEmits<{ back: [] }>();
 // Whether a gilded button's folded command is showing; a caller binds it to keep one panel open at a time.
-const open = defineModel<boolean>(`open`, { default: false });
+const open = defineModel<boolean>("open", { default: false });
 defineSlots<{
     // Laid out in the button's own row, whichever of the three renderings draws it: the caller's secondary step.
     beside?: () => VNode[];

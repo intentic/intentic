@@ -9,8 +9,8 @@ import { t } from "./i18n.js";
 const { post } = defineProps<{ post: PostApprovalSummary }>();
 const emit = defineEmits<{ close: []; touch: [] }>();
 
-const content = defineModel<string>(`content`, { required: true });
-const title = defineModel<string>(`title`, { required: true });
+const content = defineModel<string>("content", { required: true });
+const title = defineModel<string>("title", { required: true });
 
 // A headline box only where the platform publishes one. Everywhere else `title` is the agent's note about the
 // post (postText.ts): it is shown under the post, and editing the post has no business rewriting it.

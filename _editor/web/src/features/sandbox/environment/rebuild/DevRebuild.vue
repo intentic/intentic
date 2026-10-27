@@ -60,7 +60,7 @@ const anchorRef = ref<HTMLElement>();
 
 const live = computed(() => rebuildRunning(run.phase));
 // Told to the parent, whose badge says "Rebuilding" while it is, rather than "up to date" over a card rebuilding.
-const rebuilding = defineModel<boolean>(`rebuilding`, { default: false });
+const rebuilding = defineModel<boolean>("rebuilding", { default: false });
 watch(live, (now) => (rebuilding.value = now), { immediate: true });
 
 // THE LAST RUN'S LENGTHS, which size the steps and say how long is left. Re-read when a run settles, since that is
@@ -206,7 +206,7 @@ const execute = async (): Promise<void> => {
 // been dismissed yet.
 const following = computed(() => run.phase !== `idle`);
 // Told to the parent, which moves what sits beside the button to the progress's foot once there is progress to draw.
-const followingModel = defineModel<boolean>(`following`, { default: false });
+const followingModel = defineModel<boolean>("following", { default: false });
 watch(following, (now) => (followingModel.value = now), { immediate: true });
 
 // WHAT THE RESTART WILL COST, COUNTED AT THE MOMENT OF ASKING. The build itself interrupts nothing, so the number

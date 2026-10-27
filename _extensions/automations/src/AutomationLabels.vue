@@ -6,8 +6,8 @@ import { useAutomations } from "./useAutomations";
 import { t } from "./i18n.js";
 
 const { nameLocked } = defineProps<{ nameLocked: boolean }>();
-const note = defineModel<string>(`note`, { required: true });
-const group = defineModel<string>(`group`, { required: true });
+const note = defineModel<string>("note", { required: true });
+const group = defineModel<string>("group", { required: true });
 
 // Every group already named here, offered as the box is typed in: filing two jobs together means typing the same word,
 // and a near miss ("Marketting") would quietly make a second shelf.
