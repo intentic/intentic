@@ -1,29 +1,52 @@
-<!-- Three open ribbons that meet in one shared centre. Drawn for the headline's cap height. Every loop's tip sits on
-     the centre, and all three rims are drawn before all three ribbons, so the loops join into one clean knot there. -->
-<svg class="shared-agent-emblem" viewBox="0 0 96 96" fill="none" aria-hidden="true" focusable="false">
+<!-- The shared agent: a round head with smiling crescent eyes, seated on two rings that cross beneath it, crowned with a
+     flame and set with a gem on the brow and a lotus gem where everything meets. Drawn for the headline's cap height.
+     The head, both rings and the short bar that joins them are one path, stroked rim first and ribbon second, so every
+     join merges cleanly. Colours sit on the SVG itself; the style block only sizes it and turns the glow on. -->
+<svg class="shared-agent-emblem" viewBox="9 -4 78 87" fill="none" aria-hidden="true" focusable="false">
     <defs>
-        <linearGradient id="shared-ribbon" x1="22" y1="8" x2="67" y2="67" gradientUnits="userSpaceOnUse">
+        <linearGradient id="shared-ribbon" x1="22" y1="4" x2="70" y2="86" gradientUnits="userSpaceOnUse">
             <stop stop-color="var(--color-gold-bright)" />
-            <stop offset="0.45" stop-color="var(--color-primary-400)" />
+            <stop offset="0.5" stop-color="var(--color-primary-400)" />
             <stop offset="1" stop-color="var(--color-primary-600)" />
         </linearGradient>
-        <path id="shared-loop" d="M48 48C35 44.4 25 36 25 24C25 14 32 8 40 8C51 8 58 17 58 28C58 40 52 44.4 48 48Z" />
+        <filter id="shared-blur" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="3" />
+        </filter>
+        <path
+            id="shared-body"
+            d="M48 48L35.85 41.64A21 15.5 0 1 1 60.15 41.64ZM15 62a15 15 0 1 0 30 0a15 15 0 1 0-30 0ZM51 62a15 15 0 1 0 30 0a15 15 0 1 0-30 0ZM48 46L48 57"
+        />
+        <!-- A unit almond, scaled into each gem. -->
+        <path id="shared-gem" d="M0 -1Q0.95 0 0 1Q-0.95 0 0 -1Z" />
     </defs>
-    <g stroke-linejoin="round">
-        <g stroke="var(--color-gold)" stroke-width="9">
-            <use href="#shared-loop" />
-            <use href="#shared-loop" transform="rotate(120 48 48)" />
-            <use href="#shared-loop" transform="rotate(240 48 48)" />
+    <g stroke-linejoin="round" stroke-linecap="round">
+        <use href="#shared-body" class="shared-agent-glow" stroke="var(--color-primary-400)" stroke-width="9" filter="url(#shared-blur)" opacity="0" />
+        <path
+            d="M48 -2.5C49.6 1 52 3.2 52 6C52 8.3 50.2 9.6 48 9.6C45.8 9.6 44 8.3 44 6C44 3.2 46.4 1 48 -2.5Z"
+            fill="url(#shared-ribbon)"
+            stroke="var(--color-gold)"
+            stroke-width="0.9"
+        />
+        <use href="#shared-body" stroke="var(--color-gold)" stroke-width="9" />
+        <use href="#shared-body" stroke="url(#shared-ribbon)" stroke-width="6.5" />
+        <g stroke="var(--color-gold-bright)" stroke-width="1" opacity="0.7">
+            <path d="M32 22C34 17 39 14.5 44 14" />
+            <path d="M17 54C20 50 24 48.5 28 48.5" />
+            <path d="M68 48.5C72 48.5 76 50 79 54" />
         </g>
-        <g stroke="url(#shared-ribbon)" stroke-width="6.5">
-            <use href="#shared-loop" />
-            <use href="#shared-loop" transform="rotate(120 48 48)" />
-            <use href="#shared-loop" transform="rotate(240 48 48)" />
+        <g transform="translate(48 13.4)">
+            <use href="#shared-gem" transform="scale(3.4 2.8)" fill="url(#shared-ribbon)" stroke="var(--color-gold)" stroke-width="0.3" />
+            <use href="#shared-gem" transform="scale(1.87 1.68)" fill="var(--color-primary-600)" />
+            <circle r="0.54" fill="var(--color-gold-bright)" />
         </g>
-        <g stroke="var(--color-gold-bright)" stroke-width="1" stroke-linecap="round" opacity="0.7">
-            <path d="M28 26C27 17 33 11 40 11" />
-            <path d="M28 26C27 17 33 11 40 11" transform="rotate(120 48 48)" />
-            <path d="M28 26C27 17 33 11 40 11" transform="rotate(240 48 48)" />
+        <g transform="translate(48 48)">
+            <use href="#shared-gem" transform="scale(5.2 5)" fill="url(#shared-ribbon)" stroke="var(--color-gold)" stroke-width="0.19" />
+            <use href="#shared-gem" transform="scale(2.86 3)" fill="var(--color-primary-600)" />
+            <circle r="0.83" fill="var(--color-gold-bright)" />
+        </g>
+        <g fill="var(--color-gold-bright)">
+            <path d="M34.8 32Q40 24.4 45.2 32Q40 29 34.8 32Z" />
+            <path d="M50.8 32Q56 24.4 61.2 32Q56 29 50.8 32Z" />
         </g>
     </g>
 </svg>
@@ -31,10 +54,19 @@
 <style>
     .shared-agent-emblem {
         display: inline-block;
-        width: 0.94em;
-        height: 0.94em;
-        margin-inline: 0.16em 0.02em;
-        vertical-align: -0.09em;
+        width: 0.85em;
+        height: 0.95em;
+        margin-inline: 0.12em 0.04em;
+        vertical-align: -0.1em;
         overflow: visible;
+    }
+
+    /* A soft halo, as if the metal were lit from within. Only the dark skin gets it: on paper a blur reads as a smudge. */
+    .shared-agent-glow {
+        opacity: 0.45;
+    }
+
+    :global(html[data-variant="desk"]) .shared-agent-glow {
+        opacity: 0;
     }
 </style>
