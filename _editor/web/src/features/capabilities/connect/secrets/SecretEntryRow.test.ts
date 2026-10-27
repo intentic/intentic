@@ -1,14 +1,16 @@
 //
-// THE APPROVAL EDITOR'S THREE STATES, pinned because the first one went missing in a way nobody could see: the
-// "Needs approval" switch was bound to whether a gate was STORED, so flipping it on changed nothing it read, and
-// the picker under it appeared only when the roster had somebody to pre-select. An owner on a fresh sandbox
-// flipped the switch, watched nothing happen, and concluded the feature had no way to name anybody.
+// AN OPEN SECRET, READ AS ANSWERS: its value, its last use and where it lives on one side, and when it asks first on the
+// other (who releases it, where it may go, what it may be typed into), each as a word or two with nothing to fill in at
+// rest. Every answer is where it is changed, in a panel hanging off it with its own Save. The approval panel's three
+// states are pinned because the first one once went missing where nobody could see it: an owner on a fresh sandbox
+// asked for a named approver, watched nothing happen, and concluded the feature had no way to name anybody.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import { computed, createApp, h, nextTick, ref } from "vue";
 import type { CredentialGate, SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
+import { SecretPopoverStub } from "./SecretPopover.testing";
 
 const setGate = { mutateAsync: jest.fn(async () => undefined) };
 const removeGate = { mutateAsync: jest.fn(async () => undefined) };
@@ -42,6 +44,8 @@ jest.mock(`./useKeyrings`, () => ({
     useTypeInto: () => ({ typeInto: { mutateAsync: jest.fn() } }),
 }));
 
+jest.mock(`./SecretPopover.vue`, () => ({ default: SecretPopoverStub }));
+
 jest.mock(`../../../../client/sandbox/useRole`, () => ({
     useRole: () => ({ canShip: computed(() => role.value !== `collaborator`) }),
 }));
@@ -59,140 +63,192 @@ const ROW: SecretRow = {
     editable: true,
     removable: true,
     gateSubject: `DATABASE_URL`,
-    sessionShaped: false,
+    mountedForTurn: false,
     typeable: true,
     programsHere: true,
     haystack: `database_url`,
 };
 
-const mount = (row: SecretRow = ROW) => {
+const mount = (row: SecretRow = ROW, expanded = true) => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    const app = createApp({ render: () => h(SecretEntryRow, { row, expanded: true }) });
+    const asked = jest.fn();
+    const app = createApp({ render: () => h(SecretEntryRow, { row, expanded, "onUpdate:expanded": asked }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
-    const flip = async (): Promise<void> => {
-        const input = el.querySelector<HTMLInputElement>(`input[role="switch"]`);
-        if (input === null) {
-            throw new Error(`no switch on the row`);
+    const press = async (selector: string): Promise<void> => {
+        const found = el.querySelector<HTMLButtonElement>(selector);
+        if (found === null) {
+            throw new Error(`nothing on the row matches ${selector}`);
         }
-        input.click();
+        found.click();
         await nextTick();
+    };
+    const choose = async (title: string): Promise<void> => {
+        const radio = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((candidate) => candidate.textContent?.includes(title));
+        if (radio === undefined) {
+            throw new Error(`no "${title}" choice in the panel`);
+        }
+        radio.click();
+        await nextTick();
+    };
+    const button = (label: string): HTMLButtonElement => {
+        const found = [...el.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === label);
+        if (found === undefined) {
+            throw new Error(`no "${label}" button on the row`);
+        }
+        return found;
     };
     const done = (): void => {
         app.unmount();
         el.remove();
     };
-    return { el, flip, done };
+    return { el, asked, press, choose, button, done };
 };
 
-it("opens the picker when the owner flips the switch, with the owner already picked", async () => {
+const APPROVAL = `button[aria-label^="Change who releases it"]`;
+
+// Lets a save's awaited answer reach the template.
+const settled = async (): Promise<void> => {
+    await Promise.resolve();
+    await nextTick();
+};
+
+beforeEach(() => {
+    setGate.mutateAsync.mockClear();
+    removeGate.mutateAsync.mockClear();
+    isOwner.value = true;
+    role.value = `owner`;
+    keyrings.value = [];
+});
+
+it("reads every rule as its answer, approver first, with nothing to fill in at rest", () => {
+    approverChoices.value = [`owner@x.com`];
+    stored.value = undefined;
+    const { el, done } = mount();
+    const text = el.textContent ?? ``;
+    expect(text.indexOf(`Approval`)).toBeLessThan(text.indexOf(`Goes to`));
+    expect(text.indexOf(`Goes to`)).toBeLessThan(text.indexOf(`Typed into`));
+    expect(text).toContain(`Not needed`);
+    expect(text).toContain(`Any host`);
+    expect(text).toContain(`Asks each time`);
+    expect(text).toContain(`desired-state/.env`);
+    // An answer, not a form: no switch, no box and no Save until one is pressed.
+    expect(el.querySelectorAll(`input, textarea`)).toHaveLength(0);
+    expect(el.querySelector(`[data-popover]`)).toBeNull();
+    done();
+});
+
+it("opens onto named people with the owner already picked, and saves them only on Save", async () => {
     approverChoices.value = [`owner@x.com`, `bob@x.com`];
     stored.value = undefined;
-    const { el, flip, done } = mount();
-    expect(el.innerHTML).toContain(`No named person has to release it.`);
+    const { el, press, choose, button, done } = mount();
+    await press(APPROVAL);
     expect(el.innerHTML).not.toContain(`Who can release it`);
-    await flip();
+    await choose(`Named people`);
     expect(el.innerHTML).toContain(`Who can release it`);
-    expect(el.innerHTML).toContain(`bob@x.com`);
-    // The switch itself reads as on: it speaks for the draft, not only for a stored gate.
-    expect(el.querySelector(`input[role="switch"]`)?.getAttribute(`aria-checked`)).toBe(`true`);
-    const owner = [...el.querySelectorAll<HTMLButtonElement>(`button[aria-pressed]`)].find((button) => button.textContent?.includes(`owner@x.com`));
+    const owner = [...el.querySelectorAll<HTMLButtonElement>(`button[aria-pressed]`)].find((chip) => chip.textContent?.includes(`owner@x.com`));
     expect(owner?.getAttribute(`aria-pressed`)).toBe(`true`);
-    // Nobody else on the roster yet is not this case: two names, no nudge toward the Access tab.
-    expect(el.innerHTML).not.toContain(`Access tab`);
+    // Two names on the roster: no nudge toward Access.
+    expect(el.innerHTML).not.toContain(`Open Access`);
+    expect(setGate.mutateAsync).not.toHaveBeenCalled();
+    button(`Save`).click();
+    await settled();
+    expect(setGate.mutateAsync).toHaveBeenCalledWith({ subject: `DATABASE_URL`, kind: `secret`, approvers: [`owner@x.com`], scope: `use` });
     done();
 });
 
 it("says where names come from when the owner is the only one, instead of a lone chip", async () => {
     approverChoices.value = [`owner@x.com`];
     stored.value = undefined;
-    const { el, flip, done } = mount();
-    await flip();
+    const { el, press, choose, done } = mount();
+    await press(APPROVAL);
+    await choose(`Named people`);
     expect(el.innerHTML).toContain(`owner@x.com`);
-    expect(el.innerHTML).toContain(`Only you so far.`);
-    expect(el.innerHTML).toContain(`Access tab`);
+    expect(el.innerHTML).toContain(`Only you so far`);
+    expect(el.innerHTML).toContain(`Open Access`);
     done();
 });
 
-it("still opens with nobody to name, and says so: the sentence that used to be unreachable", async () => {
+it("still opens with nobody to name, says so, and will not save an empty list", async () => {
     approverChoices.value = [];
     stored.value = undefined;
-    const { el, flip, done } = mount();
-    await flip();
-    expect(el.innerHTML).toContain(`Nobody can be named yet.`);
-    expect(el.innerHTML).toContain(`Access tab`);
+    const { el, press, choose, button, done } = mount();
+    await press(APPROVAL);
+    await choose(`Named people`);
+    expect(el.innerHTML).toContain(`Nobody can be named yet`);
+    expect(el.innerHTML).toContain(`Open Access`);
     expect(el.innerHTML).toContain(`Name at least one person.`);
-    // Flipping back off with only a draft is a change of mind, not a removal the daemon hears about.
-    await flip();
-    expect(el.innerHTML).toContain(`No named person has to release it.`);
+    expect(button(`Save`).disabled).toBe(true);
+    // Going back to nobody with nothing stored is a change of mind, not a removal the daemon hears about.
+    await choose(`Not needed`);
+    expect(button(`Save`).disabled).toBe(true);
     expect(removeGate.mutateAsync).not.toHaveBeenCalled();
     done();
 });
 
-it("flipping off a stored gate asks the daemon to remove it", async () => {
+it("reads a stored gate as its approvers, and asking nobody removes it", async () => {
     approverChoices.value = [`owner@x.com`];
     stored.value = { subject: `DATABASE_URL`, kind: `secret`, approvers: [`owner@x.com`], scope: `use` };
-    const { el, flip, done } = mount();
-    expect(el.querySelector(`input[role="switch"]`)?.getAttribute(`aria-checked`)).toBe(`true`);
-    expect(el.innerHTML).toContain(`Who can release it`);
-    await flip();
+    const { el, press, choose, button, done } = mount();
+    expect(el.textContent).toContain(`owner@x.com`);
+    expect(el.textContent).toContain(`Each use asks again`);
+    await press(APPROVAL);
+    await choose(`Not needed`);
+    button(`Save`).click();
+    await settled();
     expect(removeGate.mutateAsync).toHaveBeenCalledWith(`DATABASE_URL`);
     done();
 });
 
-// Who must release it, where it may go and which windows it may be typed into are one section to the owner, not three
-// features: every switch sits under the one "Needs approval" heading, the approver first.
-it("puts the host and program guards under the same approval heading as the named approver", () => {
-    approverChoices.value = [`owner@x.com`];
-    stored.value = undefined;
-    const { el, done } = mount();
-    const text = el.textContent ?? ``;
-    expect(text.indexOf(`Needs approval`)).toBeLessThan(text.indexOf(`From a named person`));
-    expect(text.indexOf(`From a named person`)).toBeLessThan(text.indexOf(`Host guard`));
-    expect(text.indexOf(`Host guard`)).toBeLessThan(text.indexOf(`Program guard`));
-    expect([...el.querySelectorAll(`input[role="switch"]`)].map((input) => input.getAttribute(`aria-label`))).toEqual([
-        `From a named person`,
-        `Host guard`,
-        `Any field`,
-    ]);
-    expect(text).toContain(`Off: it is never held for where it goes, and the safety judge alone decides.`);
-    done();
-});
-
-it("renders the read-only sentence for everybody but the owner", () => {
+it("shows everybody but the owner the same answers, with nothing to press", () => {
     isOwner.value = false;
     approverChoices.value = [`owner@x.com`];
     stored.value = { subject: `DATABASE_URL`, kind: `secret`, approvers: [`owner@x.com`], scope: `conversation` };
     const { el, done } = mount();
-    expect(el.querySelector(`input[role="switch"]`)).toBeNull();
-    expect(el.innerHTML).toContain(`Only owner@x.com can release this`);
-    expect(el.innerHTML).toContain(`owner can change this.`);
+    expect(el.querySelector(APPROVAL)).toBeNull();
+    expect(el.textContent).toContain(`owner@x.com`);
+    expect(el.textContent).toContain(`One release covers a conversation`);
+    expect(el.textContent).toContain(`Only the owner can change these.`);
     done();
-    isOwner.value = true;
 });
 
 // The daemon reveals a value from the maintainer tier up (secrets.routes.ts `reveal`). The button used to say "owner
 // only" to the maintainer it worked for, and stood pressable for a collaborator it refused.
 const revealButton = (el: HTMLElement): HTMLButtonElement | null => el.querySelector<HTMLButtonElement>(`button[aria-label^="Reveal value"]`);
 
-it("lets a maintainer reveal a value, and names who may", () => {
+it("lets a maintainer reveal a value beside it, and names who may", () => {
     role.value = `maintainer`;
     const { el, done } = mount();
     expect(revealButton(el)?.disabled).toBe(false);
     expect(revealButton(el)?.getAttribute(`aria-label`)).toBe(`Reveal value (owner and maintainers only)`);
     done();
-    role.value = `owner`;
 });
 
-it("keeps Reveal shut for a collaborator, whom the daemon would refuse", () => {
+it("keeps the value shut for a collaborator, whom the daemon would refuse, and says who may see it", () => {
     role.value = `collaborator`;
-    const { el, done } = mount();
-    expect(revealButton(el)?.disabled).toBe(true);
-    done();
-    role.value = `owner`;
+    const open = mount();
+    expect(revealButton(open.el)).toBeNull();
+    expect(open.el.textContent).toContain(`Only the owner and maintainers can see it`);
+    open.done();
+    const closed = mount(ROW, false);
+    expect(revealButton(closed.el)?.disabled).toBe(true);
+    closed.done();
+});
+
+it("offers its value's shortcuts on a closed row, and opens the row onto the one pressed", async () => {
+    const closed = mount(ROW, false);
+    await closed.press(`button[aria-label="Set / update value"]`);
+    expect(closed.asked).toHaveBeenCalledWith(true);
+    closed.done();
+    // Open, each sits labelled beside the value it acts on, so the header keeps only Remove.
+    const open = mount();
+    expect(open.el.querySelector(`button[aria-label="Set / update value"]`)).toBeNull();
+    expect(open.el.querySelector(`button[aria-label="Remove"]`)).not.toBeNull();
+    expect(open.el.querySelector(`button[aria-label="Replace value"]`)).not.toBeNull();
+    open.done();
 });
 
 // A KEYRING'S OWN ENTRY, kept on one of the owner's computers: this sandbox holds a pointer, so its row offers nothing
@@ -219,7 +275,7 @@ const DEVICE_ROW: SecretRow = {
     editable: false,
     removable: false,
     gateSubject: `VPN_PASSWORD`,
-    sessionShaped: false,
+    mountedForTurn: false,
     typeable: true,
     programsHere: false,
     haystack: `vpn_password`,
@@ -230,38 +286,41 @@ const ROG: SandboxKeyring = { machine: `rog`, online: true, locked: false, share
 it("offers nothing that reads, copies or sets a value kept on one of the owner's computers", () => {
     const { el, done } = mount(DEVICE_ROW);
     expect(revealButton(el)).toBeNull();
-    expect(el.querySelector(`button[aria-label="Set / update value"]`)).toBeNull();
+    expect(el.querySelector(`button[aria-label="Replace value"]`)).toBeNull();
     expect(el.querySelector(`button[aria-label="Remove"]`)).toBeNull();
-    expect(el.textContent).not.toContain(`Copy value`);
+    expect(el.textContent).toContain(`Stays on rog, never here`);
+    expect(el.textContent).toContain(`This sandbox holds only a pointer to it`);
     done();
 });
 
 it("reads a keyring entry's share and rules, and names the command that changes them on that computer", () => {
     const { el, done } = mount(DEVICE_ROW);
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Kept in the keyring on rog, shared here: asks each time.`);
-    expect(text).toContain(`rog is unlocked now.`);
-    expect(text).toContain(`Typed unasked only into FortiClient.exe. Only into a password field.`);
-    expect(text).toContain(`Sites it may go to: vpn.example.com.`);
-    expect(text).toContain(`Change these on rog:`);
-    expect(el.querySelector(`[data-device-panel] code`)?.textContent).toBe(`intentic-machine keyring edit VPN_PASSWORD`);
-    // Its lists are the keyring's: no editor for either, only the sandbox's own named approver.
-    expect(text).not.toContain(`Host guard`);
-    expect(text).not.toContain(`Program guard`);
-    expect([...el.querySelectorAll(`input[role="switch"]`)].map((input) => input.getAttribute(`aria-label`))).toEqual([`From a named person`]);
+    expect(text).toContain(`Asks each time`);
+    expect(text).toContain(`rog is unlocked now`);
+    expect(text).toContain(`FortiClient.exe`);
+    expect(text).toContain(`Password fields only`);
+    expect(text).toContain(`vpn.example.com`);
+    expect(text).toContain(`Run this on rog`);
+    expect(el.querySelector(`[data-keyring-command]`)?.textContent).toBe(`intentic-machine keyring edit VPN_PASSWORD`);
+    // Its lists are the keyring's, changed there: the only answer to press is the sandbox's own approver.
+    expect(el.querySelector(`button[aria-label^="Change where it may go"]`)).toBeNull();
+    expect(el.querySelector(`button[aria-label^="Change what it may be typed into"]`)).toBeNull();
+    expect(el.querySelector(APPROVAL)).not.toBeNull();
     done();
 });
 
-it("says where a value kept on a computer was last typed", () => {
+it("says when and where it was last used, and what a command or window it went to was", () => {
     const { el, done } = mount(DEVICE_ROW);
     expect(el.textContent).toContain(`typed on rog · FortiClient.exe`);
     done();
     const desktop = mount({ ...ROW, entry: { ...ROW.entry, lastUse: { at: Date.now() - 60_000, lane: `desktop`, detail: `xfce4-terminal` } } });
-    expect(desktop.el.textContent).toContain(`typed on the sandbox's desktop xfce4-terminal`);
+    expect(desktop.el.textContent).toContain(`typed on the sandbox's desktop`);
+    expect(desktop.el.querySelector(`code`)?.textContent).toBe(`xfce4-terminal`);
     desktop.done();
 });
 
-it("offers Type into… only where a computer has a keyring, and opens it in the row", async () => {
+it("offers Type into… only where a computer has a keyring, and opens it beside the value", async () => {
     keyrings.value = [];
     const none = mount();
     expect(none.el.querySelector(`button[aria-label="Type into…"]`)).toBeNull();
@@ -276,5 +335,4 @@ it("offers Type into… only where a computer has a keyring, and opens it in the
     expect(el.querySelector(`section[aria-label="Type into…"]`)).not.toBeNull();
     expect(el.textContent).toContain(`Press Type, then put the cursor where it goes on rog. It is typed after 3 s.`);
     done();
-    keyrings.value = [];
 });

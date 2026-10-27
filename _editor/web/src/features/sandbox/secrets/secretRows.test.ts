@@ -155,20 +155,20 @@ it(`offers a gate only where there is something to release, and forces conversat
     expect(secretRow(entry({ key: `claude:default`, kind: `provider`, revealable: false }), sources()).gateSubject).toBeUndefined();
     // A stored value is released one use at a time.
     const stored = secretRow(entry({ key: `DATABASE_URL`, kind: `env` }), sources());
-    expect([stored.gateSubject, stored.sessionShaped]).toEqual([`DATABASE_URL`, false]);
+    expect([stored.gateSubject, stored.mountedForTurn]).toEqual([`DATABASE_URL`, false]);
     // A signed-in browser is mounted for the whole turn; the daemon forces conversation scope
     // (secrets/credential-grants.ts).
     const browser = secretRows([entry({ key: `reddit`, kind: `capability`, status: `connected` })], {
         capabilities: [capability(`reddit`, `browser`, { platform: `reddit` })],
         extensions: [connectors],
     })[0];
-    expect([browser?.gateSubject, browser?.sessionShaped]).toEqual([`reddit`, true]);
+    expect([browser?.gateSubject, browser?.mountedForTurn]).toEqual([`reddit`, true]);
     // A connector credential is spent at an exit, like a stored secret, so scope stays a choice.
     const connector = secretRows([entry({ key: `github`, kind: `capability`, status: `connected` })], {
         capabilities: [capability(`github`, `cli`, { provider: `github` })],
         extensions: [connectors],
     })[0];
-    expect([connector?.gateSubject, connector?.sessionShaped]).toEqual([`github`, false]);
+    expect([connector?.gateSubject, connector?.mountedForTurn]).toEqual([`github`, false]);
 });
 
 // A pointer to a keyring entry on one of the owner's computers: its own group, named by the computer and the share, never

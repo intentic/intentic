@@ -1,21 +1,24 @@
+<!-- Where a secret may go before anybody is asked: any host, or only the ones listed. Read as its answer, changed in a panel hanging off it. -->
 <script setup lang="ts">
-import { Button, Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
+import { Button, type NoticeModel, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { normalizeHostPattern, SECRET_HOSTS_MAX } from "@intentic/sandbox-contract/policy/secret-hosts";
-import ToggleSwitch from "primevue/toggleswitch";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { useCredentialGates, useSecretHosts } from "../../../../models/capabilities/useSecrets";
+import SecretChoice from "./SecretChoice.vue";
+import SecretFact from "./SecretFact.vue";
+import SecretPopover from "./SecretPopover.vue";
+import { EDITABLE_VALUE, FIXED_VALUE, VALUE_NOTE, VALUE_TEXT } from "./secretLook";
 
-// The host guard, the second half of a secret's "Needs approval" section, under the named approver: on, a use goes
-// unasked only to the hosts listed here and anything else waits for a click in the chat; off, it never asks. Off for most
-// secrets, on from the start for a connector's credential with its service's own hosts. The draft stays local until the
-// owner saves, like the approver editor above it, so a half-typed list never guards anything.
+// The host guard: on, a use goes unasked only to the hosts listed, and anything else, or anything whose destination a
+// command does not show, waits for a click in the chat; off, it never asks. Off for most secrets, on from the start for
+// a connector's credential with its service's own hosts. Turning it off keeps the list, for turning it back on.
 
 const t = useT();
 
-const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
+const { row } = defineProps<{ row: SecretRow }>();
 
 // Only the owner turns a guard off or adds a host (the daemon's rule); everybody else reads it.
 const { isOwner } = useCredentialGates();
@@ -23,56 +26,38 @@ const { setHosts } = useSecretHosts();
 
 const stored = computed(() => row.entry.hosts);
 const storedOn = computed(() => stored.value?.guard === true);
-const kind = computed(() => (row.entry.kind === `capability` ? (`capability` as const) : (`secret` as const)));
-const draftOn = ref(false);
+const storedList = computed(() => stored.value?.list ?? []);
+
+const said = computed(() => {
+    if (!storedOn.value) {
+        return t(`capabilities.secretHosts.anyHost`);
+    }
+    return storedList.value.length > 0 ? storedList.value.join(`, `) : t(`capabilities.secretHosts.noHost`);
+});
+const note = computed<string | undefined>(() => {
+    if (!storedOn.value) {
+        return undefined;
+    }
+    const asks = storedList.value.length > 0 ? t(`capabilities.secretHosts.elsewhereAsks`) : t(`capabilities.secretHosts.everyUseAsks`);
+    return stored.value?.source === `connector` ? `${asks} · ${t(`capabilities.secretHosts.byConnector`)}` : asks;
+});
+
+const anchor = ref<HTMLElement>();
+const open = ref(false);
+const guard = ref(false);
 const draft = ref<string[]>([]);
 const typed = ref(``);
 const typedError = ref<string | undefined>(undefined);
+const saving = ref(false);
 const error = ref<NoticeModel | undefined>(undefined);
-// On when the guard is on, or when the owner has opened the editor to turn it on.
-const on = computed(() => storedOn.value || draftOn.value);
 
-// Re-syncs to the server's setting whenever the row opens or the setting changes, so a stale draft can't overwrite
-// another tab's edit.
-watch(
-    [() => expanded, stored],
-    () => {
-        draftOn.value = false;
-        draft.value = [...(stored.value?.list ?? [])];
-        typed.value = ``;
-        typedError.value = undefined;
-        error.value = undefined;
-    },
-    { immediate: true },
-);
-
-const save = async (guard: boolean, hosts: readonly string[]): Promise<void> => {
+const begin = (): void => {
+    guard.value = storedOn.value;
+    draft.value = [...storedList.value];
+    typed.value = ``;
+    typedError.value = undefined;
     error.value = undefined;
-    if (row.gateSubject === undefined) {
-        return;
-    }
-    try {
-        await setHosts.mutateAsync({ subject: row.gateSubject, kind: kind.value, guard, hosts: [...hosts] });
-    } catch (err) {
-        error.value = noticeFrom(err, t(`capabilities.secretHosts.couldNotSave`));
-    }
-};
-
-const saveDraft = (): Promise<void> => save(true, draft.value);
-
-// Turning off saves at once and keeps the hosts for later; turning on opens the draft with the hosts it had.
-const toggle = (next: boolean): void => {
-    if (next) {
-        draftOn.value = true;
-        draft.value = [...(stored.value?.list ?? [])];
-        return;
-    }
-    if (storedOn.value) {
-        void save(false, stored.value?.list ?? []);
-        return;
-    }
-    draftOn.value = false;
-    draft.value = [...(stored.value?.list ?? [])];
+    open.value = true;
 };
 
 // A pasted URL counts as its host, the way the daemon reads one; anything that is still not a host is said here.
@@ -93,81 +78,117 @@ const removeHost = (host: string): void => {
     draft.value = draft.value.filter((entry) => entry !== host);
 };
 
-// Turning on is always a change; with the guard already on, only a different list is.
-const dirty = computed(() => {
-    const list = stored.value?.list ?? [];
-    return !storedOn.value || list.length !== draft.value.length || !list.every((host) => draft.value.includes(host));
-});
+const sameList = (left: readonly string[], right: readonly string[]): boolean =>
+    left.length === right.length && left.every((entry) => right.includes(entry));
+const changed = computed(() => guard.value !== storedOn.value || !sameList(storedList.value, draft.value));
+
+const save = async (): Promise<void> => {
+    if (row.gateSubject === undefined) {
+        return;
+    }
+    // A host still in the box counts as meant: Save adds it rather than dropping what was typed.
+    if (typed.value.trim() !== ``) {
+        add();
+        if (typedError.value !== undefined) {
+            return;
+        }
+    }
+    if (!changed.value) {
+        open.value = false;
+        return;
+    }
+    saving.value = true;
+    error.value = undefined;
+    try {
+        await setHosts.mutateAsync({
+            subject: row.gateSubject,
+            kind: row.entry.kind === `capability` ? `capability` : `secret`,
+            guard: guard.value,
+            hosts: [...draft.value],
+        });
+        open.value = false;
+    } catch (err) {
+        error.value = noticeFrom(err, t(`capabilities.secretHosts.couldNotSave`));
+    } finally {
+        saving.value = false;
+    }
+};
 </script>
 
 <template>
-    <div class="pt-3">
-        <div class="flex items-center justify-between gap-2">
-            <span class="text-xs text-content">{{ t(`capabilities.secretHosts.title`) }}</span>
-            <ToggleSwitch
-                v-if="isOwner"
-                :model-value="on"
-                v-tooltip.top="
-                    on
-                        ? { title: t(`capabilities.secretHosts.turnOff`), note: t(`capabilities.secretHosts.turnOffNote`) }
-                        : { title: t(`capabilities.secretHosts.turnOn`), note: t(`capabilities.secretHosts.turnOnNote`) }
-                "
-                :aria-label="t(`capabilities.secretHosts.title`)"
-                @update:model-value="toggle"
-            />
-        </div>
+    <SecretFact :label="t(`capabilities.secretHosts.label`)">
+        <button
+            v-if="isOwner"
+            ref="anchor"
+            type="button"
+            :class="EDITABLE_VALUE"
+            :aria-label="t(`capabilities.secretHosts.change`, { now: said })"
+            @click="begin"
+        >
+            <span :class="[VALUE_TEXT, storedOn && storedList.length > 0 ? `[overflow-wrap:anywhere] font-mono` : ``]">{{ said }}</span>
+            <span v-if="note" :class="VALUE_NOTE">{{ note }}</span>
+        </button>
+        <span v-else :class="FIXED_VALUE">
+            <span :class="[VALUE_TEXT, storedOn && storedList.length > 0 ? `[overflow-wrap:anywhere] font-mono` : ``]">{{ said }}</span>
+            <span v-if="note" :class="VALUE_NOTE">{{ note }}</span>
+        </span>
 
-        <!-- Not the owner: the guard as it stands, and whose it is to change, rather than controls that would be refused. -->
-        <p v-if="!isOwner" class="pt-0.5 text-2xs text-muted">
-            <template v-if="storedOn && stored && stored.list.length > 0">{{
-                t(`capabilities.secretHosts.onlyToReadOnly`, { hosts: stored.list.join(`, `) })
-            }}</template>
-            <template v-else-if="storedOn">{{ t(`capabilities.secretHosts.everyUseReadOnly`) }}</template>
-            <template v-else>{{ t(`capabilities.secretHosts.offReadOnly`) }}</template>
-        </p>
-
-        <template v-else-if="on">
-            <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretHosts.explain`) }}</p>
-            <p v-if="stored?.source === `connector`" class="pt-0.5 text-2xs text-subtle">{{ t(`capabilities.secretHosts.fromConnector`) }}</p>
-            <div v-if="draft.length > 0" class="flex flex-wrap gap-1 pt-1">
-                <span v-for="host of draft" :key="host" :class="ui.chip({ on: true, trail: true }, `font-mono`)">
-                    {{ host }}
-                    <button
-                        type="button"
-                        :class="ui.iconButton({ size: `xs`, tone: `subtle` }, `-my-0.5`)"
-                        :aria-label="t(`capabilities.secretHosts.removeHost`, { host })"
-                        @click="removeHost(host)"
-                    >
-                        <Icon name="times" class="text-2xs" />
-                    </button>
-                </span>
-            </div>
-            <p v-else class="pt-1 text-2xs text-warning">{{ t(`capabilities.secretHosts.everyUseAsks`) }}</p>
-            <form class="flex flex-wrap items-center gap-2 pt-1.5" @submit.prevent="add">
-                <input
-                    v-model="typed"
-                    type="text"
-                    autocomplete="off"
-                    spellcheck="false"
-                    :placeholder="t(`capabilities.secretHosts.placeholder`)"
-                    :aria-label="t(`capabilities.secretHosts.addHost`)"
-                    :class="ui.input({ size: `sm` }, `min-w-40 flex-1 font-mono`)"
+        <SecretPopover
+            v-model="open"
+            :anchor="anchor"
+            :header="t(`capabilities.secretHosts.label`)"
+            :saving="saving"
+            :error="error"
+            wide
+            @save="save"
+        >
+            <div class="flex flex-col gap-1" role="radiogroup" :aria-label="t(`capabilities.secretHosts.label`)">
+                <SecretChoice
+                    :checked="!guard"
+                    :title="t(`capabilities.secretHosts.anyHost`)"
+                    :note="t(`capabilities.secretHosts.anyHostChoice`)"
+                    @pick="guard = false"
                 />
-                <Button type="submit" size="small" tier="boring" :label="t(`capabilities.secretHosts.addHost`)" :disabled="typed.trim() === ``">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
-            </form>
-            <p v-if="typedError" class="pt-1 text-2xs text-warning">{{ typedError }}</p>
-            <div class="flex items-center gap-2 pt-2">
-                <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="!dirty" v-action="saveDraft">
-                    {{ storedOn ? t(`ui.action.save`) : t(`capabilities.secretHosts.turnOn`) }}
-                </button>
+                <SecretChoice
+                    :checked="guard"
+                    :title="t(`capabilities.secretHosts.onlyThese`)"
+                    :note="t(`capabilities.secretHosts.onlyTheseChoice`)"
+                    @pick="guard = true"
+                />
             </div>
-        </template>
-        <p v-else class="pt-0.5 text-2xs text-muted">
-            {{ t(`capabilities.secretHosts.off`) }}
-            <template v-if="stored && stored.list.length > 0">{{ t(`capabilities.secretHosts.keeps`, { hosts: stored.list.join(`, `) }) }}</template>
-        </p>
-        <Notice v-if="error" :of="error" class="mt-2" />
-    </div>
+
+            <div v-if="guard" class="flex flex-col gap-2 pl-9">
+                <p v-if="stored?.source === `connector`" class="text-xs text-subtle">{{ t(`capabilities.secretHosts.fromConnector`) }}</p>
+                <div v-if="draft.length > 0" class="flex flex-wrap gap-1">
+                    <span v-for="host of draft" :key="host" :class="ui.chip({ on: true, trail: true }, `font-mono`)">
+                        {{ host }}
+                        <button
+                            type="button"
+                            :class="ui.iconButton({ size: `xs`, tone: `subtle` }, `-my-0.5`)"
+                            :aria-label="t(`capabilities.secretHosts.removeHost`, { host })"
+                            @click="removeHost(host)"
+                        >
+                            <Icon name="times" class="text-2xs" />
+                        </button>
+                    </span>
+                </div>
+                <p v-else class="text-xs text-warning">{{ t(`capabilities.secretHosts.emptyList`) }}</p>
+                <form class="flex items-center gap-2" @submit.prevent="add">
+                    <input
+                        v-model="typed"
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        :placeholder="t(`capabilities.secretHosts.placeholder`)"
+                        :aria-label="t(`capabilities.secretHosts.addHost`)"
+                        :class="ui.input({ size: `sm` }, `min-w-0 flex-1 font-mono`)"
+                    />
+                    <Button type="submit" size="small" tier="boring" :label="t(`capabilities.secretHosts.add`)" :disabled="typed.trim() === ``">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                </form>
+                <p v-if="typedError" class="text-xs text-warning">{{ typedError }}</p>
+            </div>
+        </SecretPopover>
+    </SecretFact>
 </template>

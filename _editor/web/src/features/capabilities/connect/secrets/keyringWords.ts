@@ -1,4 +1,4 @@
-import type { KeyringShareMode } from "@intentic/sandbox-contract/schemas/keyring";
+import type { KeyringShareMode, KeyringSource } from "@intentic/sandbox-contract/schemas/keyring";
 import type { SandboxKeyring } from "@intentic/sandbox-contract/schemas/secrets";
 import { t } from "@intentic/ui/i18n";
 
@@ -40,3 +40,14 @@ export const keyringStanding = (keyring: Pick<SandboxKeyring, `online` | `locked
     }
     return keyring.locked === true ? t(`capabilities.keyring.locked`) : t(`capabilities.keyring.unlocked`);
 };
+
+// Product names, the same in every language.
+const SOURCES = {
+    bitwarden: `Bitwarden`,
+    "1password": `1Password`,
+    keepassxc: `KeePassXC`,
+} as const satisfies Readonly<Record<Exclude<KeyringSource, `keyring`>, string>>;
+
+/** Where a keyring entry's value comes from at each use: the password manager it is read from, or the keyring itself. */
+export const keyringSourceNote = (source: KeyringSource): string =>
+    source === `keyring` ? t(`capabilities.secretDevice.pointerOnly`) : t(`capabilities.secretDevice.readFrom`, { source: SOURCES[source] });

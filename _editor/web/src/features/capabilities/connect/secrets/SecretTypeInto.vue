@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Notice, type NoticeModel, SectionHeader, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
@@ -18,7 +18,6 @@ type Typed = ProcedureOutput<`secrets.typeInto`>;
 const t = useT();
 
 const { row } = defineProps<{ row: SecretRow }>();
-const emit = defineEmits<{ close: [] }>();
 
 const { online } = useKeyrings();
 const { typeInto } = useTypeInto();
@@ -90,6 +89,11 @@ const type = async (): Promise<void> => {
 };
 
 const working = computed(() => phase.value === `counting` || phase.value === `typing`);
+// The countdown and the typing are this panel's own busy state, drawn on its button; the press only starts them, so the
+// button's own lock (held for as long as a returned promise) does not outlast the answer.
+const start = (): void => {
+    void type();
+};
 const typedSentence = computed(() => {
     const answer = typed.value;
     if (answer === undefined) {
@@ -104,17 +108,11 @@ const typedSentence = computed(() => {
 </script>
 
 <template>
-    <section class="mt-2 flex flex-col gap-2 rounded-md border border-line bg-canvas px-3 py-2.5" :aria-label="t(`capabilities.typeInto.title`)">
-        <SectionHeader :label="t(`capabilities.typeInto.title`)" density="dense">
-            <template #actions>
-                <button type="button" :class="ui.iconButton({ size: `xs`, tone: `subtle` })" :aria-label="t(`ui.action.close`)" @click="emit(`close`)">
-                    <Icon name="times" class="text-2xs" />
-                </button>
-            </template>
-        </SectionHeader>
+    <!-- Drawn on the panel that hangs off the row's Type into… press, which is its surface: nothing here draws a box. -->
+    <section class="flex flex-col gap-3" :aria-label="t(`capabilities.typeInto.title`)">
 
         <!-- Nothing to type on: said, with what brings one back, rather than a picker with nothing in it. -->
-        <p v-if="online.length === 0 && phase === `choose`" class="text-2xs text-muted">{{ t(`capabilities.typeInto.noneOnline`) }}</p>
+        <p v-if="online.length === 0 && phase === `choose`" class="text-xs text-muted">{{ t(`capabilities.typeInto.noneOnline`) }}</p>
 
         <template v-else>
             <div v-if="online.length > 1" class="flex flex-wrap items-center gap-1" role="group" :aria-label="t(`capabilities.typeInto.which`)">
@@ -132,7 +130,7 @@ const typedSentence = computed(() => {
             </div>
 
             <div v-if="!working" class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <span class="text-2xs text-muted">{{ t(`capabilities.typeInto.wait`) }}</span>
+                <span class="text-xs text-muted">{{ t(`capabilities.typeInto.wait`) }}</span>
                 <SegmentedControl v-model="countdown" :options="countdownOptions" size="xs" />
             </div>
 
@@ -146,14 +144,19 @@ const typedSentence = computed(() => {
                 <Icon name="check" class="shrink-0 text-success" />
                 <span>{{ typedSentence }}</span>
             </p>
-            <p v-else class="text-2xs text-muted">{{ t(`capabilities.typeInto.explain`, { machine: device ?? ``, seconds }) }}</p>
+            <p v-else class="text-xs text-muted">{{ t(`capabilities.typeInto.explain`, { machine: device ?? ``, seconds }) }}</p>
 
             <Notice v-if="error" :of="error" />
 
-            <div class="flex items-center gap-2">
-                <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="working || device === undefined" @click="type">
-                    {{ phase === `typed` || phase === `refused` ? t(`capabilities.typeInto.again`) : t(`capabilities.typeInto.type`) }}
-                </button>
+            <div class="flex items-center justify-end border-t border-line-subtle pt-3">
+                <Button
+                    size="small"
+                    tier="accent"
+                    :label="phase === `typed` || phase === `refused` ? t(`capabilities.typeInto.again`) : t(`capabilities.typeInto.type`)"
+                    :disabled="working || device === undefined"
+                    :loading="working"
+                    @click="start"
+                />
             </div>
         </template>
     </section>

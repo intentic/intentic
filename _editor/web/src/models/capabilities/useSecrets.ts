@@ -88,7 +88,11 @@ export function useCredentialGates() {
     const { query: gatesQuery } = useSandboxQuery(rpcQuery(`secrets.gates`));
     const { roster } = useMembers();
     const { presentedEmail } = useSandboxSession();
-    const invalidate = (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.gates`) });
+    // The inventory too: a closed row says who must release it from the gate the inventory carries.
+    const invalidate = (): void => {
+        void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.gates`) });
+        void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) });
+    };
     const setGate = useMutation({
         mutationFn: (gate: CredentialGate) => sandboxRpc.secrets.setGate(gate),
         onSuccess: invalidate,

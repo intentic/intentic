@@ -39,7 +39,7 @@ export interface SecretRow {
      */
     readonly gateSubject?: string | undefined;
     /** True for a mounted credential (browser, identity, MCP); the daemon always scopes those to the conversation. */
-    readonly sessionShaped: boolean;
+    readonly mountedForTurn: boolean;
     /** Can be typed into a window on one of the owner's computers by the owner's Type into…: a stored value with a name the route takes. */
     readonly typeable: boolean;
     /** Its program list is the sandbox's to keep (set here), rather than a keyring's on the computer that holds it. */
@@ -116,7 +116,7 @@ const credentialRow = (entry: SecretInventoryEntry, sources: SecretSources): Sec
         editable: true,
         removable: false,
         gateSubject: instance.id,
-        sessionShaped: instance.kind === `browser` || instance.kind === `identity` || instance.kind === `mcp`,
+        mountedForTurn: instance.kind === `browser` || instance.kind === `identity` || instance.kind === `mcp`,
         // A connection's credential is spent by its connection, never typed by hand.
         typeable: false,
         programsHere: false,
@@ -177,7 +177,7 @@ const deviceRow = (entry: SecretInventoryEntry): SecretRow => {
         editable: false,
         removable: false,
         gateSubject: entry.status === `missing` ? undefined : entry.key,
-        sessionShaped: false,
+        mountedForTurn: false,
         typeable: entry.status !== `missing` && SECRET_KEY_RE.test(entry.key),
         programsHere: false,
         haystack: `${entry.key} ${entry.label ?? ``} ${detail} ${entry.storedAt}${gateHaystack(entry)}`.toLowerCase(),
@@ -203,7 +203,7 @@ const bareRow = (entry: SecretInventoryEntry, group: SecretGroup): SecretRow => 
         // No gate for an unset value (nothing to release) or a provider account (would block every turn).
         ...(entry.status !== `missing` && group !== `provider` ? { gateSubject: entry.key } : {}),
         // A stored value is spent at an exit, released one use at a time, unlike rows in `credentialRow`.
-        sessionShaped: false,
+        mountedForTurn: false,
         typeable: typeableHere(entry, group),
         programsHere: typeableHere(entry, group),
         haystack: `${entry.key} ${entry.label ?? ``} ${detail} ${entry.storedAt}${gateHaystack(entry)}`.toLowerCase(),

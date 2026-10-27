@@ -1,26 +1,28 @@
 <script setup lang="ts">
-import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, Section, SegmentedControl, StatusBadge, vAction } from "@intentic/ui";
+import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, StatusBadge, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
-import type { CredentialGateScope } from "@intentic/sandbox-contract/schemas/secrets";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
 import { reveal, useCredentialGates, useSecrets } from "../../../../models/capabilities/useSecrets";
 import { useRole } from "../../../../client/sandbox/useRole";
-import ToggleSwitch from "primevue/toggleswitch";
-import SecretField from "../../../../parts/capabilities/SecretField.vue";
-import SecretHostsEditor from "./SecretHostsEditor.vue";
+import SecretApproval from "./SecretApproval.vue";
 import SecretCredentialPolicy from "./SecretCredentialPolicy.vue";
 import SecretDevicePanel from "./SecretDevicePanel.vue";
+import SecretFact from "./SecretFact.vue";
+import SecretHostsEditor from "./SecretHostsEditor.vue";
 import SecretProgramsEditor from "./SecretProgramsEditor.vue";
-import SecretTypeInto from "./SecretTypeInto.vue";
+import SecretValue from "./SecretValue.vue";
+import { lastUseWords, storedWords } from "./secretFacts";
+import { FIXED_VALUE, VALUE_NOTE, VALUE_TEXT } from "./secretLook";
 import { useKeyrings } from "./useKeyrings";
 import { useT } from "@intentic/ui/i18n";
 
-// One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due
-// badge. Reveal/copy/set/remove fade in on hover, focus or touch rather than crowding a scanned list. Expansion
-// belongs to the parent (one row open at a time); closing drops whatever the row opened with.
+// One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due badge.
+// Reveal/copy/set/remove fade in on hover, focus or touch rather than crowding a scanned list. Open, it is two short
+// columns of facts, each a label and its answer: what it is (its value, its last use, where it lives) and when it asks
+// first (who releases it, where it may go, what it may be typed into, how a connection hands it over). Every answer is
+// where it is changed, in a panel hanging off it with its own Save; nothing on the open row is a form at rest.
+// Expansion belongs to the parent (one row open at a time); closing drops whatever the row opened with.
 
 const t = useT();
 
@@ -28,110 +30,15 @@ const { row, expanded } = defineProps<{ row: SecretRow; expanded: boolean }>();
 const emit = defineEmits<{ "update:expanded": [expanded: boolean] }>();
 
 const { remove } = useSecrets();
+// Editing a rule is the owner's (the daemon's routes enforce it); everybody else reads the same answers.
+const { isOwner } = useCredentialGates();
 
-// Editing a gate is owner-only (enforced by the daemon's route); this renders the read-only view for everyone else.
-// The draft stays local until Save, since a gate's three decisions only make sense sent together, and the switch
-// reflects the draft rather than only a stored gate.
-const { gateFor, approverChoices, isOwner, setGate, removeGate } = useCredentialGates();
-
-const gate = computed(() => (row.gateSubject === undefined ? undefined : gateFor(row.gateSubject)));
-const draftOn = ref(false);
-const draftApprovers = ref<string[]>([]);
-const draftScope = ref<CredentialGateScope>(`use`);
-const gateError = ref<NoticeModel | undefined>(undefined);
-// On when a gate is stored, or when the owner has opened the editor to write one.
-const gateOn = computed(() => gate.value !== undefined || draftOn.value);
-
-// Draft re-syncs to the server's answer whenever the row opens or the policy changes, so a stale draft can't
-// overwrite another tab's edit.
-watch(
-    [() => expanded, gate],
-    () => {
-        draftOn.value = false;
-        draftApprovers.value = [...(gate.value?.approvers ?? [])];
-        draftScope.value = gate.value?.scope ?? (row.sessionShaped ? `conversation` : `use`);
-        gateError.value = undefined;
-    },
-    { immediate: true },
-);
-
-// Turning on pre-picks the roster's first approver; turning off either removes a stored gate or just discards an
-// unsaved draft.
-const toggleGate = (on: boolean): void => {
-    if (on) {
-        draftOn.value = true;
-        draftApprovers.value = gate.value === undefined ? approverChoices.value.slice(0, 1) : [...gate.value.approvers];
-        draftScope.value = gate.value?.scope ?? (row.sessionShaped ? `conversation` : `use`);
-        return;
-    }
-    if (gate.value !== undefined) {
-        void clearGate();
-        return;
-    }
-    draftOn.value = false;
-    draftApprovers.value = [];
-};
-
-const toggleApprover = (email: string): void => {
-    draftApprovers.value = draftApprovers.value.includes(email)
-        ? draftApprovers.value.filter((entry) => entry !== email)
-        : [...draftApprovers.value, email];
-};
-
-// Saveable only with somebody on it and only when something actually changed (the route refuses an empty list).
-const gateDirty = computed(
-    () =>
-        draftApprovers.value.length > 0 &&
-        (gate.value === undefined ||
-            gate.value.scope !== draftScope.value ||
-            gate.value.approvers.length !== draftApprovers.value.length ||
-            !gate.value.approvers.every((approver) => draftApprovers.value.includes(approver))),
-);
-
-const saveGate = async (): Promise<void> => {
-    gateError.value = undefined;
-    if (row.gateSubject === undefined) {
-        return;
-    }
-    try {
-        await setGate.mutateAsync({
-            subject: row.gateSubject,
-            kind: row.entry.kind === `capability` ? `capability` : `secret`,
-            approvers: draftApprovers.value,
-            scope: draftScope.value,
-        });
-    } catch (err) {
-        gateError.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotSaveApprovers`));
-    }
-};
-
-const clearGate = async (): Promise<void> => {
-    gateError.value = undefined;
-    if (row.gateSubject === undefined) {
-        return;
-    }
-    try {
-        await removeGate.mutateAsync(row.gateSubject);
-    } catch (err) {
-        gateError.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotStopApproval`));
-    }
-};
-
-const SCOPE_OPTIONS = computed(() => [
-    { label: t(`capabilities.secretEntryRow.once`), value: `use` as const, title: t(`capabilities.secretEntryRow.oneClickReleasesExactly`) },
-    {
-        label: t(`capabilities.secretEntryRow.restConversation`),
-        value: `conversation` as const,
-        title: t(`capabilities.secretEntryRow.oneClickCoversEvery`),
-    },
-]);
-
-const editing = ref(false);
-// The Type into… panel, the third thing an open row can show beside its value and its editor.
-const typing = ref(false);
-const multiline = ref(false);
+// Held here rather than in the value's own fact, so the header's buttons on a closed row open it onto the same place.
 const revealedValue = ref<string | undefined>(undefined);
+const replacing = ref(false);
+const typing = ref(false);
 const confirming = ref(false);
+const revealError = ref<NoticeModel | undefined>(undefined);
 const error = ref<NoticeModel | undefined>(undefined);
 
 const entry = computed(() => row.entry);
@@ -144,19 +51,12 @@ const canType = computed(() => row.typeable && keyrings.value.length > 0);
 // The daemon reveals a value to the owner and maintainers (secrets.routes.ts `reveal`, ensureMaintainer).
 const { canShip } = useRole();
 // A value exists and this viewer is allowed to read it: gates both Reveal and Copy.
-const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable && canShip.value);
-// What the open panel shows: provenance only, the revealed value, the editor, or Type into… (one at a time).
-const panelMode = computed<`info` | `reveal` | `edit` | `type`>(() => {
-    if (typing.value) {
-        return `type`;
-    }
-    if (editing.value) {
-        return `edit`;
-    }
-    return revealedValue.value === undefined ? `info` : `reveal`;
-});
+const canReveal = computed(() => entry.value.status !== `missing` && entry.value.revealable && canShip.value && !onComputer.value);
 // Nominal is silent: a connection that is simply working says so by carrying nothing.
 const state = computed(() => (row.state !== undefined && row.state.rank < 3 ? row.state : undefined));
+
+const lastUse = computed(() => (entry.value.lastUse === undefined ? undefined : lastUseWords(entry.value.lastUse)));
+const stored = computed(() => storedWords(entry.value));
 
 watch(
     () => expanded,
@@ -164,10 +64,11 @@ watch(
         if (open) {
             return;
         }
-        editing.value = false;
+        replacing.value = false;
         typing.value = false;
         revealedValue.value = undefined;
         confirming.value = false;
+        revealError.value = undefined;
         error.value = undefined;
     },
 );
@@ -175,35 +76,27 @@ watch(
 const open = (): void => emit(`update:expanded`, true);
 
 const toggleReveal = async (): Promise<void> => {
-    error.value = undefined;
+    revealError.value = undefined;
     if (revealedValue.value !== undefined) {
         revealedValue.value = undefined;
         return;
     }
-    editing.value = false;
-    typing.value = false;
     open();
     try {
         revealedValue.value = await reveal(entry.value.key);
     } catch (err) {
-        error.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotReveal`));
+        revealError.value = noticeFrom(err, t(`capabilities.secretEntryRow.couldNotReveal`));
     }
 };
 
-const startEdit = (): void => {
-    error.value = undefined;
-    revealedValue.value = undefined;
-    typing.value = false;
-    editing.value = true;
+const startReplace = (): void => {
     open();
+    replacing.value = true;
 };
 
 const startType = (): void => {
-    error.value = undefined;
-    revealedValue.value = undefined;
-    editing.value = false;
-    typing.value = !typing.value;
     open();
+    typing.value = true;
 };
 
 const removeKey = async (): Promise<void> => {
@@ -259,54 +152,44 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                     class="flex items-center gap-0.5 text-subtle transition-opacity pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
                     :class="expanded || confirming ? `opacity-100` : `opacity-0`"
                 >
-                    <button
-                        v-if="canType"
-                        v-tooltip.top="{
-                            title: t(`capabilities.typeInto.title`),
-                            note: online.length > 0 ? t(`capabilities.typeInto.tooltipNote`) : t(`capabilities.typeInto.noneOnlineShort`),
-                        }"
-                        type="button"
-                        :class="ACTION"
-                        :aria-label="t(`capabilities.typeInto.title`)"
-                        :aria-pressed="typing"
-                        @click="startType"
-                    >
-                        <Icon name="keyboard-tab" class="text-xs" />
-                    </button>
-                    <button
-                        v-if="row.entry.status !== `missing` && !onComputer"
-                        v-tooltip.top="
-                            revealedValue !== undefined
-                                ? t(`capabilities.secretEntryRow.hide`)
-                                : { title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.maintainersOnly`) }
-                        "
-                        type="button"
-                        :class="ACTION"
-                        :disabled="!canReveal"
-                        :aria-label="
-                            revealedValue !== undefined
-                                ? t(`capabilities.words.hideValue`)
-                                : t(`capabilities.secretEntryRow.revealValueMaintainersOnly`)
-                        "
-                        v-action="toggleReveal"
-                    >
-                        <Icon :name="revealedValue !== undefined ? `eye-slash` : `eye`" class="text-xs" />
-                    </button>
-                    <CopyButton
-                        v-if="canReveal && !onComputer"
-                        v-tooltip.top="t(`capabilities.secretEntryRow.copyValue`)"
-                        :text="() => revealedValue ?? reveal(row.entry.key)"
-                    />
-                    <button
-                        v-if="row.editable"
-                        v-tooltip.top="t(`capabilities.secretEntryRow.setUpdate`)"
-                        type="button"
-                        :class="ACTION"
-                        :aria-label="t(`capabilities.secretEntryRow.setUpdateValue`)"
-                        @click="startEdit"
-                    >
-                        <Icon name="pencil" class="text-xs" />
-                    </button>
+                    <!-- Shortcuts for a closed row: open, each of these is a labelled button beside the value it acts on. -->
+                    <template v-if="!expanded">
+                        <button
+                            v-if="canType"
+                            v-tooltip.top="{
+                                title: t(`capabilities.typeInto.title`),
+                                note: online.length > 0 ? t(`capabilities.typeInto.tooltipNote`) : t(`capabilities.typeInto.noneOnlineShort`),
+                            }"
+                            type="button"
+                            :class="ACTION"
+                            :aria-label="t(`capabilities.typeInto.title`)"
+                            @click="startType"
+                        >
+                            <Icon name="keyboard-tab" class="text-xs" />
+                        </button>
+                        <button
+                            v-if="row.entry.status !== `missing` && !onComputer"
+                            v-tooltip.top="{ title: t(`capabilities.secretEntryRow.reveal`), note: t(`capabilities.secretEntryRow.maintainersOnly`) }"
+                            type="button"
+                            :class="ACTION"
+                            :disabled="!canReveal"
+                            :aria-label="t(`capabilities.secretEntryRow.revealValueMaintainersOnly`)"
+                            v-action="toggleReveal"
+                        >
+                            <Icon name="eye" class="text-xs" />
+                        </button>
+                        <CopyButton v-if="canReveal" v-tooltip.top="t(`capabilities.secretEntryRow.copyValue`)" :text="() => reveal(row.entry.key)" />
+                        <button
+                            v-if="row.editable"
+                            v-tooltip.top="t(`capabilities.secretEntryRow.setUpdate`)"
+                            type="button"
+                            :class="ACTION"
+                            :aria-label="t(`capabilities.secretEntryRow.setUpdateValue`)"
+                            @click="startReplace"
+                        >
+                            <Icon name="pencil" class="text-xs" />
+                        </button>
+                    </template>
                     <template v-if="row.removable">
                         <button
                             v-if="!confirming"
@@ -347,185 +230,74 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
             </span>
         </template>
 
-        <!-- The full record, one click away: where it lives, what uses it, and either the value or the editor. -->
+        <!-- The full record, one click away: what it is on one side, when it asks first on the other. -->
         <template #below>
-            <!-- Where it lives, except for a keyring's entry, whose panel below says so with how it is shared. -->
-            <p v-if="!onComputer" class="text-2xs text-muted">
-                <template v-if="row.detail">
-                    <span class="@xl:hidden">{{ row.detail }} · </span>
-                </template>
-                <template v-if="row.entry.kind === `generated`">{{
-                    `${t(`capabilities.secretEntryRow.generated`)} ${t(`capabilities.secretEntryRow.livesIn`)}`
-                }}</template>
-                <template v-else>{{ t(`capabilities.secretEntryRow.livesIn`) }}</template>
-                <span class="font-mono text-subtle"> {{ row.entry.storedAt }}</span>
-                <template v-if="row.entry.ci !== undefined">
-                    · {{ row.entry.ci.synced ? t(`capabilities.secretEntryRow.ciSynced`) : t(`capabilities.secretEntryRow.ciOutOfDate`) }}</template
-                >
-            </p>
-            <!-- Use ledger's newest row: when the agent last spent this and where; absent for a secret never yet used. -->
-            <p v-if="row.entry.lastUse" class="pt-0.5 text-2xs text-muted">
-                {{ t(`capabilities.secretEntryRow.usedByAgent`) }} {{ timeAgo(row.entry.lastUse.at, { days: true }) }}
-                <template v-if="!row.entry.lastUse.detail && row.entry.lastUse.lane === `desktop`">
-                    · {{ t(`capabilities.secretEntryRow.typedOnDesktop`) }}</template
-                >
-                <template v-if="row.entry.lastUse.detail">
-                    ·
-                    <span v-if="row.entry.lastUse.lane === `browser`">{{
-                        t(`capabilities.secretEntryRow.typedOn`, { detail: row.entry.lastUse.detail })
-                    }}</span>
-                    <!-- Typed into a window or a phone app on one of the owner's computers: "rog · FortiClient.exe". -->
-                    <span v-else-if="row.entry.lastUse.lane === `device`">{{
-                        t(`capabilities.secretEntryRow.typedOn`, { detail: row.entry.lastUse.detail })
-                    }}</span>
-                    <span v-else-if="row.entry.lastUse.lane === `desktop`"
-                        >{{ t(`capabilities.secretEntryRow.typedOnDesktop`) }}
-                        <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
-                    >
-                    <!-- Attached by the credential gateway: the agent sent the request, never held the value. -->
-                    <span v-else-if="row.entry.lastUse.lane === `gateway`"
-                        >{{ t(`capabilities.secretEntryRow.viaGateway`) }}
-                        <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
-                    >
-                    <!-- Signed with by the sandbox's ssh agent: the agent's ssh got a signature, never the key. -->
-                    <span v-else-if="row.entry.lastUse.lane === `ssh`"
-                        >{{ t(`capabilities.secretEntryRow.viaSshAgent`) }}
-                        <span class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span></span
-                    >
-                    <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
-                </template>
-            </p>
-            <!-- A keyring's own entry: where it lives, how it is shared, and its rules, read-only, with the command that changes them. -->
-            <SecretDevicePanel v-if="onComputer" :row="row" />
-            <!-- The two ways a secret needs a person, as one section: who has to release it, and (below) where it may go before
-                 anybody is asked. Both off for nearly everything by design: they are for the few credentials where one wrong use
-                 is the incident. -->
-            <Section
-                v-if="row.gateSubject !== undefined"
-                :label="t(`capabilities.secretEntryRow.needsApproval`)"
-                density="dense"
-                class="mt-3 border-t border-line pt-2"
-            >
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-xs text-content">{{ t(`capabilities.secretEntryRow.fromNamedPerson`) }}</span>
-                    <ToggleSwitch
-                        v-if="isOwner"
-                        :model-value="gateOn"
-                        v-tooltip.top="
-                            gateOn
-                                ? { title: t(`capabilities.secretEntryRow.dropApproval`), note: t(`capabilities.secretEntryRow.agentUsesFreely`) }
-                                : {
-                                      title: t(`capabilities.secretEntryRow.requireApproval`),
-                                      note: t(`capabilities.secretEntryRow.namedPersonReleases`),
-                                  }
-                        "
-                        :aria-label="t(`capabilities.secretEntryRow.fromNamedPerson`)"
-                        @update:model-value="toggleGate"
+            <!-- Dropped from the header at rail width, so said here instead: what tells it apart. -->
+            <p v-if="row.detail && !onComputer" class="pb-1.5 text-xs text-muted @xl:hidden">{{ row.detail }}</p>
+            <div class="flex flex-col gap-3 @3xl:flex-row @3xl:gap-8">
+                <dl class="flex min-w-0 flex-1 flex-col gap-1">
+                    <SecretValue
+                        v-model:revealed="revealedValue"
+                        v-model:replacing="replacing"
+                        v-model:typing="typing"
+                        :row="row"
+                        :can-reveal="canReveal"
+                        :can-type="canType"
+                        :error="revealError"
+                        @reveal="toggleReveal"
                     />
-                </div>
+                    <SecretDevicePanel v-if="onComputer" :row="row" part="about" />
+                    <!-- The use ledger's newest row: absent for a secret never yet spent. -->
+                    <SecretFact v-if="lastUse" :label="t(`capabilities.secretFacts.lastUsed`)">
+                        <span :class="FIXED_VALUE">
+                            <span :class="VALUE_TEXT">{{ lastUse.said }}</span>
+                            <code
+                                v-if="lastUse.code"
+                                v-tooltip.top.overflow="lastUse.code"
+                                class="block max-w-full truncate font-mono text-xs leading-5 text-subtle"
+                                >{{ lastUse.code }}</code
+                            >
+                            <span v-if="lastUse.note" :class="VALUE_NOTE">{{ lastUse.note }}</span>
+                        </span>
+                    </SecretFact>
+                    <SecretFact v-if="!onComputer" :label="t(`capabilities.secretFacts.storedIn`)">
+                        <span :class="FIXED_VALUE">
+                            <!-- A path wraps after a slash, never inside a name. -->
+                            <span v-if="stored.path" class="[overflow-wrap:anywhere] font-mono text-xs leading-5 text-content"
+                                ><template v-for="(part, index) of stored.said.split(`/`)" :key="index"
+                                    ><template v-if="index > 0">/<wbr /></template>{{ part }}</template
+                                ></span
+                            >
+                            <span v-else :class="VALUE_TEXT">{{ stored.said }}</span>
+                            <span v-if="stored.note" :class="VALUE_NOTE">{{ stored.note }}</span>
+                        </span>
+                    </SecretFact>
+                    <SecretFact v-if="row.entry.ci !== undefined" :label="t(`capabilities.secretFacts.ciLabel`)">
+                        <span :class="FIXED_VALUE">
+                            <span :class="row.entry.ci.synced ? VALUE_TEXT : `text-sm text-warning`">{{
+                                row.entry.ci.synced ? t(`capabilities.secretFacts.ciSynced`) : t(`capabilities.secretFacts.ciOutOfDate`)
+                            }}</span>
+                        </span>
+                    </SecretFact>
+                </dl>
 
-                <!-- Not the owner: states the gate's status and that only the owner can change it, rather than hiding the controls silently. -->
-                <p v-if="!isOwner" class="pt-0.5 text-2xs text-muted">
-                    <template v-if="gate">
-                        {{
-                            t(`capabilities.secretEntryRow.gateExplained`, {
-                                approvers: gate.approvers.join(t(`capabilities.secretEntryRow.approverSeparator`)),
-                                scope:
-                                    gate.scope === `conversation`
-                                        ? t(`capabilities.secretEntryRow.scopeConversation`)
-                                        : t(`capabilities.secretEntryRow.scopeEveryUse`),
-                            })
-                        }}
-                    </template>
-                    <template v-else>{{ t(`capabilities.secretEntryRow.noNamedApproverOwnerOnly`) }}</template>
-                </p>
-
-                <template v-else-if="gateOn">
-                    <!-- Approvers are an exact list, not a role floor ("only Bob"); the owner appears here too, since they aren't an implicit approver. -->
-                    <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.whoRelease`) }}</p>
-                    <div class="flex flex-wrap gap-1 pt-1">
-                        <button
-                            v-for="email of approverChoices"
-                            :key="email"
-                            type="button"
-                            :class="ui.chip({ on: draftApprovers.includes(email) })"
-                            :aria-pressed="draftApprovers.includes(email)"
-                            @click="toggleApprover(email)"
-                        >
-                            {{ email }}
-                        </button>
-                    </div>
-                    <!-- Names come from the Access roster plus the owner; the daemon refuses anyone else. -->
-                    <p v-if="approverChoices.length === 0" class="pt-1 text-2xs text-muted">
-                        {{ t(`capabilities.secretEntryRow.nobodyNamedYetGive`) }}
-                        <RouterLink to="/sandbox/access" class="text-link hover:underline">{{
-                            t(`capabilities.secretEntryRow.accessTab`)
-                        }}</RouterLink>
-                        {{ t(`capabilities.secretEntryRow.first`) }}
-                    </p>
-                    <p v-else-if="approverChoices.length === 1" class="pt-1 text-2xs text-muted">
-                        {{ t(`capabilities.secretEntryRow.onlyFarAnybodyGive`) }}
-                        <RouterLink to="/sandbox/access" class="text-link hover:underline">{{
-                            t(`capabilities.secretEntryRow.accessTab`)
-                        }}</RouterLink>
-                        {{ t(`capabilities.secretEntryRow.namedHere`) }}
-                    </p>
-
-                    <!-- How long one release lasts, except where it isn't a choice: a signed-in profile or running MCP server is mounted for a whole turn. -->
-                    <p class="pt-2 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.howLongOneRelease`) }}</p>
-                    <p v-if="row.sessionShaped" class="pt-0.5 text-2xs text-subtle">
-                        {{ t(`capabilities.secretEntryRow.restConversationSignedIn`) }}
-                    </p>
-                    <SegmentedControl v-else v-model="draftScope" :options="SCOPE_OPTIONS" size="xs" wrap class="pt-1" />
-
-                    <div class="flex items-center gap-2 pt-2">
-                        <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="!gateDirty" v-action="saveGate">
-                            {{ gate === undefined ? t(`capabilities.secretEntryRow.requireApproval`) : t(`ui.action.save`) }}
-                        </button>
-                        <span v-if="draftApprovers.length === 0" class="text-2xs text-warning">{{
-                            t(`capabilities.secretEntryRow.nameAtLeastOne`)
-                        }}</span>
-                    </div>
-                </template>
-                <p v-else class="pt-0.5 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.noNamedApprover`) }}</p>
-                <Notice v-if="gateError" :of="gateError" class="mt-2" />
-
-                <!-- The host guard: a stored value's, or a connector's credential's, never a mounted account's, which no command carries. -->
-                <SecretHostsEditor v-if="!row.sessionShaped && !onComputer" :row="row" :expanded="expanded" />
-                <!-- Which windows and phone apps it may be typed into unasked: a sandbox-held value's; a keyring's own list is above. -->
-                <SecretProgramsEditor v-if="row.programsHere" :row="row" :expanded="expanded" />
-                <!-- How a connection's credential reaches the agent, and the credential gateway's rules on it. -->
-                <SecretCredentialPolicy :row="row" :expanded="expanded" />
-            </Section>
+                <!-- When it asks first. Off for nearly everything by design: these are for the few credentials where one wrong
+                     use is the incident. A mounted account's credential has no host guard, since no command carries it. -->
+                <dl
+                    v-if="row.gateSubject !== undefined"
+                    class="flex min-w-0 flex-1 flex-col gap-1 @3xl:border-l @3xl:border-line-subtle @3xl:pl-6"
+                    data-secret-rules
+                >
+                    <SecretApproval :row="row" />
+                    <SecretHostsEditor v-if="!row.mountedForTurn && !onComputer" :row="row" />
+                    <SecretProgramsEditor v-if="row.programsHere" :row="row" />
+                    <SecretDevicePanel v-if="onComputer" :row="row" part="rules" />
+                    <SecretCredentialPolicy :row="row" />
+                    <p v-if="!isOwner" class="pt-1 text-xs text-subtle">{{ t(`capabilities.secretFacts.ownerChanges`) }}</p>
+                </dl>
+            </div>
 
             <Notice v-if="error" :of="error" class="mt-2" />
-
-            <Section v-if="panelMode === `reveal`" :label="t(`capabilities.secretEntryRow.value`)" density="dense" class="mt-2">
-                <template #info>
-                    <CopyButton :text="() => revealedValue ?? reveal(row.entry.key)" :label="t(`ui.action.copy`)" />
-                </template>
-                <code
-                    class="block max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
-                    >{{ revealedValue }}</code
-                >
-            </Section>
-
-            <SecretTypeInto v-else-if="panelMode === `type`" :row="row" @close="typing = false" />
-
-            <div v-else-if="panelMode === `edit`" class="mt-2 flex flex-col gap-1">
-                <SecretField
-                    :secret-key="row.entry.key"
-                    :capability-id="row.entry.kind === `capability` ? row.entry.key : undefined"
-                    :multiline="multiline"
-                    no-hint
-                    cancellable
-                    @saved="editing = false"
-                    @cancel="editing = false"
-                />
-                <button type="button" :class="ui.textButton({ size: `xs` })" @click="multiline = !multiline">
-                    {{ multiline ? t(`capabilities.secretEntryRow.singleLineValue`) : t(`capabilities.secretEntryRow.multiLineValueSsh`) }}
-                </button>
-            </div>
         </template>
     </DisclosureRow>
 </template>

