@@ -53,6 +53,7 @@ import { cardKey } from "../../../models/fleet/board/childFold";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import AttentionElsewhere from "./cards/AttentionElsewhere.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
+import ActiveGroupHead from "./ActiveGroupHead.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
 import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
@@ -140,8 +141,8 @@ const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden
 const { childrenOf, subagentsOf, callOf, familyOf, familyIds } = lanes;
 const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, first } = lanes;
 // What opens and shuts the trays under the cards (ChildRows' `shown`): the ring, the panes beside it, a subagent's
-// transcript on screen. A render that moves any of it is one the lanes' motion measures across.
-const folds = (): string => `${highlightId.value}|${chatStrip.value.panes.join(`,`)}|${subagentShown.value?.id}`;
+// transcript on screen, one of Active's groups folded. A render that moves any of it is one the lanes' motion measures across.
+const folds = (): string => `${highlightId.value}|${chatStrip.value.panes.join(`,`)}|${subagentShown.value?.id}|${lanes.activeFolded.value}`;
 const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag, folds });
 const focus = useCardFocus({
     ring,
@@ -502,82 +503,84 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
                     </p>
                     <div v-else-if="!bareLane(lane.key)" class="relative flex flex-col gap-4.5 pb-2.5">
-                        <!-- Skips a card whose inputs haven't changed: the roster ticks about once a second per running turn. -->
-                        <!-- Keyed by box and id: across sandboxes an id is not a card (a person's home conversation is named alike in every one). -->
-                        <Transition
-                            v-for="agent in cardsFor(lane.key)"
-                            :key="cardKey(agent)"
-                            v-memo="[
-                                agent,
-                                narrow,
-                                draggedId === agent.id && dragging,
-                                familyOf(agent).length,
-                                callOf(agent),
-                                lane.key,
-                                pendingFor(agent),
-                                ringed(agent.id),
-                                snippetOf(agent),
-                                idMatchOf(agent),
-                                needle,
-                                matchCase,
-                                isMovingLane(agent.id),
-                                coarse,
-                            ]"
-                            :name="isMovingLane(agent.id) ? undefined : 'lane'"
-                            :css="!isMovingLane(agent.id)"
-                            :appear="boardDrawn"
-                        >
-                            <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave, space and slide as one (laneMotion). -->
-                            <div class="flex flex-col" data-fold-unit data-reveal>
-                                <!-- Swiped aside on a touch screen, the card files itself (cardSwipe.ts); its ⋯ keeps the same press. -->
-                                <SwipeRow
-                                    :action="swipeOf(agent)"
-                                    :disabled="pendingFor(agent) !== undefined"
-                                    class="rounded-2xl"
-                                    @commit="swipeCard(agent)"
-                                >
-                                    <AgentCard
-                                        :ref="(el) => setCardEl(agent.id, el)"
+                        <template v-for="(group, at) in lanes.groupsFor(lane.key)" :key="group.key">
+                            <ActiveGroupHead v-if="group.headed" :group="group" :first="at === 0" />
+                            <!-- Skips a card whose inputs haven't changed (the roster ticks about once a second per running turn); keyed by box and id, since across sandboxes an id is not a card (a person's home conversation is named alike in every one). -->
+                            <Transition
+                                v-for="agent in group.shown"
+                                :key="cardKey(agent)"
+                                v-memo="[
+                                    agent,
+                                    narrow,
+                                    draggedId === agent.id && dragging,
+                                    familyOf(agent).length,
+                                    callOf(agent),
+                                    lane.key,
+                                    pendingFor(agent),
+                                    ringed(agent.id),
+                                    snippetOf(agent),
+                                    idMatchOf(agent),
+                                    needle,
+                                    matchCase,
+                                    isMovingLane(agent.id),
+                                    coarse,
+                                ]"
+                                :name="isMovingLane(agent.id) ? undefined : 'lane'"
+                                :css="!isMovingLane(agent.id)"
+                                :appear="boardDrawn"
+                            >
+                                <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave, space and slide as one (laneMotion). -->
+                                <div class="flex flex-col" data-fold-unit data-reveal>
+                                    <!-- Swiped aside on a touch screen, the card files itself (cardSwipe.ts); its ⋯ keeps the same press. -->
+                                    <SwipeRow
+                                        :action="swipeOf(agent)"
+                                        :disabled="pendingFor(agent) !== undefined"
+                                        class="rounded-2xl"
+                                        @commit="swipeCard(agent)"
+                                    >
+                                        <AgentCard
+                                            :ref="(el) => setCardEl(agent.id, el)"
+                                            :agent="agent"
+                                            :dense="narrow || group.rows"
+                                            :dragging="draggedId === agent.id && dragging"
+                                            :pending="pendingFor(agent)"
+                                            :selected="ringed(agent.id)"
+                                            :peek="peeked(agent.id)"
+                                            :match="snippetOf(agent)"
+                                            :id-match="idMatchOf(agent)"
+                                            :query="needle"
+                                            :match-case="matchCase"
+                                            :family="familyOf(agent).length"
+                                            :placed="lane.key"
+                                            :call="callOf(agent)"
+                                            @open="(event) => focusAgent(agent, event)"
+                                            @keep="keepAgent(agent)"
+                                            @review="drillIn(agent)"
+                                            @changes="reviewAgent(agent)"
+                                            @resolve="resolveNow(agent.id, agent.sandboxId)"
+                                            @keep-deleted="(owner, main) => keepDeletedNow(agent.id, owner, main)"
+                                            @restore-deleted="(owner) => restoreDeletedNow(agent.id, owner, agent.sandboxId)"
+                                            @land="pressLand(agent, `land`, mobile)"
+                                            @reland="pressLand(agent, `reland`, mobile)"
+                                            @unwatch="unwatchNow(agent.id, agent.sandboxId)"
+                                            @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
+                                            @archive="familyArchive.request(agent)"
+                                            @restore="restore(familyIds(agent))"
+                                            @close="closeAgent(agent)"
+                                            @grab="(event, card) => grabCard(event, agent, card)"
+                                            menus
+                                            @menu="(event, presses) => openCardMenu(agent, event, presses)"
+                                        />
+                                    </SwipeRow>
+                                    <ChildRows
                                         :agent="agent"
-                                        :dense="narrow"
-                                        :dragging="draggedId === agent.id && dragging"
-                                        :pending="pendingFor(agent)"
-                                        :selected="ringed(agent.id)"
-                                        :peek="peeked(agent.id)"
-                                        :match="snippetOf(agent)"
-                                        :id-match="idMatchOf(agent)"
-                                        :query="needle"
-                                        :match-case="matchCase"
-                                        :family="familyOf(agent).length"
-                                        :placed="lane.key"
-                                        :call="callOf(agent)"
-                                        @open="(event) => focusAgent(agent, event)"
-                                        @keep="keepAgent(agent)"
-                                        @review="drillIn(agent)"
-                                        @changes="reviewAgent(agent)"
-                                        @resolve="resolveNow(agent.id, agent.sandboxId)"
-                                        @keep-deleted="(owner, main) => keepDeletedNow(agent.id, owner, main)"
-                                        @restore-deleted="(owner) => restoreDeletedNow(agent.id, owner, agent.sandboxId)"
-                                        @land="pressLand(agent, `land`, mobile)"
-                                        @reland="pressLand(agent, `reland`, mobile)"
-                                        @unwatch="unwatchNow(agent.id, agent.sandboxId)"
-                                        @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"
-                                        @archive="familyArchive.request(agent)"
-                                        @restore="restore(familyIds(agent))"
-                                        @close="closeAgent(agent)"
-                                        @grab="(event, card) => grabCard(event, agent, card)"
-                                        menus
-                                        @menu="(event, presses) => openCardMenu(agent, event, presses)"
+                                        :focused="ringed(agent.id)"
+                                        :live="!narrow && lane.key !== `finished`"
+                                        :class="draggedId === agent.id && dragging ? `opacity-40` : ``"
                                     />
-                                </SwipeRow>
-                                <ChildRows
-                                    :agent="agent"
-                                    :focused="ringed(agent.id)"
-                                    :live="!narrow && lane.key !== `finished`"
-                                    :class="draggedId === agent.id && dragging ? `opacity-40` : ``"
-                                />
-                            </div>
-                        </Transition>
+                                </div>
+                            </Transition>
+                        </template>
                     </div>
                     <!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
                     <button

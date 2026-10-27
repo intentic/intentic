@@ -59,7 +59,7 @@ describe(`which children ride under their parent`, () => {
             child(`new`, `p`, { updatedAt: 8_000 }),
             working(`early`, { startedBy: `agent:p`, startedAt: 3_000 }),
         );
-        expect(ids(fold.children.get(`p`))).toEqual([`early`, `late`, `new`, `old`]);
+        expect(ids(fold.children.get(`p`))).toEqual([`late`, `early`, `new`, `old`]);
     });
 
     it(`keeps Attention quiet for children stopped under a parent still supervising them: they are its news`, () => {
@@ -146,7 +146,7 @@ describe(`which children ride under their parent`, () => {
         expect(ids(fold.children.get(`p`))).toEqual([`busy`, `done`]);
     });
 
-    it(`puts a lifted card where its lane's own order would: Attention by the newest call, Active by the earliest work`, () => {
+    it(`puts a lifted card where its lane's own order would: Attention by the newest call, Active by when its family's work started`, () => {
         const calls = folded(
             card(`other`, { status: `error`, updatedAt: 5_000 }),
             card(`late`),
@@ -160,7 +160,7 @@ describe(`which children ride under their parent`, () => {
             card(`p`, { startedAt: 9_000 }),
             working(`kid`, { startedBy: `agent:p`, startedAt: 2_000 }),
         );
-        expect(ids(work.lanes.active)).toEqual([`p`, `mid`]);
+        expect(ids(work.lanes.active)).toEqual([`mid`, `p`]);
     });
 
     // A review or test a person opened on the work under a card (freshSession.ts) belongs under that card in every state,
@@ -454,7 +454,7 @@ describe(`what a tray draws`, () => {
 
         it(`weaves the working ones among the working by when each started, and counts the settled ones in the one fold`, () => {
             const tray = trayOf(brood, at(), [late, newest, early, oldest]);
-            expect(ids(tray?.lead)).toEqual([`early`, `w1`, `w2`, `late`]);
+            expect(ids(tray?.lead)).toEqual([`late`, `w1`, `w2`, `early`]);
             expect([tray?.asks, tray?.groups, tray?.folded]).toEqual([[], [], 4]);
         });
 

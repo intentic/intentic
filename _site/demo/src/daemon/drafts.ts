@@ -1,10 +1,20 @@
 import type { ComposerDraft, ComposerDrafts, DraftClear, DraftWrite, DraftWritten } from "@intentic/sandbox-contract/schemas/composer-drafts";
+import { busyDrafts } from "../fixture/fleet";
+import { demoMode } from "../mode";
 
 // The demo's stand-in for the daemon's composer drafts (conversations/drafts/composer-drafts.ts), held for this page's
 // life: one person, the same revision rules, so a composer in the demo writes, conflicts and clears as against a sandbox.
 
 const drafts = new Map<string, ComposerDraft>();
 let revision = 0;
+
+// The busy recording opens holding two drafts, so its Active lane has its Drafts group.
+if (demoMode.id === `busy`) {
+    for (const draft of busyDrafts(Date.now())) {
+        revision += 1;
+        drafts.set(draft.id, { conversationId: draft.id, text: draft.text, since: draft.since, revision });
+    }
+}
 
 const answerOf = (draft: ComposerDraft | undefined, conflict: boolean): DraftWritten => {
     const answer: DraftWritten = draft === undefined ? {} : { draft };

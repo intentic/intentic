@@ -204,9 +204,10 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
     expect(cards(board)).toEqual([`Focus agent: ship the release`]);
     expect(rows(board)).toEqual([
         expect.stringMatching(/^rotate the keys/),
-        // Its kind is the title's hover now, not a word on the row (childLook.test.ts asserts it).
-        expect.stringMatching(/^map the UI/),
+        // Working rows newest started first, as Active orders its cards. Its kind is the title's hover now, not a word on
+        // the row (childLook.test.ts asserts it).
         expect.stringMatching(/^port the parser/),
+        expect.stringMatching(/^map the UI/),
     ]);
     expect(fold(board)?.textContent?.trim()).toBe(t(`agents.childRows.finished`, { count: 3 }));
 

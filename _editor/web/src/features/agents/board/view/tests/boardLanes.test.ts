@@ -271,7 +271,7 @@ describe(`children riding under their parent`, () => {
     });
 
     it(`leads its lane with the card a child named by its id rides under, and the archive's matches with a filed one named`, () => {
-        const { lanes, view, filterBy } = boardOf([card(`first`, { status: `running`, startedAt: 0, title: `h1 notes` }), parent, helper(`h1`)], {
+        const { lanes, view, filterBy } = boardOf([card(`first`, { status: `running`, startedAt: 2, title: `h1 notes` }), parent, helper(`h1`)], {
             archived: [card(`a0`, { archivedAt: 9, title: `about h1x` }), card(`h1x`, { archivedAt: 8 })],
         });
         expect(ids(lanes.cardsFor(`active`))).toEqual([`first`, `p`]);

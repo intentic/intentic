@@ -1,5 +1,8 @@
-import { finishedLaneOrder } from "../../../models/fleet/useAgents-fleet";
+import { NO_ATTENTION } from "../../../models/agent-status/agentStatus-lanes";
+import { activeLaneOrder } from "../../../models/fleet/board/activePhase";
+import { type FleetAgent, finishedLaneOrder } from "../../../models/fleet/useAgents-fleet";
 import type { OpenChat } from "./cardView";
+import { standingOf } from "../../../models/conversations/tabs/tabFacts";
 import { laneOfTab } from "./tabs";
 
 // Open chats split into the board's three lanes and put in the board's order (useAgents.lanes), for both cuts of the
@@ -8,6 +11,15 @@ import { laneOfTab } from "./tabs";
 // A chat with no roster entry is read off its conversation instead.
 
 const lastActive = (entry: OpenChat): number => entry.agent?.updatedAt ?? 0;
+
+// What activeLaneOrder reads of a chat the roster has not listed yet, off its conversation as laneOfTab reads its lane.
+const unlisted = ({ conversation }: OpenChat): FleetAgent =>
+    // SAFETY: activeLaneOrder reads a card's standing (status, attention, next, watches), its clocks and its id.
+    ({
+        ...(conversation.standing.value ?? { status: standingOf(conversation), attention: NO_ATTENTION }),
+        id: conversation.conversationId,
+        updatedAt: 0,
+    }) as FleetAgent;
 
 // Keyed by the board's lanes (FleetLane), each in the order it is drawn.
 export interface ChatLanes {
@@ -21,12 +33,8 @@ export const laneOrdered = (entries: Iterable<OpenChat>): ChatLanes => {
     for (const entry of entries) {
         grouped[laneOfTab(entry.conversation, entry.agent)].push(entry);
     }
-    // Drafts lead Active, then turn start, fixed for the turn.
-    grouped.active.sort(
-        (a, b) =>
-            Number(b.agent?.status === `draft`) - Number(a.agent?.status === `draft`) ||
-            (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
-    );
+    // The board's activeLaneOrder: working, then what goes by itself, then drafts.
+    grouped.active.sort((a, b) => activeLaneOrder(a.agent ?? unlisted(a), b.agent ?? unlisted(b)));
     grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
     // The board's finishedLaneOrder; agent-less chats fall back to the same two keys read off the conversation.
     grouped.finished.sort((a, b) => {

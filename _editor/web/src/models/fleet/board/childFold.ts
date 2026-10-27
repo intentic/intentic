@@ -3,7 +3,8 @@ import type { SubagentSession } from "@intentic/sandbox-contract/schemas/termina
 import { callsOwner, type FleetLane, laneOf, runCallsOwner } from "../../agent-status/agentStatus-lanes";
 import { heardByParent, limited, onlyOwnerCanAnswer, unregistered } from "../../agent-status/agentStatus-standing";
 import { subagentLive } from "../subagentRoster";
-import { activeLaneOrder, attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../useAgents-fleet";
+import { attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../useAgents-fleet";
+import { activeLaneOrder } from "./activePhase";
 import { parentOf } from "../../agent-status/ownership";
 
 // Fold spawned conversations under their visible parent; callsOwner promotes only reader-owned stops to the parent's lane.
@@ -331,7 +332,7 @@ export interface Tray {
     // Children asking what only the reader can give (onlyOwnerCanAnswer), each wearing its ask: always in sight. Only a
     // conversation asks: an in-process subagent asks through its parent's turn, on the card itself.
     readonly asks: readonly FleetAgent[];
-    // Every working child of either kind, the earliest started first as Active orders its cards; or while a filter is on,
+    // Every working child of either kind, the newest started first as Active orders its cards; or while a filter is on,
     // every child it matched.
     readonly lead: readonly TrayChild[];
     // Children stopped on something that is their parent's news first, a row per thing they stopped on.
@@ -367,10 +368,11 @@ interface Dealt {
 }
 
 const withSubagents = (lead: readonly FleetAgent[], settled: readonly FleetAgent[], subagents: readonly SubagentSession[]): Dealt => {
-    const working = subagents.filter(subagentLive).toSorted((a, b) => a.startedAt - b.startedAt);
+    // Newest started first, as Active orders its working cards (activePhase.ts) and so the conversations in `lead`.
+    const working = subagents.filter(subagentLive).toSorted((a, b) => b.startedAt - a.startedAt);
     const done = subagents.filter((session) => !subagentLive(session)).toSorted((a, b) => settledAt(b) - settledAt(a));
     return {
-        lead: weave(lead, working, (a, b) => startOf(a) <= startOf(b)),
+        lead: weave(lead, working, (a, b) => startOf(a) >= startOf(b)),
         settled: weave(settled, done, (a, b) => settledAt(a) >= settledAt(b)),
     };
 };

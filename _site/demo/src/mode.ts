@@ -12,7 +12,7 @@ import {
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `home` | `hero` | `desk` | `fresh`;
+export type DemoModeId = `minimal` | `default` | `full` | `busy` | `showcase` | `home` | `hero` | `desk` | `fresh`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -66,6 +66,10 @@ const FULL: DemoMode = {
     teammate: true,
     openChats: true,
 };
+
+// The whole fleet and a working day's worth more in Active (fixture/fleet.ts `busyFleet`), with two drafts: the crowded
+// lane the Active groups (working, up next, drafts) are designed and checked against.
+const BUSY: DemoMode = { ...FULL, id: `busy`, label: `Busy`, note: `The whole fleet and twenty sessions in Active.` };
 
 // What the site's screenshots are taken of (_tools/e2e/shots/capture.mts), and served quiet: the curated three plus two
 // more at work (one on Codex, one on Opus) and two more finished (one landed by hand, one started from Discord by the
@@ -135,7 +139,7 @@ const HERO: DemoMode = {
     homeRecording: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, HOME, HERO, DESK, FRESH];
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, BUSY, SHOWCASE, HOME, HERO, DESK, FRESH];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;

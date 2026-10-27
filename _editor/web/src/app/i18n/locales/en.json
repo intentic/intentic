@@ -558,6 +558,14 @@
             "archiveWithSubagents": "Archive {count} agent | Archive {count} agents",
             "finishedFirst": "Finished agents wait here for your review. Nothing lands in your workspace until you say so."
         },
+        "activeGroups": {
+            "working": "Working",
+            "next": "Up next",
+            "drafts": "Drafts",
+            "firstIn": "first in {when}",
+            "firstAt": "first {when}",
+            "firstDue": "first due now"
+        },
         "liveMetrics": {
             "cpuNote": "All available sandbox cores; 100% means all are busy (last few seconds).",
             "cpuPerCore": "100% = 1 core",

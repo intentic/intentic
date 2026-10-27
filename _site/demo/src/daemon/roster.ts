@@ -6,7 +6,7 @@ import type { PresenceUser, SystemEvent } from "@intentic/sandbox-contract/event
 import { refuse } from "@intentic/contract-serve";
 import { automationApprovals } from "../fixture/automations";
 import { DESK_AWAITING_ID, DESK_FEATURED_ID, deskRoster } from "../fixture/desk";
-import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, quietCard } from "../fixture/fleet";
+import { AWAITING_AGENT_ID, busyFleet, FEATURED_AGENT_ID, fleetRoster, quietCard } from "../fixture/fleet";
 import { demoNeeds } from "../fixture/needs";
 import { specimenCard } from "../fixture/specimen";
 import { homeAgent } from "../fixture/home/recording";
@@ -27,7 +27,8 @@ const servedRoster = (): AgentSummary[] => {
     if (demoMode.id === `home`) {
         return home;
     }
-    const agents = deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
+    const fleet = demoMode.id === `busy` ? [...fleetRoster(STARTED_AT), ...busyFleet(STARTED_AT)] : fleetRoster(STARTED_AT);
+    const agents = deskEdition ? deskRoster(STARTED_AT) : fleet.filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
     // The transcript specimen (fixture/specimen.ts) rides along in a dev build only, whatever the mode, and never into
     // a screenshot: a shot taken off a dev server must match one taken off the build.
     const served = import.meta.env.DEV && !photographed ? [...agents, specimenCard(STARTED_AT)] : agents;

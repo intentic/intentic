@@ -558,6 +558,14 @@
             "archiveWithSubagents": "Zarchiwizuj {count} agenta | Zarchiwizuj {count} agenty | Zarchiwizuj {count} agentów",
             "finishedFirst": "Skończone agenty czekają tu na Twój przegląd. Nic nie trafia do Twojej przestrzeni roboczej bez Twojej zgody."
         },
+        "activeGroups": {
+            "working": "W toku",
+            "next": "Następne",
+            "drafts": "Szkice",
+            "firstIn": "pierwsze za {when}",
+            "firstAt": "pierwsze {when}",
+            "firstDue": "pierwsze już teraz"
+        },
         "buildIdeas": {
             "pageMyBusiness": "Strona dla mojej firmy",
             "personalProfile": "Profil osobisty",

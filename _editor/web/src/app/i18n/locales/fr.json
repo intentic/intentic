@@ -558,6 +558,14 @@
             "archiveWithSubagents": "Archiver {count} agent | Archiver {count} agents",
             "finishedFirst": "Les agents terminés attendent ici votre relecture. Rien n'arrive dans votre espace de travail sans votre accord."
         },
+        "activeGroups": {
+            "working": "En cours",
+            "next": "À venir",
+            "drafts": "Brouillons",
+            "firstIn": "le premier dans {when}",
+            "firstAt": "le premier {when}",
+            "firstDue": "le premier est dû"
+        },
         "liveMetrics": {
             "cpuNote": "Tous les cœurs disponibles du sandbox ; 100 % signifie qu’ils sont tous occupés (dernières secondes).",
             "cpuPerCore": "100 % = 1 cœur",

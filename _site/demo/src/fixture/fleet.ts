@@ -778,6 +778,93 @@ export const fleetRoster = (now: number): AgentSummary[] => [
     ...automationRuns(now),
 ];
 
+// THE BUSY RECORDING'S EXTRA SESSIONS (mode.ts `busy`): the whole fleet plus a working day's worth more in Active, the
+// board the Active lane's groups (activePhase.ts) were designed against. Seven turns at work, started a minute to two
+// hours ago; messages booked for later today and tomorrow; two held on a spent allowance until it reopens; one waiting
+// on memory; one watching CI. Listed shuffled, as a roster arrives, so the lane's order is the board's own.
+const busyCard = (id: string, title: string, over: Omit<Partial<AgentSummary>, `id` | `title`> & Pick<AgentSummary, `status` | `updatedAt`>): AgentSummary => ({
+    id,
+    title,
+    startIn: `web`,
+    sessionId: `ses_${id}`,
+    provider: `claude`,
+    harness: `claude-code`,
+    model: `claude-opus-5-5`,
+    effort: `high`,
+    account: `acc_claude_demo`,
+    branch: `agent/${id.replace(`cnv_busy_`, ``)}`,
+    base: `4f1c8ab`,
+    attention: NO_ATTENTION,
+    turns: 1,
+    ...over,
+});
+
+const busyWorking = (now: number, id: string, title: string, startedMinutesAgo: number, tool: string, target: string): AgentSummary =>
+    busyCard(id, title, {
+        status: `running`,
+        startedAt: now - minutes(startedMinutesAgo),
+        updatedAt: now - 2_000,
+        costUsd: Math.round(startedMinutesAgo * 4) / 100,
+        activity: { tool, target },
+    });
+
+export const busyFleet = (now: number): AgentSummary[] => [
+    busyCard(`cnv_busy_font`, `Add the shared agents font to the site`, {
+        status: `idle`,
+        updatedAt: now - minutes(40),
+        next: { kind: `send`, at: now + minutes(185), count: 1 },
+    }),
+    busyWorking(now, `cnv_busy_access`, `Audit access denial UX patterns`, 138, `Read`, `web/src/features/access/AccessDenied.vue`),
+    busyCard(`cnv_busy_icon`, `Add an icon to the shared agent header`, {
+        status: `error`,
+        failureCode: `rate_limit`,
+        failure: `Usage limit reached.`,
+        provider: `codex`,
+        model: `gpt-5.2-codex`,
+        updatedAt: now - minutes(25),
+        limitResetsAt: seconds(now + minutes(47)),
+        next: { kind: `rerun`, at: now + minutes(47) },
+    }),
+    busyWorking(now, `cnv_busy_search`, `Research workspace file search performance`, 29, `Bash`, `rg --stats "useSearch" web/src`),
+    busyCard(`cnv_busy_mocks`, `Audit mocks and hardcoded values`, {
+        status: `error`,
+        failureCode: `rate_limit`,
+        failure: `Usage limit reached.`,
+        provider: `codex`,
+        model: `gpt-5.2-codex`,
+        updatedAt: now - minutes(31),
+        limitResetsAt: seconds(now + minutes(46)),
+        next: { kind: `rerun`, at: now + minutes(46) },
+    }),
+    busyWorking(now, `cnv_busy_chips`, `Redesign the sandbox environment section with chips`, 12, `Edit`, `web/src/features/sandbox/EnvironmentSection.vue`),
+    busyCard(`cnv_busy_ci`, `Fix the flaky upload test on main`, {
+        status: `idle`,
+        updatedAt: now - minutes(8),
+        awaitingWake: true,
+        watches: [{ id: `watch_busy_ci`, note: `CI run 4821 on main`, intervalSeconds: 60, deadlineAt: now + minutes(112) }],
+    }),
+    busyWorking(now, `cnv_busy_i18n`, `Translate the onboarding checklist`, 3, `Write`, `web/src/app/i18n/locales/pl.json`),
+    busyCard(`cnv_busy_room`, `Rebuild the search index after the schema change`, {
+        status: `idle`,
+        updatedAt: now - minutes(4),
+        next: { kind: `room` },
+    }),
+    busyWorking(now, `cnv_busy_billing`, `Reconcile the October invoices`, 64, `Bash`, `pnpm -C api test billing`),
+    busyCard(`cnv_busy_changelog`, `Write the changelog for 4.2`, {
+        status: `landed`,
+        updatedAt: now - minutes(90),
+        next: { kind: `send`, at: midnightAfter(now) + minutes(9 * 60), count: 2 },
+    }),
+    busyWorking(now, `cnv_busy_capability`, `Redesign capability integration testing`, 47, `Grep`, `capabilities`),
+    busyWorking(now, `cnv_busy_sitemap`, `Generate the docs sitemap`, 1, `Read`, `docs/README.md`),
+];
+
+// Words two conversations never sent, as the composer keeps them (the busy recording's Drafts group).
+export const busyDrafts = (now: number): readonly { readonly id: string; readonly text: string; readonly since: number }[] => [
+    { id: `cnv_busy_draft_deploy`, text: `Our deployment environment is still connected to the old cluster; move it to the new one and`, since: now - minutes(95) },
+    { id: `cnv_busy_draft_agents`, text: `Sometimes in the /agents view in some lane I have ~20 sessions running`, since: now - minutes(6) },
+];
+
 // What a quiet recording (mode.ts `demoQuiet`) takes off a card: the marks of a busy moment rather than of the work.
 // A teammate's reactions, a prompt cache counting down, a command still running past its turn, a helper tray, a queued
 // message, a check that failed or never ran, work its last turn left outside its branch, and the token a CI job started

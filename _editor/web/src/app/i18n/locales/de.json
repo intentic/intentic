@@ -558,6 +558,14 @@
             "archiveWithSubagents": "{count} Agent archivieren | {count} Agenten archivieren",
             "finishedFirst": "Fertige Agenten warten hier auf Ihre Prüfung. Nichts landet in Ihrem Workspace, bevor Sie es sagen."
         },
+        "activeGroups": {
+            "working": "In Arbeit",
+            "next": "Als Nächstes",
+            "drafts": "Entwürfe",
+            "firstIn": "erster in {when}",
+            "firstAt": "erster {when}",
+            "firstDue": "erster jetzt fällig"
+        },
         "liveMetrics": {
             "cpuNote": "Alle verfügbaren Sandbox-Kerne; 100 % bedeutet, dass alle belegt sind (letzte Sekunden).",
             "cpuPerCore": "100 % = 1 Kern",

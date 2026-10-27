@@ -10,8 +10,9 @@ import { insideRun, runMatches, runsInLane, runsNeedingYou } from "../../../../m
 import type { DropTarget } from "../laneDrop";
 import { type BoardView, windowedIn } from "./boardView";
 import { useBoardTrays } from "../../../../models/fleet/board/boardTrays";
-import { trayRows } from "../../../../models/fleet/board/childFold";
 import { firstRun } from "./firstScreen";
+import type { ActivePhase } from "../../../../models/fleet/board/activePhase";
+import { LANE_ORDER, useLaneGroups } from "./laneGroups";
 
 // What each lane draws and what the board says about it: runs above their lane's cards, Finished capped at its window
 // or standing aside for the archive a page at a time, a filter narrowing all of it; every count the header, the tail
@@ -46,9 +47,6 @@ export const laneHeads = (): readonly LaneHead[] => [
         first: useVocabulary().value.laneFinishedFirst,
     },
 ];
-
-// The lanes left to right, which is also the order a Shift+click range walks.
-const LANE_ORDER: readonly FleetLane[] = [`attention`, `active`, `finished`];
 
 // A lane's look while a card is in flight, one class string per state rather than composed flags: two ring widths or
 // min-heights in one list would resolve by Tailwind's emit order, not by intent.
@@ -113,8 +111,10 @@ export interface LanesHost {
     };
     // The subagents each conversation's runtime ran in-process, which ride in its card's tray too.
     readonly roster: Pick<SubagentRoster, "inProcessOf">;
-    // The card wearing the ring, which the Finished window keeps wherever it sits.
+    // The card wearing the ring, which the Finished window keeps wherever it sits, and a folded group of Active's too.
     readonly selected: Readonly<Ref<string | undefined>>;
+    // Active's folded groups (laneGroups.ts); this browser's own when absent.
+    readonly folds?: Readonly<Ref<ReadonlySet<ActivePhase>>>;
 }
 
 export const useBoardLanes = (host: LanesHost) => {
@@ -157,6 +157,8 @@ export const useBoardLanes = (host: LanesHost) => {
             lane !== `finished` ? scope.boardLanes.value[lane] : windowed.value ? finishedWindow.value.shown : scope.boardLanes.value.finished;
         return filter.active.value ? leadWith(source.filter(answers), filter.exact, trays.childrenOf) : source;
     };
+    // Each lane's runs of cards in drawing order (laneGroups.ts), and the order a Shift+click range walks through them.
+    const groups = useLaneGroups({ cardsFor, filtering: filter.active, selected: host.selected, folds: host.folds, trayFor: trays.trayFor });
     // Rows the filter kept, not rows drawn: the archive draws only a page of its matches, and the pager is not the answer.
     const keptIn = (lane: FleetLane): number =>
         (lane === `finished` && view.value.archive ? archiveRows.value.length : cardsFor(lane).length) + runsFor(lane).length;
@@ -216,12 +218,11 @@ export const useBoardLanes = (host: LanesHost) => {
     // Counted off the very ids Clear sends, so the button never offers a sweep that would move nothing.
     const clearable = computed(() => clearableOf(agents.lanes.value).length);
     const first = computed(() => firstRun(started.value, view.value.archive));
-    // In drawing order, each card followed by the rows its tray draws, so a range can start or end on a child.
-    const paneOrder = computed(() => LANE_ORDER.flatMap((lane) => cardsFor(lane).flatMap((card) => [card, ...trayRows(trays.trayFor(card))])));
     const laneDropClass = (lane: FleetLane): string =>
         drag.dragging.value ? dropClass(lane, { accepts: drag.accepts(lane), archive: view.value.archive, over: drag.over.value }) : ``;
     return {
         cardsFor,
+        ...groups,
         childrenOf: trays.childrenOf,
         subagentsOf: trays.subagentsOf,
         cardOf: trays.cardOf,
@@ -235,7 +236,6 @@ export const useBoardLanes = (host: LanesHost) => {
         runsFor,
         needingYou,
         finishedWindow,
-        paneOrder,
         archivedCards,
         archiveSize,
         archiveHidden,

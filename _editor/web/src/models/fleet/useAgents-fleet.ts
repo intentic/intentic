@@ -15,6 +15,7 @@ import { asStarted, endedHere, overlaid, withdrawnHere } from "./useAgents-provi
 import { parentOf } from "../agent-status/ownership";
 import { archived, heldWakes, markSeen, registry, sameEntries, snapshotFingerprint } from "./useAgents-registry";
 import { sandboxNow } from "../agent-status/sandboxClock";
+import { activeLaneOrder } from "./board/activePhase";
 
 // Fleet view: registry (authoritative status/branch/cost) merged with open tabs by conversationId (live state),
 // producing the lanes and counts the board draws. Derived only; the roster lives in useAgents-registry.
@@ -437,8 +438,9 @@ export const clearableOf = (grouped: Record<FleetLane, readonly FleetAgent[]>): 
     );
 };
 
-// Final tiebreaker for every lane's sort: without one, cards with equal `updatedAt` (common after a batch resume)
-// swap places every tick. The id itself is arbitrary, chosen only to stay the same next frame.
+// Final tiebreaker for Attention's and Finished's sorts (Active's own is board/activePhase.ts): without one, cards with
+// equal `updatedAt` (common after a batch resume) swap places every tick. The id itself is arbitrary, chosen only to
+// stay the same next frame.
 const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 // One ordering for every Finished lane: a timeline, newest first. What a card still owes — a Land, a press, a check
@@ -447,10 +449,6 @@ const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id 
 // Unsent words are the one exception: they exist only in this browser, so a fold really does lose them.
 export const finishedLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
     Number(b.unsent) - Number(a.unsent) || finishedRecency(b) - finishedRecency(a) || byId(a, b);
-
-// Fresh drafts lead, then by startedAt (fixed for a turn's life) so a running agent won't jump every tick.
-export const activeLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
-    Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b);
 
 // Newest news first.
 export const attentionLaneOrder = (a: FleetAgent, b: FleetAgent): number => b.updatedAt - a.updatedAt || byId(a, b);

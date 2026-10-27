@@ -19,7 +19,7 @@ interface LimitClock {
     readonly text: string;
     readonly wait: boolean;
 }
-const countdownTo = (at: number, now: number, exact = false): LimitClock | undefined => {
+export const countdownTo = (at: number, now: number, exact = false): LimitClock | undefined => {
     if (at <= now) {
         return undefined;
     }
