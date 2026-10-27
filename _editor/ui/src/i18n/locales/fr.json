@@ -441,6 +441,7 @@
         "forwarding": "Transfert du port {port} depuis votre sandbox…",
         "lapsed": "Le transfert du port {port} a expiré : rouvrez l'aperçu depuis la vue Ports.",
         "noPublicHostname": "Ce sandbox n'a pas de nom d'hôte public d'aperçu : ses ports ne peuvent donc pas être prévisualisés depuis le navigateur.",
+        "unanswered": "Votre sandbox n'a pas répondu à la demande de transfert du port {port}. Vérifiez qu'il est en marche, puis réessayez.",
         "unreachable": "{url} n'atteint pas ce sandbox : l'adresse est peut-être encore en cours de propagation, ou ce sandbox ne publie aucun nom d'hôte d'aperçu. Fermez cet onglet et réessayez.",
         "waitingFor": "En attente de {url}…"
     },

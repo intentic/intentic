@@ -24,6 +24,12 @@ export function usePorts() {
         void invalidate();
         return result.previewUrl;
     };
+    // A fresh read, not the cached list: asked after a forward failed, to see whether it landed anyway (openForwardedPort).
+    const listed = async (port: number): Promise<string | undefined> => {
+        const { ports } = await api.sandbox.rpc.ports.list();
+        void invalidate();
+        return ports.find((entry) => entry.port === port && entry.forwarded)?.previewUrl;
+    };
     const unforward = async (port: number): Promise<void> => {
         await api.sandbox.rpc.ports.unforward({ port });
         void invalidate();
@@ -32,6 +38,7 @@ export function usePorts() {
     return {
         loaded,
         forward,
+        listed,
         unforward,
     };
 }

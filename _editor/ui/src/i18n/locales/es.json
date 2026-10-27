@@ -441,6 +441,7 @@
         "forwarding": "Reenviando el puerto {port} desde tu sandbox…",
         "lapsed": "El reenvío del puerto {port} ha caducado: vuelve a abrir la vista previa desde la vista Puertos.",
         "noPublicHostname": "Este sandbox no tiene un nombre de host público para vistas previas, así que no se pueden previsualizar puertos desde el navegador.",
+        "unanswered": "Tu sandbox no respondió a la solicitud de reenviar el puerto {port}. Comprueba que esté en marcha y vuelve a intentarlo.",
         "unreachable": "{url} no llega a este sandbox: puede que la dirección aún se esté propagando, o que este sandbox no publique nombres de host de vista previa. Cierra esta pestaña y vuelve a intentarlo.",
         "waitingFor": "Esperando a que {url} esté disponible…"
     },

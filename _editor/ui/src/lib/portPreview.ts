@@ -112,13 +112,42 @@ export interface ForwardedPortTab {
     readonly path?: string;
     // Caller's route to POST /ports/forward; returns undefined when the sandbox has no public hostname.
     readonly forward: (port: number) => Promise<string | undefined>;
+    // Caller's route to GET /ports: the address the daemon lists for this port once it is forwarded, else undefined.
+    // Asked only after `forward` failed (forwardOrListed).
+    readonly listed?: (port: number) => Promise<string | undefined>;
     // Optional extra place to show the error; the opened tab always shows it too.
     readonly onError?: (message: string) => void;
 }
 
+// A forward the daemon carried out can still fail here: its answer lost on the way back while the port is forwarded, so
+// the Ports view shows it ready and its link opens. A failed forward is checked against the daemon's list first, and a
+// call that got no answer at all is sent once more, since asking twice is harmless (the contract's `forward`). A
+// refusal (nothing listening, a DevTools port) is the daemon's last word and is reported as it came. "No answer at all"
+// is fetch's own TypeError (a dropped connection, a blocked request), whose bare "Failed to fetch" tells a reader
+// nothing, so the tab words it itself (openForwardedPort).
+const forwardOrListed = async (
+    port: number,
+    forward: ForwardedPortTab["forward"],
+    listed: ForwardedPortTab["listed"],
+): Promise<string | undefined> => {
+    try {
+        return await forward(port);
+    } catch (error) {
+        // allow(silent-catch): a list that cannot be read is no evidence the forward landed; the forward's own failure is what gets reported.
+        const known = listed === undefined ? undefined : await listed(port).catch(() => undefined);
+        if (known !== undefined) {
+            return known;
+        }
+        if (!(error instanceof TypeError)) {
+            throw error;
+        }
+        return await forward(port);
+    }
+};
+
 // Forwards a port, opening a tab synchronously within the click's user activation (a later open would hit a
 // popup blocker). `opener` is severed by hand, not via `noopener`, which would leave no handle to navigate.
-export const openForwardedPort = ({ port, path = "", forward, onError }: ForwardedPortTab): void => {
+export const openForwardedPort = ({ port, path = "", forward, listed, onError }: ForwardedPortTab): void => {
     const tab = window.open("", "_blank");
     if (tab !== null) {
         tab.opener = null;
@@ -138,7 +167,7 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
     show(t(`ui.portPreview.forwarding`, { port }));
     void (async () => {
         try {
-            const previewUrl = await forward(port);
+            const previewUrl = await forwardOrListed(port, forward, listed);
             if (previewUrl === undefined) {
                 fail(t(`ui.portPreview.noPublicHostname`));
                 return;
@@ -158,7 +187,13 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
                 arrived.location.href = `${previewUrl}${path}`;
             }
         } catch (error) {
-            fail(error instanceof Error ? error.message : t(`ui.portPreview.failed`, { port }));
+            fail(
+                error instanceof TypeError
+                    ? t(`ui.portPreview.unanswered`, { port })
+                    : error instanceof Error
+                      ? error.message
+                      : t(`ui.portPreview.failed`, { port }),
+            );
         }
     })();
 };

@@ -441,6 +441,7 @@
         "forwarding": "Port {port} wird aus Ihrer Sandbox weitergeleitet…",
         "lapsed": "Die Weiterleitung für Port {port} ist abgelaufen: Öffnen Sie die Vorschau erneut aus der Ports-Ansicht.",
         "noPublicHostname": "Diese Sandbox hat keinen öffentlichen Vorschau-Hostnamen, daher lassen sich Ports nicht im Browser in der Vorschau anzeigen.",
+        "unanswered": "Ihre Sandbox hat auf die Anfrage, Port {port} weiterzuleiten, nicht geantwortet. Prüfen Sie, ob sie läuft, und versuchen Sie es erneut.",
         "unreachable": "{url} erreicht diese Sandbox nicht: Die Adresse verbreitet sich möglicherweise noch, oder diese Sandbox veröffentlicht keine Vorschau-Hostnamen. Schließen Sie diesen Tab und versuchen Sie es erneut.",
         "waitingFor": "Warten, bis {url} erreichbar ist…"
     },

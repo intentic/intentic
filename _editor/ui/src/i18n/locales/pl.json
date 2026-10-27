@@ -441,6 +441,7 @@
         "forwarding": "Przekierowywanie portu {port} z Twojego sandboxa…",
         "lapsed": "Przekierowanie portu {port} wygasło: otwórz podgląd ponownie z widoku Porty.",
         "noPublicHostname": "Ten sandbox nie ma publicznej nazwy hosta podglądu, więc portów nie da się podejrzeć w przeglądarce.",
+        "unanswered": "Twój sandbox nie odpowiedział na prośbę o przekierowanie portu {port}. Sprawdź, czy działa, i spróbuj ponownie.",
         "unreachable": "{url} nie prowadzi do tego sandboxa: adres może się jeszcze propagować albo ten sandbox nie publikuje nazw hostów podglądu. Zamknij tę kartę i spróbuj ponownie.",
         "waitingFor": "Czekamy, aż {url} zacznie odpowiadać…"
     },

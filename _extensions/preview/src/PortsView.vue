@@ -11,7 +11,7 @@ import { t } from "./i18n.js";
 // work above, sandbox internals muted below). Preview forwards a port to its public port-<slot> hostname, the only
 // public-exposure gesture. Renders a BODY only; the hub owns the Page and header.
 
-const { loaded, forward, unforward } = usePorts();
+const { loaded, forward, listed, unforward } = usePorts();
 const ports = computed(() => dataOf(loaded.value) ?? []);
 const workspacePorts = computed(() => ports.value.filter((entry) => entry.kind === `workspace`));
 const systemPorts = computed(() => ports.value.filter((entry) => entry.kind === `system`));
@@ -28,6 +28,7 @@ const openPreview = (port: number): void => {
     openForwardedPort({
         port,
         forward,
+        listed,
         onError: (message) => {
             actionError.value = message;
         },
