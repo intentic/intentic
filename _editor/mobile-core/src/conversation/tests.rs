@@ -22,6 +22,7 @@ fn tool(id: &str, status: ToolStatus) -> Tool {
         thinking: None,
         subagent: None,
         input: None,
+        server: None,
         started_at: None,
         ended_at: None,
         exit_code: None,
