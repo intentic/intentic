@@ -59,8 +59,8 @@ export const diagnoseVueGroup = async (group: VueGroup, options: RunOptions = {}
     if (plan.kind === "full") {
         return {
             lines: [
-                `lsp: ${pkg.name}: not checked here: ${plan.reason}. Only the full check answers for it: ${fullCommandOf(pkg)} ` +
-                    "(vue-tsc over the whole package: minutes and several GB, one at a time across the sandbox). CI typechecks it on push either way.",
+                `lsp: ${pkg.name}: not checked here: ${plan.reason}. Leave it to CI, which typechecks the package on push; ` +
+                    `run its full check (${fullCommandOf(pkg)}: vue-tsc over the whole package; on the editor, 7-10 minutes and 6.8 GB on an idle machine) only when asked to.`,
             ],
             refused: true,
         };
@@ -72,7 +72,7 @@ export const diagnoseVueGroup = async (group: VueGroup, options: RunOptions = {}
     }
     const run = await runVueCheck(prepared.project, plan.targets, options);
     if ("failure" in run) {
-        return { lines: [...unchecked, `lsp: ${pkg.name}: diagnostics unavailable: ${run.failure}. The full check: ${fullCommandOf(pkg)}`], refused: true };
+        return { lines: [...unchecked, `lsp: ${pkg.name}: diagnostics unavailable: ${run.failure}. Not checked: leave it to CI rather than the full check (${fullCommandOf(pkg)}), which is slower still`], refused: true };
     }
     const errors = run.diagnostics.filter((d) => d.category === "error").length;
     const outside = run.outside === 0 ? "" : `; ${plural(run.outside, "more error")} in files they import, outside the change`;

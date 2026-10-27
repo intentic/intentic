@@ -68,11 +68,13 @@ memory. CI runs all of it on what the owner pushes.
 
 A Vue package (one whose typecheck is `vue-tsc`: `_editor/web`, `_editor/ui`, the extensions) is typechecked with
 `lsp diag --changed`, not its `typecheck` script. It runs the package's own `vue-tsc` over the files you changed and
-the files that import them directly: 5-55 s and 1-4 GB on `_editor/web`, where the full check takes 7-10 minutes and
-6.8 GB, and the heavy-command queue runs only one full editor check at a time across the sandbox. When it cannot
+the files that import them directly: 5-55 s and 1-4 GB on `_editor/web` on an idle machine, where the full check takes
+7-10 minutes and 6.8 GB. The heavy-command queue runs two at once across the sandbox, so behind other conversations'
+checks the scoped one has taken 10-30 minutes: run it once, in the background, after your last edit. When it cannot
 vouch for the change (a `.d.ts`, a tsconfig, a `package.json`, or a file more than 300 of the package's files import
-at some depth) it says so and names the full command; run that then, or leave it to CI. Run `_site/demo`'s typecheck
-only when `_site/demo` itself changed: it compiles the whole editor source again.
+at some depth), or it times out, it says so and names the full command: leave that to CI, and run a Vue package's full
+typecheck only when asked to. Run `_site/demo`'s typecheck only when `_site/demo` itself changed: it compiles the whole
+editor source again.
 
 **After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile, or brought a
 project the main tree never installed (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI

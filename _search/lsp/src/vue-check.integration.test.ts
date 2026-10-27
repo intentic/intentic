@@ -197,7 +197,7 @@ describe.skipIf(!vueTsc.runs)(vueTsc.title("a scoped vue-tsc run on a fixture pa
         expect(readdirSync(cacheDirOf(found!)).toSorted()).toEqual(["imports.json", "tsbuildinfo"]);
     }, 120_000);
 
-    test("`lsp diag` on such a file says what it checked; a declaration file sends it to the full check", async () => {
+    test("`lsp diag` on such a file says what it checked; a declaration file leaves it to CI", async () => {
         const root = pkg();
         const { vue, rest } = splitByVuePackage([join(root, "src/count.ts"), join(root, "env.d.ts"), "/elsewhere/a.ts"]);
         expect(rest).toEqual(["/elsewhere/a.ts"]);
@@ -210,8 +210,8 @@ describe.skipIf(!vueTsc.runs)(vueTsc.title("a scoped vue-tsc run on a fixture pa
         const full = await diagnoseVueGroup(group!, { env: quiet });
         expect(full).toEqual({
             lines: [
-                "lsp: @fixture/app: not checked here: env.d.ts is a declaration file, which every file of the package may read. Only the full check answers for it: " +
-                    "pnpm --filter @fixture/app typecheck (vue-tsc over the whole package: minutes and several GB, one at a time across the sandbox). CI typechecks it on push either way.",
+                "lsp: @fixture/app: not checked here: env.d.ts is a declaration file, which every file of the package may read. Leave it to CI, which typechecks the package on push; " +
+                    "run its full check (pnpm --filter @fixture/app typecheck: vue-tsc over the whole package; on the editor, 7-10 minutes and 6.8 GB on an idle machine) only when asked to.",
             ],
             refused: true,
         });

@@ -13,8 +13,9 @@ You decide when the work is done: nothing sends you back, and no check holds a l
   Finishing) is on. The **Pipelines** view shows it (`editor.md`).
 
 So run the checks you judge worth running while you work, scoped to what you changed: the test files that cover it and
-its package's typecheck, never the whole repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`, an unfiltered
-`turbo run`), since several conversations share the machine. A failure in code you did not touch may be main's own, and
+a typecheck of what you changed (`lsp diag --changed`), never the whole repository (`pnpm test`, `pnpm typecheck`,
+`pnpm verify`, an unfiltered `turbo run`) nor a full typecheck that takes minutes and gigabytes (a Vue app's
+`vue-tsc`), since several conversations share the machine and CI runs those on push. A failure in code you did not touch may be main's own, and
 it is not yours to chase unless your task is about it. Your card records whether a check passed after your last edit;
 `mcp__diagnostics__turns` with `only: "unproven"` lists the turns that changed code and ran no check after their last
 edit, or whose last check failed.

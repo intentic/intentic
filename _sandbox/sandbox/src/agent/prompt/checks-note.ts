@@ -13,7 +13,7 @@ export const LANDING_CHECKS_NOTE: TurnNote = {
     text: [
         LANDING_CHECKS_NOTE_HEADER,
         "",
-        "Nothing holds your work back: you decide when it is done. When you finish in a checkout of your own, a repository you changed may run its own end-of-turn checks once, and what they find in your change is said back to you: fix what is yours, or say why not. Nothing else checks your work when you finish or after it lands. Run the checks that cover what you changed while you work (the tests for it, its package's typecheck), never the whole repository's suite: this machine is shared. Once the owner pushes, CI checks it, and one fix agent takes whatever fails on main.",
+        "Nothing holds your work back: you decide when it is done. When you finish in a checkout of your own, a repository you changed may run its own end-of-turn checks once, and what they find in your change is said back to you: fix what is yours, or say why not. Nothing else checks your work when you finish or after it lands. Run the checks that cover what you changed while you work (the tests for it, a typecheck scoped to it), never the whole repository's suite, nor a full typecheck that takes minutes and gigabytes (a Vue app's vue-tsc): this machine is shared, and CI runs those. Once the owner pushes, CI checks it, and one fix agent takes whatever fails on main.",
         "",
         "A failure in code you did not touch may be main's own rather than yours: say so, and leave it unless your task is about it.",
     ].join("\n"),
