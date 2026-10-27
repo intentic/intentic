@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Rust ingress built against its runtime Debian; named tunnel/browser-wire/relay contexts keep the build context local.
 # Inject config via src/config.rs; never publish the internal listener or include private signing keys. Only BUILD_ID is baked.
-# Fly QUIC needs public UDP 443 on fly-global-services; advertise enabled transports. Restarts drop in-memory tunnels until redial.
+# QUIC is off on Fly (README.md); on, it needs public UDP 443 on fly-global-services. Restarts drop in-memory tunnels until redial.
 FROM rust:1.98.1-slim-trixie@sha256:f47a8de237dcbb0b0ce1099901e60a89728e3d51f24e664b40e947171538ade7 AS build
 COPY --from=tunnel . /src/_sandbox/netd/crates/tunnel
 COPY --from=browser-wire . /src/_sandbox/netd/crates/browser-wire

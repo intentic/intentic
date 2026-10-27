@@ -1,6 +1,6 @@
 # ingress
 
-The edge every sandbox hostname points at: it terminates TLS for them and carries browser traffic down the tunnels sandboxes dial, hosted ones included, over TCP or QUIC.
+The edge every sandbox hostname points at: it terminates TLS for them and carries browser traffic down the tunnels sandboxes dial, hosted ones included, over TCP, or over QUIC where it is turned on (on Fly it is off).
 
 ```mermaid
 flowchart LR
@@ -62,17 +62,17 @@ flowchart LR
   started in 10 s while a probe beside it goes unanswered, demotes QUIC the same way and is sent once more over the
   socket when nothing of it was spent (no upgrade, no body). A QUIC netd that named itself is registered only once it
   acknowledged the edge's `Held`, so a connection its netd gave up on is never held.
-- With the certificate held here (below), browsers get HTTP/3 on the same port, and the editor's terminals ride
-  WebTransport where the platform relays the edge's declaration on the sandbox's row: a session opened at
-  `/system/transport` on a sandbox's address, each stream served as one HTTP/1.1 connection to that address whatever
-  Host it writes. The editor speaks a plain WebSocket on the stream, so any netd or daemon serving `/system/terminal`
-  serves it.
-- Machines behind the one address find each other through Fly's internal DNS and forward a miss once to whichever
-  holds the tunnel, over private port 8081. Every slot is news to the peers (a sandbox held only over QUIC on another
-  machine is that machine's to answer, not `no-tunnel`), each with when it registered and which netd instance dialled
-  it: an `add` older than this machine's own registration in that slot is stale and ignored rather than displacing the
-  newer one, and between two copies of one sandbox the first to register holds it on every machine (2026-10-05). An
-  older peer's message carries socket ids alone and still reads newest-wins.
+- Where QUIC is on (on Fly it is not: "QUIC on Fly" below), browsers get HTTP/3 on the same port with the certificate
+  held here, and the editor's terminals ride WebTransport where the platform relays the edge's declaration on the
+  sandbox's row: a session opened at `/system/transport` on a sandbox's address, each stream served as one HTTP/1.1
+  connection to that address whatever Host it writes. The editor speaks a plain WebSocket on the stream, so any netd
+  or daemon serving `/system/terminal` serves it.
+- Machines behind the one address find each other through Fly's internal DNS (`<app>.internal`) and forward a miss
+  once to whichever holds the tunnel, over private port 8081. Every slot is news to the peers (a sandbox held only
+  over QUIC on another machine is that machine's to answer, not `no-tunnel`), each with when it registered and which
+  netd instance dialled it: an `add` older than this machine's own registration in that slot is stale and ignored
+  rather than displacing the newer one, and between two copies of one sandbox the first to register holds it on every
+  machine (2026-10-05). An older peer's message carries socket ids alone and still reads newest-wins.
 - A hosted sandbox is no exception: its machine dials the same tunnel with a grant the platform put in its config,
   and nothing else reaches it. One holding no tunnel (stopped, booting) answers the `no-tunnel` verdict, and the
   editor wakes it through the api. The edge replays nothing: no Fly HTTP proxy sits in front of 443 to act on one.
@@ -96,20 +96,23 @@ pnpm --filter @intentic/ingress docker:release    # the image, the tunnel, brows
 ## Deploying
 
 The edge runs on Fly as `intentic-ingress`, apart from the Komodo stack that holds the api and web, and terminates TLS
-itself ([fly.toml](fly.toml)): Fly passes raw TCP on 443 through with a PROXY v2 header naming the browser, and UDP 443
-straight to the QUIC door, and the process presents the wildcard certificate the platform issues (the api's
-`edge-certificate.ts`, fetched with `INGRESS_PLATFORM_TOKEN`). Fly holds no certificate for `*.sbx.intentic.dev`.
+itself ([fly.toml](fly.toml)): Fly passes raw TCP on 443 through with a PROXY v2 header naming the browser, and the
+process presents the wildcard certificate the platform issues (the api's `edge-certificate.ts`, fetched with
+`INGRESS_PLATFORM_TOKEN`). Fly holds no certificate for `*.sbx.intentic.dev`, and no UDP reaches the edge while QUIC is
+off (below).
 
 On a push to main, CI's `images-platform` job pushes `ghcr.io/intentic/ingress` and runs
 [deploy-ingress.sh](../../_tools/scripts/platform/deploy-ingress.sh), which runs `flyctl deploy` with `fly.toml` and
-waits until `/health` reports the build baked into the image, lists the tunnel door this checkout's netd dials, and
-declares `quic`, `h3` and `webtransport`. It refuses a config of the proxy shape unless told `INGRESS_EDGE_MODE=proxy`,
-and its last line is the one to look for in CI's log: `edge-mode: tls — intentic-ingress declares quic, h3 and
-webtransport`. An edge already serving the image's build in the same mode is not rolled, since a roll drops every
-tunnel at once (four no-op rolls on 2026-10-21 alone; the last one cut a new user off mid-session); the checks still
-run, and `INGRESS_FORCE_ROLL=1` rolls anyway. An empty `FLY_API_TOKEN` skips it (`No FLY_API_TOKEN — skipping the edge deploy`); the Actions secret
-is a deploy token scoped to the app, `fly tokens create deploy -a intentic-ingress`. Without it, roll by hand once the
-image is pushed: `bash _tools/scripts/platform/deploy-ingress.sh` with `FLY_API_TOKEN` in the environment.
+waits until `/health` reports the build baked into the image and lists the tunnel door this checkout's netd dials.
+With `INGRESS_EDGE_MODE=proxy` unset it refuses a config of the proxy shape, and with `INGRESS_EXPECT_QUIC=1` it also
+requires `/health` to declare `quic`, `h3` and `webtransport`. Its last line is the one to look for in CI's log:
+`edge-mode: tls — intentic-ingress terminates TLS`. An edge already serving the image's build in the same mode is not
+rolled, since a roll drops every tunnel at once (four no-op rolls on 2026-10-21 alone; the last one cut a new user off
+mid-session); the checks still run, and `INGRESS_FORCE_ROLL=1` rolls anyway. The mode is read off the answer's
+headers: Fly's HTTP proxy stamps a `fly-request-id` on every answer it carries, and a TLS edge's carries none. An
+empty `FLY_API_TOKEN` skips it (`No FLY_API_TOKEN — skipping the edge deploy`); the Actions secret is a deploy token
+scoped to the app, `fly tokens create deploy -a intentic-ingress`. Without it, roll by hand once the image is pushed:
+`bash _tools/scripts/platform/deploy-ingress.sh` with `FLY_API_TOKEN` in the environment.
 
 What the script does not set:
 
@@ -117,9 +120,7 @@ What the script does not set:
 fly scale count 1 --region <region> -a intentic-ingress    # regions live here, not in fly.toml
 fly secrets set -a intentic-ingress INGRESS_PUBLIC_KEY="$(openssl pkey -in ingress-key.pem -pubout)" \
     PLATFORM_URL=https://api.intentic.dev INGRESS_PLATFORM_TOKEN=<the api's INGRESS_PLATFORM_TOKEN> \
-    INGRESS_TLS_PORT=8443 INGRESS_PROXY_PROTOCOL=true \
-    INGRESS_QUIC_PORT=443 INGRESS_QUIC_HOST=fly-global-services INGRESS_ALT_SVC='h3=":443"; ma=86400'
-fly ips list -a intentic-ingress                           # a dedicated IPv4: Fly delivers UDP to no shared one
+    INGRESS_TLS_PORT=8443 INGRESS_PROXY_PROTOCOL=true
 ```
 
 | Setting | Why |
@@ -129,15 +130,14 @@ fly ips list -a intentic-ingress                           # a dedicated IPv4: F
 | `INGRESS_PLATFORM_TOKEN` | What the edge presents to fetch the certificate; the same value as the api's. |
 | `INGRESS_TLS_CACHE_FILE` | Optional. Where the platform's certificate is kept between restarts; default `/var/lib/intentic-ingress/certificate.json`, `off` for none. Survives a Fly restart only on a volume (below). |
 | `INGRESS_TLS_PORT`, `INGRESS_PROXY_PROTOCOL` | 8443 behind PROXY v2 headers, which is where fly.toml's TCP 443 lands. |
-| `INGRESS_QUIC_PORT`, `INGRESS_QUIC_HOST` | **443**, on `fly-global-services`. Fly rewrites only a UDP packet's address, never its port, so a QUIC door on any other port hears nothing (8443 left HTTP/3 silent at go-live until it became 443). |
-| `INGRESS_ALT_SVC` | Advertises HTTP/3 on TCP answers, naming the public port. |
+| `INGRESS_QUIC_PORT`, `INGRESS_QUIC_HOST` | Unset while QUIC is off. **443**, on `fly-global-services`. Fly rewrites only a UDP packet's address, never its port, so a QUIC door on any other port hears nothing (8443 left HTTP/3 silent at go-live until it became 443). |
+| `INGRESS_ALT_SVC` | Unset while QUIC is off. Advertises HTTP/3 on TCP answers, naming the public port. |
 
-- Run one machine per region where sandbox owners are. `fly.toml` never auto-stops them, since a stopped machine
-  drops every tunnel it holds.
+- `fly.toml` never auto-stops a machine, since a stopped machine drops every tunnel it holds.
 - Every service is checked over TCP. An HTTP check on the plain service never reported through Fly's proxy at go-live
   (the deploy timed out "waiting for status update"), and `/health` stays readable over TLS for the script's read-back.
-- `tests/fly_configs.rs` holds `fly.toml`'s services (PROXY v2 on 443 to 8443, the redirect on 80 to 8080, UDP 443 to
-  443, TCP checks) and holds it equal to `fly.edge-proxy.toml` outside them.
+- `tests/fly_configs.rs` holds `fly.toml`'s services (PROXY v2 on 443 to 8443, the redirect on 80 to 8080, no UDP while
+  QUIC is off, TCP checks) and holds it equal to `fly.edge-proxy.toml` outside them.
 - Never publish `INGRESS_INTERNAL_PORT` (8081): binding only the private address is the peer protocol's one lock.
 - The edge pings `/tunnel/v1` sandboxes itself. Some older ones (an `intentic-front`, netd's name before 2026-10-06)
   never ping and only answer, and an edge that only listened dropped each one for silence every minute; that surfaced
@@ -153,13 +153,49 @@ Checking a live edge:
 
 ```sh
 EDGE=https://ingress.sbx.intentic.dev
-curl -fsS $EDGE/health | jq '{build, doors, transports, tunnels}'   # transports ["quic","h3","webtransport"]
+curl -fsS $EDGE/health | jq '{build, doors, transports, tunnels, peers}'   # transports [] while QUIC is off; peers 1 with two regions
 openssl s_client -connect ingress.sbx.intentic.dev:443 -servername ingress.sbx.intentic.dev </dev/null 2>/dev/null |
     openssl x509 -noout -issuer -enddate -fingerprint -sha256      # the platform's certificate, not Fly's
-curl -sI $EDGE/health | grep -i alt-svc                              # h3=":443"
-docker run --rm ymuski/curl-http3 curl -sI --http3-only $EDGE/health | head -1   # HTTP/3 200
+flyctl status -a intentic-ingress                                    # one started machine in iad, one in fra
 flyctl logs -a intentic-ingress --no-tail | grep -E '"message":"(QUIC )?tunnel (registered|refused|closed)"' | tail
 ```
+
+### Regions
+
+The edge runs one machine per region, `iad` and `fra` (since 2026-10-27). Every sandbox hostname points at the same
+anycast address, so Fly sends each browser and each netd to the nearest machine. The machines find each other through
+Fly's private DNS (`intentic-ingress.internal`, [peers.rs](src/peers.rs)), and a machine asked for a sandbox whose
+tunnel another machine holds forwards the request there, once. Adding a region is one command, and the new machine
+joins the others by itself:
+
+```sh
+fly scale count 1 --region <code> -a intentic-ingress
+```
+
+## QUIC on Fly
+
+**Off since 2026-10-27.** Fly's UDP return path dropped the edge's replies on most flows. Packets in arrived fine, but
+a test app in `iad` reproduced the loss from a client in Poland: replies got through on 2 of 20 flows at once, and
+packet size and GSO (the kernel batching UDP sends) made no difference. A netd's QUIC tunnel on such a flow stalled each
+request it carried for 10 to 20 s, and a POST came back 502 (`x-intentic-edge: dropped`), which people met as a chat
+message that would not send. So the three QUIC secrets are unset and `fly.toml` has no UDP service. The edge then
+declares no UDP transports, and netd falls back to its WebSocket tunnel and the editor to plain WebSocket terminals by
+themselves.
+
+To turn it back on, set the secrets again, restore the UDP service in `fly.toml` (git history has it: UDP 443 to
+internal port 443, never auto-stopped) along with its check in `tests/fly_configs.rs`, and deploy expecting QUIC:
+
+```sh
+fly ips list -a intentic-ingress                       # needs a dedicated IPv4: Fly delivers UDP to no shared one
+fly secrets set --stage -a intentic-ingress INGRESS_QUIC_PORT=443 INGRESS_QUIC_HOST=fly-global-services \
+    INGRESS_ALT_SVC='h3=":443"; ma=86400'
+INGRESS_EXPECT_QUIC=1 INGRESS_FORCE_ROLL=1 bash _tools/scripts/platform/deploy-ingress.sh   # fails unless /health declares them
+curl -sI $EDGE/health | grep -i alt-svc                                                     # h3=":443"
+docker run --rm ymuski/curl-http3 curl -sI --http3-only $EDGE/health | head -1               # HTTP/3 200
+```
+
+`INGRESS_FORCE_ROLL=1` because the script does not roll an edge already serving the image's build, and new services
+and staged secrets apply only on a roll.
 
 ## The certificate kept on disk
 
@@ -238,8 +274,8 @@ removed. In order:
    the CNAME stands (it logs why); the certificate it already issued stays valid until it expires.
 2. Deploy the fallback: `INGRESS_EDGE_MODE=proxy bash _tools/scripts/platform/deploy-ingress.sh
    _platform/ingress/fly.edge-proxy.toml`, which ends on `edge-mode: proxy`. Then `flyctl secrets unset -a
-   intentic-ingress INGRESS_TLS_PORT INGRESS_PROXY_PROTOCOL INGRESS_QUIC_PORT INGRESS_QUIC_HOST INGRESS_ALT_SVC`, which
-   restarts the machines once more. netd instances and editors stop reaching for UDP as soon as the edge stops declaring it.
+   intentic-ingress INGRESS_TLS_PORT INGRESS_PROXY_PROTOCOL` (and the three QUIC secrets, if QUIC was turned back on),
+   which restarts the machines once more. netd instances and editors stop reaching for UDP as soon as the edge stops declaring it.
 3. Stop CI putting it back: until `fly.toml` is the proxy shape again, every push to main redeploys the TLS shape.
    Either swap the two files back or remove the `FLY_API_TOKEN` Actions secret.
 

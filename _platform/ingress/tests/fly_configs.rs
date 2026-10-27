@@ -1,5 +1,5 @@
-//! The edge's two Fly configurations: fly.toml, which CI deploys on every push and which terminates TLS itself with UDP
-//! beside it, and fly.edge-proxy.toml, the old shape behind Fly's HTTP proxy kept as the emergency fallback (README.md,
+//! The edge's two Fly configurations: fly.toml, which CI deploys on every push and which terminates TLS itself, and
+//! fly.edge-proxy.toml, the old shape behind Fly's HTTP proxy kept as the emergency fallback (README.md,
 //! "Rolling back"). The two must be the same app, image and machine in every respect but their services, or a fallback
 //! would change more than who holds the certificate.
 
@@ -10,7 +10,7 @@ use toml::{Table, Value};
 // The service sections, the one thing the files are allowed to differ in.
 const SERVICES: [&str; 2] = ["http_service", "services"];
 
-// What the runbook sets the process to bind: INGRESS_TLS_PORT and INGRESS_QUIC_PORT, and the plain INGRESS_PORT.
+// What the runbook sets the process to bind: INGRESS_TLS_PORT and the plain INGRESS_PORT.
 const TLS_PORT: i64 = 8443;
 const PLAIN_PORT: i64 = 8080;
 
@@ -92,7 +92,7 @@ fn every_fly_config_is_the_same_app_image_and_machine_but_for_its_services() {
 }
 
 #[test]
-fn what_ci_deploys_passes_443_through_with_proxy_headers_and_carries_udp_beside_it() {
+fn what_ci_deploys_passes_443_through_with_proxy_headers_and_carries_no_udp() {
     let configs = configs();
     let named = |name: &str| -> &Table {
         &configs
@@ -176,9 +176,15 @@ fn what_ci_deploys_passes_443_through_with_proxy_headers_and_carries_udp_beside_
         assert!(service.get("http_checks").is_none());
     }
 
-    // Fly rewrites only a UDP packet's address, never its port: the QUIC door listens on the public port itself.
-    let quic = on("udp", 443);
-    assert_eq!(quic["internal_port"].as_integer(), Some(443));
+    // QUIC is off on Fly since 2026-10-27 (README.md, "QUIC on Fly"): its UDP return path dropped most replies, so a
+    // QUIC tunnel stalled requests the WebSocket would have carried. Turning it back on restores this service with
+    // internal_port 443, since Fly rewrites only a UDP packet's address, never its port.
+    assert!(
+        listed
+            .iter()
+            .all(|service| service.get("protocol").and_then(Value::as_str) != Some("udp")),
+        "fly.toml publishes no UDP while QUIC is off"
+    );
 
     for service in &listed {
         assert_eq!(

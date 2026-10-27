@@ -2,7 +2,7 @@
 # Deploy the Fly edge and verify the running build, door and transports; pushing an image alone does not deploy it.
 # Skip without FLY_API_TOKEN. INGRESS_IMAGE/APP/FLY_CONFIG select the target; EDGE_MODE defaults to tls and must match the config.
 # Skip unchanged builds to preserve in-memory tunnels, unless INGRESS_FORCE_ROLL=1; verification still runs.
-# TLS mode must advertise quic, h3 and webtransport on /health. Use proxy mode only with the fallback's README prerequisites.
+# INGRESS_EXPECT_QUIC=1 requires quic, h3 and webtransport on /health (QUIC is off on Fly). Proxy mode: README prerequisites first.
 set -euo pipefail
 
 if [ -z "${FLY_API_TOKEN:-}" ]; then
@@ -68,14 +68,17 @@ if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
     exit 1
 fi
 
-# What the edge serves right now. Skipping needs both halves to match: the build, and in TLS mode the UDP transports,
-# since an edge put behind Fly's proxy by hand (fly.edge-proxy.toml) can carry the same build and declares none, and
-# the way back from it is this deploy.
-running_health="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || true)"
-running_build="$(printf '%s' "$running_health" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')"
-running_shape=proxy
-case "$running_health" in
-    *'"transports":['*'"quic"'*) running_shape=tls ;;
+# What the edge serves right now. Skipping needs both halves to match: the build, and the shape, since an edge put
+# behind Fly's proxy by hand (fly.edge-proxy.toml) can carry the same build, and the way back from it is this deploy.
+# The shape is read off the answer's headers, not /health: Fly's HTTP proxy stamps every answer it carries with
+# fly-request-id, and in TLS mode Fly passes raw TCP it cannot stamp. The transports told them apart only while QUIC was
+# on; a TLS edge with QUIC off declares none either, the same as the proxy shape.
+running_answer="$(curl -fsS -D - --max-time 10 "$HEALTH_URL" 2>/dev/null || true)"
+running_build="$(printf '%s' "$running_answer" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')"
+running_shape=tls
+# tr, not grep -q: grep quitting at the first match would fail the printf before it under pipefail.
+case "$(printf '%s' "$running_answer" | tr '[:upper:]' '[:lower:]')" in
+    *'fly-request-id:'*) running_shape=proxy ;;
 esac
 if [ "${INGRESS_FORCE_ROLL:-}" != 1 ] && [ "$running_build" = "$EXPECTED" ] && [ "$running_shape" = "$SHAPE" ]; then
     echo "$APP already serves build $EXPECTED in $SHAPE mode; not rolling it (a roll drops every tunnel). INGRESS_FORCE_ROLL=1 rolls anyway."
@@ -110,11 +113,14 @@ echo "$APP is serving build $EXPECTED"
 # images-merge, the release): an edge rolled from an image that somehow lacks it fails here, where the cause is.
 EDGE_HEALTH_URL="$HEALTH_URL" EDGE_DOOR_WAIT=0 bash "$ROOT/_tools/scripts/image/require-edge-door.sh"
 
-# TERMINATING TLS, THE EDGE MUST SAY SO. The build answering above proves the process is up behind the new services;
-# the declaration proves it bound the QUIC door those services send UDP to, which is what every netd and editor now
-# goes by. Fly accepted the UDP service either way, so nothing else here would notice an edge that never listens on it.
-if [ "$SHAPE" = tls ]; then
-    declared="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | sed -n 's/.*"transports":\[\([^]]*\)\].*/\1/p')"
+# QUIC IS OPT-IN. Since 2026-10-27 the Fly edge runs with it off (ingress/README.md, "QUIC on Fly"): Fly's UDP return
+# path dropped most replies, so a TLS edge declaring no UDP transports is the expected one, and every netd and editor
+# keeps to the WebSocket when none is declared. The deploy that turns it back on sets INGRESS_EXPECT_QUIC=1, and then the
+# edge must say so: the build answering above proves the process is up behind the new services, the declaration proves
+# it bound the QUIC door they send UDP to. Fly accepts a UDP service either way, so nothing else here would notice an
+# edge that never listens on it.
+declared="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | sed -n 's/.*"transports":\[\([^]]*\)\].*/\1/p' || true)"
+if [ "$SHAPE" = tls ] && [ "${INGRESS_EXPECT_QUIC:-}" = 1 ]; then
     for transport in quic h3 webtransport; do
         case "$declared" in
             *"\"$transport\""*) ;;
@@ -128,6 +134,8 @@ if [ "$SHAPE" = tls ]; then
         esac
     done
     echo "edge-mode: tls — $APP declares quic, h3 and webtransport"
+elif [ "$SHAPE" = tls ]; then
+    echo "edge-mode: tls — $APP terminates TLS and declares [${declared}]; QUIC is not required (INGRESS_EXPECT_QUIC=1 requires it)"
 else
     echo "edge-mode: proxy — $APP sits behind Fly's HTTP proxy and declares no UDP transports"
 fi
