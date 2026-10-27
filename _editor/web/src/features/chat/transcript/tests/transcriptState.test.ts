@@ -279,6 +279,56 @@ describe(`row ids`, () => {
         expect(merged?.nextId).toBe(10);
     });
 
+    // brave-maple-ilnz, 2026-10-27: a 23:27 message turned away at the door left two rows the record never holds; the turn
+    // sent at 23:30 was followed here, and its recorded copy used to move up past them, leaving them as the chat's last
+    // word under every later row, a peer's message kept for memory included.
+    it(`leaves a run turned away at the door where it was drawn, under the record's later rows`, () => {
+        const state: TranscriptState = {
+            ...live([
+                { id: 1, role: `assistant`, text: `found it`, rowId: `a1`, at: 0, run: `r1` },
+                { id: 2, role: `notice`, text: `rebased onto your latest 10 commits`, run: `refused` },
+                { id: 3, role: `notice`, text: `The sandbox is short of memory`, noticeAction: `sendAnyway`, run: `refused` },
+                { id: 4, role: `user`, text: `go for it`, rowId: `u2`, run: `r2` },
+                { id: 5, role: `assistant`, text: `done`, rowId: `a2`, run: `r2` },
+            ]),
+            attached: { run: `r2`, base: 3 },
+        };
+        const merged = mergeRecorded(
+            state,
+            positioned([{ role: `user`, text: `go for it`, rowId: `u2`, run: `r2` }, { role: `assistant`, text: `done`, rowId: `a2`, run: `r2` }], 1),
+            `a1`,
+        );
+        expect(merged?.messages.map((message) => message.id)).toEqual([1, 2, 3, 4, 5]);
+        expect(merged?.attached).toEqual({ run: `r2`, base: 3 });
+        // A peer's message the sandbox kept for memory is recorded next, and stands last, where its press is drawn.
+        const kept = mergeRecorded(
+            { ...merged!, attached: { run: `r3`, base: 5 } },
+            positioned(
+                [
+                    { role: `notice`, text: `Message from another conversation`, rowId: `n3`, run: `r3` },
+                    { role: `notice`, text: `The sandbox is short of memory`, noticeAction: `sendAnyway`, sandboxHeld: true, rowId: `h3`, run: `r3` },
+                ],
+                3,
+            ),
+            `a2`,
+        );
+        expect(kept?.messages.at(-1)?.rowId).toBe(`h3`);
+    });
+
+    it(`puts what the record gained after a refusal below it, and keeps a live run and this window's notices below that`, () => {
+        const state: TranscriptState = {
+            ...live([
+                { id: 1, role: `assistant`, text: `found it`, rowId: `a1`, at: 0, run: `r1` },
+                { id: 2, role: `notice`, text: `The sandbox is short of memory`, noticeAction: `sendAnyway`, run: `refused` },
+                { id: 3, role: `notice`, text: `Stopped.`, local: true },
+                { id: 4, role: `user`, text: `now the docs`, run: `r3` },
+            ]),
+            attached: { run: `r3`, base: 3 },
+        };
+        const merged = mergeRecorded(state, positioned([{ role: `user`, text: `and the tests`, rowId: `u2`, run: `r2` }], 1), `a1`);
+        expect(merged?.messages.map((message) => message.text)).toEqual([`found it`, `The sandbox is short of memory`, `and the tests`, `Stopped.`, `now the docs`]);
+    });
+
     it(`cannot add after a row this window no longer holds`, () => {
         const state = live([{ id: 1, role: `user`, text: `fix it`, rowId: `u1`, at: 0 }]);
         expect(mergeRecorded(state, positioned([{ role: `assistant`, text: `on it`, rowId: `a1` }], 1), `gone`)).toBeUndefined();

@@ -190,5 +190,13 @@ export const messageConversation = async (
               };
     }
     services.logger.info({ from, to: entry.id, run: run.id }, "fleet message: opened a turn on the target conversation");
-    return { ok: true, to: entry.id, delivery: "turn", note: "Delivered: that conversation is running a turn on it now." };
+    // Said as a start, not as running: the door still judges memory after this returns, and a turn it holds goes only once
+    // memory frees (room-holds.ts). On 2026-10-27 a sender was told "running a turn on it now" five seconds before the
+    // door held it for five minutes.
+    return {
+        ok: true,
+        to: entry.id,
+        delivery: "turn",
+        note: "Delivered: a turn on it is starting in that conversation. If the sandbox is short of memory, the turn is held and goes by itself once memory frees.",
+    };
 };

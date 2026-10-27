@@ -112,7 +112,14 @@ export const recordCursor = (messages: readonly ChatMessage[]): RecordCursor | u
    recorded) takes its recorded copy where it stands and keeps its id, and moves up beside the record's other rows; one
    it never held goes in after the last of them. Whatever else stands below (a live run's rows still unrecorded, this
    window's own notices, words waiting to send) stays below, in its order. Undefined when the row the cursor names is no
-   longer held, which only a whole page can mend. */
+   longer held, which only a whole page can mend.
+   The one exception is a run that is over and will never be recorded: a turn turned away at the door ran nothing, so the
+   record never holds its rows ("rebased onto…", "Your message was held"). Those rows stay where they were drawn, among
+   the rows that came after them, and do not sink below everything the record gains. On 2026-10-27 two rows from a
+   23:27 refusal sank under a peer's message kept for memory at 00:10. They read as the last thing said, so the chat
+   drew the kept turn as settled ("This turn was held"), with no Send anyway, while its card said it would send once
+   memory freed. A run is over when this window follows a later one (`attached`) and the record gained none of its rows.
+   With no run attached, a live run's rows cannot be told from a finished one's, so they keep the old place below. */
 export const mergeRecorded = (state: TranscriptState, rows: readonly Omit<ChatMessage, "id">[], afterRow: string): TranscriptState | undefined => {
     const anchor = state.messages.findLastIndex((message) => message.rowId === afterRow);
     if (anchor === -1) {
@@ -133,20 +140,40 @@ export const mergeRecorded = (state: TranscriptState, rows: readonly Omit<ChatMe
         }
     }
     let nextId = state.nextId;
-    const recorded = rows.flatMap((row): ChatMessage[] => {
+    // Each recorded row, with where its held copy stood in `below` (undefined for a row this window never held).
+    const recorded = rows.flatMap((row): { readonly message: ChatMessage; readonly drawnAt: number | undefined }[] => {
         const same = row.rowId === undefined ? undefined : held.get(row.rowId);
         if (same !== undefined) {
-            return [keepingId(same, row)];
+            return [{ message: keepingId(same, row), drawnAt: below.indexOf(same) }];
         }
         const standing = row.rowId === undefined ? -1 : above.findIndex((message) => message.rowId === row.rowId);
         if (standing !== -1) {
             above[standing] = keepingId(above[standing]!, row);
             return [];
         }
-        return [{ ...row, id: nextId++ }];
+        return [{ message: { ...row, id: nextId++ }, drawnAt: undefined }];
     });
-    const rest = below.filter((message) => message.rowId === undefined || !held.has(message.rowId));
-    const messages = [...above, ...recorded, ...rest];
+    const incomingRuns = new Set(rows.flatMap((row) => (row.run === undefined ? [] : [row.run])));
+    const following = state.attached?.run;
+    const over = (message: ChatMessage): boolean =>
+        following !== undefined && message.local !== true && message.run !== undefined && message.run !== following && !incomingRuns.has(message.run);
+    const rest: ChatMessage[] = [];
+    const settled = [...recorded];
+    for (const [drawnAt, message] of below.entries()) {
+        if (message.rowId !== undefined && held.has(message.rowId)) {
+            continue;
+        }
+        if (!over(message)) {
+            rest.push(message);
+            continue;
+        }
+        // Ahead of the first recorded row drawn after it; past every recorded row drawn before it, and ahead of the rows
+        // this window never held, which the record gained after the refusal.
+        const after = settled.findIndex((entry) => entry.drawnAt !== undefined && entry.drawnAt > drawnAt);
+        const lastDrawn = settled.findLastIndex((entry) => entry.drawnAt !== undefined);
+        settled.splice(after === -1 ? lastDrawn + 1 : after, 0, { message, drawnAt });
+    }
+    const messages = [...above, ...settled.map((entry) => entry.message), ...rest];
     const pending = state.pending !== undefined && messages.some((message) => message.id === state.pending!.id) ? state.pending : undefined;
     if (state.attached === undefined) {
         return { messages, nextId, pending };
