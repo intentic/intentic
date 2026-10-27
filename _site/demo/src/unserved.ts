@@ -320,8 +320,9 @@ export const UNSERVED = {
     "loops.list": NOT_THE_EDITORS,
     "loops.start": UNSIMULATED_WRITE,
     "loops.stop": UNSIMULATED_WRITE,
-    // The agent's side of needs: its CLIs raise, list and withdraw them; the editor only reads and answers.
+    // The agent's side of needs: its CLIs raise, list, close and withdraw them; the editor only reads and answers.
     "needs.ask": NOT_THE_EDITORS,
+    "needs.done": NOT_THE_EDITORS,
     "needs.mine": NOT_THE_EDITORS,
     "needs.withdraw": NOT_THE_EDITORS,
     "netdisk.list": REAL_MACHINE,
@@ -341,6 +342,9 @@ export const UNSERVED = {
     "personas.savePrompt": UNSIMULATED_WRITE,
     "personas.saveSkill": UNSIMULATED_WRITE,
     "ports.forward": UNSIMULATED_WRITE,
+    "ports.previewGuard": UNFILLED_VIEW,
+    "ports.previewPass": UNSIMULATED_WRITE,
+    "ports.setPreviewGuard": UNSIMULATED_WRITE,
     "ports.unforward": UNSIMULATED_WRITE,
     "privacy.learn": NOT_THE_EDITORS,
     "public.list": UNFILLED_VIEW,

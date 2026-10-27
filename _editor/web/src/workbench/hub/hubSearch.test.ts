@@ -160,6 +160,11 @@ describe(`what people type`, () => {
         expect(theme?.trail).toBe(`Appearance`);
     });
 
+    it(`finds the network fence on the sandbox overview`, () => {
+        const fence = ask(`network fence`).find((result) => result.setting === `overview-fence`);
+        expect(fence?.to).toEqual({ path: `/sandbox/overview`, query: {}, hash: `#setting-overview-fence` });
+    });
+
     it(`finds a setting by the words people use for it rather than ours`, () => {
         expect(first(`dark mode`)).toBe(`theme`);
         expect(ask(`api key`).map((result) => result.setting ?? `page:${result.slug}`)).toContain(`page:tokens`);

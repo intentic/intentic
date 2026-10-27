@@ -50,6 +50,11 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         title: () => t(`sandbox.sandboxOverview.resources`),
         terms: () => [t(`sandbox.search.overviewResources`)],
     },
+    {
+        id: `overview-fence`,
+        slug: `overview`,
+        title: () => t(`sandbox.networkFence.rowLabel`),
+    },
     // Drawn only for a sandbox on somebody's own machine (SandboxSleepRow.vue); the reader does not know where it runs,
     // so a hosted sandbox's search finds the page without the row.
     {

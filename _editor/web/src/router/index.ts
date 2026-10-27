@@ -492,7 +492,7 @@ router.onError((error, to) => {
 });
 
 // The reload guard is not cleared on a landed navigation: asyncView lands every nav instantly regardless of chunk
-// health, so clearing here risks a reload loop on a broken deploy. A chunk that loads clears it (`loadChunk`).
+// health, so clearing here risks a reload loop on a broken deploy. The guard expires after a few minutes (`loadChunk`).
 
 // Sets the tab title to `<Page> / intentic` from the route's `title`, falling back to the bare brand when none is
 // declared. Asked for per navigation, so it is in the reader's language even when they changed it after boot; only for

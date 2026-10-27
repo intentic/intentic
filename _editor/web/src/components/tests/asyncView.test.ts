@@ -137,11 +137,18 @@ it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, as
     expect(load).toHaveBeenCalledTimes(2);
 });
 
-it(`a chunk resolving re-arms the stale-window reload for the next redeploy`, async () => {
-    // The reload guard was already spent; landing any chunk proves this window's assets are current.
-    sessionStorage.setItem(`intentic.chunkReloaded`, `/target`);
+it(`a chunk resolving does not re-arm a spent reload for a still-missing chunk`, async () => {
+    const note = `${Date.now()}\n/target`;
+    sessionStorage.setItem(`intentic.chunkReloaded`, note);
     const { router } = await mountAt(asyncView(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`) }) })));
     await router.push(`/target`);
     await settle();
-    expect(sessionStorage.getItem(`intentic.chunkReloaded`)).toBeNull();
+    expect(sessionStorage.getItem(`intentic.chunkReloaded`)).toBe(note);
+
+    const dead = (): Promise<never> => Promise.reject(new TypeError(`Failed to fetch dynamically imported module: http://x/assets/View-a1b2.js`));
+    const second = await mountAt(asyncView(dead));
+    await second.router.push(`/target`);
+    await settle();
+    expect(assign).not.toHaveBeenCalled();
+    expect(second.el.querySelector(`button`)).not.toBeNull();
 });

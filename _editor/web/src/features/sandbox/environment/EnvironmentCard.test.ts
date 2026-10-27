@@ -435,7 +435,11 @@ it(`takes one agent-added tool out, after a confirmation that names it`, async (
 
 // Several at once: one confirmation naming them all, then one removal after another, each reading what the last left.
 it(`takes several tools out in turn, after one confirmation that names them all`, async () => {
-    sandboxJson.mockImplementation(async () => environment);
+    let finishFirst: (value: Environment) => void = () => {};
+    const firstRemoval = new Promise<Environment>((resolve) => { finishFirst = resolve; });
+    sandboxJson.mockImplementation(async (path, init) =>
+        path === `/environment/remove` && (init as RequestInit).body === JSON.stringify({ block: `zcode` }) ? firstRemoval : environment,
+    );
     contentsGroups.value = [
         {
             origin: `custom`,
@@ -459,13 +463,19 @@ it(`takes several tools out in turn, after one confirmation that names them all`
         expect(document.body.textContent).toContain(`Remove 2 tools from the environment?`);
         expect(document.body.textContent).toContain(`Zcode and sox leave the recipe.`);
 
+        sandboxJson.mockClear();
         bodyButton(`Remove`)?.click();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        await nextTick();
-        expect(sandboxJson).toHaveBeenCalledTimes(2);
-        expect(sandboxJson).toHaveBeenNthCalledWith(1, `/environment/remove`, expect.objectContaining({ body: JSON.stringify({ block: `zcode` }) }));
-        expect(sandboxJson).toHaveBeenNthCalledWith(2, `/environment/remove`, expect.objectContaining({ body: JSON.stringify({ block: `sox` }) }));
+        const removals = (): unknown[][] => sandboxJson.mock.calls.filter(([path]) => path === `/environment/remove`);
+        expect(removals()).toEqual([[`/environment/remove`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ block: `zcode` }) })]]);
+        finishFirst(environment);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(removals()).toEqual([
+            [`/environment/remove`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ block: `zcode` }) })],
+            [`/environment/remove`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ block: `sox` }) })],
+        ]);
     } finally {
+        finishFirst(environment);
         sandboxJson.mockImplementation(async () => {
             throw new Error(`the daemon said no`);
         });
