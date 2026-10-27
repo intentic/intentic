@@ -312,6 +312,28 @@ describe(`a run's lifecycle`, () => {
         expect(client.phase.value).toEqual({ kind: `idle`, accepted: true });
     });
 
+    // A swept peek or a closed tab cuts the stream of a run that goes on: what it drew is not the run's last word.
+    it(`names the run it stopped following, and none for a run that ended, when the transcript is mirrored`, async () => {
+        const { client, host } = clientOf();
+        const persisted: unknown[][] = [];
+        host.transcript.persist = (...args: unknown[]) => void persisted.push(args);
+        // The fake stream does not hear the abort the way a cut fetch does; it closes right after, as one would.
+        const { promise: cut, resolve: closed } = Promise.withResolvers<void>();
+        attach.mockImplementation(async () => unwinding(`r7`, 9_000, `carry on`, cut));
+        const following = client.reattach();
+        await waitFor(() => client.phase.value.kind === `running`);
+        client.abort();
+        closed();
+        await following;
+        attach.mockImplementation(async () => attached(`r8`, 9_500, `and then`));
+        await client.reattach();
+
+        expect(persisted).toEqual([
+            [false, `r7`],
+            [false, undefined],
+        ]);
+    });
+
     it(`stays idle when the daemon has no run to attach to`, async () => {
         const { client, phases } = clientOf();
         attach.mockImplementation(async () => {

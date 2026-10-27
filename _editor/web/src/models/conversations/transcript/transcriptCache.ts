@@ -93,11 +93,42 @@ const mirroredRows = new Map<string, number>();
 // What this window remembers of the mirror goes with it.
 onAccountCleared(() => mirroredRows.clear());
 
+/* WHAT THE MIRROR KEEPS WHILE A RUN IS STILL GOING (`open`). A live run's rows are one moment of it, a command card
+   spinning, a server it had just started, and a reopen painted that moment as now until the run's live head drew over
+   it a second later (2026-10-27: a subagent looked at once, then reopened hours on, flashed a demo server it had long
+   stopped). So they stay out of the mirror, and out of what it already holds, and a reopen paints what has settled while
+   the run draws itself. A write that is not the daemon's may still not shrink the rest (saveTranscript). */
+export const settledMirror = (
+    messages: readonly ChatMessage[],
+    held: readonly ChatMessage[] | undefined,
+    authoritative: boolean,
+    open: string,
+): ChatMessage[] => {
+    const kept = persistable(messages.filter((message) => message.run !== open));
+    const heldSettled = authoritative ? undefined : held?.filter((message) => message.run !== open);
+    return heldSettled !== undefined && heldSettled.length > kept.length ? heldSettled : kept;
+};
+
+// `open` names a run still going, whose rows are left out (settledMirror); nothing settled left means no entry at all.
+const saveSettled = async (key: string, messages: readonly ChatMessage[], authoritative: boolean, open: string): Promise<void> => {
+    const kept = settledMirror(messages, authoritative ? undefined : await readTranscript(key), authoritative, open);
+    if (kept.length === 0) {
+        await dropTranscript(key);
+        return;
+    }
+    mirroredRows.set(key, kept.length);
+    await run(`readwrite`, (store) => store.put(kept, key));
+};
+
 // `authoritative` (daemon-confirmed) may shrink the mirror. Any other write only reports what a window happens to show,
 // which can be partial, so it may extend the mirror but never truncate it.
-export const saveTranscript = async (key: string, messages: readonly ChatMessage[], authoritative = false): Promise<void> => {
+export const saveTranscript = async (key: string, messages: readonly ChatMessage[], authoritative = false, open?: string): Promise<void> => {
     // An empty transcript means no mirror, not a mirror of nothing; writing it would blank a good cache entry.
     if (messages.length === 0) {
+        return;
+    }
+    if (open !== undefined) {
+        await saveSettled(key, messages, authoritative, open);
         return;
     }
     const kept = persistable(messages);

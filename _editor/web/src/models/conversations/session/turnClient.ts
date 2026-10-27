@@ -61,6 +61,8 @@ export class TurnClient {
     readonly phase = shallowRef<RunPhase>(IDLE);
     // A turn is live in this window: opened or attached, and not yet settled.
     readonly streaming = computed(() => this.phase.value.kind !== `idle`);
+    // The run followed here, once named: unmirrored until it settles, as is one whose stream endTurn saw cut (TranscriptView).
+    readonly liveRun = computed(() => (this.phase.value.kind === `running` ? this.phase.value.run : undefined));
     // A Continue press is acknowledged before resume/run answers and a stream becomes visible.
     readonly continuing = ref(false);
     // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
@@ -627,7 +629,7 @@ export class TurnClient {
         // A switch made while this turn ran held its divider back; the turn's over, so it goes here. No-op otherwise.
         host.selection.apply({ kind: `settled` });
         this.askMoveAgain();
-        host.transcript.persist();
+        host.transcript.persist(false, phase.kind === `running` && phase.controller.signal.aborted ? phase.run : undefined);
         // The sandbox just answered for a whole turn: whatever waits to go out goes now. Not after a send it never answered,
         // whose words just joined the outbox and wait on its ladder.
         if (phase.kind === `running` && this.outbox.entries.value.length > 0) {

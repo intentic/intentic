@@ -15,6 +15,15 @@ import { type ChatMessage, turnsOf } from "../transcript/transcript";
 // The daemon's rewind, the one call these ways back make; a test refuses it.
 const { rewind } = { rewind: jest.fn<SandboxRpc["agent"]["rewind"]>(async () => ({ snapshot: `cp-1`, dropped: 2 })) };
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { rewind } }) }));
+// The mirror's writes, heard rather than made: there is no IndexedDB here, and a write lands at once, not when idle.
+const { saveTranscript } = { saveTranscript: jest.fn(async (..._args: unknown[]) => undefined) };
+jest.mock("../transcript/transcriptCache", () => ({
+    saveTranscript,
+    readTranscript: async () => undefined,
+    dropTranscript: async () => undefined,
+    mirrorKeyOf: () => `box-2/c1`,
+}));
+jest.mock("../../../lib/whenIdle", () => ({ whenIdle: (task: () => void) => task() }));
 
 const { TranscriptView } = await import("./transcriptView");
 type Host = ConstructorParameters<typeof TranscriptView>[1];
@@ -39,7 +48,7 @@ const viewOf = (rows: readonly ChatMessage[] = ROWS) => {
         attachments: ref<PendingAttachment[]>([STAGED]),
         error: ref<string | null>(`an older failure`),
         session: ref<SessionRef | undefined>(SESSION),
-        turn: { streaming: computed(() => false), say: jest.fn<Host["turn"]["say"]>(async () => undefined) },
+        turn: { streaming: computed(() => false), liveRun: computed((): string | undefined => undefined), say: jest.fn<Host["turn"]["say"]>(async () => undefined) },
         // The last turn ended on a failure nothing brings back by itself: the tab reads as failed (TurnFailures.crashed).
         failures: { crashed: ref(true) },
         selection: { servingState: ref<AccountState | undefined>() },
@@ -283,5 +292,29 @@ describe(`clearRecord`, () => {
         expect(view.editing.value).toBeUndefined();
         expect(host.session.value).toBeUndefined();
         expect([host.error.value, host.failures.crashed.value]).toEqual([null, false]);
+    });
+});
+
+// A live run's rows are one moment of it: the mirror a reopen paints from never holds them (transcriptCache settledMirror).
+describe(`persist`, () => {
+    beforeEach(() => saveTranscript.mockClear());
+
+    it(`names the run this window still follows, so the mirror leaves it out`, () => {
+        const { host, view } = viewOf();
+        host.turn.liveRun = computed(() => `r2`);
+        view.persist(true);
+        expect(saveTranscript.mock.calls.map((call) => call.slice(2))).toEqual([[true, `r2`]]);
+    });
+
+    it(`names a run whose stream this window cut, though nothing is followed any more`, () => {
+        const { view } = viewOf();
+        view.persist(false, `r2`);
+        expect(saveTranscript.mock.calls.map((call) => call.slice(2))).toEqual([[false, `r2`]]);
+    });
+
+    it(`names none once the run settled`, () => {
+        const { view } = viewOf();
+        view.persist();
+        expect(saveTranscript.mock.calls.map((call) => call.slice(2))).toEqual([[false, undefined]]);
     });
 });

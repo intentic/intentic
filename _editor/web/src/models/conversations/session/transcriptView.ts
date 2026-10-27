@@ -43,7 +43,7 @@ export type TranscriptRefresh = { readonly kind: `reconnecting` } | { readonly k
 // What an edit and a rewind need from the conversation around the transcript. A redraw, a rewind and a placed answer each
 // take back the error line and a crashed turn's failure together: the turn that failed is no longer the last word.
 export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draft" | "attachments" | "error" | "session"> & {
-    readonly turn: Pick<TurnClient, "streaming" | "say">;
+    readonly turn: Pick<TurnClient, "streaming" | "liveRun" | "say">;
     readonly selection: { readonly servingState: Readonly<Ref<AccountState | undefined>> };
     readonly failures: Pick<TurnFailures, "crashed">;
 };
@@ -114,21 +114,27 @@ export class TranscriptView extends TranscriptClock {
     // Written when the page is idle, once for however many boundaries asked meanwhile: the write structured-clones up
     // to 300 rows on the main thread, and it was landing on the same frames as a turn's end and a chat's open. What is
     // written is the transcript as it stands then, which is the newest there is.
+    // A live run's rows are never mirrored (transcriptCache.ts settledMirror): `leftRunning` names a run this window stopped
+    // following before it ended, and the run it still follows when the write lands is left out as well.
     private persistQueued = false;
     private persistAuthoritative = false;
-    persist(authoritative = false): void {
+    private persistLeftRunning: string | undefined;
+    persist(authoritative = false, leftRunning?: string): void {
         this.persistAuthoritative ||= authoritative;
+        this.persistLeftRunning ??= leftRunning;
         if (this.persistQueued) {
             return;
         }
         this.persistQueued = true;
         whenIdle(() => {
             const confirmed = this.persistAuthoritative;
+            const open = this.persistLeftRunning ?? this.host.turn.liveRun.value;
             this.persistQueued = false;
             this.persistAuthoritative = false;
+            this.persistLeftRunning = undefined;
             // Timed: an unconfirmed write may read the mirror back first (transcriptCache.ts).
             void trackPerf(`chat.persist`, { messages: this.messages.value.length, authoritative: confirmed }, () =>
-                saveTranscript(mirrorKeyOf(this.host), this.messages.value, confirmed),
+                saveTranscript(mirrorKeyOf(this.host), this.messages.value, confirmed, open),
             );
         });
     }
