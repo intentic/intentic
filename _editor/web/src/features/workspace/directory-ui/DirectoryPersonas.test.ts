@@ -1,4 +1,5 @@
-// jsdom: pins that a whole-card-upsert edit doesn't silently drop untouched fields, and that a folder's persona
+// jsdom: pins that a whole-card-upsert edit doesn't silently drop untouched fields, that a card already starting here is
+// changed in its own row (its name in place, its bounds under it) with no edit mode to enter, and that a folder's persona
 // list matches exactly, not more or fewer.
 import "@intentic/testing/dom";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
@@ -59,6 +60,9 @@ const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
     [...document.body.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
 const byAriaLabel = (label: string): HTMLElement | undefined => document.body.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? undefined;
 const nameField = (): HTMLInputElement => byAriaLabel(`Name`) as HTMLInputElement;
+// A card's name at rest: InlineRename's press target, which says the name and then the verb.
+const renameOf = (name: string): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).trim().startsWith(`${name}, `));
 
 const type = async (value: string): Promise<void> => {
     const field = nameField();
@@ -124,10 +128,10 @@ it(`lists every persona starting in this folder and no others`, async () => {
     ];
     mount(`intentic/_editor`);
     await nextTick();
-    expect(byAriaLabel(`Edit docs-bot`)).toEqual(expect.any(Object));
-    expect(byAriaLabel(`Edit refactor-crew`)).toEqual(expect.any(Object));
-    expect(byAriaLabel(`Edit deep`)).toBeUndefined();
-    expect(byAriaLabel(`Edit elsewhere`)).toBeUndefined();
+    expect(renameOf(`docs-bot`)).toEqual(expect.any(Object));
+    expect(renameOf(`refactor-crew`)).toEqual(expect.any(Object));
+    expect(renameOf(`deep`)).toBeUndefined();
+    expect(renameOf(`elsewhere`)).toBeUndefined();
 });
 
 it(`keeps the rest of a card when it is renamed from the tree`, async () => {
@@ -144,10 +148,14 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     ];
     mount(`docs`);
     await nextTick();
-    byAriaLabel(`Edit Docs bot`)!.click();
+    expect(buttonLabelled(`Edit`)).toBeUndefined();
+    renameOf(`Docs bot`)!.click();
     await nextTick();
-    await type(`Docs crew`);
-    buttonLabelled(`Save`)!.click();
+    // The name's own field, in the row, before the new card's field further down.
+    const field = document.body.querySelectorAll<HTMLInputElement>(`[aria-label="Name"]`)[0]!;
+    field.value = `Docs crew`;
+    field.dispatchEvent(new Event(`input`));
+    field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({
         id: `docs-bot`,
@@ -160,8 +168,9 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     });
 });
 
-// Editing a bounded card opens Advanced automatically, so its powers show before the save that must preserve them.
-it(`keeps the powers of a bounded card`, async () => {
+// A bounded card's bounds open its powers under its row; opening them writes nothing, and a change writes the whole card
+// with only that power changed.
+it(`changes a bounded card's powers where its bounds are read`, async () => {
     personas.value = [
         {
             id: `visitor`,
@@ -172,19 +181,20 @@ it(`keeps the powers of a bounded card`, async () => {
     ];
     mount(`docs`);
     await nextTick();
-    byAriaLabel(`Edit visitor`)!.click();
+    // The card's bounds come before the new card's Advanced toggle, the other disclosure on the panel.
+    document.body.querySelector<HTMLButtonElement>(`button[aria-expanded]`)!.click();
     await nextTick();
     expect(text()).toContain(`Run commands`);
-    buttonLabelled(`Save`)!.click();
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(save).not.toHaveBeenCalled();
+    const shell = [...document.body.querySelectorAll(`label`)].find((label) => (label.textContent ?? ``).includes(`Run commands`))!;
+    shell.querySelector<HTMLInputElement>(`input`)!.click();
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save.mock.calls[0]![0].powers).toEqual({
-        files: `read`,
-        shell: false,
-        code: false,
-        web: true,
-        browser: true,
-        delegate: false,
-        sandbox: false,
+    expect(save.mock.calls[0]![0]).toEqual({
+        id: `visitor`,
+        capabilities: [],
+        powers: { files: `read`, shell: true, code: false, web: true, browser: true, delegate: false, sandbox: false },
+        workspace: { startIn: `docs` },
     });
 });
 

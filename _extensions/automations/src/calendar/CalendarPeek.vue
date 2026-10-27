@@ -10,9 +10,10 @@ import RunStrip from "../RunStrip.vue";
 import { useSandboxZone } from "../useAutomations";
 import { t } from "../i18n.js";
 
-// What one slot on the calendar is, and the three things worth doing about it from there: run it, edit it, switch it.
+// What one slot on the calendar is, and the three things worth doing about it from there: run it, switch it, or open it.
 // The moment comes first because it is what was clicked; the automation's standing facts (its rule, its guard, its
-// prompt) follow. Deleting stays on the list, where its confirmation and the rest of the row's history live.
+// prompt) follow. Opening it draws its own row above the calendar, where every value is changed where it is shown;
+// there is no edit form to go to.
 
 const props = defineProps<{
     automation: AutomationSummary;
@@ -22,7 +23,7 @@ const props = defineProps<{
     run?: AutomationRun;
     busy?: boolean;
 }>();
-const emit = defineEmits<{ run: []; edit: []; toggle: [enabled: boolean] }>();
+const emit = defineEmits<{ run: []; open: []; toggle: [enabled: boolean] }>();
 
 const sandboxZone = useSandboxZone();
 const trigger = computed(() => props.automation.trigger);
@@ -115,8 +116,8 @@ const openTranscript = (): void => {
             <Button :label="t(`automationRow.runNow2`)" size="small" tier="boring" :disabled="busy" @click="emit(`run`)">
                 <template #icon><Icon name="play" /></template>
             </Button>
-            <Button :label="t(`automationRow.edit2`)" size="small" tier="boring" @click="emit(`edit`)">
-                <template #icon><Icon name="pencil" /></template>
+            <Button :label="t(`calendar.peek.open`)" size="small" tier="boring" @click="emit(`open`)">
+                <template #icon><Icon name="arrow-right" /></template>
             </Button>
         </div>
     </div>

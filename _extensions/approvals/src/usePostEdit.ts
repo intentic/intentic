@@ -2,9 +2,9 @@ import type { ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-con
 import { type ComputedRef, computed, type Ref, ref } from "vue";
 import { type PostEdit, postEdit } from "./postText";
 
-// State behind the pencil, kept out of the page so it's testable without one. Posts only: an edited action would
-// approve something never proposed, so a bad one is rejected instead. Saves as typed, with a baseline so reading never
-// writes; every exit path (`close`, `open` another, approve) flushes first.
+// State behind a post's words being under the caret (PostText.vue), kept out of the page so it's testable without one.
+// Posts only: an edited action would approve something never proposed, so a bad one is rejected instead. Saves as typed,
+// with a baseline so reading never writes; every exit path (`close`, `open` another, approve) flushes first.
 
 // Long enough that typing is one write, not thirty; short enough Approve can't outrun the save.
 const SAVE_AFTER_MS = 700;
@@ -61,9 +61,14 @@ export const usePostEdit = (write: (post: PostApprovalSummary, changes: PostEdit
             title.value = post.title ?? ``;
         },
         close: async () => {
+            const closing = editingId.value;
             await flush();
-            editingId.value = undefined;
-            baseline = undefined;
+            // Leaving one post's words for another's runs this close and that open at once: the open must not be undone
+            // by the close's write landing after it.
+            if (editingId.value === closing) {
+                editingId.value = undefined;
+                baseline = undefined;
+            }
         },
         flush,
         content,

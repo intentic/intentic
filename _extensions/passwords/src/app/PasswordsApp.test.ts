@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { waitFor } from "@intentic/testing/bun";
 import type { KeyringNeedAnswer } from "@intentic/sandbox-contract/schemas/keyring";
-import type { PasswordItem, PasswordRequest, PasswordsCapabilities, PasswordsPort, VaultStatus } from "./port.js";
+import type { PasswordItem, PasswordPatch, PasswordRequest, PasswordsCapabilities, PasswordsPort, VaultStatus } from "./port.js";
 
 // The Passwords app against a fake port: a computer with no vault is taken through turning it on, its recovery key,
 // the one yes to remembering and the import; a request is answered with the password that fits, or a value typed once
@@ -65,10 +65,11 @@ interface Calls {
     remember: unknown[];
     sources: string[];
     answers: { id: string; answer: KeyringNeedAnswer; options?: { name?: string; value?: string } }[];
+    edits: { name: string; patch: PasswordPatch }[];
 }
 
 const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; capabilities?: PasswordsCapabilities }) => {
-    const calls: Calls = { setUp: [], remember: [], sources: [], answers: [] };
+    const calls: Calls = { setUp: [], remember: [], sources: [], answers: [], edits: [] };
     let status = options.status;
     let requests = options.requests ?? [];
     const settings = { remember: { browser: true, terminal: true, apps: false, phone: false, sandbox: false }, neverSave: [], autoLockMinutes: 15, lockOnSleep: true };
@@ -87,7 +88,9 @@ const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; reques
         reveal: async () => ({ value: `hunter2` }),
         copy: async () => ({ clearsAt: Date.now() + 30_000 }),
         add: async () => ({ name: `NEW` }),
-        edit: async () => undefined,
+        edit: async (name, patch) => {
+            calls.edits.push({ name, patch });
+        },
         remove: async () => undefined,
         setAccess: async () => undefined,
         history: async () => [],
@@ -287,6 +290,29 @@ describe(`PasswordsApp`, () => {
         await waitFor(() => expect(button(el, `Save & allow`).disabled).toBe(false));
         button(el, `Save & allow`).click();
         await waitFor(() => expect(calls.answers).toEqual([{ id: `need-1`, answer: `once`, options: { value: `s3cret` } }]));
+    });
+
+    // No Edit to press first: each value is changed where the detail reads it, and only that value is written.
+    it(`changes a password's values where they are read, one at a time`, async () => {
+        const { port, calls } = fakePort({ status: READY, items: [GITHUB] });
+        const el = mount(port, { item: `GITHUB_COM` });
+        await waitFor(() => expect(el.textContent).toContain(`saved from Brave`));
+        expect(el.textContent).not.toContain(`Edit`);
+        const username = el.querySelector<HTMLInputElement>(`input[placeholder="No username"]`);
+        if (username === null) {
+            throw new Error(`no username field`);
+        }
+        expect(username.value).toBe(`radarsu`);
+        username.value = `radar`;
+        username.dispatchEvent(new Event(`input`));
+        username.dispatchEvent(new FocusEvent(`blur`));
+        await waitFor(() => expect(calls.edits).toEqual([{ name: `GITHUB_COM`, patch: { username: `radar` } }]));
+        const remove = el.querySelector<HTMLButtonElement>(`[aria-label="Remove github.com"]`);
+        if (remove === null) {
+            throw new Error(`no remove on the place`);
+        }
+        remove.click();
+        await waitFor(() => expect(calls.edits.at(-1)).toEqual({ name: `GITHUB_COM`, patch: { origins: [] } }));
     });
 
     it(`offers nothing that manages the vault in a sandbox's view`, async () => {

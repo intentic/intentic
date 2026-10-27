@@ -2,8 +2,9 @@ import { computed, type ComputedRef, ref, type Ref, watch, type WritableComputed
 
 // An editable markdown note's lifecycle without the chrome: draft, a file-or-draft binding, two writes,
 // busy flags, the last error, delete confirmation. The draft is the caller's own ref, since an unsaved
-// edit must survive switching notes and back; `undefined` means not editing. A failed write keeps the
-// draft, the one thing here that can't be re-fetched.
+// edit must survive switching notes and back; `undefined` means the note is being read, not written. A failed
+// write keeps the draft, the one thing here that can't be re-fetched. <NoteEditor> writes as the reader types
+// (`saveDraft(true)`, the draft stays open) and once more as they leave (`saveDraft()`, which closes it).
 
 export interface NoteDraftOptions {
     /** The in-progress edit, owned by the view above the pane. `undefined` means not editing. */
@@ -35,7 +36,8 @@ export interface NoteDraft {
     readonly removing: Readonly<Ref<boolean>>;
     readonly startEdit: () => void;
     readonly cancelEdit: () => void;
-    readonly saveDraft: () => Promise<void>;
+    /** Write the draft. `keepOpen` writes it and leaves the reader writing; without it a written draft closes. */
+    readonly saveDraft: (keepOpen?: boolean) => Promise<void>;
     readonly forget: () => Promise<void>;
 }
 
@@ -87,14 +89,35 @@ export function useNoteDraft({ draft, raw, save, remove, note, onLeave, onRemove
         draft.value = undefined;
     };
 
-    const saveDraft = async (): Promise<void> => {
+    // A draft that says what the file already says (or what this just wrote, before the file is read again) is closed
+    // without a write: leaving a note you only clicked into writes nothing. Writes run one after another, so leaving
+    // mid-save still writes the last words and still closes.
+    let written: string | undefined;
+    const writeDraft = async (keepOpen: boolean): Promise<void> => {
         const content = draft.value;
-        if (content === undefined || saving.value) {
+        if (content === undefined) {
             return;
         }
-        if (await attempt(saving, () => save(content))) {
+        if (content === raw() || content === written) {
+            if (!keepOpen) {
+                draft.value = undefined;
+            }
+            return;
+        }
+        const ok = await attempt(saving, () => save(content));
+        if (ok) {
+            written = content;
+        }
+        // Closed only if nothing was typed while it was on its way: those words are the next write, not lost to this one.
+        if (ok && !keepOpen && draft.value === content) {
             draft.value = undefined;
         }
+    };
+    let queue: Promise<void> = Promise.resolve();
+    const saveDraft = (keepOpen = false): Promise<void> => {
+        const next = queue.then(() => writeDraft(keepOpen));
+        queue = next;
+        return next;
     };
 
     const forget = async (): Promise<void> => {

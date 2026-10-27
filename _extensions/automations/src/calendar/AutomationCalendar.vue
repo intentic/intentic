@@ -35,7 +35,7 @@ const props = defineProps<{
     /** A one-time wake being composed at this moment, drawn where it will sit until it is saved or dropped. */
     draft?: number;
 }>();
-const emit = defineEmits<{ create: [at: number]; edit: [id: string]; run: [id: string]; toggle: [id: string, enabled: boolean]; list: [] }>();
+const emit = defineEmits<{ create: [at: number]; open: [id: string]; run: [id: string]; toggle: [id: string, enabled: boolean]; list: [] }>();
 
 // One hour's height, and a slot's: a wake has no duration, so the slot is drawn a fixed half hour tall and two wakes
 // closer than that sit side by side.
@@ -467,8 +467,8 @@ const HOUR_LINES = {
                 :run="peekEntry?.run"
                 :busy="busy"
                 @run="emit(`run`, peekAutomation.id)"
-                @edit="
-                    emit(`edit`, peekAutomation.id);
+                @open="
+                    emit(`open`, peekAutomation.id);
                     close();
                 "
                 @toggle="emit(`toggle`, peekAutomation.id, $event)"

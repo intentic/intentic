@@ -2,7 +2,7 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Await, Button, ui, type NoticeModel, Section } from "@intentic/ui";
+import { Await, Button, ResponsiveOverlay, ui, type NoticeModel, Section } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
@@ -224,8 +224,10 @@ const audit = (listing: DiscoverListing): void => {
     );
 };
 
-// The registry behind the list.
+// The registry behind the list, changed where it is named: pressing its name opens the address and token beside it, so the
+// grid below never moves down to make room for a form.
 const changing = ref(false);
+const sourceAnchor = ref<HTMLElement>();
 const draftUrl = ref(``);
 const draftToken = ref(``);
 const openChange = (): void => {
@@ -281,38 +283,53 @@ const emptyNote = computed<string | undefined>(() => {
         <!-- Where the list came from, stated rather than asked for; changing it is one click, not a blocking field. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs">
             <span class="text-subtle">{{ t(`sandbox.words.source`) }}</span>
-            <span class="font-medium text-content">{{
-                isOfficial ? (registryName ?? t(`sandbox.extensionsBrowse.officialRegistry`)) : (registryName ?? url)
-            }}</span>
-            <span v-if="!isOfficial" class="truncate font-mono text-subtle">{{ url }}</span>
-            <button v-if="!changing" type="button" class="text-link hover:underline" @click="openChange">
-                {{ t(`sandbox.extensionsBrowse.change`) }}
+            <!-- The source's name is where it is changed: a hover wash says so, and the press opens its fields beside it. -->
+            <button
+                ref="sourceAnchor"
+                type="button"
+                class="-mx-1 cursor-pointer rounded px-1 font-medium text-content transition-colors hover:bg-content/5"
+                aria-haspopup="dialog"
+                :aria-expanded="changing"
+                v-tooltip.bottom="t(`sandbox.extensionsBrowse.change`)"
+                @click="openChange"
+            >
+                {{ isOfficial ? (registryName ?? t(`sandbox.extensionsBrowse.officialRegistry`)) : (registryName ?? url) }}
             </button>
-            <button v-if="!isOfficial && !changing" type="button" class="text-link hover:underline" @click="backToOfficial">
+            <span v-if="!isOfficial" class="truncate font-mono text-subtle">{{ url }}</span>
+            <button v-if="!isOfficial" type="button" class="text-link hover:underline" @click="backToOfficial">
                 {{ t(`sandbox.extensionsBrowse.backToOfficialOne`) }}
             </button>
         </div>
 
         <!-- Any git repository with a marketplace file can be a collapsed registry. -->
-        <div v-if="changing" class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
-            <p class="text-2xs text-muted">
-                {{ t(`sandbox.extensionsBrowse.anyGitRepositoryHolding`) }} <code class="ui-code">.claude-plugin/marketplace.json</code>
-                {{ t(`sandbox.extensionsBrowse.registryPointAtOwn`) }}
-            </p>
-            <div class="flex flex-wrap gap-2">
+        <ResponsiveOverlay v-model="changing" :anchor="sourceAnchor" :header="t(`sandbox.words.source`)" panel-class="w-pop p-4">
+            <form class="flex flex-col gap-3" @submit.prevent="applyChange">
+                <p class="text-2xs text-muted">
+                    {{ t(`sandbox.extensionsBrowse.anyGitRepositoryHolding`) }} <code class="ui-code">.claude-plugin/marketplace.json</code>
+                    {{ t(`sandbox.extensionsBrowse.registryPointAtOwn`) }}
+                </p>
                 <input
                     v-model="draftUrl"
                     placeholder="https://github.com/owner/registry"
                     spellcheck="false"
-                    :class="ui.input(`min-w-56 flex-1`)"
-                    @keyup.enter="applyChange"
+                    :aria-label="t(`sandbox.words.source`)"
+                    :class="ui.input(`w-full`)"
                 />
-                <input v-model="draftToken" type="password" autocomplete="off" :placeholder="t(`shared.token`)" :class="ui.input(`w-32`)" />
-                <Button tier="accent" :label="t(`ui.action.browse`)" size="small" :disabled="draftUrl.trim() === ``" @click="applyChange" />
-                <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="changing = false" />
-            </div>
-            <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
-        </div>
+                <input
+                    v-model="draftToken"
+                    type="password"
+                    autocomplete="off"
+                    :placeholder="t(`shared.token`)"
+                    :aria-label="t(`shared.token`)"
+                    :class="ui.input(`w-full`)"
+                />
+                <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
+                <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-3">
+                    <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="changing = false" />
+                    <Button tier="accent" type="submit" :label="t(`ui.action.browse`)" size="small" :disabled="draftUrl.trim() === ``" />
+                </div>
+            </form>
+        </ResponsiveOverlay>
 
         <!-- Registry loading, on arrival or after a change of registry, draws the listing as it last looked here; until it has
              been seen once, the tile grid's shape. A failed read says so in the section's notice region (`notice`). -->

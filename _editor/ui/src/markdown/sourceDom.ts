@@ -1,6 +1,7 @@
 import { highlightedCode } from "./code.js";
 import { MERMAID_LANG } from "./figures.js";
 import { lexBlocks, lexInline, type MarkdownToken } from "./render.js";
+import { drawWikiLinks, dropEmptyMarkers, MARKER, span } from "./markers.js";
 
 // This block's DOM text is its markdown source, byte for byte (`blockBody(element) === source`), so
 // `contenteditable` edits the source directly; markers sit in text nodes wrapped in spans CSS can hide. Line-end
@@ -8,18 +9,9 @@ import { lexBlocks, lexInline, type MarkdownToken } from "./render.js";
 // `blockBody` restores them. A builder that can't reassemble its source exactly falls back to one plain text node
 // holding it verbatim.
 
-// Markup, as opposed to words: hidden while the block is at rest, revealed when the caret is in it.
-const MARKER = `md-marker`;
 // The leading markup of a line (`## `, `- `, `> `), which hangs in the gutter so revealing it never moves the text
 // after it.
 const GUTTER = `md-marker-gutter`;
-
-const span = (text: string, ...classes: string[]): HTMLSpanElement => {
-    const node = document.createElement(`span`);
-    node.className = classes.join(` `);
-    node.textContent = text;
-    return node;
-};
 
 // Where a token's children sit in its own source, so the parent's markers are found by subtraction rather than by
 // re-deriving the lexer's delimiter rules.
@@ -84,16 +76,6 @@ const appendInline = (parent: Node, tokens: readonly MarkdownToken[]): void => {
         element.appendChild(span(token.raw.slice(inner.at + inner.text.length), MARKER));
         if (element !== parent) {
             parent.appendChild(element);
-        }
-    }
-};
-
-// An empty marker span is markup that isn't there. Removed so the DOM stays honest about the file's contents and
-// the caret has nowhere empty to land.
-const dropEmptyMarkers = (root: HTMLElement): void => {
-    for (const node of root.querySelectorAll(`.${MARKER}`)) {
-        if (node.textContent === ``) {
-            node.remove();
         }
     }
 };
@@ -706,6 +688,7 @@ export const buildBlockElement = (source: string): HTMLElement => {
     const built = token === undefined ? undefined : buildProse(token, source);
     if (built !== undefined && token !== undefined) {
         dropEmptyMarkers(built);
+        drawWikiLinks(built);
         // The invariant, checked rather than trusted: a block that doesn't reassemble its source exactly is shown as
         // source instead.
         if (blockBody(built) === source) {

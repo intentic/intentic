@@ -66,6 +66,30 @@ describe("usePostEdit", () => {
         expect(written[1]?.post.id).toBe(`two`);
     });
 
+    // Leaving one post's words for another's fires the first one's close and the second one's open together; the close's
+    // write landing last must not shut the post just opened.
+    it("keeps the next post open when the last one's close lands after it", async () => {
+        let land: () => void = () => undefined;
+        const slow = jest.fn(
+            (target: PostApprovalSummary, changes: unknown) =>
+                new Promise<void>((resolve) => {
+                    land = () => {
+                        written.push({ post: target, changes });
+                        resolve();
+                    };
+                }),
+        );
+        const edit = usePostEdit(slow);
+        await edit.open(post());
+        edit.content.value = `left behind`;
+        const closing = edit.close();
+        await edit.open(post({ id: `next` }));
+        land();
+        await closing;
+        expect(edit.isEditing(post({ id: `next` }))).toBe(true);
+        expect(written[0]?.changes).toEqual({ content: `left behind` });
+    });
+
     // Opening a post to read it must not dirty the file, or a short debounce would flash the queue under someone who
     // only looked.
     it("never writes when nothing changed", async () => {

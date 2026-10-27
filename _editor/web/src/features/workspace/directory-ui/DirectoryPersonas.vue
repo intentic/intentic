@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
-import { Button, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, SearchBar, Section, StatusBadge, ui } from "@intentic/ui";
+import { Button, FACE_SIZES, InlineRename, Modal, Notice, type NoticeModel, PersonaFace, SearchBar, Section, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 import {
@@ -20,10 +20,10 @@ import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import PersonaPowersFields from "../../../components/PersonaPowersFields.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// Who works in this folder, opened from a directory row: one question with three answers — write a new persona
-// starting here, point an existing one at this folder (which MOVES it, since a persona has one starting folder),
-// or edit one that already starts here. Every save is a whole-card upsert; a field this panel doesn't ask about must be
-// carried over, not dropped.
+// Who works in this folder, opened from a directory row: write a new persona starting here, or point an existing one at
+// this folder (which MOVES it, since a persona has one starting folder). One that already starts here is changed where
+// its row shows it: its name in place, what it may do under its bounds, each written as it changes. Every save is a
+// whole-card upsert; a field this panel doesn't ask about is carried over, not dropped.
 
 const t = useT();
 
@@ -46,12 +46,11 @@ const visible = computed({
 const folderName = computed(() => dir.value?.split(`/`).pop() ?? ``);
 const cards = computed<Persona[]>(() => (dir.value === undefined ? [] : personasStartingIn(personas.value, dir.value)));
 
-// Mode drives everything on screen (heading, fields, button verb) from one piece of state.
-// `editing` and `chosen` are cleared entering any other mode, so a picked card can't leak into a name submission.
-type Mode = `new` | `existing` | `edit`;
+// Mode drives the lower section (heading, fields, button verb) from one piece of state.
+// `chosen` is cleared entering the other mode, so a picked card can't leak into a name submission.
+type Mode = `new` | `existing`;
 const mode = ref<Mode>(`new`);
-// Id of the card being changed (edit) or pointed at this folder (existing).
-const editing = ref<string | undefined>(undefined);
+// Id of the card pointed at this folder (existing).
 const chosen = ref<string | undefined>(undefined);
 const filter = ref(``);
 const label = ref(``);
@@ -61,7 +60,6 @@ const saveError = ref<NoticeModel | undefined>(undefined);
 
 const startAdd = (): void => {
     mode.value = `new`;
-    editing.value = undefined;
     chosen.value = undefined;
     filter.value = ``;
     label.value = ``;
@@ -69,26 +67,21 @@ const startAdd = (): void => {
     advanced.value = false;
     saveError.value = undefined;
 };
-const startEdit = (persona: Persona): void => {
-    mode.value = `edit`;
-    editing.value = persona.id;
-    chosen.value = undefined;
-    label.value = persona.label ?? persona.id;
-    powers.value = powersDraftOf(persona);
-    // Auto-expanded when editing, since changing bounds is the usual reason to open an existing card.
-    advanced.value = persona.powers !== undefined;
-    saveError.value = undefined;
-};
 const startExisting = (): void => {
     mode.value = `existing`;
-    editing.value = undefined;
     chosen.value = undefined;
     filter.value = ``;
     saveError.value = undefined;
 };
 
-// A second folder must not inherit the first one's half-typed name or a previous save failure.
-watch(dir, () => startAdd());
+// A second folder must not inherit the first one's half-typed name or a previous save failure; a card's bounds changed
+// a moment before the panel closed are written, not dropped.
+watch(dir, () => {
+    flushPowers();
+    powersOpen.value = undefined;
+    cardError.value = undefined;
+    startAdd();
+});
 
 // Every persona that doesn't already start here (elsewhere, or nowhere); the ones that do are the list above,
 // so offering them again would be a no-op.
@@ -105,7 +98,7 @@ const chosenCard = computed(() => personas.value.find((persona) => persona.id ==
 // Where the chosen card starts today, if anywhere; stated aloud since the folder losing it isn't shown on this screen.
 const movedFrom = computed(() => chosenCard.value?.workspace?.startIn);
 
-const cardId = computed(() => (mode.value === `edit` ? editing.value : personaSlug(label.value)) ?? ``);
+const cardId = computed(() => personaSlug(label.value));
 // A new card can't land on a taken name — save is by id, so it would silently overwrite that other persona.
 const taken = computed(() => mode.value === `new` && personas.value.some((persona) => persona.id === cardId.value));
 const nameValid = computed(() => cardId.value !== `` && !taken.value);
@@ -118,11 +111,7 @@ const nameHint = computed(() => {
 });
 
 const heading = computed(() =>
-    mode.value === `edit`
-        ? t(`workspace.directoryPersonas.editing`, { label: label.value })
-        : mode.value === `existing`
-          ? t(`workspace.directoryPersonas.useExisting`)
-          : t(`workspace.directoryPersonas.addAPersona`),
+    mode.value === `existing` ? t(`workspace.directoryPersonas.useExisting`) : t(`workspace.directoryPersonas.addAPersona`),
 );
 
 // How bounded this draft is, in the app's own phrase; shown beside the collapsed Advanced section so a limited
@@ -131,23 +120,6 @@ const bounds = computed(() => {
     const stored = storedPowers(powers.value);
     return stored === undefined ? undefined : personaBoundsWords({ id: cardId.value, capabilities: [], powers: stored });
 });
-
-// Fields this panel never asks about but must not drop when rewriting an existing card: what it's for, its
-// prompt mode, its repos, its models, what it is told before each message — each would otherwise vanish on the
-// first folder change.
-const carriedOver = (existing: Persona | undefined): Pick<Persona, "brief" | "systemPromptMode" | "context" | "models" | "briefing"> => {
-    if (existing === undefined) {
-        return {};
-    }
-    const { brief, systemPromptMode, context, models, briefing } = existing;
-    return {
-        ...(brief !== undefined ? { brief } : {}),
-        ...(systemPromptMode !== undefined ? { systemPromptMode } : {}),
-        ...(context !== undefined ? { context } : {}),
-        ...(models !== undefined ? { models } : {}),
-        ...(briefing !== undefined ? { briefing } : {}),
-    };
-};
 
 // The whole card about to be written, or undefined until the form describes one. Built here so the two modes'
 // shapes sit side by side: moving a card touches one field, writing one spells out every field it owns.
@@ -160,22 +132,87 @@ const draftCard = (folder: string): Persona | undefined => {
     if (!nameValid.value) {
         return undefined;
     }
-    const existing = editing.value === undefined ? undefined : personas.value.find((persona) => persona.id === editing.value);
     const stored = storedPowers(powers.value);
     const named = label.value.trim();
     return {
         id: cardId.value,
-        // Carried over, not asked about (see header); a brand-new card starts with no accounts.
-        capabilities: existing?.capabilities ?? [],
-        ...carriedOver(existing),
+        // A brand-new card starts with no accounts.
+        capabilities: [],
         // Only stored when it says something the id doesn't already.
         ...(named !== `` && named !== cardId.value ? { label: named } : {}),
         // Absent means the full toolbox, so an untouched Advanced section commits nothing.
         ...(stored !== undefined ? { powers: stored } : {}),
-        // The panel's whole point: the clicked folder, kept alongside anything else the card already said about itself.
-        workspace: { ...existing?.workspace, startIn: folder },
+        // The panel's whole point: the clicked folder.
+        workspace: { startIn: folder },
     };
 };
+
+// A CARD ALREADY STARTING HERE, CHANGED WHERE ITS ROW SHOWS IT: the whole card with that one change, so nothing this panel
+// does not ask about is dropped, and a refusal said under that row.
+const cardError = ref<{ readonly id: string; readonly notice: NoticeModel }>();
+const writeCard = async (next: Persona): Promise<boolean> => {
+    cardError.value = undefined;
+    try {
+        await save.mutateAsync(next);
+        return true;
+    } catch (err) {
+        cardError.value = { id: next.id, notice: noticeFrom(err, t(`workspace.directoryPersonas.couldNotSave`)) };
+        return false;
+    }
+};
+// Its name, renamed in place; the id stays, so nothing that names the card loses it. A refusal stays in the name's field.
+const rename = async (persona: Persona, name: string): Promise<void> => {
+    const { label: _label, ...rest } = persona;
+    await save.mutateAsync(name === persona.id ? rest : { ...rest, label: name });
+};
+// What it may do: its bounds are the press target, and the same fields as a new card's open under its row, each change
+// written a moment after it is made.
+const powersOpen = ref<string | undefined>(undefined);
+const powersDraft = ref<PersonaPowersDraft>({ ...FULL_POWERS });
+let powersTimer: ReturnType<typeof setTimeout> | undefined;
+const writePowers = (id: string | undefined): void => {
+    const persona = personas.value.find((card) => card.id === id);
+    if (persona === undefined) {
+        return;
+    }
+    const stored = storedPowers(powersDraft.value);
+    // Opening the fields seeds them from the card: an unchanged draft is not a write.
+    if (JSON.stringify(stored) === JSON.stringify(persona.powers)) {
+        return;
+    }
+    const { powers: _powers, ...rest } = persona;
+    void writeCard(stored === undefined ? rest : { ...rest, powers: stored });
+};
+// What was changed last is written before the fields close or move to another card, never dropped with the timer.
+const flushPowers = (): void => {
+    if (powersTimer !== undefined) {
+        clearTimeout(powersTimer);
+        powersTimer = undefined;
+        writePowers(powersOpen.value);
+    }
+};
+watch(
+    powersDraft,
+    () => {
+        clearTimeout(powersTimer);
+        const id = powersOpen.value;
+        powersTimer = setTimeout(() => {
+            powersTimer = undefined;
+            writePowers(id);
+        }, 500);
+    },
+    { deep: true },
+);
+const togglePowers = (persona: Persona): void => {
+    flushPowers();
+    if (powersOpen.value === persona.id) {
+        powersOpen.value = undefined;
+        return;
+    }
+    powersDraft.value = powersDraftOf(persona);
+    powersOpen.value = persona.id;
+};
+onBeforeUnmount(flushPowers);
 
 const submitting = ref(false);
 const submit = async (): Promise<void> => {
@@ -210,25 +247,32 @@ const submit = async (): Promise<void> => {
             <!-- Existing cards first, since a folder can hold several; absent entirely (not an empty box) when there are none. -->
             <Section v-if="cards.length > 0" :label="t(`workspace.directoryPersonas.startingHere`)">
                 <div class="flex flex-col gap-1">
-                    <!-- Rows on the dialog's ground, the one being edited tinted; reaching out by their padding so faces line up with the label. -->
-                    <div
-                        v-for="persona in cards"
-                        :key="persona.id"
-                        class="-mx-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors"
-                        :class="editing === persona.id ? `ui-row-select-on` : ``"
-                    >
-                        <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
-                        <PersonaFace :persona :size="FACE_SIZES.row" />
-                        <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
-                        <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBoundsWords(persona) }}</StatusBadge>
-                        <button
-                            type="button"
-                            :class="ui.iconButton()"
-                            :aria-label="t(`workspace.directoryPersonas.edit`, { id: persona.label ?? persona.id })"
-                            @click="startEdit(persona)"
-                        >
-                            <Icon name="pencil" class="text-xs" />
-                        </button>
+                    <!-- Rows on the dialog's ground, reaching out by their padding so faces line up with the label. Each is changed
+                         where it is read: its name in place, what it may do by pressing its bounds. -->
+                    <div v-for="persona in cards" :key="persona.id" class="-mx-2.5 flex flex-col gap-2 rounded-lg px-2.5 py-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
+                            <PersonaFace :persona :size="FACE_SIZES.row" />
+                            <InlineRename
+                                :value="persona.label ?? persona.id"
+                                :write="(name: string) => rename(persona, name)"
+                                :label="t(`shared.name`)"
+                                :action="t(`ui.action.rename`)"
+                                :failure="t(`workspace.directoryPersonas.couldNotSave`)"
+                                class="min-w-0 flex-1 text-sm text-content"
+                            />
+                            <button
+                                type="button"
+                                :class="ui.textButton({ size: `xs`, tone: `quiet` })"
+                                :aria-expanded="powersOpen === persona.id"
+                                @click="togglePowers(persona)"
+                            >
+                                {{ personaBoundsWords(persona) }}
+                                <Icon name="angle-right" class="transition-transform" :class="powersOpen === persona.id ? `rotate-90` : ``" />
+                            </button>
+                        </div>
+                        <PersonaPowersFields v-if="powersOpen === persona.id" :draft="powersDraft" :grantables="grantables" />
+                        <Notice v-if="cardError?.id === persona.id" :of="cardError.notice" />
                     </div>
                 </div>
             </Section>
@@ -335,13 +379,7 @@ const submit = async (): Promise<void> => {
             <!-- The verb follows the mode, so the button never promises "add" while the panel is actually moving a card. -->
             <Button
                 tier="accent"
-                :label="
-                    mode === `new`
-                        ? t(`workspace.directoryPersonas.addPersona`)
-                        : mode === `existing`
-                          ? t(`workspace.directoryPersonas.startHere2`)
-                          : t(`ui.action.save`)
-                "
+                :label="mode === `new` ? t(`workspace.directoryPersonas.addPersona`) : t(`workspace.directoryPersonas.startHere2`)"
                 :loading="save.isPending.value"
                 :disabled="!valid"
                 @click="submit"

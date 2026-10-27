@@ -126,9 +126,11 @@ const decide = (link: InboundLinkSummary, request: LinkRequest, approve: boolean
         t(`sandbox.linkedSandboxes.couldntAnswer`),
     );
 
-// One link's terms, edited in place under its row.
+// One link's terms, shown under its row and each changed where it is shown: a pick, a switch or a number writes itself,
+// with no Save to reach for and nothing that turns into a form first.
 const editing = ref<string>();
-const draft = ref<{ runAs?: string | undefined; actsAs: string; approve: boolean; turnsPerHour: number }>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20 });
+type TermsDraft = { runAs?: string | undefined; actsAs: string; approve: boolean; turnsPerHour: number };
+const draft = ref<TermsDraft>({ actsAs: NO_PERSONA, approve: false, turnsPerHour: 20 });
 const edit = (link: InboundLinkSummary): void => {
     if (editing.value === link.id) {
         editing.value = undefined;
@@ -137,15 +139,33 @@ const edit = (link: InboundLinkSummary): void => {
     editing.value = link.id;
     draft.value = { runAs: link.terms.runAs, actsAs: link.terms.actsAs ?? NO_PERSONA, approve: link.terms.approve, turnsPerHour: link.terms.turnsPerHour };
 };
-const save = async (link: InboundLinkSummary): Promise<void> => {
+const TURNS = { min: 1, max: 120 } as const;
+const write = async (link: InboundLinkSummary, change: Partial<TermsDraft>): Promise<void> => {
+    draft.value = { ...draft.value, ...change };
     const { actsAs, approve, turnsPerHour, runAs: service } = draft.value;
+    // A number typed out of bounds, or not a number at all, is not sent: the field shows what the link still has.
+    if (!Number.isInteger(turnsPerHour) || turnsPerHour < TURNS.min || turnsPerHour > TURNS.max) {
+        draft.value = { ...draft.value, turnsPerHour: link.terms.turnsPerHour };
+        return;
+    }
     // Owner again is a null, which takes the service off; absence would keep the one the link had.
     const input: InboundLinkTermsUpdate = { approve, turnsPerHour, runAs: service ?? null };
     if (actsAs !== NO_PERSONA) {
         input.actsAs = actsAs;
     }
     await settle(link.id, () => sandboxRaw(`POST /system/links/{id}`, { params: { id: link.id }, input }), t(`sandbox.linkedSandboxes.couldntSave`));
-    editing.value = undefined;
+    // A refused change is not left standing on the control: it shows what the link still has, beside the refusal.
+    if (rowNotice.value !== undefined) {
+        const stands = shown.value.find((each) => each.id === link.id) ?? link;
+        draft.value = { runAs: stands.terms.runAs, actsAs: stands.terms.actsAs ?? NO_PERSONA, approve: stands.terms.approve, turnsPerHour: stands.terms.turnsPerHour };
+    }
+};
+// The number writes once it is left or Enter is pressed, never mid-typing: "1" on the way to "12" is not a limit.
+const writeTurns = (link: InboundLinkSummary, event: Event): void => {
+    const typed = event.target instanceof HTMLInputElement ? event.target.valueAsNumber : Number.NaN;
+    if (typed !== link.terms.turnsPerHour) {
+        void write(link, { turnsPerHour: typed });
+    }
 };
 
 // A link minted by hand, for a sandbox the editor cannot pair from here: asked for with the group's New link, since most
@@ -264,7 +284,13 @@ const address = computed(() => daemonUrl.value ?? ``);
                         />
                     </template>
                     <template #control>
-                        <Button :label="t(`sandbox.linkedSandboxes.terms`)" size="small" tier="quiet" @click="edit(link)" />
+                        <Button
+                            :label="t(`sandbox.linkedSandboxes.terms`)"
+                            size="small"
+                            tier="quiet"
+                            :aria-expanded="editing === link.id"
+                            @click="edit(link)"
+                        />
                         <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(link.id)" />
                     </template>
                 </Row>
@@ -289,34 +315,34 @@ const address = computed(() => daemonUrl.value ?? ``);
                     </template>
                 </Row>
                 <RowNote v-if="editing === link.id" variant="block">
-                    <form class="flex flex-col gap-3" @submit.prevent="save(link)">
-                        <div class="flex flex-wrap items-center gap-3">
-                            <Picker
-                                v-model="draft.actsAs"
-                                :options="personaOptions"
-                                variant="input"
-                                :aria-label="t(`sandbox.linkedSandboxes.persona`)"
-                                :header="t(`sandbox.linkedSandboxes.persona`)"
-                                class="ui-field-sm w-48"
+                    <div class="flex flex-wrap items-center gap-3">
+                        <Picker
+                            :model-value="draft.actsAs"
+                            :options="personaOptions"
+                            variant="input"
+                            :aria-label="t(`sandbox.linkedSandboxes.persona`)"
+                            :header="t(`sandbox.linkedSandboxes.persona`)"
+                            class="ui-field-sm w-48"
+                            @update:model-value="write(link, { actsAs: $event })"
+                        />
+                        <ServicePicker :model-value="draft.runAs" @update:model-value="write(link, { runAs: $event })" />
+                        <label class="flex items-center gap-2 text-sm text-content">
+                            <ToggleSwitch :model-value="draft.approve" class="ui-switch-sm" @update:model-value="write(link, { approve: $event })" />
+                            {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-content">
+                            <input
+                                :value="draft.turnsPerHour"
+                                type="number"
+                                :min="TURNS.min"
+                                :max="TURNS.max"
+                                :class="ui.input({ size: `sm` }, `w-20`)"
+                                @change="writeTurns(link, $event)"
+                                @keydown.enter.prevent="writeTurns(link, $event)"
                             />
-                            <ServicePicker v-model="draft.runAs" />
-                            <label class="flex items-center gap-2 text-sm text-content">
-                                <ToggleSwitch v-model="draft.approve" class="ui-switch-sm" />
-                                {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
-                            </label>
-                            <label class="flex items-center gap-2 text-sm text-content">
-                                <input
-                                    v-model.number="draft.turnsPerHour"
-                                    type="number"
-                                    min="1"
-                                    max="120"
-                                    :class="ui.input({ size: `sm` }, `w-20`)"
-                                />
-                                {{ t(`sandbox.linkedSandboxes.turnsAnHour`) }}
-                            </label>
-                            <Button tier="accent" type="submit" :label="t(`ui.action.save`)" size="small" />
-                        </div>
-                    </form>
+                            {{ t(`sandbox.linkedSandboxes.turnsAnHour`) }}
+                        </label>
+                    </div>
                 </RowNote>
             </template>
 

@@ -239,8 +239,7 @@
         "copyWebhookUrl": "Webhook-URL für {id} kopieren",
         "delete": "{id} löschen",
         "delete2": "Löschen",
-        "edit2": "Bearbeiten",
-        "editToRearm": "Bearbeiten zum Scharfschalten",
+        "editToRearm": "Neue Zeit schaltet es scharf",
         "embedCode": "Einbettungscode",
         "enable": "{id} aktivieren",
         "groups": "Gruppen",
@@ -456,6 +455,7 @@
             "guarded": "Prüft zuerst und wacht nur auf, wenn die Prüfung etwas findet.",
             "afterSessions": "Übersprungen, bis {count} neue Sitzung gelaufen ist. | Übersprungen, bis {count} neue Sitzungen gelaufen sind.",
             "openTranscript": "Verlauf öffnen",
+            "open": "Öffnen",
             "nextIn": "Nächste {when}"
         }
     },

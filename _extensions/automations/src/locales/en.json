@@ -239,8 +239,7 @@
         "copyWebhookUrl": "Copy webhook URL for {id}",
         "delete": "Delete {id}",
         "delete2": "Delete",
-        "edit2": "Edit",
-        "editToRearm": "Edit to re-arm",
+        "editToRearm": "A new time re-arms it",
         "embedCode": "Embed code",
         "enable": "Enable {id}",
         "groups": "Groups",
@@ -456,6 +455,7 @@
             "guarded": "Checks first, and wakes only if its check finds something.",
             "afterSessions": "Skipped until {count} new session has run. | Skipped until {count} new sessions have run.",
             "openTranscript": "Open the transcript",
+            "open": "Open",
             "nextIn": "Next {when}"
         }
     },

@@ -1,11 +1,28 @@
-<!-- One password: who it signs in as, the value behind the person's yes, where it works, which agents may use it, what it was used for, and its earlier values. -->
+<!-- One password: who it signs in as, the value behind the person's yes, where it works, which agents may use it, what it was used for, and its earlier values.
+     Every one of them is changed where it is read, one at a time, through the person's yes at the computer: there is no edit form. -->
 <script setup lang="ts">
-import { Button, ConfirmDialog, CopyButton, Icon, messageOr, Notice, Section, SegmentedControl, ui } from "@intentic/extension-ui";
+import {
+    Button,
+    ConfirmDialog,
+    CopyButton,
+    Icon,
+    InlineRename,
+    messageOr,
+    Notice,
+    ProseField,
+    Section,
+    SegmentedControl,
+    ToggleSwitch,
+    ui,
+} from "@intentic/extension-ui";
 import { timeAgo } from "@intentic/extension-ui/format";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import type { KeyringOrigin } from "@intentic/sandbox-contract/schemas/keyring";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import { t } from "../i18n.js";
 import ItemTile from "./ItemTile.vue";
-import type { AccessLevel, ActivityLine, PasswordItem, PasswordsPort, PasswordVersion, SandboxRef } from "./port.js";
+import PasswordPlaces from "./PasswordPlaces.vue";
+import PasswordValuePopover from "./PasswordValuePopover.vue";
+import type { AccessLevel, ActivityLine, PasswordItem, PasswordPatch, PasswordsPort, PasswordVersion, SandboxRef } from "./port.js";
 import { accessHelp, activitySentence, originLabel, savedLine } from "./words.js";
 
 const { item, port, sandboxes, now } = defineProps<{
@@ -17,7 +34,7 @@ const { item, port, sandboxes, now } = defineProps<{
     /** Narrow layout: the detail stands alone, with a way back to the list. */
     alone?: boolean;
 }>();
-const emit = defineEmits<{ edit: []; back: []; changed: [] }>();
+const emit = defineEmits<{ back: []; changed: [] }>();
 
 const manage = computed(() => port.capabilities.manage);
 const error = ref<string | undefined>(undefined);
@@ -61,6 +78,82 @@ const copy = (): Promise<void> =>
         copiedUntil.value = (await port.copy(item.name, `password`)).clearsAt;
     });
 const copySeconds = computed(() => (copiedUntil.value === undefined ? 0 : Math.max(0, Math.ceil((copiedUntil.value - now) / 1000))));
+
+/* EACH FIELD CHANGED WHERE IT IS READ: one patch per change, through the keyring and the person's yes at the computer, as
+   the whole form's Save once was. Text fields write when they are left or Enter is pressed, never mid-word; Esc puts back
+   what is stored. */
+const uid = useId();
+const edit = (what: string, patch: PasswordPatch): Promise<void> =>
+    act(what, async () => {
+        await port.edit(item.name, patch);
+        emit(`changed`);
+    });
+// The title is a name, renamed in place (InlineRename); a refusal stays in its own field, so it throws rather than act()s.
+const rename = async (title: string): Promise<void> => {
+    waiting.value = `title`;
+    try {
+        await port.edit(item.name, { title });
+        emit(`changed`);
+    } finally {
+        waiting.value = undefined;
+    }
+};
+// A field's text on screen: seeded from the password, following a change made elsewhere only while it holds nothing of the
+// reader's own, and reset when another password is opened.
+const usernameDraft = ref(item.username ?? ``);
+const noteDraft = ref(item.note ?? ``);
+watch(
+    () => item.username ?? ``,
+    (next, before) => {
+        if (usernameDraft.value === before) {
+            usernameDraft.value = next;
+        }
+    },
+);
+watch(
+    () => item.note ?? ``,
+    (next, before) => {
+        if (noteDraft.value === before) {
+            noteDraft.value = next;
+        }
+    },
+);
+const writeUsername = (): void => {
+    const next = usernameDraft.value.trim();
+    if (next !== (item.username ?? ``)) {
+        void edit(`username`, { username: next });
+    }
+};
+const writeNote = (): void => {
+    const next = noteDraft.value.trim();
+    if (next !== (item.note ?? ``)) {
+        void edit(`note`, { note: next });
+    }
+};
+const blurOut = (event: Event): void => {
+    if (event.target instanceof HTMLElement) {
+        event.target.blur();
+    }
+};
+const revertUsername = (event: Event): void => {
+    usernameDraft.value = item.username ?? ``;
+    blurOut(event);
+};
+const revertNote = (event: Event): void => {
+    noteDraft.value = item.note ?? ``;
+    blurOut(event);
+};
+const setPlaces = (origins: KeyringOrigin[]): Promise<void> => edit(`origins`, { origins });
+const setAnyField = (anyField: boolean): Promise<void> => edit(`anyField`, { anyField });
+// A new value is set where the dots are read, in its own small panel (PasswordValuePopover.vue).
+const valueAnchor = ref<HTMLElement>();
+const changingValue = ref(false);
+const setValue = async (patch: PasswordPatch): Promise<void> => {
+    await edit(`value`, patch);
+    if (error.value === undefined) {
+        changingValue.value = false;
+    }
+};
 
 /* AGENTS. Every linked sandbox, and any that has access though it is no longer linked, each with its level. */
 const levels = computed(() => {
@@ -115,6 +208,9 @@ watch(
         hide();
         copiedUntil.value = undefined;
         error.value = undefined;
+        usernameDraft.value = item.username ?? ``;
+        noteDraft.value = item.note ?? ``;
+        changingValue.value = false;
         void readAround(name);
         // Looked at: it leaves "Just saved".
         if (item.fresh) {
@@ -153,15 +249,22 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
             </button>
             <ItemTile :item="item" size="lg" />
             <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <h2 class="truncate text-lg font-semibold text-content">{{ item.title }}</h2>
+                <h2 class="min-w-0 text-lg font-semibold text-content">
+                    <InlineRename
+                        :value="item.title"
+                        :write="rename"
+                        :label="t(`app.edit.title`)"
+                        :action="t(`app.edit.title`)"
+                        :editable="manage"
+                        :maxlength="200"
+                        :failure="t(`app.error.act`)"
+                    />
+                </h2>
                 <p class="text-xs text-muted">{{ savedLine(item, now) }}</p>
                 <p v-if="item.computer" class="text-xs text-subtle">{{ t(`app.detail.onComputer`, { computer: item.computer }) }}</p>
             </div>
-            <Button v-if="manage" tier="boring" size="small" :label="t(`app.editAction`)" @click="emit(`edit`)">
-                <template #icon><Icon name="pencil" /></template>
-            </Button>
             <Button
-                v-else-if="port.manageOnComputer"
+                v-if="!manage && port.manageOnComputer"
                 tier="boring"
                 size="small"
                 :label="t(`app.manageOnComputer`)"
@@ -173,17 +276,46 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
 
         <!-- The fields: what a person reads, copies and shows. -->
         <section class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
-            <div v-if="item.username" class="flex items-center gap-3 px-4 py-3">
+            <div v-if="item.username || manage" class="flex items-center gap-3 px-4 py-3">
                 <div class="flex min-w-0 flex-1 flex-col">
-                    <span class="text-2xs text-subtle">{{ t(`app.detail.username`) }}</span>
-                    <span class="truncate text-sm text-content">{{ item.username }}</span>
+                    <label :for="`${uid}-username`" class="text-2xs text-subtle">{{ t(`app.detail.username`) }}</label>
+                    <!-- The field reads as the text it holds (the kit's frameless field, which lights its ground once it has a
+                         caret), with a wash under a pointer to say it can be written in. -->
+                    <input
+                        v-if="manage"
+                        :id="`${uid}-username`"
+                        v-model="usernameDraft"
+                        class="field-bare ui-field-lit -mx-1 w-full min-w-0 rounded-md px-1 transition-colors hover:bg-content/5"
+                        maxlength="256"
+                        autocomplete="off"
+                        spellcheck="false"
+                        :placeholder="t(`app.detail.noUsername`)"
+                        @blur="writeUsername"
+                        @keydown.enter.prevent="blurOut"
+                        @keydown.esc.prevent="revertUsername"
+                    />
+                    <span v-else :id="`${uid}-username`" class="truncate text-sm text-content">{{ item.username }}</span>
+                    <p v-if="waiting === `username`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
                 </div>
-                <CopyButton :text="item.username" :label="t(`app.detail.copy`)" />
+                <CopyButton v-if="item.username" :text="item.username" :label="t(`app.detail.copy`)" />
             </div>
-            <div v-if="item.backend === undefined || port.capabilities.reveal" class="flex items-center gap-3 px-4 py-3">
+            <div v-if="item.backend === undefined || port.capabilities.reveal || manage" class="flex items-center gap-3 px-4 py-3">
                 <div class="flex min-w-0 flex-1 flex-col">
                     <span class="text-2xs text-subtle">{{ fieldLabel }}</span>
-                    <span v-if="revealed !== undefined" class="break-all font-mono text-sm text-content">{{ revealed }}</span>
+                    <!-- The value itself is where a new one is set: pressing it opens the panel for it, anchored here. -->
+                    <button
+                        v-if="manage"
+                        ref="valueAnchor"
+                        type="button"
+                        class="-mx-1 cursor-pointer self-start rounded-md px-1 text-left text-sm text-content transition-colors hover:bg-content/5"
+                        :class="revealed !== undefined ? `break-all font-mono` : `tracking-widest`"
+                        :aria-label="item.kind === `text` ? t(`app.detail.newText`) : t(`app.detail.newPassword`)"
+                        v-tooltip.top="item.kind === `text` ? t(`app.detail.newText`) : t(`app.detail.newPassword`)"
+                        @click="changingValue = true"
+                    >
+                        {{ revealed ?? `•••••••••••` }}
+                    </button>
+                    <span v-else-if="revealed !== undefined" class="break-all font-mono text-sm text-content">{{ revealed }}</span>
                     <span v-else class="text-sm tracking-widest text-content" aria-hidden="true">•••••••••••</span>
                     <span v-if="waiting === `reveal` || waiting === `copy`" class="flex items-center gap-1.5 text-2xs text-info" role="status">
                         <Icon name="spinner" spin />{{ t(`app.confirmHere`) }}
@@ -207,16 +339,37 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
             </div>
             <div class="flex flex-col gap-2 px-4 py-3">
                 <span class="text-2xs text-subtle">{{ t(`app.detail.worksOn`) }}</span>
-                <div v-if="item.origins.length > 0" class="flex flex-wrap gap-1.5">
-                    <span v-for="origin in item.origins" :key="originLabel(origin)" :class="ui.chip()">{{ originLabel(origin) }}</span>
-                </div>
-                <span v-else class="text-xs text-muted">{{ t(`app.detail.worksNowhere`) }}</span>
+                <PasswordPlaces :origins="item.origins" :editable="manage" :busy="waiting === `origins`" @change="setPlaces" />
                 <span v-if="item.unverified" class="text-xs text-subtle">{{ t(`app.detail.unverified`) }}</span>
+                <p v-if="waiting === `origins`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
             </div>
-            <div v-if="item.note" class="flex flex-col gap-1 px-4 py-3">
-                <span class="text-2xs text-subtle">{{ t(`app.detail.note`) }}</span>
-                <p class="whitespace-pre-wrap text-sm text-content">{{ item.note }}</p>
+            <div v-if="item.note || manage" class="flex flex-col gap-1 px-4 py-3">
+                <label :for="`${uid}-note`" class="text-2xs text-subtle">{{ t(`app.detail.note`) }}</label>
+                <ProseField
+                    v-if="manage"
+                    :id="`${uid}-note`"
+                    v-model="noteDraft"
+                    class="-mx-2 rounded-md transition-colors hover:bg-content/5"
+                    maxlength="500"
+                    :placeholder="t(`app.detail.addNote`)"
+                    @blur="writeNote"
+                    @keydown.esc.prevent="revertNote"
+                />
+                <p v-else :id="`${uid}-note`" class="whitespace-pre-wrap text-sm text-content">{{ item.note }}</p>
+                <p v-if="waiting === `note`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
             </div>
+            <label v-if="manage" class="flex items-start gap-3 px-4 py-3">
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="text-sm text-content">{{ t(`app.edit.anyField`) }}</span>
+                    <span class="text-2xs text-subtle">{{ t(`app.edit.anyFieldHelp`) }}</span>
+                </span>
+                <ToggleSwitch
+                    :model-value="item.anyField"
+                    :disabled="waiting !== undefined"
+                    :aria-label="t(`app.edit.anyField`)"
+                    @update:model-value="setAnyField"
+                />
+            </label>
         </section>
 
         <p v-if="healthLine" class="flex items-start gap-2 text-xs text-warning"><Icon name="exclamation-triangle" />{{ healthLine }}</p>
@@ -279,6 +432,8 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                 <Icon name="trash" />{{ t(`app.detail.delete`) }}
             </button>
         </div>
+
+        <PasswordValuePopover v-if="manage" v-model="changingValue" :item="item" :anchor="valueAnchor" :saving="waiting === `value`" @save="setValue" />
 
         <ConfirmDialog
             :open="confirmDelete"

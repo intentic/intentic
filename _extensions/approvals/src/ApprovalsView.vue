@@ -36,7 +36,7 @@ import { hookSetSize } from "./hookSet.js";
 import { host } from "./host";
 import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
-import PostEditor from "./PostEditor.vue";
+import PostText from "./PostText.vue";
 import ScheduleControl from "./ScheduleControl.vue";
 import { useApprovals } from "./useApprovals";
 import { useHeldWakes, waitingOf } from "./useHeldWakes";
@@ -295,11 +295,9 @@ const reject = (item: ApprovalSummary): Promise<void> => {
     }, t(`approvalsView.couldntRemoveIt`));
 };
 
-// Toggles in place: opening makes the words typeable where they are; closing writes the last of them on the way out.
-const toggleEdit = (post: PostApprovalSummary): Promise<void> =>
-    run(async () => {
-        await (edit.isEditing(post) ? edit.close() : edit.open(post));
-    }, t(`approvalsView.couldntSaveChanges`));
+// A press on a post's words makes them typeable where they are (PostText.vue); leaving them writes the last of them.
+const openEdit = (post: PostApprovalSummary): Promise<void> => run(() => edit.open(post), t(`approvalsView.couldntSaveChanges`));
+const closeEdit = (): Promise<void> => run(() => edit.close(), t(`approvalsView.couldntSaveChanges`));
 
 // Clears `scheduledAt` along with the status: it's a deadline the daemon wrote, and re-approving a held item without
 // clearing it would fire instantly, with no second hold to stop it.
@@ -374,10 +372,6 @@ const FACTS = `mt-3 flex max-w-read flex-wrap items-center gap-x-3 gap-y-1 text-
 
 // Two lines at most, rest on hover; below the post since it's the agent talking about it, not the post itself.
 const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtle`;
-
-// The pencil lives with the row's other actions, not the footer, so "what can I do here" has one answer in one place.
-// It's a toggle that lights up; nothing else on the row moves when it opens.
-const EDIT_ACTIVE = `bg-overlay text-content`;
 </script>
 
 <template>
@@ -433,18 +427,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 </template>
                                 <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
                                 <template #control>
-                                    <!-- Retry preserves the failed post; edit changes its length before retrying. -->
-                                    <button
-                                        v-if="canShip && isPost(item)"
-                                        type="button"
-                                        :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
-                                        :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
-                                        :aria-pressed="edit.isEditing(item)"
-                                        v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
-                                        v-action="() => toggleEdit(item)"
-                                    >
-                                        <Icon name="pencil" />
-                                    </button>
+                                    <!-- Retry sends the post as it now reads: a failed one is fixed in its own words, below, before retrying. -->
                                     <button
                                         v-if="canShip"
                                         type="button"
@@ -469,15 +452,17 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 <template #below>
                                     <div :class="POST_COLUMN">
                                         <template v-if="isPost(item)">
-                                            <PostEditor
-                                                v-if="edit.isEditing(item)"
-                                                :post="item"
+                                            <PostText
                                                 v-model:content="edit.content.value"
                                                 v-model:title="edit.title.value"
+                                                :post="item"
+                                                :label="headline(item)"
+                                                :writable="canShip"
+                                                :writing="edit.isEditing(item)"
+                                                @open="openEdit(item)"
+                                                @close="closeEdit"
                                                 @touch="edit.touch()"
-                                                @close="toggleEdit(item)"
                                             />
-                                            <PostBody v-else :post="item" />
                                         </template>
                                         <ActionBody v-else :action="item" />
                                         <!-- Failed rows show their reason as the primary content. -->
@@ -519,19 +504,8 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                         "
                                     />
                                 </template>
-                                <!-- Edit, reject, approve, in escalating order; none moves or hides when the editor opens. -->
+                                <!-- Reject, approve, in escalating order; the post's own words are where it is changed, below. -->
                                 <template #control>
-                                    <button
-                                        v-if="canShip && isPost(item)"
-                                        type="button"
-                                        :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
-                                        :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
-                                        :aria-pressed="edit.isEditing(item)"
-                                        v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
-                                        v-action="() => toggleEdit(item)"
-                                    >
-                                        <Icon name="pencil" />
-                                    </button>
                                     <button
                                         v-if="canShip"
                                         type="button"
@@ -554,17 +528,19 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                 </template>
                                 <template #below>
                                     <div :class="POST_COLUMN">
-                                        <!-- Read-only and edited bodies share the same column and measure. -->
+                                        <!-- Read and written in the same column and measure (PostText.vue). -->
                                         <template v-if="isPost(item)">
-                                            <PostEditor
-                                                v-if="edit.isEditing(item)"
-                                                :post="item"
+                                            <PostText
                                                 v-model:content="edit.content.value"
                                                 v-model:title="edit.title.value"
+                                                :post="item"
+                                                :label="headline(item)"
+                                                :writable="canShip"
+                                                :writing="edit.isEditing(item)"
+                                                @open="openEdit(item)"
+                                                @close="closeEdit"
                                                 @touch="edit.touch()"
-                                                @close="toggleEdit(item)"
                                             />
-                                            <PostBody v-else :post="item" />
                                         </template>
                                         <ActionBody v-else :action="item" />
 

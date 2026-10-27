@@ -241,8 +241,7 @@
         "copyWebhookUrl": "Kopiuj adres webhooka dla {id}",
         "delete": "Usuń {id}",
         "delete2": "Usuń",
-        "edit2": "Edytuj",
-        "editToRearm": "Edytuj, by uzbroić",
+        "editToRearm": "Nowy czas ją uzbraja",
         "embedCode": "Kod osadzenia",
         "enable": "Włącz {id}",
         "getEmbedCode": "Weź kod osadzenia",
@@ -456,6 +455,7 @@
             "guarded": "Najpierw sprawdza i budzi się tylko wtedy, gdy coś znajdzie.",
             "afterSessions": "Pomijana, dopóki nie odbędzie się {count} nowa sesja. | Pomijana, dopóki nie odbędą się {count} nowe sesje. | Pomijana, dopóki nie odbędzie się {count} nowych sesji.",
             "openTranscript": "Otwórz transkrypcję",
+            "open": "Otwórz",
             "nextIn": "Następne {when}"
         }
     },

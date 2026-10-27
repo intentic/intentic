@@ -75,12 +75,10 @@ const pick = (key: string): void => {
     if (selected.value !== undefined && !visibleItems(items.value, filterOf(key), query.value).some((candidate) => candidate.name === selected.value)) {
         selected.value = undefined;
     }
-    editing.value = false;
     tell();
 };
 const select = (name: string): void => {
     selected.value = name;
-    editing.value = false;
     tell();
 };
 const view = (name: string): void => {
@@ -113,11 +111,9 @@ const onKey = (event: KeyboardEvent): void => {
     }
 };
 
-/* EDIT AND NEW. */
-const editing = ref(false);
+/* NEW. A password that exists is changed where its detail shows it (PasswordDetail.vue); only a new one has a form. */
 const creating = ref(false);
 const saved = async (name: string): Promise<void> => {
-    editing.value = false;
     creating.value = false;
     await state.load();
     view(name);
@@ -308,22 +304,16 @@ watch(item, async (found) => {
                         <PasswordList :items="visible" :selected="selected" :recent="recent" :empty="emptyText" @select="select" @open="open" @review="pick(`fresh`)" />
                     </div>
                     <div v-if="showDetail && (!narrow || item)" class="flex min-h-0 min-w-0 flex-1 flex-col">
-                        <template v-if="item">
-                            <div v-if="editing" class="ui-softscroll flex min-h-0 flex-1 flex-col overflow-y-auto pb-8 pr-1">
-                                <PasswordEditor :key="item.name" :item="item" :port="port" @saved="saved" @cancel="editing = false" />
-                            </div>
-                            <PasswordDetail
-                                v-else
-                                :item="item"
-                                :port="port"
-                                :sandboxes="knownSandboxes"
-                                :now="now"
-                                :alone="narrow"
-                                @edit="editing = true"
-                                @back="detailOpen = false"
-                                @changed="state.load()"
-                            />
-                        </template>
+                        <PasswordDetail
+                            v-if="item"
+                            :item="item"
+                            :port="port"
+                            :sandboxes="knownSandboxes"
+                            :now="now"
+                            :alone="narrow"
+                            @back="detailOpen = false"
+                            @changed="state.load()"
+                        />
                         <p v-else class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-subtle">{{ t(`app.list.nothingSelected`) }}</p>
                     </div>
                 </div>

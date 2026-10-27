@@ -18,7 +18,6 @@ import {
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import AutomationCalendar from "./calendar/AutomationCalendar.vue";
 import AutomationComposer from "./AutomationComposer.vue";
-import AutomationEditor from "./AutomationEditor.vue";
 import AutomationRail, { type RailShelf } from "./shelves/AutomationRail.vue";
 import AutomationRow from "./AutomationRow.vue";
 import VisitorChatInstallDialog from "./VisitorChatInstallDialog.vue";
@@ -79,8 +78,8 @@ const readLens = (): Lens => {
 };
 const lens = ref<Lens>(readLens());
 watch(lens, (next) => {
-    // An edit the calendar opened belongs to the calendar; the list edits in its rows.
-    editingId.value = undefined;
+    // A row the calendar opened belongs to the calendar; the list opens its own rows.
+    openedId.value = undefined;
     try {
         localStorage.setItem(LENS_KEY, next);
     } catch {
@@ -93,9 +92,10 @@ const lensOptions = computed(() => [
 ]);
 // A moment clicked on the calendar, which the composer opens on as a one-time wake.
 const createAt = ref<number | undefined>(undefined);
-// The automation the calendar is editing, in the card above it; the list edits inside its own row instead.
-const editingId = ref<string | undefined>(undefined);
-const editingAutomation = computed(() => automations.value.find((automation) => automation.id === editingId.value));
+// The automation the calendar opened, drawn above it as its own row, open: every value of it is changed where it is shown,
+// exactly as in the list. The list opens its rows in place instead.
+const openedId = ref<string | undefined>(undefined);
+const openedAutomation = computed(() => automations.value.find((automation) => automation.id === openedId.value));
 // The card the calendar opened, brought into view: the click that opened it may be a screen further down.
 const topCard = ref<HTMLElement>();
 const revealTop = (): void => void nextTick(() => topCard.value?.scrollIntoView({ block: `nearest`, behavior: `smooth` }));
@@ -197,19 +197,19 @@ const closeComposer = (): void => {
     createAt.value = undefined;
 };
 const createAtSlot = (at: number): void => {
-    editingId.value = undefined;
+    openedId.value = undefined;
     createPrefill.value = undefined;
     createAt.value = at;
     createOpen.value = true;
     revealTop();
 };
-const editFromCalendar = (id: string): void => {
+const openFromCalendar = (id: string): void => {
     closeComposer();
-    editingId.value = id;
+    openedId.value = id;
     revealTop();
 };
 const openNew = (): void => {
-    editingId.value = undefined;
+    openedId.value = undefined;
     createOpen.value = true;
 };
 // The calendar speaks in ids; the list's own handlers take the row.
@@ -306,27 +306,30 @@ const toggleDetail = (id: string): void => {
                     />
                 </div>
 
-                <!-- The calendar's edit form, shaped like the composer: the same card, the same place, for the other verb. -->
-                <section
-                    v-if="lens === `calendar` && editingAutomation"
-                    ref="topCard"
-                    :key="editingAutomation.id"
-                    class="flex flex-col gap-3 rounded-lg bg-card p-4 shadow-sm"
-                >
-                    <div class="flex items-center gap-2">
-                        <Icon name="pencil" class="shrink-0 text-2xs text-subtle" />
-                        <h2 class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ editingAutomation.id }}</h2>
-                        <button type="button" :class="ui.iconButton()" :aria-label="t(`automationComposer.close`)" @click="editingId = undefined">
-                            <Icon name="times" class="text-xs" />
-                        </button>
-                    </div>
-                    <AutomationEditor
-                        :automation="editingAutomation"
-                        :listener-sources="listenerSources"
-                        :templates="offered"
-                        @done="editingId = undefined"
-                    />
-                </section>
+                <!-- The automation a calendar slot opened: its own row, open, the same one the list draws, so its schedule, prompt and
+                     check are changed where they are read rather than in a form. Pressing its head folds it away, as in the list. -->
+                <div v-if="lens === `calendar` && openedAutomation" ref="topCard" :key="openedAutomation.id">
+                    <RowGroup>
+                        <template #actions>
+                            <button type="button" :class="ui.iconButton()" :aria-label="t(`automationComposer.close`)" @click="openedId = undefined">
+                                <Icon name="times" class="text-xs" />
+                            </button>
+                        </template>
+                        <AutomationRow
+                            :automation="openedAutomation"
+                            :gist="gistOf(openedAutomation, shelfLabelOf(openedAutomation))"
+                            :listener-sources="listenerSources"
+                            :templates="offered"
+                            expanded
+                            :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
+                            @toggle="toggle(openedAutomation, $event)"
+                            @expand="openedId = undefined"
+                            @remove="confirmRemoveId = openedAutomation.id"
+                            @run="runNow(openedAutomation)"
+                            @install="installId = openedAutomation.id"
+                        />
+                    </RowGroup>
+                </div>
 
                 <!-- Skeletons distinguish the pending list from a true empty state. -->
                 <Await :of="loaded" imprint="automations.list" :label="t(`automationsView.readingAutomations`)">
@@ -345,7 +348,7 @@ const toggleDetail = (id: string): void => {
                         :busy="save.isPending.value || setEnabled.isPending.value || run.isPending.value"
                         :draft="createOpen ? createAt : undefined"
                         @create="createAtSlot"
-                        @edit="editFromCalendar"
+                        @open="openFromCalendar"
                         @run="runById"
                         @toggle="toggleById"
                         @list="lens = `list`"

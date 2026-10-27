@@ -239,8 +239,7 @@
         "copyWebhookUrl": "Copiar la URL del webhook de {id}",
         "delete": "Eliminar {id}",
         "delete2": "Eliminar",
-        "edit2": "Editar",
-        "editToRearm": "Edítala para rearmar",
+        "editToRearm": "Una hora nueva la rearma",
         "embedCode": "Código de inserción",
         "enable": "Activar {id}",
         "groups": "Grupos",
@@ -456,6 +455,7 @@
             "guarded": "Comprueba primero y solo despierta si la comprobación encuentra algo.",
             "afterSessions": "Se omite hasta que se haya ejecutado {count} sesión nueva. | Se omite hasta que se hayan ejecutado {count} sesiones nuevas.",
             "openTranscript": "Abrir la transcripción",
+            "open": "Abrir",
             "nextIn": "Próxima {when}"
         }
     },

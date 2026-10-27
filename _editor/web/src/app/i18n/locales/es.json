@@ -12420,8 +12420,6 @@
             "addPersona": "Añadir una persona",
             "advancedWhatMayDo": "Avanzado: qué puede hacer",
             "couldNotSave": "No se pudo guardar esta persona.",
-            "edit": "Editar {id}",
-            "editing": "Editando {label}",
             "findPersona": "Encontrar una persona…",
             "findPersona2": "Encontrar una persona",
             "fullEditor": "Editor completo",

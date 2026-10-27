@@ -96,6 +96,24 @@ describe(`what it draws`, () => {
         expect(anchor?.dataset[`mdHref`]).toBe(`https://example.com`);
     });
 
+    test(`a note's [[link]] is drawn as a link to that note, its brackets the markup and its text the file's`, () => {
+        const element = buildBlockElement(`Why [[Idempotency key]] says it, see [[Soft delete everything|the decision]].`);
+        expect(blockBody(element)).toBe(`Why [[Idempotency key]] says it, see [[Soft delete everything|the decision]].`);
+        const links = [...element.querySelectorAll<HTMLAnchorElement>(`a[data-md-wiki]`)];
+        expect(links.map((link) => link.dataset[`mdWiki`])).toEqual([`Idempotency key`, `Soft delete everything`]);
+        expect(links.map((link) => [...link.querySelectorAll(`.md-marker`)].map((node) => node.textContent))).toEqual([
+            [`[[`, `]]`],
+            [`[[Soft delete everything|`, `]]`],
+        ]);
+        // Not a URL: no host follows it as one.
+        expect(links.some((link) => link.hasAttribute(`href`) || link.dataset[`mdHref`] !== undefined)).toBe(false);
+    });
+
+    test(`a [[link]] in code stays code`, () => {
+        expect(buildBlockElement(`Write \`[[name]]\` to link.`).querySelector(`a[data-md-wiki]`)).toBeNull();
+        expect(buildBlockElement("```\n[[name]]\n```").querySelector(`a[data-md-wiki]`)).toBeNull();
+    });
+
     test(`a list item's bullet hangs in the gutter where the rendered bullet was`, () => {
         const element = buildBlockElement(`- first\n- second`);
         expect(element.tagName).toBe(`UL`);
