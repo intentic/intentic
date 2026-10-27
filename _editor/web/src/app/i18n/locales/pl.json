@@ -2926,6 +2926,7 @@
             "within": "w ramach {name}",
             "accountsHaveRoom": "Konta z zapasem: {ready} z {total}",
             "moreCantServe": "Konta, które w ogóle nie obsłużą tury: jeszcze {count}",
+            "thisChat": "Ten czat",
             "turnsSpread": "tury rozkładają się między nie automatycznie",
             "remeasureOldest": "Zmierz ponownie limity planu, najstarszy odczyt {age}",
             "cantReReadYet": "Nie można jeszcze ponownie odczytać: {who}, kolejna próba {when}",

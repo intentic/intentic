@@ -2926,6 +2926,7 @@
             "within": "innerhalb von {name}",
             "accountsHaveRoom": "{ready} von {total} Konten haben Kontingent",
             "moreCantServe": "{count} weitere können gar keinen Zug bedienen",
+            "thisChat": "Dieser Chat",
             "turnsSpread": "Züge werden automatisch auf sie verteilt",
             "remeasureOldest": "Planlimits neu messen, älteste Messung {age}",
             "cantReReadYet": "{who} kann noch nicht erneut gelesen werden, neuer Versuch {when}",

@@ -5,6 +5,9 @@ import ChatCapacityRail from "./capacity/ChatCapacityRail.vue";
 import ChatRailChecklist from "./ChatRailChecklist.vue";
 import { useT } from "@intentic/ui/i18n";
 import type { Conversation } from "../../../models/conversations/session/conversation";
+import { useChat } from "../../../models/conversations/run/useChat";
+import { computed } from "vue";
+import type { CapacityMine } from "./capacity/chatCapacity";
 
 // The strip in the pop-out window that panes have no use for (chatCapacity's railFitsBeside). Holds what the reader
 // wants standing rather than scrolling past: this chat's checklist, then what they can still run. Presence is decided
@@ -14,6 +17,12 @@ import type { Conversation } from "../../../models/conversations/session/convers
 const t = useT();
 // The chat whose checklist it shows when the panel is pinned to one (ChatPanel's `only`); absent, the focused chat's.
 const { conversation } = defineProps<{ conversation?: Conversation | undefined }>();
+const chat = useChat();
+// The same chat's account, for the allowance rows: the one the reader typing beside the rail is spending.
+const mine = computed((): CapacityMine => {
+    const selection = (conversation ?? chat.active.value).selection;
+    return { provider: selection.provider.value, account: selection.account.value };
+});
 </script>
 
 <template>
@@ -28,6 +37,6 @@ const { conversation } = defineProps<{ conversation?: Conversation | undefined }
         :aria-label="t(`chat.chatSideRail.chatWhatRun`)"
     >
         <ChatRailChecklist :conversation="conversation" />
-        <ChatCapacityRail />
+        <ChatCapacityRail :mine="mine" />
     </aside>
 </template>

@@ -60,6 +60,14 @@ export interface CapacityRow {
     // Why there are no lanes; never a pool's name, since drawn lanes already name themselves.
     readonly note: string;
     readonly stale: boolean;
+    // The account the chat beside the rail runs its next turn on: the one row of the column that is that reader's own.
+    readonly mine: boolean;
+}
+
+/** The chat the rail stands beside: the account its next turn runs on, undefined while it is left to Auto. */
+export interface CapacityMine {
+    readonly provider: AgentProvider;
+    readonly account: string | undefined;
 }
 
 export interface CapacityProvider {
@@ -76,6 +84,8 @@ export interface CapacityProvider {
     readonly hidden: number;
     // True when the translator spreads turns across these accounts itself, so the rows are one, not a choice.
     readonly pooled: boolean;
+    // The chat beside the rail runs on this provider, on an account drawn below or on whichever Auto picks.
+    readonly mine: boolean;
 }
 
 /** A provider with nothing left to offer, and what it is waiting on. */
@@ -88,6 +98,8 @@ export interface CapacityOut {
     readonly reopensAt: number | undefined;
     // The provider's own refusal words, shown on hover where the line is too narrow to carry them.
     readonly detail: string | undefined;
+    // The chat beside the rail is on this provider, so this line is why its next turn waits.
+    readonly mine: boolean;
 }
 
 /** Credentials held back until one kind of person acts: signing in again, or an organisation's admin. */
@@ -213,7 +225,7 @@ const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] => {
 // A credential no turn runs on until someone acts: named by what it is missing, never dated by a figure.
 const needsAPerson = (row: PlanLimitRow): boolean => row.state.kind === `blocked` && row.state.fix !== `wait`;
 
-const capacityRow = (row: PlanLimitRow, label: string | undefined): CapacityRow => ({
+const capacityRow = (row: PlanLimitRow, label: string | undefined, mine: boolean): CapacityRow => ({
     id: row.id,
     label,
     // Omitted when it matches the label already shown, to avoid repeating it on hover.
@@ -223,24 +235,37 @@ const capacityRow = (row: PlanLimitRow, label: string | undefined): CapacityRow 
     // Which of two kinds of nothing to report: not read yet, or never publishes limits.
     note: row.readable ? t(`chat.chatCapacity.noReadingYet`) : t(`chat.chatCapacity.noPublishedLimits`),
     stale: row.stale,
+    mine,
 });
 
-const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[]): CapacityProvider => {
+// The chat's own account takes the last of the drawn rows when the roomier ones would push it under "+N more": the row
+// a reader looks for first must not be the one the cap counts instead of drawing.
+const drawnRows = (ready: readonly PlanLimitRow[], own: PlanLimitRow | undefined): readonly PlanLimitRow[] => {
+    const top = ready.slice(0, ROWS_PER_PROVIDER);
+    return own === undefined || top.includes(own) ? top : [...top.slice(0, ROWS_PER_PROVIDER - 1), own];
+};
+
+const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[], mine: CapacityMine | undefined): CapacityProvider => {
     // A routed pool or a lone account is one row either way, since the heading already names what the bar measures.
     const pooled = ready[0]?.routed === true && group.rows.length > 1;
-    const shown = pooled ? ready.slice(0, 1) : ready.slice(0, ROWS_PER_PROVIDER);
+    const here = mine?.provider === group.provider;
+    const own = here && mine.account !== undefined ? ready.find((row) => row.account === mine.account) : undefined;
+    // A pool's one row stands for every account in it, the chat's own among them.
+    const shown = pooled ? ready.slice(0, 1) : drawnRows(ready, own);
     const named = !pooled && group.rows.length > 1;
     const ambiguous = ambiguousLabels(group.rows);
     const blocked = attentionGroups(group.rows).reduce((count, entry) => count + entry.rows.length, 0);
     return {
         provider: group.provider,
         label: providerDisplayLabel(group.provider),
-        rows: shown.map((row) => capacityRow(row, named ? displayName(row, ambiguous) : undefined)),
+        rows: shown.map((row) => capacityRow(row, named ? displayName(row, ambiguous) : undefined, own !== undefined && (pooled || row === own))),
         ready: ready.length,
         total: group.rows.length - blocked,
         blocked,
         hidden: pooled ? 0 : ready.length - shown.length,
         pooled,
+        // Not for an account picked by hand that can't serve: the heading would then claim a row the column doesn't draw.
+        mine: here && (mine.account === undefined || own !== undefined),
     };
 };
 
@@ -275,7 +300,7 @@ const reopensAt = (group: PlanLimitGroup, now: number): number | undefined => {
 // Roomiest offer ranks the provider; an unmeasured provider sorts last, never as a zero.
 const roomOf = (entry: CapacityProvider): number => entry.rows[0]?.percent ?? Number.POSITIVE_INFINITY;
 
-export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number = Date.now()): ChatCapacity => {
+export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number = Date.now(), mine?: CapacityMine): ChatCapacity => {
     const rows = planLimitRows(providerAccounts.value, translatorAccounts.value, now);
     const groups = planLimitGroups(rows, providerRefusals.value, now);
     const judged = groups.map((group) => ({ group, ready: group.rows.filter(canServe).toSorted(byRoom) }));
@@ -291,7 +316,7 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
     const dated = rows.filter((row) => !needsAPerson(row) && !heldNow.has(row.id));
     return {
         providers: judged
-            .flatMap((entry) => (entry.ready.length === 0 ? [] : [capacityProvider(entry.group, entry.ready)]))
+            .flatMap((entry) => (entry.ready.length === 0 ? [] : [capacityProvider(entry.group, entry.ready, mine)]))
             .toSorted((left, right) => roomOf(left) - roomOf(right) || left.label.localeCompare(right.label)),
         out: judged.flatMap((entry) =>
             entry.ready.length > 0
@@ -303,6 +328,7 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
                           reason: outReason(entry.group),
                           reopensAt: reopensAt(entry.group, now),
                           detail: entry.group.refusal?.current === true ? entry.group.refusal.detail : undefined,
+                          mine: mine?.provider === entry.group.provider,
                       },
                   ],
         ),

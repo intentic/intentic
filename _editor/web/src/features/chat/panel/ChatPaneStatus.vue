@@ -23,6 +23,7 @@ import HomeMemory from "./pane/HomeMemory.vue";
 import { useHomeMemory } from "../../../models/home/homeMemory";
 import { homeConversation } from "../../../models/home/homeChat";
 import UsageMeter from "../session/UsageMeter.vue";
+import { useRailCarries } from "./capacity/railCarries";
 import { useT } from "@intentic/ui/i18n";
 
 // The pane's status bar: readouts under the composer, the one part of the footer outside the scroller — about the
@@ -157,6 +158,11 @@ const { reading: homeMemory } = useHomeMemory(() => card.value);
 const cacheOpen = ref(false);
 const cacheTrigger = ref<HTMLElement>();
 
+// The capacity rail beside a lone chat marks this account's row with every allowance and its reset, so the chip would be
+// the same figure a second time on one screen: it steps aside there and stays everywhere the rail is not (docked, a
+// split, a narrow window), where it is the one reading of the allowance this chat spends.
+const railCarries = useRailCarries();
+
 // Subscription headroom for this conversation's account, from the shared usage map; a small ring once there's a
 // reading, draining and tinted as the binding pool is spent, keyed by account. Tracks the pool that gates this conversation's
 // model specifically (its card lists all of them).
@@ -166,7 +172,7 @@ const usageChip = computed(() => {
     const modelRef = model.value === `` ? undefined : { id: model.value };
     const headroom = planHeadroom(usageStatusFor(provider.value, account.value, modelRef), modelRef);
     // No binding pool means nothing measured or everything reset; stays hidden rather than pinning a false "100% left".
-    if (headroom?.binding === undefined) {
+    if (headroom?.binding === undefined || (account.value !== undefined && railCarries.value === `${provider.value}:${account.value}`)) {
         return undefined;
     }
     // Once a pool is effectively spent, its reset joins the visible label instead of waiting behind a hover.

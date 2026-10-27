@@ -2926,6 +2926,7 @@
             "within": "dentro de {name}",
             "accountsHaveRoom": "{ready} de {total} cuentas tienen margen",
             "moreCantServe": "{count} más no pueden atender ningún turno",
+            "thisChat": "Este chat",
             "turnsSpread": "los turnos se reparten entre ellas automáticamente",
             "remeasureOldest": "Volver a medir los límites del plan; la lectura más antigua es de {age}",
             "cantReReadYet": "Aún no se puede volver a leer {who}; reintenta {when}",

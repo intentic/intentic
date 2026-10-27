@@ -3,6 +3,7 @@ import { Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CAPACITY_RAIL_PX, railFitsBeside } from "./capacity/chatCapacity";
 import { useCapacityRail } from "./capacity/capacityMemory";
+import { provideRailCarries } from "./capacity/railCarries";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../../../models/conversations/run/chatRun";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { traceFocus } from "../../../models/conversations/run/focusTrace";
@@ -139,6 +140,8 @@ const showsRail = computed(
         capacityRail.value &&
         railFitsBeside(panelWidth.value, tabs ? railWidth.value : CAPACITY_RAIL_PX, shown.value.length),
 );
+// Beside one chat, the rail's marked row is that chat's allowance, so its composer chip gives the figure to the rail.
+provideRailCarries(() => showsRail.value && !split.value);
 
 // Past the floor the row scrolls, so the focused pane scrolls back into view (a no-op if already visible).
 const paneRow = ref<HTMLElement>();

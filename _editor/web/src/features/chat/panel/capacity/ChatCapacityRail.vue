@@ -2,11 +2,12 @@
 import { useLoaded } from "@intentic/extension-api";
 import { Await, Section, SectionHeader, type Tip, type TipRow, ui } from "@intentic/ui";
 import { useRowReveal } from "@intentic/ui/motion";
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import ChatCapacityLane from "./ChatCapacityLane.vue";
 import {
     type CapacityBlocked,
     type CapacityLane,
+    type CapacityMine,
     type CapacityProvider,
     type CapacityRow,
     type CapacityUnread,
@@ -19,22 +20,43 @@ import { heldAccounts, refreshConnections } from "../../../../models/conversatio
 import { useRemeasure } from "../../accounts/pickerAccounts";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
+import { useRailMark } from "./railCarries";
 
 // Headroom rail in chat pop-out: displays runnable provider capacity without full Usage tab reconciliation.
 
 // Refreshes on mount: pools are account-wide, shared across apps, so a stale window shows stale numbers.
 const t = useT();
 
+// The chat this rail stands beside (ChatSideRail): its account's row is marked as the reader's own.
+const { mine } = defineProps<{ mine?: CapacityMine | undefined }>();
+
 onMounted(() => void refreshConnections());
 
 // Held accounts ride in so the age below counts only what a press could actually move; the line under it says the rest.
-const capacity = computed(() => chatCapacity(heldAccounts.value));
+const capacity = computed(() => chatCapacity(heldAccounts.value, Date.now(), mine));
 // Unread isn't empty: until the accounts are read, the rail must not claim the fleet has nothing.
 const reading = useLoaded(() => ({ data: accountsLoaded.value ? capacity.value : undefined, error: undefined, fetching: false, wanted: true }));
 
 const measuredProviders = computed(() => capacity.value.providers.filter((entry) => entry.rows.some((row) => row.lanes.length > 0)));
 
 const unmeasuredProviders = computed(() => capacity.value.providers.filter((entry) => entry.rows.every((row) => row.lanes.length === 0)));
+
+// The marked row with figures on it, told to the panel, so the chat's own composer chip steps aside while this says it
+// (railCarries.ts). A marked row with no lanes says nothing the chip would, so it is not reported.
+const railMark = useRailMark();
+watchEffect(() => {
+    if (railMark !== undefined) {
+        railMark.value = measuredProviders.value.flatMap((entry) => entry.rows).find((row) => row.mine && row.lanes.length > 0)?.id;
+    }
+});
+onBeforeUnmount(() => {
+    if (railMark !== undefined) {
+        railMark.value = undefined;
+    }
+});
+
+// "This chat" on the heading only when no row below carries it: on Auto, or a provider whose one row has no figures.
+const headingMine = (entry: CapacityProvider): boolean => entry.mine && !entry.rows.some((row) => row.mine);
 
 // Motion for rows a re-read adds or reorders: arrivals fade in and settle, reorders slide (FLIP). A leaving row just
 // goes, since sliding it out would need it lifted from the flow and the rows closing the gap already show the change.
@@ -66,7 +88,7 @@ const laneDetail = (lane: CapacityLane, row: CapacityRow): string =>
     }`;
 
 const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
-    [row.label, row.identity, ...(row.lanes.length === 0 ? [row.note] : row.lanes.map((lane) => laneDetail(lane, row)))]
+    [row.mine ? t(`chat.chatCapacityRail.thisChat`) : undefined, row.label, row.identity, ...(row.lanes.length === 0 ? [row.note] : row.lanes.map((lane) => laneDetail(lane, row)))]
         .filter((part) => part !== undefined)
         .join(` · `);
 
@@ -244,6 +266,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                         <div class="flex items-center gap-1.5" data-reveal>
                             <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                             <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                            <span v-if="headingMine(entry)" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
                             <!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
                             <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
                                 >{{ entry.ready }}/{{ entry.total }}</span
@@ -253,10 +276,21 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                         <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
                         <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
                         <TransitionGroup tag="div" class="flex flex-col gap-2.5" v-bind="motion">
-                            <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1" data-reveal>
+                            <!-- The chat's own account sits on a faint neutral wash that holds its bars together as one block, bleeding
+                                 into the gutter so they stay in line with the rows around it; the words say what the wash means. Not the
+                                 picker's selected style: its gold edge reads as a press, and nothing in this column is pressed. -->
+                            <div
+                                v-for="row in entry.rows"
+                                :key="row.id"
+                                class="flex flex-col gap-1"
+                                :class="{ '-mx-1.5 -my-1 rounded-md bg-content/4 px-1.5 py-1': row.mine }"
+                                :data-mine="row.mine || undefined"
+                                data-reveal
+                            >
                                 <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
-                                    <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
-                                        {{ row.label }}
+                                    <span v-if="row.label !== undefined || row.mine" class="col-span-3 flex min-w-0 items-baseline gap-2 text-2xs">
+                                        <span class="min-w-0 flex-1 truncate" :class="row.mine ? `text-content` : `text-muted`">{{ row.label }}</span>
+                                        <span v-if="row.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
                                     </span>
 
                                     <ChatCapacityLane v-for="lane in row.lanes" :key="lane.kind" :lane="lane" :row="row" />
@@ -282,6 +316,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                         <div class="flex items-center gap-1.5" aria-hidden="true">
                             <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                             <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                            <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
                             <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
                                 >{{ entry.ready }}/{{ entry.total }}</span
                             >
@@ -304,7 +339,8 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                 >
                     <div class="flex flex-col gap-1">
                         <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
-                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
+                            <span class="min-w-0 flex-1 truncate text-2xs" :class="entry.mine ? `text-content` : `text-muted`">{{ entry.label }}</span>
+                            <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
                             <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
                         </div>
                         <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's

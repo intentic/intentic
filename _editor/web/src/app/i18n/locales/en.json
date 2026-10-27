@@ -2926,6 +2926,7 @@
             "within": "within {name}",
             "accountsHaveRoom": "{ready} of {total} accounts have room",
             "moreCantServe": "{count} more can't serve a turn at all",
+            "thisChat": "This chat",
             "turnsSpread": "turns are spread across them automatically",
             "remeasureOldest": "Re-measure plan limits, oldest reading {age}",
             "cantReReadYet": "Can't re-read {who} yet, retry {when}",

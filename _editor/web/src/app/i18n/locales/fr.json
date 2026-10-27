@@ -2926,6 +2926,7 @@
             "within": "dans {name}",
             "accountsHaveRoom": "{ready} comptes sur {total} ont de la marge",
             "moreCantServe": "{count} autres ne peuvent servir aucun tour",
+            "thisChat": "Ce chat",
             "turnsSpread": "les tours sont répartis automatiquement entre eux",
             "remeasureOldest": "Remesurer les limites du forfait, plus ancienne lecture {age}",
             "cantReReadYet": "Impossible de relire {who} pour l'instant, réessayez {when}",

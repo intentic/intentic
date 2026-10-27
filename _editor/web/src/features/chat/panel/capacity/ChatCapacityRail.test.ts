@@ -418,3 +418,41 @@ it(`moves a lane to a new reading and leaves the spent part as a trail that then
     expect(el.querySelector(`[data-meter-trail]`)).toBeNull();
     expect(drawn(el)).toContain(`30%`);
 });
+
+// The chat beside the rail is spending one of these accounts; the reader should not have to match an address to find it,
+// and the composer's own chip steps aside only while that row is drawn with its figures.
+it(`marks the account the chat beside it runs on, and tells the panel it is saying that allowance`, async () => {
+    const { provideRailCarries, useRailCarries } = await import("./railCarries");
+    const { defineComponent } = await import("vue");
+    const week = (utilization: number) => ({ measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization, gates: `all` as const }] });
+    providerAccounts.value = {
+        claude: [claude({ id: `a`, label: `a@example.com`, usage: week(10) }), claude({ id: `b`, label: `b@example.com`, usage: week(40) })],
+    };
+    translatorAccounts.value = NO_ROUTED;
+    accountsLoaded.value = true;
+    // What a pane under the same panel reads: ChatPaneStatus hides its chip on exactly this value.
+    const Pane = defineComponent({
+        setup() {
+            const carried = useRailCarries();
+            return () => h(`span`, { "data-carried": carried.value ?? `` });
+        },
+    });
+    const Panel = defineComponent({
+        setup() {
+            provideRailCarries(() => true);
+            return () => [h(ChatCapacityRail, { mine: { provider: `claude`, account: `b` } }), h(Pane)];
+        },
+    });
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp({ render: () => h(Panel) });
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.mount(el);
+    await nextTick();
+
+    const marked = [...el.querySelectorAll<HTMLElement>(`[data-mine]`)];
+    expect(marked.map((row) => row.textContent?.includes(`b@example.com`) && row.textContent.includes(`This chat`))).toEqual([true]);
+    expect(spoken(el).some((line) => line.startsWith(`This chat · b@example.com`))).toBe(true);
+    expect(el.querySelector(`[data-carried]`)?.getAttribute(`data-carried`)).toBe(`claude:b`);
+});

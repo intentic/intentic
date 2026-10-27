@@ -407,7 +407,7 @@ describe(`what the rail says about what it is not offering`, () => {
     it(`names a spent provider and the instant it comes back`, () => {
         providerAccounts.value = { claude: [claude({ id: `a`, label: `spent`, usage: usage(100, 1_700_090_000) })] };
         expect(chatCapacity([], NOW).out).toEqual([
-            { provider: `claude`, label: `Claude Code`, reason: `spent`, reopensAt: 1_700_090_000, detail: undefined },
+            { provider: `claude`, label: `Claude Code`, reason: `spent`, reopensAt: 1_700_090_000, detail: undefined, mine: false },
         ]);
     });
 
@@ -458,6 +458,37 @@ describe(`a pool nobody picks among`, () => {
         const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows.map((row) => row.label)).toEqual([`a1@example.com`, `a2@example.com`, `a3@example.com`]);
         expect(entry?.hidden).toBe(2);
+    });
+
+    it(`marks the row the chat beside it runs on, and draws it even where the cap would have counted it`, () => {
+        providerAccounts.value = {
+            claude: [1, 2, 3, 4, 5].map((index) => claude({ id: `a${index}`, label: `a${index}@example.com`, usage: usage(index * 5) })),
+        };
+        const [entry] = chatCapacity([], NOW, { provider: `claude`, account: `a5` }).providers;
+        expect(entry?.rows.map((row) => [row.label, row.mine])).toEqual([
+            [`a1@example.com`, false],
+            [`a2@example.com`, false],
+            [`a5@example.com`, true],
+        ]);
+        expect([entry?.hidden, entry?.mine]).toEqual([2, true]);
+    });
+
+    it(`marks only the provider while the chat is on Auto, and nothing for an account picked by hand that can't serve`, () => {
+        providerAccounts.value = {
+            claude: [claude({ id: `a`, label: `a@example.com`, usage: usage(20) }), claude({ id: `b`, label: `b@example.com`, usage: usage(100) })],
+        };
+        const auto = chatCapacity([], NOW, { provider: `claude`, account: undefined }).providers[0];
+        expect([auto?.mine, auto?.rows.some((row) => row.mine)]).toEqual([true, false]);
+
+        const spent = chatCapacity([], NOW, { provider: `claude`, account: `b` }).providers[0];
+        expect([spent?.mine, spent?.rows.some((row) => row.mine)]).toEqual([false, false]);
+        expect(chatCapacity([], NOW, { provider: `codex`, account: `a` }).providers[0]?.mine).toBe(false);
+    });
+
+    it(`marks a spent provider the chat is on, since that line is why its next turn waits`, () => {
+        providerAccounts.value = { claude: [claude({ id: `a`, usage: usage(100) })] };
+        expect(chatCapacity([], NOW, { provider: `claude`, account: `a` }).out.map((entry) => entry.mine)).toEqual([true]);
+        expect(chatCapacity([], NOW).out.map((entry) => entry.mine)).toEqual([false]);
     });
 
     it(`leaves a lone account's row unnamed and lets its lanes carry the pools`, () => {
