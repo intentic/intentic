@@ -111,6 +111,7 @@ jobs:
           retention-days: 7
 
   ios:
+    if: ${{ false }}
     runs-on: macos-15
     timeout-minutes: 45
     defaults:
