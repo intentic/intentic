@@ -33,11 +33,12 @@ describe(`the rendered nginx config`, () => {
         expect(header).toContain(`"\${WEB_BUILD}"`);
     });
 
-    // nginx's first matching regex wins, as here; a URI none matches gets the map's default.
-    const cacheControlOf = (uri: string): string | undefined => {
-        const block = /map \$request_uri \$cache_control \{([^}]*)\}/.exec(nginxConf)?.[1] ?? ``;
+    // nginx's first matching regex wins, as here; a response none matches gets the map's default. The map reads
+    // `<status>:<uri>`, so what a URI is served with depends on whether it was found.
+    const cacheControlOf = (uri: string, status = 200): string | undefined => {
+        const block = /map "\$status:\$request_uri" \$cache_control \{([^}]*)\}/.exec(nginxConf)?.[1] ?? ``;
         const rules = [...block.matchAll(/^\s*(\S+)\s+"([^"]*)";/gm)].map((match) => ({ key: match[1] ?? ``, value: match[2] ?? `` }));
-        const hit = rules.find((rule) => rule.key.startsWith(`~`) && new RegExp(rule.key.slice(1)).test(uri));
+        const hit = rules.find((rule) => rule.key.startsWith(`~`) && new RegExp(rule.key.slice(1)).test(`${status}:${uri}`));
         return (hit ?? rules.find((rule) => rule.key === `default`))?.value;
     };
 
@@ -48,6 +49,20 @@ describe(`the rendered nginx config`, () => {
             `no-cache`,
             `no-store`,
             `no-store`,
+            `public, max-age=31536000, immutable`,
+        ]);
+    });
+
+    // 2026-10-27: an old container answered 404 for a chunk the new build had just named, the edge kept that 404 for a
+    // year because it carried "immutable", and /sandbox reloaded in a loop for every browser that preloaded the chunk.
+    it(`caches only an asset that was found: a missing one is never stored, by the edge or the browser`, () => {
+        expect([
+            cacheControlOf(`/assets/SectionLink-B4qdwgZq.js`, 404),
+            cacheControlOf(`/fonts/x.woff2`, 404),
+            cacheControlOf(`/assets/x.js`, 502),
+        ]).toEqual([`no-store`, `no-store`, `no-store`]);
+        expect([cacheControlOf(`/assets/x.js`, 304), cacheControlOf(`/assets/x.js`, 206)]).toEqual([
+            `public, max-age=31536000, immutable`,
             `public, max-age=31536000, immutable`,
         ]);
     });

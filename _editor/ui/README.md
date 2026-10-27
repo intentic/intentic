@@ -145,7 +145,8 @@ flowchart LR
   on warm paper in light mode, the same fill as the cards behind them in dark mode, and a near-black box in Sanctum.
   A focus ring also landed on × every time a dialog opened._
 - **Lazy chunks.** Every dynamic import in the editor goes through `loadChunk` (`@intentic/ui/chunk`). A chunk a
-  redeploy removed reloads the page once onto where the reader is, and any chunk that loads re-arms that reload.
+  redeploy removed reloads the page once onto where the reader is. That page's reload stays spent for five minutes,
+  whatever else loads meanwhile, so a chunk that is still missing afterwards fails visibly instead of looping.
   `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.
 - **Loading placeholders.** A region that is not here yet is drawn by `<Await :of="loaded" imprint="name">`
   (`src/components/feedback/Await.vue`) from its read's `Loaded` (`@intentic/extension-api`: waiting, ready, failed or

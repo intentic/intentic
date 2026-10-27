@@ -61,12 +61,56 @@ it(`rejects any other failure without reloading: reloading a coding bug would lo
     expect(assign.mock.calls).toEqual([]);
 });
 
-it(`a chunk that loads re-arms the reload for the next redeploy`, async () => {
-    sessionStorage.setItem(`intentic.chunkReloaded`, `/files?path=a`);
-    expect(await loadChunk(() => Promise.resolve(42))).toBe(42);
-    expect(sessionStorage.getItem(`intentic.chunkReloaded`)).toBeNull();
+// 2026-10-27: an edge cached a 404 for one chunk of the /sandbox view. The shell's own chunk loaded on every load and
+// re-armed the reload, so the view's failed preload reloaded the page about once a second, forever.
+it(`a chunk that loads does not re-arm the reload: a chunk still missing after it fails instead of looping`, async () => {
     expect(await outcome(loadChunk(dead))).toBe(`pending`);
+    expect(await loadChunk(() => Promise.resolve(42))).toBe(42);
+    await expect(loadChunk(dead)).rejects.toBe(deadChunk);
     expect(assign.mock.calls).toEqual([[`/files?path=a`]]);
+});
+
+it(`gives the same page its reload back once a few minutes have passed, for the next redeploy`, async () => {
+    const now = jest.spyOn(Date, `now`).mockReturnValue(1_000_000);
+    try {
+        expect(await outcome(loadChunk(dead))).toBe(`pending`);
+        now.mockReturnValue(1_000_000 + 4 * 60_000);
+        await expect(loadChunk(dead)).rejects.toBe(deadChunk);
+        now.mockReturnValue(1_000_000 + 6 * 60_000);
+        expect(await outcome(loadChunk(dead))).toBe(`pending`);
+        expect(assign.mock.calls).toEqual([[`/files?path=a`], [`/files?path=a`]]);
+    } finally {
+        now.mockRestore();
+    }
+});
+
+// A 404 the browser itself kept would answer the reload too: the files the page was refused are asked for again past the
+// cache first, and only this origin's scripts and stylesheets.
+it(`asks the server again, past the browser's cache, for the files the page was refused before it reloads`, async () => {
+    // A Resource Timing entry as the browser reports one: only the two fields the recovery reads.
+    const refused = (name: string, responseStatus: number): PerformanceEntry => Object.assign(Object.create(null), { name, responseStatus });
+    const entries = jest
+        .spyOn(performance, `getEntriesByType`)
+        .mockReturnValue([
+            refused(`http://localhost/assets/SectionLink-B4qdwgZq.js`, 404),
+            refused(`http://localhost/assets/Fine-a1b2c3d4.js`, 200),
+            refused(`http://localhost/api/thing`, 500),
+            refused(`https://elsewhere.dev/x-a1b2c3d4.js`, 404),
+        ]);
+    // The test DOM defines fetch as an accessor, which spyOn cannot wrap: the property is swapped and put back instead.
+    const realFetch = Object.getOwnPropertyDescriptor(globalThis, `fetch`);
+    const fetched = jest.fn((..._asked: unknown[]) => Promise.resolve(new Response(``)));
+    Object.defineProperty(globalThis, `fetch`, { configurable: true, writable: true, value: fetched });
+    try {
+        expect(await outcome(loadChunk(dead))).toBe(`pending`);
+        expect(fetched.mock.calls).toEqual([[`http://localhost/assets/SectionLink-B4qdwgZq.js`, { cache: `reload` }]]);
+        expect(assign.mock.calls).toEqual([[`/files?path=a`]]);
+    } finally {
+        if (realFetch !== undefined) {
+            Object.defineProperty(globalThis, `fetch`, realFetch);
+        }
+        entries.mockRestore();
+    }
 });
 
 it(`catches the preload Vite failed for an import nobody wrapped, and cancels it only when it reloads`, () => {
