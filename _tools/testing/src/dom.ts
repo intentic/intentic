@@ -168,6 +168,8 @@ const inspectNodesAsMarkup = (win: Global): void => {
 };
 
 const dom = new JSDOM(`<!DOCTYPE html>`, { pretendToBeVisual: true, url: `http://localhost:3000`, runScripts: `dangerously` });
+// jsdom has no text layout and omits Range's geometry API; ranges expose no line boxes here.
+dom.window.Range.prototype.getClientRects ??= () => Object.assign([], { item: () => null });
 const win = dom.window as unknown as Global;
 const global = globalThis as unknown as Global;
 

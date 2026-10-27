@@ -30,6 +30,16 @@ test("inline DOM handlers execute in the window realm", () => {
     expect(button.dataset["clicked"]).toBe("yes");
 });
 
+test("text ranges expose an empty client rect list without layout", () => {
+    const text = document.createTextNode("a line of text");
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const rects = range.getClientRects();
+    expect([...rects]).toEqual([]);
+    expect(rects.length).toBe(0);
+    expect(rects.item(0)).toBeNull();
+});
+
 test("document method spies observe changing focus through its prototype", () => {
     // jsdom 30 wraps document in a proxy; Bun cannot install a method spy directly on that proxy.
     let focused = false;
