@@ -13,7 +13,7 @@ FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e4
 # libglib2.0-bin carries `gio`, which is what xdg-open delegates the lookup to on every desktop this app ships
 # to (see the XDG_CURRENT_DESKTOP note in smoke.sh for why the delegation matters here).
 # xdotool + x11-utils are how the test observes windows: no window manager, so it reads the X tree directly.
-# AT-SPI activates the confirmation's named button; keyboard focus can be on its selectable message instead.
+# AT-SPI activates the confirmation's named button independently of keyboard focus.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb \
         dbus-x11 \

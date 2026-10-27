@@ -102,18 +102,25 @@ setup_started() { [ -f "$SETUP_MARKER" ] && grep -Fxq 'smoke-test-code' "$SETUP_
 # Every link goes through the external OS handler path, so the app must ask before running it.
 CONFIRM_TITLE="Set up a sandbox on this device"
 
-# GTK's message labels are selectable, so focusing its window and pressing Return need not activate any button.
 # Activate the actual affirmative button through the native accessibility tree, independent of focus or geometry.
 activate_setup_button() {
     timeout 10 python3 - "$CONFIRM_TITLE" >/tmp/intentic-confirm.log 2>&1 <<'PY'
 import sys
 import pyatspi
 
-dialog = pyatspi.findDescendant(
-    pyatspi.Registry.getDesktop(0),
-    lambda node: node.getRole() in (pyatspi.ROLE_DIALOG, pyatspi.ROLE_ALERT) and sys.argv[1] in node.name,
-)
+desktop = pyatspi.Registry.getDesktop(0)
+
+def is_setup_dialog(node):
+    if node.getRole() not in (pyatspi.ROLE_DIALOG, pyatspi.ROLE_ALERT):
+        return False
+    # GtkMessageDialog can keep its generic accessible name ("Warning") when rfd sets its window title later.
+    # The primary message label carries the setup question in either case.
+    return pyatspi.findDescendant(node, lambda child: child.getRole() == pyatspi.ROLE_LABEL and sys.argv[1] in child.name) is not None
+
+dialog = pyatspi.findDescendant(desktop, is_setup_dialog)
 if dialog is None:
+    dialogs = pyatspi.findAllDescendants(desktop, lambda node: node.getRole() in (pyatspi.ROLE_DIALOG, pyatspi.ROLE_ALERT))
+    print("Native dialogs:", [(node.getRoleName(), node.name) for node in dialogs], file=sys.stderr)
     sys.exit("The native setup confirmation is not in the accessibility tree yet.")
 button = pyatspi.findDescendant(dialog, lambda node: node.getRole() == pyatspi.ROLE_PUSH_BUTTON and node.name == "Set up")
 if button is None or not button.queryAction().doAction(0):
