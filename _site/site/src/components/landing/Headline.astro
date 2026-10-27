@@ -18,12 +18,15 @@ const beats = Astro.props.lines
         beats.map((beat, index) => (
             <>
                 <span class="headline-line">
-                    {Astro.props.shared && index === beats.length - 1 ? (
+                    {Astro.props.shared && index === 0 && beat.includes(" ") ? (
                         <>
-                            {beat.includes(" ") && <span class="display">{beat.slice(0, beat.lastIndexOf(" ") + 1)}</span>}
                             <span class="headline-phrase">
-                                <span class="display">{beat.slice(beat.lastIndexOf(" ") + 1)}</span>
+                                <span class="display">{beat.slice(0, beat.indexOf(" "))}</span>
                                 <SharedAgentEmblem />
+                            </span>{" "}
+                            <span class="headline-phrase">
+                                <span class="display">{beat.slice(beat.indexOf(" ") + 1)}</span>
+                                <span class="stop">.</span>
                             </span>
                         </>
                     ) : (
@@ -40,7 +43,7 @@ const beats = Astro.props.lines
 </h1>
 
 <style>
-    /* The shared agent stands in for the headline's last stop; keep it on the line with the word it ends. */
+    /* Keep the emblem with “Shared” and the final words together when a small screen needs two lines. */
     .headline-phrase {
         display: inline-block;
         white-space: nowrap;
