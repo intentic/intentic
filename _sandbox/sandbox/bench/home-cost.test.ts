@@ -7,6 +7,7 @@ const turn = (over: Partial<UsageTurn> & Pick<UsageTurn, "conversationId" | "cos
     at: 0,
     day: "2026-10-27",
     provider: "claude",
+    harness: "claude-code",
     outcome: "ok",
     turns: 1,
     inputTokens: 0,

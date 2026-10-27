@@ -205,6 +205,7 @@ export const UNSERVED = {
     "agent.routeChat": UNSIMULATED_WRITE,
     // The desktop app's status bar and `ic sandbox attention` read it with a session minted for the owner; no view does.
     "agents.attention": NOT_THE_EDITORS,
+    "agents.clearHomeHistory": UNSIMULATED_WRITE,
     "agents.conflicts": UNFILLED_VIEW,
     "agents.deleteScratch": UNSIMULATED_WRITE,
     "agents.get": NOT_THE_EDITORS,
@@ -214,6 +215,7 @@ export const UNSERVED = {
     "agents.purge": UNSIMULATED_WRITE,
     "agents.requestLand": UNSIMULATED_WRITE,
     "agents.settle": UNSIMULATED_WRITE,
+    "agents.startFreshHome": UNSIMULATED_WRITE,
     "agents.stopWatching": UNSIMULATED_WRITE,
     "agents.toolChildren": UNFILLED_VIEW,
     "approvals.approveHooks": UNSIMULATED_WRITE,

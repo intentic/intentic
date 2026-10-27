@@ -23,19 +23,41 @@ const vueFiles = (dir: string): readonly string[] =>
         return entry.name.endsWith(`.vue`) ? [path] : [];
     });
 
+// Match the whole attribute name: `data-setting-change` marks a connection's change, not a settings card.
+const settingMarks = (source: string) =>
+    [...source.matchAll(/(:|v-bind:)?data-setting(?![\w-])(?:="([^"]*)")?/gu)].map((match) => ({
+        bound: match[1] !== undefined,
+        id: match[2],
+    }));
+
 // Every `data-setting` written in a template, with where it was written.
 const marks = vueFiles(SRC).flatMap((path) => {
     const source = readFileSync(path, `utf8`);
-    return [...source.matchAll(/(:|v-bind:)?data-setting(?:="([^"]*)")?/gu)].map((match) => ({
+    return settingMarks(source).map((mark) => ({
         file: relative(SRC, path),
-        bound: match[1] !== undefined,
-        id: match[2],
+        ...mark,
     }));
 });
 
 const sandbox = SANDBOX_CARDS;
 const settings = SETTINGS_CARDS;
 const entries: readonly SettingEntry[] = [...sandbox, ...settings];
+
+describe(`template marks`, () => {
+    it(`distinguishes card marks from other data attributes`, () => {
+        expect(settingMarks(`<span data-setting-change data-settings="other" data-setting="theme">`)).toEqual([
+            { bound: false, id: `theme` },
+        ]);
+    });
+
+    it(`still reports bare and bound card marks`, () => {
+        expect(settingMarks(`<span data-setting :data-setting="chosen" v-bind:data-setting="chosen">`)).toEqual([
+            { bound: false, id: undefined },
+            { bound: true, id: `chosen` },
+            { bound: true, id: `chosen` },
+        ]);
+    });
+});
 
 describe(`the index and the cards`, () => {
     it(`names every card with an id of plain lower-case words, used once across both hubs`, () => {
