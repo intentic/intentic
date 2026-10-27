@@ -131,6 +131,22 @@ if [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ]; then
     fi
 fi
 
+# THE CGROUP FILESYSTEM, WRITABLE. Docker mounts cgroup2 read-only in any container it does not run privileged: every
+# sandbox started from the setup page's Docker Compose file, and an `ic` one without the Docker capability. Everything
+# below that writes to it then failed in silence, the memory brake and the daemon's no-swap leaf with it, since root
+# passes `[ -w ]` on a read-only mount and only the writes said no. A compose sandbox ran that way for hours with its
+# daemon's heap free to swap, and the first visit after a long idle waited minutes for it to fault back in (2026-10-27).
+# CAP_SYS_ADMIN, which every sandbox is given, may remount it read-write, and that is only done in a cgroup namespace of
+# the container's own (its own cgroup reads as `/`): there nothing written reaches past the limits the engine set on
+# it. Under the host's namespace (`--cgroupns=host`) the root is the host's, and it is left alone. A host security profile
+# that forbids mounts (AppArmor's docker-default) keeps it read-only; the daemon block below says so.
+cgroup_root=/sys/fs/cgroup
+cgroup_options() { awk -v root="$cgroup_root" '$2 == root && $3 == "cgroup2" { print $4; exit }' /proc/mounts 2>/dev/null; }
+cgroup_writable() { case ",$(cgroup_options)," in *,rw,*) return 0 ;; *) return 1 ;; esac; }
+if ! cgroup_writable && [ -n "$(cgroup_options)" ] && [ "$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)" = "/" ]; then
+    mount -o remount,rw "$cgroup_root" 2>/dev/null || true
+fi
+
 # memory.high, the kernel's own brake, set below the hard cap so reclaim starts BEFORE the cliff rather than at it.
 # `memory.max` is a wall: cross it and something is killed. `memory.high` is throttle-and-reclaim, which spends time
 # instead of a process, and it raises PSI early enough that the resource budget (src/workload/resource-budget.ts)
@@ -156,9 +172,10 @@ fi
 # seconds (in minutes with heavy faulting, a quarter held a freeze over 5 s). `memory.swap.max` 0 keeps it resident, and
 # a larger cpu and io weight keeps an agent's build from starving the process every keystroke waits on. netd keeps
 # the leaf to itself and the daemon, moving everything else into `workload` (_sandbox/netd, cgroup.rs). Silent on
-# refusal, like memory.high above.
-cgroup_root=/sys/fs/cgroup
-if [ -w "$cgroup_root/cgroup.subtree_control" ] && grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
+# refusal, like memory.high above, except where the filesystem itself stays read-only.
+if ! cgroup_writable && grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
+    echo "intentic: $cgroup_root is read-only in this container, so the daemon's heap is not kept out of swap and the first visit after a long idle can wait while it pages back in; run the container privileged, or let it mount (security_opt apparmor=unconfined)" >&2
+elif grep -qw memory "$cgroup_root/cgroup.controllers" 2>/dev/null; then
     mkdir -p "$cgroup_root/daemon" "$cgroup_root/workload" 2>/dev/null || true
     # A cgroup whose children get controllers may hold no process itself, so every process here moves to a leaf first.
     # Tried a few times: a process forked between the read and the write (sshd answering a local-sync connection as the

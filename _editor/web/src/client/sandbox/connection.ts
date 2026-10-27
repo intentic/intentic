@@ -87,6 +87,9 @@ export type ConnectionSignal =
     | { readonly kind: "switched"; readonly lastKnownOnline: boolean }
     // The dial address changed mid-attempt; clears cause and backoff instead of climbing the ladder against it.
     | { readonly kind: "retargeted" }
+    // The page came back from a sleep, or the network came back: the rung the failures while away climbed to says nothing
+    // about now, so the ladder starts again. Cause and phase stay, so a reader's notice does not flicker on a return.
+    | { readonly kind: "resumed" }
     // The shell tore the loop down (logout, unmount).
     | { readonly kind: "disconnect" };
 
@@ -157,6 +160,9 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
         case `retargeted`:
             // Like a switch without the generation bump: only the address changed, so in-flight results stay valid.
             return { ...state, phase: `connecting`, failure: undefined, attempt: 0, retryDelayMs: 0, onlineSince: undefined };
+        case `resumed`:
+            // The same state when there is no climb to forget, as `connect` keeps identity.
+            return state.attempt === 0 && state.retryDelayMs === 0 ? state : { ...state, attempt: 0, retryDelayMs: 0 };
         case `disconnect`:
             return { ...initialConnection, generation: state.generation };
     }

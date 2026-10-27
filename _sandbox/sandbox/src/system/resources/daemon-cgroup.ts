@@ -79,10 +79,20 @@ export interface DaemonCgroupKeeper {
     readonly stop: () => void;
 }
 
-/** Keeps the daemon's leaf as the entrypoint meant it: at boot and every `intervalMs`, said once per file each way. */
+// The cgroup2 mount's options (`ro,nosuid,…`) as /proc/mounts lists them, or undefined where none is at the root.
+export const cgroupMountOptions = (mounts: string): string | undefined =>
+    mounts
+        .split("\n")
+        .map((line) => line.split(" "))
+        .find((fields) => fields[1] === CGROUP_ROOT && fields[2] === "cgroup2")?.[3];
+
+/** Keeps the daemon's leaf as the entrypoint meant it: at boot and every `intervalMs`, said once per file each way.
+ * `container` is whether this daemon runs as a sandbox's container: there a container with no daemon leaf at all is said
+ * once, since nothing then keeps the heap out of swap (a compose sandbox's read-only cgroup filesystem, 2026-10-27);
+ * a local daemon, and a guest beside a leaf another daemon holds, have none to keep and say nothing. */
 export const startDaemonCgroupKeeper = (
     logger: Pick<Logger, "warn" | "info">,
-    options: { readonly intervalMs?: number; readonly io?: CgroupFiles } = {},
+    options: { readonly intervalMs?: number; readonly io?: CgroupFiles; readonly container?: boolean } = {},
 ): DaemonCgroupKeeper => {
     const io = options.io ?? files;
     // Said once a daemon life per file and outcome: a leaf something keeps resetting would otherwise say it every minute.
@@ -96,6 +106,15 @@ export const startDaemonCgroupKeeper = (
     const pass = async (): Promise<void> => {
         const leaf = daemonLeafOf((await io.read("/proc/self/cgroup")) ?? "");
         if (leaf === undefined) {
+            if (options.container === true && !said.has("no-leaf") && (await io.read(`${CGROUP_ROOT}/daemon/cgroup.procs`)) === undefined) {
+                const mount = cgroupMountOptions((await io.read("/proc/mounts")) ?? "");
+                once("no-leaf", () => {
+                    logger.warn(
+                        { mount: mount ?? "none" },
+                        "daemon cgroup: this container has no daemon leaf, so nothing keeps the daemon's heap out of swap and the first requests after a long idle can wait while it pages back in",
+                    );
+                });
+            }
             return;
         }
         const check = await checkDaemonLeaf(leaf, io);

@@ -1,5 +1,5 @@
 import { HISTORY_ROOT } from "@intentic/constants";
-import { checkDaemonLeaf, type CgroupFiles, daemonLeafOf, startDaemonCgroupKeeper } from "./daemon-cgroup.js";
+import { cgroupMountOptions, checkDaemonLeaf, type CgroupFiles, daemonLeafOf, startDaemonCgroupKeeper } from "./daemon-cgroup.js";
 
 // A cgroup filesystem in a map: a missing key is a file this kernel lacks, a `refuse` entry a write the kernel turns down.
 const fakeFiles = (texts: Record<string, string>, refuse: ReadonlySet<string> = new Set()) => {
@@ -60,4 +60,36 @@ test("the keeper says each restore once a daemon life, however often something r
     }
     // Nothing here touches a real cgroup or the history volume.
     expect(HISTORY_ROOT).not.toBe(LEAF);
+});
+
+// 2026-10-27: a compose sandbox's cgroup filesystem was read-only, the entrypoint made no leaf, and the daemon said nothing.
+const COMPOSE_MOUNTS = "proc /proc proc rw,nosuid 0 0\ncgroup /sys/fs/cgroup cgroup2 ro,nosuid,nodev,noexec,relatime,nsdelegate 0 0\n";
+
+test("the cgroup mount's options are read off the mount table, and only the cgroup2 one at the root counts", () => {
+    expect(cgroupMountOptions(COMPOSE_MOUNTS)).toBe("ro,nosuid,nodev,noexec,relatime,nsdelegate");
+    expect(cgroupMountOptions("cgroup /sys/fs/cgroup/memory cgroup rw 0 0\n")).toBeUndefined();
+    expect(cgroupMountOptions("")).toBeUndefined();
+});
+
+describe("a container with no daemon leaf", () => {
+    const watch = async (texts: Record<string, string>, container: boolean): Promise<unknown[]> => {
+        const warned: unknown[] = [];
+        const keeper = startDaemonCgroupKeeper({ warn: (fields: unknown, message?: string) => { warned.push({ fields, message }); }, info: () => {} }, { io: fakeFiles(texts).io, intervalMs: 5, container });
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        } finally {
+            keeper.stop();
+        }
+        return warned;
+    };
+
+    test("is said once a daemon life, with the mount that kept it from one", async () => {
+        const warned = await watch({ "/proc/self/cgroup": "0::/\n", "/proc/mounts": COMPOSE_MOUNTS }, true);
+        expect(warned).toEqual([{ fields: { mount: "ro,nosuid,nodev,noexec,relatime,nsdelegate" }, message: expect.stringMatching(/no daemon leaf, so nothing keeps the daemon's heap out of swap/u) }]);
+    });
+
+    test("is not a local daemon's to say, nor a guest's beside a leaf another daemon holds", async () => {
+        expect(await watch({ "/proc/self/cgroup": "0::/\n", "/proc/mounts": COMPOSE_MOUNTS }, false)).toEqual([]);
+        expect(await watch({ "/proc/self/cgroup": "0::/workload\n", "/sys/fs/cgroup/daemon/cgroup.procs": "9\n" }, true)).toEqual([]);
+    });
 });

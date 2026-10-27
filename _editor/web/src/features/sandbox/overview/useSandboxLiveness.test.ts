@@ -49,7 +49,15 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
 jest.mock("../../../client/sandbox/sandboxAuthFetch", () => ({ SandboxUnaddressedError: class extends Error {} }));
 jest.mock("../../../client/session/sandboxSession", () => ({ useSandboxSession: () => ({ invalidateSession: () => undefined }) }));
 jest.mock("../../../client/sandbox/edgeVerdict", () => ({ forgetEdgeVerdict: () => undefined, lastEdgeVerdict: () => undefined }));
-jest.mock("../../../client/sandbox/pageWake", () => ({ watchPageWake: () => () => undefined, refVisibility: () => undefined }));
+// What the loop asked to hear when the page comes back from a sleep; a case calls it as the page would.
+const wakeHandlers: (() => void)[] = [];
+jest.mock("../../../client/sandbox/pageWake", () => ({
+    watchPageWake: (woke: () => void) => {
+        wakeHandlers.push(woke);
+        return () => wakeHandlers.splice(wakeHandlers.indexOf(woke), 1);
+    },
+    refVisibility: () => undefined,
+}));
 jest.mock("../../../app/hotReload", () => ({ reloadOnHotUpdate: () => undefined }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { removeQueries: () => undefined } }));
 jest.mock("../../../workbench/presence/usePresence", () => ({ clearPresence: () => undefined, presenceStreamOpened: () => undefined }));
@@ -245,4 +253,72 @@ test(`the loop goes back to its rung once the waking window has passed`, async (
 
     // At 0, 1 and 2 s inside the window; the wait after the third is the rung's 5 s, so the fourth is at 7 s.
     expect(events).toHaveBeenCalledTimes(4);
+});
+
+// A computer that slept: the stream died while it was away, and the failures since climbed the ladder. Coming back, the
+// next attempt goes at once and the ladder starts again, rather than after the watchdog's grace and the rung.
+test(`a page back from a sleep redials at once, past the rung the failures while away climbed to`, async () => {
+    jest.useFakeTimers();
+    connection.value = { phase: `retrying`, retryDelayMs: 60_000 };
+    events.mockImplementationOnce(async () => {
+        throw new Error(`fetch failed`);
+    });
+    start();
+    await waitFor(() => expect(failures()).toEqual([`network`]));
+    // Past the watchdog's window since the attempt began, as a slept computer's clock is.
+    await advanceTimersByTimeAsync(11_000);
+    expect(events).toHaveBeenCalledTimes(1);
+
+    for (const woke of wakeHandlers) {
+        woke();
+    }
+
+    await waitFor(() => expect(events).toHaveBeenCalledTimes(2));
+    expect(kinds()).toContain(`resumed`);
+});
+
+// The same return over a stream still talking costs it nothing: no redial, and no new rung.
+test(`a page back from a sleep leaves a stream that is still talking alone`, async () => {
+    jest.useFakeTimers();
+    events.mockImplementationOnce(async (_input, { signal }) => ({
+        [Symbol.asyncIterator]: () => {
+            let sent = false;
+            return {
+                next: async (): Promise<IteratorResult<unknown>> => {
+                    if (!sent) {
+                        sent = true;
+                        return { done: false, value: { type: `heartbeat` } };
+                    }
+                    await hangs(signal);
+                    return { done: true, value: undefined };
+                },
+            };
+        },
+    }));
+    start();
+    await waitFor(() => expect(kinds()).toContain(`frame`));
+
+    for (const woke of wakeHandlers) {
+        woke();
+    }
+    await advanceTimersByTimeAsync(1_000);
+
+    expect({ streams: events.mock.calls.length, resumed: kinds().includes(`resumed`) }).toEqual({ streams: 1, resumed: false });
+});
+
+// The list a break asks the platform for is only how a moved daemon is found; a platform that never answers (or a
+// connection to it that died while the computer slept) must not hold the sandbox's own redial behind it.
+test(`a break waits on the platform's list for a few seconds at most before the next attempt`, async () => {
+    jest.useFakeTimers();
+    refresh.mockImplementation(() => new Promise<void>(() => {}));
+    events.mockImplementation(async () => {
+        throw new Error(`fetch failed`);
+    });
+    start();
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+
+    // The three seconds, then the first rung's zero: the list still has not answered.
+    await advanceTimersByTimeAsync(3_100);
+
+    expect(events).toHaveBeenCalledTimes(2);
 });

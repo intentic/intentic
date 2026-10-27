@@ -270,7 +270,10 @@ flowchart LR
   computer's loopback (the desktop app's offline copy of the editor lists them at `http://127.0.0.1:<port>`) that does
   not answer is **loopback-down**: its container or the Docker/WSL port forwarding, never a network, a VPN or
   `*.sbx.intentic.dev`, and the details say the platform was not used rather than "ok". A blocked address is named as
-  it is, the owner's own domain included.
+  it is, the owner's own domain included. (2026-10-27) A page back from a sleep, or a browser whose network came back,
+  redials at once when the stream has said nothing for longer than its watchdog allows, and starts the retry ladder
+  again (`redialIfQuiet` in `useSandboxLiveness.ts`); a break waits at most 3 s on the platform's sandbox list before
+  its next attempt.
 - **One progress model.** Everything that shows how far along work is reads `components/progress/progress.ts`: how
   long it has run, how long it should take (`expectedMs`), when the screen gives up (`giveUpMs`), and, where the work
   counts for itself, how much is done (`measured`: docker's layers, the steps a rebuild has passed). The bar is that

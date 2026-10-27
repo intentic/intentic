@@ -279,6 +279,23 @@ describe(`applyConnectionSignal`, () => {
         expect(drive({ kind: `retargeted` }).generation).toBe(0);
     });
 
+    it(`starts the ladder again on a return from a sleep, keeping the cause the reader is shown`, () => {
+        // The failures while the computer slept climbed to the ceiling; the next one after waking waits the first rung.
+        const away = drive(failed(network(), 1_000), failed(network(), 2_000), failed(network(), 3_000), failed(network(), 4_000));
+        const resumed = applyConnectionSignal(away, { kind: `resumed` });
+        expect({ attempt: resumed.attempt, retryDelayMs: resumed.retryDelayMs }).toEqual({ attempt: 0, retryDelayMs: 0 });
+        expect({ phase: resumed.phase, failure: resumed.failure, unavailableSince: resumed.unavailableSince }).toEqual({
+            phase: away.phase,
+            failure: away.failure,
+            unavailableSince: away.unavailableSince,
+        });
+        expect(applyConnectionSignal(resumed, failed(network(), 5_000)).retryDelayMs).toBe(1_000);
+
+        // Nothing to forget is the very same state, so a return over a healthy stream wakes no watcher.
+        const online = drive({ kind: `connect` }, { kind: `opened` }, frame());
+        expect(applyConnectionSignal(online, { kind: `resumed` })).toBe(online);
+    });
+
     it(`returns to idle on disconnect without rewinding the generation`, () => {
         const state = drive({ kind: `switched`, lastKnownOnline: false }, { kind: `connect` }, { kind: `opened` }, { kind: `disconnect` });
         expect(state.phase).toBe(`idle`);

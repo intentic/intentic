@@ -134,7 +134,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     shutdown.push(() => loopWatchdog.stop());
     // What most of those stalls were: the daemon's heap paged back in from swap, which its own cgroup leaf is meant to
     // forbid. Kept as the entrypoint meant it, and said when it was not (daemon-cgroup.ts).
-    shutdown.push(startDaemonCgroupKeeper(logger).stop);
+    shutdown.push(startDaemonCgroupKeeper(logger, { container: traits.containerCapabilities }).stop);
     // Names the function behind a boot stall, which the watchdog can only time: kept under logs/ when one happened.
     // Started ahead of the state convergence below, so an update's first boot is profiled too.
     const bootProfile = startBootProfile(logger, logsRoot(config.historyRoot));

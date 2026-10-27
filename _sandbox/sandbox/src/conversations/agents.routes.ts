@@ -27,6 +27,7 @@ import { historyOf, liveConflicts } from "./land/review/review.js";
 import { createReviewReader } from "./land/review/review-cache.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
+import { standingsForRead } from "./standings-read.js";
 import { endingOf } from "./registry/turn-ending.js";
 import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
 import { landByHandLeased, settleByHand } from "./land/land-by-hand.js";
@@ -133,9 +134,10 @@ export const createAgentsRoutes = (services: Services) => {
     return {
         documents: i.documents.handler(async ({ input, context }) => ({ paths: await documentsOf(services, entryFor(input.id, context)) })),
         // Revision the roster was taken at, so the browser can tell this apart from a racing /events snapshot
-        // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing.
+        // (AgentsListSchema). Refreshes standings first, which is what makes a roster read self-healing, for as long as
+        // a read waits on them (standingsForRead): a probe past it answers through the broadcast instead.
         list: i.list.handler(async ({ context }) => {
-            await services.agents.refreshStandings();
+            await standingsForRead(services.agents);
             // Approvals ride along as `held`; approve/reject stay the automations routes' own verbs. A guest sees its
             // own conversations and no held wake: a wake is somebody else's automation.
             const caller = context.identity;

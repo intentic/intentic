@@ -1,4 +1,4 @@
-import { anySignal, Latest, sleep, TimeoutError } from "@intentic/base/async";
+import { anySignal, Latest, sleep, TimeoutError, within } from "@intentic/base/async";
 import { watch } from "vue";
 import { desyncAgents } from "../../../models/fleet/useAgents";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
@@ -38,8 +38,18 @@ const BUSY_WATCHDOG_MS = 30_000;
 // says changes that fast during a wake, and the diagnosis reads it on its own cadence for the notice (useDiagnosis.ts
 // PROBE_EVERY_MS, MIRROR_EVERY_MS) (2026-10-19).
 const WAKING_REFRESH_EVERY_MS = 5_000;
+// The longest a break waits on that list before the next attempt goes: the list only matters to a daemon that
+// re-registered at a new address, and a platform answering slowly (or a connection to it that died while the computer
+// slept) must not hold the sandbox's own redial behind it. It keeps going, single-flighted, for the next break to join.
+const BREAK_REFRESH_PATIENCE_MS = 3_000;
 
 const watchdogMs = (): number => (sandboxSeemsAlive() ? BUSY_WATCHDOG_MS : WATCHDOG_MS);
+
+// When the stream in hand last spoke, and when the attempt in hand began: a page coming back from a sleep, or a network
+// coming back, tells a stream still talking (or an attempt still inside its watchdog) from one that died while it was
+// away by these, since the watchdog's own timer stopped with the page.
+let lastFrameAt = 0;
+let attemptStartedAt = 0;
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
 const { daemonBase, usingLocal, resolve: resolveEndpoint, demoteIfUnreachable, reset: resetEndpoint, recheckAfterWake } = useEndpoint();
@@ -131,9 +141,10 @@ const stream = async (sandboxId: string, signal: AbortSignal): Promise<void> => 
         // The daemon just registered this connection's blank roster entry; announce this tab's current activity.
         presenceStreamOpened(clientId);
         for await (const frame of frames) {
+            lastFrameAt = Date.now();
             // Stamps, not just counts, each run of frames so a later break can be told from a daemon that never holds a
             // stream up (connection.ts); only the first frame of a run matters.
-            signalConnection({ kind: `frame`, at: Date.now() });
+            signalConnection({ kind: `frame`, at: lastFrameAt });
             armWatchdog();
             // Re-checked every heartbeat, not just per connect: a long-lived stream gets no other chance to notice a
             // better route.
@@ -179,7 +190,11 @@ const reportBreak = async (failure: ConnectionFailure, sandboxId: string): Promi
     const now = Date.now();
     if (breakRefreshDue(sandboxId, now)) {
         lastBreakRefresh = { sandboxId, at: now };
-        await refresh().catch(() => undefined);
+        await within(
+            refresh().catch(() => undefined),
+            BREAK_REFRESH_PATIENCE_MS,
+            undefined,
+        );
     }
 };
 
@@ -219,6 +234,7 @@ const attempt = async (signal: AbortSignal, run: AbortSignal): Promise<void> => 
     void resolveEndpoint().catch(() => undefined);
     // Address this attempt is bound to, so its own deliberate abort can be told from a real break.
     const base = daemonBase.value;
+    attemptStartedAt = Date.now();
     signalConnection({ kind: `connect` });
     try {
         await stream(sandboxId, signal);
@@ -272,17 +288,42 @@ const loop = async (run: AbortSignal): Promise<void> => {
     }
 };
 
-// Set while running: a page that slept re-checks its loopback address before calls queue on it (useEndpoint.ts). Away
-// is judged by onScreen, as the chat panes judge it, not by the document alone: a desktop window hidden in the Windows
-// tray still reads visible to its document, so a day there would never count as away.
+// A page back from a sleep, or a network back from a drop: the stream in hand is taken as gone once it has been quiet
+// longer than its watchdog allows, and the attempt in hand once it has run that long without a frame, and the next one
+// goes now with the ladder started again. The watchdog would get there on its own, but only after its late-timer grace,
+// and the backoff after it at whatever rung the failures while away had climbed to. A stream still talking, or an attempt
+// still inside its watchdog, is left alone, so a return costs a healthy connection nothing.
+const redialIfQuiet = (): void => {
+    if (runs.current === undefined || Date.now() - Math.max(lastFrameAt, attemptStartedAt) < watchdogMs()) {
+        return;
+    }
+    signalConnection({ kind: `resumed` });
+    attempts.abort();
+};
+
+// Set while running: a page that slept re-checks its loopback address before calls queue on it (useEndpoint.ts), and
+// redials a stream that died while it was away. Away is judged by onScreen, as the chat panes judge it, not by the
+// document alone: a desktop window hidden in the Windows tray still reads visible to its document, so a day there would
+// never count as away.
 let unwatchWake: (() => void) | undefined;
+
+const woke = (): void => {
+    recheckAfterWake();
+    redialIfQuiet();
+};
 
 const start = (): void => {
     if (runs.current !== undefined) {
         return;
     }
     const run = runs.next();
-    unwatchWake = watchPageWake(recheckAfterWake, { visibility: refVisibility(onScreen) });
+    const unwatchPage = watchPageWake(woke, { visibility: refVisibility(onScreen) });
+    // The browser's own word that its network is back (Wi-Fi rejoined, a VPN up again): no page-wake beat says it.
+    globalThis.addEventListener?.(`online`, redialIfQuiet);
+    unwatchWake = () => {
+        unwatchPage();
+        globalThis.removeEventListener?.(`online`, redialIfQuiet);
+    };
     startDiagnosis();
     void loop(run);
 };

@@ -5,6 +5,7 @@ import type { OrpcContext } from "../app-env.js";
 import { theirs, visibleTo } from "../auth/fleet-scope.js";
 import type { Services } from "../composition.js";
 import { homeConversationOf } from "./home/home-conversation.js";
+import { standingsForRead } from "./standings-read.js";
 
 // `GET /agents/attention`: the two counts the desktop app's status bar reads over the loopback port (`ic sandbox
 // attention`), by the board's own rules (the contract's models/agent-lanes.ts `fleetAttention`), so the bar and the board
@@ -18,12 +19,12 @@ export const createAttentionRoutes = (services: Pick<Services, "agents" | "heldW
     return {
         attention: i.attention.handler(async ({ context }) => {
             // As `list` does: a roster read refreshes the standings it counts.
-            await services.agents.refreshStandings();
+            await standingsForRead(services.agents);
             const agents = services.agents.list().filter((agent) => visibleTo(context.identity, agent));
             return fleetAttention(agents, await services.heldWakes.list());
         }),
         attentionMine: i.attentionMine.handler(async ({ context }) => {
-            await services.agents.refreshStandings();
+            await standingsForRead(services.agents);
             const caller = context.identity;
             // No identity is the loopback owner, who answers for the whole sandbox.
             const agents = services.agents.list().filter((agent) => caller === undefined || (visibleTo(caller, agent) && theirs(caller, agent)));
