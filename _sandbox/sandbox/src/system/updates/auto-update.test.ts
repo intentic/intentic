@@ -1,6 +1,6 @@
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract/schemas/devices";
 import type { StagedUpdate } from "@intentic/sandbox-contract/schemas/system";
-import { waitFor } from "@intentic/testing/bun";
+import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import type { RestartResume } from "../restart-resume.js";
 import {
     type AutoUpdateActivity,
@@ -110,6 +110,9 @@ describe("holdsOf", () => {
 });
 
 describe("createAutoUpdater", () => {
+    const pollMs = 5;
+    // Long enough that a loaded runner still looks inside a countdown (20 ms ran out between two 15 ms ticks on CI).
+    const countdownMs = { seen: 600, unseen: 300 };
     let activity: AutoUpdateActivity = QUIET;
     let current: AutoUpdateOffer = offer();
     let host: string | undefined = "rog";
@@ -161,10 +164,8 @@ describe("createAutoUpdater", () => {
                 changes += 1;
             },
             logger: { info: () => undefined, warn: () => undefined },
-            pollMs: 5,
-            // Long enough that a loaded runner still looks inside a countdown (20 ms ran out between two 15 ms ticks on
-            // CI); a test waiting for one to end polls for it rather than sleeping a guess.
-            countdownMs: { seen: 600, unseen: 300 },
+            pollMs,
+            countdownMs,
             cutoverGraceMs: 10_000,
         });
         return updater;
@@ -267,25 +268,27 @@ describe("createAutoUpdater", () => {
     });
 
     test("a machine that answers in words did not restart anything: said, and tried again later", async () => {
-        answer = [{ kind: "error", message: "Not enough free disk space for the update." }];
-        const auto = make();
-        // Settled once the next look has read the failure back as a hold: until then the state is the failure alone.
-        const state = await waitFor(
-            async () => {
-                const said = await auto.state();
-                expect({ failure: said.failure, holds: said.holds.map((hold) => hold.kind) }).toEqual({
-                    failure: "Not enough free disk space for the update.",
-                    holds: ["retry"],
-                });
-                return said;
-            },
-            { timeout: 3_000, interval: 10 },
-        );
-        expect(relayed).toHaveLength(1);
-        expect(state.phase).toBe("waiting");
-        // No update of ours is coming, so the next boot must not claim one, nor resume turns for it.
-        expect(policy.applied).toBeUndefined();
-        expect(asks).toEqual(["announce daemon update", "ask", "withdraw"]);
+        // Drive the countdown and the following look on one clock, so observing the reply never depends on real timers
+        // being serviced before the polling deadline.
+        jest.useFakeTimers();
+        try {
+            answer = [{ kind: "error", message: "Not enough free disk space for the update." }];
+            const auto = make();
+            await advanceTimersByTimeAsync(countdownMs.unseen + pollMs);
+            const state = await auto.state();
+            expect({ failure: state.failure, holds: state.holds.map((hold) => hold.kind) }).toEqual({
+                failure: "Not enough free disk space for the update.",
+                holds: ["retry"],
+            });
+            expect(relayed).toHaveLength(1);
+            expect(state.phase).toBe("waiting");
+            // No update of ours is coming, so the next boot must not claim one, nor resume turns for it.
+            expect(policy.applied).toBeUndefined();
+            expect(asks).toEqual(["announce daemon update", "ask", "withdraw"]);
+        } finally {
+            updater?.stop();
+            jest.useRealTimers();
+        }
     });
 
     test("an unconnected machine is waited for, and named", async () => {
