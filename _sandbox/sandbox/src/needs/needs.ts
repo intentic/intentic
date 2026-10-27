@@ -88,6 +88,8 @@ export interface Needs {
     readonly ask: (input: NeedAskInput) => Promise<NeedRaised>;
     readonly mine: (conversationId: string | undefined) => Promise<readonly Need[]>;
     readonly withdraw: (id: string, conversationId: string | undefined) => Promise<Need>;
+    // The agent closing its own need as met, with what showed it: refused for a need the daemon's checks can see met.
+    readonly done: (id: string, conversationId: string | undefined, how: string) => Promise<Need>;
     readonly list: (query: { readonly conversationId?: string | undefined; readonly open?: boolean | undefined }) => Promise<readonly Need[]>;
     readonly get: (id: string) => Promise<Need | undefined>;
     readonly answer: (id: string, answer: NeedAnswer, by: Answerer) => Promise<Need>;
@@ -106,7 +108,7 @@ export interface Needs {
 
 const agentNeed = (need: Need): AgentNeed => ({ id: need.id, kind: need.subject.kind, title: need.title, status: need.status });
 
-const openAsk = (need: Need, unattended: boolean): string =>
+const openAsk = (need: Need, unattended: boolean, kinds: NeedKinds): string =>
     [
         `Asked a person: ${need.title} (need ${need.id}).`,
         unattended
@@ -114,6 +116,11 @@ const openAsk = (need: Need, unattended: boolean): string =>
             : "They have not answered yet. Carry on with everything that does not need it.",
         "The answer reaches this conversation by itself, so do not poll and do not ask again. `needs` lists what is still waiting; `needs cancel " +
             `${need.id}\` withdraws it if the task stops needing it.`,
+        ...(kinds[need.subject.kind].agentMayClose?.(need) === true
+            ? [
+                  `Nothing the sandbox checks can see this one fixed: if a person says in the chat that it is (the token updated in place), retry what was refused, and once it works close the card with \`needs done ${need.id} --how "<what you retried and what came back>"\`.`,
+              ]
+            : []),
     ].join(" ");
 
 // Runs `pass` one at a time. A call that arrives while a pass runs is not dropped: that pass may have listed the needs, or
@@ -186,6 +193,30 @@ const openNeedsPasses = (
     };
 };
 
+// One of the asking conversation's own needs, for the agent to withdraw or close: refused for anyone else's.
+const ownedBy = async (deps: Pick<NeedsDeps, "store" | "raisingConversation">, id: string, conversationId: string | undefined): Promise<Need> => {
+    const need = await deps.store.get(id);
+    if (need === undefined) {
+        throw new NeedRefusal("not_found", `No need is named "${id}": \`needs\` lists this conversation's.`);
+    }
+    const asking = deps.raisingConversation(conversationId);
+    if (asking !== undefined && need.conversationId !== asking) {
+        throw new NeedRefusal("not_yours", `"${id}" was raised by another conversation, so it is not this one's to withdraw.`);
+    }
+    return need;
+};
+
+// What `needs done` closes an open need with: the agent's own sentence, or a refusal where the kind's checks see it met.
+const agentsWord = (need: Need, kinds: NeedKinds, how: string): string => {
+    if (kinds[need.subject.kind].agentMayClose?.(need) !== true) {
+        throw new NeedRefusal(
+            "invalid",
+            `"${need.id}" closes by itself the moment the sandbox sees it met, so your word cannot close it. If the task no longer needs it, \`needs cancel ${need.id}\` withdraws it.`,
+        );
+    }
+    return `The agent confirmed it works: ${how.trim().replace(/\s+/g, " ").slice(0, 280)}`;
+};
+
 export const createNeeds = (deps: NeedsDeps): Needs => {
     const now = deps.now ?? Date.now;
     const newId = deps.newId ?? ((): string => `need-${randomInt(ID_SPAN).toString(36).padStart(5, "0")}`);
@@ -256,6 +287,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
                 outcome,
                 updatedAt: now(),
                 ...(by?.email === undefined ? {} : { answeredBy: by.email }),
+                ...(by?.agent === true ? { byAgent: true, told: "call" as const } : {}),
             };
             return settled;
         });
@@ -276,7 +308,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
                 waiter(need, met);
             }
             await told(need, "call");
-        } else if (status !== "cancelled") {
+        } else if (status !== "cancelled" && by?.agent !== true) {
             await deliver(need, met).catch((error: unknown) => deps.logger.warn({ err: error, need: id }, "needs: could not tell the conversation"));
         }
         return need;
@@ -343,7 +375,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
                 message: `A person declined: ${need.title}.${need.outcome === undefined ? "" : ` ${need.outcome}`} Carry on without it, say plainly what it would have enabled, and do not ask for it again in this conversation.`,
             };
         }
-        return { state: "open", need, message: openAsk(need, false) };
+        return { state: "open", need, message: openAsk(need, false, deps.kinds) };
     };
 
     const ask = async ({ raise, conversationId: named, signal }: NeedAskInput): Promise<NeedRaised> => {
@@ -400,19 +432,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         if (!isOpenNeed(held.need)) {
             return answered(held.need, held.met);
         }
-        return { state: "open", need: held.need, message: openAsk(held.need, unattended) };
-    };
-
-    const ownedBy = async (id: string, conversationId: string | undefined): Promise<Need> => {
-        const need = await deps.store.get(id);
-        if (need === undefined) {
-            throw new NeedRefusal("not_found", `No need is named "${id}": \`needs\` lists this conversation's.`);
-        }
-        const asking = deps.raisingConversation(conversationId);
-        if (asking !== undefined && need.conversationId !== asking) {
-            throw new NeedRefusal("not_yours", `"${id}" was raised by another conversation, so it is not this one's to withdraw.`);
-        }
-        return need;
+        return { state: "open", need: held.need, message: openAsk(held.need, unattended, deps.kinds) };
     };
 
     const answer = async (id: string, reply: NeedAnswer, by: Answerer): Promise<Need> => {
@@ -462,11 +482,15 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             return asking === undefined ? [] : (await deps.store.all()).filter((need) => need.conversationId === asking);
         },
         withdraw: async (id, conversationId) => {
-            const need = await ownedBy(id, conversationId);
+            const need = await ownedBy(deps, id, conversationId);
             if (!isOpenNeed(need)) {
                 return need;
             }
             return settle(id, "cancelled", "The agent withdrew it: the task no longer needs it.", undefined);
+        },
+        done: async (id, conversationId, how) => {
+            const need = await ownedBy(deps, id, conversationId);
+            return isOpenNeed(need) ? settle(id, "met", agentsWord(need, deps.kinds, how), { email: undefined, agent: true }) : need;
         },
         list: async ({ conversationId, open }) =>
             (await deps.store.all()).filter(

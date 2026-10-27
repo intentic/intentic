@@ -28,6 +28,7 @@ interface FakeKind {
     met: Met | undefined;
     answered: Answered;
     nextTurn: boolean;
+    agentMayClose: boolean;
     declinedCalls: string[];
 }
 
@@ -38,6 +39,7 @@ const fakeKind = (state: FakeKind): NeedKindHandler => ({
     declined: async (need) => {
         state.declinedCalls.push(need.id);
     },
+    agentMayClose: () => state.agentMayClose,
     nextTurn: () => state.nextTurn,
     key: (subject) => JSON.stringify(subject),
 });
@@ -61,6 +63,7 @@ const harness = (): Harness => {
         met: undefined,
         answered: { status: "met", result: "Stored under OPENAI_API_KEY.", use: ["Write {{secret:OPENAI_API_KEY}} in a command."] },
         nextTurn: false,
+        agentMayClose: false,
         declinedCalls: [],
     };
     const drawn: Need[] = [];
@@ -328,6 +331,25 @@ describe("needs", () => {
         await expect(needs.withdraw("need-1", "conv-2")).rejects.toThrow("raised by another conversation");
         const withdrawn = await needs.withdraw("need-1", "conv-1");
         expect(withdrawn.status).toBe("cancelled");
+        expect(woken).toEqual([]);
+        expect(steered).toEqual([]);
+    });
+
+    it("lets the agent close a need as met on its own word only where its kind allows, telling nobody and never again at boot", async () => {
+        const { deps, kind, woken, steered, shown } = harness();
+        const needs = createNeeds(deps);
+        const open = await needs.ask({ raise: raise(0), conversationId: "conv-1", signal: signal() });
+        expect(open.message).not.toContain("needs done");
+        await expect(needs.done("need-1", "conv-1", "retried")).rejects.toThrow("`needs cancel need-1` withdraws it");
+        kind.agentMayClose = true;
+        expect((await needs.ask({ raise: raise(0), conversationId: "conv-1", signal: signal() })).message).toContain('`needs done need-1 --how "');
+        await expect(needs.done("need-1", "conv-2", "retried")).rejects.toThrow("raised by another conversation");
+        const done = await needs.done("need-1", "conv-1", "  the purge   answered 200 ");
+        expect(done).toMatchObject({ status: "met", byAgent: true, told: "call", outcome: "The agent confirmed it works: the purge answered 200" });
+        expect(done.answeredBy).toBeUndefined();
+        expect(shown.at(-1)?.needs).toEqual([]);
+        createNeeds(deps).start()();
+        await new Promise((resolve) => setTimeout(resolve, 10));
         expect(woken).toEqual([]);
         expect(steered).toEqual([]);
     });

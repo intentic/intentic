@@ -113,6 +113,11 @@ const refused = (code: string, message: string): Resolved => ({ kind: "refused",
 // The kinds whose connection a turn mounts at its start, so a later grant or connection reaches only the next turn.
 const MOUNTED = new Set(["browser", "identity", "device", "webext", "phone", "mcp", "agent", "plugin"]);
 
+// A refusal the agent reported is one no probe saw, so no probe sees it end either: once the person says in the chat
+// that the credential is fixed and a retry works, the agent closes the card (`needs done`) rather than leaving it up.
+const reportedReconnect = (need: Need): boolean =>
+    need.subject.kind === "capability" && need.subject.mode === "reconnect" && need.subject.reported === true;
+
 export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
     const entryFor = async (asked: string): Promise<{ entry: CapabilityCatalogEntry; instance?: Capability } | undefined> => {
         const entries = await deps.entries();
@@ -391,10 +396,8 @@ export const capabilityNeed = (deps: CapabilityNeedDeps): NeedKindHandler => {
             const met = await check({ ...need, subject: vouched });
             return { status: "met", ...(met ?? { result: `${subject.name} is connected as "${instance.id}".`, use: [] }) };
         },
-        nextTurn: (need) => {
-            const subject = subjectOf(need);
-            return subject !== undefined && subject.mode !== "change" && subject.mode !== "remove";
-        },
+        agentMayClose: reportedReconnect,
+        nextTurn: (need) => ![undefined, "change", "remove"].includes(subjectOf(need)?.mode),
         key: (subject: NeedSubject) =>
             subject.kind === "capability" ? [subject.entry, subject.mode, subject.instance ?? "", hostOf(subject.target ?? "")].join("|") : "",
     };

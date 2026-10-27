@@ -39,6 +39,8 @@ export const isGone = (checked: Met | Gone | undefined): checked is Gone => chec
 // Who answered, as the request verified them.
 export interface Answerer {
     readonly email: string | undefined;
+    // The agent itself (`needs done`): it already knows, so it is never told, and the record says whose word it was.
+    readonly agent?: true;
 }
 
 // What a person's answer did. `met` and `declined` settle the need; `working` is a yes still being carried out (a
@@ -60,6 +62,10 @@ export interface NeedKindHandler {
     // Who may answer at all, yes or no, when the kind names them (a release's approvers): the reason a click from
     // anybody else is refused, leaving the need waiting for somebody who can. Absent: anyone who reaches the route.
     readonly mayAnswer?: (need: Need, by: Answerer) => string | undefined;
+    // Whether the agent's own word may close an open need as met (`needs done`): only where nothing `check` reads can
+    // ever see it met, so a person's "it is fixed" said in the chat, and a retry that worked, are all there is. Absent:
+    // never, since the daemon closes the need itself the moment it is met.
+    readonly agentMayClose?: (need: Need) => boolean;
     // What a decline undoes, where the kind left something behind (a drafted overlay step).
     readonly declined?: (need: Need) => Promise<void>;
     // Whether a met need only reaches the agent on its conversation's next turn: a grant, a release, an account a turn

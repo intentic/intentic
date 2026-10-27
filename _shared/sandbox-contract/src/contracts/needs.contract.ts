@@ -3,6 +3,7 @@ import { OkSchema } from "../schemas/shared.js";
 import {
     GrantRevokeSchema,
     NeedAnswerInputSchema,
+    NeedDoneInputSchema,
     NeedIdParamSchema,
     NeedRaisedSchema,
     NeedRaiseSchema,
@@ -53,6 +54,16 @@ export const needsContract = {
             description: "Closes one of this conversation's open needs because the task no longer needs it. Its card says so.",
         })
         .input(NeedIdParamSchema)
+        .output(NeedSchema),
+    done: agentDoor
+        .route({
+            method: "POST",
+            path: "/needs/{id}/done",
+            summary: "Close a need as met, on the agent's word",
+            description:
+                "Closes one of this conversation's open needs as met, with what showed the agent it works: only a need no check of the daemon's can see met (a credential reported refused while its connection still probes fine), once a person said in the chat it was fixed. Any other need is refused: the daemon closes those itself.",
+        })
+        .input(NeedDoneInputSchema)
         .output(NeedSchema),
     list: procedure
         .route({

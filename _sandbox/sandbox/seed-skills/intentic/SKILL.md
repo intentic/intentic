@@ -49,7 +49,9 @@ What the daemon does around you:
 - **Needs** are what a conversation has asked people for: a connection, a secret, a grant, a release, a tool
   for the image. Each is a card in its chat, pinned above the composer and shown on its agent's card on the
   board; it outlives the turn that raised it, and its answer continues the conversation by itself. `needs` lists this
-  conversation's, and `needs cancel <id>` withdraws one the task no longer needs.
+  conversation's, and `needs cancel <id>` withdraws one the task no longer needs. A `--reconnect` card for a
+  credential you reported refused is the one the sandbox cannot see fixed: once the owner says it is and a retry
+  works, `needs done <id> --how "…"` closes it as met.
 
 ## Scope and verification: never a negative answer from memory
 

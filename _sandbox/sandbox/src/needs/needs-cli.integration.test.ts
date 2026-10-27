@@ -438,6 +438,19 @@ describe("the asking commands speak the needs contract", () => {
         expect(cancelled).toMatchObject({ code: 0, stdout: "need-a1b2c is cancelled: The OPENAI_API_KEY secret.\n" });
     });
 
+    it("needs done closes one as met with what the agent saw, at the route the contract declares, and asks for --how", async () => {
+        server.answer = (seen) =>
+            `${seen.method} ${seen.path}` === declared(["needs", "done"], { id: "need-a1b2c" })
+                ? { status: 200, body: { ...OPEN_NEED, status: "met", byAgent: true } }
+                : { status: 404, body: { message: `nothing at ${seen.method} ${seen.path}` } };
+        const missing = await run(server.port, "needs", ["done", "need-a1b2c"]);
+        expect(missing.code).toBe(2);
+        expect(server.seen).toEqual([]);
+        const done = await run(server.port, "needs", ["done", "need-a1b2c", "--how", "the purge answered 200"]);
+        expect(done).toMatchObject({ code: 0, stdout: "need-a1b2c is met: The OPENAI_API_KEY secret.\n" });
+        expect(server.seen.at(-1)?.body).toEqual({ how: "the purge answered 200" });
+    });
+
     it("a typo exits 2 on stdout without asking for the wrong thing", async () => {
         const result = await run(server.port, "capabilities", ["request", "github", "--targte", "github.com"]);
         expect(result).toEqual({ code: 2, stdout: "capabilities: unknown option --targte\n", stderr: "" });

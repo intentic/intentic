@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // The in-sandbox needs command: what this conversation has asked people for, and how each stands
 // (docs/architecture/needs.md). An open need's answer reaches the conversation by itself, so this is for looking, not
-// for polling; `cancel` withdraws one the task stopped needing, and its card says so.
+// for polling; `cancel` withdraws one the task stopped needing, and its card says so; `done` closes one as met on the
+// agent's word, only where nothing the daemon checks could see it met (a credential reported refused).
 
-import { call, die, refusalOf } from "./needs-cli.mjs";
+import { call, die, parseArgs, refusalOf } from "./needs-cli.mjs";
 
 const COMMAND = "needs";
 
@@ -11,6 +12,9 @@ const USAGE = `needs — what this conversation has asked people for
 
   needs                 every need this conversation raised, open ones first, with its id and where it stands
   needs cancel <id>     withdraw one the task no longer needs; its card says so
+  needs done <id> --how "…"
+                        close one as met on your word, with what showed it works: only for a credential you
+                        reported refused (--reconnect), once a person says in the chat it is fixed and a retry works
 
 An open need's answer arrives in this conversation by itself: do not poll it.`;
 
@@ -45,6 +49,20 @@ const cancel = async (id) => {
     process.stdout.write(`${need.id} is ${need.status}: ${need.title}.\n`);
 };
 
+const done = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["how"] });
+    const [id] = rest;
+    if (id === undefined || flags.how === undefined || flags.how.trim() === "") {
+        return die(COMMAND, USAGE);
+    }
+    const { status, text } = await call(COMMAND, "POST", `/needs/${encodeURIComponent(id)}/done`, JSON.stringify({ how: flags.how }));
+    if (status < 200 || status >= 300) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const need = JSON.parse(text);
+    process.stdout.write(`${need.id} is ${need.status}: ${need.title}.\n`);
+};
+
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
     if (command === undefined || command === "list") {
@@ -52,6 +70,9 @@ const main = async () => {
     }
     if (command === "cancel") {
         return cancel(rest[0]);
+    }
+    if (command === "done") {
+        return done(rest);
     }
     process.stdout.write(`${USAGE}\n`);
     process.exit(command === "--help" || command === "-h" ? 0 : 2);

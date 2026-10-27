@@ -62,6 +62,7 @@ export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) =
             return { needs: [...(await needs.mine(conversationId))] };
         }),
         withdraw: i.withdraw.handler(({ input, context }) => answered(needs.withdraw(input.id, conversationOf(context)))),
+        done: i.done.handler(({ input, context }) => answered(needs.done(input.id, conversationOf(context), input.how))),
         list: i.list.handler(async ({ input, context }) => ({
             needs: (await needs.list(input)).filter((need) => visible(context.identity, need.conversationId)),
         })),

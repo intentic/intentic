@@ -201,6 +201,17 @@ describe("capability need", () => {
         expect(await handler.answer(need, { kind: "apply" }, { email: "owner@acme.dev" })).toMatchObject({ status: "met", result: 'Komodo is connected as "komodo".' });
     });
 
+    // 2026-10-27: the owner widened a Cloudflare token in place and said so in the chat; the card had no way to close.
+    it("lets the agent close only a reported reconnect on its own word, since no probe can see that one fixed", async () => {
+        const broken = world({ capabilities: [komodo("komodo")], statuses: new Map([["komodo", { state: "error", detail: "401 Invalid user credentials" }]]) });
+        const reported = needOf({ kind: "capability", entry: "komodo", name: "Komodo", mode: "reconnect", instance: "komodo", reported: true });
+        const probed = needOf({ kind: "capability", entry: "komodo", name: "Komodo", mode: "reconnect", instance: "komodo", reason: "401" });
+        const connect = needOf({ kind: "capability", entry: "komodo", name: "Komodo", mode: "connect" });
+        expect(kind(broken).agentMayClose?.(reported)).toBe(true);
+        expect(kind(broken).agentMayClose?.(probed)).toBe(false);
+        expect(kind(broken).agentMayClose?.(connect)).toBe(false);
+    });
+
     it("asks for a new credential when the connection is broken, with the probe's own reason", async () => {
         const broken = world({ capabilities: [komodo("komodo")], statuses: new Map([["komodo", { state: "error", detail: "401 Invalid user credentials" }]]) });
         expect(await kind(broken).resolve({ kind: "capability", entry: "komodo" }, asked())).toMatchObject({

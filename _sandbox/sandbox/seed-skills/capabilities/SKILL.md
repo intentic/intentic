@@ -42,6 +42,12 @@ Every ask answers the same way:
   poll, and do not ask again: `needs` lists what is still waiting, and `needs cancel <id>` withdraws an ask the
   task no longer needs.
 
+A `--reconnect` card for a connection that still probes fine never closes by itself: the sandbox could not see
+the refusal, so it cannot see the fix either. When the owner says in the chat that they fixed it (the same token
+given more scopes, say), retry what was refused; once it works, close the card with
+`needs done <id> --how "<what you retried and what came back>"`. If the retry is still refused, say so and leave
+the card up.
+
 The call holds up to 90 seconds for a quick answer (`--wait <0..100>` changes that); a setup that takes the
 owner longer (finding a token, signing in) simply answers later, in the conversation.
 

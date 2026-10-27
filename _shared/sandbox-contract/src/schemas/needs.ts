@@ -19,7 +19,7 @@ export type NeedKind = z.infer<typeof NeedKindSchema>;
 export const NeedStatusSchema = z
     .enum(["open", "working", "met", "declined", "cancelled"])
     .describe(
-        "Where it stands: open (waiting on a person), working (a person said yes and it is being set up), met, declined, or cancelled (the agent withdrew it, or its conversation went away).",
+        "Where it stands: open (waiting on a person), working (a person said yes and it is being set up), met (a person's answer, the daemon's own check, or the agent's word where no check can see it), declined, or cancelled (the agent withdrew it, or its conversation went away).",
     );
 export type NeedStatus = z.infer<typeof NeedStatusSchema>;
 
@@ -177,6 +177,10 @@ export const NeedSchema = z.object({
     createdAt: z.number().describe("When it was raised, in milliseconds."),
     updatedAt: z.number().describe("When it last moved, in milliseconds."),
     answeredBy: z.string().optional().describe("Who answered it, as the sandbox verified them."),
+    byAgent: z
+        .boolean()
+        .optional()
+        .describe("The agent closed it as met on its own word (`needs done`), after a person said in the chat it was fixed and a retry worked."),
     outcome: z.string().optional().describe("How it ended, in the daemon's words, once it has."),
     told: NeedToldSchema.optional().describe("How the agent heard the outcome, once it has."),
     unattended: z.boolean().optional().describe("Raised by a turn nobody was watching, so the card waited for whoever came next."),
@@ -255,6 +259,10 @@ export const NeedAnswerSchema = z.discriminatedUnion("kind", [
 export type NeedAnswer = z.infer<typeof NeedAnswerSchema>;
 
 export const NeedIdParamSchema = z.object({ id: z.string().min(1).describe("Which need.") });
+// POST /needs/{id}/done: the agent closing its own need as met, where nothing the daemon checks could see it met.
+export const NeedDoneInputSchema = NeedIdParamSchema.extend({
+    how: z.string().trim().min(1).max(280).describe("What showed the agent it works now: the call it retried and what came back."),
+});
 export const NeedAnswerInputSchema = NeedIdParamSchema.extend({ answer: NeedAnswerSchema });
 // POST /needs/{id}/release: a release need's own answer, from the people its gate names, whatever their tier.
 export const NeedReleaseInputSchema = NeedIdParamSchema.extend({
