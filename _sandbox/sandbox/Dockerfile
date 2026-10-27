@@ -93,6 +93,7 @@ RUN printf '%s\n' \
         'set -g history-limit 100000' \
         'setw -g aggressive-resize on' \
         'set -g default-terminal "tmux-256color"' \
+        'set -g default-shell /bin/bash' \
         'set -g default-command zsh' \
         'set -g destroy-unattached off' \
         "set-hook -g session-created 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
@@ -401,6 +402,11 @@ WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
 ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin WEBQ_PLUGIN_DIR=/opt/webq-plugin EXTENSIONS_DIR=/opt/extensions
+# Agent CLIs choose their command interpreter from SHELL; Claude Code also has its own override. Their generated
+# commands use Bash semantics (field splitting, unmatched globs, arrays). Keep those semantics explicit, including
+# nested `$SHELL -c` calls. The terminal remains interactive zsh through tmux's default-command above; changing a few
+# noninteractive zsh options would still leave the two languages different.
+ENV SHELL=/bin/bash CLAUDE_CODE_SHELL=/bin/bash
 # The translator's fixed localhost endpoint + a loopback-only bearer (the token is just what Claude Code must
 # send as ANTHROPIC_AUTH_TOKEN to a same-host proxy). The ENV is a pointer, not the binary — cli-proxy-api
 # itself is the `translator` pack, and main.ts only spawns it when it is present and a connected provider

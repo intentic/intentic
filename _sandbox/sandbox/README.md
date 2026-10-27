@@ -78,6 +78,12 @@ pin. `src/` itself is not shipped: the image runs `dist/`.
 boundary, with an example of each body the daemon defines, written by `src/system/host-files.test.ts` and read by
 ic's own tests, so a rename on either side fails a test instead of a rollback.
 
+The image sets `SHELL=/bin/bash` and `CLAUDE_CODE_SHELL=/bin/bash` for agent commands. tmux also parses command
+strings with Bash, while `default-command zsh` keeps the person's interactive terminals in zsh. (2026-10-27: an agent
+passed a file list as one argument under zsh because it expected Bash's field splitting. Setting a few zsh options
+was rejected because it cannot make zsh implement Bash.) The image smoke probe checks both ordinary and login
+shells, nested shell calls, and the interactive terminal's configuration before release tags move.
+
 A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
 
 The asking CLIs (`capabilities`, `secrets`, `environment`, `grants`, `needs`) write errors to stdout.

@@ -45,9 +45,55 @@ trap 'for leftover in $STARTED; do docker rm -f "$leftover" >/dev/null 2>&1 || t
 PROBE="$(
     cat <<'JS'
 const { existsSync } = require("node:fs");
+const { spawnSync } = require("node:child_process");
 const { join } = require("node:path");
 const { pathToFileURL } = require("node:url");
 const fail = (code, why) => { console.error(why); process.exit(code); };
+// Agent programs must get the language their commands assume. A few zsh options cannot supply Bash semantics.
+// Exercise the image's defaults, including a child choosing its shell again; never substitute a hard-coded Bash
+// executable for the value being tested. These are terminal failures, so a broken image is not retried as slow boot.
+const checkShells = () => {
+    for (const key of ["SHELL", "CLAUDE_CODE_SHELL"]) {
+        if (process.env[key] !== "/bin/bash") fail(2, `${key} must select /bin/bash for agent commands, got ${JSON.stringify(process.env[key])}`);
+    }
+    const command = String.raw`
+files=$(printf 'first\nsecond\n')
+set -- $files
+[ "$#" = 2 ] || exit 11
+[ "$1" = first ] && [ "$2" = second ] || exit 12
+set -- intentic-smoke-no-match-*.missing =intentic-smoke-no-command
+[ "$#" = 2 ] && [ "$1" = 'intentic-smoke-no-match-*.missing' ] && [ "$2" = '=intentic-smoke-no-command' ] || exit 13
+files=(first second)
+[ "$files" = first ] || exit 14
+files[0]=zero
+[ "$files" = zero ] || exit 14
+"$SHELL" -c 'values="first second"; set -- $values; [ "$#" = 2 ] && [ -n "$BASH_VERSION" ]' || exit 15
+printf 'bash semantics ok'
+`;
+    for (const key of ["SHELL", "CLAUDE_CODE_SHELL"]) {
+        for (const flag of ["-c", "-lc"]) {
+            const result = spawnSync(process.env[key], [flag, command], { encoding: "utf8", timeout: 10000 });
+            if (result.status !== 0 || result.stdout !== "bash semantics ok") {
+                fail(2, `${key} ${flag} failed the agent shell probe: ${result.error?.message ?? result.stderr} (exit ${result.status})`);
+            }
+        }
+    }
+    // Use a private server: its defaults must come from the shipped config, independent of the daemon's tmux server.
+    const socket = `intentic-smoke-shell-${process.pid}`;
+    const tmux = (args) => spawnSync("tmux", ["-L", socket, ...args], { encoding: "utf8", timeout: 10000 });
+    let problem;
+    try {
+        const started = tmux(["-f", "/root/.tmux.conf", "new-session", "-d", "-s", "shell"]);
+        if (started.status !== 0) problem = `cannot start the image's terminal: ${started.error?.message ?? started.stderr}`;
+        for (const [key, expected] of [["default-shell", "/bin/bash"], ["default-command", "zsh"]]) {
+            const result = tmux(["show-options", "-gv", key]);
+            if (result.status !== 0 || result.stdout.trim() !== expected) problem ??= `tmux ${key} must be ${expected}, got ${JSON.stringify(result.stdout)}`;
+        }
+    } finally {
+        tmux(["kill-server"]);
+    }
+    if (problem !== undefined) fail(2, problem);
+};
 (async () => {
     // netd answers its vitals itself, whatever state the daemon is in. A daemon it has restarted three times and that is
     // down again is crashing on every start, and /health would only be retried until the timeout (2026-10-06: a daemon
@@ -115,7 +161,8 @@ const fail = (code, why) => { console.error(why); process.exit(code); };
         fail(2, `the daemon converged but seeded no starter site: ${seeded} is absent (a fresh workspace must open with one)`);
         return;
     }
-    console.log(`ok · profile=${health.profile} · ${steps.length} boot step(s) done · starter site seeded`);
+    checkShells();
+    console.log(`ok · profile=${health.profile} · ${steps.length} boot step(s) done · starter site seeded · agent shells checked`);
 })();
 JS
 )"
