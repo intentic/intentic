@@ -189,8 +189,13 @@ const useAddOffers = ({ host, row, hosted, setup }: Flows) => {
 };
 
 // The form: the next free name, kept current with the account's list until the reader types one of their own, and the
-// pick, which falls back to what is on offer.
-const useAddForm = (rows: Readonly<Ref<readonly { readonly name: string }[]>>, options: Readonly<Ref<readonly AddOption[]>>) => {
+// pick, which falls back to what is on offer. No pick at all until the offers are read: before then the only way listed is
+// "More ways"' address, and falling back to it would draw its domain field for a moment and then swap it for the real pick.
+const useAddForm = (
+    rows: Readonly<Ref<readonly { readonly name: string }[]>>,
+    options: Readonly<Ref<readonly AddOption[]>>,
+    loaded: Readonly<Ref<boolean>>,
+) => {
     // (The first on offer is the likeliest: a one-press way before any of "More ways", which `options` lists last.)
     const typed = ref<string | undefined>(undefined);
     const name = computed<string>({
@@ -201,7 +206,7 @@ const useAddForm = (rows: Readonly<Ref<readonly { readonly name: string }[]>>, o
     });
     const picked = ref<string | undefined>(undefined);
     const pick = computed<string | undefined>({
-        get: () => pickOf(picked.value, options.value),
+        get: () => (loaded.value ? pickOf(picked.value, options.value) : undefined),
         set: (next) => {
             picked.value = next;
         },
@@ -404,6 +409,7 @@ export const useAddSandbox = (host: AddSandboxHost) => {
     const form = useAddForm(
         sandbox.sandboxes,
         computed(() => [...offers.options.value, ...offers.moreOptions.value]),
+        offers.loaded,
     );
     const starts = useAddStarts(flows, offers.onMachine);
     // The command a code was minted for, and how its run is waited on (useAddCommand.ts).

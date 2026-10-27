@@ -172,6 +172,13 @@ describe(`what it offers`, () => {
         expect(add.options.value.map((option) => option.value)).toEqual([HOSTED]);
     });
 
+    it(`picks nothing until the offers are read, rather than the address that is always offered`, async () => {
+        const { add } = stage({ inApp: true });
+        const before = { pick: add.pick.value, blocked: add.blocked.value };
+        await add.read();
+        expect({ before, after: add.pick.value }).toEqual({ before: { pick: undefined, blocked: true }, after: HERE });
+    });
+
     it(`keeps a pick only while it is on offer`, () => {
         const options = [
             { value: `rog`, label: `rog`, icon: `server` as const },
