@@ -1,12 +1,12 @@
 import { STATE_DIR } from "@intentic/constants";
 import { type AgentErrorCode, AgentErrorCodeSchema, type AgentEvent } from "../events/agent-events.js";
-import { type TranscriptPatch, type TranscriptRow, TranscriptRowSchema } from "../events/transcript.js";
+import { type TranscriptPatch, type TranscriptRow, TranscriptRowSchema, type TranscriptTool } from "../events/transcript.js";
 import { sandboxNoticeOf } from "../events/sandbox-notice.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
 import { LAND_CONFLICT_OPENING } from "../events/land-conflict.js";
 import { RESUME_NOTES } from "../events/resume.js";
 import { childReportPrompt, peerMessagePrompt } from "../events/agent-words.js";
-import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./transcript-fold.js";
+import { applyTranscriptPatch, foldTurn, mapTool, TranscriptFold, userRow } from "./transcript-fold.js";
 
 // Epoch ms stamped on the opening user row's sentAt.
 const SENT_AT = 1_767_225_600_000;
@@ -702,6 +702,75 @@ describe("foldTurn", () => {
 
 // Patches applied to a window's rows must reproduce the fold's own rows exactly, or live and reopened chats drift.
 describe("patches", () => {
+    const call = (id: string, children?: TranscriptTool[]): TranscriptTool => {
+        const tool: TranscriptTool = { id, name: "Read", category: "read", status: "completed" };
+        if (children !== undefined) {
+            tool.children = children;
+        }
+        return tool;
+    };
+
+    it("a nested tool update preserves unrelated branches and the original tree", () => {
+        const sibling = call("sibling");
+        const leaf = call("leaf");
+        const parent = call("parent", [sibling, leaf]);
+        const other = call("other", [call("untouched")]);
+        const tools = [other, parent];
+        const next = mapTool(tools, "leaf", (tool) => ({ ...tool, thinking: "new reasoning" }));
+
+        expect(next).toEqual([other, { ...parent, children: [sibling, { ...leaf, thinking: "new reasoning" }] }]);
+        expect(next).not.toBe(tools);
+        expect(next[0]).toBe(other);
+        expect(next[1]?.children?.[0]).toBe(sibling);
+        expect(leaf.thinking).toBeUndefined();
+        expect(parent.children).toEqual([sibling, leaf]);
+    });
+
+    it("an absent tool keeps the tree, while a matched identity callback still reports a match", () => {
+        const tools = [call("parent", [call("child")])];
+        let called = 0;
+        const identity = (tool: TranscriptTool): TranscriptTool => {
+            called += 1;
+            return tool;
+        };
+        expect(mapTool(tools, "missing", identity)).toBe(tools);
+        expect(called).toBe(0);
+        const matched = mapTool(tools, "child", identity);
+        expect(matched).toEqual(tools);
+        expect(matched).not.toBe(tools);
+        expect(called).toBe(1);
+    });
+
+    it("updates every matching branch without descending into a matching card", () => {
+        const hidden = call("target");
+        const parent = call("target", [hidden]);
+        const nestedLeaf = call("target");
+        const nested = call("branch", [nestedLeaf]);
+        const tools = [parent, nested];
+        let called = 0;
+        const next = mapTool(tools, "target", (tool) => {
+            called += 1;
+            return { ...tool, thinking: "updated" };
+        });
+        expect(next).toEqual([
+            { ...parent, thinking: "updated" },
+            { ...nested, children: [{ ...nestedLeaf, thinking: "updated" }] },
+        ]);
+        expect(called).toBe(2);
+        expect(next[0]?.children?.[0]).toBe(hidden);
+    });
+
+    it("an indexed row patch keeps unrelated rows and ignores positions outside the transcript", () => {
+        const opening: TranscriptRow = { role: "user", text: "go" };
+        const rows: TranscriptRow[] = [opening, { role: "assistant", text: "hello" }];
+        const next = applyTranscriptPatch(rows, { op: "text", index: 1, text: " world" });
+        expect(next).toEqual([opening, { role: "assistant", text: "hello world" }]);
+        expect(next[0]).toBe(rows[0]);
+        expect(rows[1]?.text).toBe("hello");
+        expect(applyTranscriptPatch(rows, { op: "text", index: 2, text: "ignored" })).toEqual(rows);
+        expect(applyTranscriptPatch(rows, { op: "text", index: -1, text: "ignored" })).toEqual(rows);
+    });
+
     const replay = (
         opening: readonly TranscriptRow[],
         events: readonly AgentEvent[],

@@ -734,14 +734,18 @@ export const patchedRow = <R extends TranscriptRow>(row: R, patch: RowPatch): R 
 
 /** Applies one patch to a row list; only what the patch names moves (patchedRow). */
 export const applyTranscriptPatch = (rows: readonly TranscriptRow[], patch: TranscriptPatch): TranscriptRow[] => {
-    switch (patch.op) {
-        case "append":
-            return [...rows, patch.row];
-        case "drop":
-            return rows.filter((_row, index) => index !== patch.index);
-        default:
-            return rows.map((row, index) => (index === patch.index ? patchedRow(row, patch) : row));
+    if (patch.op === "append") {
+        return [...rows, patch.row];
     }
+    if (patch.op === "drop") {
+        return rows.filter((_row, index) => index !== patch.index);
+    }
+    const next = [...rows];
+    const row = next[patch.index];
+    if (row !== undefined) {
+        next[patch.index] = patchedRow(row, patch);
+    }
+    return next;
 };
 
 // Appends a delegated subagent's reasoning onto the card with this id, wherever it nests.
@@ -768,25 +772,24 @@ const upsertTool = (tools: readonly TranscriptTool[], tool: TranscriptTool, pare
     return [...tools, tool];
 };
 
-// Applies `fn` to the tool with `id` anywhere in the tree; returns the same array when absent, so an unrelated row's
-// identity is unchanged.
+// Applies `fn` to the tool with `id` anywhere in the tree; copies only arrays on a changed branch, so an unrelated
+// subtree keeps its identity without allocating an array for every streamed update.
 export const mapTool = (tools: readonly TranscriptTool[], id: string, fn: (tool: TranscriptTool) => TranscriptTool): readonly TranscriptTool[] => {
-    let changed = false;
-    const next = tools.map((tool) => {
+    let next: TranscriptTool[] | undefined;
+    for (let index = 0; index < tools.length; index += 1) {
+        const tool = tools[index]!;
         if (tool.id === id) {
-            changed = true;
-            return fn(tool);
+            (next ??= [...tools])[index] = fn(tool);
+            continue;
         }
         if (tool.children !== undefined) {
             const children = mapTool(tool.children, id, fn);
             if (children !== tool.children) {
-                changed = true;
-                return { ...tool, children: [...children] };
+                (next ??= [...tools])[index] = { ...tool, children: [...children] };
             }
         }
-        return tool;
-    });
-    return changed ? next : tools;
+    }
+    return next ?? tools;
 };
 
 // Which row fields are cards, exported for readers that count rows by them.
