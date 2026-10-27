@@ -136,6 +136,10 @@ const heading = computed(() => {
     }
 });
 
+// "Rebuilding" over a group whose badge already says "rebuilding" says nothing: the heading is drawn only where it adds
+// a fact (held, restarting, and how it ended), and the bar keeps it as its name.
+const hideHeading = computed(() => live.value && !waiting.value && props.run.stage !== `swap`);
+
 // The gate let the swap through, or the narration says the swap is on: from here nothing may stop the build.
 const swapping = computed(() => props.run.swapping || (props.run.stage === `swap` && !props.run.waiting));
 const cancellable = computed(() => live.value && !swapping.value && props.run.phase !== `starting`);
@@ -158,28 +162,40 @@ const policyModel = computed({
     },
 });
 
-// WHAT THE RESTART COSTS, read now rather than when it lands. Only said where it still decides something: under "as
-// soon as it's built" the restart will cut whoever is mid-turn when it comes; under "once no agent is mid-turn" the
-// question is who it is waiting on; under "when I say" the owner is the one who will look.
-const cost = computed(() => {
+// WHAT THE RESTART COSTS, read now rather than when it lands, said in a few words beside the choice it follows from:
+// under "as soon as it's built" the turns it will cut, under "once no agent is mid-turn" how many it waits on (their
+// names on hover, a list nobody reads inline). "When I say" costs nothing until the owner says.
+const restartCost = computed((): { label: string; tip: string; warn: boolean } | undefined => {
+    if (!live.value || unheard.value || swapping.value) {
+        return undefined;
+    }
+    if (props.policy === `idle` && props.waitingOn.length > 0) {
+        const count = props.waitingOn.length;
+        // The hover label clamps to a few lines, so three titles and a count of the rest rather than a cut-off list.
+        const named = props.waitingOn.slice(0, 3).join(`, `);
+        const tip = count > 3 ? `${named} +${count - 3}` : named;
+        return { label: t(`sandbox.devRebuildProgress.waitingOnCount`, { count }, count), tip, warn: false };
+    }
+    if (props.policy === `built` && props.midTurn > 0 && !waiting.value) {
+        const count = props.midTurn;
+        return {
+            label: t(`sandbox.devRebuildProgress.interruptsTurns`, { count }, count),
+            tip: props.autoResume ? t(`sandbox.devRebuildProgress.turnsResume`) : t(`sandbox.devRebuildProgress.turnsLost`),
+            warn: !props.autoResume,
+        };
+    }
+    return undefined;
+});
+
+// The sentences that are not a cost of a choice: the restart under way, and an older daemon that offers no choice.
+const restartLine = computed(() => {
     if (!live.value || unheard.value) {
         return undefined;
     }
     if (swapping.value) {
         return t(`sandbox.devRebuildProgress.restartingOnNewImage`);
     }
-    if (props.policy === undefined) {
-        return t(`sandbox.devRebuildProgress.keepsWorking`);
-    }
-    if (props.policy === `idle`) {
-        return props.waitingOn.length > 0 ? t(`sandbox.devRebuildProgress.waitingOn`, { names: props.waitingOn.join(`, `) }) : undefined;
-    }
-    if (props.policy === `built` && props.midTurn > 0) {
-        return props.autoResume
-            ? t(`sandbox.devRebuild.midTurnResumed`, { count: props.midTurn }, props.midTurn)
-            : t(`sandbox.devRebuild.midTurnLost`, { count: props.midTurn }, props.midTurn);
-    }
-    return undefined;
+    return props.policy === undefined ? t(`sandbox.devRebuildProgress.keepsWorking`) : undefined;
 });
 
 // Built and held: the one moment the owner is the thing the build is waiting on, so it is said as a strip with its button.
@@ -281,6 +297,7 @@ const confirmCancel = (): void => {
     <StagedProgress
         v-model:log="showLog"
         :heading="heading"
+        :hide-heading="hideHeading"
         :progress="progress"
         :steps="steps"
         :stage="stage"
@@ -298,7 +315,9 @@ const confirmCancel = (): void => {
     >
         <!-- Built and held at the gate: the image is ready and the sandbox untouched, waiting on the owner or an idle fleet. -->
         <div v-if="held" class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md bg-primary-600/10 px-3 py-2">
-            <span class="min-w-0 flex-1 text-2xs text-content">{{ held }}</span>
+            <span class="min-w-0 flex-1 text-2xs text-content"
+                >{{ held }}<span v-if="restartCost" v-tooltip.top="restartCost.tip" class="text-muted"> · {{ restartCost.label }}</span></span
+            >
             <Button :label="t(`sandbox.devRebuildProgress.restartNow`)" size="small" tier="accent" :loading="policyBusy" @click="$emit(`restartNow`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
@@ -315,8 +334,16 @@ const confirmCancel = (): void => {
                 :aria-label="t(`sandbox.devRebuildProgress.restartLabel`)"
                 class="text-2xs"
             />
+            <span
+                v-if="restartCost"
+                v-tooltip.top="restartCost.tip"
+                class="text-2xs"
+                :class="restartCost.warn ? `text-warning` : `text-subtle`"
+                :aria-label="`${restartCost.label}: ${restartCost.tip}`"
+                >{{ restartCost.label }}</span
+            >
         </div>
-        <p v-if="cost" class="text-2xs text-muted">{{ cost }}</p>
+        <p v-if="restartLine" class="text-2xs text-muted">{{ restartLine }}</p>
         <p v-if="policyTrouble" class="text-2xs text-warning">{{ policyTrouble }}</p>
 
         <div v-if="notice" class="flex flex-col gap-1.5">

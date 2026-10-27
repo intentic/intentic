@@ -79,6 +79,16 @@ const nextSlug = (): string => `demo-${(counter += 1)}`;
 const buttonSaying = (words: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(words));
 
+// The confirmation's restart picker, moved off its default ("Once no agent is mid-turn") onto another policy.
+const pickStartPolicy = async (label: string): Promise<void> => {
+    buttonSaying(`Once no agent is mid-turn`)?.click();
+    await nextTick();
+    [...document.querySelectorAll(`[role="option"], button`)]
+        .findLast((option): option is HTMLElement => option instanceof HTMLElement && option.textContent?.includes(label) === true)
+        ?.click();
+    await nextTick();
+};
+
 // What the daemon hands back for `dev-rebuild-log`: the command's stdout, header line first.
 const log = (quiet: string, ...lines: readonly string[]): { ok: true; message: string } => ({
     ok: true,
@@ -238,9 +248,12 @@ it(`confirms first, then puts the run where the offer was`, async () => {
     await settleUi();
 
     expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild`);
-    // The group above already says "Built from your checkout": the run's own heading says where it is.
-    expect(el.textContent).toContain(`Rebuilding`);
-    expect(el.textContent).not.toContain(`Rebuilding from your checkout`);
+    // The group's badge already says "rebuilding": the run draws no heading of its own while it builds, and the bar
+    // keeps it as its name.
+    expect(el.textContent).not.toContain(`Rebuilding`);
+    expect(el.querySelector(`[role="progressbar"]`)?.getAttribute(`aria-label`)).toBe(`Rebuilding`);
+    // Asked to wait for the fleet by default, so nobody's turn is the price of not reading the picker.
+    expect(askIdle).toHaveBeenCalledWith(`host-1`);
     // ONE WAIT, DRAWN ONCE. The offer leaves while its own run is on screen, so a disabled button can't sit there
     // spinning beside the card that already says the same thing — the single spinner is the running step's.
     expect(buttonSaying(`Rebuild from checkout`)).toBeUndefined();
@@ -255,6 +268,9 @@ it(`counts the turns the restart will interrupt before it is agreed to`, async (
 
     buttonSaying(`Rebuild from checkout`)?.click();
     await nextTick();
+    // The default waits for them, and so costs none.
+    expect(document.body.textContent).not.toContain(`agents are mid-turn`);
+    await pickStartPolicy(`As soon as it's built`);
 
     expect(document.body.textContent).toContain(`2 agents are mid-turn`);
     expect(document.body.textContent).toContain(`would need sending again`);
@@ -267,6 +283,7 @@ it(`says the turns come back when this sandbox resumes them after a restart`, as
 
     buttonSaying(`Rebuild from checkout`)?.click();
     await nextTick();
+    await pickStartPolicy(`As soon as it's built`);
 
     expect(document.body.textContent).toContain(`An agent is mid-turn`);
     expect(document.body.textContent).toContain(`picked up once the sandbox is back`);
@@ -279,7 +296,7 @@ it(`says nothing about interrupted work when there is none to interrupt`, async 
     await nextTick();
 
     expect(document.body.textContent).toContain(`Rebuild from checkout?`);
-    expect(document.body.textContent).not.toContain(`mid-turn`);
+    expect(document.body.textContent).not.toContain(`An agent is mid-turn`);
 });
 
 // The complaint this card is answering: a message, and nothing else, for minutes. What it answers it with is the
@@ -610,16 +627,19 @@ it(`holds the restart when the owner picks "When I say", and lets it through fro
     expect(runDeviceCommand).toHaveBeenCalledWith(`host-1`, `dev-rebuild-release`);
 });
 
-it(`hands an idle-wait to the sandbox, and names who it is waiting on`, async () => {
+it(`hands an idle-wait to the sandbox, and counts who it is waiting on, naming them on hover`, async () => {
     const slug = nextSlug();
     const el = mount({ slug, base: `intentic-sandbox:dev`, root: `/home/ada/intentic` });
     runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`1`, `${DEV_REBUILD_HOLD_MARK} 1`, `#12 [builder 4/9] RUN pnpm install`));
-    idleWait.value = { phase: `waiting`, waitingOn: [`Fix the login bug`] };
+    idleWait.value = { phase: `waiting`, waitingOn: [`Fix the login bug`, `Audit the fence`] };
     await useDevRebuild(slug).start(`host-1`);
     await settleUi(POLL_MS);
 
     expect(el.textContent).toContain(`Once no agent is mid-turn`);
-    expect(el.textContent).toContain(`Fix the login bug`);
+    expect(el.textContent).toContain(`waiting on 2 agents`);
+    // A list of turn titles is not read inline; it is there for whoever asks which.
+    expect(el.textContent).not.toContain(`Fix the login bug`);
+    expect(el.querySelector(`[aria-label*="Fix the login bug"]`)).not.toBeNull();
 });
 
 it(`cancels after asking, and says the sandbox never left its image`, async () => {

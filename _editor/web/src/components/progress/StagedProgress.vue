@@ -21,8 +21,11 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const props = defineProps<{
-    /** One line for the whole run: what it is. */
+    /** One line for the whole run: what it is. Always the progress bar's name, even where it is not drawn. */
     heading: string;
+    /** Off where the surface around it already says it (a badge reading "rebuilding"): the line then carries only the
+     *  time left, and goes where there is none to say. */
+    hideHeading?: boolean;
     /** How long it has run and how far its own count says it is (`measured`, never decreasing). */
     progress: Progress;
     steps: readonly ProgressStep[];
@@ -132,6 +135,13 @@ const clockOf = (step: (typeof steps.value)[number]): string | undefined => {
     return step.state === `running` && usual !== undefined ? t(`common.waitProgress.figureOfUsual`, { elapsed: took, usual }) : took;
 };
 
+// Without its heading the top line is only worth a row for the time left. "Longer than usual" is already the running
+// step's own clock ("11m 6s / ~45s"), and how long it has run is the sum of the clocks under each step.
+const leftLine = computed(() => (left.value === undefined || left.value.overdue ? undefined : figure.value));
+
+// What the running step is on this second goes under its own name, not on a row of its own across the card.
+const detailOf = (step: (typeof steps.value)[number]): string | undefined => (step === running.value ? (props.detail ?? step.note) || undefined : undefined);
+
 const share = computed(() => Math.round((progressShare(props.progress) ?? 0) * 100));
 // The bar to a screen reader: the step it is on and what is left, in the words the card shows.
 const spoken = computed(() => [running.value?.label, figure.value].filter((part) => part !== undefined).join(`, `));
@@ -141,10 +151,11 @@ const spoken = computed(() => [running.value?.label, figure.value].filter((part)
     <!-- No card of its own: it is drawn inside a group that is already a surface, and a second border there is chrome. -->
     <div class="flex flex-col gap-3">
         <!-- One line for the whole run: what it is, and how long it has left (or has been going). -->
-        <div class="flex items-baseline gap-2">
+        <div v-if="!hideHeading" class="flex items-baseline gap-2">
             <span class="flex-1 text-xs font-medium text-content">{{ heading }}</span>
             <span v-if="figure" class="shrink-0 font-mono text-2xs tabular-nums text-muted">{{ figure }}</span>
         </div>
+        <p v-else-if="leftLine" class="text-xs text-muted first-letter:uppercase">{{ leftLine }}</p>
 
         <!-- Read out once per step, not once per second: the label changes when the step does. -->
         <span class="sr-only" aria-live="polite">{{ running?.label }}</span>
@@ -186,13 +197,10 @@ const spoken = computed(() => [running.value?.label, figure.value].filter((part)
                 <span v-if="clockOf(step)" class="truncate pl-5 font-mono text-2xs tabular-nums" :class="step.state === 'running' ? `text-muted` : `text-subtle`">{{
                     clockOf(step)
                 }}</span>
+                <!-- Width-neutral (w-0 min-w-full): a package name changing every second must not move the bar. -->
+                <span v-if="detailOf(step)" class="w-0 min-w-full truncate pl-5 text-2xs text-subtle" :title="detailOf(step)">{{ detailOf(step) }}</span>
             </li>
         </ol>
-
-        <!-- What the running step is on this second, under the row rather than squeezed into its column. -->
-        <p v-if="columns && running && (detail ?? running.note)" class="truncate text-2xs text-subtle" :title="detail ?? running.note">
-            {{ detail ?? running.note }}
-        </p>
 
         <!-- A longer plan: one bar, then the steps as a list with the running one's detail under it. -->
         <template v-if="!columns">

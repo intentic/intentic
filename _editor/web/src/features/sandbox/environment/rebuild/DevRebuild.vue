@@ -181,8 +181,9 @@ const onCancel = async (): Promise<void> => {
     }
 };
 
-// The restart's timing, picked at the moment of asking, beside the count of who it would cut.
-const startPolicy = ref<SwapPolicy>(`built`);
+// The restart's timing, picked at the moment of asking, beside the count of who it would cut. Waiting for the fleet to
+// settle by default: a rebuild is minutes either way, and nobody's turn should be the price of not reading a picker.
+const startPolicy = ref<SwapPolicy>(`idle`);
 const START_POLICY_OPTIONS = computed(() => [
     { value: `built` as const, label: t(`sandbox.devRebuildProgress.policyBuilt`), icon: `bolt` as const },
     { value: `idle` as const, label: t(`sandbox.devRebuildProgress.policyIdle`), icon: `users` as const },
@@ -375,8 +376,9 @@ const checkout = computed(() => {
                         <span>{{ t(`sandbox.devRebuild.approvedRecipeAppliedPart`) }}</span>
                     </p>
 
-                    <!-- The cost nobody can see from here: what is running now, and whether the restart hands it back. -->
-                    <Notice v-if="interrupted" tone="warning" class="text-2xs">{{ interrupted }}</Notice>
+                    <!-- The cost nobody can see from here: what is running now, and whether the restart hands it back. Only
+                         under "as soon as it's built": the other two never cut a turn. -->
+                    <Notice v-if="interrupted && startPolicy === `built`" tone="warning" class="text-2xs">{{ interrupted }}</Notice>
                 </div>
             </ConfirmDialog>
         </template>
