@@ -18,6 +18,10 @@ import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { ogCard, ogFonts } from "./scripts/og-template.mjs";
 import { postPaths } from "./scripts/post-slugs.mjs";
 import { sourceFirstWorkspace } from "./scripts/source-first.mjs";
+import { demoDevServer } from "./scripts/demo-dev-server.mjs";
+
+// The demo's dev server (_site/demo/vite.config.ts); /demo proxies to it in dev, and demoDevServer starts it on demand.
+const DEMO_DEV_PORT = 47146;
 
 // Absent without the Inter TTFs checked out; OG then skips, BaseLayout falls back to the static logo.
 const ogFontFaces = ogFonts();
@@ -69,7 +73,7 @@ export default defineConfig({
         inlineStylesheets: "always",
     },
     vite: {
-        plugins: [sourceFirstWorkspace(), tailwindcss(), desktopDevRoutes],
+        plugins: [sourceFirstWorkspace(), tailwindcss(), desktopDevRoutes, demoDevServer({ port: DEMO_DEV_PORT })],
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(ogFontFaces !== undefined),
         },
@@ -77,12 +81,12 @@ export default defineConfig({
         resolve: {
             conditions: ["@intentic/src", "@intentic/src", "@intentic/src", "import", "module", "browser", "default"],
         },
-        // Dev proxies /demo to its own dev server: run `pnpm -C _site/demo dev` (port from its vite.config.ts).
+        // Dev proxies /demo to its own dev server, which demoDevServer starts on the first /demo request.
         server: isDev
             ? {
                   proxy: {
                       "/demo": {
-                          target: "http://localhost:47146",
+                          target: `http://127.0.0.1:${String(DEMO_DEV_PORT)}`,
                           ws: true,
                           configure: (proxy) => {
                               proxy.on("error", (_error, _request, response) => {

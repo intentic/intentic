@@ -23,8 +23,9 @@ const LOGICAL_WIDTH = 1280;
 const ASPECT = 9 / 16;
 /** Below this the app's 13px type stops reading; a narrower frame draws a narrower app instead. */
 const MIN_SCALE = 0.75;
-/** How long a frame may take to draw before the hero gives up on it and leaves the poster. */
-const READY_TIMEOUT_MS = 30_000;
+/** How long a frame may take to draw before the hero gives up on it and leaves the poster. Dev allows a cold start of
+ *  the demo's dev server (astro.config.mjs starts it on the first /demo request), which bundles for minutes. */
+const READY_TIMEOUT_MS = import.meta.env.DEV ? 6 * 60_000 : 30_000;
 
 type LiveState = `poster` | `loading` | `live` | `failed`;
 
