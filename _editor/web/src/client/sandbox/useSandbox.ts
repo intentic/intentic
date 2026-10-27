@@ -177,7 +177,9 @@ const hostedRelease = withConcurrency(
 // swallowed: PAYMENT_REQUIRED (spent hours) and FORBIDDEN (the owner's hosted lane is switched off); everything else is
 // a wait.
 const WAKE_THROTTLE_MS = 60_000;
-const wokeAt = new Map<string, number>();
+// A request that never woke the machine gets another chance on the connection loop's next attempt after this pause.
+const WAKE_RETRY_MS = 5_000;
+const wakeAfter = new Map<string, number>();
 export type WakeRefusalKind = "hours" | "suspended";
 // The sandbox whose last wake the platform refused, why, and in the platform's own words.
 // allow(module-state): a refused wake, stamped with the sandbox it names
@@ -218,11 +220,9 @@ watch(
         if (!(asleep as readonly string[]).includes(state.failure.kind)) {
             return;
         }
-        const last = wokeAt.get(id) ?? 0;
-        if (Date.now() - last < WAKE_THROTTLE_MS) {
+        if (Date.now() < (wakeAfter.get(id) ?? 0)) {
             return;
         }
-        wokeAt.set(id, Date.now());
         const box = active.value;
         if (box !== undefined) {
             noteUnreachable(box);
@@ -238,26 +238,35 @@ watch(activeSandboxId, (_id, previous) => {
     }
 });
 // A manual retry crosses the same platform gate as selection, and keeps its refusal in the active gate.
-const wake = async (sandboxId: string, source: `retry` | `switch`): Promise<void> => {
-    wokeAt.set(sandboxId, Date.now());
-    try {
-        await apiClient.sandbox.wake({ sandboxId });
-        // Taken, so the sandbox is due back within seconds: the connection loop redials it every second until it answers
-        // (wake/wakeWindow.ts), whether this ask came from a failure (above) or from selecting a hosted one asleep (select).
-        // Only for the sandbox the loop dials, and not one whose stream already proved itself while the ask was out: a
-        // list that still said asleep, or a box that came back on its own (2026-10-19).
-        if (activeSandboxId.value === sandboxId && connection.value.onlineSince === undefined) {
-            openWakeWindow(sandboxId, Date.now());
+const requestWake = withConcurrency<{ sandboxId: string; source: `retry` | `switch` }, void>(
+    async ({ sandboxId, source }) => {
+        wakeAfter.set(sandboxId, Date.now() + WAKE_THROTTLE_MS);
+        try {
+            await apiClient.sandbox.wake({ sandboxId });
+            // Taken, so the sandbox is due back within seconds: the connection loop redials it every second until it answers
+            // (wake/wakeWindow.ts), whether this ask came from a failure (above) or from selecting a hosted one asleep (select).
+            // Only for the sandbox the loop dials, and not one whose stream already proved itself while the ask was out: a
+            // list that still said asleep, or a box that came back on its own (2026-10-19).
+            if (activeSandboxId.value === sandboxId && connection.value.onlineSince === undefined) {
+                openWakeWindow(sandboxId, Date.now());
+            }
+            recordWake(sandboxId, undefined);
+            collectWakeHere(sandboxes.value.find((box) => box.id === sandboxId));
+            track(`sandbox_wake`, { source, outcome: `success` });
+        } catch (error) {
+            // No wake was accepted: a network error or 5xx must not leave the machine asleep for the successful wake's
+            // whole cooldown. Definitive refusals keep that cooldown, including the hours/suspension gate below.
+            if (refusalKind(error) === undefined && (!(error instanceof ORPCError) || error.status >= 500)) {
+                wakeAfter.set(sandboxId, Date.now() + WAKE_RETRY_MS);
+            }
+            recordWake(sandboxId, error);
+            track(`sandbox_wake`, { source, outcome: refusalKind(error) ?? `error` });
+            throw error;
         }
-        recordWake(sandboxId, undefined);
-        collectWakeHere(sandboxes.value.find((box) => box.id === sandboxId));
-        track(`sandbox_wake`, { source, outcome: `success` });
-    } catch (error) {
-        recordWake(sandboxId, error);
-        track(`sandbox_wake`, { source, outcome: refusalKind(error) ?? `error` });
-        throw error;
-    }
-};
+    },
+    { mode: `singleFlight`, key: ({ sandboxId }) => sandboxId },
+);
+const wake = (sandboxId: string, source: `retry` | `switch`): Promise<void> => requestWake({ sandboxId, source });
 
 // The ACTIVE sandbox's last refused wake, if its last wake was refused.
 const activeWakeRefused = computed(() =>

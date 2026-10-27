@@ -1,5 +1,6 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic/api-contract";
+import { ORPCError } from "@orpc/client";
 import { stubGlobal, mocked, waitFor } from "@intentic/testing/bun";
 import { nextTick } from "vue";
 
@@ -294,6 +295,62 @@ describe(`the wake a sleeping sandbox is asked back with`, () => {
         mocked(apiClient.sandbox.wake).mockRejectedValue(new Error(`refused`));
         await asleep(summary(`own-4`));
         expect(handed).toEqual([]);
+    });
+
+    it(`retries a transient failed wake on a later connection attempt without waiting a minute`, async () => {
+        const clock = jest.spyOn(Date, `now`).mockReturnValue(1_800_000_000_000);
+        mocked(apiClient.sandbox.wake).mockRejectedValueOnce(new ORPCError(`BAD_GATEWAY`, { message: `temporarily unavailable` }));
+        try {
+            await asleep(summary(`wake-retry`));
+            expect(apiClient.sandbox.wake).toHaveBeenCalledTimes(1);
+            expect(handed).toEqual([]);
+            clock.mockReturnValue(1_800_000_004_999);
+            signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `no tunnel` }, at: Date.now() });
+            await nextTick();
+            expect(apiClient.sandbox.wake).toHaveBeenCalledTimes(1);
+            clock.mockReturnValue(1_800_000_005_000);
+            signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `no tunnel` }, at: Date.now() });
+            await nextTick();
+            await Promise.resolve();
+            expect(apiClient.sandbox.wake).toHaveBeenCalledTimes(2);
+            expect(handed).toEqual([`intentic://sandbox-wakes`]);
+            expect(wakePendingFor(`wake-retry`, Date.now())).toBe(true);
+            clock.mockReturnValue(1_800_000_010_000);
+            signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `no tunnel` }, at: Date.now() });
+            await nextTick();
+            expect(apiClient.sandbox.wake).toHaveBeenCalledTimes(2);
+        } finally {
+            clock.mockRestore();
+        }
+    });
+
+    for (const code of [`PAYMENT_REQUIRED`, `FORBIDDEN`] as const) {
+        it(`keeps the cooldown after a definitive ${code} wake refusal`, async () => {
+            const clock = jest.spyOn(Date, `now`).mockReturnValue(1_800_000_000_000);
+            mocked(apiClient.sandbox.wake).mockRejectedValue(new ORPCError(code, { message: `wake refused` }));
+            try {
+                await asleep(summary(`wake-${code}`));
+                clock.mockReturnValue(1_800_000_005_000);
+                signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `no tunnel` }, at: Date.now() });
+                await nextTick();
+                expect(apiClient.sandbox.wake).toHaveBeenCalledTimes(1);
+                expect(handed).toEqual([]);
+                expect(wakePendingFor(`wake-${code}`, Date.now())).toBe(false);
+            } finally {
+                clock.mockRestore();
+            }
+        });
+    }
+
+    it(`shares an in-flight wake between automatic recovery and a manual retry`, async () => {
+        const answer = Promise.withResolvers<{ ok: boolean }>();
+        mocked(apiClient.sandbox.wake).mockReturnValue(answer.promise);
+        await asleep(summary(`wake-shared`));
+        const retry = useSandbox().wake(`wake-shared`, `retry`);
+        expect(apiClient.sandbox.wake).toHaveBeenCalledTimes(1);
+        answer.resolve({ ok: true });
+        await retry;
+        expect(handed).toEqual([`intentic://sandbox-wakes`]);
     });
 
     // The loop redials a sandbox fast while a wake the platform took is pending (wake/wakeWindow.ts).

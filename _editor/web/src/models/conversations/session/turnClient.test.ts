@@ -505,6 +505,33 @@ describe(`a run's lifecycle`, () => {
         expect(host.error.value).toBeNull();
     });
 
+    for (const status of [400, 403, 500]) {
+        it(`keeps a held turn and shows the resume refusal (${status}) without starting another turn`, async () => {
+            const { client, host } = clientOf();
+            host.pickUp.value = { reason: `stopped`, held: { ran: true } };
+            resume.mockRejectedValueOnce(new SandboxHttpError(status, `The held turn could not be resumed.`));
+
+            await client.continueTurn();
+
+            expect(host.error.value).toBe(`The held turn could not be resumed.`);
+            expect(host.pickUp.value).toEqual({ reason: `stopped`, held: { ran: true } });
+            expect(client.continuing.value).toBe(false);
+            expect(run).not.toHaveBeenCalled();
+            expect(attach).not.toHaveBeenCalled();
+        });
+    }
+
+    it(`leaves a kept message held when its resume is refused`, async () => {
+        const { client, host } = clientOf();
+        resume.mockRejectedValueOnce(new SandboxHttpError(500, `Could not read the held turn.`));
+
+        await client.resendKept({ text: `clean the sandbox`, attachments: [] });
+
+        expect(host.error.value).toBe(`Could not read the held turn.`);
+        expect(run).not.toHaveBeenCalled();
+        expect(attach).not.toHaveBeenCalled();
+    });
+
     // The composer's account follows the daemon's session (bindSession), so a plain Continue on it names none and keeps
     // the session. One that differs is a pick the daemon has not taken yet (refused while a turn ran), and the press
     // names it, as intent, like a send would.

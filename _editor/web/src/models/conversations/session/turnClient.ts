@@ -844,6 +844,9 @@ export class TurnClient {
         if (resumed === undefined) {
             return false;
         }
+        if (resumed === `refused`) {
+            return true;
+        }
         // A 409 is a re-run somebody else's press already started, on its own routing, not on this one's.
         if (resumed === `ran`) {
             this.ranOn(settings);
@@ -947,8 +950,8 @@ export class TurnClient {
 
     // Whether the daemon now runs the held turn: re-run by this press (`ran`), or already running (`running`, a 409, which
     // following answers); undefined when it holds nothing or is unreachable, so the caller continues instead and an
-    // offline press still works.
-    private async askResume(routing: ResumeRouting | undefined): Promise<`ran` | `running` | undefined> {
+    // offline press still works. Other refusals keep their own reason: they do not mean the held turn is gone.
+    private async askResume(routing: ResumeRouting | undefined): Promise<`ran` | `running` | `refused` | undefined> {
         try {
             await sandboxRpc.agent.resume(
                 { conversationId: this.host.conversationId, ...(routing === undefined ? {} : { routing }) },
@@ -956,7 +959,16 @@ export class TurnClient {
             );
             return `ran`;
         } catch (error) {
-            return error instanceof SandboxHttpError && error.status === 409 ? `running` : undefined;
+            if (error instanceof SandboxHttpError) {
+                if (error.status === 409) {
+                    return `running`;
+                }
+                if (error.status !== 404) {
+                    this.host.error.value = error.message;
+                    return `refused`;
+                }
+            }
+            return undefined;
         }
     }
 
@@ -976,6 +988,9 @@ export class TurnClient {
         const resumed = await this.askResume(named ? heldRouting(settings, host.session.value, {}) : undefined);
         if (resumed === undefined) {
             await this.say(kept.text, kept.attachments);
+            return;
+        }
+        if (resumed === `refused`) {
             return;
         }
         if (resumed === `ran`) {
