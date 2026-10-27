@@ -136,9 +136,8 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             // A run that died in its runner's own setup, or whose log names the fleet, never ran a line of this repository:
             // an agent opened on it would fix code that is fine, so it is refused with the reason unless forced.
             if (evidence.infra && input.force !== true) {
-                const where = evidence.infraSteps.length > 0 ? ` (${evidence.infraSteps.join(", ")})` : "";
                 throw new ORPCError("PRECONDITION_FAILED", {
-                    message: `Every failed job died on the fleet${where}, not in any step of this repository: bring the runner back and re-run the pipeline; force the fix to put an agent on it anyway.`,
+                    message: `Not a code failure: ${evidence.infraReasons.join("; ")}. Bring the runner back and re-run the failed jobs, or force the fix to put an agent on it anyway.`,
                 });
             }
             // A run of a failing main-line branch is its streak's: the press continues the one fix agent on it.

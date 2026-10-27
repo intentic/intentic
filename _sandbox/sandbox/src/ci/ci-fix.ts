@@ -24,19 +24,42 @@ export const FIX_LOG_BYTES = 24_000;
 export const WHOLE_LOG = Number.POSITIVE_INFINITY;
 const RUNS_PER_PROJECT = 15;
 
-// Lines only the runner, its Docker daemon or its disk print; a test's own output (a refused port, an HTTP 503 it asserts)
-// is left to read as the code's.
-const INFRA_LOG = [
-    /Cannot connect to the Docker daemon at /,
-    /docker: command not found/,
-    /no space left on device/i,
-    /net\/http: timeout awaiting response headers/,
-    /The runner has received a shutdown signal/,
-    /lost communication with the server/i,
+// Lines only the runner, its Docker daemon or its disk print, each with what it says happened; a test's own output (a
+// refused port, an HTTP 503 it asserts) is left to read as the code's.
+const INFRA_LOG: readonly { readonly sign: RegExp; readonly says: string }[] = [
+    { sign: /Cannot connect to the Docker daemon at /, says: "the runner's Docker daemon stopped answering" },
+    { sign: /docker: command not found/, says: "the runner has no Docker" },
+    { sign: /no space left on device/i, says: "the runner's disk is full" },
+    { sign: /net\/http: timeout awaiting response headers/, says: "the runner's network timed out" },
+    { sign: /The runner has received a shutdown signal/, says: "the runner was shut down mid-job" },
+    { sign: /lost communication with the server/i, says: "the runner lost its connection to the forge" },
 ];
 
+// What a failed-job log says the fleet did, once per sign it carries; none for a log that reads as the code's.
+const infraSigns = (logs: string): readonly string[] => INFRA_LOG.flatMap(({ sign, says }) => (sign.test(logs) ? [says] : []));
+
 // Whether a failed-job log reads as the fleet's failure; any one sign is enough, since a code failure prints none of them.
-export const infraLog = (logs: string): boolean => INFRA_LOG.some((sign) => sign.test(logs));
+export const infraLog = (logs: string): boolean => infraSigns(logs).length > 0;
+
+// Why a run reads as the fleet's, in words for whoever pressed Fix: each sign with the jobs whose log ends carry it, or,
+// when none does, the runner-owned steps every job died in. Empty when the run reads as the code's.
+export const fleetReasons = (failedSteps: readonly FailedStep[], logs: readonly string[]): readonly string[] => {
+    const jobsBySign = new Map<string, string[]>();
+    failedSteps.forEach((failed, index) => {
+        for (const says of infraSigns((logs[index] ?? "").slice(-FIX_LOG_BYTES))) {
+            jobsBySign.set(says, [...(jobsBySign.get(says) ?? []), failed.job]);
+        }
+    });
+    if (jobsBySign.size > 0) {
+        return [...jobsBySign].map(([says, jobs]) => `${says} (${jobs.join(", ")})`);
+    }
+    const stepsOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
+    if (!stepsOnly) {
+        return [];
+    }
+    const steps = [...new Set(failedSteps.flatMap(({ step }) => (step === undefined ? [] : [step])))];
+    return [`every failed job died in the runner's own steps (${steps.join(", ")})`];
+};
 
 export interface CiFailureEvidence {
     readonly failedJobs: readonly string[];
@@ -45,10 +68,10 @@ export interface CiFailureEvidence {
     // What failed, read out of the failed jobs' logs (failure-digest.ts): every error once with the jobs that printed it,
     // then each failed step's last lines.
     readonly logs: string;
-    // Every failure died in a runner-owned step, or its log names the fleet: nothing an agent on the code can fix.
+    // Every failure died in a runner-owned step, or a log names the fleet: nothing an agent on the code can fix.
     readonly infra: boolean;
-    // The runner-owned steps it died in, for saying so.
-    readonly infraSteps: readonly string[];
+    // Why it reads as the fleet's (fleetReasons), for saying so; empty when infra is false.
+    readonly infraReasons: readonly string[];
 }
 
 // What a fix conversation is handed about a failed run, and whether the run failed on the fleet rather than the code.
@@ -65,7 +88,7 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
     // Every failed job's log, whole and side by side; one that cannot be read is left out, and only its end is asked
     // whether the fleet died.
     const logs = await Promise.all(failedSteps.map((failed) => client.jobLog(project, failed.id, WHOLE_LOG).catch(missing(`log of ${failed.job}`, ""))));
-    const stepsOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
+    const infraReasons = fleetReasons(failedSteps, logs);
     // Each whole log is kept where the agent can read it (job-logs.ts); one that cannot be written is left unnamed.
     const kept = await Promise.all(
         failedSteps.map((failed, index) =>
@@ -88,8 +111,8 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
                 }),
             ),
         ),
-        infra: stepsOnly || logs.some((log) => infraLog(log.slice(-FIX_LOG_BYTES))),
-        infraSteps: [...new Set(failedSteps.flatMap(({ step }) => (step === undefined ? [] : [step])))],
+        infra: infraReasons.length > 0,
+        infraReasons,
     };
 };
 

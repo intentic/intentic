@@ -229,7 +229,7 @@ const startFixer = async (
                     failedJobIds: parked.map(({ job }) => job.jobId),
                     logs: digestOf(parked.map(({ excerpt }) => excerpt)),
                     infra: false,
-                    infraSteps: [],
+                    infraReasons: [],
                 },
                 preface: openingPreface(project, branch, runId, parked, reason),
             },

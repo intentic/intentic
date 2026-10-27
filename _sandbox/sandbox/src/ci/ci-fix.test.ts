@@ -6,7 +6,7 @@ import type { TurnInput } from "../seams/turn-starter.js";
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { idleConversation } from "../conversations/actor/conversation-state.js";
-import { infraLog, startCiFix } from "./ci-fix.js";
+import { fleetReasons, infraLog, startCiFix } from "./ci-fix.js";
 import type { CiProject } from "./projects.js";
 
 // A failure read as the fleet's is re-run instead of fixed, so a test's own output must never read as the runner dying.
@@ -20,6 +20,19 @@ test("the runner's own death reads as the fleet, and a failing test's words neve
     expect(infraLog("expected status 200, received 503 Service Unavailable")).toBe(false);
 });
 
+// The refusal names what the fleet did and in which jobs, not the repository steps the jobs happened to be in when it did.
+test("a fleet failure is told by the sign its logs carry, with the jobs that carry it", () => {
+    const docker = "##[error]Process completed with exit code 255.\nCannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?";
+    const failed = [
+        { job: "verify-providers", id: 1, step: "Run bash _tools/scripts/ci/install-provider-clis.sh" },
+        { job: "e2e-signin", id: 2, step: "Run pnpm --filter @intentic/e2e exec playwright install --with-deps chromium" },
+        { job: "desktop-check", id: 3, step: "Run cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml" },
+    ];
+    expect(fleetReasons(failed, ["npm error network read ETIMEDOUT", docker, docker])).toEqual(["the runner's Docker daemon stopped answering (e2e-signin, desktop-check)"]);
+    expect(fleetReasons([{ job: "test", id: 4, step: "Set up job" }], [""])).toEqual(["every failed job died in the runner's own steps (Set up job)"]);
+    expect(fleetReasons([{ job: "test", id: 5, step: "Run pnpm test" }], ["FAIL src/api.test.ts"])).toEqual([]);
+});
+
 // Nothing connected and nothing pinned: the fix is refused in words before any agent exists, rather than opened on a
 // provider nobody connected to fail at once on the board. `agents` is left unstubbed, so reaching it would throw.
 test("a fix with no provider connected is refused before an agent is created", async () => {
@@ -29,7 +42,7 @@ test("a fix with no provider connected is refused before an agent is created", a
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
     });
     const project = unstubbed<CiProject>("project", { repo: "odysseus" });
-    const request = { project, runId: 7, run: undefined, evidence: { failedJobs: ["test"], failedJobIds: [70], logs: "", infra: false, infraSteps: [] } };
+    const request = { project, runId: 7, run: undefined, evidence: { failedJobs: ["test"], failedJobIds: [70], logs: "", infra: false, infraReasons: [] } };
     await expect(startCiFix(services, request)).rejects.toThrow(AttemptRefused);
     await expect(startCiFix(services, request)).rejects.toThrow(
         "No AI provider is connected to this sandbox, so there is no model to run this on. Connect one in Setup, then try again.",
@@ -83,7 +96,7 @@ test("a retry of a turned-away CI fix sends current evidence instead of replayin
         run: unstubbed<PipelineRun>("run", { branch: "main", url: "https://github.com/acme/web/actions/runs/7", title: "Retry" }),
         turn: { agent: "claude", model: "test-model" },
         pressed: true,
-        evidence: { failedJobs: ["new failure"], failedJobIds: [71], logs: "Error: new failure from the latest snapshot", infra: false, infraSteps: [] },
+        evidence: { failedJobs: ["new failure"], failedJobIds: [71], logs: "Error: new failure from the latest snapshot", infra: false, infraReasons: [] },
     });
     expect(outcome).toEqual({ kind: "started", conversationId: "ci-fix-web-7", attempt: 1, continued: true });
     expect(started).toHaveLength(1);
