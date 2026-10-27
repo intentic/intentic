@@ -29,6 +29,12 @@ const FEATURE_GATES: readonly {
             `The agent on "${id}" is too old to download an update in the background. Nothing was changed; its own timer still downloads updates every few hours.`,
     },
     {
+        asks: (input) => input.op === "set-egress",
+        feature: "egress",
+        refusal: (id) =>
+            `The agent on "${id}" is too old to fence a sandbox's network, or the ic it drives cannot. Nothing was changed. Update that device's agent, then try again.`,
+    },
+    {
         asks: (input) => input.op === "sleep",
         feature: "sleep",
         refusal: (id) => `The agent on "${id}" is too old to put a sandbox to sleep. Nothing was changed. Update that device's agent, or stop the sandbox instead.`,

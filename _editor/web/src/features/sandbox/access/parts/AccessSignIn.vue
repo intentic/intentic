@@ -9,9 +9,11 @@ import { useRole } from "../../../../client/sandbox/useRole";
 import { useSandboxSession } from "../../../../client/session/sandboxSession";
 import { useOperation } from "../../../../workbench/operations/operations";
 import PasskeysSection from "../PasskeysSection.vue";
+import PreviewGuardSection from "../previews/PreviewGuardSection.vue";
 
-// ACCESS ▸ SIGN-IN: how people prove themselves to this sandbox, and the browsers still holding a pass. Everyone manages
-// their own passkeys here; signing every browser out is a maintainer's.
+// ACCESS ▸ SIGN-IN: how people prove themselves to this sandbox, whether its previews ask them to, and the browsers still
+// holding a pass. Everyone manages their own passkeys here; the previews' guard is the owner's, and signing every browser
+// out is a maintainer's.
 
 const t = useT();
 const { user } = useAuth();
@@ -62,6 +64,7 @@ const revokeSessions = async (): Promise<void> => {
 <template>
     <div class="flex flex-col gap-6">
         <PasskeysSection />
+        <PreviewGuardSection />
 
         <!-- Credential revocation answers whether any access remains active. -->
         <RowGroup v-if="canShip" data-setting="access-signed-in-browsers" :label="t(`sandbox.sandboxAccess.signedInBrowsers`)">

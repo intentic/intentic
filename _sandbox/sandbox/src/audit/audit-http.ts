@@ -69,6 +69,7 @@ export const AUDITED_CHANGES = new Map<string, string>([
     ["POST /system/passkeys/register", "passkey.add"],
     ["DELETE /system/passkeys/{id}", "passkey.remove"],
     ["POST /system/passkeys/policy", "passkey.policy.set"],
+    ["ports.setPreviewGuard", "preview.guard.set"],
     ["POST /system/passkeys/recovery", "passkey.recovery.regenerate"],
     ["POST /system/control/tokens", "token.mint"],
     ["DELETE /system/control/tokens/{id}", "token.revoke"],

@@ -4,12 +4,14 @@ import type { NetdHeader, Page, PreviewRoute, Upstream } from "@intentic/sandbox
 import { escapeHtml } from "@intentic/base/format";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PublicHandler } from "../public/public-serve.js";
-import { interstitial, type Refusal } from "./interstitial.js";
+import { interstitial, type InterstitialExtras, type Refusal } from "./interstitial.js";
 import type { PanelServer, PanelUpstream, PanelUpstreamResolver } from "./panel-upstream.js";
+import { PREVIEW_PASS_PATH, passCookie, type PreviewGuards } from "../auth/previews/preview-guard.js";
 
 // What a preview host (`preview-`, `port-`, `public-` labels) answers with, decided once when netd asks
 // (_sandbox/netd, proxy.rs): netd relays a serving upstream's bytes itself and writes a refusal or the probe's
-// report as the page rendered here, so only the outbox, and an upstream that refused netd, come back here marked.
+// report as the page rendered here, so only the outbox, an upstream that refused netd, and what the owner's preview
+// guard hands back (a pass's exchange, a navigation with no pass; auth/previews/preview-guard.ts) come back here marked.
 
 // Resolves a forward slot to its mapped port and upstream scheme.
 export type SlotResolver = (slot: string) => PortTarget | undefined;
@@ -17,10 +19,12 @@ export type SlotResolver = (slot: string) => PortTarget | undefined;
 // CORS-open so a browser can tell reachable from not; the string must match @intentic/ui's portPreview.ts.
 export const PREVIEW_PROBE_PATH = "/__intentic/preview-probe";
 
-// Set by netd on a request it hands back: the outbox this side decided it is, or the page for an upstream that
-// refused netd's connection.
+// Set by netd on a request it hands back: the outbox this side decided it is, a pass being exchanged or a navigation
+// the owner's guard refused (preview-guard.ts), or the page for an upstream that refused netd's connection.
 const ANSWER_HEADER: NetdHeader = "x-intentic-preview";
 const OUTBOX = "outbox";
+const PASS = "pass";
+const SIGN_IN = "signin";
 const UNREACHABLE_HEADER: NetdHeader = "x-intentic-preview-unreachable";
 
 // What this side can answer for. `outbox` is absent without a connect token (tests, loopback), which has no salted
@@ -33,6 +37,8 @@ export interface PreviewDeps {
     // A page of this panel was asked for (never a probe): true when that woke an app rested for want of visitors
     // (scaffold/app-rest.ts), so the visitor is told it is starting rather than that it is not running.
     readonly visit?: (panel: string) => boolean;
+    // The owner's guard, and the editor a visitor without a pass is sent to for one; absent where nothing is guarded.
+    readonly guard?: { readonly guards: Pick<PreviewGuards, "redeem" | "pass">; readonly editorOrigin: string | undefined } | undefined;
 }
 
 // What the probe reports: the sandbox's own view of the address. A browser only needs a readable response; curl gets
@@ -174,9 +180,67 @@ const refuse = (response: ServerResponse, refusal: Refusal): void => {
     response.end(interstitial(refusal.title, refusal.message));
 };
 
-// Answers what netd handed back, nothing resolved again: the outbox it was decided to be, or the page for an
-// upstream that stopped answering between the question and the relay.
+// Asks the editor framing this page for a pass, which it answers by loading the preview again through one; framed by
+// anything else, the message names an address the framer already has. In a tab of its own the page waits for a press.
+const ASK_THE_FRAME = `if(window.parent!==window){var go=document.getElementById("go");if(go){go.target="_blank";go.rel="noopener"}window.parent.postMessage({intentic:"preview-pass",href:location.href},"*")}`;
+
+// The host a request was handed back for, without a port: what a ticket is bound to.
+const hostOf = (request: IncomingMessage): string => String(request.headers.host ?? "").replace(/:\d+$/, "").toLowerCase();
+
+// A path on the same host to land on, never another host (`//`, `/\`) and never the exchange again.
+const landingPath = (to: string | null): string =>
+    to !== null && to.startsWith("/") && !to.startsWith("//") && !to.startsWith("/\\") && !/[\u0000-\u001f]/.test(to) && !to.startsWith(PREVIEW_PASS_PATH)
+        ? to
+        : "/";
+
+// The page a navigation without a pass gets, and a ticket that did not redeem: 401, never cached, with the way to a pass
+// (the editor's /preview-pass, which signs this browser in to the address and brings it back).
+const signInPage = (response: ServerResponse, guard: NonNullable<PreviewDeps["guard"]>, host: string, path: string, expired: boolean): void => {
+    const back = `https://${host}${path}`;
+    // Without an editor to send the visitor to, the page still says what this is; the editor's own frame asks anyway.
+    const extras: InterstitialExtras =
+        guard.editorOrigin === undefined
+            ? { script: ASK_THE_FRAME }
+            : { action: { label: "Continue to Intentic", href: `${guard.editorOrigin}/preview-pass?url=${encodeURIComponent(back)}` }, script: ASK_THE_FRAME };
+    response.writeHead(401, { ...HTML, "cache-control": "no-store", "referrer-policy": "no-referrer" });
+    response.end(
+        interstitial(
+            expired ? "This sign-in link has expired" : "This preview is for the sandbox's members",
+            expired
+                ? "Links that sign you in to a preview work once, for a minute. Open it again from Intentic to get a fresh one."
+                : "Its owner keeps it to the people they invited. Sign in with Intentic and you'll be brought straight back here.",
+            undefined,
+            extras,
+        ),
+    );
+};
+
+// The exchange: a ticket minted for this host becomes the pass, a cookie on this host, and the browser lands where it
+// asked to go. Only ever reached on a host the guard covers, since netd hands the path back nowhere else.
+const exchangePass = async (request: IncomingMessage, response: ServerResponse, guard: NonNullable<PreviewDeps["guard"]>): Promise<void> => {
+    const asked = new URL(request.url ?? "/", "https://preview.invalid");
+    const to = landingPath(asked.searchParams.get("to"));
+    const host = hostOf(request);
+    if (request.method !== "GET" || guard.guards.redeem(asked.searchParams.get("ticket") ?? "", host) === undefined) {
+        signInPage(response, guard, host, to, true);
+        return;
+    }
+    response.writeHead(302, { location: to, "set-cookie": passCookie(await guard.guards.pass()), "cache-control": "no-store", "referrer-policy": "no-referrer" });
+    response.end();
+};
+
+// Answers what netd handed back, nothing resolved again: the outbox it was decided to be, a pass's exchange or the page
+// for a visitor without one, or the page for an upstream that stopped answering between the question and the relay.
 export const answerPreview = async (request: IncomingMessage, response: ServerResponse, deps: PreviewDeps): Promise<void> => {
+    const handed = request.headers[ANSWER_HEADER];
+    if ((handed === PASS || handed === SIGN_IN) && deps.guard !== undefined) {
+        if (handed === PASS) {
+            await exchangePass(request, response, deps.guard);
+        } else {
+            signInPage(response, deps.guard, hostOf(request), landingPath(request.url ?? "/"), false);
+        }
+        return;
+    }
     const unreachable = request.headers[UNREACHABLE_HEADER];
     if (unreachable !== undefined) {
         const port = escapeHtml(String(unreachable));

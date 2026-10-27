@@ -5,6 +5,7 @@ import type { DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp } from "@intent
 import type { ProjectDelivery, ProjectDeliveryResult } from "@intentic/sandbox-contract/schemas/project-delivery";
 import { implement, ORPCError } from "@orpc/server";
 import { audit } from "./audit.js";
+import { setEgress } from "./egress/set-egress.js";
 import { readGrant, tolerantDeviceContract } from "./grant.js";
 import { calling } from "./indicator.js";
 import { catchLoopback } from "./loopback-catch.js";
@@ -69,7 +70,8 @@ const streamFlow = (run: (onLine: (line: string) => void) => Promise<string>): A
     narrate(run, (outcome): DeviceFlowLine => (outcome.ok ? { kind: "result", message: outcome.value } : { kind: "error", message: outcome.error }));
 
 type Flow = (onLine: (line: string) => void) => Promise<string>;
-type FlowFor = (flow: DeviceSandboxFlow, scopes: DeviceScopes) => Flow;
+// `via` is the link the order came over (its sandbox URL), for the ops that record who asked.
+type FlowFor = (flow: DeviceSandboxFlow, scopes: DeviceScopes, via: string) => Flow;
 
 // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name. The parent's
 // shape rides to `ic` as files, so the runner starts as its twin instead of a bare base image.
@@ -138,6 +140,15 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
             }
             return shapeSandbox(slug, shape, when, scopes, onLine);
         },
+    // The whole egress policy (egress/set-egress.ts): a tightening as it comes, anything else under the owner's passkey.
+    "set-egress":
+        ({ slug, egress, egressProof, egressOwnerKeys }, scopes, via) =>
+        (onLine) => {
+            if (egress === undefined) {
+                throw new ORPCError("BAD_REQUEST", { message: "An egress policy is set whole: `egress` is required." });
+            }
+            return setEgress({ slug, policy: egress, proof: egressProof, ownerKeys: egressOwnerKeys, via }, scopes, onLine);
+        },
     "forget-shape":
         ({ slug }, scopes) =>
         (onLine) =>
@@ -169,14 +180,21 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     "runner-remove": runnerFlowFor,
 };
 
-// The flow an order asks for. `to` belongs to a rollback alone: an order carrying it for anything else is refused rather
-// than carried out without it, like every field this agent does not expect.
-const flowFor: FlowFor = (input, scopes) =>
-    input.to !== undefined && input.op !== "rollback"
-        ? () => {
-              throw new ORPCError("BAD_REQUEST", { message: `"to" names a version to go back to, which only a rollback takes, not ${input.op}.` });
-          }
-        : FLOWS[input.op](input, scopes);
+// The flow an order asks for. `to` belongs to a rollback alone, and the egress fields to `set-egress`: an order carrying
+// one for anything else is refused rather than carried out without it, like every field this agent does not expect.
+const flowFor: FlowFor = (input, scopes, via) => {
+    if (input.to !== undefined && input.op !== "rollback") {
+        return () => {
+            throw new ORPCError("BAD_REQUEST", { message: `"to" names a version to go back to, which only a rollback takes, not ${input.op}.` });
+        };
+    }
+    if ((input.egress !== undefined || input.egressProof !== undefined || input.egressOwnerKeys !== undefined) && input.op !== "set-egress") {
+        return () => {
+            throw new ORPCError("BAD_REQUEST", { message: `An egress policy, its proof and the owner's passkeys belong to set-egress, not ${input.op}.` });
+        };
+    }
+    return FLOWS[input.op](input, scopes, via);
+};
 
 // LANDED WORK INTO A PROJECT FOLDER (sync/project/project-delivery.ts). Behind no switch of the
 // grant: the folder's own opt-in (`deliver: "auto"`, which `sync setup --project` records) is the permission, and only a folder of
@@ -266,7 +284,7 @@ export const createHostRouter = (runtime: HostRuntime) => {
         mcp: os.mcp.handler(async ({ input }) => await calling.run(runtime, async () => await handleMcpMessage(input, runtime.scopes()))),
         // Read here, per call, exactly as the MCP handler reads them: a stream opened before the owner flipped a
         // switch must not outlive the decision.
-        runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(flowFor(input, runtime.scopes()))),
+        runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(flowFor(input, runtime.scopes(), runtime.sandboxUrl))),
         // The agent's own update/restart, through the same adapter, and the one stream whose ending is not its answer:
         // both ops kill the process serving this socket. The work is detached first (tools/agent.ts); the reader
         // confirms by the version.

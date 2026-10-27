@@ -11,7 +11,7 @@ before this verb. golden/ic-features.json in the contract is this list, held the
 
 /// Every optional op this ic implements, in the contract's words. A word is added here in the release that implements
 /// it, never sooner: an agent advertises exactly this.
-pub const FEATURES: [&str; 6] = [
+pub const FEATURES: [&str; 7] = [
     "reshape-later",
     "set-shape",
     "rollback-to",
@@ -19,6 +19,8 @@ pub const FEATURES: [&str; 6] = [
     "sleep",
     // `sandbox list --json`'s `rollbackTargets` names only ways back a rollback can reach (versions.rs `ways_back`).
     "reachable-ways-back",
+    // (2026-10-27) `ic sandbox egress`: a sandbox's egress policy set, shown and followed, and `egress` on list rows.
+    "egress",
 ];
 
 /// The answer, as one JSON line.

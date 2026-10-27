@@ -436,9 +436,11 @@ fn removal(slug: &str, now: bool, say: bool) -> std::result::Result<(), String> 
         }
         trash::stash(slug)
     };
-    // Its pairings go once it has left the live namespace, whether or not every step after that went through.
+    // Its pairings go once it has left the live namespace, whether or not every step after that went through, and so do
+    // its egress rules (sandbox/egress).
     if !docker::container_exists(&container_of(slug)) {
         forget_pairings(slug);
+        crate::sandbox::egress::forget(slug);
     }
     outcome
 }

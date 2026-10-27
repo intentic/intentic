@@ -129,7 +129,11 @@ pub enum Preflight {
 }
 
 pub fn run(mode: Mode, slug: Option<String>, preflight: Preflight) -> Result<()> {
-    recreate(mode, slug, Reach::Applied, false, preflight)
+    let named = slug.clone();
+    recreate(mode, slug, Reach::Applied, false, preflight)?;
+    // The new container's egress rules (sandbox/egress), once the swap has settled.
+    crate::sandbox::egress::after_start_of(named.as_deref());
+    Ok(())
 }
 
 /// `ic sandbox prepare` — the pull and the overlay rebuild, taken off the click. Runs against a live sandbox
@@ -1428,11 +1432,13 @@ pub fn reshape(slug: String, ask: Ask, preflight: Preflight) -> Result<()> {
     }
     recreate(
         Mode::Reshape(ask),
-        Some(slug),
+        Some(slug.clone()),
         Reach::Applied,
         false,
         preflight,
-    )
+    )?;
+    crate::sandbox::egress::after_start(&slug);
+    Ok(())
 }
 
 /// The caps an ask names, as a shape whose spelling can be checked (the switches cannot be misspelled).

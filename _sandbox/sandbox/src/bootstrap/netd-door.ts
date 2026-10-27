@@ -6,6 +6,7 @@ import {
     type Answer,
     type FromNode,
     type ListenConfig,
+    type PreviewGuard,
     NETD_SOCKET_ENV,
     NODE_GENERATION_ENV,
     NODE_SOCKET_ENV,
@@ -31,6 +32,7 @@ import { planTerminal, type TerminalPlanDeps } from "../terminal/terminal-plan.j
 import { buildId } from "../version.js";
 import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
 import { visitWorkspaceApp } from "../scaffold/app-rest.js";
+import { allowedOriginsOf } from "../auth/browser-origins.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // The daemon behind intentic-netd (_sandbox/netd): HTTP on a Unix socket only netd dials, and every port, the
@@ -156,6 +158,10 @@ export const tunnelReports = (
     };
 };
 
+// The editor a visitor without a preview pass is sent to for one: the first origin this sandbox serves the app to that
+// names one host, as the daemon's own address does for a person who opens it (system/boot/open-in-app.ts).
+const editorOriginOf = (webOrigin: string): string | undefined => allowedOriginsOf(webOrigin).find((origin) => !origin.includes("*"))?.replace(/\/+$/, "");
+
 const previewDepsOf = ({ config, services }: BootPhase): PreviewDeps => ({
     panelOf: services.panelUpstreamOf,
     visit: visitWorkspaceApp,
@@ -165,6 +171,7 @@ const previewDepsOf = ({ config, services }: BootPhase): PreviewDeps => ({
         config.connectToken === ""
             ? undefined
             : { slot: publicSlotFromToken(config.connectToken), serve: createPublicHandler(publicRoot(config.workspaceRoot)) },
+    guard: { guards: services.previewGuards, editorOrigin: editorOriginOf(config.webOrigin) },
 });
 
 const terminalDepsOf = ({ logger, services }: BootPhase): TerminalPlanDeps => ({
@@ -175,9 +182,10 @@ const terminalDepsOf = ({ logger, services }: BootPhase): TerminalPlanDeps => ({
     warn: (fields, message) => logger.warn(fields, message),
 });
 
-const listenConfigOf = ({ config, traits }: BootPhase, host: string): ListenConfig => {
+// `previewGuard` is the owner's guard as netd checks it (auth/previews/preview-guard.ts), absent while it is off.
+export const listenConfigOf = ({ config, traits }: Pick<BootPhase, "config" | "traits">, host: string, previewGuard?: PreviewGuard): ListenConfig => {
     const sandboxId = sandboxIdFromToken(config.connectToken);
-    return {
+    const listen: ListenConfig = {
         daemon: { host, port: config.sandbox.port },
         ...(traits.extraListeners ? { preview: { host, port: config.preview.port }, loopback: { host, port: config.local.port } } : {}),
         ...(sandboxId === undefined ? {} : { sandboxId }),
@@ -187,6 +195,41 @@ const listenConfigOf = ({ config, traits }: BootPhase, host: string): ListenConf
             .filter((origin) => origin !== ""),
         previewProbePath: PREVIEW_PROBE_PATH,
     };
+    return previewGuard === undefined ? listen : { ...listen, previewGuard };
+};
+
+// Tells netd its listen config now and again on every change to the preview guard (a scope set, a key replaced), one
+// telling at a time and each computed when its turn comes, so netd never ends on an older guard than the newest.
+// Awaited at boot before Node says hello: netd resolves no preview until then, so no guarded preview is ever served
+// open in between. A key replaced by a lost access (auth/connections.ts) is one of those changes.
+const handListen = async (phase: BootPhase, host: string, link: NetdLink): Promise<void> => {
+    const { logger, services, shutdown } = phase;
+    let telling = Promise.resolve();
+    const tell = (): Promise<void> => {
+        telling = telling.then(async () => {
+            const guard = await services.previewGuards.forNetd();
+            link.tell({ kind: "listen", config: listenConfigOf(phase, host, guard) });
+        });
+        return telling;
+    };
+    const retell = async (): Promise<void> => {
+        try {
+            await tell();
+        } catch (error) {
+            logger.warn({ err: error }, "netd door: the preview guard could not be handed to netd");
+        }
+    };
+    const endPasses = async (member: string | undefined): Promise<void> => {
+        try {
+            await services.previewGuards.revoked(member);
+        } catch (error) {
+            logger.warn({ err: error }, "netd door: the preview passes could not be ended");
+        }
+    };
+    shutdown.push(services.previewGuards.onChange(() => void retell()));
+    const unrevoke = services.auth?.connections.onRevoke((member) => void endPasses(member));
+    shutdown.push(() => unrevoke?.());
+    await tell();
 };
 
 const certificateMessage = (certificate: LocalCertificate | undefined): FromNode => ({
@@ -325,7 +368,7 @@ export const startNetdDoor = async (phase: BootPhase, host: string, { controlPat
     await once(server, "listening");
     shutdown.push(() => server.close());
 
-    link.tell({ kind: "listen", config: listenConfigOf(phase, host) });
+    await handListen(phase, host, link);
     handCertificate(phase, link);
     const reach = handTunnel(phase, link);
     const generation = generationOf(process.env);

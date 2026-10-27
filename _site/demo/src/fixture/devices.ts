@@ -1,4 +1,5 @@
 import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import type { EgressOwnerKeysRead } from "@intentic/sandbox-contract/schemas/egress";
 import { demoQuiet, deskEdition } from "../mode";
 
 // One of the owner's own computers, as the daemon's device registry reports it. The Devices tab used to answer
@@ -154,6 +155,9 @@ const portsOn = (hostId: string, ports: NonNullable<Device[`report`]>[`ports`]):
 const demoLinks = (now: number): NonNullable<NonNullable<Device[`facts`]>[`links`]> =>
     demoState.linksForgotten || demoQuiet() ? { total: 2, unreachable: 0 } : { total: 7, unreachable: 5, unreachableSince: now - 7 * HOUR };
 
+// The PC's own id, which every side of it reports: what a signed change to a sandbox's network fence names.
+const ADA_PC_MACHINE = `ada-pc-7f3c9a2e`;
+
 const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
     {
         slug: `sandbox`,
@@ -164,6 +168,23 @@ const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
         // Capped well under the engine's size, so a raise has somewhere to go: the offer withdraws itself once the
         // cap reaches everything the engine has.
         resources: { memoryBytes: 16 * GIB, cpus: 8, privileged: true, gpu: false, hostRuntime: [`--privileged`], overlayRuntime: [] },
+        // Fenced to the internet with one way through to the NAS; privileged on runc, and its own card runs commands on
+        // this PC, so both of the fence's warnings have something to say. Two refusals to offer an Allow for.
+        egress: {
+            policy: { profile: `internet-only`, allow: [{ to: `nas.lan`, ports: [445], protocol: `tcp`, note: `Photos share`, from: `owner` }] },
+            revision: `7`,
+            effectiveProfile: `internet-only`,
+            neverAllow: [],
+            state: `enforced`,
+            match: `network`,
+            advisory: true,
+            hostShell: true,
+            appliedAt: Date.parse(`2026-10-27T08:00:00Z`),
+            blocked: [
+                { to: `192.168.1.40`, port: 8123, protocol: `tcp`, packets: 14, lastSeenAt: Date.parse(`2026-10-27T09:40:00Z`) },
+                { to: `169.254.169.254`, port: 80, protocol: `tcp`, packets: 3, lastSeenAt: Date.parse(`2026-10-27T09:12:00Z`) },
+            ],
+        },
     },
     {
         slug: `billing-api`,
@@ -171,6 +192,15 @@ const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
         running: false,
         image: `ghcr.io/intentic/sandbox:latest`,
         resources: { memoryBytes: 8 * GIB, privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] },
+        // Fenced while stopped: written, applied at its next start.
+        egress: {
+            policy: { profile: `internet-only`, allow: [] },
+            revision: `2`,
+            effectiveProfile: `internet-only`,
+            neverAllow: [],
+            state: `pending`,
+            blocked: [],
+        },
     },
     {
         slug: `docs-site`,
@@ -247,6 +277,7 @@ const allDevices = (now: number): Device[] => [
         label: `ada-pc`,
         hostId: `ada-pc`,
         card: `ada-pc`,
+        machineId: ADA_PC_MACHINE,
         online: true,
         platform: `windows`,
         agentVersion: `1.275.0`,
@@ -263,6 +294,7 @@ const allDevices = (now: number): Device[] => [
             wslDistros: [`archlinux`],
             engine: ENGINE,
             links: demoLinks(now),
+            features: [`egress`],
         },
         sandboxes: sandboxes(),
         report: {
@@ -282,6 +314,7 @@ const allDevices = (now: number): Device[] => [
         label: `Arch Linux`,
         hostId: `ada-pc::wsl:archlinux`,
         card: `ada-pc`,
+        machineId: ADA_PC_MACHINE,
         online: true,
         platform: `linux`,
         agentVersion: `1.275.0`,
@@ -297,6 +330,7 @@ const allDevices = (now: number): Device[] => [
             roots: [`/home/ada`],
             wsl: { distro: `archlinux` },
             engine: ENGINE,
+            features: [`egress`],
         },
         sandboxes: sandboxes(),
         report: {
@@ -420,3 +454,17 @@ const allDevices = (now: number): Device[] => [
         sandboxes: [{ slug: `side-project`, name: `side-project`, container: `intentic-sandbox-side-project`, running: false, image: `ghcr.io/intentic/sandbox:latest` }],
     },
 ];
+
+// What a loosening of a network fence is signed over: the demo owner's one passkey, and the NAS their SSH card dials,
+// offered as an exception.
+export const demoEgressOwnerKeys = (): EgressOwnerKeysRead => ({
+    ownerKeys: {
+        rpId: globalThis.location?.hostname ?? `localhost`,
+        origins: [globalThis.location?.origin ?? `http://localhost`],
+        keys: [{ id: `ZGVtby1wYXNza2V5`, alg: -7, jwk: { kty: `EC`, crv: `P-256`, x: `demo`, y: `demo` }, name: `This laptop` }],
+    },
+    credentials: [{ id: `ZGVtby1wYXNza2V5`, transports: [`internal`] }],
+    owner: true,
+    slug: `sandbox`,
+    suggestions: [{ to: `192.168.1.5`, ports: [22], protocol: `tcp`, from: `nas-ssh`, note: `SSH host (nas-ssh)` }],
+});

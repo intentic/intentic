@@ -374,7 +374,7 @@ const fakeServices = (
         return await respond(call);
     };
     const services = {
-        config: { historyRoot: NO_HISTORY },
+        config: { historyRoot: NO_HISTORY, sandbox: { name: "intentic-sandbox-work" } },
         logger: readLog.logger,
         // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
         syncFleet: () => enrolledFleet(NO_HISTORY),
@@ -641,7 +641,7 @@ test("gives every environment of one machine its own door, read through its own 
         wsl: { distro: "Arch" },
     };
     const services = {
-        config: { historyRoot: NO_HISTORY },
+        config: { historyRoot: NO_HISTORY, sandbox: { name: "intentic-sandbox-work" } },
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
         capabilities: { list: async () => [{ kind: "device", id: "pc-rog", config: { platform: "windows" } }] },
@@ -775,7 +775,12 @@ const runnerServices = (
                 environmentHash: "",
             },
             platform: { url: overrides.platformUrl ?? "https://host.docker.internal:6480" },
+            webOrigin: "https://app.example.test",
         },
+        // The owner's one passkey and a member's, which `set-egress` hands the machine as the owner keys.
+        passkeys: { list: async () => [OWNER_PASSKEY, { ...OWNER_PASSKEY, id: "member-key", email: "member@example.test" }] },
+        ownerEmail: async () => "owner@example.test",
+        appPasskeys: { relyingParty: async () => undefined, admitted: async () => undefined },
         // Backs runner-up's best-effort reads; empty here so nothing extra appears in the assertions below.
         workspace: { root: "/nowhere" },
         files: {
@@ -821,6 +826,19 @@ const runnerServices = (
         },
     } as unknown as Services;
     return { services, sent, minted, revoked, disconnected };
+};
+
+const OWNER_PASSKEY = {
+    id: "owner-key",
+    email: "owner@example.test",
+    label: "Laptop",
+    rpId: "app.example.test",
+    publicKey: { alg: -7 as const, jwk: { kty: "EC", crv: "P-256", x: "x", y: "y" } },
+    counter: 0,
+    transports: ["internal"],
+    backedUp: true,
+    aaguid: "",
+    createdAt: 0,
 };
 
 const drain = async (flow: AsyncGenerator<DeviceFlowLine>): Promise<DeviceFlowLine[]> => {
@@ -1019,4 +1037,31 @@ test("an answer the device's RPC layer sent comes through as the refusal it is",
         ),
     );
     expect(lines).toEqual([{ kind: "error", message: "This device's agent has no such flow. Run `intentic-machine upgrade` on that device." }]);
+});
+
+// The daemon sits inside the fence, so the owner keys a machine pins are never the caller's: whatever a page sends is
+// replaced by the owner's own passkeys for the origin the request came from.
+test("a network fence reaches only an agent that can set one, whole, with the daemon's own owner keys", async () => {
+    const egress = { profile: "internet-only" as const, allow: [] };
+    const old = runnerServices({ features: ["set-shape"] });
+    await expect(drain(manageDeviceSandbox(old.services, "rog", { op: "set-egress", slug: "work", egress }))).rejects.toThrow(
+        /too old to fence a sandbox's network/,
+    );
+    expect(old.sent).toEqual([]);
+    const { services, sent } = runnerServices({ features: ["egress"] });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "set-egress", slug: "work" }))).rejects.toThrow(/`egress` \(the whole policy\) is required/);
+    const forged = { rpId: "evil.test", origins: ["https://evil.test"], keys: [] };
+    await drain(manageDeviceSandbox(services, "rog", { op: "set-egress", slug: "work", egress, egressOwnerKeys: forged }, { origin: "https://app.example.test" }));
+    expect(sent).toEqual([
+        {
+            op: "set-egress",
+            slug: "work",
+            egress,
+            egressOwnerKeys: {
+                rpId: "app.example.test",
+                origins: ["https://app.example.test"],
+                keys: [{ id: "owner-key", alg: -7, jwk: OWNER_PASSKEY.publicKey.jwk, name: "Laptop" }],
+            },
+        },
+    ]);
 });

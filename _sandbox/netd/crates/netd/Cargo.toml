@@ -26,6 +26,8 @@ memchr.workspace = true
 pin-project-lite.workspace = true
 relay.workspace = true
 quinn.workspace = true
+# HMAC-SHA256 for the preview guard's pass (src/guard.rs); already built for rustls.
+ring = "0.17"
 rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -41,5 +43,4 @@ webpki-roots.workspace = true
 [dev-dependencies]
 base64 = "0.23"
 rcgen = "0.14"
-ring = "0.17"
 vt100 = "0.16"

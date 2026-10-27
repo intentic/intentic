@@ -130,6 +130,7 @@ impl StandIn {
                     sandbox_id: Some(SANDBOX_ID.into()),
                     frame_ancestors: vec![],
                     preview_probe_path: "/__intentic/preview-probe".into(),
+                    preview_guard: None,
                 },
             })
             .await;

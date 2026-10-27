@@ -189,6 +189,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import(`../features/sandbox/recovery/Recover.vue`),
     },
     {
+        // A guarded preview's way in, from the page it shows a visitor with no pass
+        // (features/preview/previewPassRules.ts): signs this browser in to the preview and sends it back. Behind sign-in,
+        // which brings a signed-out visitor back.
+        path: `/preview-pass`,
+        name: `preview-pass`,
+        meta: { title: () => t(`router.index.openingPreview`) },
+        beforeEnter: [requireAuth],
+        component: () => import(`../features/preview/PreviewPass.vue`),
+    },
+    {
         // A floating panel's own window (chat, terminal or browsers), no shell around it, nothing to navigate. Guarded
         // like the shell; the path enumerates the three panels, an unknown one falls through.
         path: `/floating/:panel(chat|terminal|browsers)`,

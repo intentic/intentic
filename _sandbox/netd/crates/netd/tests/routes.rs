@@ -15,7 +15,8 @@ use hyper::service::service_fn;
 use hyper::{HeaderMap, Request, Response};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use netd_wire::{
-    Certificate, Endpoint, FromNode, ListenConfig, Page, PreviewRoute, Scheme, Upstream,
+    Certificate, Endpoint, FromNode, ListenConfig, Page, PreviewGuard, PreviewRoute, Scheme,
+    Upstream,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -124,6 +125,7 @@ fn config(daemon: u16, preview: u16, loopback: u16) -> ListenConfig {
         sandbox_id: Some(SANDBOX_ID.into()),
         frame_ancestors: vec!["https://app.example".into()],
         preview_probe_path: "/__intentic/preview-probe".into(),
+        preview_guard: None,
     }
 }
 
@@ -684,5 +686,172 @@ async fn the_netd_answers_its_vitals_itself_whatever_state_node_is_in() {
     assert_eq!(
         (restarting.node, restarting.lag_ms),
         (NodeLink::Restarting, None)
+    );
+}
+
+// A dev server that names the cookies and the Authorization it was sent, for the guard's test.
+async fn cookie_upstream() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            tokio::spawn(async move {
+                let service = service_fn(|request: Request<Incoming>| async move {
+                    let header = |name: &str| {
+                        request
+                            .headers()
+                            .get(name)
+                            .map_or("-", |value| value.to_str().unwrap())
+                            .to_owned()
+                    };
+                    let body = format!(
+                        "upstream saw {} {} cookie={} authorization={}",
+                        request.method(),
+                        request.uri().path(),
+                        header("cookie"),
+                        header("authorization")
+                    );
+                    Ok::<_, Infallible>(
+                        Response::builder()
+                            .header(
+                                "set-cookie",
+                                "__Host-intentic-preview-pass=forged; Path=/; Secure",
+                            )
+                            .header("set-cookie", "app=1")
+                            .body(Full::new(Bytes::from(body)))
+                            .unwrap(),
+                    )
+                });
+                let _ = hyper::server::conn::http1::Builder::new()
+                    .serve_connection(TokioIo::new(stream), service)
+                    .await;
+            });
+        }
+    });
+    port
+}
+
+const PASS_COOKIE: &str = "__Host-intentic-preview-pass";
+const PASS_KEY: &str = "the-pass-key";
+
+// A pass as the daemon mints one (_sandbox/sandbox auth/previews/preview-guard.ts): `v1.<expiry>.<HMAC-SHA256 of v1.<expiry>>`, base64url.
+fn pass(expiry: u64) -> String {
+    use base64::Engine;
+    let signed = format!("v1.{expiry}");
+    let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, PASS_KEY.as_bytes());
+    let tag = ring::hmac::sign(&key, signed.as_bytes());
+    format!(
+        "{signed}.{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(tag.as_ref())
+    )
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+// The owner's guard (2026-10-27), on the real binary: a panel's preview from outside opens only with a pass, which
+// never reaches the app; a navigation without one is handed back for Node's page, the exchange for Node's cookie, and
+// everything else is refused by netd itself. Forwarded ports (left out here), the outbox and the machine's own loopback
+// port stay open.
+#[tokio::test]
+async fn a_guarded_preview_opens_only_with_a_pass_that_never_reaches_the_app() {
+    let upstream_port = cookie_upstream().await;
+    let (harness, daemon, preview, loopback) = started("guard", upstream_port).await;
+    let mut guarded = config(daemon, preview, loopback);
+    guarded.preview_guard = Some(PreviewGuard {
+        panels: true,
+        ports: false,
+        cookie: PASS_COOKIE.into(),
+        key: PASS_KEY.into(),
+        pass_path: "/__intentic/preview-pass".into(),
+    });
+    harness.send(&FromNode::Listen { config: guarded }).await;
+    let web = format!("preview-web-{SANDBOX_ID}.sbx.test");
+    // The config lands asynchronously; the open preview answers until it does.
+    let mut refused = get(preview, &web, "/app.js", &[]).await;
+    for _ in 0..200 {
+        if refused.status == 401 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        refused = get(preview, &web, "/app.js", &[]).await;
+    }
+    assert_eq!(refused.status, 401, "{}", refused.body);
+    assert_eq!(refused.headers["cache-control"], "no-store");
+    assert!(refused.body.contains("members only"), "{}", refused.body);
+
+    let navigation = get(preview, &web, "/", &[("sec-fetch-mode", "navigate")]).await;
+    assert_eq!(navigation.body, format!("node saw {web} / mark=signin"));
+    let exchange = get(
+        preview,
+        &web,
+        "/__intentic/preview-pass?ticket=t&to=%2F",
+        &[],
+    )
+    .await;
+    assert_eq!(
+        exchange.body,
+        format!("node saw {web} /__intentic/preview-pass?ticket=t&to=%2F mark=pass")
+    );
+    let probed = get(preview, &web, "/__intentic/preview-probe", &[]).await;
+    assert_eq!((probed.status, probed.body), (200, format!("probed {web}")));
+    let preflight = send(
+        preview,
+        "OPTIONS",
+        &web,
+        "/api",
+        &[
+            ("origin", "https://elsewhere.example"),
+            ("access-control-request-method", "POST"),
+        ],
+    )
+    .await;
+    assert_eq!(
+        preflight.body,
+        "upstream saw OPTIONS /api cookie=- authorization=-"
+    );
+
+    // A pass that verifies reaches the app with the app's own cookies and Authorization as they were, and the pass taken
+    // off; the app cannot set the pass's cookie in its answer.
+    let cookie = format!("theme=dark; {PASS_COOKIE}={}", pass(unix_now() + 600));
+    let passed = send(
+        preview,
+        "POST",
+        &web,
+        "/api",
+        &[("cookie", &cookie), ("authorization", "Bearer app-token")],
+    )
+    .await;
+    assert_eq!(
+        passed.body,
+        "upstream saw POST /api cookie=theme=dark authorization=Bearer app-token"
+    );
+    let set: Vec<_> = passed.headers.get_all("set-cookie").iter().collect();
+    assert_eq!(set, ["app=1"]);
+    let expired = format!("{PASS_COOKIE}={}", pass(unix_now() - 1));
+    assert_eq!(
+        get(preview, &web, "/", &[("cookie", &expired)])
+            .await
+            .status,
+        401
+    );
+
+    // What the guard leaves alone: a forwarded port (not chosen here), the outbox, and the machine's own loopback port.
+    let port = get(preview, &format!("port-zz-{SANDBOX_ID}.sbx.test"), "/", &[]).await;
+    assert_eq!(port.status, 404);
+    let outbox = format!("public-salt-{SANDBOX_ID}.sbx.test");
+    assert_eq!(
+        get(preview, &outbox, "/report.pdf", &[]).await.body,
+        format!("node saw {outbox} /report.pdf mark=outbox")
+    );
+    let local = format!("preview-web-{SANDBOX_ID}.localhost:28123");
+    assert_eq!(
+        get(loopback, &local, "/x", &[]).await.body,
+        "upstream saw GET /x cookie=- authorization=-"
     );
 }

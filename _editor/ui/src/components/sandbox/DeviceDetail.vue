@@ -83,6 +83,8 @@ const slots = defineSlots<{
     // The verbs that settle this folder's conflicts, at the foot of the block that explains them: they answer that
     // block, not the folder as a whole.
     conflicts?: (props: { group: DeviceSandboxGroup }) => VNode[];
+    // A caller's own fact line about the sandbox (its network fence), with the classes the card's own lines use.
+    fact?: (props: { group: DeviceSandboxGroup; row: string; label: string }) => VNode[];
     // One port's own verb, at the end of that port's line. Its own slot rather than another button under the
     // block: what it acts on is the number beside it, and a switch for 5440 sitting under a list of six ports
     // would be a switch for none of them.
@@ -382,6 +384,9 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             </span>
                         </div>
                     </div>
+
+                    <!-- A caller's own fact about the sandbox (its network fence), drawn in the same columns as the lines above. -->
+                    <slot name="fact" :group="item.group" :row="FACT" :label="FACT_LABEL" />
 
                     <!-- Outside the facts: a verb pressed on a card must show what it's doing under it. -->
                     <div v-if="$slots[`footer`]" class="empty:hidden">

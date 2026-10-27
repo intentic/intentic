@@ -14,6 +14,7 @@ import {
     hostHoldingPath,
     hostRunningSandbox,
 } from "@intentic/sandbox-contract/schemas/devices";
+import type { EgressPolicy, EgressProof } from "@intentic/sandbox-contract/schemas/egress";
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
 import { type Loaded, mapLoaded } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";
@@ -80,6 +81,9 @@ export interface DeviceSandboxPayload {
     resources?: SandboxResourcesAsk | undefined;
     // The short-lived setup code reconnect redeems on the host machine for a drifted container's missing values.
     setupCode?: string | undefined;
+    // `set-egress`: the whole policy, and the owner's passkey over a change that loosens it (egressFlow.ts).
+    egress?: EgressPolicy | undefined;
+    egressProof?: EgressProof | undefined;
     onLine?: ((line: string) => void) | undefined;
     // Set when the op is aimed at the sandbox relaying it: the daemon dies mid-stream, so a lost connection is the
     // op landing rather than a failure. Only the caller knows which sandbox is serving the page.
@@ -91,14 +95,20 @@ export interface DeviceSandboxPayload {
     at?: string | undefined;
 }
 
-// hash/to/shape/when/resources/setupCode/resumeTurns are set only when present; the schema rejects an explicit undefined.
+// hash/to/shape/when/resources/setupCode/resumeTurns/egress are set only when present; the schema rejects an explicit undefined.
 const flowInput = (
     hostId: string,
     slug: string,
     op: DeviceSandboxOp,
-    { hash, to, shape, when, resources, setupCode, resumeTurns }: DeviceSandboxPayload,
+    { hash, to, shape, when, resources, setupCode, resumeTurns, egress, egressProof }: DeviceSandboxPayload,
 ): DeviceSandboxFlowInput => {
     const input: DeviceSandboxFlowInput = { id: hostId, slug, op };
+    if (egress !== undefined) {
+        input.egress = egress;
+    }
+    if (egressProof !== undefined) {
+        input.egressProof = egressProof;
+    }
     if (hash !== undefined) {
         input.hash = hash;
     }
@@ -142,6 +152,7 @@ const OP_WORDS: Readonly<Record<DeviceSandboxOp, () => string>> = {
     reshape: () => t(`sandbox.useDevices.ops.reshape`),
     "set-shape": () => t(`sandbox.useDevices.ops.setShape`),
     "forget-shape": () => t(`sandbox.useDevices.ops.forgetShape`),
+    "set-egress": () => t(`sandbox.useDevices.ops.setEgress`),
     remove: () => t(`sandbox.useDevices.ops.remove`),
     logs: () => t(`sandbox.useDevices.ops.logs`),
     reconnect: () => t(`sandbox.useDevices.ops.reconnect`),

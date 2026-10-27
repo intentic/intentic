@@ -105,6 +105,12 @@
       "since": "v1.333.0"
     }
   ],
+  "auth:preview-guard.json": [
+    {
+      "type": "{ scope?: \"off\" | \"panels\" | \"all\" }",
+      "since": "unreleased"
+    }
+  ],
   "auth:privacy-shield.json": [
     {
       "type": "{ allow?: string[]; classes?: (\"person-name\" | \"national-id\" | \"tax-id\" | \"identity-document\" | \"bank-account\" | \"payment-card\" | \"email\" | \"phone\" | \"address\")[]; images?: \"mask\" | \"allow\"; mode?: \"off\" | \"watch\" | \"on\"; names?: \"dictionary\" | \"model\"; trusted?: string[] }",

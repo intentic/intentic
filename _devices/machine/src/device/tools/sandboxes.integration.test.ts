@@ -88,6 +88,22 @@ test("a newer ic's row, parked mid-swap with its probation and rollback targets,
     expect(fleetFrom(JSON.stringify([parked]))).toEqual([parked]);
 });
 
+// (2026-10-27) What ic holds and enforces for a sandbox's egress reaches the daemon as ic said it; a status this agent
+// cannot read costs that field alone.
+test("a row's egress status passes through whole, and one this agent cannot read is dropped from the row", () => {
+    const egress = {
+        policy: { profile: "internet-only", allow: [{ to: "192.168.1.20", ports: [445], protocol: "tcp" }] },
+        revision: "r7",
+        effectiveProfile: "internet-only",
+        neverAllow: [],
+        state: "enforced",
+        match: "address",
+        blocked: [{ to: "192.168.1.1", port: 80, protocol: "tcp", packets: 3 }],
+    } satisfies DeviceSandbox["egress"];
+    expect(fleetFrom(JSON.stringify([{ ...listed, egress }]))).toEqual([{ ...listed, egress }]);
+    expect(fleetFrom(JSON.stringify([{ ...listed, egress: { ...egress, state: "melting" } }]))).toEqual([listed]);
+});
+
 // What an ic newer than this agent may say in a way it cannot read yet costs that one field, not the whole listing: a
 // Devices view that went blank over a new outcome word would hide every sandbox on the machine.
 test("an optional field this agent cannot read is dropped from its row, and the row is kept", () => {
@@ -333,6 +349,9 @@ test("takes the features a current ic says it has, the words this agent knows, a
     const golden = readFileSync(join(repoRoot(import.meta.url), "_shared/sandbox-contract/golden/ic-features.json"), "utf8");
     expect(icFeaturesFrom(`${JSON.stringify(JSON.parse(golden))}\n`)).toContain("reachable-ways-back");
     expect(icFeaturesFrom('note\n{"features":["sleep","teleport"]}\n')).toEqual(["sleep"]);
+    // (2026-10-27) `egress` is advertised only on ic's own word: no help flag stands for it.
+    expect(icFeaturesFrom('{"features":["sleep","egress"]}')).toEqual(["sleep", "egress"]);
+    expect(featuresFrom("Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --set <SHAPE>", "--to", "--auto", "--idle")).not.toContain("egress");
     // An ic from before the verb answers with clap's usage error, which is no list.
     expect(icFeaturesFrom("error: unrecognized subcommand 'features'\n")).toBeUndefined();
     expect(icFeaturesFrom('{"features":"sleep"}')).toBeUndefined();

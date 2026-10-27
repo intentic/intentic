@@ -10,6 +10,7 @@ import {
     DeviceSandboxFlowInputSchema,
     DevicesListSchema,
 } from "../schemas/devices.js";
+import { EgressOwnerKeysReadSchema } from "../schemas/egress.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
 import { SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -314,6 +315,17 @@ export const systemContract = {
         })
         .input(DeviceSandboxFlowInputSchema)
         .output(streamOf(DeviceFlowLineSchema)),
+    // (2026-10-27) What a loosening of the egress fence is signed over: read just before the passkey ceremony, so the
+    // editor hashes the very owner keys the daemon then hands the machine with `set-egress`.
+    egressOwnerKeys: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/egress/owner-keys",
+            summary: "The owner's passkeys a network-fence change is checked against",
+            description:
+                "The owner's passkeys (their public halves), the relying party and the exact origins a ceremony with them may run from, as this sandbox hands them to a machine with every change to a sandbox's network fence; whether the caller is the owner; and the exceptions this sandbox's own cards suggest (an SSH host, a network disk, a VPN gateway on a private network). The machine checks a loosening against the passkeys it pinned, so the editor signs over exactly these.",
+        })
+        .output(EgressOwnerKeysReadSchema),
     // Closed set of actions; the daemon builds the command line, not the caller. One sentence is the whole answer.
     runDeviceCommand: systemRoute
         .route({

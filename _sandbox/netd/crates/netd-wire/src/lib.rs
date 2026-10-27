@@ -53,7 +53,9 @@ pub fn frame<T: Serialize>(message: &T) -> serde_json::Result<Vec<u8>> {
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub enum NetdHeader {
-    /// A preview request handed back for Node to answer, the value naming what Node already decided: `outbox`.
+    /// A preview request handed back for Node to answer, the value naming what it is: `outbox`, the outbox Node decided
+    /// it is; `pass`, a pass being exchanged on a host the preview guard covers; `signin`, a navigation the guard
+    /// refused, for the page that says how to get a pass.
     #[serde(rename = "x-intentic-preview")]
     Preview,
     /// A preview request whose upstream refused the connection; the value is that upstream's port.
@@ -109,6 +111,34 @@ pub struct ListenConfig {
     pub frame_ancestors: Vec<String>,
     /// A preview path Node answers whatever its host resolves to.
     pub preview_probe_path: String,
+    /// The owner's guard on preview hosts arriving from outside; absent, every preview host is open to anyone with its
+    /// address, as before the guard existed (2026-10-27). An older netd ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub preview_guard: Option<PreviewGuard>,
+}
+
+/// Which preview hosts need the sandbox's pass, and how netd checks one (2026-10-27). netd applies it to requests on
+/// the preview port and the tunnel only, never on the machine's loopback port, and never to the outbox (`public-`).
+/// A covered host lets through a pass that verifies (its cookie taken off before the upstream sees it), the probe, a
+/// CORS preflight, and the pass's exchange (handed back to Node); a navigation without a pass is handed back for Node's
+/// page, and anything else is answered 401 by netd itself, without asking Node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "wire.ts")]
+pub struct PreviewGuard {
+    /// Panel previews (`preview-<panel>-<id>`) need a pass.
+    pub panels: bool,
+    /// Forwarded ports (`port-<slot>-<id>`) need a pass.
+    pub ports: bool,
+    /// The cookie a pass rides in: `v1.<expiry in unix seconds>.<signature>`, the signature unpadded base64url
+    /// HMAC-SHA256 of `v1.<expiry>` under `key`.
+    pub cookie: String,
+    /// The HMAC key, as its text's bytes; Node replaces it to end every pass at once.
+    pub key: String,
+    /// The path a pass is exchanged on for its cookie, which netd hands back to Node marked `pass`.
+    pub pass_path: String,
 }
 
 /// A PEM certificate chain and its PEM private key.
@@ -627,6 +657,36 @@ mod tests {
         assert_eq!(json, r#"{"kind":"certificate"}"#);
         let back: FromNode = serde_json::from_str(r#"{"kind":"tunnel"}"#).unwrap();
         assert_eq!(back, FromNode::Tunnel { tunnel: None });
+    }
+
+    // Node names the guard beside the rest of the listen config; a config from before it has none, and every preview host
+    // stays open.
+    #[test]
+    fn a_listen_config_carries_the_preview_guard_only_when_node_names_one() {
+        let guarded: ListenConfig = serde_json::from_str(
+            r#"{"daemon":{"host":"0.0.0.0","port":8787},"frameAncestors":[],"previewProbePath":"/__intentic/preview-probe","previewGuard":{"panels":true,"ports":false,"cookie":"__Host-intentic-preview-pass","key":"k","passPath":"/__intentic/preview-pass"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            guarded.preview_guard,
+            Some(PreviewGuard {
+                panels: true,
+                ports: false,
+                cookie: "__Host-intentic-preview-pass".into(),
+                key: "k".into(),
+                pass_path: "/__intentic/preview-pass".into(),
+            })
+        );
+        let older: ListenConfig = serde_json::from_str(
+            r#"{"daemon":{"host":"0.0.0.0","port":8787},"frameAncestors":[],"previewProbePath":"/p"}"#,
+        )
+        .unwrap();
+        assert_eq!(older.preview_guard, None);
+        assert!(
+            !serde_json::to_string(&older)
+                .unwrap()
+                .contains("previewGuard")
+        );
     }
 
     #[test]

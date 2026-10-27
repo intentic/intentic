@@ -935,6 +935,47 @@ user: through `[Environment]::SetEnvironmentVariable` on Windows, and on Linux a
 uninstall` removes the service (an administrator's yes) and puts the vault back in `~/.intentic/keyring`, where it
 stays; set up again, the same recovery key opens it.
 
+### The egress fence
+
+(2026-10-27) A sandbox's traffic to private networks (the LAN, the machine itself, VPN-reachable nets, link-local
+metadata) can be fenced, per sandbox and off by default. `ic` enforces it on the host, never inside the container,
+where the agent is root. This agent decides whether a change asked from the editor may be carried out
+([`device/egress/`](src/device/egress)).
+
+- **The op.** `set-egress` carries a sandbox's whole policy, behind "Manage sandboxes" like every verb that changes one.
+  The agent reads what ic holds (`ic sandbox egress <slug> --json`) and compares. A change that only tightens
+  (`egressOnlyTightens` in the contract) is carried out as it comes. Anything else (an exception added or widened, the
+  fence turned off) needs the owner's passkey over exactly that change. The editor's only way to ic runs through the
+  sandbox's own daemon, which is inside the fence, so the daemon's word cannot be what decides a loosening.
+- **The pin.** The first tightening that carries the owner's passkeys (the daemon fills them in) pins them on this
+  machine: trust on first use, written to the audit log. Pins live in `~/.intentic/machine/egress-pins.json` (0600), one
+  per sandbox, keyed by slug and the sandbox's id from its connect token. A sandbox removed and made again under the
+  same name starts unpinned. A tightening never moves a pin. A loosening signed by a pinned key may only NARROW it to the
+  passkeys the request carries (a passkey the owner deleted drops off); it never adds one. A passkey the owner adds
+  later is trusted here after `intentic-machine egress trust <slug> --reset` on this machine and one save of the fence
+  from the editor, which pins again. `intentic-machine egress trust <slug>` shows a pin. (2026-10-27: a loosening used
+  to move the pin to whatever key list it signed over, but that list is the daemon's word, so a daemon could slip in a
+  key of its own beside the change the owner meant to sign, and hold the pin from then on.)
+- **What a loosening must prove.** The signed text reads as an `EgressChangeDocument` for this machine's id, this
+  environment's key (the one the agent enrolls with), this slug, the revision ic holds now, and the policy asked for. It
+  expires within five minutes. Its `keys` digest matches the passkeys the daemon handed over. The WebAuthn assertion is
+  from a pinned credential, of type `webauthn.get`. Its challenge is the sha256 of the document text, and it ran on a
+  pinned origin, not cross-origin. Its rpIdHash is the pinned rpId, with user presence and user verification. The
+  signature verifies with the pinned key, and a key that counts must count up (the last counter is kept with the pin,
+  spent before ic runs). Every refusal says what to do: sign it, sign again, or change it on the machine with
+  `ic sandbox egress <slug>`. The verifier is the daemon's own, moved to `@intentic/base/webauthn` so both read the
+  same bytes.
+- **The follower.** While this environment's ic advertises `egress` (`ic features --json`, nothing else), the agent
+  keeps `ic sandbox egress --follow` running as a child. ic fences a container the moment docker starts it, so a
+  sandbox Docker Compose recreates is fenced within a second. A follower that exits is started again after 1 s,
+  doubling to a minute, and back to 1 s after a run that held a minute. The minute's `ic sandbox watch` is the
+  backstop, and ic puts the rules back inside it.
+- **What it does not cover.** A sandbox granted "Run commands" (`shell`) on this machine runs commands outside every
+  fence, as this agent. The daemon marks such a sandbox (`hostShell`) so the editor can say so. Until a sandbox's first
+  `set-egress` with passkeys, whoever drives its daemon can pin keys of their own. Any sandbox linked with "Manage
+  sandboxes" can send the first one for a slug on this machine. A pin that looks wrong is reset here and pinned again
+  from the editor.
+
 ### Uninstall
 
 `intentic-machine uninstall [--purge] [--delete-data]` ([`src/uninstall/`](src/uninstall/)). `ic uninstall` is the one
@@ -978,7 +1019,7 @@ person who runs it alone, and either way it never downloads anything.
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `egress`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
 - [src/uninstall/purge.ts](src/uninstall/purge.ts) — `uninstall --purge`: the steps in `steps.ts`, the distros in `distros.ts`, the files in `sweep.ts`, every decision pure in `plan.ts`.
 - [src/resident/resident.ts](src/resident/resident.ts) — the resident process that holds links, pairings and WSL distros; `supervision.ts` beside it starts and stops it through whatever restarts this environment's agent.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
@@ -990,6 +1031,7 @@ person who runs it alone, and either way it never downloads anything.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
 - [src/resident/watchdog.ts](src/resident/watchdog.ts) — the agent's own hang watchdog.
 - [src/release/release-verify.ts](src/release/release-verify.ts) — a downloaded release binary checked against the release's signed `SHA256SUMS`.
+- [src/device/egress/set-egress.ts](src/device/egress/set-egress.ts) — the `set-egress` op: a tightening as it comes, a loosening under the owner's passkey (`proof.ts`), checked against the pins in `pins.ts`; `follower.ts` keeps `ic sandbox egress --follow` running, `trust-command.ts` is `intentic-machine egress trust`.
 - [src/keyring/commands.ts](src/keyring/commands.ts) — `intentic-machine keyring …`; `service.ts` installs, starts, upgrades and removes intentic-keyring, `relay.ts` carries the sandbox's `keyring*` calls to its pipe.
 
 ## Commands

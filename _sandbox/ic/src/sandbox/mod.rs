@@ -6,6 +6,7 @@ pub mod composition;
 pub mod connect;
 pub mod desired;
 pub mod doctor;
+pub mod egress;
 pub mod fix;
 #[cfg(test)]
 mod host_files;

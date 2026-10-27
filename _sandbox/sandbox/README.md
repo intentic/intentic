@@ -197,6 +197,18 @@ flowchart LR
   stand-in `card:<name>` one, and only for the environment the pairing is for. An agent that sends nothing is recorded
   under the card's stand-in id and says its own at connect. (2026-10-20: the id used to be learned only at connect,
   which drew a freshly paired computer as two machine cards until its agent came up.)
+- A sandbox's network fence (2026-10-27, `schemas/egress.ts`) is `ic`'s on the host: the daemon only shows it and
+  relays `set-egress`, gated on the agent's `egress` feature and maintainer-floored like every device op. The daemon
+  sits inside the fence, so it can never loosen one by itself: a loosening carries the owner's passkey over the exact
+  change, signed in the editor, and the machine agent checks it against the owner keys it pinned. Those keys are filled
+  here on every `set-egress`, whatever the caller sent (`hosts/egress/owner-keys.ts`: the owner's passkeys for the
+  rpId the request's origin implies, the exact origins admitted for it, the Android app's included), and
+  `GET /system/egress/owner-keys` hands the editor the same object to hash, with the exceptions this sandbox's cards
+  suggest (an SSH host, a network disk or a VPN gateway on a private network, `hosts/egress/suggestions.ts`). The
+  Devices read marks this sandbox's own row `egress.hostShell` when one of its device cards runs commands on the
+  machine it runs on (`hosts/egress/host-shell.ts`), which reaches past any fence there. While
+  `/run/intentic/egress.json` says the fence is enforced, every turn's guidance says so in one line
+  (`agent/prompt/guidance/egress-fence.ts`), so an agent asks for an exception instead of debugging a refused connection.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. When an isolated Claude Code turn is about to stop, each repository's own `turn` checks run

@@ -68,6 +68,15 @@ flowchart LR
   (`NetdHeader::Listener`), which netd strips from every request arriving from outside, like its other headers. It is
   how the daemon admits the desktop app's own bundled page there and nowhere else (2026-10-16: the offline sandbox face,
   the daemon's `auth/browser-origins.ts`): only netd knows which port a request came in on.
+- The owner may keep previews to the sandbox's members (2026-10-27, `guard.rs`). The listen config's `previewGuard` names
+  which hosts need a pass (panel previews, and forwarded ports when the owner chose them too; never the outbox), the
+  cookie a pass rides in and its HMAC key. On the preview port and the tunnel, never the loopback port, netd checks a
+  covered host's request before asking Node anything: a pass is `v1.<expiry>.<signature>`, the signature HMAC-SHA256 of
+  `v1.<expiry>` under the key, and netd takes it off the `Cookie` header and relays the request as usual. An upstream's
+  `Set-Cookie` naming it is dropped. The probe and a CORS preflight pass without one. The pass's exchange path is handed
+  back to Node marked `pass` (`NetdHeader::Preview`), and a navigation with no pass marked `signin`, for Node's page.
+  Anything else gets netd's own 401, never a redirect, since a WebSocket or a service worker's script fails on one.
+  Node ends every pass by handing over a new key, which netd remembers with the rest of the listen config.
 - Every address netd has is Node's word: its ports, the loopback certificate and the tunnel, sent over the control
   socket. netd writes the last of each down (`remember.rs`, `last-config.json` in the run directory, 0600) and applies
   them again when it starts, before any Node has spoken, and the next Node's word replaces them. A container whose
@@ -122,6 +131,7 @@ flowchart LR
 
 - [crates/netd/src/route.rs](crates/netd/src/route.rs) — which side answers a request.
 - [crates/netd/src/supervise.rs](crates/netd/src/supervise.rs) — runs Node, restarts it and ends what it left, reaps orphans as PID 1.
+- [crates/netd/src/guard.rs](crates/netd/src/guard.rs) — the owner's guard on preview hosts: which requests need a pass, and checking one.
 - [crates/netd/src/tunnel.rs](crates/netd/src/tunnel.rs) — the ingress tunnel: grant, then a stream per request.
 - [crates/netd/src/standing.rs](crates/netd/src/standing.rs) — where the tunnel stands for Node and the vitals, and
   each carrier's redial pace.

@@ -4,6 +4,7 @@ import { statePath } from "../../state-paths.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
+import { EGRESS_FENCE_GUIDANCE, egressFenced } from "./guidance/egress-fence.js";
 import { type GuidanceFacts, toolName } from "./guidance/guidance-facts.js";
 import {
     browserFull,
@@ -328,6 +329,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "still waiting, so carry on with what does not need it. The answer continues this conversation by itself, so " +
             "never poll and never ask twice; `needs` lists what is still waiting.",
     },
+    // Only while ic says the owner's fence is enforced here (guidance/egress-fence.ts).
+    { id: "egress", when: () => egressFenced(), text: EGRESS_FENCE_GUIDANCE },
     {
         id: "outside",
         // Envelopes reach every runtime (Cursor seals tool results, automations and webchat wrap the message itself).

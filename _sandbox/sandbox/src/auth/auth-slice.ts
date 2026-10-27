@@ -28,7 +28,7 @@ import { assertionsPossible, authEnabled } from "./auth-enabled.js";
 import { fileBrowserAccess } from "./browser-access.js";
 import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
-import { createAppRelyingParty } from "./passkeys/app-origins.js";
+import { type AppPasskeys, createAppPasskeys } from "./passkeys/app-origins.js";
 import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
 import { fencedMembers } from "../org/org-roster.js";
 import type { OrgPolicyHolder } from "../org/org-policy.js";
@@ -41,6 +41,16 @@ import { createWsTickets, type WsTickets } from "./tokens/ws-tickets.js";
 import { type AccessProfiles, accessProfilesDocument, fileAccessProfiles } from "./principals/access-profiles-store.js";
 import { fileServices, servicesDocument, type ServicesStore } from "./principals/services-store.js";
 import { type AccessRequestsStore, fileAccessRequests } from "./members/access-requests.js";
+import {
+    createPreviewGuards,
+    filePreviewGuardStore,
+    filePreviewPassKey,
+    opensPreviews,
+    previewGuardDocument,
+    type PreviewGuards,
+} from "./previews/preview-guard.js";
+import { publicAddressOf } from "../env.config.js";
+import { authRootOf } from "../state-paths.js";
 
 // What authenticates a caller: sessions, per-boot and per-extension tokens, passkeys and the member roster.
 export interface AuthSlice {
@@ -59,6 +69,8 @@ export interface AuthSlice {
     // Passkeys registered with this sandbox, the require switch and recovery hashes; the daemon is the relying party.
     readonly passkeys: PasskeyStore;
     readonly passkeyCeremonies: PasskeyCeremonies;
+    // The Android app origins the editor's Digital Asset Links admit for its passkeys, read whole (app-origins.ts).
+    readonly appPasskeys: AppPasskeys;
     // Shared-access grants besides the owner; the daemon enforces these, the platform only mirrors them.
     readonly members: MembersStore;
     // What people on that roster have asked the owner for, answered by granting it (members/access-requests.ts).
@@ -71,6 +83,8 @@ export interface AuthSlice {
     readonly ownerEmail: () => Promise<string | undefined>;
     // The platform's identity key the authorizer verifies assertions with; the announcer hands it each key it is answered.
     readonly platformIdentityKey: PlatformIdentityKey;
+    // The owner's guard on previews, and the passes members open them with (auth/previews/preview-guard.ts).
+    readonly previewGuards: PreviewGuards;
     // When set, the daemon verifies the bearer on every route but /health and emits CORS; unset means loopback.
     readonly auth:
         | {
@@ -115,15 +129,22 @@ const noticedRequired = (passkeys: PasskeyStore, logger: Pick<Logger, "error">):
 const passkeysOf = (
     config: Config,
     logger: Pick<Logger, "error" | "warn">,
-): { readonly passkeys: PasskeyStore; readonly passkeyCeremonies: PasskeyCeremonies; readonly passkeyPolicy: PasskeyPolicy } => {
+): {
+    readonly passkeys: PasskeyStore;
+    readonly passkeyCeremonies: PasskeyCeremonies;
+    readonly appPasskeys: AppPasskeys;
+    readonly passkeyPolicy: PasskeyPolicy;
+} => {
     const passkeys = filePasskeys(join(config.historyRoot, passkeysDocument.path));
+    const appPasskeys = createAppPasskeys({ webOrigin: config.webOrigin, logger });
     const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
     return {
         passkeys,
+        appPasskeys,
         passkeyCeremonies: createPasskeyCeremonies({
             store: passkeys,
             originAllowed: originAllowedBy(allowedOriginsOf(config.webOrigin)),
-            appRelyingParty: createAppRelyingParty({ webOrigin: config.webOrigin, logger }),
+            appRelyingParty: appPasskeys.relyingParty,
             sandboxId: sandboxIdFromToken(config.connectToken) ?? "",
             sandboxName: config.sandbox.name,
         }),
@@ -176,7 +197,7 @@ export const createAuthSlice = (
 ): AuthSlice => {
     const rosterFile = fileMembersStore(join(config.historyRoot, membersDocument.path));
     const members = orgPolicy === undefined ? rosterFile : fencedMembers(rosterFile, orgPolicy);
-    const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, logger);
+    const { passkeys, passkeyCeremonies, appPasskeys, passkeyPolicy } = passkeysOf(config, logger);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
     const ownerStore = noticedOwnerStore(fileOwnerStore(join(config.historyRoot, ownerDocument.path)), logger, config.connectToken);
     // Read once now, so a file that cannot be read is said at boot rather than at the owner's first refused sign-in.
@@ -230,6 +251,7 @@ export const createAuthSlice = (
         doorTokens: fileDoorTokens(join(workspaceRoot, doorTokensDocument.path)),
         passkeys,
         passkeyCeremonies,
+        appPasskeys,
         members,
         accessRequests: fileAccessRequests(config.historyRoot),
         accessProfiles: fileAccessProfiles({
@@ -242,6 +264,13 @@ export const createAuthSlice = (
         ),
         ownerEmail: () => ownerStore.read(),
         platformIdentityKey,
+        previewGuards: createPreviewGuards({
+            store: filePreviewGuardStore(join(authRootOf({ agentAuthDir: config.agentAuthDir, workspaceRoot }), previewGuardDocument.path)),
+            key: filePreviewPassKey(join(config.historyRoot, "preview-pass.key")),
+            sandboxId: publicAddressOf(config).sandboxId,
+            zone: publicAddressOf(config).zone,
+            mayPass: opensPreviews(() => ownerStore.read(), members),
+        }),
         auth,
     };
 };

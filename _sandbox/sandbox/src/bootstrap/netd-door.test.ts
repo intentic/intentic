@@ -1,7 +1,9 @@
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { TunnelReport } from "../netd/netd-link.js";
 import type { PreviewDeps } from "../panels/preview-routes.js";
-import { netdDoorRefusal, netdDoorServer, generationOf, tunnelReports } from "./netd-door.js";
+import { testConfig } from "../env.config.testing.js";
+import { profileTraits } from "../system/boot/profile.js";
+import { listenConfigOf, netdDoorRefusal, netdDoorServer, generationOf, tunnelReports } from "./netd-door.js";
 
 describe(`the netd door's HTTP server`, () => {
     // A stall past a keep-alive timer let Node close a pooled socket netd had just written a request into; the
@@ -112,5 +114,14 @@ describe(`netd's tunnel reports`, () => {
         report(false, dropped("the platform deleted this sandbox", { refusal: "deleted" }));
         report(false, dropped("the platform deleted this sandbox", { refusal: "deleted" }));
         expect(lines.filter(([level]) => level === "error")).toHaveLength(1);
+    });
+});
+
+describe(`the listen config netd is handed`, () => {
+    const phase = { config: testConfig, traits: profileTraits(testConfig) };
+    test(`names the owner's preview guard only while it is on`, () => {
+        expect(`previewGuard` in listenConfigOf(phase, `0.0.0.0`)).toBe(false);
+        const guard = { panels: true, ports: false, cookie: `__Host-intentic-preview-pass`, key: `k`, passPath: `/__intentic/preview-pass` };
+        expect(listenConfigOf(phase, `0.0.0.0`, guard).previewGuard).toEqual(guard);
     });
 });

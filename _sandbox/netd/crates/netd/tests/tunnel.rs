@@ -127,6 +127,7 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
                 sandbox_id: Some(SANDBOX_ID.into()),
                 frame_ancestors: vec![],
                 preview_probe_path: "/__intentic/preview-probe".into(),
+                preview_guard: None,
             },
         })
         .await;

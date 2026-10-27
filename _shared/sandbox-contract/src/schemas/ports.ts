@@ -74,3 +74,28 @@ export const PortForwardResultSchema = z.object({
         .describe("Where it can now be reached. Absent on a sandbox with no outside address, where the mapping exists but has no public name."),
 });
 export type PortForwardResult = z.infer<typeof PortForwardResultSchema>;
+
+// THE OWNER'S GUARD ON PREVIEWS (2026-10-27, docs/architecture/sandbox.md). Off, a preview is open to anyone with its
+// address, as it always was; `panels` asks a visitor of a panel's preview (`preview-<panel>-<id>`) for this sandbox's
+// pass, which only its members get; `all` asks it of forwarded ports (`port-<slot>-<id>`) too. The outbox is public
+// whatever this says. Ports are left out of `panels` because their names are salted already, and they are where a
+// webhook or a phone app with no browser to sign in calls.
+export const PreviewGuardScopeSchema = z.enum(["off", "panels", "all"]);
+export type PreviewGuardScope = z.infer<typeof PreviewGuardScopeSchema>;
+export const PreviewGuardSchema = z.object({
+    scope: PreviewGuardScopeSchema.default("off").describe(
+        "Who may open this sandbox's previews from outside: anyone with the address (`off`), only its members for panel previews (`panels`), or only its members for panel previews and forwarded ports alike (`all`). The outbox stays public.",
+    ),
+});
+export type PreviewGuard = z.infer<typeof PreviewGuardSchema>;
+export const PreviewPassRequestSchema = z.object({
+    url: z.string().min(1).max(4096).describe("The preview address to open, at the path to open it on."),
+});
+export const PreviewPassSchema = z.object({
+    url: z
+        .string()
+        .describe(
+            "Where to send the browser: the same address through a one-time link that signs this browser in to it, or the address unchanged when nothing guards it.",
+        ),
+});
+export type PreviewPass = z.infer<typeof PreviewPassSchema>;

@@ -139,6 +139,18 @@ test("a flow carrying a rollback's version for any other op is refused before an
     expect(frames).toEqual([]);
 });
 
+// (2026-10-27) The egress fields are set-egress's alone, and set-egress is refused without its policy.
+test("a flow carrying an egress policy for any other op, or a set-egress without one, is refused before anything runs", async () => {
+    const { client } = connectedPair();
+    const drain = async (flow: Parameters<typeof client.runSandboxFlow>[0]): Promise<void> => {
+        for await (const frame of await client.runSandboxFlow(flow)) {
+            expect(frame).toBeUndefined();
+        }
+    };
+    await expect(drain({ op: "start", slug: "work", egress: { profile: "open", allow: [] } })).rejects.toThrow("belong to set-egress, not start");
+    await expect(drain({ op: "set-egress", slug: "work" })).rejects.toThrow("`egress` is required");
+});
+
 test("an MCP message rides the one opaque procedure and comes back answered", async () => {
     const { client } = connectedPair();
     const response = (await client.mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string }[] } };

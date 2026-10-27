@@ -26,7 +26,7 @@ import { choresReport, writeLedger } from "../fixture/chores";
 import { demoComplianceReport, demoPresetItems } from "../fixture/data-protection/compliance";
 import { ciJobs, ciRunsResponse } from "../fixture/ci";
 import { DESK_SANDBOX_NAME } from "../fixture/desk";
-import { demoCommandSaid, demoDevices, switchDemoPairings } from "../fixture/devices";
+import { demoCommandSaid, demoDevices, demoEgressOwnerKeys, switchDemoPairings } from "../fixture/devices";
 import { inProcessSubagents } from "../fixture/fleet";
 import { demoHealth } from "../fixture/health";
 import { demoLoops } from "../fixture/loops";
@@ -160,6 +160,7 @@ export const procedures = {
         // Each environment of a PC answers for itself, which is what a machine-wide update walks through — without this
         // the only state that page could show was the refusal of a route nobody serves.
         runDeviceAgentFlow: ({ id, op }) => agentFlow(id, op),
+        egressOwnerKeys: () => demoEgressOwnerKeys(),
         // The container verbs and the unpair a removal ends with, answered the way a machine does, so a batch over
         // several rows can be pressed and watched rather than refused as a route nobody serves.
         manageDeviceSandbox: ({ slug, op }) => sandboxFlow(slug, op),

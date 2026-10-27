@@ -30,6 +30,9 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     { path: "privacy-shield.json", portability: "carry" },
     // The execution boundary agents run in (workload/domain/agent-domain-policy.ts).
     { path: "agent-domain.json", portability: "carry" },
+    // Who may open the sandbox's previews from outside (auth/previews/preview-guard.ts); its signing key stays on the history
+    // volume and never travels.
+    { path: "preview-guard.json", portability: "carry" },
 
     /* ---- credentials and what holds their values ---- */
 

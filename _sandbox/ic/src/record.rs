@@ -166,6 +166,11 @@ pub struct ChannelRecord {
     /// of this side's own sandbox from a copy of another side's. Absent from a record an ic before it wrote.
     /// (2026-10-05)
     pub side: Option<String>,
+    /// (2026-10-27) The sandbox's egress policy as `ic sandbox egress --policy` set it (sandbox/egress), whole, in the
+    /// contract's canonical JSON under `egress_policy`. Absent when nothing was ever set (read as open, revision
+    /// `none`). Kept by every write, since every flow writes the record back with `..record`; a value that does not
+    /// read is held as `internet-only` with no exceptions, so a damaged record never opens the fence.
+    pub egress: Option<crate::sandbox::egress::policy::Policy>,
 }
 
 impl ChannelRecord {
@@ -268,6 +273,7 @@ pub fn parse(content: &str) -> ChannelRecord {
     let mut kept: [[Option<String>; 4]; MAX_KEPT] = Default::default();
     let mut swap: [Option<String>; 11] = Default::default();
     let mut rest: [Option<String>; 14] = Default::default();
+    let mut egress: Option<String> = None;
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -318,6 +324,7 @@ pub fn parse(content: &str) -> ChannelRecord {
             "probation_daemon_start" => &mut swap[8],
             "probation_daemon_restarts" => &mut swap[9],
             "swap_alive" => &mut swap[10],
+            "egress_policy" => &mut egress,
             // A key written by a NEWER ic than this one. Ignored rather than refused: a user who downgrades
             // their host binary must still be able to update and roll back.
             _ => continue,
@@ -359,7 +366,17 @@ pub fn parse(content: &str) -> ChannelRecord {
         })
         .collect();
     record.swap = swap_of(swap);
+    record.egress = egress.map(|text| egress_of(&text));
     record
+}
+
+/// A held egress policy back from its record value; one that does not read is the tightest there is. Pure.
+fn egress_of(text: &str) -> crate::sandbox::egress::policy::Policy {
+    use crate::sandbox::egress::policy::{self, Policy, Profile};
+    policy::parse(text).unwrap_or(Policy {
+        profile: Profile::InternetOnly,
+        allow: Vec::new(),
+    })
 }
 
 /// A pinned environment build and its hash, both or neither: a build whose hash is not known would boot reading as a
@@ -488,6 +505,14 @@ pub fn serialize(record: &ChannelRecord) -> String {
     put("report_key", record.report_key.as_deref());
     put("report_platform", record.report_platform.as_deref());
     put("side", record.side.as_deref());
+    put(
+        "egress_policy",
+        record
+            .egress
+            .as_ref()
+            .map(crate::sandbox::egress::policy::canonical_json)
+            .as_deref(),
+    );
     if let Some(desired) = &record.desired {
         let keys = [
             "desired_memory",

@@ -23,6 +23,7 @@ import { membersDocument, ownerDocument } from "../auth/auth.js";
 import { accessRequestsDocument } from "../auth/members/access-requests.js";
 import { identityOffWorkspaceStep, passkeysOffWorkspaceStep } from "../auth/members/identity-off-workspace.js";
 import { passkeysDocument } from "../auth/passkeys/passkey-store.js";
+import { previewGuardDocument } from "../auth/previews/preview-guard.js";
 import { accessProfilesDocument } from "../auth/principals/access-profiles-store.js";
 import { servicesDocument } from "../auth/principals/services-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
@@ -146,6 +147,7 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     ownerDocument,
     accessRequestsDocument,
     passkeysDocument,
+    previewGuardDocument,
     accessProfilesDocument,
     servicesDocument,
     controlTokensDocument,
@@ -172,10 +174,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     ciDocument,
     composerDraftsDocument,
     projectDeliveriesDocument,
-    conversationRecordDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
@@ -220,10 +222,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
-    credentialReleasesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,

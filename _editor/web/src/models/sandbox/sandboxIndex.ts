@@ -353,7 +353,7 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
 
     // Access: who may come in and what they are told (People, the page's default part, which writes no param), the named
     // folders a grant is drawn in (Areas), how they prove it (Sign-in), and what programs and other sandboxes hold
-    // (Programs). A member sees People and Passkeys; the rest is a maintainer's. Allowed has no card: it is a list, found by
+    // (Programs). A member sees People, Passkeys and Previews; the rest is a maintainer's. Allowed has no card: it is a list, found by
     // the page's own words. Areas is a list too, but one that was a page of its own until 2026-10-26, found by its name.
     {
         id: `access-people`,
@@ -386,6 +386,20 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         partLabel: () => t(`sandbox.sandboxAccess.partSignIn`),
         title: () => t(`sandbox.passkeysSection.passkeys`),
         terms: () => [t(`sandbox.words.addPasskey`), t(`sandbox.passkeysSection.requirePasskeyToOpen`), t(`sandbox.search.accessPasskeys`)],
+    },
+    // Every member reads who may open the previews; the owner alone changes it.
+    {
+        id: `access-previews`,
+        slug: `access`,
+        part: `sign-in`,
+        partLabel: () => t(`sandbox.sandboxAccess.partSignIn`),
+        title: () => t(`sandbox.previewGuardSection.title`),
+        terms: () => [
+            t(`sandbox.previewGuardSection.whoCanOpen`),
+            t(`sandbox.previewGuardSection.panels`),
+            t(`sandbox.previewGuardSection.all`),
+            t(`sandbox.search.accessPreviews`),
+        ],
     },
     {
         id: `access-signed-in-browsers`,

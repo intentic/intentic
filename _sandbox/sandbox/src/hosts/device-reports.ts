@@ -16,8 +16,11 @@ import {
     type HostSummary,
     HOST_NATIVE_ENVIRONMENT,
 } from "@intentic/sandbox-contract/schemas/hosts";
+import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { ORPCError } from "@orpc/server";
 import { refuseUnsupported } from "./device-feature-gates.js";
+import { commandingCards, withHostShell } from "./egress/host-shell.js";
+import { withEgressOwnerKeys } from "./egress/owner-keys.js";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/overlay.js";
 import { opt } from "../opt.js";
@@ -452,8 +455,10 @@ export const devices = async (services: Services): Promise<Device[]> =>
                 result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
             })),
         );
-        const fleet = await services.syncFleet();
-        return mergeDevices(fleet.machines, fleet.reports, answered, setupHostCard(services.config));
+        const [fleet, cards] = await Promise.all([services.syncFleet(), services.capabilities.list()]);
+        // Whether this sandbox runs commands on its own machine, which only this daemon knows (egress/host-shell.ts).
+        const merged = mergeDevices(fleet.machines, fleet.reports, answered, setupHostCard(services.config));
+        return withHostShell(merged, sandboxSlugOf(services.config.sandbox.name), commandingCards(cards));
     });
 
 // The host-capability devices as the readings ALREADY IN HAND describe them: `devices` without the asking, for callers
@@ -491,8 +496,10 @@ const mintingPlatform = (services: Services): string => {
 };
 
 // One management action relayed to the machine and streamed back verbatim (some flows take minutes); the daemon adds no
-// judgement of its own, only drops the cached pull so the next poll reflects the result.
-export async function* manageDeviceSandbox(services: Services, id: string, input: DeviceSandboxFlow): AsyncGenerator<DeviceFlowLine> {
+// judgement of its own, only drops the cached pull so the next poll reflects the result. `origin` is the browser's,
+// which names the passkeys a `set-egress` carries.
+type FlowOrigin = { readonly origin?: string | undefined };
+export async function* manageDeviceSandbox(services: Services, id: string, input: DeviceSandboxFlow, { origin }: FlowOrigin = {}): AsyncGenerator<DeviceFlowLine> {
     const client = services.hostHub.client(id);
     if (client === undefined) {
         throw new ORPCError("CONFLICT", { message: services.hostHub.offline(id) });
@@ -532,7 +539,9 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
                         ...(overlay === undefined ? {} : { overlay: overlay.content, overlayHash: overlay.hash }),
                     };
                 })()
-              : input;
+              : input.op === "set-egress"
+                ? await withEgressOwnerKeys(services, input, origin)
+                : input;
     try {
         // The machine bounds its own work; this ceiling only ever catches a socket that is gone but not closed.
         for await (const line of await client.runSandboxFlow(flow, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) })) {

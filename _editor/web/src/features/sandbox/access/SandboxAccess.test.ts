@@ -99,6 +99,8 @@ jest.mock(`../../../client/sandbox/sandboxRpc`, () => ({
         secrets: { inventory: () => connected.inventory() },
         extensions: { list: async () => ({ extensions: [], invalid: [], pending: [] }) },
         org: { policy: async () => orgPolicy.value },
+        // Sign-in's Previews group reads who may open the previews; open to anyone, which no test here is about.
+        ports: { previewGuard: async () => ({ scope: `off` as const }) },
     }),
 }));
 
@@ -727,6 +729,8 @@ it(`keeps the token surfaces off the tab of a member below maintainer`, async ()
     await openPart(`Sign-in`);
     expect(shown()).toContain(`Passkeys`);
     expect(shown()).not.toContain(`Signed-in browsers`);
+    // Who may open the previews is read by every member, and changed by the owner alone.
+    await waitFor(() => expect(shown()).toContain(`Only the sandbox owner can change who can open previews.`));
     // An address naming a part they are not drawn opens their first.
     app?.unmount();
     document.body.innerHTML = ``;

@@ -89,14 +89,20 @@ pub fn newer(volume: &ChannelRecord, home: &ChannelRecord) -> bool {
 }
 
 /// The volume's copy as this machine keeps it: a report key cached here (record::remember_report) is a derived fact
-/// the other side may never have derived, so it is carried over rather than lost. Pure.
+/// the other side may never have derived, so it is carried over rather than lost.
+///
+/// (2026-10-27) The egress policy home holds always stands: the copy on the volume is the sandbox's own to write (it is
+/// root in its container), so a newer-stamped copy saying `open` must not open the fence. Only a home that holds no
+/// policy at all takes the volume's, which can only be tighter than none. Pure.
 pub fn adopted(volume: ChannelRecord, home: &ChannelRecord) -> ChannelRecord {
+    let egress = home.egress.clone().or(volume.egress.clone());
     if volume.report_key.is_some() {
-        return volume;
+        return ChannelRecord { egress, ..volume };
     }
     ChannelRecord {
         report_key: home.report_key.clone(),
         report_platform: home.report_platform.clone(),
+        egress,
         ..volume
     }
 }
@@ -155,6 +161,37 @@ mod tests {
             ..at(Some(2), Some("b"))
         };
         assert_eq!(adopted(own, &home).report_key.as_deref(), Some("v"));
+    }
+
+    #[test]
+    fn the_volumes_copy_never_changes_the_egress_policy_home_holds() {
+        use crate::sandbox::egress::policy::{Policy, Profile};
+        let fenced = Policy {
+            profile: Profile::InternetOnly,
+            allow: Vec::new(),
+        };
+        let home = ChannelRecord {
+            egress: Some(fenced.clone()),
+            ..at(Some(1), Some("a"))
+        };
+        // The sandbox wrote a newer copy that says open: home's policy stands.
+        let forged = ChannelRecord {
+            egress: Some(Policy::open()),
+            ..at(Some(9), Some("a"))
+        };
+        assert_eq!(adopted(forged.clone(), &home).egress, Some(fenced.clone()));
+        // A home that never held one takes the volume's (the other side of a Windows/WSL machine set it).
+        assert_eq!(
+            adopted(
+                ChannelRecord {
+                    egress: Some(fenced.clone()),
+                    ..forged
+                },
+                &at(Some(1), Some("a"))
+            )
+            .egress,
+            Some(fenced)
+        );
     }
 
     #[test]

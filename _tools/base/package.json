@@ -326,6 +326,17 @@
                 "default": "./dist/node/process.js"
             }
         },
+        "./webauthn": {
+            "types": "./dist/node/webauthn.d.ts",
+            "import": {
+                "@intentic/src": "./src/node/webauthn.ts",
+                "default": "./dist/node/webauthn.js"
+            },
+            "require": {
+                "@intentic/src": "./src/node/webauthn.ts",
+                "default": "./dist/node/webauthn.js"
+            }
+        },
         "./escape": {
             "types": "./dist/text/escape.d.ts",
             "import": {

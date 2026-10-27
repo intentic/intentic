@@ -4,6 +4,7 @@
 mod cgroup;
 mod connect;
 mod feed;
+mod guard;
 mod link;
 mod listen;
 mod proxy;

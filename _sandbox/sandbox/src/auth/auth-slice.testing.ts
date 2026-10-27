@@ -6,6 +6,7 @@ import { createMediaTickets } from "./tokens/media-tickets.js";
 import { createWsTickets } from "./tokens/ws-tickets.js";
 import type { AuthSlice } from "./auth-slice.js";
 import { memoryAccessRequests } from "./members/access-requests.testing.js";
+import { memoryPreviewGuards } from "./previews/preview-guard.testing.js";
 
 // The auth slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
@@ -97,6 +98,10 @@ export const authSliceFake = ({ auth }: AuthFakeOverrides, passkeys: AuthSlice["
         // actual verifier, and one that only lists sees nothing.
         passkeys: passkeyStore,
         passkeyCeremonies: createPasskeyCeremonies({ store: passkeyStore, originAllowed: () => true, sandboxId: "test-sandbox", sandboxName: "test" }),
+        // No editor publishes an app statement here: no app origin is admitted.
+        appPasskeys: { relyingParty: async () => undefined, admitted: async () => undefined },
+        // Real over memory: off until a suite turns it on, and a suite that does mints and checks real passes.
+        previewGuards: memoryPreviewGuards(),
         // Loopback unless a test asks for the exposed daemon: it's the key's absence, not an override of `undefined`,
         // that means loopback. CORS is separate, emitted in every mode from config.webOrigin.
         auth:

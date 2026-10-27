@@ -4,6 +4,7 @@ import { beforeSignInCommand } from "./autostart/before-sign-in.js";
 import { buildCommand, machineUi } from "./cli-ui.js";
 import { runLogPath } from "./config.js";
 import { deviceCommands } from "./device/commands.js";
+import { egressRoutes } from "./device/egress/trust-command.js";
 import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
 import { keyringCommands } from "./keyring/commands.js";
@@ -150,6 +151,8 @@ export const commands = buildRouteMap({
             docs: { brief: "The password vault on this computer, which types and hands over secrets for your sandboxes at your word" },
         }),
         sandbox: sandboxRoutes,
+        // The passkeys this machine pinned for loosening a sandbox's egress fence (device/egress/).
+        egress: egressRoutes,
         environment: environmentRoutes,
         run,
         "before-sign-in": beforeSignInCommand,

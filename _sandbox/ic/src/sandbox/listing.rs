@@ -276,6 +276,39 @@ fn listing(
     Value::Array(sandboxes)
 }
 
+/// (2026-10-27) Each row this side keeps, with its `egress` status (sandbox/egress): what its record holds, the
+/// machine's baseline and what ic last did, read without asking the engine. Left off a row another side keeps (its
+/// policy is that side's) and one docker would not inspect, as the contract says.
+fn with_egress(
+    mut listed: Value,
+    inspected: &HashMap<String, Value>,
+    records: &HashMap<String, ChannelRecord>,
+) -> Value {
+    let (baseline, _) = crate::sandbox::egress::baseline();
+    for row in listed.as_array_mut().into_iter().flatten() {
+        if row.get("keptElsewhere").is_some() {
+            continue;
+        }
+        let (Some(slug), Some(container)) = (row["slug"].as_str(), row["container"].as_str())
+        else {
+            continue;
+        };
+        let Some(inspected) = inspected.get(container) else {
+            continue;
+        };
+        let status = crate::sandbox::egress::listed(
+            slug,
+            records.get(slug).and_then(|record| record.egress.as_ref()),
+            &baseline,
+            inspected,
+        );
+        if let Some(row) = row.as_object_mut() {
+            row.insert("egress".into(), status);
+        }
+    }
+    listed
+}
+
 /// `docker inspect --format '{{json .}}'` over several containers prints one object per line, each named with a
 /// leading slash no other reader uses. A line that is not one object is a warning riding along.
 fn inspected_from(listing: &str) -> HashMap<String, Value> {
@@ -423,6 +456,7 @@ pub fn list_json() -> Result<()> {
         .flatten()
         .filter_map(|row| row["container"].as_str().map(str::to_string))
         .collect();
+    let listed = with_egress(listed, &inspected, &records);
     let platform_ids = loopback::platform_ids(&containers, &inspected);
     // allow(terminal-output): the --json answer, one line of JSON the desktop app and the machine agent read.
     println!(

@@ -19,7 +19,7 @@ flowchart LR
 - Subpath exports only, with no index, so a browser bundle pulls nothing it does not use. `outside-text` uses Web
   Crypto, so it does not tie a caller to Node, and `one-line`, `capped-read`, `escape`, `json` and `fetch-json` need nothing but
   the language and fetch; `fs`, `contained`, `json-lines`, `process`, `sqlite`, `worker-calls`, `web-stream`,
-  `ws-tcp-pump`, `acme` and `git` are Node's.
+  `ws-tcp-pump`, `acme`, `git` and `webauthn` are Node's.
 - The package carries `src` alongside `dist`: consumers selecting `@intentic/src`, including pnpm's injected
   workspace copies, need the source files named by the export map.
 - `when.ts` is a closed grammar with no arithmetic, calls or property access, because its strings arrive from
@@ -76,6 +76,11 @@ flowchart LR
   full buffer. A run that hands over the person's own terminal (`stdio: "inherit"`) stays on `spawnSync`, so Ctrl-C
   reaches it. `untranslatedEnv` is the environment for a program whose output is parsed: messages in gettext's C
   locale, every other category as the caller had it.
+- `node/webauthn.ts` (`./webauthn`) is the relying-party half of WebAuthn: the CBOR subset authenticators emit, COSE
+  keys as JWKs, ES256/RS256/EdDSA, the rpIdHash, user presence and verification, and the signature counter. The
+  daemon's passkey sign-in and the machine agent's check of the owner's passkey over an egress change both use it
+  (2026-10-27; it was the daemon's alone). Responses are typed by the fields it reads, so base needs no schema of the
+  contract's. An expectation may list several origins.
 - `fetch-json.ts` (`./fetch-json`) is one JSON call over HTTP: a deadline of its own combined with the caller's signal,
   a refusal's body read up to 1,200 bytes (then cancelled) and quoted in the error at 300 characters, and a `kind` that
   tells a timeout from a server that could not be reached. Explicitly accepted statuses keep their complete bodies.

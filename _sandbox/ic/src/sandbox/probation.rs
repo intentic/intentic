@@ -466,6 +466,7 @@ impl Report {
 /// nothing when no swap is in flight. With no slug, every sandbox on this machine.
 pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
     docker::require_daemon()?;
+    let named = slug.clone();
     let slugs = match slug {
         Some(slug) => vec![slug],
         None => live_slugs().unwrap_or_default(),
@@ -509,6 +510,13 @@ pub fn run(slug: Option<String>, as_json: bool) -> Result<()> {
             }
         }
     }
+    /* THE EGRESS ROUND (2026-10-27): every sandbox's fence reasserted, its counters read and its status written into it
+    (sandbox/egress). After the swaps are judged, so a rollback above is fenced too. Its sentences never reach the
+    stdout a `--json` reader parses. */
+    if as_json {
+        crate::ui::send_human_to_stderr();
+    }
+    crate::sandbox::egress::round(named.as_deref());
     Ok(())
 }
 

@@ -31,6 +31,7 @@ import { useRole } from "../../../client/sandbox/useRole";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
+import SandboxFenceRow from "./SandboxFenceRow.vue";
 import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
@@ -390,6 +391,8 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                 <p v-if="resizeFailed !== undefined" class="text-warning">{{ resizeFailed }}</p>
                 <!-- Whether the machine it stands on may put it to sleep while nobody needs it; self-hides for a hosted one. -->
                 <SandboxSleepRow />
+                <!-- What it may reach on the networks around that machine; says a hosted one has none to fence. -->
+                <SandboxFenceRow />
             </dl>
         </Card>
 

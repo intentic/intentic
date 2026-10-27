@@ -184,6 +184,7 @@ async fn started(name: &str, server: &Server) -> (Harness, u16) {
                 sandbox_id: Some(SANDBOX_ID.into()),
                 frame_ancestors: vec![],
                 preview_probe_path: "/__intentic/preview-probe".into(),
+                preview_guard: None,
             },
         })
         .await;

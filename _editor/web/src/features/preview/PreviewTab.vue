@@ -14,6 +14,7 @@ import { frameSandbox, type PreviewTarget } from "../../models/preview/previewMo
 import { loopbackPreviewUrl } from "./previewLane";
 import type { PhoneModel } from "./phoneModels";
 import PreviewStage from "./PreviewStage.vue";
+import { usePreviewPass } from "./usePreviewPass";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useOperations } from "../../workbench/operations/operations";
@@ -165,6 +166,10 @@ const probeThenShow = async (url: string): Promise<void> => {
     }
 };
 
+// A guarded preview's pass (usePreviewPass.ts): a one-time link the frame loads in place of its address, keyed on it.
+const frameEl = ref<HTMLIFrameElement | null>(null);
+const { link: passLink, notice: passNotice, settle: settlePass, forget: forgetPass } = usePreviewPass(() => frameEl.value?.contentWindow, () => target?.url);
+
 // Resolves once the daemon has published an address for the target; url's absence is one of the explained states below
 // (starting, fanned out, not running), not a wait.
 const resolvePreview = (): void => {
@@ -173,6 +178,7 @@ const resolvePreview = (): void => {
     probeSlow.value = false;
     probing.value = false;
     reach.value = undefined;
+    forgetPass();
     if (target?.url === undefined) {
         return;
     }
@@ -218,6 +224,7 @@ const frameSrc = computed<string | undefined>(() => {
 
 // Reloads by re-keying the iframe, the only reliable reload across origins.
 const reload = (): void => {
+    settlePass();
     previewEpoch.value += 1;
 };
 
@@ -238,6 +245,7 @@ const navigate = (url: string): boolean => {
         return false;
     }
     visited.value = typed.toString();
+    settlePass();
     previewEpoch.value += 1;
     return true;
 };
@@ -411,6 +419,7 @@ watch(
     <div class="flex h-full min-h-0 w-full flex-col bg-canvas">
         <!-- Errors stay beside the app whose controls caused them. -->
         <Notice v-if="actionError" :of="actionError" class="mx-3 mt-3" />
+        <Notice v-if="passNotice" :of="passNotice" class="mx-3 mt-3" />
 
         <div v-if="!target" class="flex min-h-0 flex-1 flex-col">
             <Await :of="listed" :label="t(`preview.previewPanel.readingWhatPreviewed`)">
@@ -438,8 +447,9 @@ watch(
         <PreviewStage v-else-if="frameSrc" :phone="phone">
             <template #default="{ frame }">
                 <iframe
-                    :key="`${previewEpoch}-${previewSrc}`"
-                    :src="frameSrc"
+                    ref="frameEl"
+                    :key="`${previewEpoch}-${previewSrc}-${passLink ?? ``}`"
+                    :src="passLink ?? frameSrc"
                     :title="t(`preview.previewPanel.preview2`, { label: target.label })"
                     :sandbox="frameSandbox(target.kind)"
                     :style="frame"

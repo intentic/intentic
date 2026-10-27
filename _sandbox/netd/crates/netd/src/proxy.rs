@@ -25,13 +25,17 @@ use tokio::sync::watch;
 use tower_service::Service;
 
 use crate::connect::{self, Io, NodeConnector, Pool, UpstreamConnector};
+use crate::guard::{self, Verdict};
 use crate::link::Link;
 use crate::route::{self, Listener, Target};
 use crate::term::{self, Terminals};
 use crate::vitals::{self, Vitals};
 
-// The one disposition Node serves itself, named on the request it is handed back.
+// What a preview request handed back to Node is, named on it (`NetdHeader::Preview`): the outbox Node decided it is,
+// a pass being exchanged on a host the preview guard covers, or a navigation the guard refused, for Node's page.
 const OUTBOX: &str = "outbox";
+const PASS: &str = "pass";
+const SIGN_IN: &str = "signin";
 
 // A restarting Node is waited for this long before a request is answered 503; its sockets stay open meanwhile.
 const NODE_PATIENCE: Duration = Duration::from_secs(30);
@@ -64,9 +68,9 @@ pub struct Netd {
 }
 
 enum Destination {
-    /// Node's socket; `outbox` hands a preview request back marked as the outbox Node decided it is.
+    /// Node's socket; `handed` hands a preview request back marked as what it is (`OUTBOX`, `PASS`, `SIGN_IN`).
     Node {
-        outbox: bool,
+        handed: Option<&'static str>,
     },
     Upstream {
         upstream: Upstream,
@@ -124,9 +128,35 @@ impl Netd {
         if vitals::serves(request.uri().path()) && self.target(listener, &host) == Target::Node {
             return self.vitals.respond(request.method(), request.headers());
         }
-        let destination = self
-            .destination(listener, &host, request.uri().path())
-            .await;
+        // The owner's guard is checked before Node is asked anything, so a visitor without a pass costs Node nothing
+        // but the page a navigation is shown.
+        let guarded = self.guarded(listener, &host);
+        let verdict = match guarded
+            .as_deref()
+            .and_then(|config| config.preview_guard.as_ref().map(|guard| (config, guard)))
+        {
+            Some((config, guard)) => {
+                let (method, path) = (request.method().clone(), request.uri().path().to_owned());
+                guard::judge(
+                    guard,
+                    &config.preview_probe_path,
+                    &method,
+                    &path,
+                    request.headers_mut(),
+                    guard::now(),
+                )
+            }
+            None => Verdict::Open,
+        };
+        let destination = match verdict {
+            Verdict::Open => {
+                self.destination(listener, &host, request.uri().path())
+                    .await
+            }
+            Verdict::Exchange => self.node_destination(Some(PASS)).await,
+            Verdict::SignIn => self.node_destination(Some(SIGN_IN)).await,
+            Verdict::Refused => return guard::refused(request.headers()),
+        };
         match destination {
             Destination::Unavailable => return unavailable(),
             Destination::Page(page) => return answer_page(page),
@@ -159,7 +189,16 @@ impl Netd {
                     ancestors,
                     ..
                 },
-            ) => from_far_side(answer, upstream.frameable.then_some(&ancestors)),
+            ) => {
+                let mut relayed = from_far_side(answer, upstream.frameable.then_some(&ancestors));
+                if let Some(guard) = guarded
+                    .as_deref()
+                    .and_then(|config| config.preview_guard.as_ref())
+                {
+                    guard::keep_pass(relayed.headers_mut(), &guard.cookie);
+                }
+                relayed
+            }
             (Ok(answer), _) => from_far_side(answer, None),
             (Err(error), Destination::Upstream { upstream, host, .. }) => {
                 tracing::debug!(error = %causes(&error), port = upstream.port, "a preview upstream did not answer");
@@ -248,6 +287,20 @@ impl Netd {
         }
     }
 
+    // The config, when the owner's guard covers this host as it arrived: on the preview port or the tunnel, never the
+    // machine's own loopback port, whose previews only that machine reaches.
+    fn guarded(&self, listener: Listener, host: &str) -> Option<Arc<ListenConfig>> {
+        if !matches!(listener, Listener::Preview | Listener::Tunnel) {
+            return None;
+        }
+        let config = self.config.borrow().clone()?;
+        let guard = config.preview_guard.as_ref()?;
+        let sandbox_id = config.sandbox_id.as_deref();
+        (route::target(listener, host, sandbox_id) == Target::Preview
+            && guard::covers(guard, host, sandbox_id))
+        .then_some(config)
+    }
+
     fn target(&self, listener: Listener, host: &str) -> Target {
         let config = self.config.borrow();
         let sandbox_id = config
@@ -267,7 +320,7 @@ impl Netd {
             .as_deref()
             .and_then(|config| config.sandbox_id.as_deref());
         match route::target(listener, host, sandbox_id) {
-            Target::Node => self.node_destination(false).await,
+            Target::Node => self.node_destination(None).await,
             Target::Preview => {
                 let Some(config) = config else {
                     return Destination::Unavailable;
@@ -290,7 +343,7 @@ impl Netd {
                         ancestors: config.frame_ancestors.clone(),
                     },
                     Ok(PreviewRoute::Page { page }) => Destination::Page(page),
-                    Ok(PreviewRoute::Outbox) => self.node_destination(true).await,
+                    Ok(PreviewRoute::Outbox) => self.node_destination(Some(OUTBOX)).await,
                     Err(error) => {
                         tracing::warn!(%error, host, "could not resolve a preview host");
                         Destination::Unavailable
@@ -300,9 +353,9 @@ impl Netd {
         }
     }
 
-    async fn node_destination(&self, outbox: bool) -> Destination {
+    async fn node_destination(&self, handed: Option<&'static str>) -> Destination {
         if self.link.ready(NODE_PATIENCE).await {
-            Destination::Node { outbox }
+            Destination::Node { handed }
         } else {
             Destination::Unavailable
         }
@@ -405,7 +458,7 @@ impl Netd {
 
 // A route netd answers itself is the daemon's own: a preview's app may have a path of the same name.
 fn is_netd_route(destination: &Destination, method: &Method, path: &str) -> bool {
-    matches!(destination, Destination::Node { outbox: false }) && term::serves(method, path)
+    matches!(destination, Destination::Node { handed: None }) && term::serves(method, path)
 }
 
 fn strip_netd_headers(headers: &mut HeaderMap) {
@@ -432,11 +485,11 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool, listene
         .map_or("/", |path| path.as_str())
         .to_owned();
     let base = match destination {
-        Destination::Node { outbox } => {
-            if *outbox {
+        Destination::Node { handed } => {
+            if let Some(handed) = handed {
                 parts
                     .headers
-                    .insert(NetdHeader::Preview.name(), HeaderValue::from_static(OUTBOX));
+                    .insert(NetdHeader::Preview.name(), HeaderValue::from_static(handed));
             }
             // Said only by netd, which stripped any copy the request arrived with (`strip_netd_headers`).
             if matches!(listener, Listener::Loopback { .. }) {
@@ -668,7 +721,7 @@ mod tests {
             strip_netd_headers(request.headers_mut());
             let (mut parts, ()) = request.into_parts();
             outbound(
-                &Destination::Node { outbox: false },
+                &Destination::Node { handed: None },
                 &mut parts,
                 false,
                 listener,

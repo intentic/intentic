@@ -27,6 +27,9 @@ if ours_bridge docker0; then
     iptables -F "$chain" 2>/dev/null; iptables -X "$chain" 2>/dev/null
   done
 fi
+# ic's egress fence (one nftables table of its own, `inet intentic_egress`): `ic engine remove` drops it through the engine
+# first; this takes it out where the engine could not, when this rootfs has nft.
+command -v nft >/dev/null 2>&1 && nft delete table inet intentic_egress 2>/dev/null
 for link in $(ls /sys/class/net 2>/dev/null); do
   case "$link" in
     docker0|br-*) ours_bridge "$link" && ip link delete "$link" 2>/dev/null ;;

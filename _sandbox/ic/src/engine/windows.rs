@@ -353,6 +353,8 @@ pub fn remove(yes: bool) -> Result<(), String> {
         }
     }
     let distro = distro();
+    // ic's own egress table goes while the engine still answers (sandbox/egress): the next engine reuses its subnets.
+    crate::sandbox::egress::drop_table();
     // What dockerd put into WSL's shared network goes before the distro does: nothing else would take it out.
     if write_into_distro(&distro, TEARDOWN_PATH, TEARDOWN).is_ok() {
         let _ = wsl::run_wsl(

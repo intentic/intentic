@@ -208,6 +208,7 @@ const samplesOf = (
             terminals: undefined,
             browsers: undefined,
             devices: undefined,
+            egressOwnerKeys: undefined,
             runDeviceAgentFlow: { id: host, op: `restart` },
             // A log tail and a pause: the two that leave the fixture's containers and pairings as they were.
             manageDeviceSandbox: { id: host, slug: `docs-site`, op: `logs` },

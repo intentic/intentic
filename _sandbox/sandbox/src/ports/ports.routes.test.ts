@@ -6,11 +6,19 @@ import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contra
 import { workspacePaths } from "../workspace/workspace.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { testConfig } from "../env.config.testing.js";
-import { errorCode, routesClient } from "../harness/route-client.testing.js";
+import { errorCode, proven, routesClient } from "../harness/route-client.testing.js";
+import { authSliceFake } from "../auth/auth-slice.testing.js";
 import { fakeServiceProcesses } from "../processes/processes-slice.testing.js";
 import { handJobOver, openBackgroundJob, portJobOf } from "../agent/tools/jobs/background-jobs.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
+import { createORPCClient } from "@orpc/client";
+import type { ContractRouterClient } from "@orpc/contract";
+import { OpenAPILink } from "@orpc/openapi-client/fetch";
+import { OpenAPIHandler } from "@orpc/openapi/fetch";
+import type { ProvenCaller } from "../auth/auth.js";
+import { PREVIEW_PASS_PATH } from "../auth/previews/preview-guard.js";
+import { memoryPreviewGuards, memoryPreviewGuardStore } from "../auth/previews/preview-guard.testing.js";
 
 // The ports routes over PortsRoutesDeps; anything the routes can reach is in `deps` below, compiler-checked. Middleware
 // (auth, CORS, boot gate) is the app's and is tested there.
@@ -33,7 +41,73 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     serviceProcesses: fakeServiceProcesses(),
     // No conversation has left a job running here, so no port is claimed by one.
     jobOn: () => undefined,
+    // Loopback, as a suite's daemon is unless it says otherwise; the preview guard off until a test turns it on.
+    auth: undefined,
+    previewGuards: memoryPreviewGuards({ sandboxId: sandboxIdFromToken("tok"), zone: "example.com" }),
     ...overrides,
+});
+
+// The routes as the bearer middleware hands them a caller: `identity` is who signed in, absent for a call nobody did.
+const clientAs = (deps: PortsRoutesDeps, identity?: ProvenCaller): ContractRouterClient<typeof portsContract> => {
+    const handler = new OpenAPIHandler(createPortsRoutes(deps));
+    return createORPCClient(
+        new OpenAPILink(portsContract, {
+            url: "http://sandbox",
+            fetch: async (request) => {
+                const url = new URL(request.url);
+                const asked = { headers: request.headers, method: request.method, url: url.pathname + url.search };
+                const { response } = await handler.handle(request, { context: identity === undefined ? asked : { ...asked, identity } });
+                return response ?? new Response("no matching procedure", { status: 404 });
+            },
+        }),
+    );
+};
+
+const ID = sandboxIdFromToken("tok")!;
+const PANEL_URL = `https://preview-web-${ID}.example.com/app?x=1#top`;
+const PORT_URL = portUrl(SLOT, "example.com", ID)!;
+
+describe("the preview guard's routes", () => {
+    test("previews are open to anyone with the address until the owner says otherwise", async () => {
+        const client = clientAs(portsDeps(), proven("ada@example.com", "viewer"));
+        expect(await client.previewGuard()).toEqual({ scope: "off" });
+        expect(await client.previewPass({ url: PANEL_URL })).toEqual({ url: PANEL_URL });
+    });
+
+    test("only the signed-in owner changes it", async () => {
+        const store = memoryPreviewGuardStore();
+        const previewGuards = memoryPreviewGuards({ store, sandboxId: ID, zone: "example.com" });
+        expect(await errorCode(clientAs(portsDeps({ previewGuards })).setPreviewGuard({ scope: "all" }))).toBe("FORBIDDEN");
+        // The fake's authorizer refuses everyone it was not told to admit.
+        const refused = portsDeps({ previewGuards, auth: authSliceFake({ auth: {} }, undefined).auth });
+        expect(await errorCode(clientAs(refused).setPreviewGuard({ scope: "all" }))).toBe("FORBIDDEN");
+        expect(await store.scope()).toBe("off");
+        const owner = portsDeps({ previewGuards, auth: authSliceFake({ auth: { authorizeOwner: async () => undefined } }, undefined).auth });
+        expect(await clientAs(owner).setPreviewGuard({ scope: "panels" })).toEqual({ scope: "panels" });
+        expect(await store.scope()).toBe("panels");
+    });
+
+    test("a member's pass for a covered preview is a one-time link on that preview's own host", async () => {
+        const previewGuards = memoryPreviewGuards({ store: memoryPreviewGuardStore("panels"), sandboxId: ID, zone: "example.com" });
+        const client = clientAs(portsDeps({ previewGuards }), proven("ada@example.com", "viewer"));
+        const { url } = await client.previewPass({ url: PANEL_URL });
+        const link = new URL(url);
+        expect(`${link.origin}${link.pathname}`).toBe(`https://preview-web-${ID}.example.com${PREVIEW_PASS_PATH}`);
+        expect(link.searchParams.get("to")).toBe("/app?x=1");
+        expect(link.hash).toBe("#top");
+        expect(previewGuards.redeem(link.searchParams.get("ticket") ?? "", link.hostname)).toBe("ada@example.com");
+        // Forwarded ports are left out at `panels`, so their address comes back as it was.
+        expect(await client.previewPass({ url: PORT_URL })).toEqual({ url: PORT_URL });
+    });
+
+    test("never a ticket for an address that is not this sandbox's, nor for nobody", async () => {
+        const previewGuards = memoryPreviewGuards({ store: memoryPreviewGuardStore("all"), sandboxId: ID, zone: "example.com" });
+        const client = clientAs(portsDeps({ previewGuards }), proven("ada@example.com", "viewer"));
+        for (const foreign of [`https://preview-web-${ID}.evil.example/`, `http://preview-web-${ID}.example.com/`, "https://example.com/", "not a url"]) {
+            expect(await errorCode(client.previewPass({ url: foreign }))).toBe("BAD_REQUEST");
+        }
+        expect(await errorCode(clientAs(portsDeps({ previewGuards })).previewPass({ url: PANEL_URL }))).toBe("FORBIDDEN");
+    });
 });
 
 test("ports.list scans on demand, hides the daemon's own listeners, and marks forwards with their URLs", async () => {

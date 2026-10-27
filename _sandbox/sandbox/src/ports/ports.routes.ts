@@ -7,6 +7,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { publicAddressOf } from "../env.config.js";
+import { createPreviewGuardRoutes } from "./preview-guard.routes.js";
 
 // list scans procfs on demand, no background poller; forward/unforward drive the slot table. Forwarding is the explicit
 // exposure gesture: a preview is public once forwarded; the daemon's own surfaces are never listed.
@@ -22,7 +23,7 @@ export interface PortJob {
 
 // `jobOn` answers from the background-job registry (agent/tools/jobs/background-jobs.ts), handed in by the router rather than
 // imported, which would tie this subsystem to the agent's in a cycle.
-export type PortsRoutesDeps = Pick<Services, "config" | "deviceTunnels" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
+export type PortsRoutesDeps = Pick<Services, "auth" | "config" | "deviceTunnels" | "portForwards" | "previewGuards" | "scanPorts" | "serviceProcesses" | "workspace"> &
     ExtensionHost & { readonly jobOn: (port: number) => PortJob | undefined };
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
@@ -83,5 +84,6 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
             services.portForwards.unforward(input.port);
             return { ok: true } as const;
         }),
+        ...createPreviewGuardRoutes(services),
     };
 };

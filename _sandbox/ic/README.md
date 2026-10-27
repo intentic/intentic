@@ -276,6 +276,71 @@ flowchart LR
   `--set`: a shim fetches a fresh ic on every run, so an older agent can be driving this one. They can go once no
   agent older than the release carrying `--set` is left; a `sandbox-<slug>.shape` delta an older ic saved is
   converted into the record the first time it is read, then deleted.
+- A sandbox's **egress** is what it may reach on the networks around this machine ([`sandbox/egress/`](src/sandbox/egress/),
+  the contract's `egress.ts`). `ic sandbox egress <slug> --policy <JSON>` sets the whole policy: `open` (nothing fenced,
+  no rules at all) or `internet-only`, which refuses every private, link-local, shared and multicast range and the
+  machine itself except the `allow` entries (an address or prefix, a hostname resolved on the host at every apply, or
+  the word `host`, each with optional ports and protocol). It is read as strictly as the contract writes it (an unknown
+  field is refused), kept in the channel record as `egress_policy`, and applied at once when the sandbox runs; a policy
+  whose rules cannot be put in is not saved, and the command says why. `ic sandbox egress <slug> [--json]` prints the
+  contract's `EgressStatus` (its `revision` is the sha256 of the canonical policy, `none` when nothing is held), and the
+  rows of `ic sandbox list --json` carry the same as `egress`. The machine's own word over every sandbox is
+  `/etc/intentic/os.json`'s `egress` on Intentic OS, else `~/.intentic/egress.json`: `minimum` lifts every profile,
+  `neverAllow` is refused before any allow entry. ic checks no signature and no tightening: its caller here is the
+  machine's owner, and the machine agent is the gate for a change from anywhere else.
+  - **The rules** are one nftables table of ic's own, `inet intentic_egress`, never Docker's chains. Each fenced sandbox
+    owns two base chains in it, on the forward hook (the LAN and the internet) and the input hook (the host's own
+    addresses, which on Windows include every WSL distro's services at the bridge gateway), each in order: replies to
+    connections already allowed, IPv6 neighbour discovery, peers on its own networks, the machine's `neverAllow`, DNS to
+    the private resolvers docker forwards to, the allow entries, then the private ranges, counted into an hour-long
+    dynamic set and rejected. The goldens are [`golden/`](src/sandbox/egress/golden/); the ranges are held to the
+    contract's `golden/egress-private.json` by a test on each side.
+  - **The match.** A sandbox on the network ic made for it is fenced by that network's subnets, from its first packet
+    (`match: network`). One on a network something else made (Compose) is fenced by that network's subnet less the
+    addresses of every other container on it (`match: address`), so a sandbox recreated onto a new address is fenced
+    from its first packet too, and its sibling services are not fenced. What can go wrong instead is on the sibling's
+    side: a container that starts on the shared network after the rules were drawn is, until `--follow` (within a
+    fraction of a second) or the next watch adds it to the exclusions, refused the private ranges and the host. Its own
+    subnet peers and the internet stay reachable the whole time. A sandbox whose container is gone keeps its fence on
+    the shared networks ic last fenced it on (remembered with what it applied, `~/.intentic/egress/<slug>.json`), less
+    everything on them now, until its policy goes open, it is removed, or the network goes: Compose's recreate removes
+    the container before it makes the next, and the next is inside a fenced subnet from its first packet. (2026-10-27,
+    measured on a WSL engine: matching the sandbox's own addresses left a recreate unfenced for 6.8 s under `--follow`,
+    and dropping the chains of a removed container still let the first request through.) A sandbox on the host's own
+    network cannot be fenced at all.
+  - **Putting them in.** A helper container on the engine's host network, `docker run --rm -i --network host --cap-drop
+    ALL --cap-add NET_ADMIN --pull never --entrypoint nft <image> -f -`, from an image the engine already holds (the
+    sandbox's own, which ships `nft`; `IC_EGRESS_IMAGE` names another). That reaches the right namespace wherever
+    docker runs: a Linux server, ic's WSL engine, Intentic OS, Docker Desktop's VM, a remote engine.
+  - **When.** After every start, restart, recreate and setup ic performs; on every `ic sandbox watch` (the machine
+    agent's minute), which also reads the counters and writes the status into the sandbox at `/run/intentic/egress.json`
+    (a report: changing it changes no rule); and, for starts ic did not perform (Compose's `up`, Docker's restart
+    policy), `ic sandbox egress --follow`, which follows `docker events` (container starts, network connects and
+    disconnects) and runs until stopped. Each burst of events costs one `nft -f`, through a helper the follower keeps
+    running on the host network (`docker run -d … --entrypoint sleep <image> infinity`, labelled ic's, one per side of
+    the computer by name) and `docker exec -i <helper> nft -f -`, with the host's resolvers read once at its start and
+    every ten minutes. A helper someone removed is started again, waiting out a removal docker has not finished; one a
+    killed follower left behind is taken by the next; the follower removes it when it ends. A follower that cannot have
+    its helper puts the change in the one-shot way, so losing the helper never fails a sandbox closed while its rules
+    are in the kernel (2026-10-27: a restart that raced the removal stopped a fenced sandbox). A removed sandbox's
+    rules go with it, and the table goes with the last; `ic engine remove` drops it before the engine goes.
+  - **Fail closed.** A running sandbox with a policy other than open whose rules cannot be put in is stopped, the reason
+    left in its restart intent, held so nothing restarts it unfenced, and its status is `failed` with the same reason.
+    An engine that cannot take rules at all (no nf_tables in its kernel, no image with nft) is `unsupported`: the policy
+    is held and nothing enforces it. A privileged sandbox under runc is the host's root and can step around any rule on
+    the host, so its status says `advisory: true`; under Kata it does not.
+  - (2026-10-27) Decisions. **One transaction per change, per sandbox, rather than the table rewritten whole:** on a
+    Windows PC, ic on Windows and ic in a WSL distro drive one engine and each holds the policies of the sandboxes it
+    keeps (side.rs), so a whole-table replace from one side would drop the other's fences until its next round. Each
+    `nft -f` adds and deletes a sandbox's chains and declares them again, so it lands whole or not at all, and keeps the
+    sets, so the counts survive the minute's reapply. A side changes only the sandboxes it keeps, and takes out the
+    chains of sandboxes the engine no longer has. **Reject, never drop:** TCP gets a reset (refused at once, and never
+    rate-limited by the kernel the way ICMP errors are), everything else ICMP administratively-prohibited, so an agent
+    sees the refusal at once instead of a timeout. **The policy home holds always stands:** the record's copy on the
+    sandbox's own volume (mirror.rs) is the sandbox's to write, so it never replaces a policy home holds, and is taken
+    only by a home that holds none. **DNS through private resolvers** (a LAN router, Docker Desktop's 192.168.65.7,
+    WSL's 10.255.255.254) is allowed on port 53 to exactly those, read from the engine host's own resolv.conf and the
+    container's `--dns`, since docker's resolver forwards from the container's side of the fence.
 - `ic sandbox logs [<slug>] [--tail N]` prints the tail of a sandbox's own log, both streams: what the machine
   agent's Logs button and `sandbox_logs` tool read.
 - `ic sandbox fix [<slug>]` ([src/sandbox/fix/mod.rs](src/sandbox/fix/mod.rs)) checks every layer between this
@@ -476,6 +541,8 @@ flowchart LR
 - [src/sandbox/probation.rs](src/sandbox/probation.rs) — the watch that finishes interrupted swaps and rolls a failing new version back.
 - [src/sandbox/side.rs](src/sandbox/side.rs) — which side of the computer keeps a sandbox, and the keeper's lease;
   [src/sandbox/inside.rs](src/sandbox/inside.rs) reads and writes the files every side shares under `/history/.ic/`.
+- [src/sandbox/egress/](src/sandbox/egress/) — `ic sandbox egress`: the policy, the match, the nftables rules and
+  their goldens, the status.
 - [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
 - [src/os/](src/os/) — `ic os`: Intentic OS's status, updates, orderly reboots, boot health and first-boot pairing;
   [src/os/policy.rs](src/os/policy.rs) is the isolation policy every sandbox run line passes through.

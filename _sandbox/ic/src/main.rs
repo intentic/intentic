@@ -830,6 +830,26 @@ enum SandboxCommand {
         #[arg(long = "no-resume", conflicts_with = "forget")]
         no_resume: bool,
     },
+    /// What a sandbox may reach on the networks around this device: its egress policy (`open`, or `internet-only` with
+    /// exceptions), enforced by nftables rules ic keeps on the engine's host. With --policy it sets the whole policy,
+    /// applied at once when the sandbox runs and refused, unsaved, when its rules cannot be put in; without it, it shows
+    /// the policy and what is enforced. --follow fences every sandbox start ic did not perform (Compose's `up`)
+    #[command(group = ArgGroup::new("egress_action").args(["policy", "follow"]))]
+    Egress {
+        /// The sandbox (always named, except with --follow)
+        #[arg(required_unless_present = "follow")]
+        slug: Option<String>,
+        /// The whole policy as the sandbox contract's JSON, e.g. {"profile":"internet-only","allow":[{"to":"host","ports":[11434]}]}.
+        /// A field ic does not know is refused
+        #[arg(long, value_name = "JSON")]
+        policy: Option<String>,
+        /// Follow docker's events and fence every sandbox start as it happens; runs until stopped
+        #[arg(long, conflicts_with_all = ["slug", "json"])]
+        follow: bool,
+        /// One line of JSON: the sandbox's EgressStatus (the machine agent reads this)
+        #[arg(long)]
+        json: bool,
+    },
     /// Start a stopped sandbox and its tunnel, applying the shape saved for its next restart if there is one
     Start {
         /// The sandbox to start (omit when this device runs exactly one)
@@ -1285,6 +1305,24 @@ fn main() {
                     })
                 }
             },
+            SandboxCommand::Egress {
+                slug,
+                policy,
+                follow,
+                json,
+            } => {
+                if json {
+                    ui::send_human_to_stderr();
+                }
+                match (follow, slug, policy) {
+                    (true, _, _) => sandbox::egress::follow(),
+                    (false, Some(slug), Some(policy)) => sandbox::egress::set(&slug, &policy, json),
+                    (false, Some(slug), None) => sandbox::egress::show(&slug, json),
+                    (false, None, _) => Err(util::Fail(
+                        "name the sandbox: ic sandbox egress <slug>".to_string(),
+                    )),
+                }
+            }
             SandboxCommand::Start { slug, no_resume } => resumed(no_resume, || {
                 sandbox::power::run(sandbox::power::Power::Start, slug)
             }),

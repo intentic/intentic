@@ -69,10 +69,18 @@ export interface AppRelyingPartyDeps {
     readonly now?: () => number;
 }
 
-export const createAppRelyingParty = ({ webOrigin, logger, fetcher = fetch, now = Date.now }: AppRelyingPartyDeps): AppRelyingParty => {
+// The same statement read whole: the rpId app origins sign for and every origin it admits now, for a reader that must
+// name them rather than test one (the owner keys a machine pins for the egress fence, hosts/egress/owner-keys.ts).
+export interface AppPasskeys {
+    readonly relyingParty: AppRelyingParty;
+    // Undefined when the editor publishes no https origin, so no app can sign for it.
+    readonly admitted: () => Promise<{ readonly rpId: string; readonly origins: readonly string[] } | undefined>;
+}
+
+export const createAppPasskeys = ({ webOrigin, logger, fetcher = fetch, now = Date.now }: AppRelyingPartyDeps): AppPasskeys => {
     const editor = allowedOriginsOf(webOrigin).find((origin) => origin.startsWith("https://") && !origin.includes("*"));
     if (editor === undefined) {
-        return async () => undefined;
+        return { relyingParty: async () => undefined, admitted: async () => undefined };
     }
     const rpId = rpIdOf(editor);
     const url = `https://${rpId}/.well-known/assetlinks.json`;
@@ -113,5 +121,10 @@ export const createAppRelyingParty = ({ webOrigin, logger, fetcher = fetch, now 
         return reading;
     };
 
-    return async (origin) => (origin.startsWith(ANDROID_ORIGIN_PREFIX) && (await admitted()).has(origin) ? rpId : undefined);
+    return {
+        relyingParty: async (origin) => (origin.startsWith(ANDROID_ORIGIN_PREFIX) && (await admitted()).has(origin) ? rpId : undefined),
+        admitted: async () => ({ rpId, origins: [...(await admitted())].toSorted() }),
+    };
 };
+
+export const createAppRelyingParty = (deps: AppRelyingPartyDeps): AppRelyingParty => createAppPasskeys(deps).relyingParty;

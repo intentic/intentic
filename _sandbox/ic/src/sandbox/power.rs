@@ -204,6 +204,11 @@ pub(crate) fn run_by_reading(
         Power::Stop => {}
     }
     power_all(power, &container, sidecar)?;
+    // Its egress rules, before anyone is told it is up (sandbox/egress): a fenced sandbox whose rules cannot go in is
+    // stopped again there, with the reason.
+    if power != Power::Stop {
+        crate::sandbox::egress::after_start(&slug);
+    }
     rest(
         &slug,
         if power == Power::Stop {

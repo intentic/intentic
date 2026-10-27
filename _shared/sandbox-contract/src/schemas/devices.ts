@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PortNumberSchema } from "./device-commands.js";
 import { DeviceBridgeHoldSchema, DeviceConflictSchema, DeviceCopySchema, DeviceLowDiskSchema } from "./device-folder.js";
 import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdentitySchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
+import { EgressOwnerKeysSchema, EgressPolicySchema, EgressProofSchema, EgressStatusSchema } from "./egress.js";
 import { RollbackTargetSchema, UpdateOutcomeSchema } from "./updates.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
@@ -79,6 +80,9 @@ export const DeviceSandboxSchema = z.object({
     resources: SandboxResourcesSchema.optional(),
     // The update `ic sandbox prepare` built and left waiting for this sandbox; absent when nothing is staged.
     staged: z.object({ image: z.string(), version: z.string().optional(), channel: z.string().optional() }).optional(),
+    // (2026-10-27) What ic holds and enforces for the sandbox's outbound traffic (egress.ts). Absent from an ic older
+    // than `ic sandbox egress`, and from a row whose container docker would not inspect.
+    egress: EgressStatusSchema.optional(),
     // Everything below is read off an `ic` new enough to know it; an older ic's listing simply lacks it.
     // What the running image says it is.
     version: z.string().optional(),
@@ -136,6 +140,10 @@ export const DeviceSandboxOpSchema = z.enum([
     "reshape",
     "set-shape",
     "forget-shape",
+    // (2026-10-27) Sets the sandbox's whole egress policy through `ic sandbox egress` (egress.ts). A change that only
+    // tightens is carried out as it comes; any other needs `egressProof`, the owner's passkey over it, which the machine
+    // agent checks against the passkeys it pinned for this sandbox. Sent only to an agent advertising `egress`.
+    "set-egress",
     "remove",
     "logs",
     // The two ops that redeem a fresh setup code; every other one recreates a container from its own existing env.
@@ -167,6 +175,12 @@ export const DeviceSandboxFlowSchema = z.strictObject({
     // reader): an order carrying a field this agent does not know is refused rather than carried out without it.
     shape: z.strictObject(SandboxShapeSchema.shape).optional(),
     when: SandboxShapeWhenSchema.optional(),
+    // `set-egress` only: the whole policy (required), the owner's passkey over a change that loosens it, and,
+    // daemon-filled and never the caller's, the owner's passkeys the agent pins on the first `set-egress` and replaces
+    // only under a proof signed by a key it already pins.
+    egress: EgressPolicySchema.optional(),
+    egressProof: EgressProofSchema.optional(),
+    egressOwnerKeys: EgressOwnerKeysSchema.optional(),
     // READ-ONLY for one release, from pages served by sandboxes older than `set-shape`: the old `reshape` op's delta,
     // and `later` to save it for the next restart instead. Nothing new sends either.
     resources: SandboxResourcesAskSchema.optional(),

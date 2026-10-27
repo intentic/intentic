@@ -114,6 +114,9 @@ export const HISTORY_FILES_WITHOUT_DOCUMENT: readonly StateFile[] = [
 
     // Signs every browser session cookie; carrying it would let the holder mint sessions against the target.
     { path: "session-secret", portability: "identity", note: "Sign in again, the target signs its own sessions." },
+    // Signs the passes members open guarded previews with (auth/previews/preview-guard.ts); the target signs its own, and a
+    // member's browser fetches a fresh pass the next time it opens one.
+    { path: "preview-pass.key", portability: "identity" },
     // The platform's id for this sandbox's row, as its announce last said (system/boot/platform-row.ts): the target is
     // its own row, and learns its own id at its first announce.
     { path: "platform-row.json", portability: "identity", note: "The target learns its own platform id when it first announces." },

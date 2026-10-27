@@ -30,6 +30,7 @@ import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import DeviceConcern from "./health/DeviceConcern.vue";
 import DeviceEnvironment from "./DeviceEnvironment.vue";
+import FenceFact from "../fence/FenceFact.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceOpOutcome from "./runners/DeviceOpOutcome.vue";
 import DeviceVerbLog from "./runners/DeviceVerbLog.vue";
@@ -568,6 +569,9 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                                 )
                             "
                         />
+                    </template>
+                    <template #fact="{ group, row, label }">
+                        <FenceFact :machine="machine" :group="group" :editable="canShip" :row-class="row" :label-class="label" @saved="refetch()" />
                     </template>
                     <!-- The machine's own output, visible while a row works and afterward for as long as its log is being read. -->
                     <template #footer="{ group }">

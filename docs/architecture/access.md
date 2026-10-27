@@ -118,6 +118,15 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
   maintainer's row now carries both lists like anyone's and every turn worked for them keeps to them; the terminal and
   revealing a secret still reach past them, which the panel says, so the limit is a rule for people trusted to operate
   the box. A tool ceiling and a profile stay refused on a maintainer.
+- **The sandbox cannot open its own network fence** (2026-10-27). A sandbox's outbound traffic to private networks is
+  fenced by `ic` on the host ([`egress.ts`](../../_shared/sandbox-contract/src/schemas/egress.ts)), off by default.
+  Tightening it is any maintainer's device op. Loosening it from the editor needs the owner's passkey over the exact
+  change: the daemon is inside the boundary the fence draws, so a rule it could relax by itself would hold nothing
+  against a turn that owns it. The editor signs the change document, the daemon relays it with the owner keys it holds
+  ([`egress/owner-keys.ts`](../../_sandbox/sandbox/src/hosts/egress/owner-keys.ts)), and the machine agent checks the
+  signature against the keys it pinned for the sandbox. An owner with no passkey adds one under Access ▸ Sign-in, or
+  changes the fence on the machine itself with `ic sandbox egress`.
+- **Previews follow the roster** (2026-10-27). With the preview guard on, a pass goes to the owner and to anyone on the roster above a guest, checked when the editor asks for one. A guest reaches its assistants, not the workspace's apps. A pass does not name its holder, so a change that takes someone's previews away replaces the key, and every member's browser fetches a new pass with its next preview. The alternative was netd asking the daemon about each request, which would have put the daemon on the path of every byte a preview loads ([sandbox.md](sandbox.md#the-process)).
 - **No separate assistant record** (2026-10-26). An outward assistant is already a listener automation (persona, `runAs`, sender rules), and an inward one is a persona a profile lists. A third record would have said the same thing twice. Under a guest's own authority the guest's fence still has to hold an assistant's starting folder, so a listed assistant must work in the guest's areas.
 
 ## Key files

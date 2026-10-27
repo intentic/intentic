@@ -14,6 +14,7 @@ import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLink
 import { connect, reachedOverLoopback } from "../device/connection.js";
 import { hostedSlugs, keeperOn, startKeeper } from "../device/sandbox-rounds/keeper.js";
 import { startProbationWatch } from "../device/sandbox-rounds/probation-watch.js";
+import { startEgressFollower } from "../device/egress/follower.js";
 import { readChannelSlugs } from "../device/sandbox-rounds/swap-records.js";
 import { fleet } from "../device/tools/sandboxes.js";
 import { takeOverCommandLedger } from "../device/tools/command-ledger.js";
@@ -309,7 +310,17 @@ const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Con
     const later = supervised ? SUPERVISED_ROUND_DELAY_MS : 0;
     // The device's own upkeep runs everywhere too: each environment holds its own leftovers and stores (upkeep/).
     const upkeep = startUpkeep(log, lease.supervisor);
-    return [watch, keeper, startAutoPrepare(log, { delayMs: later }), startAutoBackup(log, { delayMs: later }), upkeep, startLogRoll(runLogPath, log)];
+    // The egress follower fences a sandbox as docker starts it, while this environment's ic advertises `egress`
+    // (device/egress/follower.ts); the probation watch's minute round is its backstop, where ic reasserts the rules.
+    return [
+        watch,
+        keeper,
+        startAutoPrepare(log, { delayMs: later }),
+        startAutoBackup(log, { delayMs: later }),
+        upkeep,
+        startLogRoll(runLogPath, log),
+        startEgressFollower(log),
+    ];
 };
 
 const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: PidRecord, log: Log): Runtime => {

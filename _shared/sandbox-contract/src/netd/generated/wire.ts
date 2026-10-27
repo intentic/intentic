@@ -33,7 +33,12 @@ frameAncestors: Array<string>,
 /**
  * A preview path Node answers whatever its host resolves to.
  */
-previewProbePath: string, };
+previewProbePath: string, 
+/**
+ * The owner's guard on preview hosts arriving from outside; absent, every preview host is open to anyone with its
+ * address, as before the guard existed (2026-10-27). An older netd ignores it.
+ */
+previewGuard?: PreviewGuard, };
 
 export type NetdAnswer = { "answer": "sync", generations: Array<number | null>, };
 
@@ -52,6 +57,36 @@ export type NetdQuestion = { "question": "sync", dirs: Array<string>, };
  * An answer Node renders whole when asked, for netd to write as it stands: a refusal page, or the probe's report.
  */
 export type Page = { status: number, headers: { [key in string]: string }, body: string, };
+
+/**
+ * Which preview hosts need the sandbox's pass, and how netd checks one (2026-10-27). netd applies it to requests on
+ * the preview port and the tunnel only, never on the machine's loopback port, and never to the outbox (`public-`).
+ * A covered host lets through a pass that verifies (its cookie taken off before the upstream sees it), the probe, a
+ * CORS preflight, and the pass's exchange (handed back to Node); a navigation without a pass is handed back for Node's
+ * page, and anything else is answered 401 by netd itself, without asking Node.
+ */
+export type PreviewGuard = { 
+/**
+ * Panel previews (`preview-<panel>-<id>`) need a pass.
+ */
+panels: boolean, 
+/**
+ * Forwarded ports (`port-<slot>-<id>`) need a pass.
+ */
+ports: boolean, 
+/**
+ * The cookie a pass rides in: `v1.<expiry in unix seconds>.<signature>`, the signature unpadded base64url
+ * HMAC-SHA256 of `v1.<expiry>` under `key`.
+ */
+cookie: string, 
+/**
+ * The HMAC key, as its text's bytes; Node replaces it to end every pass at once.
+ */
+key: string, 
+/**
+ * The path a pass is exchanged on for its cookie, which netd hands back to Node marked `pass`.
+ */
+passPath: string, };
 
 /**
  * What becomes of a preview host's request, decided by Node once, when asked.

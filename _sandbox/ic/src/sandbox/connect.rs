@@ -710,6 +710,9 @@ fn connect(
         }
         ui::note("started without the local shortcut (its port is taken) — this browser reaches the sandbox over its tunnel.");
     }
+    // Its egress rules at once, before it is waited on (sandbox/egress): a machine whose baseline fences every sandbox
+    // fences this one from its first minute, and a replaced sandbox keeps the policy its record holds.
+    crate::sandbox::egress::after_start(&slug);
 
     // No connector container: the sandbox's own entrypoint enables against the hub with the grant below and
     // serves its share from inside. One less container per sandbox, and the token never sits beside the box.

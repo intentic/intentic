@@ -160,6 +160,42 @@ pub fn read(paths: &Paths) -> (Policy, Vec<String>) {
     (policy, said)
 }
 
+/// (2026-10-27) The machine's egress baseline on Intentic OS: the `egress` key of both files, laid over each other in
+/// the same order as the rest of the policy (sandbox/egress/policy.rs `baseline_over` reads each). None on a machine
+/// that is not Intentic OS, whose baseline is ic's own `~/.intentic/egress.json` instead.
+pub fn egress(paths: &Paths) -> Option<(crate::sandbox::egress::policy::Baseline, Vec<String>)> {
+    if !paths.release().exists() {
+        return None;
+    }
+    let mut baseline = crate::sandbox::egress::policy::Baseline::default();
+    let mut said = Vec::new();
+    for path in [paths.policy_defaults(), paths.policy_owner()] {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let name = path.display().to_string();
+        match serde_json::from_str::<Value>(&text) {
+            Ok(value) => {
+                if let Some(layer) = value.get("egress") {
+                    let (next, mut more) =
+                        crate::sandbox::egress::policy::baseline_over(baseline, &name, layer);
+                    baseline = next;
+                    said.append(&mut more);
+                }
+            }
+            // The isolation reading says this file is not JSON; a fence that cannot read the machine's word is the
+            // tightest one rather than none.
+            Err(_) => {
+                baseline.minimum = crate::sandbox::egress::policy::Profile::InternetOnly;
+                said.push(format!(
+                    "{name} is not JSON; egress is held at internet-only until it reads."
+                ));
+            }
+        }
+    }
+    Some((baseline, said))
+}
+
 /// This machine's policy, read once per run, its warnings said once.
 pub fn current() -> Policy {
     static READ: OnceLock<Policy> = OnceLock::new();
@@ -819,6 +855,31 @@ mod tests {
         let (policy, said) = merged(&[layer("owner", json!(["vm"]))]);
         assert_eq!(policy, Policy::default());
         assert_eq!(said.len(), 1);
+    }
+
+    #[test]
+    fn the_egress_baseline_is_read_only_on_intentic_os_and_the_owner_wins() {
+        use crate::sandbox::egress::policy::Profile;
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::under(dir.path());
+        assert_eq!(egress(&paths), None);
+        std::fs::create_dir_all(dir.path().join("usr/lib/intentic-os")).unwrap();
+        std::fs::create_dir_all(dir.path().join("etc/intentic")).unwrap();
+        std::fs::write(paths.release(), "{}").unwrap();
+        std::fs::write(
+            paths.policy_defaults(),
+            r#"{"egress":{"minimum":"internet-only"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            paths.policy_owner(),
+            r#"{"isolation":"vm","egress":{"neverAllow":["10.0.0.0/8"]}}"#,
+        )
+        .unwrap();
+        let (baseline, said) = egress(&paths).unwrap();
+        assert_eq!(baseline.minimum, Profile::InternetOnly);
+        assert_eq!(baseline.never_allow, vec!["10.0.0.0/8".to_string()]);
+        assert!(said.is_empty());
     }
 
     #[test]

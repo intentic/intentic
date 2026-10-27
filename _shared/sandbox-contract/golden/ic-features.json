@@ -5,6 +5,7 @@
     "rollback-to",
     "background-prepare",
     "sleep",
-    "reachable-ways-back"
+    "reachable-ways-back",
+    "egress"
   ]
 }

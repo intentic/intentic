@@ -7,6 +7,8 @@ test(`an action reads as what happened; one this build has no sentence for keeps
     expect(actionTitle(`member.grant`)).toBe(`Access granted`);
     expect(actionTitle(`secret.gate.set`)).toBe(`Secret approver set`);
     expect(actionTitle(`auth.sign_in`)).toBe(`Signed in`);
+    expect(actionTitle(`preview.guard.set`)).toBe(`Preview access changed`);
+    expect(actionIcon(`preview.guard.set`)).toBe(`eye`);
     expect(actionTitle(`secret.rotate`)).toBe(`Secrets · secret.rotate`);
     expect(actionTitle(`weather.change`)).toBe(`weather.change`);
     expect(actionIcon(`capability.add`)).toBe(`sitemap`);

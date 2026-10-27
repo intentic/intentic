@@ -1,15 +1,18 @@
 import type { DeviceFlowLine, DeviceSandboxFlowInput, DeviceSandboxOp } from "@intentic/sandbox-contract/schemas/devices";
+import type { EgressOwnerKeysRead } from "@intentic/sandbox-contract/schemas/egress";
 import { systemContract } from "@intentic/sandbox-contract/contracts/system.contract";
 import { sandboxSlugOf } from "@intentic/sandbox-run";
 import { implement } from "@orpc/server";
 import { askedRestart, fileRestartResume } from "../system/restart-resume.js";
 import type { RestartAction } from "../system/boot/restarts/restart-record.js";
-import { requireMaintainer } from "../auth/owner-gates.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { opt } from "../opt.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
+import { egressOwnerKeys } from "./egress/owner-keys.js";
+import { egressSuggestions } from "./egress/suggestions.js";
+import { isOwnerBearer, requireMaintainer } from "../auth/owner-gates.js";
 import { liveSharedIdentities } from "./host-dedupe.js";
 import { cardlessHosts } from "./host-peer.js";
 
@@ -24,27 +27,53 @@ const STOPPING_ACTION: ReadonlyMap<DeviceSandboxOp, RestartAction> = new Map([
     ["rollback", "swap"],
 ]);
 
+// The owner keys a `set-egress` from this origin will carry, whether the caller is the owner whose passkey can sign a
+// loosening, and the exceptions this sandbox's own cards suggest.
+const egressOwnerKeysRead = async (services: Services, headers: Headers): Promise<EgressOwnerKeysRead> => {
+    const [keys, owner, suggestions] = await Promise.all([
+        egressOwnerKeys(services, headers.get("origin") ?? undefined),
+        isOwnerBearer(services, headers),
+        egressSuggestions(services),
+    ]);
+    return {
+        ...opt("ownerKeys", keys?.ownerKeys),
+        credentials: [...(keys?.credentials ?? [])],
+        owner,
+        slug: sandboxSlugOf(services.config.sandbox.name) ?? "",
+        suggestions,
+    };
+};
+
 /* The `system.*Device*` procedures, implemented where the devices themselves live rather than in system/system.routes.ts. */
 export const createDeviceSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
     // The flow as the machine takes it, field by field: anything only this door reads (`resumeTurns`) stays here.
-    const relayed = (input: DeviceSandboxFlowInput): AsyncGenerator<DeviceFlowLine> =>
-        manageDeviceSandbox(services, input.id, {
-            op: input.op,
-            slug: input.slug,
-            ...(input.hash === undefined ? {} : { hash: input.hash }),
-            // `rollback`'s chosen target, and the code `reconnect`/`create` redeem: dropping either rolled back to the
-            // previous version instead of the one picked, and sent a reconnect with nothing to redeem.
-            ...opt("to", input.to),
-            ...opt("setupCode", input.setupCode),
-            // `set-shape`'s payload: a whole shape and when it takes effect, a closed form the machine spells into
-            // `ic` flags, never a command line.
-            ...(input.shape === undefined ? {} : { shape: input.shape }),
-            ...(input.when === undefined ? {} : { when: input.when }),
-            // The old `reshape` op's delta and its `later`, read for one release from pages older than `set-shape`.
-            ...(input.resources === undefined ? {} : { resources: input.resources }),
-            ...(input.later === true ? { later: true } : {}),
-        });
+    const relayed = (input: DeviceSandboxFlowInput, origin: string | undefined): AsyncGenerator<DeviceFlowLine> =>
+        manageDeviceSandbox(
+            services,
+            input.id,
+            {
+                op: input.op,
+                slug: input.slug,
+                ...(input.hash === undefined ? {} : { hash: input.hash }),
+                // `rollback`'s chosen target, and the code `reconnect`/`create` redeem: dropping either rolled back to the
+                // previous version instead of the one picked, and sent a reconnect with nothing to redeem.
+                ...opt("to", input.to),
+                ...opt("setupCode", input.setupCode),
+                // `set-shape`'s payload: a whole shape and when it takes effect, a closed form the machine spells into
+                // `ic` flags, never a command line.
+                ...(input.shape === undefined ? {} : { shape: input.shape }),
+                ...(input.when === undefined ? {} : { when: input.when }),
+                // The old `reshape` op's delta and its `later`, read for one release from pages older than `set-shape`.
+                ...(input.resources === undefined ? {} : { resources: input.resources }),
+                ...(input.later === true ? { later: true } : {}),
+                // `set-egress`'s whole policy and the owner's passkey over a loosening. Never the caller's owner keys: the
+                // daemon fills its own for the origin the request came from (egress/owner-keys.ts).
+                ...opt("egress", input.egress),
+                ...opt("egressProof", input.egressProof),
+            },
+            { origin },
+        );
     return {
         // The merged fleet view. No maintainer floor: this is what every devices-aware card reads to draw itself, and
         // the doors it leads to carry their own. Beside it, the device keys no card holds, which no row can show and
@@ -85,7 +114,14 @@ export const createDeviceSystemRoutes = (services: Services) => {
                 // An ask left standing by an earlier restart whose refusal nobody stayed to relay is not this one's.
                 await resume.withdraw();
             }
-            yield* restartsThis && input.resumeTurns === true ? askedRestart(resume, Date.now(), relayed(input)) : relayed(input);
+            const origin = context.headers.get("origin") ?? undefined;
+            yield* restartsThis && input.resumeTurns === true ? askedRestart(resume, Date.now(), relayed(input, origin)) : relayed(input, origin);
+        }),
+        // What a loosening of a sandbox's network fence is signed over (egress/owner-keys.ts), with the exceptions this
+        // sandbox's own cards suggest. The same floor as the op it prepares.
+        egressOwnerKeys: i.egressOwnerKeys.handler(async ({ context }) => {
+            await requireMaintainer(services, context.headers, "only a sandbox maintainer can change a sandbox's network fence");
+            return await egressOwnerKeysRead(services, context.headers);
         }),
         // One named CLI action on a connected device (e.g. the Devices tab's Stop-mirroring button).
         // `sync-install` needs no extra gate for its mode: this floor is the same maintainer-equivalent one
