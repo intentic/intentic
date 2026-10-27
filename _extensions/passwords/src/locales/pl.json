@@ -32,6 +32,14 @@
             "lockNow": "Zablokuj",
             "lockedNote": "Nazwy widać także po zablokowaniu. Pokazanie lub skopiowanie hasła wymaga odblokowania."
         },
+        "reset": {
+            "lost": "Zgubiony klucz odzyskiwania?",
+            "ask": "Zacząć Hasła od nowa na tym komputerze?",
+            "saysEmpty": "Hasła nie zawierają jeszcze niczego, więc nic nie przepadnie.",
+            "says": "{count} hasło zostaje odłożone na tym komputerze, nie usunięte, i otworzy się ponownie tylko starym kluczem odzyskiwania. | {count} hasła zostają odłożone na tym komputerze, nie usunięte, i otworzą się ponownie tylko starym kluczem odzyskiwania. | {count} haseł zostaje odłożonych na tym komputerze, nie usuniętych, i otworzy się ponownie tylko starym kluczem odzyskiwania.",
+            "then": "Ten komputer poprosi o zgodę administratora, potem ponownie włączysz Hasła i dostaniesz nowy klucz odzyskiwania.",
+            "confirm": "Zacznij od nowa"
+        },
         "index": {
             "label": "Rodzaje haseł",
             "all": "Wszystkie",
@@ -234,7 +242,7 @@
             "saved": "Zachowałem go w bezpiecznym miejscu",
             "continue": "Dalej",
             "existingTitle": "Hasła są już na tym komputerze",
-            "existingHelp": "Zostały skonfigurowane wcześniej, więc nie ma nowego klucza odzyskiwania: ten pokazany wtedy nadal otwiera Twoje hasła.",
+            "existingHelp": "Zostały skonfigurowane wcześniej, więc nie ma nowego klucza odzyskiwania: ten pokazany wtedy nadal otwiera Twoje hasła. Jeśli go już nie masz, wybierz „Zgubiony klucz odzyskiwania?” przy kłódce.",
             "rememberTitle": "Niech Intentic zapamiętuje hasła, które wpisujesz",
             "rememberHelp": "Zapisują się cicho przy logowaniu, z powiadomieniem do cofnięcia. Agenci nie dostają żadnego, dopóki na to nie pozwolisz.",
             "ready": "Gotowe",

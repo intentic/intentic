@@ -11,4 +11,6 @@ export { linuxServicePaths, linuxServiceInstalled, type LinuxServicePaths } from
 export { currentSid } from "./service/windows/sid-windows.js";
 export { helloHere, NOT_ON_MAC, serviceInstalledHere, servicePlatform, serviceUserId, type ServicePlatform } from "./service/user.js";
 export { asRecoveryKey, newRecoveryKey } from "./service/recovery.js";
+export { NO_SESSION } from "./service/remote.js";
+export { linuxResetScript, setAsideName, windowsResetScript } from "./service/reset.js";
 export { realRunner } from "./run.js";

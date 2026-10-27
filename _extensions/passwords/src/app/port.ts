@@ -232,6 +232,12 @@ export interface PasswordsPort {
     readonly setUp: (options: { readonly hello: boolean }) => Promise<{ readonly recoveryKey?: string | undefined }>;
     readonly unlock: (minutes?: number) => Promise<void>;
     readonly lock: () => Promise<void>;
+    /**
+     * Starts Passwords over for a person who lost the recovery key: an administrator's yes, then the vault set aside on
+     * this computer (never deleted: its old key still opens it) and the computer ready to be set up again. Only where
+     * the vault is (scope "computer").
+     */
+    readonly reset?: (() => Promise<void>) | undefined;
 
     readonly reveal: (name: string, version?: number) => Promise<{ readonly value: string; readonly username?: string | undefined }>;
     /** Put on the clipboard by the keyring itself, and cleared at `clearsAt`. */

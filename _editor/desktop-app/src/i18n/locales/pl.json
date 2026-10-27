@@ -689,6 +689,9 @@
         "repair": "Napraw Hasła",
         "repairing": "Naprawianie Haseł",
         "serviceDown": "Chroniona usługa Haseł na tym komputerze nie odpowiada, więc twoje hasła są teraz niedostępne. Są bezpieczne w jej sejfie. Naprawa ponownie instaluje usługę, gdy to potwierdzisz.",
+        "helperDown": "Hasła są skonfigurowane na tym komputerze, ale teraz nie odpowiadają. Twoje hasła są bezpieczne w sejfie. Ponowne uruchomienie zwykle o nic nie pyta.",
+        "start": "Uruchom Hasła",
+        "starting": "Uruchamianie Haseł",
         "steps": {
             "download": "Pobierz i zweryfikuj nową wersję",
             "consent": "Potwierdź, że to ty",

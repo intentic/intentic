@@ -43,6 +43,17 @@ describe(`vaultOf`, () => {
         expect(vaultOf(ready, `rog`, false)).toMatchObject({ kind: `ready`, locked: true, pendingCaptures: 2, rememberAsked: false, computer: `rog` });
     });
 
+    // Its service installed and the helper in front of it silent: never "turn on", which would read as starting over.
+    it(`offers to start Passwords where its service is installed and its helper does not answer`, () => {
+        const silent: KeyringStatus = { installed: true, running: false, setUp: false, serviceInstalled: true, askpass: { installed: true }, support: { canSetUp: true, hello: true, platform: `windows` } };
+        const status = vaultOf(silent, `rog`, true);
+        if (status.kind !== `unavailable` || status.fix === undefined) {
+            throw new Error(`A silent helper must offer to start it.`);
+        }
+        expect(status.reason).toContain(`isn't answering`);
+        expect(status.fix.label).toBe(`Start Passwords`);
+    });
+
     // Set up, and its service silent: not "turn on", which could only fail, but a repair that says what is happening.
     it(`offers a repair, drawn stage by stage, where the service is installed and does not answer`, () => {
         const silent: KeyringStatus = { installed: true, running: true, setUp: false, serviceDown: true, askpass: { installed: true }, support: { canSetUp: true, hello: true, platform: `windows` } };

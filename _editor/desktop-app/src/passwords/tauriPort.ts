@@ -24,8 +24,10 @@ import {
     keyringList,
     keyringLock,
     keyringRemove,
+    keyringReset,
     keyringSetup,
     keyringShare,
+    keyringStart,
     keyringStatus,
     keyringUnlock,
     keyringUnshare,
@@ -114,6 +116,11 @@ export const vaultOf = (status: KeyringStatus | undefined, computer: string, rem
     // Read before `setUp`, which a silent service cannot say.
     if (status.serviceDown === true) {
         return { kind: `unavailable`, reason: t(`desktop.passwords.serviceDown`), fix: upgradeFix(`repair`, status.support?.platform) };
+    }
+    // Its service installed and the helper in front of it silent: whether it is set up is unknown, and "turn on" would
+    // read as starting over. Starting the helper is the way back, with no prompt unless the service needs repair.
+    if (status.serviceInstalled === true && !status.running) {
+        return { kind: `unavailable`, reason: t(`desktop.passwords.helperDown`), fix: { label: t(`desktop.passwords.start`), doing: t(`desktop.passwords.starting`), run: keyringStart } };
     }
     if (status.setUp && status.state !== undefined) {
         return {
@@ -245,6 +252,9 @@ export const tauriPasswordsPort = (): PasswordsPort => {
         list,
         sandboxes: async () => (await readHere()).links.map((link) => ({ url: link.sandboxUrl, label: sandboxLabel(link.sandboxUrl) })),
         setUp: async ({ hello }) => ({ recoveryKey: (await keyringSetup(hello)).recoveryKey }),
+        reset: async () => {
+            await keyringReset();
+        },
         unlock: (minutes) => keyringUnlock(minutes),
         lock: () => keyringLock(),
         reveal: revealValue,

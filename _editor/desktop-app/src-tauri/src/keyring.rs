@@ -498,6 +498,20 @@ pub async fn keyring_lock() -> CommandResult<String> {
     blocking(|| run_present(plain_args("lock"), None, READ_LIMIT)).await
 }
 
+/// Passwords' session helper started where its protected service is installed (the service repaired, after an
+/// administrator's yes, if it is silent).
+#[tauri::command]
+pub async fn keyring_start() -> CommandResult<String> {
+    blocking(|| run_present(plain_args("start"), None, UPGRADE_LIMIT)).await
+}
+
+/// Passwords started over for a lost recovery key: an administrator's yes, the old vault set aside (never deleted),
+/// and the service left ready for a new setup.
+#[tauri::command]
+pub async fn keyring_reset() -> CommandResult<String> {
+    blocking(|| run_present(plain_args("reset"), None, UPGRADE_LIMIT)).await
+}
+
 /// The keyring's own update: verified download, the person's consent, then the protected service installer. Each stage
 /// the agent reaches is told to the webview as it happens ([`STEP_EVENT`]), so Passwords draws the update's progress
 /// rather than leaving a person watching a button for minutes.

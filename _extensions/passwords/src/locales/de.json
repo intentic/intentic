@@ -32,6 +32,14 @@
             "lockNow": "Sperren",
             "lockedNote": "Namen werden auch im gesperrten Zustand angezeigt. Zum Anzeigen oder Kopieren eines Passworts musst du entsperren."
         },
+        "reset": {
+            "lost": "Wiederherstellungsschlüssel verloren?",
+            "ask": "Passwörter auf diesem Computer neu beginnen?",
+            "saysEmpty": "Passwörter enthält noch nichts, es geht also nichts verloren.",
+            "says": "Das {count} Passwort darin wird auf diesem Computer beiseitegelegt, nicht gelöscht, und öffnet sich nur mit dem alten Wiederherstellungsschlüssel wieder. | Die {count} Passwörter darin werden auf diesem Computer beiseitegelegt, nicht gelöscht, und öffnen sich nur mit dem alten Wiederherstellungsschlüssel wieder.",
+            "then": "Dieser Computer fragt nach der Zustimmung eines Administrators, danach schaltest du Passwörter wieder ein und bekommst einen neuen Wiederherstellungsschlüssel.",
+            "confirm": "Neu beginnen"
+        },
         "index": {
             "label": "Arten von Passwörtern",
             "all": "Alle",
@@ -234,7 +242,7 @@
             "saved": "Ich habe ihn sicher abgelegt",
             "continue": "Weiter",
             "existingTitle": "Passwörter ist auf diesem Computer schon eingerichtet",
-            "existingHelp": "Es wurde schon früher eingerichtet, daher gibt es keinen neuen Wiederherstellungsschlüssel: Der damals angezeigte öffnet deine Passwörter weiterhin.",
+            "existingHelp": "Es wurde schon früher eingerichtet, daher gibt es keinen neuen Wiederherstellungsschlüssel: Der damals angezeigte öffnet deine Passwörter weiterhin. Wenn du ihn nicht mehr hast, wähle „Wiederherstellungsschlüssel verloren?“ beim Schloss.",
             "rememberTitle": "Intentic soll sich die Passwörter merken, die du eingibst",
             "rememberHelp": "Leise beim Anmelden gespeichert, mit einer Meldung zum Rückgängigmachen. Agenten bekommen keine davon, bis du es erlaubst.",
             "ready": "Bereit",

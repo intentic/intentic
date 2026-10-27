@@ -21,7 +21,8 @@ flowchart LR
 intentic-machine is the agent's hands on the computer: it runs the agent's `run_command`, reads files, types. A vault
 key kept in its memory would be one bug in its scope checks away from the agent, and it updates itself on a timer at a
 sandbox maintainer's word. The keyring does only what a vault does, updates only when a person says so
-(`intentic-machine keyring upgrade` asks the running keyring, which asks the person), and trusts no caller on its pipe
+(`intentic-machine keyring upgrade` asks the running keyring, which asks the person; where it has nobody to ask, no
+session helper let in, the administrator's yes the update needs anyway stands for it), and trusts no caller on its pipe
 for who it is. The vault itself is held by a service running as a system account of its own, so no process of the user,
 the agent's own commands included, can read the vault file or the memory that holds its key (see "The protected
 service" below). Every caller on the pipe is a process of the same user, so the pipe is not the boundary; three things
@@ -191,6 +192,15 @@ stored. The vault wraps the vault key under it exactly as it wrapped a passphras
 the field `passphrase`. Asked for in the passphrase box ("Type your recovery key"), it is read without regard to case,
 spaces or dashes, with I, L and O read as 1, 1 and 0; anything else is tried as typed, so a passphrase from before
 still opens a vault it made.
+
+### Starting over
+
+A lost recovery key leaves a vault nobody can open. `intentic-machine keyring reset` (the Passwords app's "Lost your
+recovery key?", offered while locked) asks an administrator's yes and runs `src/service/reset.ts`'s script: the service
+stopped, every file in its vault folder moved into a `set-aside-<time>` folder inside it, the service started with no
+vault. Nothing is deleted, so the old key still opens the set-aside vault if it turns up; setup then makes a new vault
+and a new key. The script is the agent's to run, not a verb of the keyring binary, so a keyring too old to have one can
+still be started over.
 
 ## The type-once box
 

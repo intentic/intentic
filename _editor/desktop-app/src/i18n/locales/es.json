@@ -689,6 +689,9 @@
         "repair": "Reparar Contraseñas",
         "repairing": "Reparando Contraseñas",
         "serviceDown": "El servicio protegido de Contraseñas en este equipo no responde, así que tus contraseñas no están accesibles ahora. Siguen seguras en su bóveda. Reparar reinstala el servicio, tras tu confirmación.",
+        "helperDown": "Contraseñas está configurado en este equipo, pero ahora mismo no responde. Tus contraseñas están a salvo en su almacén. Volver a iniciarlo no suele pedir nada.",
+        "start": "Iniciar Contraseñas",
+        "starting": "Iniciando Contraseñas",
         "steps": {
             "download": "Descargar y verificar la nueva versión",
             "consent": "Confirma que eres tú",

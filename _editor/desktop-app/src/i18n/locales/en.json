@@ -689,6 +689,9 @@
         "repair": "Repair Passwords",
         "repairing": "Repairing Passwords",
         "serviceDown": "Passwords' protected service on this computer isn't answering, so your passwords can't be reached right now. They are safe in its vault. Repairing reinstalls the service, after you confirm.",
+        "helperDown": "Passwords is set up on this computer, but it isn't answering right now. Your passwords are safe in its vault. Starting it again usually needs no prompt.",
+        "start": "Start Passwords",
+        "starting": "Starting Passwords",
         "steps": {
             "download": "Download and verify the new version",
             "consent": "Confirm it's you",

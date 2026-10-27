@@ -1,6 +1,6 @@
 import { NOT_ON_MAC,KeyringUnavailable } from "@intentic/keyring";
 import { supportOf,keyringLine } from "./keyring-status.js";
-import { approvalRefused, elevatedCommand, NEEDS_ADMIN, serviceDown } from "./service.js";
+import { approvalRefused, elevatedCommand, elevatedScriptCommand, NEEDS_ADMIN, nobodyToAsk, serviceDown } from "./service.js";
 
 /* Whether Passwords can be set up here, and how its one administrator's yes is asked: UAC on Windows, pkexec on Linux.
    Neither prompt is shown here. */
@@ -35,6 +35,14 @@ describe("the administrator's yes", () => {
         expect(windows.args.at(-1)).toContain("-WindowStyle Hidden");
     });
 
+    test("runs a script as sh under pkexec, and as PowerShell's encoded command through UAC", () => {
+        expect(elevatedScriptCommand("systemctl stop x", "linux")).toEqual({ command: "pkexec", args: ["sh", "-c", "systemctl stop x"] });
+        const windows = elevatedScriptCommand("Stop-ScheduledTask -TaskName 'x'", "win32").args.at(-1) ?? "";
+        expect(windows).toContain("-Verb RunAs");
+        // Encoded, so no quote in the script can end the outer command's string.
+        expect(windows).toContain(`'-EncodedCommand','${Buffer.from("Stop-ScheduledTask -TaskName 'x'", "utf16le").toString("base64")}'`);
+    });
+
     test("not given reads as such: pkexec's 126 and 127, UAC's cancel", () => {
         expect(approvalRefused(126, "", "linux")).toBe(true);
         expect(approvalRefused(127, "", "linux")).toBe(true);
@@ -55,5 +63,26 @@ describe("a service installed and silent", () => {
         const line = keyringLine({ installed: true, running: true, setUp: false, serviceDown: true });
         expect(line.tone).toBe("fail");
         expect(line.meta).toContain("keyring upgrade");
+    });
+});
+
+describe("an update the keyring cannot ask about", () => {
+    test("is a no that nobody was there to give, which the administrator's yes stands in for", () => {
+        expect(
+            nobodyToAsk({
+                ok: false,
+                refusal: "Nobody could be asked: no passphrase prompt could be shown: nobody is signed in to ask: Passwords' session helper starts at sign-in.",
+            }),
+        ).toBe(true);
+        expect(nobodyToAsk({ ok: false, refusal: "You said no to updating the keyring." })).toBe(false);
+    });
+});
+
+describe("a keyring that does not answer where its service is installed", () => {
+    test("reads as not running and how to start it, never as waiting to be set up", () => {
+        const line = keyringLine({ installed: true, running: false, setUp: false, serviceInstalled: true });
+        expect(line.tone).toBe("fail");
+        expect(line.meta).toContain("keyring start");
+        expect(line.meta).not.toContain("keyring setup");
     });
 });

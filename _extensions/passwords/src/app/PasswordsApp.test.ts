@@ -62,14 +62,15 @@ const NEED: PasswordRequest = {
 
 interface Calls {
     setUp: { hello: boolean }[];
+    resets: number;
     remember: unknown[];
     sources: string[];
     answers: { id: string; answer: KeyringNeedAnswer; options?: { name?: string; value?: string } }[];
     edits: { name: string; patch: PasswordPatch }[];
 }
 
-const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; capabilities?: PasswordsCapabilities; alreadySetUp?: boolean }) => {
-    const calls: Calls = { setUp: [], remember: [], sources: [], answers: [], edits: [] };
+const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; capabilities?: PasswordsCapabilities; alreadySetUp?: boolean; reset?: boolean }) => {
+    const calls: Calls = { setUp: [], resets: 0, remember: [], sources: [], answers: [], edits: [] };
     let status = options.status;
     let requests = options.requests ?? [];
     const settings = { remember: { browser: true, terminal: true, apps: false, phone: false, sandbox: false }, neverSave: [], autoLockMinutes: 15, lockOnSleep: true };
@@ -86,6 +87,13 @@ const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; reques
         },
         unlock: async () => undefined,
         lock: async () => undefined,
+        reset:
+            options.reset === true
+                ? async () => {
+                      calls.resets += 1;
+                      status = { kind: `not-set-up`, canSetUp: true, hello: true, computer: `rog` };
+                  }
+                : undefined,
         reveal: async () => ({ value: `hunter2` }),
         copy: async () => ({ clearsAt: Date.now() + 30_000 }),
         add: async () => ({ name: `NEW` }),
@@ -285,6 +293,40 @@ describe(`PasswordsApp`, () => {
         expect(el.querySelector(`code`)).toBeNull();
         button(el, `Continue`).click();
         await waitFor(() => expect(el.textContent).toContain(`No passwords yet.`));
+    });
+
+    it(`starts over for a lost recovery key, saying what is set aside, then turns on again`, async () => {
+        const { port, calls } = fakePort({ status: { ...READY, locked: true }, items: [GITHUB], reset: true });
+        // The confirm dialog measures itself; the test DOM has no ResizeObserver to do it with.
+        const view = document.defaultView;
+        if (view !== null && !(`ResizeObserver` in view)) {
+            Object.defineProperty(view, `ResizeObserver`, {
+                configurable: true,
+                value: class {
+                    observe(): void {}
+                    unobserve(): void {}
+                    disconnect(): void {}
+                },
+            });
+        }
+        const el = mount(port);
+        await waitFor(() => expect(el.textContent).toContain(`Lost your recovery key?`));
+        button(el, `Lost your recovery key?`).click();
+        await waitFor(() => expect(document.body.textContent).toContain(`Start Passwords over on this computer?`));
+        expect(document.body.textContent).toContain(`The 1 password in it is set aside on this computer, not deleted`);
+        expect(calls.resets).toBe(0);
+        button(document.body, `Start over`).click();
+        await waitFor(() => expect(el.textContent).toContain(`Turn on Passwords`));
+        expect(calls.resets).toBe(1);
+    });
+
+    it(`offers no start-over where the port cannot, or while unlocked`, async () => {
+        const locked = mount(fakePort({ status: { ...READY, locked: true } }).port);
+        await waitFor(() => expect(locked.textContent).toContain(`Names are shown while locked`));
+        expect(locked.textContent).not.toContain(`Lost your recovery key?`);
+        const open = mount(fakePort({ status: { ...READY, locked: false }, reset: true }).port);
+        await waitFor(() => expect(open.textContent).toContain(`Lock`));
+        expect(open.textContent).not.toContain(`Lost your recovery key?`);
     });
 
     it(`says why it cannot be turned on where it cannot`, async () => {

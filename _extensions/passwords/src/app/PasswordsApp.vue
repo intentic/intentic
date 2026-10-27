@@ -1,6 +1,6 @@
 <!-- THE PASSWORDS APP, as any host mounts it with a PasswordsPort: the first run, then an index, a list and a password, with Requests and Settings in the same frame. -->
 <script setup lang="ts">
-import { Button, Icon, messageOr, Modal, Notice, SearchBar, SegmentedControl, SplitView, ui, useNarrow, useNow } from "@intentic/extension-ui";
+import { Button, ConfirmDialog, Icon, messageOr, Modal, Notice, SearchBar, SegmentedControl, SplitView, ui, useNarrow, useNow } from "@intentic/extension-ui";
 import { formatClock } from "@intentic/extension-ui/format";
 import { computed, nextTick, ref, watch } from "vue";
 import { t } from "../i18n.js";
@@ -145,6 +145,25 @@ const toggleLock = async (): Promise<void> => {
     }
 };
 
+/* STARTING OVER, for a lost recovery key: offered while locked, where the port can. What is in the vault is set aside,
+   never deleted, and the first run follows for a new key. */
+const canReset = computed(() => manage.value && port.reset !== undefined && ready.value?.locked === true);
+const confirmReset = ref(false);
+const resetting = ref(false);
+const resetSays = computed(() => (items.value.length === 0 ? t(`app.reset.saysEmpty`) : t(`app.reset.says`, { count: items.value.length }, items.value.length)));
+const startOver = async (): Promise<void> => {
+    resetting.value = true;
+    try {
+        await port.reset?.();
+    } catch (failure) {
+        lockError.value = messageOr(failure, t(`app.error.act`));
+    } finally {
+        confirmReset.value = false;
+        resetting.value = false;
+        await state.load();
+    }
+};
+
 /* FIRST RUN: shown while the vault is not set up, and kept through its later steps after it is. */
 const firstRun = ref(false);
 watch(
@@ -279,7 +298,10 @@ watch(item, async (found) => {
                     {{ t(`app.remember.strip`) }}
                     <template #actions><Button tier="accent" size="small" :label="t(`app.remember.turnOn`)" @click="rememberAll()" /></template>
                 </Notice>
-                <p v-if="ready?.locked" class="text-xs text-muted">{{ t(`app.lock.lockedNote`) }}</p>
+                <p v-if="ready?.locked" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                    <span>{{ t(`app.lock.lockedNote`) }}</span>
+                    <button v-if="canReset" type="button" :class="ui.textButton({ tone: `quiet` })" @click="confirmReset = true">{{ t(`app.reset.lost`) }}</button>
+                </p>
             </template>
 
             <template #compact>
@@ -323,6 +345,16 @@ watch(item, async (found) => {
         <Modal v-model:open="creating" size="md" :header="t(`app.edit.newTitle`)" :description="t(`app.edit.newDescription`)">
             <PasswordEditor v-if="creating" :port="port" @saved="saved" @cancel="creating = false" />
         </Modal>
+
+        <ConfirmDialog
+            :open="confirmReset"
+            :header="t(`app.reset.ask`)"
+            :description="`${resetSays} ${t(`app.reset.then`)}`"
+            :confirm-label="t(`app.reset.confirm`)"
+            :loading="resetting"
+            @cancel="confirmReset = false"
+            @confirm="startOver()"
+        />
 
         <ToastStack :toasts="toasts" :port="port" @dismiss="state.dismissToast" @view="view" @undone="state.load()" />
     </div>

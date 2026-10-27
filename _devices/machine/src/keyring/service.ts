@@ -6,7 +6,21 @@ import { repoRoot } from "@intentic/constants/node";
 import { errorMessage } from "@intentic/base/errors";
 import { renameOver } from "@intentic/base/fs";
 import { runBounded } from "@intentic/base/process";
-import { askKeyring, keyringPaths, type KeyringResponse, KeyringUnavailable, realRunner, serviceInstalledHere } from "@intentic/keyring";
+import {
+    askKeyring,
+    keyringPaths,
+    type KeyringResponse,
+    KeyringUnavailable,
+    linuxResetScript,
+    linuxServicePaths,
+    NO_SESSION,
+    realRunner,
+    serviceInstalledHere,
+    serviceUserId,
+    setAsideName,
+    windowsResetScript,
+    windowsServicePaths,
+} from "@intentic/keyring";
 import { type AutostartKind, autostart, type CliLauncher, explain, livePid, type Log, spawnDetached, stopProcess } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import type { KeyringRefusalCode } from "@intentic/sandbox-contract/schemas/keyring";
@@ -215,9 +229,28 @@ export const elevatedCommand = (args: readonly string[], platform: NodeJS.Platfo
 export const approvalRefused = (exitCode: number | null, said: string, platform: NodeJS.Platform = process.platform): boolean =>
     platform === "win32" ? /canceled by the user/iu.test(said) : exitCode === 126 || exitCode === 127;
 
-/** The keyring binary run as an administrator, through the one prompt the system shows for it. */
-const runElevated = async (args: readonly string[]): Promise<void> => {
-    const elevated = elevatedCommand(args);
+/**
+ * A script of the keyring package's run as an administrator, through the one prompt the system shows for it: Windows
+ * PowerShell started elevated with the script encoded (UTF-16LE base64, as -EncodedCommand takes it), or sh under
+ * pkexec. Used where the keyring binary on this computer may be too old to have the verb itself. Pure.
+ */
+export const elevatedScriptCommand = (script: string, platform: NodeJS.Platform = process.platform): { readonly command: string; readonly args: readonly string[] } =>
+    platform === "win32"
+        ? {
+              command: "powershell.exe",
+              args: [
+                  "-NoProfile",
+                  "-NonInteractive",
+                  "-WindowStyle",
+                  "Hidden",
+                  "-Command",
+                  `$p = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-NonInteractive','-WindowStyle','Hidden','-EncodedCommand',${psQuoted(Buffer.from(script, "utf16le").toString("base64"))} -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`,
+              ],
+          }
+        : { command: "pkexec", args: ["sh", "-c", script] };
+
+/** `elevated` run, its failure read as the administrator's yes not given or as `what` not finishing. */
+const runAsAdministrator = async (elevated: { readonly command: string; readonly args: readonly string[] }, what: string): Promise<void> => {
     const result = await runBounded(elevated.command, elevated.args, { timeoutMs: ELEVATED_TIMEOUT_MS });
     if (result.spawnError !== undefined) {
         throw new KeyringCliError("declined", `${NEEDS_ADMIN} (${elevated.command} could not be started: ${errorMessage(result.spawnError)})`);
@@ -227,11 +260,13 @@ const runElevated = async (args: readonly string[]): Promise<void> => {
         if (approvalRefused(result.exitCode, said)) {
             throw new KeyringCliError("declined", NEEDS_ADMIN);
         }
-        throw new KeyringCliError(
-            "failed",
-            `\`intentic-keyring ${args.join(" ")}\` did not finish (exit ${String(result.exitCode)})${said === "" ? "" : `: ${said}`}. Its log is ${keyringPaths().log}.`,
-        );
+        throw new KeyringCliError("failed", `${what} did not finish (exit ${String(result.exitCode)})${said === "" ? "" : `: ${said}`}. Its log is ${keyringPaths().log}.`);
     }
+};
+
+/** The keyring binary run as an administrator, through the one prompt the system shows for it. */
+const runElevated = async (args: readonly string[]): Promise<void> => {
+    await runAsAdministrator(elevatedCommand(args), `\`intentic-keyring ${args.join(" ")}\``);
 };
 
 // ---- running it ----
@@ -267,6 +302,9 @@ export const startKeyring = async (log: Log): Promise<{ readonly autostart: Auto
     }
     return { autostart: kind, state: came };
 };
+
+/** Whether the keyring's no was that nobody could be asked: no session helper the service has let in. Pure. */
+export const nobodyToAsk = (answer: { readonly ok: false; readonly refusal: string }): boolean => answer.refusal.includes(NO_SESSION);
 
 /** What a session helper answers while the service behind it has published no door: it runs, and nothing can reach it. */
 export const serviceDown = (state: KeyringStateAnswer | KeyringUnavailable): boolean => !(state instanceof KeyringUnavailable) && !state.ok && state.code === "no-keyring";
@@ -362,9 +400,15 @@ export const upgradeKeyring = async (version: string, log: Log, step: StepReport
         log("Asking the keyring, which asks you, before anything is replaced…");
         const consent = await askKeyring({ address: keyringPaths().address }, { op: "consent-upgrade", version });
         if (!consent.ok) {
-            // allow(silent-catch): the person's no is the answer; a download left behind is swept by the next one
-            await rm(staged, { force: true }).catch(() => undefined);
-            return consent;
+            if (nobodyToAsk(consent) && (await serviceHere())) {
+                // No proven session helper (its sign-in proof turned down or never seen): the keyring cannot ask, and
+                // waiting for it would keep the fix for that from ever landing. The administrator's yes below stands.
+                log("The keyring has nobody at this computer to ask, so the administrator's yes stands for its own.");
+            } else {
+                // allow(silent-catch): the person's no is the answer; a download left behind is swept by the next one
+                await rm(staged, { force: true }).catch(() => undefined);
+                return consent;
+            }
         }
     }
     step("install");
@@ -435,6 +479,32 @@ export const ensureService = async (log: Log): Promise<{ readonly autostart: Aut
         throw new KeyringCliError("no-keyring", SERVICE_SILENT);
     }
     return { ...running, state, installedNow: true };
+};
+
+// ---- starting over ----
+
+/**
+ * Passwords started over on this computer, for a person who lost the recovery key: an administrator's yes, then the
+ * service's vault set aside inside its own folder (never deleted: its old recovery key still opens it) and the service
+ * started with none, ready for `keyring setup` to make a new vault and a new key. Answers where the old one went.
+ */
+export const resetKeyring = async (log: Log, at: Date = new Date()): Promise<{ readonly setAside: string; readonly state: KeyringStateAnswer }> => {
+    if (!(await serviceHere())) {
+        throw new KeyringCliError("no-keyring", "Passwords' protected service is not installed on this computer, so there is nothing to start over from.");
+    }
+    const id = await serviceUserId(realRunner);
+    const aside = setAsideName(at);
+    const plan =
+        process.platform === "win32"
+            ? { script: windowsResetScript(windowsServicePaths(id), aside), setAside: join(windowsServicePaths(id).vaultDir, aside) }
+            : { script: linuxResetScript(linuxServicePaths(id), aside), setAside: `${linuxServicePaths(id).vaultDir}/${aside}` };
+    log("Asking for an administrator's yes to set the vault aside and start Passwords over…");
+    await runAsAdministrator(elevatedScriptCommand(plan.script), "Starting Passwords over");
+    const state = await awaitService((await startKeyring(log)).state);
+    if (state === undefined) {
+        throw new KeyringCliError("no-keyring", SERVICE_SILENT);
+    }
+    return { setAside: plan.setAside, state };
 };
 
 // ---- uninstall ----

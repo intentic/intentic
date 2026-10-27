@@ -48,6 +48,8 @@
         "allow-keyring-unlock",
         "allow-keyring-lock",
         "allow-keyring-upgrade",
+        "allow-keyring-start",
+        "allow-keyring-reset",
         "allow-keyring-app",
         "allow-workspace-open",
         "allow-local-sandbox-open",

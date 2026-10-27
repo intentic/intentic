@@ -221,6 +221,8 @@ pub fn run() {
             keyring::keyring_unlock,
             keyring::keyring_lock,
             keyring::keyring_upgrade,
+            keyring::keyring_start,
+            keyring::keyring_reset,
             keyring::keyring_app,
             commands::workspace_open,
             machine_face::local_sandbox_open,

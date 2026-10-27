@@ -32,6 +32,14 @@
             "lockNow": "Bloquear",
             "lockedNote": "Los nombres se muestran con el bloqueo activo. Para ver o copiar una contraseña tienes que desbloquear."
         },
+        "reset": {
+            "lost": "¿Perdiste tu clave de recuperación?",
+            "ask": "¿Empezar de nuevo con Contraseñas en este equipo?",
+            "saysEmpty": "Contraseñas aún no tiene nada, así que no se pierde nada.",
+            "says": "La {count} contraseña que contiene se aparta en este equipo, no se borra, y solo se vuelve a abrir con la clave de recuperación anterior. | Las {count} contraseñas que contiene se apartan en este equipo, no se borran, y solo se vuelven a abrir con la clave de recuperación anterior.",
+            "then": "Este equipo pide la aprobación de un administrador; después vuelves a activar Contraseñas y recibes una clave de recuperación nueva.",
+            "confirm": "Empezar de nuevo"
+        },
         "index": {
             "label": "Tipos de contraseñas",
             "all": "Todas",
@@ -234,7 +242,7 @@
             "saved": "La he guardado en un sitio seguro",
             "continue": "Continuar",
             "existingTitle": "Contraseñas ya está en este equipo",
-            "existingHelp": "Se configuró antes, así que no hay una clave de recuperación nueva: la que se mostró entonces sigue abriendo tus contraseñas.",
+            "existingHelp": "Se configuró antes, así que no hay una clave de recuperación nueva: la que se mostró entonces sigue abriendo tus contraseñas. Si ya no la tienes, elige «¿Perdiste tu clave de recuperación?» junto al candado.",
             "rememberTitle": "Dejar que Intentic recuerde las contraseñas que escribes",
             "rememberHelp": "Se guardan en silencio al iniciar sesión, con un aviso para deshacer. Los agentes no reciben ninguna hasta que tú lo digas.",
             "ready": "Listo",

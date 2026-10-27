@@ -32,6 +32,14 @@
             "lockNow": "Verrouiller",
             "lockedNote": "Les noms restent visibles verrouillé. Afficher ou copier un mot de passe demande de déverrouiller."
         },
+        "reset": {
+            "lost": "Clé de récupération perdue ?",
+            "ask": "Recommencer Mots de passe sur cet ordinateur ?",
+            "saysEmpty": "Mots de passe ne contient encore rien, rien n'est donc perdu.",
+            "says": "Le {count} mot de passe qu'il contient est mis de côté sur cet ordinateur, pas supprimé, et ne s'ouvre à nouveau qu'avec l'ancienne clé de récupération. | Les {count} mots de passe qu'il contient sont mis de côté sur cet ordinateur, pas supprimés, et ne s'ouvrent à nouveau qu'avec l'ancienne clé de récupération.",
+            "then": "Cet ordinateur demande l'accord d'un administrateur, puis vous réactivez Mots de passe et obtenez une nouvelle clé de récupération.",
+            "confirm": "Recommencer"
+        },
         "index": {
             "label": "Types de mots de passe",
             "all": "Tous",
@@ -234,7 +242,7 @@
             "saved": "Je l'ai mise en lieu sûr",
             "continue": "Continuer",
             "existingTitle": "Mots de passe est déjà sur cet ordinateur",
-            "existingHelp": "Il a été configuré auparavant, il n'y a donc pas de nouvelle clé de récupération : celle affichée alors ouvre toujours vos mots de passe.",
+            "existingHelp": "Il a été configuré auparavant, il n'y a donc pas de nouvelle clé de récupération : celle affichée alors ouvre toujours vos mots de passe. Si vous ne l'avez plus, choisissez « Clé de récupération perdue ? » à côté du verrou.",
             "rememberTitle": "Laisser Intentic mémoriser les mots de passe que vous saisissez",
             "rememberHelp": "Enregistrés discrètement en vous connectant, avec un avis pour annuler. Les agents n'en reçoivent aucun tant que vous ne l'autorisez pas.",
             "ready": "Prêt",

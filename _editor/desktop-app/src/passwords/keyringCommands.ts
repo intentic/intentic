@@ -24,6 +24,8 @@ export interface KeyringStatus {
     readonly askpass: { readonly installed: boolean; readonly path?: string };
     /** Passwords' protected service is installed and its helper runs, but the service does not answer: nothing reaches the vault. */
     readonly serviceDown?: boolean;
+    /** Passwords' protected service is installed and its session helper did not answer: set up or not is unknown. */
+    readonly serviceInstalled?: boolean;
     /** Whether this computer can keep a protected vault, and how it unlocks. Absent from an agent older than 2026-10-19. */
     readonly support?: { readonly canSetUp: boolean; readonly why?: string; readonly hello: boolean; readonly platform: `windows` | `linux` | `darwin` };
 }
@@ -186,6 +188,12 @@ export const keyringUnlock = async (minutes?: number): Promise<void> => {
 export const keyringLock = async (): Promise<void> => {
     keyringAnswer<KeyringLine>(await invoke<string>(`keyring_lock`));
 };
+/** Passwords' session helper started where its service is installed: what a helper that stopped answering needs. */
+export const keyringStart = async (): Promise<void> => {
+    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_start`));
+};
+/** Passwords started over for a lost recovery key: the old vault set aside, never deleted; answers where it went. */
+export const keyringReset = async (): Promise<string> => keyringAnswer<KeyringLine & { setAside: string }>(await invoke<string>(`keyring_reset`)).setAside;
 /** The stages `keyring upgrade` reports as it reaches them (keyring.rs `UPGRADE_STEPS`), in order. */
 export const UPGRADE_STEPS = [`download`, `consent`, `install`, `start`] as const;
 export type UpgradeStep = (typeof UPGRADE_STEPS)[number];

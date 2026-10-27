@@ -9,6 +9,7 @@ import { readLinks } from "../device/config.js";
 import { MACHINE_VERSION } from "../version.js";
 import { keyringAnswer } from "./answer.js";
 import { askpassStatus, installAskpass, uninstallAskpass, type AskpassInstalled } from "./askpass.js";
+import { json, type JsonFlags, lifecycleCommands } from "./lifecycle-commands.js";
 import {
     type AddFlags,
     addPlan,
@@ -25,10 +26,8 @@ import {
 } from "./flags.js";
 import { readConfirmed, readStdin } from "./secret-input.js";
 import { type AskpassAnswer, clock, keyringLine, keyringStatusLine, readAskpassAnswer, readKeyringStatus, supportOf } from "./keyring-status.js";
-import { ensureService, installKeyring, keyringState, type StepReport, uninstallKeyring, upgradeKeyring } from "./service.js";
+import { ensureService, installKeyring, keyringState } from "./service.js";
 import { appCommands } from "./app-commands.js";
-import { uninstallGitHelper } from "./git-helper.js";
-import { uninstallNativeHost } from "./native-host-install.js";
 
 /* `intentic-machine keyring …`: intentic-keyring on this computer, set up, kept and asked from a terminal, and from the
    desktop app, which runs these with --json (answer.ts). A value or a passphrase is never an argument: it is typed with
@@ -39,13 +38,9 @@ import { uninstallNativeHost } from "./native-host-install.js";
 // The keyring's pipe, read at each call rather than at load: HOME is what names it, and a test moves HOME.
 const pipe = (): KeyringClientOptions => ({ address: keyringPaths().address });
 
-const json = { kind: "boolean", brief: "Print one JSON line, `ok` first (what the desktop app reads)", default: false } as const;
 
 const NAME = { brief: "The entry's name, as `{{secret:NAME}}` spells it", parse: String, placeholder: "NAME" } as const;
 
-interface JsonFlags {
-    readonly json: boolean;
-}
 
 // The terminal handed to a hidden prompt: the live line stops repainting over it while the person types.
 const prompted = async <T>(ui: Ui, read: () => Promise<T>): Promise<T> => {
@@ -525,54 +520,6 @@ const syncStatus = buildCommand<JsonFlags>({
     },
 });
 
-// ---- upgrade, uninstall ----
-
-// Under --json, each stage of a long change as one line on stderr, `intentic-step {"step":…}`: the desktop app draws
-// them as the steps the person watches (keyring.rs streams stderr), where stdout stays the one answer.
-const stepLine =
-    (cli: CommandContext): StepReport =>
-    (step) => {
-        // allow(terminal-output): the progress line the desktop app reads while the answer is still coming
-        cli.process.stderr.write(`intentic-step ${JSON.stringify({ step })}\n`);
-    };
-
-const upgrade = buildCommand<JsonFlags>({
-    docs: { brief: "Move the keyring to this agent's release, once the running keyring has asked you" },
-    parameters: { flags: { json } },
-    async func(this: CommandContext, flags: JsonFlags) {
-        await keyringAnswer(
-            this,
-            flags.json,
-            { doing: `Updating the keyring to ${MACHINE_VERSION}`, failed: "The keyring was not updated." },
-            async (ui) => await upgradeKeyring(MACHINE_VERSION, ui.note, flags.json ? stepLine(this) : undefined),
-            (result, ui) => ui.done(result.upgraded ? `Updated the keyring from ${result.from} to ${result.to}.` : `The keyring is already on ${result.to}. Nothing to do.`),
-        );
-    },
-});
-
-const uninstall = buildCommand<JsonFlags>({
-    docs: { brief: "Remove the keyring from this computer, keeping its vault" },
-    parameters: { flags: { json } },
-    async func(this: CommandContext, flags: JsonFlags) {
-        await keyringAnswer(
-            this,
-            flags.json,
-            { doing: "Removing the keyring", failed: "The keyring was not removed." },
-            async (ui) => {
-                // ssh, sudo and git must not be left asking a program that is gone, nor a browser starting one.
-                await uninstallAskpass();
-                await uninstallGitHelper();
-                await uninstallNativeHost();
-                return { ok: true as const, ...(await uninstallKeyring(ui.note)) };
-            },
-            (result, ui) => {
-                ui.note(`The vault stays in ${result.vault}: set Passwords up again and the same recovery key opens it.`);
-                ui.done("Removed the keyring from this computer.");
-            },
-        );
-    },
-});
-
 export const keyringCommands = {
     setup,
     status,
@@ -592,6 +539,5 @@ export const keyringCommands = {
     sync: buildRouteMap({ routes: { status: syncStatus }, docs: { brief: "The keyring's sync with your other computers" } }),
     // The Passwords app's verbs (app-commands.ts), what the desktop app calls with one JSON object on stdin.
     app: appCommands,
-    upgrade,
-    uninstall,
+    ...lifecycleCommands,
 };

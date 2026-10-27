@@ -910,7 +910,8 @@ it reaches the pipe.
 | Command | Success output |
 |---|---|
 | `keyring setup [--no-hello]` | `{ "ok": true, "path", "askpass": { "installed", "path"? }, "autostart", "setUp": true, "alreadySetUp", "recoveryKey"?, "state"? }` (`recoveryKey` only when this run made the vault) |
-| `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "askpass": { "installed", "path"? }, "support": { "canSetUp", "why"?, "hello", "platform" } }` |
+| `keyring status` | `{ "ok": true, "installed", "running", "setUp", "state"?, "serviceDown"?, "serviceInstalled"?, "askpass": { "installed", "path"? }, "support": { "canSetUp", "why"?, "hello", "platform" } }` (`serviceInstalled`: the protected service is there and its session helper did not answer, so set up or not is unknown) |
+| `keyring start` | `{ "ok": true, "autostart", "setUp", "state" }`: the session helper started where the service is installed, the service repaired if silent |
 | `keyring unlock [--minutes N]` / `keyring lock` | `{ "ok": true, "unlockedUntil" }` / `{ "ok": true }` |
 | `keyring list` | `{ "ok": true, "entries": [EntryInfo], "backends" }` |
 | `keyring add NAME [--stdin] [rules] [--backend B --ref R [--field F] [--attribute A]] [--replace]` | `{ "ok": true, "name" }` |
@@ -921,7 +922,8 @@ it reaches the pipe.
 | `keyring backend 1password\|bitwarden\|keepassxc [--cli] [--account] [--token-entry] [--password-entry] [--database] [--key-file]` | `{ "ok": true, "backend" }` |
 | `keyring askpass install\|uninstall\|status` | `{ "ok": true, "installed", "path"?, "variables", "file"?, "profile"? }` |
 | `keyring sync status` | `{ "ok": true, "sync": { "key", "peers", "revision" } }` |
-| `keyring upgrade` | `{ "ok": true, "upgraded", "from", "to" }` |
+| `keyring upgrade` | `{ "ok": true, "upgraded", "from", "to" }`. Asks the running keyring first; where it has nobody to ask (no session helper let in), the administrator's yes stands for its own |
+| `keyring reset` | `{ "ok": true, "setAside" }`: Passwords started over for a lost recovery key, after an administrator's yes. The service's vault files move into a `set-aside-<time>` folder beside them (never deleted; the old key still opens them) and `keyring setup` makes a new vault and key |
 | `keyring uninstall` | `{ "ok": true, "removed", "vault", "service" }` |
 
 The rule flags are `--kind password|text`, `--program P`, `--package P`, `--host H`, `--askpass M` (each repeatable;

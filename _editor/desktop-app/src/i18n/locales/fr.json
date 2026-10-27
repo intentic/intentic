@@ -689,6 +689,9 @@
         "repair": "Réparer Mots de passe",
         "repairing": "Réparation de Mots de passe",
         "serviceDown": "Le service protégé de Mots de passe sur cet ordinateur ne répond pas, vos mots de passe sont donc inaccessibles pour l'instant. Ils restent en sécurité dans son coffre. La réparation réinstalle le service, après votre confirmation.",
+        "helperDown": "Mots de passe est configuré sur cet ordinateur, mais ne répond pas pour l'instant. Vos mots de passe sont en sécurité dans son coffre. Le relancer ne demande en général rien.",
+        "start": "Démarrer Mots de passe",
+        "starting": "Démarrage de Mots de passe",
         "steps": {
             "download": "Télécharger et vérifier la nouvelle version",
             "consent": "Confirmez que c'est vous",

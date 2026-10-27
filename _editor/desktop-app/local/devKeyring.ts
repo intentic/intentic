@@ -264,6 +264,15 @@ export const keyringVerb = (command: string, args: InvokeArgs | undefined): stri
                 outdated = false;
                 return undefined;
             });
+        case `keyring_start`:
+            return prompted(() => undefined);
+        case `keyring_reset`:
+            return prompted(() => {
+                setUp = false;
+                locked = true;
+                entries = [];
+                return ok({ setAside: `C:\\ProgramData\\Intentic\\Keyring\\S-1-5-21-1001\\set-aside-2026-10-27T16-07-53Z` });
+            });
         case `keyring_remove`:
             return prompted(() => {
                 entries = entries.filter((entry) => entry.name !== argsOf(args).name);

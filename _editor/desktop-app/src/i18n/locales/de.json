@@ -689,6 +689,9 @@
         "repair": "Passwörter reparieren",
         "repairing": "Passwörter wird repariert",
         "serviceDown": "Der geschützte Dienst von Passwörter auf diesem Computer antwortet nicht, daher sind deine Passwörter gerade nicht erreichbar. Sie liegen sicher in seinem Tresor. Die Reparatur installiert den Dienst neu, nachdem du bestätigst.",
+        "helperDown": "Passwörter ist auf diesem Computer eingerichtet, antwortet aber gerade nicht. Deine Passwörter sind in seinem Tresor sicher. Ein Neustart fragt meist nichts.",
+        "start": "Passwörter starten",
+        "starting": "Passwörter wird gestartet",
         "steps": {
             "download": "Neue Version herunterladen und prüfen",
             "consent": "Bestätige, dass du es bist",

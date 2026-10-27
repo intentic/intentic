@@ -32,6 +32,14 @@
             "lockNow": "Lock",
             "lockedNote": "Names are shown while locked. Showing or copying a password asks you to unlock."
         },
+        "reset": {
+            "lost": "Lost your recovery key?",
+            "ask": "Start Passwords over on this computer?",
+            "saysEmpty": "Passwords has nothing in it yet, so nothing is lost.",
+            "says": "The {count} password in it is set aside on this computer, not deleted, and opens again only with the old recovery key. | The {count} passwords in it are set aside on this computer, not deleted, and open again only with the old recovery key.",
+            "then": "This computer asks for an administrator's approval, then you turn Passwords on again and get a new recovery key.",
+            "confirm": "Start over"
+        },
         "index": {
             "label": "Kinds of passwords",
             "all": "All",
@@ -234,7 +242,7 @@
             "saved": "I've saved it somewhere safe",
             "continue": "Continue",
             "existingTitle": "Passwords is already on this computer",
-            "existingHelp": "It was set up before, so there is no new recovery key: the one shown then still opens your passwords.",
+            "existingHelp": "It was set up before, so there is no new recovery key: the one shown then still opens your passwords. If you no longer have it, choose “Lost your recovery key?” beside the lock.",
             "rememberTitle": "Let Intentic remember the passwords you type",
             "rememberHelp": "Saved quietly as you sign in, with a notice you can undo. Agents get none of them until you say so.",
             "ready": "Ready",
