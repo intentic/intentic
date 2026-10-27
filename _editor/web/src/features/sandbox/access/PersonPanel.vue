@@ -16,8 +16,8 @@ import { usePersonaReach } from "./usePersonaReach";
 import { useT } from "@intentic/ui/i18n";
 
 // ONE PERSON'S ACCESS, opened under their tile: first whether they manage the sandbox (full access, every answer below at
-// once), else whether their conversations run agents, where they see, where they edit by hand, which AI accounts their
-// turns run on and what their agents may spend; and how they sign in. Changes save as they are
+// once), else whether their conversations run agents, where they see and where they edit by hand; then, either way,
+// which AI accounts their turns run on and what their agents may spend; and how they sign in. Changes save as they are
 // made, like a persona's: a run of clicks is one write, and an answer the daemon would refuse (a chat with no area, a
 // narrowed scope with nothing ticked) waits here, said, instead of being sent. Mounted once per person, so a draft never
 // carries from one to the next; one still waiting when the panel closes is sent on its way out.
@@ -155,15 +155,22 @@ const pickSee = (see: string[] | undefined): void => {
 // ACCESS: managing the sandbox is every other answer at once, so it is the first thing asked rather than a switch found
 // after the rest has been set up by hand. The answers below are kept while it is on, so turning it off again gives them back;
 // a person who managed from the start comes down to running agents across the workspace.
+// What their conversations spend is not part of managing: the AI accounts and connections picked carry across either way,
+// so "full access, but only on these accounts" is one switch away from what was just picked. A reach with nothing picked
+// (where a new person starts) is not carried up: nobody choosing full access means "and no connections".
 const beforeManage = ref<AccessDraft>();
 const pickManage = (on: boolean): void => {
+    const { credentials, aiAccounts } = draft.value;
     if (on) {
         beforeManage.value = draft.value;
-        set({ manage: true, profile: undefined });
+        const nothing = credentials !== `all` && credentials.capabilities.length === 0 && credentials.secrets.length === 0;
+        set({ manage: true, profile: undefined, credentials: nothing ? `all` : credentials });
         return;
     }
     const back = beforeManage.value;
-    set(back === undefined ? { manage: false, agents: `run`, see: undefined, edit: `none` } : { ...back, emailSignIn: draft.value.emailSignIn, manage: false });
+    // A profile's own answers come back whole; answers of their own keep what was picked while they managed.
+    const spend = back?.profile === undefined ? { credentials, aiAccounts } : {};
+    set(back === undefined ? { manage: false, agents: `run`, see: undefined, edit: `none` } : { ...back, ...spend, emailSignIn: draft.value.emailSignIn, manage: false });
 };
 
 type Level = `custom` | `full`;
@@ -180,14 +187,16 @@ const LEVELS = computed(() => [
     },
 ]);
 // Full access said in the same words the custom answers use, so the reader sees what it hands over before picking it.
+// What their conversations spend is not in it: those two are still pickers, asked below it.
 const FULL = computed(() => [
     { label: t(`sandbox.sandboxAccess.agentsSection`), value: t(`sandbox.sandboxAccess.fullAgentsValue`) },
     { label: t(`sandbox.sandboxAccess.seeSection`), value: t(`sandbox.sandboxAccess.wholeWorkspace`) },
     { label: t(`sandbox.sandboxAccess.editSection`), value: t(`sandbox.sandboxAccess.editEverything`) },
-    { label: t(`sandbox.sandboxAccess.aiAccountsSection`), value: t(`sandbox.sandboxAccess.reachAll`) },
-    { label: t(`sandbox.sandboxAccess.reachSection`), value: t(`sandbox.sandboxAccess.reachAll`) },
     { label: t(`sandbox.sandboxAccess.fullSettings`), value: t(`sandbox.sandboxAccess.fullSettingsValue`) },
 ]);
+// Whether a full-access person is held to some of what the sandbox spends: said once, since a terminal (part of full
+// access) still reaches the whole box, and whoever grants it should know the limit is a rule for people they trust.
+const fullButLimited = computed(() => draft.value.manage && (draft.value.aiAccounts !== `all` || draft.value.credentials !== `all`));
 
 const PROBLEMS = {
     pickSeeArea: () => t(`sandbox.sandboxAccess.pickSeeArea`),
@@ -253,12 +262,24 @@ const signInId = useId();
             <Picker :model-value="draft.profile ?? ``" :options="profileOptions" variant="input" :aria-label="t(`sandbox.accessProfiles.title`)" @update:model-value="chooseProfile" />
         </Section>
         <ProfileAnswers v-if="chosenProfile && !draft.manage" :profile="chosenProfile" disabled />
-        <dl v-if="draft.manage" class="flex flex-col gap-2">
-            <div v-for="row in FULL" :key="row.label" class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-                <dt class="shrink-0 text-xs text-muted sm:w-44 sm:text-sm">{{ row.label }}</dt>
-                <dd class="text-sm text-content">{{ row.value }}</dd>
-            </div>
-        </dl>
+        <template v-if="draft.manage">
+            <dl class="flex flex-col gap-2">
+                <div v-for="row in FULL" :key="row.label" class="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
+                    <dt class="shrink-0 text-xs text-muted sm:w-44 sm:text-sm">{{ row.label }}</dt>
+                    <dd class="text-sm text-content">{{ row.value }}</dd>
+                </div>
+            </dl>
+
+            <Section :label="t(`sandbox.sandboxAccess.aiAccountsSection`)">
+                <AiAccountsPicker :accounts="draft.aiAccounts" @change="(aiAccounts) => set({ aiAccounts })" />
+            </Section>
+
+            <Section :label="t(`sandbox.sandboxAccess.reachSection`)">
+                <ReachPicker :reach="draft.credentials" @change="(credentials) => set({ credentials })" />
+            </Section>
+
+            <p v-if="fullButLimited" class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.fullLimitNote`) }}</p>
+        </template>
         <template v-else-if="draft.profile === undefined">
             <Section :label="t(`sandbox.sandboxAccess.agentsSection`)">
                 <div class="flex flex-col gap-2">

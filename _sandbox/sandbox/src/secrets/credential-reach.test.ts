@@ -13,8 +13,8 @@ import {
     withinReach,
 } from "./credential-reach.js";
 
-// What a conversation may spend is what every person it works for may: the owner and a maintainer everything, a member
-// their row's reach (absent: everything), anyone the roster no longer names nothing. Read off the conversation's latched
+// What a conversation may spend is what every person it works for may: the owner everything, anyone on the roster (a
+// maintainer included) their row's reach (absent: everything), anyone the roster no longer names nothing. Read off the conversation's latched
 // people and its parents', so a child or a peer message never spends more than the person behind it.
 
 const OWNER = "ada@example.com";
@@ -22,13 +22,21 @@ const roster: Member[] = [
     { email: "bob@example.com", role: "collaborator", credentials: { capabilities: ["github", "reddit"], secrets: ["DATABASE_URL"] } },
     { email: "cy@example.com", role: "collaborator", credentials: { capabilities: ["github"], secrets: [] } },
     { email: "dee@example.com", role: "collaborator" },
-    // A reach left on a maintainer row is not one: that tier reads every credential.
-    { email: "eve@example.com", role: "maintainer", credentials: { capabilities: [], secrets: [] } },
+    { email: "eve@example.com", role: "maintainer" },
+    // Managing the sandbox and spending all of it are separate answers: a maintainer may be held to some of it.
+    { email: "fox@example.com", role: "maintainer", credentials: { capabilities: ["github"], secrets: [] } },
 ];
 
-test("the owner, a maintainer and a member with no reach on their row are not limited", () => {
+test("the owner, and a maintainer or a member with no reach on their row, are not limited", () => {
     expect(reachOfPeople([OWNER], roster, OWNER)).toEqual(REACH_ALL);
     expect(reachOfPeople(["eve@example.com", "dee@example.com"], roster, OWNER)).toEqual(REACH_ALL);
+});
+
+test("a maintainer with a reach on their row spends only that", () => {
+    const reach = reachOfPeople(["fox@example.com"], roster, OWNER);
+    expect(reachAllows(reach, "capability", "github")).toBe(true);
+    expect(reachAllows(reach, "capability", "reddit")).toBe(false);
+    expect(reach).toMatchObject({ kind: "some", who: ["fox@example.com"] });
 });
 
 test("a conversation reaches only what every person in it may, whatever the case of their address", () => {

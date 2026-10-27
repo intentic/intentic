@@ -11,9 +11,10 @@ import { parentOfActor } from "../auth/principal.js";
  *
  * A conversation latches `people` (everyone who asked it for a turn) and `services` (every service a turn ran as), its
  * own and, through its starter, its parents' (conversations/actor/identity-latch.ts). Each turns into one or more limits:
- *   - a person: their roster row. The owner and a maintainer hold every answer; a member what their row says, absent
- *     answers being no limit; someone the roster no longer names nothing at all, since a conversation must not keep
- *     spending for somebody whose access was taken back;
+ *   - a person: their roster row. The owner holds every answer; anyone on the roster what their row says, absent
+ *     answers being no limit (a maintainer runs every tool, but may be held to some AI accounts, connections and
+ *     secrets); someone the roster no longer names nothing at all, since a conversation must not keep spending for
+ *     somebody whose access was taken back;
  *   - a service: its steward, as a person above, and its access profile. A service, steward or profile that no longer
  *     exists reaches nothing, never everything;
  *   - a bound sandbox's organisation: its ceiling on tools and AI accounts, held over every turn, the owner's included.
@@ -85,7 +86,10 @@ export const principalsOf = (entryOf: (id: string) => ChainEntry | undefined, co
     return { people: [...people], services: [...services] };
 };
 
-/** One person's limit off the roster: the owner and a maintainer nothing, a member their row, a stranger everything withheld. */
+/**
+ * One person's limit off the roster: the owner nothing, anyone on it their row (a maintainer with no tool ceiling, since
+ * that tier runs every tool), a stranger everything withheld.
+ */
 export const personLimit = (email: string, roster: readonly Member[], owner: string | undefined): ChainLimit => {
     const address = lower(email);
     if (owner !== undefined && lower(owner) === address) {
@@ -95,14 +99,11 @@ export const personLimit = (email: string, roster: readonly Member[], owner: str
     if (member === undefined) {
         return { who: address, ...NOTHING };
     }
-    if (member.role === "maintainer") {
-        return { who: address, ...EVERYTHING };
-    }
     return {
         who: address,
         credentials: member.credentials ?? "all",
         aiAccounts: member.aiAccounts ?? "all",
-        tools: member.tools,
+        tools: member.role === "maintainer" ? undefined : member.tools,
     };
 };
 

@@ -7385,6 +7385,7 @@
             "fullSettings": "Ustawienia",
             "fullSettingsValue": "Publikuje, zmienia ustawienia i połączenia",
             "fullAgentsValue": "Uruchamia agentów i wdraża pracę",
+            "fullLimitNote": "Każdy agent, którego uruchomią, trzyma się tych limitów. Pełny dostęp obejmuje terminal, który może je obejść.",
             "tipOffTitle": "Tylko podgląd",
             "tipOffNote": "Nie uruchamia agentów",
             "tipChatTitle": "Tylko asystenci",

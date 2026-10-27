@@ -34,7 +34,7 @@ The conversation latches who it acts for as its turns begin ([`identity-latch.ts
 
 | Limit | Comes from |
 | --- | --- |
-| A person | their roster row: the owner and a maintainer every answer, a member what their row says, someone no longer on the roster nothing |
+| A person | their roster row: the owner every answer, anyone on the roster what their row says (a maintainer runs every tool but may be held to some AI accounts, connections and secrets), someone no longer on the roster nothing |
 | A service | its steward, as a person above, intersected with its profile. A service, steward or profile that no longer exists reaches nothing |
 | The organisation | the ceiling a bound sandbox's policy carries, on tools and AI accounts |
 
@@ -111,6 +111,13 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
   word, and a guest's shell polled about two refused reads a second. Gating each surface by hand had already been tried
   (159 places, six treatments, about forty-five phrasings); predicting every refusal from the contract in one place is
   what keeps a new surface from regressing.
+- **Managing is not spending** (2026-10-27). Full access (the maintainer tier) used to refuse any list of AI accounts or
+  credentials, on the grounds that a person who can open a terminal and reveal secrets would hold a line on a screen
+  rather than a boundary. Owners needed people who change every setting, providers included, while their turns run only
+  on the accounts picked for them, and the alternative was a member tier that sees almost none of the sandbox. A
+  maintainer's row now carries both lists like anyone's and every turn worked for them keeps to them; the terminal and
+  revealing a secret still reach past them, which the panel says, so the limit is a rule for people trusted to operate
+  the box. A tool ceiling and a profile stay refused on a maintainer.
 - **No separate assistant record** (2026-10-26). An outward assistant is already a listener automation (persona, `runAs`, sender rules), and an inward one is a persona a profile lists. A third record would have said the same thing twice. Under a guest's own authority the guest's fence still has to hold an assistant's starting folder, so a listed assistant must work in the guest's areas.
 
 ## Key files

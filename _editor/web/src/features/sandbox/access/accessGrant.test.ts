@@ -50,14 +50,17 @@ describe(`draftGrant`, () => {
         });
     });
 
-    // Managing is every other answer at once, and the daemon refuses a fence or a list of credentials on it.
-    it(`sends a manager's tier and sign-in alone`, () => {
+    // Managing is every other answer at once, and the daemon refuses a fence on it; what its conversations spend still
+    // rides along, since someone may manage the sandbox while paying only with some of its accounts.
+    it(`sends a manager's tier, sign-in and what their conversations may spend`, () => {
         expect(
             draftGrant(`mai@example.com`, draft({ manage: true, see: [`web`], credentials: { capabilities: [`github`], secrets: [] }, aiAccounts: [`claude:work`] })),
         ).toEqual({
             email: `mai@example.com`,
             role: `maintainer`,
             emailSignIn: true,
+            credentials: { capabilities: [`github`], secrets: [] },
+            aiAccounts: [`claude:work`],
         });
     });
 });
@@ -108,6 +111,7 @@ describe(`draftProblem`, () => {
         expect(draftProblem(draft({ agents: `run`, aiAccounts: [] }), 0)).toBe(`pickAiAccount`);
         expect(draftProblem(draft({ agents: `off`, aiAccounts: [] }), 0)).toBeUndefined();
         expect(draftProblem(draft({ agents: `run`, aiAccounts: [`claude:work`] }), 0)).toBeUndefined();
+        expect(draftProblem(draft({ manage: true, aiAccounts: [] }), 0)).toBe(`pickAiAccount`);
     });
 });
 
@@ -147,6 +151,12 @@ describe(`profile grants`, () => {
         expect(draftGrant(row.email, { ...draftOf({ ...row, profile: `support` }, row.role), emailSignIn: true })).toEqual({ email: row.email, role: `guest`, profile: `support`, emailSignIn: true });
     });
     it(`never attaches a profile to a maintainer`, () => {
-        expect(draftGrant(`ana@corp.example`, draft({ manage: true, profile: `support` }))).toEqual({ email: `ana@corp.example`, role: `maintainer`, emailSignIn: true });
+        expect(draftGrant(`ana@corp.example`, draft({ manage: true, profile: `support`, credentials: `all` }))).toEqual({
+            email: `ana@corp.example`,
+            role: `maintainer`,
+            emailSignIn: true,
+            credentials: `all`,
+            aiAccounts: `all`,
+        });
     });
 });

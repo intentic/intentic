@@ -63,14 +63,21 @@ export const draftOf = (row: Member | undefined, recorded: GrantedRole): AccessD
     aiAccounts: row?.aiAccounts ?? `all`,
 });
 
-// The daemon's `/members` body. The role is the tier the access makes; a maintainer carries nothing else, since that
-// tier is every other answer. An area list's ABSENCE is the whole workspace, so it is omitted rather than sent empty.
-// Agents and edit are always sent, so the row says what the panel decided instead of what a role used to mean.
+// What a person's conversations spend, as a grant sends it: always said, so the row holds what the panel shows.
+const spendOf = (draft: AccessDraft): Pick<MemberGrant, `credentials` | `aiAccounts`> => ({
+    credentials: draft.credentials === `all` ? `all` : { capabilities: [...draft.credentials.capabilities], secrets: [...draft.credentials.secrets] },
+    aiAccounts: draft.aiAccounts === `all` ? `all` : [...draft.aiAccounts],
+});
+
+// The daemon's `/members` body. The role is the tier the access makes; a maintainer carries only what its conversations
+// may spend besides, since that tier is every other answer. An area list's ABSENCE is the whole workspace, so it is
+// omitted rather than sent empty. Agents and edit are always sent, so the row says what the panel decided instead of
+// what a role used to mean.
 export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
     const role = tierOf(draft);
     const body: MemberGrant = { email, role, emailSignIn: draft.emailSignIn };
     if (draft.manage) {
-        return body;
+        return { ...body, ...spendOf(draft) };
     }
     if (draft.profile !== undefined) {
         body.profile = draft.profile;
@@ -89,18 +96,19 @@ export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
     if (draft.agents === `home` && draft.lands === true) {
         body.lands = true;
     }
-    body.credentials = draft.credentials === `all` ? `all` : { capabilities: [...draft.credentials.capabilities], secrets: [...draft.credentials.secrets] };
-    body.aiAccounts = draft.aiAccounts === `all` ? `all` : [...draft.aiAccounts];
-    return body;
+    return { ...body, ...spendOf(draft) };
 };
 
 // Why the panel holds a draft back instead of saving it, as the key of the line it shows. A guest-like chat needs areas
 // whose assistants it talks to; a narrowed scope with nothing ticked is a fence admitting nothing, which nobody means.
 export type DraftProblem = `pickSeeArea` | `pickEditArea` | `chatNeedsArea` | `chatReachesNobody` | `editOutsideSee` | `pickAiAccount`;
 
+// Agents that may run on no AI account run nothing: held back as a narrowed fence admitting nothing is.
+const noAiAccount = (draft: AccessDraft): boolean => draft.aiAccounts !== `all` && draft.aiAccounts.length === 0;
+
 export const draftProblem = (draft: AccessDraft, reaches: number): DraftProblem | undefined => {
     if (draft.manage) {
-        return undefined;
+        return noAiAccount(draft) ? `pickAiAccount` : undefined;
     }
     if (draft.agents === `chat`) {
         if ((draft.see ?? []).length === 0) {
@@ -114,8 +122,7 @@ export const draftProblem = (draft: AccessDraft, reaches: number): DraftProblem 
     if (draft.edit !== `none` && draft.edit !== `all` && draft.edit.length === 0) {
         return `pickEditArea`;
     }
-    // Agents that may run on no AI account run nothing: held back as a narrowed fence admitting nothing is.
-    if (drivesAgents(draft.agents) && draft.aiAccounts !== `all` && draft.aiAccounts.length === 0) {
+    if (drivesAgents(draft.agents) && noAiAccount(draft)) {
         return `pickAiAccount`;
     }
     return accessRefusal(draft) === undefined ? undefined : `editOutsideSee`;

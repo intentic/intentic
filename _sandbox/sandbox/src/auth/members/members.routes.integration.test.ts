@@ -129,30 +129,46 @@ test("a grant over a roster that cannot be read answers 503 and leaves the file 
 });
 
 // What a person's conversations may spend rides on the grant: `all` lifts a reach, a list sets one, and a re-grade that
-// never mentions it keeps it, so an editor that predates the field can never widen it. A maintainer is refused one.
-test("a grant sets, keeps and lifts what a member's conversations may spend, and a maintainer cannot be limited", async () => {
+// never mentions it keeps it, so an editor that predates the field can never widen it. A maintainer may be held to one
+// too: managing the sandbox and spending all of it are separate answers.
+test("a grant sets, keeps and lifts what a person's conversations may spend, a maintainer's included", async () => {
     const { app, members } = await ownerApp();
     const reach = { capabilities: ["github"], secrets: ["DATABASE_URL"] };
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: reach })).status).toBe(200);
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "viewer" })).status).toBe(200);
     expect(await members.list()).toEqual([{ email: "bob@example.com", role: "viewer", credentials: reach }]);
 
-    const maintainer = await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", credentials: reach });
-    expect(maintainer.status).toBe(400);
-    expect(await maintainer.json()).toEqual({ error: expect.stringContaining("cannot be limited") });
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", credentials: reach })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "maintainer", credentials: reach }]);
 
-    // Graded up to maintainer without naming a reach, the row drops it rather than keeping one nothing enforces.
+    // Graded up to maintainer without naming a reach, the row keeps it: silence never widens what they spend.
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: reach })).status).toBe(200);
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "maintainer" })).status).toBe(200);
-    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "maintainer" }]);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "maintainer", credentials: reach }]);
 
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", credentials: "all" })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "maintainer" }]);
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: reach })).status).toBe(200);
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", credentials: "all" })).status).toBe(200);
     expect(await members.list()).toEqual([{ email: "bob@example.com", role: "collaborator" }]);
 });
 
+// A maintainer still runs every tool and holds its authority as a person, never through a shared profile.
+test("a maintainer is refused a tool ceiling and a profile", async () => {
+    const { app, members } = await ownerApp();
+    const tools = await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", tools: { shell: false } });
+    expect(tools.status).toBe(400);
+    expect(await tools.json()).toEqual({ error: expect.stringContaining("its tools cannot be limited") });
+    const profiled = await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", profile: "interns" });
+    expect(profiled.status).toBe(400);
+    expect(await profiled.json()).toEqual({ error: expect.stringContaining("never through a shared access profile") });
+    expect(await members.list()).toEqual([]);
+});
+
 // Which AI accounts a person's conversations run on rides on the grant the same way: `all` lifts the list, a list sets
-// it, a re-grade that never mentions it keeps it, and a maintainer is refused one. The person's own editor is told it.
-test("a grant sets, keeps and lifts the AI accounts a member runs on, and tells the member", async () => {
+// it, a re-grade that never mentions it keeps it, and a maintainer may hold one, so someone can manage the sandbox (add
+// providers included) while paying only with the accounts they were given. The person's own editor is told it.
+test("a grant sets, keeps and lifts the AI accounts a person runs on, a maintainer's included, and tells them", async () => {
     const { app, members } = await ownerApp();
     const accounts = ["claude:work", "endpoint/my-endpoint"];
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", aiAccounts: accounts })).status).toBe(200);
@@ -168,9 +184,19 @@ test("a grant sets, keeps and lifts the AI accounts a member runs on, and tells 
     );
     expect(await (await self.request("/members/self", { headers: { authorization: "Bearer bob" } })).json()).toMatchObject({ aiAccounts: accounts });
 
-    const maintainer = await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", aiAccounts: accounts });
-    expect(maintainer.status).toBe(400);
-    expect(await maintainer.json()).toEqual({ error: expect.stringContaining("every AI account") });
+    expect((await postJson(app, "/members", { email: "bob@example.com", role: "maintainer", aiAccounts: ["claude:work"] })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bob@example.com", role: "maintainer", aiAccounts: ["claude:work"] }]);
+    const managing = createApp(
+        services({
+            auth: { authorize: async () => proven(`bob@example.com`, `maintainer`), authorizeOwner: async () => undefined },
+            ownerEmail: async () => `ada@example.com`,
+            members,
+        }),
+    );
+    expect(await (await managing.request("/members/self", { headers: { authorization: "Bearer bob" } })).json()).toMatchObject({
+        role: "maintainer",
+        aiAccounts: ["claude:work"],
+    });
 
     expect((await postJson(app, "/members", { email: "bob@example.com", role: "collaborator", aiAccounts: "all" })).status).toBe(200);
     expect(await members.list()).toEqual([{ email: "bob@example.com", role: "collaborator" }]);

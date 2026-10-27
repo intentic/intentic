@@ -60,7 +60,12 @@ under the tiles (as does any tile pressed, or a link with `?open=<email>`), and 
   out is never loaded into their conversations, and every use of it is refused with no approval card that could release
   it. A conversation can use only what every person who has written in it may use. Docker, a VPN, a network disk and a
   local model hold no credential to withhold, so they are listed as always available.
-- **Manage the sandbox**: everything at once (land work, publish, settings, connections), the old Maintainer.
+- **AI accounts**: all, or only the ones ticked: which model accounts pay for their turns. A turn on any other is
+  refused, and the model pickers they see offer only theirs.
+- **Full access** (managing the sandbox): everything at once (land work, publish, settings, adding providers and
+  connections), the old Maintainer. **AI accounts** and **Connections and secrets** stay as pickers under it, so a
+  person can manage everything while their own agents run only on the accounts ticked. Every agent they run keeps to
+  those limits; full access also includes a terminal, which can get around them, so it is for people the owner trusts.
 - **Sign in with an emailed code**: on by default for an address outside Gmail; Google and passkeys always work.
 
 An answer the sandbox would refuse (chatting with no area, a narrowed scope with nothing ticked) waits in the panel as

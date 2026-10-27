@@ -225,14 +225,14 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 // `emailSignIn` lets the platform's identity assertion open this sandbox for them (policy/identity-assertion.ts): true
 // allows it, false takes it back, absent keeps what the row already says, so a re-grade from an editor that predates
 // the field never drops it. `credentials` the same way: `all` lifts a reach, a list sets one, absent keeps the row's,
-// so a re-grade that never mentions it can never widen what a person's conversations may spend. A maintainer is refused
-// a list: that tier reads every credential.
+// so a re-grade that never mentions it can never widen what a person's conversations may spend. A maintainer may hold
+// a list too: managing the sandbox and spending all of it are separate answers (docs/architecture/access.md).
 // `agents` and `edit` decide the rest of the access; absent, the role's own meaning stands, so an editor that predates
 // them still grants what it always did. `lands` is written as sent: absent is no, so a re-grade that never mentions it
 // can never hand a home-only person's agent the authority to land. The role sent must be the tier the access makes (`tierOf`): two answers to one
 // question are refused rather than one of them guessed away. `aiAccounts` reads as `credentials` does: `all` lifts it, a
-// list sets it, absent keeps the row's; a maintainer is refused a list, since the tier runs on every account. `tools` and
-// `assistants` read the same way.
+// list sets it, absent keeps the row's, a maintainer's included. `tools` and `assistants` read the same way, except that
+// a maintainer is refused a tool ceiling, since the tier runs every tool.
 // `profile` names an access profile instead of answering on the row: the daemon writes that profile's answers out on
 // the row and ignores the access fields sent beside it, and the role sent must still be the tier the profile makes.
 // Absent is answers of the row's own, so a re-grade from an editor that predates profiles unlinks the row, keeping

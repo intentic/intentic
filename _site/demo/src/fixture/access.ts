@@ -136,8 +136,8 @@ const answersOf = (
 };
 
 /** Upsert, as both stores do: granting an address that already holds access re-grades it and replaces its fence. A
- *  grant silent about the reach or the AI accounts keeps the row's, `all` lifts it, and a maintainer holds neither
- *  (auth.ts memberRow). */
+ *  grant silent about the reach or the AI accounts keeps the row's and `all` lifts it, a maintainer's included
+ *  (auth/members/member-row.ts). */
 export const grantAccess = (
     email: string,
     role: GrantedRole,
@@ -153,8 +153,8 @@ export const grantAccess = (
     const address = email.toLowerCase();
     const at = index(address);
     const held = at === -1 ? undefined : roster[at];
-    const reach = role === `maintainer` || credentials === `all` ? undefined : (credentials ?? held?.credentials);
-    const aiAccounts = role === `maintainer` || answers.aiAccounts === `all` ? undefined : (answers.aiAccounts ?? held?.aiAccounts);
+    const reach = credentials === `all` ? undefined : (credentials ?? held?.credentials);
+    const aiAccounts = answers.aiAccounts === `all` ? undefined : (answers.aiAccounts ?? held?.aiAccounts);
     const row: DemoMember = {
         email: address,
         role,

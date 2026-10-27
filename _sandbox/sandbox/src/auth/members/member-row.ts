@@ -22,11 +22,11 @@ interface MemberRowDraft {
     profile?: string;
 }
 
-// The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's. A
-// maintainer holds none, whatever the grant or the row before it said: the tier reads every credential, so a reach kept
-// on it would read as a limit nothing enforces, and would come back the day the person is graded down.
+// The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's, whatever the
+// tier: a maintainer's conversations may be held to some connections and secrets too (docs/architecture/access.md), and
+// a re-grade that never mentions it can never widen what they spend.
 const reachOfRow = (grant: MemberGrant, previous: Member | undefined): CredentialReach | undefined => {
-    if (grant.role === "maintainer" || grant.credentials === "all") {
+    if (grant.credentials === "all") {
         return undefined;
     }
     const reach = grant.credentials ?? previous?.credentials;
@@ -34,9 +34,10 @@ const reachOfRow = (grant: MemberGrant, previous: Member | undefined): Credentia
 };
 
 // The AI accounts a grant leaves on the row, by the same rule as the reach above: `all` lifts it, a list replaces it,
-// silence keeps the previous row's, and a maintainer holds none, since the tier runs on every account.
+// silence keeps the previous row's, a maintainer's included, so a person may manage every setting while their turns run
+// only on the accounts they were given.
 const aiAccountsOfRow = (grant: MemberGrant, previous: Member | undefined): string[] | undefined => {
-    if (grant.role === "maintainer" || grant.aiAccounts === "all") {
+    if (grant.aiAccounts === "all") {
         return undefined;
     }
     const kept = grant.aiAccounts ?? previous?.aiAccounts;

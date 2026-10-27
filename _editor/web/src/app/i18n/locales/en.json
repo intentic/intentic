@@ -7951,6 +7951,7 @@
             "fullSettings": "Settings",
             "fullSettingsValue": "Publish, change settings and connections",
             "fullAgentsValue": "Run agents and land work",
+            "fullLimitNote": "Every agent they run keeps to these limits. Full access includes a terminal, which can get around them.",
             "tipOffTitle": "Watch only",
             "tipOffNote": "Can't start agents",
             "tipChatTitle": "Assistants only",

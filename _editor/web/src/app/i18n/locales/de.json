@@ -7951,6 +7951,7 @@
             "fullSettings": "Einstellungen",
             "fullSettingsValue": "Veröffentlichen, Einstellungen und Verbindungen ändern",
             "fullAgentsValue": "Agenten starten und Arbeit landen",
+            "fullLimitNote": "Jeder Agent, den sie starten, hält sich an diese Grenzen. Voller Zugriff umfasst ein Terminal, das sie umgehen kann.",
             "tipOffTitle": "Nur zuschauen",
             "tipOffNote": "Kann keine Agenten starten",
             "tipChatTitle": "Nur Assistenten",

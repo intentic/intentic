@@ -12,6 +12,7 @@ const NOTHING = { credentials: { capabilities: [], secrets: [] }, aiAccounts: []
 const roster: Member[] = [
     { email: "bob@example.com", role: "collaborator", credentials: { capabilities: ["github"], secrets: [] }, aiAccounts: ["claude:work"], tools: { shell: false } },
     { email: "eve@example.com", role: "maintainer" },
+    { email: "fox@example.com", role: "maintainer", credentials: { capabilities: ["github"], secrets: [] }, aiAccounts: ["claude:work"] },
 ];
 
 const profiles: AccessProfile[] = [{ id: "marketing", credentials: { capabilities: ["reddit-work"], secrets: [] }, aiAccounts: ["claude"], tools: { browser: false } }];
@@ -24,9 +25,15 @@ const services: Service[] = [
 ];
 
 describe("personLimit", () => {
-    test("the owner and a maintainer are not limited; a member is their row", () => {
+    test("the owner is not limited; anyone on the roster is their row, a maintainer with no tool ceiling", () => {
         expect(personLimit(OWNER, roster, OWNER)).toEqual({ who: OWNER, credentials: "all", aiAccounts: "all", tools: undefined });
         expect(personLimit("eve@example.com", roster, OWNER)).toEqual({ who: "eve@example.com", credentials: "all", aiAccounts: "all", tools: undefined });
+        expect(personLimit("fox@example.com", roster, OWNER)).toEqual({
+            who: "fox@example.com",
+            credentials: { capabilities: ["github"], secrets: [] },
+            aiAccounts: ["claude:work"],
+            tools: undefined,
+        });
         expect(personLimit("Bob@Example.com", roster, OWNER)).toEqual({
             who: "bob@example.com",
             credentials: { capabilities: ["github"], secrets: [] },

@@ -128,24 +128,20 @@ const areaRefusal = async (services: Pick<Services, "areas">, grant: MemberGrant
     return missing.length === 0 ? undefined : `no such area: ${missing.join(", ")}`;
 };
 
-// A maintainer reads every credential the sandbox holds and operates the box as the owner does, so a list of what its
-// conversations may spend would be a line on a screen rather than a boundary, as a folder fence over it would be. The
-// same holds for the AI accounts it runs on: it connects and disconnects them.
-const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "credentials" | "aiAccounts" | "tools" | "profile">): string | undefined => {
+// A maintainer operates the box as the owner does, which is granted to a person and never through a shared profile, and
+// runs every tool. What its conversations spend is another matter: the AI accounts its turns run on and the connections
+// and secrets its agents use may be narrowed like anyone's (docs/architecture/access.md), so a person can manage every
+// setting while paying only with the accounts they were given. Those lists hold every turn worked for them; a terminal,
+// which a maintainer keeps, still reaches the whole box, so they are a rule for people trusted to operate it.
+const reachRefusal = (grant: Pick<MemberGrantRequest, "role" | "tools" | "profile">): string | undefined => {
     if (grant.role !== "maintainer") {
         return undefined;
     }
     if (grant.profile !== undefined) {
         return "a maintainer holds the owner's operating authority, which is granted to a person and never through a shared access profile";
     }
-    if (grant.credentials !== undefined && grant.credentials !== "all") {
-        return "a maintainer holds the owner's operating authority and reads every credential, so it cannot be limited to some of them";
-    }
-    if (grant.tools !== undefined && grant.tools !== "all") {
-        return "a maintainer holds the owner's operating authority and runs every tool, so its tools cannot be limited";
-    }
-    return grant.aiAccounts !== undefined && grant.aiAccounts !== "all"
-        ? "a maintainer holds the owner's operating authority and manages every AI account, so it cannot be limited to some of them"
+    return grant.tools !== undefined && grant.tools !== "all"
+        ? "a maintainer holds the owner's operating authority and runs every tool, so its tools cannot be limited"
         : undefined;
 };
 

@@ -7951,6 +7951,7 @@
             "fullSettings": "Ajustes",
             "fullSettingsValue": "Publicar, cambiar ajustes y conexiones",
             "fullAgentsValue": "Ejecutar agentes e integrar trabajo",
+            "fullLimitNote": "Cada agente que ejecuten respeta estos límites. El acceso completo incluye una terminal, que puede saltárselos.",
             "tipOffTitle": "Solo mirar",
             "tipOffNote": "No puede iniciar agentes",
             "tipChatTitle": "Solo asistentes",

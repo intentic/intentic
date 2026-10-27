@@ -625,7 +625,7 @@ it(`limits which AI accounts a person's conversations run on`, async () => {
 });
 
 // Managing is every other answer at once, so it is asked first; the panel then says what it hands over rather than
-// drawing controls that would mean nothing.
+// drawing controls that would mean nothing. What their conversations spend is still asked beneath it.
 it(`gives a person full access with the first choice`, async () => {
     withMember(`viewer`);
     setRole.mockResolvedValue({ members: [accepted(`maintainer`)] });
@@ -635,10 +635,41 @@ it(`gives a person full access with the first choice`, async () => {
     await tab(`Full access`, part(`Access`));
     expect(shown()).toContain(`Publish, change settings and connections`);
     expect(hintOf(`Chat with assistants`)).toBeUndefined();
+    expect(hintOf(`All`, part(`AI accounts`))).toContain(`Every AI account`);
+    expect(part(`Connections and secrets`)?.textContent).toContain(`Only these`);
+    expect(shown()).not.toContain(`which can get around them`);
     await autosaved();
 
-    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `maintainer`, emailSignIn: false }]);
+    expect(grantsSent()).toEqual([{ email: `guest@example.com`, role: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: `all` }]);
     expect(setRole).toHaveBeenCalledWith({ sandboxId: `s1`, email: `guest@example.com`, role: `maintainer` });
+});
+
+// Managing the sandbox and paying for every turn are separate answers: someone may change every setting, add providers
+// included, while their own turns run only on the accounts picked for them. The AI accounts picked before carry across.
+it(`gives a person full access on only some AI accounts`, async () => {
+    providerAccounts.value = {
+        ...providerAccounts.value,
+        claude: [
+            { id: `home`, label: `Home`, connectedAt: 0 },
+            { id: `work`, label: `Work`, connectedAt: 1 },
+        ],
+    };
+    try {
+        withMember(`collaborator`);
+        setRole.mockResolvedValue({ members: [accepted(`maintainer`)] });
+        mount();
+        await settle();
+        await openPerson(`guest@example.com`);
+        await tab(`Only these`, part(`AI accounts`));
+        await tickRow(`Work`, part(`AI accounts`));
+        await tab(`Full access`, part(`Access`));
+        expect(shown()).toContain(`which can get around them`);
+        await autosaved();
+
+        expect(grantsSent().at(-1)).toEqual({ email: `guest@example.com`, role: `maintainer`, emailSignIn: false, credentials: `all`, aiAccounts: [`claude:work`] });
+    } finally {
+        providerAccounts.value = { ...providerAccounts.value, claude: [] };
+    }
 });
 
 // With no assistant homed in any area, nobody can be set to chat; that is said once, before any area is tried.
