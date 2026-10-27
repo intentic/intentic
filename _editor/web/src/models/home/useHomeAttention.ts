@@ -1,4 +1,5 @@
-import { onScopeDispose, shallowRef, watch } from "vue";
+import type { SandboxSummary } from "@intentic/api-contract";
+import { computed, onScopeDispose, type Ref, shallowRef, watch } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { onScreen } from "../../workbench/window/onScreen";
@@ -13,31 +14,46 @@ export interface AttentionPace {
     readonly skip?: () => string | undefined;
 }
 
+export interface AttentionSource {
+    readonly sandboxes: Readonly<Ref<readonly SandboxSummary[]>>;
+    readonly activeSandboxId: Readonly<Ref<string | undefined>>;
+    readonly reachable: Readonly<Ref<boolean>>;
+    readonly onScreen: Readonly<Ref<boolean>>;
+    readonly read: (id: string) => Promise<{ readonly needsYou: number }>;
+}
+
+const attentionSource = (): AttentionSource => {
+    const { sandboxes, activeSandboxId, reachable } = useSandbox();
+    return {
+        sandboxes, activeSandboxId, reachable, onScreen,
+        read: (id) => sandboxRpc.agents.attentionMine(undefined, { context: { at: id, background: true } }),
+    };
+};
+
 // What each sandbox holds for its reader, as Home's tiles count it. Mounted by Home's rail and by the sandbox rail's
 // door to Home: unmounting stops the ambient calls to other sandboxes.
-export function useHomeAttention({ everyMs = 15_000, skip = () => undefined }: AttentionPace = {}) {
-    const { sandboxes } = useSandbox();
+export function useHomeAttention({ everyMs = 15_000, skip = () => undefined }: AttentionPace = {}, source: AttentionSource = attentionSource()) {
+    const { sandboxes, activeSandboxId, reachable } = source;
     const readings = shallowRef<ReadonlyMap<string, AttentionReading>>(new Map());
     const pending = new Set<string>();
     let disposed = false;
     const asked = () => switchableSandboxes(sandboxes.value).filter((box) => box.id !== skip());
-    const poll = (): void => {
-        if (!onScreen.value) {
+    const read = (id: string): void => {
+        if (!source.onScreen.value || pending.has(id)) {
             return;
         }
+        pending.add(id);
+        void source.read(id)
+            .then(
+                (answer) => update(id, answer.needsYou),
+                () => update(id, undefined),
+            )
+            .finally(() => pending.delete(id));
+    };
+    const poll = (): void => {
         // The rail's own tiles: a row with no daemon behind it has nobody to ask.
         for (const box of asked()) {
-            if (pending.has(box.id)) {
-                continue;
-            }
-            pending.add(box.id);
-            void sandboxRpc.agents
-                .attentionMine(undefined, { context: { at: box.id, background: true } })
-                .then(
-                    (answer) => update(box.id, answer.needsYou),
-                    () => update(box.id, undefined),
-                )
-                .finally(() => pending.delete(box.id));
+            read(box.id);
         }
     };
     const update = (id: string, count: number | undefined): void => {
@@ -45,11 +61,24 @@ export function useHomeAttention({ everyMs = 15_000, skip = () => undefined }: A
             readings.value = new Map(readings.value).set(id, mergeAttention(readings.value.get(id), count));
         }
     };
-    watch(() => [onScreen.value, asked().map((box) => box.id)], poll, { immediate: true });
+    watch(() => [source.onScreen.value, asked().map((box) => box.id)], poll, { immediate: true });
+    watch(() => [activeSandboxId.value, reachable.value] as const, ([id, online]) => {
+        if (online && asked().some((box) => box.id === id) && id !== undefined) {
+            read(id);
+        }
+    });
     const timer = setInterval(poll, everyMs);
     onScopeDispose(() => {
         disposed = true;
         clearInterval(timer);
     });
-    return readings;
+    return computed(() => {
+        const id = activeSandboxId.value;
+        const previous = id === undefined ? undefined : readings.value.get(id);
+        // The live connection proves this sandbox is awake, even if an attention read from before the wake fails late.
+        // Keep its last count until the refresh answers; other sandboxes still rely on their own polls.
+        return id !== undefined && reachable.value && previous?.unreachable === true
+            ? new Map(readings.value).set(id, { ...previous, unreachable: false })
+            : readings.value;
+    });
 }
