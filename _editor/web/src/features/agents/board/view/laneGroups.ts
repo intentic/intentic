@@ -1,8 +1,8 @@
 import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { computed, type Ref, shallowRef } from "vue";
 import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
-import { ACTIVE_PHASES, activeGroups, type ActivePhase, goesAt } from "../../../../models/fleet/board/activePhase";
-import { type Tray, trayRows } from "../../../../models/fleet/board/childFold";
+import { ACTIVE_PHASES, activeGroups, type ActivePhase, type ActiveReading, ownReading } from "../../../../models/fleet/board/activePhase";
+import { cardKey, type Tray, trayRows } from "../../../../models/fleet/board/childFold";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // THE RUNS OF CARDS A LANE DRAWS, EACH UNDER ITS OWN HEAD. A lane is one run, save Active once it holds more than one
@@ -65,13 +65,16 @@ export interface LaneGroupsHost {
     readonly folds?: Readonly<Ref<ReadonlySet<ActivePhase>>>;
     // The tray under a card (boardTrays), whose rows a range walks too.
     readonly trayFor: (card: FleetAgent) => Tray | undefined;
+    // How each Active card a family rides reads there (childFold.families), by its cardKey; a card absent reads as itself.
+    readonly scope?: { readonly boardFamilies: Readonly<Ref<ReadonlyMap<string, ActiveReading>>> };
 }
 
 export const useLaneGroups = (host: LaneGroupsHost) => {
     const folded = host.folds ?? folds;
+    const readingOf = (card: FleetAgent): ActiveReading => host.scope?.boardFamilies.value.get(cardKey(card)) ?? ownReading(card);
     // Headed only when it holds more than one phase: a lane of one kind needs no heads to say so.
     const active = computed((): readonly LaneGroup[] => {
-        const groups = activeGroups(host.cardsFor(`active`));
+        const groups = activeGroups(host.cardsFor(`active`), (card) => readingOf(card).phase);
         const headed = groups.length > 1;
         const foldable = headed && !host.filtering.value;
         return groups.map(({ phase, cards }) => {
@@ -84,7 +87,7 @@ export const useLaneGroups = (host: LaneGroupsHost) => {
                 rows: phase !== `working`,
                 foldable,
                 folded: shut,
-                goesAt: phase === `next` ? Math.min(...cards.map(goesAt)) : Number.POSITIVE_INFINITY,
+                goesAt: phase === `next` ? Math.min(...cards.map((card) => readingOf(card).goesAt)) : Number.POSITIVE_INFINITY,
             };
         });
     });

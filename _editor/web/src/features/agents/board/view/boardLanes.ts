@@ -11,7 +11,7 @@ import type { DropTarget } from "../laneDrop";
 import { type BoardView, windowedIn } from "./boardView";
 import { useBoardTrays } from "../../../../models/fleet/board/boardTrays";
 import { firstRun } from "./firstScreen";
-import type { ActivePhase } from "../../../../models/fleet/board/activePhase";
+import type { ActivePhase, ActiveReading } from "../../../../models/fleet/board/activePhase";
 import { LANE_ORDER, useLaneGroups } from "./laneGroups";
 
 // What each lane draws and what the board says about it: runs above their lane's cards, Finished capped at its window
@@ -80,6 +80,8 @@ export interface LanesHost {
         readonly boardLanes: Readonly<Ref<Record<FleetLane, FleetAgent[]>>>;
         readonly boardChildren: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
         readonly boardHosts: Readonly<Ref<ReadonlyMap<string, FleetAgent>>>;
+        // How each Active card a family rides reads there (childFold.families), by its cardKey.
+        readonly boardFamilies: Readonly<Ref<ReadonlyMap<string, ActiveReading>>>;
         readonly boardCalls: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
         readonly boardRunRows: Readonly<Ref<readonly WorkflowRun[]>>;
         readonly archivedRunRows: Readonly<Ref<readonly WorkflowRun[]>>;
@@ -158,7 +160,7 @@ export const useBoardLanes = (host: LanesHost) => {
         return filter.active.value ? leadWith(source.filter(answers), filter.exact, trays.childrenOf) : source;
     };
     // Each lane's runs of cards in drawing order (laneGroups.ts), and the order a Shift+click range walks through them.
-    const groups = useLaneGroups({ cardsFor, filtering: filter.active, selected: host.selected, folds: host.folds, trayFor: trays.trayFor });
+    const groups = useLaneGroups({ cardsFor, filtering: filter.active, selected: host.selected, folds: host.folds, trayFor: trays.trayFor, scope });
     // Rows the filter kept, not rows drawn: the archive draws only a page of its matches, and the pager is not the answer.
     const keptIn = (lane: FleetLane): number =>
         (lane === `finished` && view.value.archive ? archiveRows.value.length : cardsFor(lane).length) + runsFor(lane).length;

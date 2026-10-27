@@ -141,6 +141,7 @@ export const useBoardScope = (host: ScopeHost) => {
     const boardChildren = computed(() => folded.value.children);
     const boardHosts = computed(() => folded.value.hosts);
     const boardCalls = computed(() => folded.value.calls);
+    const boardFamilies = computed(() => folded.value.families);
     watch(host.sharedAccess, (shared) => {
         if (!shared) {
             ownerFilter.value = undefined;
@@ -171,6 +172,7 @@ export const useBoardScope = (host: ScopeHost) => {
         boardChildren,
         boardHosts,
         boardCalls,
+        boardFamilies,
         ownerOptions,
         ownerScope,
         scopeOptions,

@@ -4,7 +4,7 @@ import { callsOwner, type FleetLane, laneOf, runCallsOwner } from "../../agent-s
 import { heardByParent, limited, onlyOwnerCanAnswer, unregistered } from "../../agent-status/agentStatus-standing";
 import { subagentLive } from "../subagentRoster";
 import { attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../useAgents-fleet";
-import { activeLaneOrder } from "./activePhase";
+import { type ActiveReading, activeOrderBy, joinReadings, ownReading } from "./activePhase";
 import { parentOf } from "../../agent-status/ownership";
 
 // Fold spawned conversations under their visible parent; callsOwner promotes only reader-owned stops to the parent's lane.
@@ -66,6 +66,9 @@ export interface ChildFold {
     readonly hosts: ReadonlyMap<string, FleetAgent>;
     // The children under each card that call the reader through it (callsOwner), by its cardKey, in the same order.
     readonly calls: ReadonlyMap<string, readonly FleetAgent[]>;
+    // How each Active card a family rides reads there (activePhase.familyReading), by its cardKey: the most urgent work
+    // in the family, its own included where its own standing is Active. A card with no riders reads as itself.
+    readonly families: ReadonlyMap<string, ActiveReading>;
 }
 
 const EMPTY: ReadonlyMap<string, never> = new Map<string, never>();
@@ -82,11 +85,11 @@ const push = <T>(map: Map<string, T[]>, key: string, value: T): void => {
 };
 
 // Where a card lifted by its family sits in the lane it was lifted to, read as that lane's own order would read it: in
-// Attention by its children's newest call, in Active by the start of the earliest work in flight under it.
+// Attention by its children's newest call, in Active by the most urgent work the family holds (joinReadings).
 interface Lift {
     lane: FleetLane;
     calledAt: number;
-    workingSince: number;
+    family: ActiveReading | undefined;
 }
 
 const ordered = (cards: FleetAgent[], order: (a: FleetAgent, b: FleetAgent) => number, probe: (card: FleetAgent) => FleetAgent): FleetAgent[] =>
@@ -106,7 +109,7 @@ const liftWith = (lift: Lift, child: FleetAgent, read: { readonly lane: FleetLan
     return {
         lane: URGENCY[wants] < URGENCY[lift.lane] ? wants : lift.lane,
         calledAt: read.calling ? Math.max(lift.calledAt, child.updatedAt) : lift.calledAt,
-        workingSince: read.lane === `active` && !drafted ? Math.min(lift.workingSince, child.startedAt ?? child.updatedAt) : lift.workingSince,
+        family: wants === `active` ? joinReadings(lift.family, ownReading(child)) : lift.family,
     };
 };
 
@@ -192,43 +195,55 @@ export const foldChildren = (lanes: Lanes, rules: FoldRules = BOARD_RULES): Chil
             if (calling) {
                 push(calls, host, agent);
             }
-            const lift = lifts.get(host) ?? { lane: hostEntry.lane, calledAt: 0, workingSince: Number.POSITIVE_INFINITY };
-            lifts.set(host, liftWith(lift, agent, { lane, calling, heard: heardByParent(agent, parentAt) }));
+            lifts.set(host, liftWith(lifts.get(host) ?? unlifted(hostEntry), agent, { lane, calling, heard: heardByParent(agent, parentAt) }));
         }
     }
     // Nothing rode anywhere, which is most boards: the lanes go on as they came, so nothing downstream recomputes.
     if (hosts.size === 0) {
-        return { lanes, children: EMPTY, hosts: EMPTY, calls: EMPTY };
+        return { lanes, children: EMPTY, hosts: EMPTY, calls: EMPTY, families: EMPTY };
     }
+    return { ...dealFamilies(lanes, hosts, lifts), children, hosts, calls };
+};
+
+// A family's lift before any rider is read in: where its card's own standing put it. A card already in Active by that
+// standing counts its own work in; one lifted there stands for its riders' alone.
+const unlifted = (card: { readonly agent: FleetAgent; readonly lane: FleetLane }): Lift => ({
+    lane: card.lane,
+    calledAt: 0,
+    family: card.lane === `active` ? ownReading(card.agent) : undefined,
+});
+
+// The lanes less every rider, each family's card in the lane its lift asks for. Attention, once a card was lifted into
+// it, is put back in its own order with the lifted card read by its children's newest call; Active, once any family
+// stands in it, by how each card reads there (its family's reading, else its own).
+const dealFamilies = (
+    lanes: Lanes,
+    hosts: ReadonlyMap<string, FleetAgent>,
+    lifts: ReadonlyMap<string, Lift>,
+) => {
     const cards = noLanes();
-    const lifted = new Map<FleetAgent, Lift>();
+    const called = new Map<FleetAgent, number>();
+    const families = new Map<string, ActiveReading>();
     for (const lane of LANES) {
-        for (const agent of lanes[lane]) {
-            const key = cardKey(agent);
-            if (hosts.has(key)) {
-                continue;
+        for (const agent of lanes[lane].filter((card) => !hosts.has(cardKey(card)))) {
+            const lift = lifts.get(cardKey(agent));
+            const dealt = lift?.lane ?? lane;
+            cards[dealt].push(agent);
+            if (dealt === `attention` && lane !== `attention`) {
+                called.set(agent, lift?.calledAt ?? agent.updatedAt);
             }
-            const lift = lifts.get(key);
-            if (lift !== undefined && lift.lane !== lane) {
-                lifted.set(agent, lift);
-                cards[lift.lane].push(agent);
-            } else {
-                cards[lane].push(agent);
+            if (dealt === `active` && lift?.family !== undefined) {
+                families.set(cardKey(agent), lift.family);
             }
         }
     }
-    // A lane a card was lifted into is put back in its own order, the lifted card read by its family's clock.
-    if (lifted.size > 0) {
-        cards.attention = ordered(cards.attention, attentionLaneOrder, (card) => {
-            const lift = lifted.get(card);
-            return lift === undefined ? card : { ...card, updatedAt: lift.calledAt };
-        });
-        cards.active = ordered(cards.active, activeLaneOrder, (card) => {
-            const lift = lifted.get(card);
-            return lift === undefined || !Number.isFinite(lift.workingSince) ? card : { ...card, startedAt: lift.workingSince };
-        });
+    if (called.size > 0) {
+        cards.attention = ordered(cards.attention, attentionLaneOrder, (card) => ({ ...card, updatedAt: called.get(card) ?? card.updatedAt }));
     }
-    return { lanes: cards, children, hosts, calls };
+    if (families.size > 0) {
+        cards.active = [...cards.active].sort(activeOrderBy((card) => families.get(cardKey(card)) ?? ownReading(card)));
+    }
+    return { lanes: cards, families };
 };
 
 const sameMembers = <T>(left: readonly T[] | undefined, right: readonly T[]): boolean =>
@@ -260,12 +275,22 @@ export const steadyFold = (previous: ChildFold | undefined, next: ChildFold): Ch
     const lanesStill = LANES.every((lane) => kept[lane] === previous.lanes[lane]);
     const children = steadyMap(previous.children, next.children);
     const calls = steadyMap(previous.calls, next.calls);
+    // A family can change phase with every card where it was: a child running into a spent allowance moves its parent
+    // from Working to Up next without a card moving lane or tray.
+    const families = sameReadings(previous.families, next.families) ? previous.families : next.families;
     // The same cards in every lane and tray means the same card under each child, so the hosts are the last answer's too.
-    if (lanesStill && children === previous.children && calls === previous.calls) {
+    if (lanesStill && children === previous.children && calls === previous.calls && families === previous.families) {
         return previous;
     }
-    return { lanes: lanesStill ? previous.lanes : kept, children, hosts: next.hosts, calls };
+    return { lanes: lanesStill ? previous.lanes : kept, children, hosts: next.hosts, calls, families };
 };
+
+const sameReadings = (left: ReadonlyMap<string, ActiveReading>, right: ReadonlyMap<string, ActiveReading>): boolean =>
+    left.size === right.size &&
+    [...right].every(([key, reading]) => {
+        const before = left.get(key);
+        return before !== undefined && before.phase === reading.phase && before.startedAt === reading.startedAt && before.goesAt === reading.goesAt;
+    });
 
 // The settled children's fold, in the set of folds a card's tray has open.
 export const FINISHED_FOLD = `finished`;

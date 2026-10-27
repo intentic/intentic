@@ -64,6 +64,7 @@ const boardOf = (
         boardChildren: shallowRef(folded.children),
         boardHosts: shallowRef(folded.hosts),
         boardCalls: shallowRef(folded.calls),
+        boardFamilies: shallowRef(folded.families),
         boardRunRows: shallowRef(over.runs ?? []),
         archivedRunRows: shallowRef(over.archivedRuns ?? []),
         ledgerRunIds: shallowRef<ReadonlySet<string>>(new Set(runIds(runs))),

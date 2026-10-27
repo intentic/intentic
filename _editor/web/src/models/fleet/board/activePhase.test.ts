@@ -1,7 +1,7 @@
 import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
 import { type FleetAgent, laneGroups } from "../useAgents-fleet";
-import { ANY_MOMENT, activeGroups, activePhase, goesAt } from "./activePhase";
-import { foldChildren } from "./childFold";
+import { ANY_MOMENT, activeGroups, activePhase, goesAt, ownReading } from "./activePhase";
+import { cardKey, foldChildren, steadyFold } from "./childFold";
 
 // Pins the Active lane's one order: what is working, newest started first; then what goes by itself, soonest first;
 // then drafts, newest first. A twenty-card lane sorted by "drafts, then turn start" interleaved a draft, a running turn,
@@ -69,6 +69,42 @@ describe(`the Active lane's order`, () => {
         const lane = foldChildren(laneGroups([parent, child, booked(`b`, 9_000), running(`r`, 100)])).lanes.active;
         expect(ids(lane)).toEqual([`p`, `r`, `b`]);
         expect(activePhase(parent)).toBe(`working`);
+    });
+
+    test(`a family whose only work waits on a re-run reads as up next, at the child's re-run`, () => {
+        // The parent idle, its spawned child held on a spent allowance until 9_000 (2026-10-27's screenshot).
+        const parent = card(`p`, { status: `idle`, updatedAt: 500 });
+        const child = { ...resend(`c`, 9_000), startedBy: `agent:p`, updatedAt: 400 };
+        const fold = foldChildren(laneGroups([parent, child, booked(`b`, 5_000), running(`r`, 100)]));
+        const reading = (agent: FleetAgent) => fold.families.get(cardKey(agent)) ?? ownReading(agent);
+        expect(ids(fold.lanes.active)).toEqual([`r`, `b`, `p`]);
+        expect(activeGroups(fold.lanes.active, (agent) => reading(agent).phase).map((group) => [group.phase, ids(group.cards)])).toEqual([
+            [`working`, [`r`]],
+            [`next`, [`b`, `p`]],
+        ]);
+        expect(reading(parent).goesAt).toBe(9_000);
+    });
+
+    test(`a family with any child working reads as working, whatever else in it waits`, () => {
+        const parent = card(`p`, { status: `idle`, updatedAt: 500 });
+        const waiting = { ...resend(`c1`, 9_000), startedBy: `agent:p` };
+        const working = { ...running(`c2`, 300), startedBy: `agent:p` };
+        const fold = foldChildren(laneGroups([parent, waiting, working, running(`r`, 100)]));
+        expect(fold.families.get(`p`)?.phase).toBe(`working`);
+        expect(ids(fold.lanes.active)).toEqual([`p`, `r`]);
+    });
+
+    test(`a card in Active by its own booking reads as working while a child of it runs`, () => {
+        const parent = booked(`p`, 9_000);
+        const fold = foldChildren(laneGroups([parent, { ...running(`c`, 300), startedBy: `agent:p` }]));
+        expect(fold.families.get(`p`)).toEqual({ phase: `working`, startedAt: 300, goesAt: 9_000 });
+    });
+
+    test(`a child running into a spent allowance moves its family's reading though no card moved`, () => {
+        const parent = card(`p`, { status: `idle`, updatedAt: 500 });
+        const before = foldChildren(laneGroups([parent, { ...running(`c`, 300), startedBy: `agent:p` }]));
+        const after = steadyFold(before, foldChildren(laneGroups([parent, { ...resend(`c`, 9_000), startedBy: `agent:p` }])));
+        expect([before.families.get(`p`)?.phase, after.families.get(`p`)?.phase]).toEqual([`working`, `next`]);
     });
 
     test(`goesAt names the soonest instant its corner promises`, () => {
