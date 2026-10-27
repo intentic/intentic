@@ -6,7 +6,7 @@ import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { waitForAnnounce } from "../announce.js";
 import { findIcBinary } from "../ic-binary.js";
 import type { Provisioner, ProvisionContext } from "../provisioner.js";
-import { openRunTab } from "../run-step.js";
+import { NEW_SANDBOX_PATH, openRunTab } from "../run-step.js";
 import { type Completed, freshShellEnv, runTool } from "../shell.js";
 
 // Redeems the wizard's setup code with this checkout's `ic sandbox connect`, the coverage the desktop app and one-liner
@@ -49,7 +49,7 @@ export const icProvisioner = (): Provisioner => {
     // platform into the command only when the api is on loopback.
     const readSetupCode = async (context: ProvisionContext, apiUrl: string): Promise<string> => {
         const { page } = context;
-        // Step 1 is already done (sandbox minted); this waits on the RUN step, rendered behind a fold.
+        // Creates the sandbox from Home's dialog as a command for a server, then opens that command's shell tab.
         await openRunTab(page, /Linux \/ macOS/u, `Linux / macOS`);
 
         await page.getByRole(`button`, { name: `Copy`, exact: true }).first().click();
@@ -130,7 +130,7 @@ export const icProvisioner = (): Provisioner => {
                 throw new Error(`the CLI lane was provisioned without an ic binary or without a world — standDown() did not run`);
             }
 
-            await context.page.goto(`${webUrl}/setup`);
+            await context.page.goto(`${webUrl}${NEW_SANDBOX_PATH}`);
             const code = await readSetupCode(context, apiUrl);
 
             // Stamped before the box is started, so the announce this waits for can only be this run's.

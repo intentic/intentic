@@ -9,13 +9,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ContractRoute } from "@intentic/sandbox-contract/protocol/routes";
 import type { SandboxCallInput, SandboxProcedure } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { build } from "vite";
+import { SECRET_SAMPLES } from "./smoke-secrets.ts";
 
 type Contract = typeof import("@intentic/sandbox-contract") & Pick<typeof import("@intentic/sandbox-contract/protocol/routes"), "requestPathFor">;
 type Daemon = typeof import("../src/daemon.ts");
 type Router = typeof import("../src/daemon/procedures.ts")["procedures"];
 
 // One input per served procedure, as the editor hands it to its client; a handler added without one fails to compile.
-type Samples = { readonly [G in keyof Router]: { readonly [P in keyof Router[G]]: SandboxCallInput<G, P & SandboxProcedure<G>> } };
+export type Samples = { readonly [G in keyof Router]: { readonly [P in keyof Router[G]]: SandboxCallInput<G, P & SandboxProcedure<G>> } };
 
 // What an answer was: parsed by its schema, the fixture's deliberate `{ error }` refusal, or a failure to report.
 type Verdict = { readonly kind: `answered` | `refused` } | { readonly kind: `failed`; readonly why: string };
@@ -417,9 +418,7 @@ const samplesOf = (
             rollup: {},
             refreshPlanLimits: {},
         },
-        secrets: {
-            inventory: undefined,
-        },
+        secrets: SECRET_SAMPLES,
         needs: {
             list: {},
             answer: { id: `need-3m9xd`, answer: { kind: `accept` } },

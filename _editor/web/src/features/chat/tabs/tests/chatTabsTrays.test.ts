@@ -110,9 +110,10 @@ it(`hangs what a chat's conversation started under its card, spawned and in-proc
     await settle();
 
     expect(cards(el)).toContain(`lead`);
+    // Newest started first, as Active orders its working cards (activePhase.ts): map the UI started after port the parser.
     expect(rows(el).map((row) => row.textContent?.replace(/\s+/g, ` `).trim())).toEqual([
-        expect.stringMatching(/^port the parser/),
         expect.stringMatching(/^map the UI/),
+        expect.stringMatching(/^port the parser/),
     ]);
 });
 

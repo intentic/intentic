@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitForAnnounce } from "../announce.js";
 import type { Provisioner, ProvisionContext } from "../provisioner.js";
-import { copyBlockFor, openRunTab } from "../run-step.js";
+import { copyBlockFor, NEW_SANDBOX_PATH, openRunTab } from "../run-step.js";
 import { sh } from "../shell.js";
 
 // Drives the wizard's rendered path end to end (mint, render, claim redemption, container announce), not
@@ -30,10 +30,9 @@ export const composeProvisioner = (): Provisioner => {
         async provision(context) {
             const { page, world } = context;
 
-            await page.goto(`${world.webUrl ?? ``}/setup`);
+            await page.goto(`${world.webUrl ?? ``}${NEW_SANDBOX_PATH}`);
 
-            // Step 1 is already done (sandbox minted); this waits on the RUN step, which the wizard renders behind a
-            // fold.
+            // Creates the sandbox from Home's dialog as a command for a server, then opens that command's compose tab.
             await openRunTab(page, /Docker Compose|^Compose$/u, `Docker Compose`);
 
             const yaml = await copiedText(context, `Add these services to your docker-compose.yml`);

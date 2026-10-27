@@ -130,7 +130,6 @@ export const UNSERVED = {
     "POST /environment/dev-swap-when-idle": REAL_MACHINE,
     "POST /environment/rebuild-when-idle": REAL_MACHINE,
     "POST /environment/reject": REAL_MACHINE,
-    "POST /environment/remove": REAL_MACHINE,
     "POST /environment/runtime-install": REAL_MACHINE,
     "POST /fleet/message": NOT_THE_EDITORS,
     "POST /fleet/resume": NOT_THE_EDITORS,
@@ -409,6 +408,8 @@ export const UNSERVED = {
     "workspace.packageModules": UNFILLED_VIEW,
     "workspace.previewTicket": UNSIMULATED_WRITE,
     "workspace.runTests": UNSIMULATED_WRITE,
+    // The search box streams its first page where it can; on the demo's 404 it asks workspace.search, which is served.
+    "workspace.searchStream": UNFILLED_VIEW,
     "workspace.setup": NOT_THE_EDITORS,
     "workspace.startApp": UNSIMULATED_WRITE,
     "workspace.stopApp": UNSIMULATED_WRITE,

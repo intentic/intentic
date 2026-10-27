@@ -76,6 +76,14 @@ const openTabs = (count: number): string[] => {
 };
 
 const tabs = (): HTMLElement[] => [...strip.querySelectorAll<HTMLElement>(`[data-chat-tab]`)];
+// A card by the chat it draws, never by where it is drawn: Active draws drafts newest first, ties broken by id
+// (activePhase.ts), so the drawn order is not the order openTabs opened them. The sweeps (Close Others, Close to the
+// Right) read the open order, which `ids` is.
+const tabOf = (id: string): HTMLElement => {
+    const found = tabs().find((tab) => tab.getAttribute(`data-chat-tab`) === id);
+    expect(found, `card for ${id}`).toEqual(expect.any(Object));
+    return found!;
+};
 // Cards live in the sheet the header drops, so every test opens it first. Idempotent: the component is mounted
 // once for the whole file, so the sheet survives between tests unless a test closed it.
 const openSheet = async (): Promise<void> => {
@@ -99,8 +107,8 @@ const clickRow = async (label: string): Promise<void> => {
     row(label).querySelector(`a`)!.click();
     await flush();
 };
-const openMenuOn = async (index: number): Promise<void> => {
-    tabs()[index]!.dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+const openMenuOn = async (id: string): Promise<void> => {
+    tabOf(id).dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
     await flush();
 };
 // A right-click that lands on the bar's chrome rather than a card: the no-card-named gesture.
@@ -122,7 +130,7 @@ it(`closes a tab from the × it wears, without selecting it on the way`, async (
     chat.setActive(ids[0]!);
     await nextTick();
 
-    const target = tabs()[2]!.querySelector<HTMLElement>(`[aria-label="Close chat"]`);
+    const target = tabOf(ids[2]!).querySelector<HTMLElement>(`[aria-label="Close chat"]`);
     expect(target).not.toBeNull();
     target!.click();
     await flush();
@@ -139,7 +147,7 @@ it(`closes the card a middle-click lands on, leaving the focus where it was`, as
     chat.setActive(ids[0]!);
     await nextTick();
 
-    tabs()[2]!.dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
+    tabOf(ids[2]!).dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
     await flush();
 
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[1]!]);
@@ -153,7 +161,7 @@ it(`leaves the last open chat alone`, async () => {
     const ids = openTabs(1);
     await nextTick();
 
-    tabs()[0]!.dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
+    tabOf(ids[0]!).dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
     await flush();
 
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
@@ -166,7 +174,7 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     expect(tabs()).toHaveLength(4);
 
     // Right-click the second tab: "Close to the Right" takes the two after it, leaving the first two.
-    await openMenuOn(1);
+    await openMenuOn(ids[1]!);
     expect(labels()).toEqual([
         `Pin`,
         `Rename`,
@@ -185,18 +193,18 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     expect(chat.activeId.value).toBe(ids[1]!);
 
     // Right-click the first tab: "Close Others" keeps that one, not the active one.
-    await openMenuOn(0);
+    await openMenuOn(ids[0]!);
     await clickRow(`Close Others`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
     expect(chat.activeId.value).toBe(ids[0]!);
 });
 
 it(`teaches the shortcut a close command is bound to, and disables the rows with nothing left to take`, async () => {
-    openTabs(2);
+    const ids = openTabs(2);
     await nextTick();
 
     // The last tab: nothing to its right, but there is still an "other" to close.
-    await openMenuOn(1);
+    await openMenuOn(ids[1]!);
     expect(row(`Close Others`).className).not.toContain(`p-disabled`);
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
     // Every row teaches its own chord: rename on the app-wide F2, closes on the shell-wide tab family shared with
@@ -204,8 +212,9 @@ it(`teaches the shortcut a close command is bound to, and disables the rows with
     expect(row(`Rename`).querySelector(`kbd`)?.textContent).toBe(`F2`);
     expect(row(`Close All`).querySelector(`kbd`)?.textContent).toBe(`Ctrl+Shift+Backspace`);
 
+    // The one card left: no other, and nothing to its right.
     await clickRow(`Close Others`);
-    await openMenuOn(0);
+    await openMenuOn(ids[1]!);
     expect(row(`Close Others`).className).toContain(`p-disabled`);
     expect(row(`Close to the Right`).className).toContain(`p-disabled`);
 });
@@ -289,7 +298,7 @@ it(`mass closes past a running agent with no confirm: closing detaches from the 
     runningTurn(chat.conversations.value[1]!.turn);
     await nextTick();
 
-    await openMenuOn(0);
+    await openMenuOn(ids[0]!);
     await clickRow(`Close Others`);
 
     expect(document.querySelector(`.p-dialog`)).toBeNull();
@@ -302,12 +311,12 @@ it(`pins a chat from its menu, and every sweep leaves the pinned one standing`, 
     const ids = openTabs(3);
     await nextTick();
 
-    await openMenuOn(0);
+    await openMenuOn(ids[0]!);
     await clickRow(`Pin`);
     expect(chat.conversations.value[0]!.pinned.value).toBe(true);
-    expect(tabs()[0]!.querySelector(`[aria-label="Pinned"]`)).not.toBeNull();
+    expect(tabOf(ids[0]!).querySelector(`[aria-label="Pinned"]`)).not.toBeNull();
 
-    await openMenuOn(2);
+    await openMenuOn(ids[2]!);
     await clickRow(`Close Others`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[2]!]);
 
@@ -315,7 +324,7 @@ it(`pins a chat from its menu, and every sweep leaves the pinned one standing`, 
     await clickRow(`Close All`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
 
-    await openMenuOn(0);
+    await openMenuOn(ids[0]!);
     expect(labels()).toContain(`Unpin`);
 });
 
@@ -326,7 +335,7 @@ it(`closes a pinned chat from its own Close`, async () => {
     chat.setPinned(ids[0]!, true);
     await nextTick();
 
-    await openMenuOn(0);
+    await openMenuOn(ids[0]!);
     await clickRow(`Close`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1]!]);
 });
@@ -337,7 +346,7 @@ it(`reopens the chat closed last, words and pin included, and disables the row o
     chat.setPinned(ids[0]!, true);
     await nextTick();
 
-    await openMenuOn(0);
+    await openMenuOn(ids[0]!);
     await clickRow(`Close`);
     expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1]!]);
 

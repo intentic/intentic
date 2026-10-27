@@ -4,6 +4,7 @@ import { computed, type ComputedRef, type MaybeRefOrGetter, ref, type Ref, toVal
 import { ACCESS_REQUESTS, SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { sandboxRaw } from "../sandboxRaw";
+import { supportsRoute } from "../useDaemonRoutes";
 import { selfMember } from "../useMembers";
 import { useSandboxQuery } from "../useSandboxQuery";
 import type { AccessReason } from "./accessReason";
@@ -69,12 +70,13 @@ export const useAccessRequest = (): AccessRequest => {
 
 // THE OWNER'S SIDE: every open request, read beside the roster (Access ▸ People) and counted on the sandbox's attention.
 // Only the owner reads them, so `enabled` is the reader's ownership; granting the person anything answers theirs on the
-// daemon, whose push refreshes this read, and dismissing one answers it without a grant.
+// daemon, whose push refreshes this read, and dismissing one answers it without a grant. A daemon from before requests
+// has none to read: asked anyway, every page the owner opened logged a failed read (the compat tier, run 40433162504).
 export const useAccessRequests = (enabled: MaybeRefOrGetter<boolean>) => {
     const { query, loaded } = useSandboxQuery<AccessRequests>({
         queryKey: ACCESS_REQUESTS.of(),
         queryFn: () => sandboxRaw(`GET /members/requests`),
-        enabled: computed(() => toValue(enabled)),
+        enabled: computed(() => toValue(enabled) && supportsRoute(`GET /members/requests`)),
     });
     const dismiss = async (email: string): Promise<void> => {
         queryClient.setQueryData<AccessRequests>(ACCESS_REQUESTS.of(), await sandboxRaw(`DELETE /members/requests`, { input: { email } }));
