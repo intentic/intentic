@@ -55,25 +55,33 @@ const runs = (index: number): boolean =>
 // New or rewritten since the owner agreed: what switching the row on again would accept.
 const waits = (index: number): boolean => entry.changed && entry.checks[index]?.when !== `land` && (entry.held?.[index] ?? true);
 
-type Line = { key: string; when: RepoCheckMoment; run: string; paths: readonly string[]; note: string | undefined; waiting: boolean; dim: boolean };
+type Line = { key: string; run: string; paths: string; note: string | undefined; waiting: boolean; dim: boolean };
+type Group = { when: RepoCheckMoment; lines: Line[]; dim: boolean };
 
-// In the order of their moments, so one moment's checks sit together under a single label.
-const lines = computed((): Line[] =>
-    entry.checks
-        .map((check, index): Line => ({
-            key: `${index}`,
-            when: check.when,
-            run: check.run,
-            paths: check.paths ?? [],
-            // A running check stamps a firing when it reports something; one that waits says so instead, and a retired
-            // one has nothing left to have flagged.
-            note: runs(index) ? firedWords(entry.fired[index]) : waits(index) ? t(`sandbox.repoCheckRow.waitsForYou`) : undefined,
-            waiting: waits(index),
-            // Only a check's own line dims when it does not run, never the switch that would start it; a retired check
-            // reads as inert as one nobody switched on.
-            dim: !runs(index),
-        }))
-        .toSorted((a, b) => MOMENTS.indexOf(a.when) - MOMENTS.indexOf(b.when)),
+// One moment's checks under a single label, in the order the moments come; a label dims only when nothing under it runs.
+const groups = computed((): Group[] =>
+    MOMENTS.map((when): Group => {
+        const lines = entry.checks.flatMap((check, index): Line[] =>
+            check.when !== when
+                ? []
+                : [
+                      {
+                          key: `${index}`,
+                          run: check.run,
+                          // Repo-relative, as the file spells them; the daemon is the one that prefixes the repository.
+                          paths: (check.paths ?? []).join(`, `),
+                          // A running check stamps a firing when it reports something; one that waits says so instead,
+                          // and a retired one has nothing left to have flagged.
+                          note: runs(index) ? firedWords(entry.fired[index]) : waits(index) ? t(`sandbox.repoCheckRow.waitsForYou`) : undefined,
+                          waiting: waits(index),
+                          // Only a check's own line dims when it does not run, never the switch that would start it; a
+                          // retired check reads as inert as one nobody switched on.
+                          dim: !runs(index),
+                      },
+                  ],
+        );
+        return { when, lines, dim: lines.every((line) => line.dim) };
+    }).filter((group) => group.lines.length > 0),
 );
 
 // How many of a changed file's checks wait, when some of the rest still run; zero when the whole file is paused.
@@ -109,7 +117,7 @@ const statusWords = computed((): string | undefined => status.value?.words);
 </script>
 
 <template>
-    <Row icon="shield" :tone="status?.tone ?? `default`" class="@container/repo-check">
+    <Row indent icon="shield" :tone="status?.tone ?? `default`">
         <template #title>
             <span class="flex min-w-0 items-baseline gap-x-2">
                 <span class="min-w-0 truncate">{{ title ?? name }}</span>
@@ -133,44 +141,34 @@ const statusWords = computed((): string | undefined => status.value?.words);
                 @update:model-value="(value: boolean) => emit(`switch`, value)"
             />
         </template>
-        <template v-if="entry.error === undefined && lines.length > 0" #below>
-            <!-- Commands get their own full-width line in a narrow row. Wider rows align moments, commands and verdicts in three columns. -->
-            <ul
-                class="grid grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-line-subtle bg-canvas/60 text-xs @xl/repo-check:grid-cols-[max-content_minmax(0,1fr)_max-content]"
-            >
-                <li
-                    v-for="(line, index) in lines"
-                    :key="line.key"
-                    class="col-span-full grid grid-cols-subgrid items-baseline gap-x-3 gap-y-1 px-3 py-2 @xl/repo-check:gap-x-4"
-                    :class="[index > 0 && line.when !== lines[index - 1]!.when ? `border-t border-line-subtle` : ``, line.dim ? `opacity-60` : ``]"
-                >
-                    <span class="col-start-1 row-start-1 min-w-0 break-words text-2xs text-subtle">{{
-                        index > 0 && line.when === lines[index - 1]!.when ? `` : momentWords(line.when)
-                    }}</span>
-                    <span
-                        class="col-span-full row-start-2 flex min-w-0 flex-col gap-1 @xl/repo-check:col-span-1 @xl/repo-check:col-start-2 @xl/repo-check:row-start-1"
-                    >
-                        <!-- The command wraps so the approval target remains fully readable. -->
-                        <RuleCommand :command="line.run" wrap />
-                        <!-- Repo-relative, as the file spells them; the daemon is the one that prefixes the repository. -->
-                        <span v-if="line.paths.length > 0" class="flex min-w-0 flex-wrap items-center gap-1.5 text-2xs text-subtle">
-                            {{ t(`sandbox.words.onlyTouching`) }}
+        <!-- No surface of its own: `indent` starts the list under the title, which is what says it belongs to this row, as
+             every other row's sub-block in the sandbox settings does. Type, not boxes, tells the moment, the command and
+             its scope and verdict apart. -->
+        <template v-if="entry.error === undefined && groups.length > 0" #below>
+            <div class="flex min-w-0 flex-col gap-3 text-xs">
+                <div v-for="group in groups" :key="group.when" class="flex min-w-0 flex-col gap-1.5">
+                    <p class="text-2xs text-subtle" :class="group.dim ? `opacity-60` : ``">{{ momentWords(group.when) }}</p>
+                    <ul class="flex min-w-0 flex-col gap-2">
+                        <li v-for="line in group.lines" :key="line.key" class="flex min-w-0 flex-col gap-0.5" :class="line.dim ? `opacity-60` : ``">
+                            <!-- The command wraps so the approval target remains fully readable. -->
+                            <RuleCommand :command="line.run" wrap />
+                            <!-- Its scope and its verdict share one quiet line, so neither needs a column a narrow pane cannot give. -->
                             <span
-                                v-for="glob in line.paths"
-                                :key="glob"
-                                class="max-w-48 truncate rounded border border-line-subtle bg-overlay px-1.5 font-mono text-content"
-                                v-tooltip.top.overflow="glob"
-                                >{{ glob }}</span
+                                v-if="line.paths !== `` || line.note !== undefined"
+                                class="flex min-w-0 flex-wrap gap-x-1.5 text-2xs text-subtle"
                             >
-                        </span>
-                    </span>
-                    <span
-                        class="col-start-2 row-start-1 min-w-0 break-words text-right text-2xs tabular-nums @xl/repo-check:col-start-3"
-                        :class="line.waiting ? `text-warning` : `text-subtle`"
-                        >{{ line.note ?? `` }}</span
-                    >
-                </li>
-            </ul>
+                                <span v-if="line.paths !== ``" class="min-w-0 break-words"
+                                    >{{ t(`sandbox.words.onlyTouching`) }} <span class="font-mono text-muted">{{ line.paths }}</span></span
+                                >
+                                <span v-if="line.paths !== `` && line.note !== undefined" aria-hidden="true">·</span>
+                                <span v-if="line.note !== undefined" class="tabular-nums" :class="line.waiting ? `text-warning` : ``">{{
+                                    line.note
+                                }}</span>
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </template>
     </Row>
 </template>

@@ -86,14 +86,18 @@ export const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
     },
 };
 
-/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running, `api` waiting on the owner, the workspace held since its file changed. Every one is an `edit` check, which is what most repositories declare; a `turn` check runs once as an isolated turn ends and says what it found back to the agent, and nothing runs after work lands any more, since CI checks what is pushed. */
+/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running, `api` waiting on the owner, the workspace held since its file changed. Most are `edit` checks, which is what most repositories declare; `web` adds a `turn` check, which runs once as an isolated turn ends and says what it found back to the agent, and nothing runs after work lands any more, since CI checks what is pushed. */
 export const DEMO_REPO_CHECKS: RepoChecksList = {
     repos: [
         {
             repo: `web`,
             path: `web/${REPO_CHECKS_FILE}`,
-            checks: [{ when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`] }],
-            fired: [Date.now() - 11 * 60_000],
+            checks: [
+                { when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`, `test/**`] },
+                { when: `edit`, run: `pnpm exec prettier --check {file}` },
+                { when: `turn`, run: `pnpm typecheck` },
+            ],
+            fired: [Date.now() - 11 * 60_000, null, Date.now() - 3 * 86_400_000],
             adopted: true,
             changed: false,
         },

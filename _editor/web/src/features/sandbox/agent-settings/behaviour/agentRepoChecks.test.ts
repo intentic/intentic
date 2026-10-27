@@ -64,40 +64,50 @@ test(`a repository's row prints the command it declares, not a count of them`, (
     expect(host.textContent).toContain(`intentic/.intentic/checks.json`);
 });
 
-test(`gives the complete command and path filters a full-width line until the row can support aligned columns`, () => {
-    repos.value = [declaring({ checks: [{ when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`] }] })];
+// A check is drawn on the row's own surface, not in a box of its own: the command, then one quiet line with its scope and
+// its verdict, under the label of the moment it runs at.
+test(`a check reads as its command, then its scope and verdict on one quiet line, with no surface of its own`, () => {
+    repos.value = [declaring({ checks: [{ when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`, `test/**`] }] })];
     const host = mount();
-    const row = host.querySelector(`[class*="@container/repo-check"]`)!;
-    const line = row.querySelector(`li`)!;
-    const command = line.children[1]!;
-    expect(command.classList.contains(`min-w-0`)).toBe(true);
-    expect(command.classList.contains(`col-span-full`)).toBe(true);
-    expect(command.classList.contains(`row-start-2`)).toBe(true);
-    expect(command.classList.contains(`@xl/repo-check:row-start-1`)).toBe(true);
-    expect(command.textContent).toContain(`pnpm exec eslint {file}`);
-    expect(command.textContent).toContain(`only when touching`);
-    expect(command.textContent).toContain(`src/**`);
-    expect(line.textContent).toContain(`After each edit`);
-    expect(line.textContent).toContain(`never flagged`);
+    const line = host.querySelector(`li`)!;
+    expect(line.closest(`[class*="rounded"][class*="border"]`)).toBeNull();
+    expect(line.children[0]!.textContent).toBe(`pnpm exec eslint {file}`);
+    expect([...line.children[1]!.children].map((part) => part.textContent?.trim())).toEqual([
+        `only when touching src/**, test/**`,
+        `·`,
+        `never flagged`,
+    ]);
+    expect(host.textContent).toContain(`After each edit`);
     expect(adopt).not.toHaveBeenCalled();
 });
 
-test(`each check is named by the moment it runs at`, () => {
+// Checks sit under the moment they run at, each moment named once however many checks it has.
+const groupsOf = (host: HTMLElement): string[][] =>
+    [...host.querySelectorAll(`ul`)].map((list) => [
+        list.previousElementSibling?.textContent ?? ``,
+        ...[...list.querySelectorAll(`li`)].map((line) => line.textContent ?? ``),
+    ]);
+
+test(`each check is named by the moment it runs at, once per moment`, () => {
     repos.value = [
         declaring({
             checks: [
+                { when: `land`, run: `pnpm test` },
                 { when: `edit`, run: `pnpm exec eslint {file}` },
                 { when: `turn`, run: `pnpm lint` },
-                { when: `land`, run: `pnpm test` },
+                { when: `edit`, run: `pnpm exec prettier --check {file}` },
             ],
-            fired: [null, null, null],
+            fired: [null, null, null, null],
         }),
     ];
-    const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
-    expect(lines).toHaveLength(3);
-    expect(lines.find((line) => line.includes(`eslint`))).toContain(`After each edit`);
-    expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`When a turn ends — said back to the agent once, never blocks`);
-    expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`After it lands — no longer runs; CI checks what is pushed`);
+    const groups = groupsOf(mount());
+    expect(groups.map(([label]) => label)).toEqual([
+        `After each edit`,
+        `When a turn ends — said back to the agent once, never blocks`,
+        `After it lands — no longer runs; CI checks what is pushed`,
+    ]);
+    expect(groups[0]!.slice(1).map((line) => line.split(`never`)[0])).toEqual([`pnpm exec eslint {file}`, `pnpm exec prettier --check {file}`]);
+    expect(groups[2]!.slice(1)).toEqual([`pnpm test`]);
 });
 
 // A turn check runs once as an isolated turn ends and says what it found back to the agent; nothing runs after work
@@ -113,12 +123,12 @@ test(`a turn check runs and says when it last flagged something, and a declared 
             fired: [FIVE_DAYS_AGO, FIVE_DAYS_AGO],
         }),
     ];
-    const [turn, land] = [...mount().querySelectorAll<HTMLElement>(`li`)];
-    expect([turn?.textContent, land?.textContent]).toEqual([
-        `When a turn ends — said back to the agent once, never blockspnpm lintlast flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`,
-        `After it lands — no longer runs; CI checks what is pushedpnpm verify`,
-    ]);
+    const host = mount();
+    const [turn, land] = [...host.querySelectorAll<HTMLElement>(`li`)];
+    expect([turn?.textContent, land?.textContent]).toEqual([`pnpm lintlast flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`, `pnpm verify`]);
     expect([turn?.classList.contains(`opacity-60`), land?.classList.contains(`opacity-60`)]).toEqual([false, true]);
+    const labels = [...host.querySelectorAll(`ul`)].map((list) => list.previousElementSibling);
+    expect(labels.map((label) => label?.classList.contains(`opacity-60`))).toEqual([false, true]);
 });
 
 const FIVE_DAYS_AGO = Date.now() - 5 * 86_400_000;
@@ -194,11 +204,12 @@ test(`a changed declaration that says nothing of which checks wait reads as whol
     expect(host.textContent).toContain(`new or changed, waits for you`);
 });
 
-test(`a declaration nobody has answered yet says so, and counts itself at the foot`, () => {
+// Said on the row that waits, and only there: a count at the group's foot would repeat it.
+test(`a declaration nobody has answered yet says so on its own row`, () => {
     repos.value = [declaring({ adopted: false })];
     const host = mount();
     expect(host.textContent).toContain(`Off. Nothing a repository declares runs`);
-    expect(host.textContent).toContain(`One repository is waiting on you`);
+    expect(host.textContent).not.toContain(`waiting on you`);
 });
 
 // The empty state carries the whole feature for a workspace that has never used it, so it has to name the file.

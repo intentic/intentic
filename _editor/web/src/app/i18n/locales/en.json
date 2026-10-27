@@ -6006,9 +6006,7 @@
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Couldn't read what the repositories declare.",
             "noRepositoryDeclaresOwn": "No repository declares its own checks",
-            "oneRepositoryWaitingOn": "One repository is waiting on you. Until you switch it on, its own checks do not run.",
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
-            "repositoriesWaitingOnUntil": "{waiting} repositories are waiting on you. Until you switch them on, their own checks do not run.",
             "checksAfterEdits": "Checks after edits",
             "repositoryDeclaresOwnChecks": "A repository declares in .intentic/checks.json what runs on its own code after each edit, and once as a turn ends. Nothing it declares ever blocks a land, a commit or a push."
         },

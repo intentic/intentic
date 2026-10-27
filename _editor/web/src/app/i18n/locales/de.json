@@ -6006,9 +6006,7 @@
         "agentRepoChecks": {
             "couldntReadWhatRepositories": "Es ließ sich nicht lesen, was die Repositorys deklarieren.",
             "noRepositoryDeclaresOwn": "Kein Repository deklariert eigene Prüfungen",
-            "oneRepositoryWaitingOn": "Ein Repository wartet auf Sie. Bis Sie es einschalten, laufen seine eigenen Prüfungen nicht.",
             "readingWhatWorkspacesRepositories": "Es wird gelesen, was die Repositorys dieses Workspace deklarieren…",
-            "repositoriesWaitingOnUntil": "{waiting} Repositorys warten auf Sie. Bis Sie sie einschalten, laufen ihre eigenen Prüfungen nicht.",
             "checksAfterEdits": "Prüfungen nach Änderungen",
             "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was nach jeder Änderung und einmal am Ende eines Zuges auf seinem eigenen Code läuft. Nichts, was es deklariert, blockiert je ein Landen, einen Commit oder einen Push."
         },
