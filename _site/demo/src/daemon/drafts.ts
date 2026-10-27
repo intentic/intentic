@@ -59,9 +59,9 @@ const clearSentDraft = (conversationId: string, sentFrom: number | undefined): v
 
 /** A send that takes its draft with it, as the daemon's `agent.run` does. */
 export const clearingSentDraft =
-    <I extends { readonly conversationId?: string; readonly draft?: number }, A>(run: (input: I) => A) =>
-    (input: I): A => {
-        const answer = run(input);
+    <I extends { readonly conversationId?: string; readonly draft?: number }, R extends unknown[], A>(run: (input: I, ...rest: R) => A) =>
+    (input: I, ...rest: R): A => {
+        const answer = run(input, ...rest);
         clearSentDraft(input.conversationId ?? ``, input.draft);
         return answer;
     };

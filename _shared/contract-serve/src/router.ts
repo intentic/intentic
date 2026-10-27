@@ -32,9 +32,11 @@ export class Frames<T> {
 type Answer<T> = T extends AsyncIteratorObject<infer F, unknown, void> ? Frames<F> : T;
 
 // What a handler knows of the request beside its input: `signal` aborts when the asker lets go of the answer (a search
-// a newer keystroke replaced), so work still under way for it can stop.
+// a newer keystroke replaced), so work still under way for it can stop; `url` is the address it was sent to, whose origin
+// says which daemon was asked when one stand-in answers for several.
 export interface ProcedureCall {
     readonly signal: AbortSignal;
+    readonly url: URL;
 }
 
 export type ProcedureHandler<G extends SandboxGroup, P extends SandboxProcedure<G>> = (
@@ -116,7 +118,7 @@ const answerOf = async (procedures: FixtureRouter, raw: RawRoutes, request: Requ
     if (handler === undefined) {
         return undefined;
     }
-    const answer = await handler((await inputOf(group, name, request, url, params)) as never, { signal: request.signal });
+    const answer = await handler((await inputOf(group, name, request, url, params)) as never, { signal: request.signal, url });
     return answer instanceof Frames ? eventStream(request, answer.start) : json(answer);
 };
 

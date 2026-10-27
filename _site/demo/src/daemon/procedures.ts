@@ -46,6 +46,7 @@ import {
 import { skillDoors } from "./skills";
 import { demoStorageCancel, demoStorageClean, demoStorageReport, demoStorageScan } from "../fixture/storage";
 import { subagentTranscriptFor } from "../fixture/subagentTranscripts";
+import { homeSandboxOf } from "../fixture/home/sandboxes";
 import { documentsFor, transcriptFor } from "../fixture/transcripts";
 import { demoRuns, demoWorkflows } from "../fixture/workflows";
 import {
@@ -187,7 +188,7 @@ export const procedures = {
     },
     agents: {
         // `held` mirrors /automations/pending's approval queue, projected onto the board.
-        list: () => ({ agents: boardAgents(), rev: roster.rev, held: heldApprovals() }),
+        list: (_input, call) => ({ agents: boardAgents(homeSandboxOf(call.url)), rev: roster.rev, held: heldApprovals() }),
         archived: () => ({ agents: [], rev: roster.rev, held: [] }),
         search: ({ query, caseSensitive }) => searchAgents(query, caseSensitive === true),
         seenAll: () => ({ agents: roster.agents, rev: roster.rev, held: heldApprovals() }),
@@ -197,7 +198,7 @@ export const procedures = {
             return { ok: true as const };
         },
         // A card that is not mid-turn reads its transcript instead of attaching.
-        transcript: ({ id }) => transcriptFor(id),
+        transcript: ({ id }, call) => transcriptFor(id, homeSandboxOf(call.url)),
         documents: ({ id }) => ({ paths: documentsFor(id) }),
         // The checkout agent's in-process subagents, read as transcripts of their own from its tray and its cards.
         subagentTranscript: ({ subagentId }) => subagentTranscriptFor(subagentId),
@@ -223,13 +224,13 @@ export const procedures = {
         unarchive: () => ({ moved: [], rev: roster.rev }),
     },
     agent: {
-        run: clearingSentDraft(sayOrBook),
+        run: (input, call) => clearingSentDraft(sayOrBook)(input, homeSandboxOf(call.url)),
         ...queueDoors,
         switchAccount,
-        attach: ({ conversationId }) => attach(conversationId),
+        attach: ({ conversationId }, call) => attach(conversationId, homeSandboxOf(call.url)),
         reply,
         steer: () => ({ delivered: `steered` as const }),
-        stop: stopTurn,
+        stop: (input, call) => stopTurn(input, homeSandboxOf(call.url)),
         commands: () => ({ commands: DEMO_COMMANDS }),
         refusals: demoRefusals,
     },

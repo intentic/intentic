@@ -12,11 +12,15 @@ import type { StreamSink } from "@intentic/contract-serve";
 // (transcript-fold.ts) over a scripted `AgentEvent` sequence instead of a real agent. `plan` and `question` frames park
 // the turn until `POST /agent/reply` resolves, same as the daemon.
 
-/** One recorded beat: wait, then emit. `park` holds the script until the app replies to that requestId. */
-interface Beat {
+/** One recorded beat: wait, then emit. `park` holds the script until the app replies to that requestId, or, with
+ *  `answer`, until that reply is given for the visitor once `answer.after` passes with nobody answering. */
+export interface Beat {
     readonly after: number;
     readonly event: AgentEvent;
     readonly park?: string;
+    readonly answer?: { readonly after: number; readonly reply: AgentReply };
+    /** What the turn does instead of the rest of its script, for a reply that asks for something else; undefined goes on. */
+    readonly instead?: (reply: AgentReply | undefined) => readonly Beat[] | undefined;
 }
 
 const TODOS = [
@@ -374,9 +378,70 @@ const wait = (ms: number, signal: { stopped: boolean }): Promise<void> =>
 
 type Entry = Extract<AttachFrame, { kind: "patch" | "fact" }>;
 
-/** Build a run from a beat script. Entries are numbered as the daemon numbers them: 1-based `seq`. */
-const createRun = (conversationId: string, prompt: string, beats: Beat[], now: number): Run => {
-    const parks = new Map<string, (reply: AgentReply | undefined) => void>();
+/** The cards a run is parked on, each answered once: by the reply route, or by the recording's own answer come due. */
+class Parks {
+    readonly #waiting = new Map<string, (reply: AgentReply | undefined) => void>();
+
+    // The park IS the turn waiting on the user.
+    wait(requestId: string, answer: Beat[`answer`]): Promise<AgentReply | undefined> {
+        return new Promise((resolve) => {
+            this.#waiting.set(requestId, resolve);
+            if (answer !== undefined) {
+                setTimeout(() => this.settle(requestId, answer.reply), answer.after);
+            }
+        });
+    }
+
+    settle(requestId: string, reply: AgentReply | undefined): void {
+        const waiter = this.#waiting.get(requestId);
+        this.#waiting.delete(requestId);
+        waiter?.(reply);
+    }
+
+    /** A stopped run lets every park go unanswered. */
+    drop(): void {
+        for (const requestId of this.#waiting.keys()) {
+            this.settle(requestId, undefined);
+        }
+    }
+}
+
+// How many of a script's first beats are due at once: the run holds them from its first frame (an attach's head), so a
+// line the landing page's poster already shows is drawn whole rather than typed again.
+const dueAtOnce = (beats: readonly Beat[]): number => {
+    const index = beats.findIndex((beat) => beat.after > 0 || beat.park !== undefined);
+    return index === -1 ? beats.length : index;
+};
+
+// Plays a script beat by beat, parking where it asks; a reply its park's `instead` has other words for swaps the rest of
+// the script for those. Whether it reached the end: false for a run stopped on the way.
+const play = async (beats: readonly Beat[], publish: (event: AgentEvent) => void, parks: Parks, signal: { stopped: boolean }): Promise<boolean> => {
+    let queue = beats;
+    for (let beat = queue[0]; beat !== undefined; beat = queue[0]) {
+        queue = queue.slice(1);
+        // a recorded stream is sequential by definition
+        await wait(beat.after, signal);
+        if (signal.stopped) {
+            return false;
+        }
+        publish(beat.event);
+        if (beat.park === undefined) {
+            continue;
+        }
+        const reply = await parks.wait(beat.park, beat.answer);
+        if (signal.stopped) {
+            return false;
+        }
+        publish({ kind: `resolved`, requestId: beat.park, ...(reply === undefined ? {} : { reply }) });
+        queue = beat.instead?.(reply) ?? queue;
+    }
+    return true;
+};
+
+// Entries are numbered as the daemon numbers them: 1-based `seq`.
+/** Build a run from a beat script; `watch` hears every event it plays, as the daemon's registry does. */
+export const createRun = (conversationId: string, prompt: string, beats: readonly Beat[], now: number, watch?: (event: AgentEvent) => void): Run => {
+    const parks = new Parks();
     const signal = { stopped: false };
     const fold = new TranscriptFold(prompt.length > 0 ? [userRow(prompt, now, [])] : []);
     // Facts replayed to every attach, so a late-joining window still learns model and spend.
@@ -397,6 +462,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     };
 
     const publish = (event: AgentEvent): void => {
+        watch?.(event);
         for (const patch of fold.apply(event)) {
             deliver({ kind: `patch`, seq: ++seq, patch });
         }
@@ -421,48 +487,26 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
         sinks.clear();
     };
 
+    const due = dueAtOnce(beats);
+    for (const beat of beats.slice(0, due)) {
+        publish(beat.event);
+    }
     // Runs once, from creation, not per attach, or each consumer would replay its own copy.
-    void (async () => {
-        for (const beat of beats) {
-            // a recorded stream is sequential by definition
-            await wait(beat.after, signal);
-            if (signal.stopped) {
-                return;
-            }
-            publish(beat.event);
-            if (beat.park === undefined) {
-                continue;
-            }
-            const requestId = beat.park;
-            // the park IS the turn waiting on the user
-            const reply = await new Promise<AgentReply | undefined>((resolve) => parks.set(requestId, resolve));
-            if (signal.stopped) {
-                return;
-            }
-            publish({ kind: `resolved`, requestId, ...(reply === undefined ? {} : { reply }) });
+    void play(beats.slice(due), publish, parks, signal).then((played) => {
+        if (played) {
+            finish(`settled`);
         }
-        finish(`settled`);
-    })();
+    });
 
     return {
         id,
         conversationId,
         prompt,
         startedAt: now,
-        resolve: (requestId, reply) => {
-            const waiter = parks.get(requestId);
-            if (waiter === undefined) {
-                return;
-            }
-            parks.delete(requestId);
-            waiter(reply);
-        },
+        resolve: (requestId, reply) => parks.settle(requestId, reply),
         stop: () => {
             signal.stopped = true;
-            for (const [requestId, waiter] of parks) {
-                parks.delete(requestId);
-                waiter(undefined);
-            }
+            parks.drop();
             finish(`stopped`);
         },
         attach: (sink) => {
@@ -493,4 +537,5 @@ export const featuredRun = (conversationId: string, now: number): Run =>
         ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, plain(DESK_FEATURED), now)
         : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, plain(FEATURED), now);
 
-export const visitorRun = (conversationId: string, prompt: string, now: number): Run => createRun(conversationId, prompt, replyScript(prompt), now);
+export const visitorRun = (conversationId: string, prompt: string, now: number, watch?: (event: AgentEvent) => void): Run =>
+    createRun(conversationId, prompt, replyScript(prompt), now, watch);

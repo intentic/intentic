@@ -8,7 +8,8 @@
 // - Its storage is its own. The frame is same-origin and same-tab with /demo/, so it would otherwise read and write the
 //   very localStorage and sessionStorage the full demo keeps: its look, its mode, its open tabs, and everything the app
 //   remembers as it is clicked through. Both are swapped for in-memory stores seeded with the hero's recording and the
-//   site's look, so every visit opens on the same afternoon and nothing played in the hero follows the visitor to /demo/.
+//   site's look, and IndexedDB refuses every open, so every visit opens on the same afternoon, its turns played from
+//   the start, and nothing played in the hero follows the visitor to /demo/.
 // - It never moves the page around it. The app focuses fields and scrolls rows into view as it mounts, and from a
 //   same-origin frame both reach the landing page: a focus would take the keyboard from a reader who never touched the
 //   frame, and a scroll would yank the page back up to it. Focus waits for the visitor's first press inside the frame,
@@ -31,9 +32,12 @@ export const embedded = window.name === EMBED_NAME || window.name === `${EMBED_N
 // take it (_tools/e2e/shots/capture.mts): the site's dark skin is the app in Sanctum, its light one the app unskinned in
 // daylight, the Mist wallpaper under both. index.html's pre-paint script reads the same name for the first frame.
 const SESSION_SEED = { "intentic.demo.mode": `hero` };
-const LOCAL_SEED = window.name.endsWith(LIGHT_SUFFIX)
+const LOOK = window.name.endsWith(LIGHT_SUFFIX)
     ? { "ui-color-scheme": `light`, "ui-skin": `none`, "ui-wallpaper": `mist` }
     : { "ui-color-scheme": `dark`, "ui-skin": `sanctum`, "ui-wallpaper": `mist` };
+// Its turns show their tool calls as they run (models/conversations/tools/useToolCalls.ts): the hero is there to show
+// work being done, and folded, a turn reads as a "Thinking…" line beside rows that never appear.
+const LOCAL_SEED = { ...LOOK, "ui-chat-show-tool-calls": `on` };
 
 /** A Storage that lives as long as the page: the same methods, kept in a Map. */
 const memoryStorage = (seed: Record<string, string>) => {
@@ -56,9 +60,39 @@ const memoryStorage = (seed: Record<string, string>) => {
     };
 };
 
+// An IndexedDB request refused as a browser with site storage turned off refuses it: `error` on the next task, nothing
+// opened. Every mirror the app keeps there (the transcripts, the query cache, the skeleton imprints) takes its uncached
+// path on that answer, so a visit opens on the recording, never on the last visit's copy of a turn that is played again.
+class RefusedRequest extends EventTarget {
+    readonly result = undefined;
+    readonly error = new DOMException(`The landing page's hero keeps nothing between visits.`, `InvalidStateError`);
+    readonly readyState = `done`;
+    onsuccess: ((event: Event) => void) | null = null;
+    onerror: ((event: Event) => void) | null = null;
+    onblocked: ((event: Event) => void) | null = null;
+    onupgradeneeded: ((event: Event) => void) | null = null;
+
+    constructor() {
+        super();
+        setTimeout(() => {
+            const refusal = new Event(`error`);
+            this.dispatchEvent(refusal);
+            this.onerror?.(refusal);
+        });
+    }
+}
+
+const refusedIndexedDb = {
+    open: (): RefusedRequest => new RefusedRequest(),
+    deleteDatabase: (): RefusedRequest => new RefusedRequest(),
+    databases: async (): Promise<IDBDatabaseInfo[]> => [],
+    cmp: (): number => 0,
+};
+
 const sealStorage = (): void => {
     Object.defineProperty(window, `localStorage`, { value: memoryStorage(LOCAL_SEED), configurable: true });
     Object.defineProperty(window, `sessionStorage`, { value: memoryStorage(SESSION_SEED), configurable: true });
+    Object.defineProperty(window, `indexedDB`, { value: refusedIndexedDb, configurable: true });
 };
 
 // Runs `move` and puts the landing page back where it was. Cross-origin parents (somebody else framing /demo/ under this

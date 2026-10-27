@@ -16,6 +16,8 @@ import { RUN_TARGETS_FILE } from "@intentic/sandbox-contract/schemas/run-targets
 import { demoQuiet, deskEdition, freshEdition } from "../mode";
 import { acceptanceFiles } from "./acceptance";
 import { SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT } from "./browserShots";
+import { BRIEF, BRIEF_PATH } from "./home/research";
+import { CHECKOUT_SHOT, CHECKOUT_SHOT_PATH, SHIPPING_AFTER, SHIPPING_PATH } from "./home/shop";
 import { choreFiles } from "./chores";
 import { DESK_AGENT_DELTAS, DESK_CHANGES, DESK_DIFFS, DESK_ORIGIN_AGENTS, DESK_REPOS, DESK_SOURCES, deskSessions } from "./desk";
 import { HANDOVER_CHANGE, HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_PATH } from "./document";
@@ -593,6 +595,11 @@ const RECORDED_AT = Date.now();
 const SOURCES: [string, string | number][] = [
     [`README.md`, README],
     [SUPPORT_SWEEP_PATH, SUPPORT_SWEEP_SHOT],
+    // What the home recordings' turns open (fixture/home/): the checkout as the browser saw it, the file the fix went
+    // into, and the research brief.
+    [CHECKOUT_SHOT_PATH, CHECKOUT_SHOT],
+    [SHIPPING_PATH, SHIPPING_AFTER],
+    [BRIEF_PATH, BRIEF],
 
     [`web/src/pricing/PricingPage.tsx`, 3_184],
     [`web/src/pricing/CheckoutPanel.tsx`, CHECKOUT_PANEL_AFTER],

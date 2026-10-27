@@ -10,6 +10,8 @@ import { AWAITING_AGENT_ID, busyFleet, FEATURED_AGENT_ID, fleetRoster, quietCard
 import { demoNeeds } from "../fixture/needs";
 import { specimenCard } from "../fixture/specimen";
 import { homeAgent } from "../fixture/home/recording";
+import type { HomeSandbox } from "../fixture/home/sandboxes";
+import { homeCardOf } from "./homeCards";
 import { demoMode, demoQuiet, deskEdition, freshEdition, homeRecording, photographed } from "../mode";
 
 // The live agent board the demo mutates and re-broadcasts: the roster, who it waits on, and the pub/sub every
@@ -48,7 +50,8 @@ const withNeeds = (agent: AgentSummary): AgentSummary => {
               needs: open.map((need) => ({ id: need.id, kind: need.subject.kind, title: need.title, status: need.status })),
           };
 };
-export const boardAgents = (): AgentSummary[] => roster.agents.map(withNeeds);
+// `sandbox` is the one asking (fixture/home/sandboxes.ts): its own home turn shows on its home card (homeCards.ts).
+export const boardAgents = (sandbox: HomeSandbox = `shop`): AgentSummary[] => roster.agents.map((agent) => withNeeds(homeCardOf(agent, sandbox)));
 
 // Held automation approvals project onto the board's attention lane; a desk runs no automations.
 export const heldApprovals = () => (deskEdition || freshEdition ? [] : automationApprovals(Date.now()));

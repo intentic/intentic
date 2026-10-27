@@ -165,13 +165,12 @@ class DemoSocket extends EventTarget {
 export type DemoSession = (socket: DemoSocket) => void;
 export type { DemoSocket };
 
-/** Claims the demo daemon's WebSocket URLs; anything else gets a real socket. */
+/** Claims the demo daemons' WebSocket URLs (every sandbox the home recording switches between has its own); anything else gets a real socket. */
 export const installWebSocket = (session: (url: URL) => DemoSession | undefined): void => {
-    const wsOrigin = DEMO_DAEMON_ORIGIN.replace(/^https/, `wss`);
     globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
         construct: (target, args: [string | URL, (string | string[])?]) => {
             const url = urlOf(args[0]);
-            const replay = url?.origin === wsOrigin ? session(url) : undefined;
+            const replay = url?.protocol === `wss:` && url.hostname.endsWith(`demo.invalid`) ? session(url) : undefined;
             return replay === undefined ? new target(...args) : new DemoSocket(String(args[0]), replay);
         },
     });

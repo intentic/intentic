@@ -4,6 +4,7 @@ import { deriveTitle } from "@intentic/sandbox-contract/text/title";
 import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { refuse } from "@intentic/contract-serve";
 import { amendAgent, broadcastRoster, FEATURED_ID, roster } from "./roster";
+import type { HomeSandbox } from "../fixture/home/sandboxes";
 import { startTurn } from "./turns";
 
 // What waits for a conversation's next turn, as the daemon's queue holds it (conversation-queue.ts): messages booked to
@@ -173,7 +174,8 @@ const book = (input: SandboxHandlerInput<`agent`, `run`>, id: string, hold: Hold
     return { delivered: `queued` as const };
 };
 
-export const sayOrBook = (input: SandboxHandlerInput<`agent`, `run`>): { delivered: `started`; run: string } | { delivered: `queued` } => {
+// `sandbox` is the one asked (fixture/home/sandboxes.ts): a home conversation's turn is that sandbox's alone.
+export const sayOrBook = (input: SandboxHandlerInput<`agent`, `run`>, sandbox: HomeSandbox = `shop`): { delivered: `started`; run: string } | { delivered: `queued` } => {
     const id = input.conversationId ?? FEATURED_ID;
     const hold = holdOf(input);
     if (hold !== undefined) {
@@ -184,7 +186,7 @@ export const sayOrBook = (input: SandboxHandlerInput<`agent`, `run`>): { deliver
     if (!roster.agents.some((agent) => agent.id === id)) {
         roster.agents = [bookedCard(input, id, Date.now()), ...roster.agents];
     }
-    return startTurn({ ...input, conversationId: id });
+    return startTurn({ ...input, conversationId: id }, sandbox);
 };
 
 // A conversation that exists only for the message just taken back: no turn ran in it, no session, nothing else waits, and

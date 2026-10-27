@@ -23,9 +23,10 @@ const seedCredentials = (): void => {
     localStorage.setItem(ACTIVE_SANDBOX_KEY, DEMO_SANDBOX.id);
     for (const sandbox of DEMO_SANDBOXES) {
         localStorage.setItem(`intentic.session.${sandbox.id}`, JSON.stringify({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: DEMO_USER.email }));
+        // Declines the local-shortcut offer for every sandbox the rail switches to: no real sandbox here for it to
+        // reach faster, and the card would otherwise open on the first switch.
+        localStorage.setItem(`intentic.localShortcut.declined.${sandbox.id}`, `yes`);
     }
-    // Declines the local-shortcut offer: no real sandbox here for it to reach faster.
-    localStorage.setItem(`intentic.localShortcut.declined.${DEMO_SANDBOX.id}`, `yes`);
 };
 
 // Seeds tabs the same way as credentials: writes where the app already looks, in both session and local storage since
