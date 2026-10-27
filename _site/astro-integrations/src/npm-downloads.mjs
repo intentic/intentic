@@ -6,7 +6,11 @@
 const API = `https://api.npmjs.org/downloads/point/last-month`;
 const TIMEOUT_MS = 5000;
 
-/** @type {Map<string, number | null>} */
+/**
+ * One read per package per build, kept as the promise: pages render concurrently, so a second page asking for the same
+ * package while its read is in flight waits for it.
+ * @type {Map<string, Promise<number | null>>}
+ */
 const cache = new Map();
 
 /**
@@ -14,12 +18,20 @@ const cache = new Map();
  * @param {string} name
  * @returns {Promise<number | null>}
  */
-async function downloadsFor(name) {
-    const hit = cache.get(name);
-    if (hit !== undefined) {
-        return hit;
+function downloadsFor(name) {
+    let read = cache.get(name);
+    if (read === undefined) {
+        read = readDownloads(name);
+        cache.set(name, read);
     }
+    return read;
+}
 
+/**
+ * @param {string} name
+ * @returns {Promise<number | null>}
+ */
+async function readDownloads(name) {
     /** @type {number | null} */
     let value = null;
     try {
@@ -39,8 +51,6 @@ async function downloadsFor(name) {
     } catch (error) {
         console.warn(`[npm-downloads] ${name}: npm could not be read (${String(error)}), so no install figure is printed for it`);
     }
-
-    cache.set(name, value);
     return value;
 }
 

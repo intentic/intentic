@@ -107,8 +107,13 @@ function urlPathToSources(pathname) {
     return null;
 }
 
-/** @type {Map<string, string | null>} */
-const cache = new Map();
+/**
+ * One cache per process, not per copy of this module. A build loads it twice: the page bundle's copy dates every page
+ * for BaseLayout's dateModified, then astro.config's copy dates the same URLs again for the sitemap. A module-level Map
+ * ran every `git log` twice (~1 s each pass over the site's ~155 URLs); this one answers the sitemap from the first pass.
+ */
+const shared = /** @type {Record<symbol, Map<string, string | null> | undefined>} */ (globalThis);
+const cache = (shared[Symbol.for("@intentic/astro-integrations/git-lastmod")] ??= new Map());
 
 /**
  * Return ISO lastmod for a sitemap URL, or null if no source file / no git history.

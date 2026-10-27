@@ -328,7 +328,6 @@ catalog:
   "@ast-grep/lang-java": 0.0.7
   asn1js: 4.0.0
   astro: 7.3.5
-  astro-opengraph-images: 1.20.3
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
@@ -401,6 +400,8 @@ catalog:
   prisma: 7.10.1
   quickjs-emscripten-core: 0.32.0
   read-excel-file: 9.3.12
+  # The OpenGraph cards' layout (@intentic/astro-integrations og-images.mjs); resvg above draws them.
+  satori: 0.33.5
   semantic-release: 25.0.9
   semver: 7.8.5
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the

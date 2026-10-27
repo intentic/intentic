@@ -1,4 +1,4 @@
-/* Checks the git date helper and its regressions without emitting build artifacts. */
+/* Checks the git date helper, the integrations' regressions and the og-images types without emitting build artifacts. */
 {
     "extends": "@intentic/tsconfig/tsconfig.base.json",
     "compilerOptions": {
@@ -11,6 +11,11 @@
         "declarationMap": false,
         "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
     },
-    "include": ["./src/git-lastmod.mjs", "./src/git-lastmod.integration.test.mjs", "./src/llms-text.integration.test.ts"],
+    "include": [
+        "./src/git-lastmod.mjs",
+        "./src/git-lastmod.integration.test.mjs",
+        "./src/llms-text.integration.test.ts",
+        "./src/og-images.integration.test.ts"
+    ],
     "exclude": []
 }

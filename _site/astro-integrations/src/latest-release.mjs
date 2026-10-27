@@ -10,19 +10,24 @@ const TIMEOUT_MS = 5000;
  * @typedef {{ version: string, date: string, notes: string }} LatestRelease
  */
 
-/** @type {LatestRelease | null | undefined} */
-let cached;
+/**
+ * The one read per build. Pages render concurrently (astro.config's `build.concurrency`), so the promise is what is kept:
+ * a page that asks while another page's read is in flight waits for that read instead of being handed nothing.
+ * @type {Promise<LatestRelease | null> | undefined}
+ */
+let pending;
 
 /**
  * The newest published release, or null when it cannot be read.
  * @returns {Promise<LatestRelease | null>}
  */
-export async function latestRelease() {
-    if (cached !== undefined) {
-        return cached;
-    }
+export function latestRelease() {
+    pending ??= read();
+    return pending;
+}
 
-    cached = null;
+/** @returns {Promise<LatestRelease | null>} */
+async function read() {
     try {
         const response = await fetch(API, {
             // Unauthenticated: sends a media type and caller id, GitHub's hardest-limited anonymous shape.
@@ -31,16 +36,16 @@ export async function latestRelease() {
         });
         if (!response.ok) {
             console.warn(`[latest-release] ${API} answered ${response.status}: the download page ships without its version line`);
-            return cached;
+            return null;
         }
         const body = await response.json();
         // `tag_name` is `v1.15.1` (the .releaserc.json format); anything else means the tag scheme moved.
         const version = /^v(?<version>\d+\.\d+\.\d+.*)$/u.exec(body?.tag_name ?? ``)?.groups?.version;
         if (version === undefined || typeof body?.published_at !== `string`) {
             console.warn(`[latest-release] ${API} answered a release with no v<semver> tag or no date: the download page ships without its version line`);
-            return cached;
+            return null;
         }
-        cached = {
+        return {
             version,
             // The day, not the timestamp: the same shape gitStats' `since` and scorecard's `date` use.
             date: body.published_at.split(`T`)[0],
@@ -48,6 +53,6 @@ export async function latestRelease() {
         };
     } catch (error) {
         console.warn(`[latest-release] ${API} could not be read (${String(error)}): the download page ships without its version line`);
+        return null;
     }
-    return cached;
 }

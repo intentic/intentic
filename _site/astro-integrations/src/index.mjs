@@ -1,4 +1,5 @@
 export { lastModForUrl } from "./git-lastmod.mjs";
+export { ogImageUrl } from "./og-image-url.mjs";
 export { gitStats } from "./git-stats.mjs";
 export { latestRelease } from "./latest-release.mjs";
 export { npmDownloads } from "./npm-downloads.mjs";

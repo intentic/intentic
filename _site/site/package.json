@@ -26,7 +26,6 @@
         "@intentic/sandbox-openapi": "workspace:*",
         "@tailwindcss/vite": "catalog:",
         "astro": "catalog:",
-        "astro-opengraph-images": "catalog:",
         "sharp": "catalog:",
         "tailwindcss": "catalog:"
     },

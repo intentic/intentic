@@ -1,5 +1,6 @@
 import sitemap from "@astrojs/sitemap";
 import { docsSearch, lastModForUrl, llmsText } from "@intentic/astro-integrations";
+import { ogImages } from "@intentic/astro-integrations/og-images";
 import { developersBook, developersHref, developersPages } from "@intentic/site-content/developers";
 import { bookHref, bookPlacements } from "@intentic/site-content/book";
 import { compareHref, comparePages } from "@intentic/site-content/compare";
@@ -11,7 +12,6 @@ import { referenceBook, referenceHref, referencePages } from "@intentic/site-con
 import { ORG_NAME, SITE_URL } from "@intentic/site-content/site";
 import { PAID_TIERS } from "@intentic/constants";
 import tailwindcss from "@tailwindcss/vite";
-import astroOpenGraphImages, { getImagePath } from "astro-opengraph-images";
 import { defineConfig } from "astro/config";
 import { createReadStream, existsSync } from "node:fs";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
@@ -25,7 +25,6 @@ const DEMO_DEV_PORT = 47146;
 
 // Absent without the Inter TTFs checked out; OG then skips, BaseLayout falls back to the static logo.
 const ogFontFaces = ogFonts();
-const site = new URL(SITE_URL);
 
 // Dev serves paths with or without the trailing slash; builds keep "always" so canonical URLs stay slashed.
 const isDev = process.argv.includes("dev");
@@ -71,6 +70,11 @@ export default defineConfig({
     trailingSlash: isDev ? "ignore" : "always",
     build: {
         inlineStylesheets: "always",
+        // Pages that wait on the network (the changelog's GitHub read alone is ~2 s, then /about/, /extensions/,
+        // /download/) render beside the rest instead of one after another. A read more than one page asks for
+        // (latestRelease, scorecard, npmDownloads, src/lib/api-reference.ts) keeps its promise rather than its value,
+        // so pages asking at once share one read instead of a second one getting nothing.
+        concurrency: 4,
     },
     vite: {
         plugins: [sourceFirstWorkspace(), tailwindcss(), desktopDevRoutes, demoDevServer({ port: DEMO_DEV_PORT })],
@@ -148,16 +152,8 @@ export default defineConfig({
                 return item;
             },
         }),
-        // Only pages that asked get a card; the integration's file must match BaseLayout's og:image tag.
-        ...(ogFontFaces === undefined
-            ? []
-            : [
-                  astroOpenGraphImages({
-                      options: { width: 1200, height: 628, fonts: ogFontFaces },
-                      filter: ({ url, image }) => image === getImagePath({ url: new URL(url), site }),
-                      render: ogCard,
-                  }),
-              ]),
+        // Only pages whose og:image is their own card get one: BaseLayout names it with the same ogImageUrl.
+        ...(ogFontFaces === undefined ? [] : [ogImages({ width: 1200, height: 628, fonts: ogFontFaces, render: ogCard })]),
         llmsText({
             name: ORG_NAME,
             summary: landingContent.meta.description,

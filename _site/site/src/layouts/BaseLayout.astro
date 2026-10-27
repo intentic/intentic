@@ -4,9 +4,7 @@ import { getPageMeta } from "@intentic/site-content/page-meta";
 import { ORG_DESCRIPTION, ORG_NAME, ORG_TAGLINE, SITE_URL } from "@intentic/site-content/site";
 import type { BreadcrumbEntry, FaqEntry } from "@intentic/site-content/structured-data";
 import { buildPageGraph } from "@intentic/site-content/structured-data";
-import { lastModForUrl } from "@intentic/astro-integrations";
-// Use the package's pure path-math subpath to avoid bundling native image dependencies.
-import { getImagePath } from "astro-opengraph-images/util.js";
+import { lastModForUrl, ogImageUrl } from "@intentic/astro-integrations";
 import VisitorChat from "../components/VisitorChat.astro";
 import LiveNotice from "../components/LiveNotice.astro";
 import PageBackdrop from "../components/PageBackdrop.astro";
@@ -56,7 +54,7 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 
 // Per-page OG cards require metadata and use the integration's path naming.
 const perPageOgAvailable = import.meta.env.PUBLIC_OG_PER_PAGE;
-const defaultOgPath = perPageOgAvailable && (meta || authored) ? getImagePath({ url: new URL(path, Astro.site), site: Astro.site }) : "/assets/intentic-logo-sized.png";
+const defaultOgPath = perPageOgAvailable && (meta || authored) ? ogImageUrl(new URL(path, Astro.site)) : "/assets/intentic-logo-sized.png";
 const ogImage = new URL(Astro.props.ogImage ?? defaultOgPath, Astro.site);
 
 const jsonLd = buildPageGraph({

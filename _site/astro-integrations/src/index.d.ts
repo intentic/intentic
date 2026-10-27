@@ -26,6 +26,9 @@ export function llmsText(options: LlmsTextOptions): AstroIntegration;
 /** ISO `lastmod` for a sitemap URL from git history, or null if unavailable. */
 export function lastModForUrl(url: string): string | null;
 
+/** The absolute URL of a page's OpenGraph card, which `ogImages` (the `./og-images` entry) draws there. */
+export function ogImageUrl(pageUrl: URL): string;
+
 export interface GitStats {
     /** Commits reachable from HEAD. */
     total: number;
