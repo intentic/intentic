@@ -41,6 +41,11 @@ const browserDisplayName = (raw: string): string | undefined => {
 
 export const displayNameOf = (raw: string): string => DISPLAY_NAMES[raw] ?? browserDisplayName(raw) ?? raw;
 
+// The MCP server a raw tool name belongs to, which its display name drops: `web`'s browser, a signed-in account's
+// `browser` server and a device all show "Browser navigate", so a record that kept only that could not say which one
+// ran (2026-10-27). Undefined for a tool that is not an MCP server's.
+export const mcpServerOf = (raw: string): string | undefined => /^mcp__(.+?)__./u.exec(raw)?.[1];
+
 // Display name to ACP ToolKind (case-insensitive), the one table driving card icons and live-writes.
 const CATEGORIES: ReadonlyArray<readonly [string, ToolKind]> = [
     ["read", "read"],

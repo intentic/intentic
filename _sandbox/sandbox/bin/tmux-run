@@ -246,9 +246,18 @@ fi
 printf '%s\nexport INTENTIC_PIPESTATUS_FILE=%q/pipestatus\nexec 3> >(exec tee -a %q/out)\nteepid=$!\nbash %q/cmd >&3 2>&1\ncode=$?\nexec 3>&-\n%s\nwait "$teepid" 2>/dev/null\necho "$code" > %q/status.part\nmv %q/status.part %q/status\n[ -p %q/wake ] && printf x 2>/dev/null 1<>%q/wake\nexit $code\n' "$first" "$d" "$d" "$d" "$sweep" "$d" "$d" "$d" "$d" "$d" > "$d/runner"
 
 # The persistent pane log (written by the global pipe-pane hooks, src/logs/log-files.ts, VT-rendered to clean
-# text by pane-log-clean) — the filter's footer points the agent here for the full output. Path known only
-# after the pane exists; the session
-# name already satisfies the hooks' sanitized charset, so session-pane composes the exact hook filename.
+# text by pane-log-clean): the filter names its raw-output retention and cache after it. Path known only after the
+# pane exists; the session name already satisfies the hooks' sanitized charset, so session-pane composes the exact
+# hook filename.
+#
+# NEVER THE PATH A RUNNING COMMAND IS FOLLOWED BY. The pane log is not there to read while the command runs: it is
+# first written when the pane prints something (a command quiet at a prompt has none at all), the hourly log prune keeps
+# only the newest 200 under terminals/ (src/logs/log-files.ts GROUP_CAPS), which a busy sandbox makes in well under an
+# hour, so a quiet pane's log is deleted under it, and a turn in an agent domain has no log dir at all. Agents told to
+# "follow" it got "No such file or directory" (244 reads of it 10-16..10-26, 197 from Codex). The early return names
+# $d/out instead: tee opens it before the command starts, nothing removes it on the command's end (an early return
+# leaves $d to the daemon, which files it as the job's dir), and the tmp sweep takes it only after a day without a
+# write, never while it is a job kept for the person (src/system/boot/reaper.ts).
 logfile=""
 
 # Emit the captured output as the tool result, noise-filtered when the filter is present ($1 = exit code
@@ -379,12 +388,12 @@ while [ ! -f "$d/status" ]; do
     if [ -z "$jobdir" ] && [ -f "$d/input-wait" ]; then
         emit running
         printf '\n--- waiting for input: %s\n' "$(head -n 1 "$d/input-wait" 2>/dev/null)"
-        printf -- '--- command still running in tmux window %s · follow: %s\n' "$name" "${logfile:-$d/out}"
+        printf -- '--- command still running in tmux window %s · output so far: %s\n' "$name" "$d/out"
         exit 0
     fi
     if [ "$soft" -ge 1 ] 2>/dev/null && [ "$SECONDS" -ge "$soft" ]; then
         emit running
-        printf '\n--- command still running in tmux window %s · follow: %s\n' "$name" "${logfile:-$d/out}"
+        printf '\n--- command still running in tmux window %s · output so far: %s\n' "$name" "$d/out"
         exit 0
     fi
     if [ -n "$wake" ]; then

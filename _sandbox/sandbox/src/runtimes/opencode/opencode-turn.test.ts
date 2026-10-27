@@ -1,10 +1,11 @@
-import type { OpenCodeClient } from "@opencode/client";
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { realYield } from "@intentic/testing/bun";
 import { turnWatchdog } from "../decorators/turn-watchdog.js";
 import { FORM_DISMISSED, FORM_UNRENDERABLE } from "./opencode-forms.js";
-import type { EventOf } from "./opencode-frames.js";
+import { type EventOf, type ToolEvent, toolCards } from "./opencode-frames.js";
 import {
     answerForm,
     BACKGROUND_WAIT_MS,
@@ -425,4 +426,44 @@ describe("after the server's stream reopened", () => {
 
         expect(await queue.next(turnWatchdog(TIMEOUTS), undefined)).toMatchObject({ type: "session.execution.succeeded", data: { sessionID: "s1" } });
     });
+});
+
+// ---- Tool cards (opencode-frames.ts toolCards) ----
+
+// A card keeps the arguments the model wrote even where `called` brought none: 39% of OpenCode's cards since 2026-10-23
+// were stored with no input, and a failing call could not be told from a mistyped one.
+
+const VIEW = { cwd: WORKSPACE_ROOT, toolName: (raw: string) => (raw.startsWith("web_") ? `mcp__web__${raw.slice(4)}` : raw) };
+// SAFETY: the frames read only `type` and these `data` fields; the rest of an event is the SDK's envelope.
+const toolEvent = (type: OpenCodeEvent["type"], data: Record<string, unknown>): ToolEvent => ({ type, data: { sessionID: "s", assistantMessageID: "m", ...data } }) as never;
+
+// What the card says the call was given: the target read off its input, or the input itself where none reads.
+const givenOf = (frames: readonly AgentEvent[]): string | undefined => {
+    const card = frames.find((frame) => frame.kind === "tool_call");
+    return card?.kind === "tool_call" ? (card.target ?? card.input) : undefined;
+};
+
+test("a call whose `called` came empty keeps the input the model wrote", () => {
+    const cards = toolCards(VIEW);
+    cards.frames(toolEvent("session.tool.input.started", { id: "c1", name: "web_browser_click" }), undefined);
+    cards.frames(toolEvent("session.tool.input.ended", { id: "c1", text: '{"target":"ref=e17","element":"Follow button"}' }), undefined);
+    const opened = cards.frames(toolEvent("session.tool.called", { id: "c1", input: {}, executed: true }), undefined);
+    // The card names the element the model meant; before, an empty `called` left the card with nothing at all.
+    expect(givenOf(opened)).toBe("Follow button");
+});
+
+test("a call that ends without any `called` still opens with what the model wrote", () => {
+    const cards = toolCards(VIEW);
+    cards.frames(toolEvent("session.tool.input.started", { id: "c2", name: "web_browser_type" }), undefined);
+    cards.frames(toolEvent("session.tool.input.ended", { id: "c2", text: '{"target":"","text":"hi"}' }), undefined);
+    const ended = cards.frames(toolEvent("session.tool.failed", { id: "c2", error: { message: "Unexpected token" } }), undefined);
+    expect(givenOf(ended)).toContain('"text":"hi"');
+});
+
+test("what `called` brought wins, and text that is not an object is no input", () => {
+    const cards = toolCards(VIEW);
+    cards.frames(toolEvent("session.tool.input.started", { id: "c3", name: "web_browser_snapshot" }), undefined);
+    cards.frames(toolEvent("session.tool.input.ended", { id: "c3", text: "not json" }), undefined);
+    const opened = cards.frames(toolEvent("session.tool.called", { id: "c3", input: { depth: 3 }, executed: true }), undefined);
+    expect(givenOf(opened)).toBe('{"depth":3}');
 });

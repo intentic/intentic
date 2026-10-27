@@ -426,7 +426,7 @@ test("a foreground call that came back still running is filed as a job the agent
     // What tmux-run leaves for a command still running: its own files, and no status yet.
     writeFileSync(join(dir, "cmd"), "pnpm test\n");
     writeFileSync(join(dir, "out"), "12 pass\n");
-    const output = syncHookOutput(await postToolUse(hooks, { stdout: `12 pass\n\n--- command still running in tmux window run-the-tests · follow: ${dir}/out`, stderr: "" }));
+    const output = syncHookOutput(await postToolUse(hooks, { stdout: `12 pass\n\n--- command still running in tmux window run-the-tests · output so far: ${dir}/out`, stderr: "" }));
     const specific = output.hookSpecificOutput;
     const told = specific?.hookEventName === "PostToolUse" ? (specific.additionalContext ?? "") : "";
     const id = /background job (\S+)\./u.exec(told)?.[1] ?? "";
@@ -447,7 +447,7 @@ test("a foreground call that finished, or came back early and then finished in i
     const command = await rewritten({ command: "pnpm test" }, hooks);
     const dir = dirname((/ -f (\S+) /u.exec(command ?? "")?.[1] ?? "").replaceAll("'", ""));
     writeFileSync(join(dir, "cmd"), "pnpm test\n");
-    await postToolUse(hooks, { stdout: "--- command still running in tmux window run · follow: x", stderr: "" });
+    await postToolUse(hooks, { stdout: "--- command still running in tmux window run · output so far: x", stderr: "" });
     writeFileSync(join(dir, "status"), "0\n");
     // The agent was handed the result to look at in its turn; a finished overrun is not an unread completion.
     expect(settledBackgroundJobs(actors, "conv-overrun-done")).toEqual({ running: [], unseen: [] });
@@ -473,61 +473,25 @@ test("a call that came back at a prompt is told to stop it and run it so it cann
     const { id, dir, told } = await overrun(
         hooks,
         "conv-at-prompt",
-        (at) => `\n--- waiting for input: npm exec eslint src/a.vue (pid 4242)\n--- command still running in tmux window run · follow: ${at}/out`,
+        (at) => `\n--- waiting for input: npm exec eslint src/a.vue (pid 4242)\n--- command still running in tmux window run · output so far: ${at}/out`,
     );
     expect(told).toContain("That command is waiting for input: npm exec eslint src/a.vue (pid 4242) is blocked reading its terminal");
-    expect(told).toContain(`stop it with TaskStop (task_id "${id}")`);
+    expect(told).toContain(`stop it with the \`stop\` tool (target "${id}"`);
     expect(told).toContain("request_help");
-    expect(told).not.toContain(`target "${id}"`);
+    expect(told).not.toContain("`wait` tool");
     rmSync(dir, { recursive: true, force: true });
 });
 
-const taskStop = (hooks: ReturnType<typeof bashTmuxHooks>, taskId: string) => {
-    const hook = hooks.PreToolUse?.find((matcher) => matcher.matcher === "TaskStop|KillShell|KillBash")?.hooks[0];
-    if (hook === undefined) {
-        throw new Error("PreToolUse TaskStop hook not registered");
-    }
-    return hook(
-        {
-            hook_event_name: "PreToolUse",
-            tool_name: "TaskStop",
-            tool_input: { task_id: taskId },
-            tool_use_id: "tu-stop",
-            session_id: "3f2a9b1c-0000-0000-0000-000000000000",
-            transcript_path: "/tmp/t",
-            cwd: WORKSPACE_ROOT,
-        },
-        "tu-stop",
-        { signal: new AbortController().signal },
-    );
-};
-
-// 2026-10-04: the agent was told to wait on job 9672168b by that id, then TaskStop on it answered "No task found" and
-// left npx at its prompt, because the CLI only knows the ids its own run_in_background calls returned.
-test("a stop naming a job by the sandbox's own id ends it here, before the CLI can answer that it knows no such task", async () => {
+// 2026-10-04 and 170 times from 10-02 to 10-26: the agent was told to stop an overrun's job with TaskStop by the sandbox's
+// id, and the CLI answered "No task found" from its validateInput, before any PreToolUse hook could step in. Every note
+// about such a job now names the `stop` tool (subagent-wait.ts), and no PreToolUse hook pretends to catch TaskStop.
+test("an overrun's note names the stop tool for its id, and TaskStop is only followed after the CLI's own stop", async () => {
     const jobs = { conversationId: "conv-stop-own-id", profile: {}, conversations: actors };
     const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs);
-    const { id, dir } = await overrun(hooks, "conv-stop-own-id", (at) => `--- command still running in tmux window run · follow: ${at}/out`);
-    const specific = syncHookOutput(await taskStop(hooks, id)).hookSpecificOutput;
-    expect(specific).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: "deny" });
-    expect(specific?.hookEventName === "PreToolUse" ? specific.permissionDecisionReason : "").toBe(
-        `Stopped background job ${id}: the sandbox ended it itself, since the CLI never knew this id, and it exited 143 (SIGTERM). Nothing more to stop.`,
-    );
-    // No pane ran it here, so its end was written down on its runner's behalf.
-    expect(readFileSync(join(dir, "status"), "utf8").trim()).toBe("143");
-    expect(actors.state("conv-stop-own-id")?.jobs?.find((entry) => entry.id === id)).toMatchObject({ stoppedBy: "agent", exitCode: 143 });
+    const { id, dir, told } = await overrun(hooks, "conv-stop-own-id", (at) => `--- command still running in tmux window run · output so far: ${at}/out`);
+    expect(told).toContain(`the \`stop\` tool (target "${id}")`);
+    expect(told).toContain(`Full output so far: ${dir}/out`);
+    expect(hooks.PreToolUse?.map((matcher) => matcher.matcher)).toEqual(["Bash"]);
+    expect(hooks.PostToolUse?.map((matcher) => matcher.matcher)).toEqual(["TaskStop|KillShell|KillBash", "Bash"]);
     rmSync(dir, { recursive: true, force: true });
-});
-
-test("a stop naming a job by the id the CLI gave it is left to the CLI, whose own result the agent gets", async () => {
-    const jobs = { conversationId: "conv-stop-shell-id", profile: {}, conversations: actors };
-    const hooks = bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs);
-    await rewritten({ command: "pnpm dev", run_in_background: true }, hooks);
-    noteJobShell(actors, "tu-1", "bsh-stop");
-    expect(syncHookOutput(await taskStop(hooks, "bsh-stop"))).toEqual({});
-    expect(syncHookOutput(await taskStop(hooks, "no-such-task"))).toEqual({});
-    const dir = backgroundJobOf(actors, "conv-stop-shell-id", "bsh-stop")?.dir;
-    if (dir !== undefined) {
-        rmSync(dir, { recursive: true, force: true });
-    }
 });

@@ -5,6 +5,8 @@ import { editDiffContent } from "../../sessions/vocabulary/tool-calls.js";
 import { toolCard, type TurnTokens } from "../decorators/vendor-events.js";
 import { retryFrame } from "./opencode-failures.js";
 import { opt } from "../../opt.js";
+import { parseJsonWith } from "@intentic/base/json";
+import { z } from "zod";
 
 // OpenCode 2's events as frames, the parts a turn's own session and its subagents' sessions share: tool cards, and what
 // one model step spent. OpenCode announces a tool call in three steps: its name as the model starts writing it, its
@@ -21,11 +23,17 @@ export type EventOf<T extends OpenCodeEvent["type"]> = Extract<OpenCodeEvent, { 
 
 // The events a tool card is drawn from.
 export type ToolEvent = EventOf<
-    "session.tool.input.started" | "session.tool.called" | "session.tool.progress" | "session.tool.success" | "session.tool.failed"
+    | "session.tool.input.started"
+    | "session.tool.input.ended"
+    | "session.tool.called"
+    | "session.tool.progress"
+    | "session.tool.success"
+    | "session.tool.failed"
 >;
 
 const TOOL_EVENTS: ReadonlySet<string> = new Set([
     "session.tool.input.started",
+    "session.tool.input.ended",
     "session.tool.called",
     "session.tool.progress",
     "session.tool.success",
@@ -78,12 +86,26 @@ export const unreportedTokens = (before: TurnTokens, after: TurnTokens, reported
 const contentText = (content: readonly { readonly type: string; readonly text?: string; readonly uri?: string }[]): string =>
     content.map((part) => (part.type === "text" ? (part.text ?? "") : `[${part.uri ?? "file"}]`)).join("\n");
 
+// A call's arguments, as OpenCode's own event types them.
+type CallInput = EventOf<"session.tool.called">["data"]["input"];
+
 interface Call {
     // The tool's raw name, as the model called it.
     raw: string | undefined;
-    input: Record<string, unknown> | undefined;
+    input: CallInput | undefined;
+    // The input as the model finished writing it (`input.ended`), for a call whose `called` came without it.
+    written: CallInput | undefined;
     opened: boolean;
 }
+
+// `input.ended` carries the arguments as the text the model wrote; one JSON object is an input, anything else is none.
+const WrittenInputSchema: z.ZodType<CallInput> = z.record(z.string(), z.unknown());
+
+// A call's input for its card: what `called` said, or, where that came empty or not at all, what the model wrote. Until
+// 2026-10-27 only `called` was read, and 39% of OpenCode's tool cards since 10-23 (Gemini's browser clicks, typing,
+// snapshots, skills) were stored with no input at all, so a failing call could not be told from a mistyped one.
+const inputOf = (call: Call): CallInput | undefined =>
+    call.input !== undefined && Object.keys(call.input).length > 0 ? call.input : (call.written ?? call.input);
 
 export interface ToolCards {
     // One tool event's frames; `parent` is the subagent call whose session made it. Undefined for a call whose input has
@@ -101,7 +123,7 @@ export const toolCards = (view: TurnView): ToolCards => {
         if (known !== undefined) {
             return known;
         }
-        const fresh: Call = { raw: undefined, input: undefined, opened: false };
+        const fresh: Call = { raw: undefined, input: undefined, written: undefined, opened: false };
         calls.set(id, fresh);
         return fresh;
     };
@@ -111,26 +133,29 @@ export const toolCards = (view: TurnView): ToolCards => {
 
     const finished = (id: string, call: Call, failed: boolean, text: string, parent: string | undefined): AgentEvent => {
         const name = nameOf(call);
-        const diff = failed ? undefined : editDiffContent(name, call.input, view.cwd);
+        const diff = failed ? undefined : editDiffContent(name, inputOf(call), view.cwd);
         const content = [diff ?? { type: "text" as const, text }];
         const status = failed ? ("failed" as const) : ("completed" as const);
         if (call.opened) {
             return { kind: "tool_call_update", id, status, content };
         }
         call.opened = true;
-        return toolCard({ id, name: canonicalOf(call), status, input: call.input, cwd: view.cwd, content, parentToolUseId: parent });
+        return toolCard({ id, name: canonicalOf(call), status, input: inputOf(call), cwd: view.cwd, content, parentToolUseId: parent });
     };
 
     return {
         call: (id) => {
             const known = calls.get(id);
-            return { raw: known?.raw, input: known?.input };
+            return { raw: known?.raw, input: known === undefined ? undefined : inputOf(known) };
         },
         frames: (event, parent) => {
             const call = callOf(event.data.id);
             switch (event.type) {
                 case "session.tool.input.started":
                     call.raw = event.data.name;
+                    return [];
+                case "session.tool.input.ended":
+                    call.written = parseJsonWith(event.data.text, WrittenInputSchema);
                     return [];
                 case "session.tool.called":
                     call.input = event.data.input;
@@ -139,7 +164,7 @@ export const toolCards = (view: TurnView): ToolCards => {
                     }
                     call.opened = true;
                     return [
-                        toolCard({ id: event.data.id, name: canonicalOf(call), input: call.input, cwd: view.cwd, parentToolUseId: parent }),
+                        toolCard({ id: event.data.id, name: canonicalOf(call), input: inputOf(call), cwd: view.cwd, parentToolUseId: parent }),
                     ];
                 case "session.tool.progress":
                     return [];

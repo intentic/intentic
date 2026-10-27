@@ -31,15 +31,22 @@ export interface RuntimeFacts {
     readonly toolPrefix?: string | undefined;
 }
 
-// The Claude Code loop: every tool of its own, every MCP tool spelled `mcp__<server>__<tool>`.
-export const CLAUDE_CODE_RUNTIME: RuntimeFacts = {
-    deferredTools: true,
+// The Claude Code loop: every tool of its own, every MCP tool spelled `mcp__<server>__<tool>`. Whether schemas wait
+// behind ToolSearch is the turn's own (TurnPolicy.toolSearch): a turn the CLI runs with every tool loaded has no
+// ToolSearch at all, and until 2026-10-26 its prompt still said "load them with ToolSearch" seven times. 35 turns in the
+// ten days to then called the tool that was not there, and the routed providers this loop also serves (Kimi through the
+// translator) never had it either.
+export const claudeCodeRuntime = (deferredTools: boolean): RuntimeFacts => ({
+    deferredTools,
     nativeAsk: true,
     planMode: true,
     checklist: true,
     backgroundShell: true,
     secretRefs: true,
-};
+});
+
+// A Claude Code turn with deferred schemas, as every native Claude turn now runs (settings toolSearch).
+export const CLAUDE_CODE_RUNTIME: RuntimeFacts = claudeCodeRuntime(true);
 
 // Any other loop: the shared mounts and nothing of the Claude Code loop's own; whether a secret reference resolves is
 // the runtime's own record (AgentCapabilities.secrets).

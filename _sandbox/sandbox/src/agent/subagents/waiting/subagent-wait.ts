@@ -17,7 +17,8 @@ import type { SubagentWaitUntil } from "../subagents.js";
 import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
 import { opt } from "../../../opt.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
-import { keepBackgroundJob, type KeepOutcome } from "../../tools/jobs/background-jobs.js";
+import { backgroundJobOf, jobFinished, keepBackgroundJob, type KeepOutcome, stopBackgroundJob } from "../../tools/jobs/background-jobs.js";
+import { jobReport } from "../../tools/jobs/job-report.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
@@ -79,6 +80,24 @@ const KEEP_ANSWERS = {
     ended: "That command has already exited, so there is nothing to keep running.",
     stopped: "That command is being stopped, so it cannot be kept. Start it again and keep the new one.",
 } as const satisfies Record<KeepOutcome, string>;
+
+/* A STOP THAT TAKES EVERY ID A JOB IS NAMED BY. A foreground call that runs past its time is filed as a job under the
+   sandbox's own id, the only one it has, and that id is what `wait` and every note about the job name. The CLI's TaskStop
+   cannot take it: its validateInput looks the id up in the CLI's own task list and answers "No task found with ID" before
+   any PreToolUse hook runs (Claude Code 0.3.310), so the hook agent-terminals.ts kept for exactly this never fired, and
+   about 55 stops a week failed and left the command running (170 from 10-02 to 10-26). This takes the CLI's id too, so
+   one tool stops any background command whichever id the agent holds. */
+const STOP_WORDS =
+    "Stop a background command of yours: one you ran with run_in_background, or a Bash call that outlived its window and " +
+    "went on as a background job. Takes the ID `wait` and the job's notes name it by, which is the sandbox's own for a " +
+    "call that outlived its window (TaskStop does not know that one) or the one its Bash call returned. Ends the " +
+    "command and everything it started, and answers with its exit code and the tail of its output.";
+
+const STOP_ANSWERS = {
+    stopped: "Stopped: the command and what it started were ended. Nothing more to stop.",
+    ended: "That command had already exited, so there was nothing left to stop.",
+    unknown: "No background command of this conversation has that ID.",
+} as const;
 
 // The tool's whole answer as one JSON text block, so the model can branch on `outcome` without parsing prose.
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
@@ -258,6 +277,10 @@ const WAIT_WORDS =
     "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
     "now rather than when the wait runs out.";
 
+// A call naming neither `target` nor `targets` waits on nothing; saying which to name beats guessing "any".
+const NO_TARGET =
+    'Name what to wait on: `target` (a subagent\'s id, a background command\'s ID, "any" or "all"), or `targets` for several children as one.';
+
 // A wait on several children as one (work-wait.ts waitForChildren): `targets`, or every live child for "all".
 const waitOnMany = async (
     deps: SubagentWaitDeps,
@@ -274,6 +297,55 @@ const waitOnMany = async (
     });
     return many.outcome === "unknown-target" ? { ...said, note: NOTHING_TO_WAIT_FOR } : said;
 };
+
+// The background commands' own tools, beside wait: keep one running for the person, or stop one.
+const commandTools = (deps: SubagentWaitDeps): ServerTool[] => [
+    sdk().tool(
+        "keep",
+        "Leave a command you ran with run_in_background running for the person after your turn ends: a dev server " +
+            "or preview you started FOR them. This call is the only thing that keeps one: what your reply says " +
+            "decides nothing. A server you reached and did not keep is stopped when your turn ends; one you never " +
+            "reached is waited on like any command. A kept command wakes nobody when it exits and the person stops " +
+            "it from chat or Preview, so give them its address in your reply. Target it by the ID its Bash call returned.",
+        {
+            target: z.string().min(1).describe("The background command's ID, as its Bash call returned it"),
+            reason: z.string().min(1).max(200).describe('What the person gets, e.g. "dev server for you at http://localhost:5173"'),
+        },
+        (args) => {
+            if (deps.conversationId === undefined) {
+                return Promise.resolve(answer({ ok: false, message: "This turn has no conversation, so nothing it starts outlives it." }));
+            }
+            const outcome = keepBackgroundJob(deps.conversations, deps.conversationId, args.target, args.reason);
+            return Promise.resolve(answer({ ok: outcome === "kept", message: KEEP_ANSWERS[outcome] }));
+        },
+        // Changes what the turn's ending does with the job, and nothing else.
+        { annotations: toolAnnotations("write") },
+    ),
+    sdk().tool(
+        "stop",
+        STOP_WORDS,
+        { target: z.string().min(1).describe("The background command's ID, as `wait` or the note about it named it") },
+        async (args) => {
+            if (deps.conversationId === undefined) {
+                return answer({ ok: false, outcome: "unknown", message: STOP_ANSWERS.unknown });
+            }
+            const job = backgroundJobOf(deps.conversations, deps.conversationId, args.target);
+            if (job === undefined) {
+                return answer({ ok: false, outcome: "unknown", message: STOP_ANSWERS.unknown });
+            }
+            // A job an earlier turn's ending handed to a watch keeps it, as on TaskStop's path: its exit then wakes
+            // the conversation once, saying it ended.
+            const outcome = (await stopBackgroundJob(deps.conversations, job, "agent")) ? "stopped" : "ended";
+            return answer({
+                ok: true,
+                outcome,
+                message: STOP_ANSWERS[outcome],
+                ...opt("job", jobFinished(job) ? await jobReport(deps.conversations, job) : undefined),
+            });
+        },
+        { annotations: toolAnnotations("write") },
+    ),
+];
 
 export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWithInstance =>
     sdk().createSdkMcpServer({
@@ -438,11 +510,14 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 "wait",
                 WAIT_WORDS,
                 {
+                    // Optional because `targets` stands in for it: required, it refused every call naming only `targets`, the
+                    // way the description tells the model to wait on several (26 failed calls in 25 conversations, 10-16..10-26).
                     target: z
                         .string()
                         .min(1)
+                        .optional()
                         .describe(
-                            'The subagent\'s id (its call\'s, or the one spawn returned), a background command\'s ID, "any", or "all" for every child still running',
+                            'The subagent\'s id (its call\'s, or the one spawn returned), a background command\'s ID, "any", or "all" for every child still running. Leave it out when you name `targets`.',
                         ),
                     targets: z
                         .array(z.string().min(1))
@@ -461,8 +536,12 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     if (args.targets !== undefined || args.target === "all") {
                         return answer({ ...(await waitOnMany(deps, deps.conversationId, args.targets, timeoutMs)) });
                     }
+                    const target = args.target;
+                    if (target === undefined) {
+                        return answer({ outcome: "unknown-target", note: NO_TARGET });
+                    }
                     const result = await waitForWork(deps.conversations, deps.conversationId, {
-                        ...(args.target !== "any" ? { target: args.target } : {}),
+                        ...opt("target", target === "any" ? undefined : target),
                         until,
                         timeoutMs,
                         signal: deps.signal,
@@ -483,26 +562,6 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
             ),
             ...(deps.result === undefined ? [] : [resultTool(deps.result)]),
             ...(deps.extraTools ?? []),
-            sdk().tool(
-                "keep",
-                "Leave a command you ran with run_in_background running for the person after your turn ends: a dev server " +
-                    "or preview you started FOR them. This call is the only thing that keeps one: what your reply says " +
-                    "decides nothing. A server you reached and did not keep is stopped when your turn ends; one you never " +
-                    "reached is waited on like any command. A kept command wakes nobody when it exits and the person stops " +
-                    "it from chat or Preview, so give them its address in your reply. Target it by the ID its Bash call returned.",
-                {
-                    target: z.string().min(1).describe("The background command's ID, as its Bash call returned it"),
-                    reason: z.string().min(1).max(200).describe('What the person gets, e.g. "dev server for you at http://localhost:5173"'),
-                },
-                (args) => {
-                    if (deps.conversationId === undefined) {
-                        return Promise.resolve(answer({ ok: false, message: "This turn has no conversation, so nothing it starts outlives it." }));
-                    }
-                    const outcome = keepBackgroundJob(deps.conversations, deps.conversationId, args.target, args.reason);
-                    return Promise.resolve(answer({ ok: outcome === "kept", message: KEEP_ANSWERS[outcome] }));
-                },
-                // Changes what the turn's ending does with the job, and nothing else.
-                { annotations: toolAnnotations("write") },
-            ),
+            ...commandTools(deps),
         ],
     });

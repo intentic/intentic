@@ -89,7 +89,7 @@ export const openCodeSubagents = (cards: ToolCards, usage: UsageTotals): OpenCod
         call: (event) => {
             const id = event.data.id;
             const { raw, input } = cards.call(id);
-            if (raw !== SUBAGENT_TOOL || event.type === "session.tool.input.started") {
+            if (raw !== SUBAGENT_TOOL || event.type === "session.tool.input.started" || event.type === "session.tool.input.ended") {
                 return [];
             }
             const frames: AgentEvent[] = [];

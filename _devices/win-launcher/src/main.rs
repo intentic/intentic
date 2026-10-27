@@ -6,6 +6,9 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+// `--capture` and `--frame`: the screen read by GDI calls, for the agent that drives this desktop (capture.rs).
+mod capture;
+
 #[cfg(windows)]
 use std::io::Write;
 
@@ -217,7 +220,11 @@ mod job {
 
 #[cfg(windows)]
 fn main() -> ExitCode {
-    let launch = match parse(std::env::args_os().skip(1).collect()) {
+    let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if capture::asked(&argv) {
+        return capture::main(argv);
+    }
+    let launch = match parse(argv) {
         Ok(launch) => launch,
         // No log path was parsed, so stderr is the only place left — and it exists precisely when a person
         // typed the malformed command line, which is the only way one gets malformed.
@@ -268,7 +275,12 @@ fn main() -> ExitCode {
 /* Everywhere else this is a program with nothing to do, and it says so rather than not existing. */
 #[cfg(not(windows))]
 fn main() -> ExitCode {
-    match parse(std::env::args_os().skip(1).collect()) {
+    let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if capture::asked(&argv) {
+        eprintln!("intentic-launch reads the screen through Windows' own GDI calls, which this system has not got.");
+        return ExitCode::FAILURE;
+    }
+    match parse(argv) {
         Ok(launch) => eprintln!(
             "intentic-launch starts a program without a console window, which is a Windows problem and has no meaning here. Run {} yourself; its log would have been {}.",
             launch.program.to_string_lossy(),

@@ -194,7 +194,7 @@ describe("waiting on a job at a prompt", () => {
             job: { id: job.id, running: true, waitingForInput: { program: `bash ${join(job.dir, "cmd")}`, pid: expect.any(Number) } },
         });
         const answer = workWaitAnswer(result, { pendingQuestion: () => undefined, report: () => undefined, landing: () => undefined });
-        expect(answer["note"]).toContain(`Stop it with TaskStop (task_id "${job.id}")`);
+        expect(answer["note"]).toContain(`Stop it with the \`stop\` tool (target "${job.id}")`);
     });
 
     test.skipIf(!terminal.runs)(terminal.title("a wait counting only finished keeps parking: the prompt is not an exit"), async () => {

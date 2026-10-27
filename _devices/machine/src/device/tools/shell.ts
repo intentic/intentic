@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homeDir } from "@intentic/local-agent";
 import { COMMAND_CLASS_LABELS, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
+import { DEVICE_OWN_DEADLINES } from "@intentic/sandbox-contract/models/device-deadlines";
 import type { CommandClass } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
@@ -21,9 +22,10 @@ import { forgetCommand, recordCommand } from "./command-ledger.js";
 // below reads the same table the sandbox does (sandbox-contract/command-classes.ts), here beside the scopes.
 
 // Long enough for an install or a test run, short of the hub's 15-minute ceiling; the agent can ask for more,
-// up to the hard cap. Exported so the MCP tool's schema is built from these two numbers.
-export const DEFAULT_TIMEOUT_MS = 120_000;
-export const MAX_TIMEOUT_MS = 10 * 60 * 1000;
+// up to the hard cap. Exported so the MCP tool's schema is built from these two numbers, which are the contract's
+// (models/device-deadlines.ts): the daemon sizes the bridge's wait on each call from the same table.
+export const DEFAULT_TIMEOUT_MS = DEVICE_OWN_DEADLINES.run_command.defaultMs;
+export const MAX_TIMEOUT_MS = DEVICE_OWN_DEADLINES.run_command.maxMs;
 // Characters kept per stream, half from the start and half from the end: the head says what the command did, the
 // tail says how it ended, and the megabyte of progress bars between them is counted rather than kept.
 const MAX_OUTPUT = 100_000;

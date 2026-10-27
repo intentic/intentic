@@ -30,7 +30,10 @@ offers to switch on the two automatic rules in steps 2 and 3 below.
    the agent's card on `/agents` and on its review page; there is none in the chat. A **Collaborator** gets
    **Request land** / **Ask to accept** instead. With **Land finished work automatically** on (Sandbox ▸ Agent ▸
    Finishing; off by default, also per agent from its ⋯ menu: **Land automatically** / **Hold work on the
-   branch**), a clean turn lands by itself; a failed or stopped one never does.
+   branch**), a clean turn lands by itself; a failed or stopped one never does. A refused land loses nothing: every
+   worktree keeps everything. Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of
+   its own) never ride a land: they stay in the conversation's copy, listed on its review, until the owner includes or
+   deletes them.
 3. **Save changes / Commit** makes it a version. Until then the landed work is uncommitted, and isolated agents
    start from the last commit, so later agents do not see it. The plain-words **Save** panel commits the whole tree,
    named by the subject written for the landing when the tree holds only that one, else "Your edits". With **Save a
@@ -70,6 +73,12 @@ Files and commits never change the sandbox's image. A tool or package that must 
    turns the restart cut), or press **Rebuild when they're idle** (the sandbox holds the rebuild, starts it once no
    agent is mid-turn, and the card says whom it waits for, with **Cancel rebuild**). The owner can also take a tool out
    again with **Remove from environment** on its row in Contents; that too waits for a rebuild.
+
+Approving the overlay is the owner's. On a HOSTED sandbox (`SANDBOX_VM=1` in its environment) the rebuild is that one
+press of **Rebuild now** and the platform builds it: never hand the owner a command to paste. Elsewhere the rebuild runs
+on the machine this sandbox lives on, which is yours to run when that machine is a connected device (its skill is in
+your list): `list_sandboxes` finds this sandbox by the slug in `SANDBOX_NAME`, then `swap_sandbox` rebuilds its approved
+environment. That restarts this container and so ends your turn: say so and get a yes first.
 
 Not the same thing: the **Update** card on Sandbox ▸ Overview moves the sandbox to a newer Intentic release
 (`/root/.claude/skills/intentic/references/sandbox-behind-app.md`), and **Restart sandbox** on the version card is

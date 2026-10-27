@@ -117,5 +117,26 @@ test("a command the daemon marks as waiting for input comes back at once, naming
     });
     // Far under the 60 s soft timeout: the marker, not the clock, ended the wait.
     expect(Date.now() - started).toBeLessThan(30_000);
-    expect(stdout).toContain("\n--- waiting for input: npm exec eslint src/a.vue (pid 4242)\n--- command still running in tmux window probe · follow: ");
+    expect(stdout).toContain("\n--- waiting for input: npm exec eslint src/a.vue (pid 4242)\n--- command still running in tmux window probe · output so far: ");
+});
+
+// 2026-10-16..10-26: 244 reads of the pane log this line used to name, many answered "No such file or directory": the
+// pane log is first written when the pane prints, and the hourly prune keeps only the newest 200 under terminals/. The
+// line names the run's own capture, which tee opens before the command starts and which lives on with the run's dir.
+test("a command that outlives its window names its run's own capture to read, never the pane log the prune may take", async () => {
+    const { dir } = await stubs();
+    const { INTENTIC_TMUX_NS: _inherited, ...base } = process.env;
+    const { stdout } = await execFileAsync("bash", [TMUX_RUN, "agent-soft", "true", "probe"], {
+        env: {
+            ...base,
+            PATH: `${dir}:${process.env["PATH"] ?? ""}`,
+            INTENTIC_RUN_FILTER: "0",
+            INTENTIC_RUN_SOFT_TIMEOUT_S: "1",
+            INTENTIC_TERMINAL_LOGS_DIR: join(dir, "terminals"),
+            PANE_ALIVE: "1",
+        },
+    });
+    const named = /--- command still running in tmux window probe · output so far: (\S+)\n/u.exec(stdout)?.[1];
+    expect(named).toMatch(/\/intentic-run-[^/]+\/out$/u);
+    expect(named?.startsWith(join(dir, "terminals"))).toBe(false);
 });

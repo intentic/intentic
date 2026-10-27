@@ -809,9 +809,6 @@ export const backgroundJobOf = (actors: Holders, conversationId: string, id: str
         .of(conversationId)
         .find((record) => record.shellId === id || record.job.id === id)?.job;
 
-/** The id the CLI knows the job by: its own task id, which only a `run_in_background` call ever has. */
-export const jobShellId = (actors: Holders, job: BackgroundJob): string | undefined => actors.holdings(JOBS).get(job.id)?.shellId;
-
 /** The id the model was given for the job, else the daemon's own. */
 export const jobHandle = (actors: Holders, job: BackgroundJob): string => actors.holdings(JOBS).get(job.id)?.shellId ?? job.id;
 

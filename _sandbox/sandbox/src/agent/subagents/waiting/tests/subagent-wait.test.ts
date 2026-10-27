@@ -56,7 +56,7 @@ const toolNames = async (server: McpSdkServerConfigWithInstance): Promise<readon
 };
 
 // One schema the SDK cannot convert fails the whole listing, and the CLI then mounts the server with no tools at all.
-test("a delegating turn's server lists wait and keep beside every supervision tool", async () => {
+test("a delegating turn's server lists wait, keep and stop beside every supervision tool", async () => {
     await expect(toolNames(serverWith(unstubbed<ChildSupervisor>("children", {})))).resolves.toEqual([
         "providers",
         "spawn",
@@ -67,11 +67,12 @@ test("a delegating turn's server lists wait and keep beside every supervision to
         "settle",
         "wait",
         "keep",
+        "stop",
     ]);
 });
 
-test("a turn that may not delegate still lists wait and keep", async () => {
-    await expect(toolNames(serverWith(undefined))).resolves.toEqual(["wait", "keep"]);
+test("a turn that may not delegate still lists wait, keep and stop", async () => {
+    await expect(toolNames(serverWith(undefined))).resolves.toEqual(["wait", "keep", "stop"]);
 });
 
 test("keep answers not ok, with the reason, for an id that names none of the conversation's commands", async () => {
@@ -146,7 +147,7 @@ test("a child given a result schema lists a result tool taking that shape, and a
         }),
     );
     const listed = await call("tools/list", {});
-    expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["wait", "result", "keep"]);
+    expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["wait", "result", "keep", "stop"]);
     // SAFETY: tools/list answers each tool with its JSON Schema input; read here only to compare.
     expect((listed.result?.tools?.find((tool) => tool.name === "result") as { inputSchema?: unknown } | undefined)?.inputSchema).toMatchObject({
         properties: { value: { type: "object", properties: { verdict: { type: "string", enum: ["real", "false-positive"] } }, required: ["verdict"], additionalProperties: false } },
@@ -189,4 +190,21 @@ test("spawn passes a result schema on, and refuses one that is no JSON object be
         { ok: false, message: "The result schema must be a JSON object: a JSON Schema describing the value you want back." },
     ]);
     expect(spawned).toHaveLength(1);
+});
+
+// `target` was required although the description says `targets` replaces it, so `{targets: [...]}` failed input validation
+// before the tool ran (26 failed calls in 25 conversations, 2026-10-16..10-26).
+test("wait takes `targets` alone, and says what to name when given neither", async () => {
+    const call = await connect(
+        subagentWaitServer({ conversationId: "parent", conversations: memoryFleet().conversations, signal: new AbortController().signal }),
+    );
+    const many = await call("tools/call", { name: "wait", arguments: { targets: ["kid-a", "kid-b"], timeoutSeconds: 5 } });
+    expect(many.error).toBeUndefined();
+    // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toMatchObject to compare.
+    expect(many.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toMatchObject([{ outcome: "unknown-target" }]);
+    const none = await call("tools/call", { name: "wait", arguments: { timeoutSeconds: 5 } });
+    // SAFETY: as above, one JSON text block per answer.
+    expect(none.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toMatchObject([
+        { outcome: "unknown-target", note: expect.stringContaining("`targets`") },
+    ]);
 });

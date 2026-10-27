@@ -743,7 +743,7 @@ test("an OpenCode turn mounts the turn's remote servers, and a call to one reads
     expect(events).toEqual([
         { kind: "session", sessionId: "s1" },
         // Categorized by its canonical name, as the Claude Code loop's is: going somewhere is a fetch.
-        { kind: "tool_call", id: "c1", name: "Browser navigate", category: "fetch", status: "in_progress", target: "https://example.com" },
+        { kind: "tool_call", id: "c1", name: "Browser navigate", category: "fetch", status: "in_progress", target: "https://example.com", server: "web" },
         { kind: "done" },
     ]);
 });

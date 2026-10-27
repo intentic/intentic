@@ -91,6 +91,12 @@ test("a finished tool_call_update carries the exit code rawOutput or its embedde
     expect(Object.keys(sessionUpdateEvent({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "in_progress", rawOutput: { exitCode: 1 } }, CWD) ?? {})).not.toContain("exitCode");
 });
 
+// An agent that sends a call's arguments only once it runs (Devin) would otherwise leave its card with none.
+test("a tool_call_update carries the input its rawInput names, capped like a card's", () => {
+    expect(sessionUpdateEvent({ sessionUpdate: "tool_call_update", toolCallId: "t1", rawInput: { path: "src/a.ts" } }, CWD)).toMatchObject({ input: '{"path":"src/a.ts"}' });
+    expect(Object.keys(sessionUpdateEvent({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" }, CWD) ?? {})).not.toContain("input");
+});
+
 test("available_commands_update maps to the commands frame", () => {
     expect(
         sessionUpdateEvent(

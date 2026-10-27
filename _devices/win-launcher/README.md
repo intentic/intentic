@@ -29,11 +29,18 @@ flowchart LR
   same size as `LOG_ROTATE_BYTES` in [local-agent](../local-agent). A failed start is written into that log.
 - Ships as the release asset `intentic-launch-windows-<arch>.exe`; [`intentic-machine`](../machine) keeps a copy
   beside its own binary, which is where `local-agent` looks for it. On any other OS it prints a note and exits
-  non-zero. It uses only std (and three kernel32 calls declared by hand for the job), which keeps the download small.
+  non-zero. It uses only std (and Win32 calls declared by hand: three kernel32 ones for the job, and the user32/gdi32
+  ones `--capture` reads the screen with), which keeps the download small.
+- `intentic-launch --capture <out> [--region x,y,w,h]` and `--frame` read the screen for
+  [desktop-automation](../desktop-automation) (2026-10-27). Its PowerShell capture script was refused by Defender's
+  script scanner as malware on both Windows test machines, 54 times in two weeks; the same GDI calls made from this
+  signed binary leave no script to scan. `--capture` writes `IRAW`, width, height and BGRX rows, which the agent turns
+  into a PNG; `--frame` prints `<width> <height> <left> <top>` of the virtual desktop. Both are per-monitor DPI aware.
 
 ## Key files
 
 - [src/main.rs](src/main.rs) — argument parsing, the windowless spawn, log rotation, the `--wait` job and the tests.
+- [src/capture.rs](src/capture.rs) — `--capture` and `--frame`: the screen through GDI, and their tests.
 - [Cargo.toml](Cargo.toml) — no dependencies, and a release profile tuned for size.
 - [../../_tools/scripts/build/build-win-launcher.sh](../../_tools/scripts/build/build-win-launcher.sh) — cross-compiles, checks the PE subsystem and signs.
 

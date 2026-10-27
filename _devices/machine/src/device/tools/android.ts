@@ -18,6 +18,7 @@ import {
 } from "@intentic/desktop-automation";
 import { homeDir } from "@intentic/local-agent";
 import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
+import { DEVICE_OWN_DEADLINES } from "@intentic/sandbox-contract/models/device-deadlines";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { textResult } from "@intentic/sandbox-contract/peer-mcp-server";
 import { calling, type Indicator, machineIndicator } from "../indicator.js";
@@ -128,8 +129,7 @@ const CAPTURE_MS = 30_000;
 const DUMP_MS = 30_000;
 const INSTALL_MS = 5 * 60_000;
 
-export const DEFAULT_SHELL_TIMEOUT_MS = 60_000;
-export const MAX_SHELL_TIMEOUT_MS = 10 * 60_000;
+export const { defaultMs: DEFAULT_SHELL_TIMEOUT_MS, maxMs: MAX_SHELL_TIMEOUT_MS } = DEVICE_OWN_DEADLINES.android_shell;
 export const DEFAULT_LOG_LINES = 200;
 export const MAX_LOG_LINES = 5_000;
 

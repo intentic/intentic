@@ -62,7 +62,7 @@ LOOK UP — reach for these instead of searching /history by hand
                                        the fleet, most recently active first. --all includes the archive;
                                        --repo narrows to conversations spanning one repo; --owner to the
                                        ones a member answers for (any part of their address)
-  agents find '<text>' [--all] [--limit <n>] [--owner <who>] [--json]
+  agents find '<text>' [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
                                        which conversations said or did this, with the line that proves it,
                                        marked by kind: user (asked by its user), said, ran (a tool call's
                                        name and target), asked (a question card), notice, run
@@ -155,6 +155,22 @@ const die = (message) => {
     process.exit(1);
 };
 
+// One verb's own lines of USAGE: its entry and everything indented under it, up to the next verb or heading. What that
+// verb's refusals and its --help print, so the lines that answer the mistake are the ones on screen: the 2026-10
+// post-mortem of 739k agent tool calls found `agents find` refusals read as some other tool's usage, because the whole
+// hundred-line page scrolled the one entry that mattered out of a capped tool result.
+const usageOf = (verb) => {
+    const lines = USAGE.split("\n");
+    const own = (line) => line === `  agents ${verb}` || line.startsWith(`  agents ${verb} `);
+    const start = lines.findIndex(own);
+    if (start === -1) {
+        return USAGE;
+    }
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => !own(line) && !/^\s{3,}\S/u.test(line));
+    return [lines[start], ...rest.slice(0, end === -1 ? rest.length : end), "", "agents --help lists every verb."].join("\n");
+};
+
 // Read lazily, not at startup: `agents --help` has to work in any shell, including one where the daemon
 // isn't running yet — only an actual call needs the token.
 const token = () => {
@@ -208,7 +224,9 @@ const refusalOf = (text) => {
 // `shorts` maps the single-dash spellings a verb knows to a long flag, or to null for one that changes
 // nothing (grep is already case-insensitive, so `-i` is accepted rather than refused); `--` ends the flags.
 // Only the lookups pass `shorts`: a message or a task is free text, and one that starts with "-" is still text.
-const parseFlags = (argv, known, booleans = [], shorts = undefined) => {
+const parseFlags = (argv, known, booleans = [], shorts = undefined, usage = undefined) => {
+    // A verb that hands its own usage (usageOf) gets it under each refusal, instead of a pointer to the whole page.
+    const refuse = (message, pointer = "") => die(usage !== undefined ? `${message}\n\n${usage}` : `${message}${pointer === "" ? "" : ` ${pointer}`}`);
     const flags = {};
     const positional = [];
     for (let i = 0; i < argv.length; i += 1) {
@@ -218,13 +236,13 @@ const parseFlags = (argv, known, booleans = [], shorts = undefined) => {
             break;
         }
         if (arg === "--help" || arg === "-h") {
-            process.stdout.write(`${USAGE}\n`);
+            process.stdout.write(`${usage ?? USAGE}\n`);
             process.exit(0);
         }
         if (arg.startsWith("--")) {
             const [name, inline] = arg.slice(2).split(/=(.*)/su);
             if (!known.includes(name)) {
-                return die(`agents: unknown flag --${name} (agents --help lists them)`);
+                return refuse(`agents: unknown flag --${name}`, "(agents --help lists them)");
             }
             if (booleans.includes(name)) {
                 flags[name] = true;
@@ -240,13 +258,13 @@ const parseFlags = (argv, known, booleans = [], shorts = undefined) => {
             }
             const value = inline ?? argv[i + 1];
             if (value === undefined) {
-                return die(`agents: --${name} needs a value`);
+                return refuse(`agents: --${name} needs a value`);
             }
             flags[name] = value;
             i += inline === undefined ? 1 : 0;
         } else if (shorts !== undefined && arg.length > 1 && arg.startsWith("-")) {
             if (!(arg in shorts)) {
-                return die(`agents: unknown flag ${arg} (agents --help lists them; put a handle or text that starts with "-" after "--")`);
+                return refuse(`agents: unknown flag ${arg}; put a handle or text that starts with "-" after "--"`, "(agents --help lists them)");
             }
             if (shorts[arg] !== null) {
                 flags[shorts[arg]] = true;
@@ -365,10 +383,11 @@ const ls = async (argv) => {
 };
 
 const find = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"], { "-i": null });
+    const usage = usageOf("find");
+    const { flags, positional } = parseFlags(argv, ["all", "limit", "repo", "owner", "json"], ["all", "json"], { "-i": null }, usage);
     const text = positional.join(" ").trim();
     if (text === "") {
-        return die(`agents: find needs something to look for\n\n${USAGE}`);
+        return die(`agents: find needs something to look for\n\n${usage}`);
     }
     const answer = await read(`/fleet?${query({ q: text, all: flags.all, limit: flags.limit, repo: flags.repo, owner: flags.owner })}`);
     if (flags.json === true) {
@@ -1004,7 +1023,7 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     // Before any verb runs, so `agents list --help` is the usage and not the list.
     if (rest.includes("--help") || rest.includes("-h")) {
-        process.stdout.write(`${USAGE}\n`);
+        process.stdout.write(`${command === "find" ? usageOf("find") : USAGE}\n`);
         return;
     }
     if (command === "show") return show(rest);

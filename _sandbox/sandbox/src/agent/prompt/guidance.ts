@@ -17,7 +17,7 @@ import {
     unlistedPhones,
 } from "./guidance/guidance-reach.js";
 
-export { CLAUDE_CODE_RUNTIME, type GuidanceFacts, otherRuntime } from "./guidance/guidance-facts.js";
+export { CLAUDE_CODE_RUNTIME, claudeCodeRuntime, type GuidanceFacts, otherRuntime } from "./guidance/guidance-facts.js";
 
 // This product's own guidance as one ordered registry: each entry says when it applies and what it says. Order is the
 // order a turn reads them, most-stable-first, so the cached prefix survives a session.
@@ -104,9 +104,13 @@ const askText = (facts: EntryFacts): string => {
 };
 
 // How a turn waits: on a background command and the `keep`/`wait` tools where its shell has them, on the daemon's
-// `watch` and `subagents` servers wherever they are mounted, and never on `sleep`.
+// `watch` and `subagents` servers wherever they are mounted, and never on `sleep`. Both tools are named in full: "the
+// `wait` tool" sent 21 turns to ToolSearch for `select:wait`, a name nothing answers to (to 2026-10-26).
 const waitingText = (facts: EntryFacts): string => {
     const watch = facts.watch !== false ? toolName(facts, "watch", "start") : undefined;
+    const wait = toolName(facts, "subagents", "wait");
+    const keep = toolName(facts, "subagents", "keep");
+    const stop = toolName(facts, "subagents", "stop");
     if (facts.runtime.backgroundShell) {
         return (
             "Never idle in the shell. A command that will outlive a few seconds takes `run_in_background: true`, and you " +
@@ -114,11 +118,12 @@ const waitingText = (facts: EntryFacts): string => {
             `(a CI run, a deploy, a remote queue) arm ${watch ?? "a watch"} with a cheap check command and end your turn; it ` +
             "wakes this conversation when the check passes. `sleep N` in a Bash command is not a way to wait: it bills the " +
             "wait to the turn and costs a model round-trip per poll, and a sleep sized to land just under the tool timeout " +
-            "is the most expensive way this harness can do nothing. If you already started work here, wait on it with the " +
-            "`wait` tool (a background command by the ID its Bash call returned, a subagent by its id) rather than " +
-            "re-reading its log on a timer. Do not detach a process yourself (setsid, nohup, `&` with disown): once this " +
+            `is the most expensive way this harness can do nothing. If you already started work here, wait on it with ${wait} ` +
+            "(a background command by the ID its Bash call returned, a subagent by its id) rather than " +
+            `re-reading its log on a timer, and end a background command early with ${stop}, which takes either ID a job ` +
+            "is named by (TaskStop knows only the one its Bash call returned). Do not detach a process yourself (setsid, nohup, `&` with disown): once this " +
             "conversation stops, whatever it left running outside run_in_background is reclaimed. A server you start for the " +
-            "person keeps running after your turn only when you pass its ID to the `keep` tool with a reason, then give " +
+            `person keeps running after your turn only when you pass its ID to ${keep} with a reason, then give ` +
             "them its address; one you reached and did not keep is stopped with your turn, whatever your reply says."
         );
     }
@@ -131,7 +136,7 @@ const waitingText = (facts: EntryFacts): string => {
               "check command and end your turn; it wakes this conversation when the check passes.",
         facts.subagents === false
             ? undefined
-            : `A subagent you started is waited on with ${toolName(facts, "subagents", "wait")}, never by re-reading its log on a timer.`,
+            : `A subagent or background command you started is waited on with ${wait}, never by re-reading its log on a timer.`,
         "Do not detach a process yourself (setsid, nohup, `&` with disown): once this conversation stops, whatever it left " +
             "running is reclaimed.",
     ]
@@ -147,6 +152,9 @@ const phonesOf = ({ ownPhones }: GuidanceFacts): OwnPhoneReach => ownPhones ?? {
 const ENTRIES: readonly GuidanceEntry[] = [
     {
         id: "self",
+        // The AGENTS.md sentences: workspace-memory.ts composes those files into the turn, yet Codex turns (whose own loop
+        // reads AGENTS.md from where it starts) ran `cat AGENTS.md` or read `/work/AGENTS.md`, at a root that had none,
+        // about a hundred times in the month to 2026-10-26, and never opened the repository's own file instead.
         text:
             "You run inside Intentic: a sandbox container serving one workspace, driven from a browser editor, where " +
             "each conversation is an agent on its own git worktree whose finished delta lands in the owner's tree as " +
@@ -154,7 +162,9 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "connect, configure, extend or debug this sandbox; whether it can do something) load the `intentic` skill " +
             `(${PRODUCT_GUIDE}, and the references it names) first and answer from it rather than from memory, and never ` +
             "say Intentic cannot do something without checking there. A workspace's AGENTS.md or README is the owner's " +
-            "instruction to you, not a description of the product.",
+            "instruction to you, not a description of the product. Any AGENTS.md from the workspace root down to where this " +
+            "turn started is already part of these instructions, so do not go looking for it; a repository deeper in keeps " +
+            "its own, which you read like any file before working there.",
     },
     {
         id: "interactive",
@@ -190,13 +200,15 @@ const ENTRIES: readonly GuidanceEntry[] = [
     },
     {
         id: "checklist",
-        // The Task tools are deferred; this line is what makes a turn load them.
+        // Where schemas are deferred the Task tools are too, and this line is what makes a turn load them; where every
+        // tool is loaded there is no ToolSearch to load them with.
         when: (facts) => facts.runtime.checklist,
-        text:
-            "For any task worth more than a few steps, keep a checklist with the Task tools (load them with ToolSearch first: " +
-            "`select:TaskCreate,TaskUpdate,TaskList`). Call TaskCreate once per step up front, TaskUpdate to move exactly one " +
-            "task to in_progress before you start it and to completed the moment it is done. The user watches this list to see " +
-            "where you are, so keep it current as you go rather than updating it in a batch at the end.",
+        text: ({ runtime }) =>
+            `For any task worth more than a few steps, keep a checklist with the Task tools ${ 
+            runtime.deferredTools ? "(load them with ToolSearch first: `select:TaskCreate,TaskUpdate,TaskList`)" : "(TaskCreate, TaskUpdate, TaskList)" 
+            }. Call TaskCreate once per step up front, TaskUpdate to move exactly one ` +
+            `task to in_progress before you start it and to completed the moment it is done. The user watches this list to see ` +
+            `where you are, so keep it current as you go rather than updating it in a batch at the end.`,
     },
     // Shared word for word with the Claude Code plugin's output style; true of every loop that can call tools in parallel.
     { id: "batching", text: BATCHING_GUIDANCE },

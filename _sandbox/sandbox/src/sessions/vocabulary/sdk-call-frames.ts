@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
 import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolInput, toolLocations } from "./tool-calls.js";
 
@@ -57,6 +57,7 @@ export class SdkCallFrames {
             ...opt("target", target),
             // An MCP or Agent call has no target; its input is what the record would otherwise lose.
             ...opt("input", toolInput(block.input, target)),
+            ...opt("server", mcpServerOf(block.name)),
             ...opt("locations", toolLocations(block.input, this.cwd)),
             ...opt("content", diff === undefined ? undefined : [diff]),
             ...opt("parentToolUseId", parent),

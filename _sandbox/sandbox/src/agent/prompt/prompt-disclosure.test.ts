@@ -100,7 +100,8 @@ test("the harness arm's own guidance is shown, though it never rode the append",
 test("the guidance shown is the block the turn was sent", () => {
     const claude = promptDisclosure({
         capabilities: CLAUDE,
-        request: { spec: { systemPromptMode: "intentic" }, policy: { unattended: true }, tools: {} },
+        // A native Claude turn runs with tool search on (the default), as the block below was composed for.
+        request: { spec: { systemPromptMode: "intentic" }, policy: { unattended: true, toolSearch: true }, tools: {} },
         at: AT,
     });
     expect(textOf(claude, "guidance")).toBe(

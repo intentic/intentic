@@ -19,6 +19,7 @@ import { turnedAwayCode } from "../policy/turned-away.js";
 import { errorRow, RENEWAL_WITHDRAWN, RENEWING } from "../events/failure-rows.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
+import { takeToolUpdate } from "../events/tool-update.js";
 import { needRowText } from "../events/need-wake.js";
 import { noticeCode, sandboxNoticeOf } from "../events/sandbox-notice.js";
 import { installRow, landedRow, syncLine } from "./land-rows.js";
@@ -73,6 +74,7 @@ const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>, at: number | 
     ...(event.locations !== undefined ? { locations: event.locations } : {}),
     ...(event.content !== undefined ? { content: event.content } : {}),
     ...(event.input !== undefined ? { input: event.input } : {}),
+    ...(event.server !== undefined ? { server: event.server } : {}),
     ...(at !== undefined ? { startedAt: at, ...(ended(event.status) ? { endedAt: at } : {}) } : {}),
 });
 
@@ -191,15 +193,10 @@ export class TranscriptFold {
                             tool.endedAt = this.now();
                         }
                     }
-                    if (event.exitCode !== undefined) {
-                        tool.exitCode = event.exitCode;
-                    }
+                    takeToolUpdate(tool, event);
                     if (event.content !== undefined) {
                         tool.content = event.content;
                         this.claimByResult(tool);
-                    }
-                    if (event.locations !== undefined) {
-                        tool.locations = event.locations;
                     }
                 });
             case "subagent":

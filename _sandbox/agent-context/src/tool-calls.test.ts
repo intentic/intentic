@@ -1,4 +1,4 @@
-import { displayNameOf, isFileWorkCall, isRootListing, isSearchCall, searchPrecedesFileWork, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
+import { displayNameOf, isFileWorkCall, mcpServerOf, isRootListing, isSearchCall, searchPrecedesFileWork, toolCategoryOf, toolPathsUnder, toolTarget } from "./tool-calls.js";
 
 // The agent's root in these fixtures; the predicates only compare paths against it, nothing here touches the disk.
 const CWD = "/repo";
@@ -126,4 +126,11 @@ test("toolPathsUnder names a file inside the root, relative to it, and nothing o
     expect(toolPathsUnder({ file_path: "/etc/hosts" }, CWD)).toBeUndefined();
     expect(toolPathsUnder({ path: "/repo" }, CWD)).toBeUndefined();
     expect(toolPathsUnder({ command: "ls" }, CWD)).toBeUndefined();
+});
+
+// Every browser shows as "Browser …"; the server is what still says which one ran.
+test("mcpServerOf names the server of an MCP tool, and nothing for a tool of the loop's own", () => {
+    expect(mcpServerOf("mcp__web__browser_navigate")).toBe("web");
+    expect(mcpServerOf("mcp__radarsu-omen__run_command")).toBe("radarsu-omen");
+    expect(mcpServerOf("Bash")).toBeUndefined();
 });

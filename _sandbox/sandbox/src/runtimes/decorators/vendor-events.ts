@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract/events/requests";
-import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
 import { toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
@@ -84,6 +84,8 @@ export const toolCallOpened = (call: {
     readonly content?: ToolCallContent[] | undefined;
     // The call's input as bounded JSON text, for a call with no target (sessions/vocabulary/tool-calls.ts `toolInput`).
     readonly input?: string | undefined;
+    // The MCP server the call went to, which the display name drops (agent-context mcpServerOf).
+    readonly server?: string | undefined;
     readonly parentToolUseId?: string | undefined;
 }): Extract<AgentEvent, { kind: "tool_call" }> => ({
     kind: "tool_call",
@@ -95,6 +97,7 @@ export const toolCallOpened = (call: {
     ...opt("locations", call.locations),
     ...opt("content", call.content),
     ...opt("input", call.input),
+    ...opt("server", call.server),
     ...opt("parentToolUseId", call.parentToolUseId),
 });
 
@@ -132,6 +135,7 @@ export const toolCard = (call: {
         locations: call.locations ?? (call.cwd === undefined ? undefined : toolLocations(call.input, call.cwd)),
         content: call.content,
         input: toolInput(call.input, target),
+        server: mcpServerOf(call.name),
         parentToolUseId: call.parentToolUseId,
     });
 };

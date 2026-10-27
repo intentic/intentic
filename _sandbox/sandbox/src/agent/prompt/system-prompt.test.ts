@@ -3,7 +3,7 @@ import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog"
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { CLAUDE_CODE_RUNTIME, GUIDANCE_HEADER, GUIDANCE_TITLE, guidanceBlock, otherRuntime } from "./guidance.js";
 import { intenticPromptOf } from "./intentic-prompt.js";
-import { sdkSystemPrompt, turnPromptPlacement, withRuntimeGuidance } from "./system-prompt.js";
+import { promptInputOf, sdkSystemPrompt, turnPromptPlacement, withRuntimeGuidance } from "./system-prompt.js";
 
 // Stands in for the installed CLI's preset, so no suite here spawns one: a line and a section the intentic base cuts,
 // around what it keeps.
@@ -335,6 +335,23 @@ test("both built-in bases carry the waiting and context-reuse steers", async () 
         expect(text).toContain("`sleep N`");
         expect(text).toMatch(/already read/i);
     }
+});
+
+// The turn's own tool search decides what the prompt says about loading tools: a turn the CLI runs with every schema
+// loaded (the holdout, or a routed provider this loop serves without tool search) has no ToolSearch to load them with.
+test("the prompt names ToolSearch only on a turn whose tool search is on", async () => {
+    const request = (policy: { readonly unattended: boolean; readonly toolSearch?: boolean }) => ({
+        spec: { systemPromptMode: "intentic" as const, systemPrompt: "" },
+        policy,
+        tools: {},
+    });
+    expect(promptInputOf(request({ unattended: false, toolSearch: true }), false).deferredTools).toBe(true);
+    expect(promptInputOf(request({ unattended: false, toolSearch: false }), false).deferredTools).toBe(false);
+    expect(promptInputOf(request({ unattended: false }), false).deferredTools).toBe(false);
+    const loaded = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, deferredTools: false })) as string;
+    expect(loaded).not.toContain("ToolSearch");
+    const deferred = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, deferredTools: true })) as string;
+    expect(deferred).toContain("ToolSearch");
 });
 
 test("an unattended turn keeps them: a wake nobody watches is where polling costs most", async () => {

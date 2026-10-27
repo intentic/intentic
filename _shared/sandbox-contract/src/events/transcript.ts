@@ -141,6 +141,10 @@ export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
             .describe(
                 "What the call was given, as JSON text cut to a few kilobytes, on a call whose input names no one-line target: an MCP tool's arguments, a delegation's prompt. Read afterwards to learn what was asked when the card alone cannot say.",
             ),
+        server: z
+            .string()
+            .optional()
+            .describe("The MCP server the call went to, where its name does not say: `web`'s browser, an account's `browser` server and a device all show as Browser calls."),
         startedAt: z.number().optional().describe("When the call was seen, in milliseconds. Absent on calls recorded before cards were stamped."),
         endedAt: z
             .number()
@@ -193,6 +197,7 @@ export interface TranscriptTool {
     thinking?: string | undefined;
     subagent?: TranscriptSubagent | undefined;
     input?: string | undefined;
+    server?: string | undefined;
     startedAt?: number | undefined;
     endedAt?: number | undefined;
     exitCode?: number | undefined;

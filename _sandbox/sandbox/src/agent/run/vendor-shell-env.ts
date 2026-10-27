@@ -8,12 +8,18 @@ import { heavyEnvVariables, QUEUE_RUN_BIN, queueRunEnabled } from "../../workloa
 // table, or a table that cannot be read, which leaves the shell as it was.
 export const vendorShellEnv = async (tools: Pick<TurnTools, "heavyCommands">, inherited: Readonly<Record<string, string | undefined>>): Promise<Record<string, string>> => {
     if (tools.heavyCommands === undefined) {
-        return {};
+        return loginPath(inherited["PATH"]);
     }
     try {
-        return heavyEnvVariables(await tools.heavyCommands(), { queueRun: queueRunEnabled() ? QUEUE_RUN_BIN : undefined }, inherited);
+        const heavy = heavyEnvVariables(await tools.heavyCommands(), { queueRun: queueRunEnabled() ? QUEUE_RUN_BIN : undefined }, inherited);
+        return { ...heavy, ...loginPath(heavy["PATH"] ?? inherited["PATH"]) };
     } catch {
         // allow(silent-catch): an unreadable table leaves the vendor's shell as it was, unqueued, never fails the turn.
-        return {};
+        return loginPath(inherited["PATH"]);
     }
 };
+
+// The PATH a login shell puts back (the image's /etc/profile.d/00-intentic-path.sh). Codex runs every command through
+// `bash -lc`, and /etc/profile replaces PATH outright, so the one the daemon built here never reached a command: 67
+// "pnpm: command not found" in the ten days to 2026-10-26. A variable /etc/profile leaves alone carries it past.
+const loginPath = (path: string | undefined): Record<string, string> => (path === undefined || path === "" ? {} : { INTENTIC_LOGIN_PATH: path });

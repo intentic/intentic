@@ -98,7 +98,16 @@ RUN printf '%s\n' \
         "set-hook -g session-created 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
         "set-hook -g after-new-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
         "set-hook -g after-split-window 'pipe-pane -o \"mkdir -p /history/logs/terminals; exec pane-log-clean /history/logs/terminals/#{s|[^a-zA-Z0-9_.-]|_|:session_name}-#{pane_id}.log #{pane_width} #{pane_height}\"'" \
-        > /root/.tmux.conf
+        > /root/.tmux.conf \
+# A login shell starts from /etc/profile's PATH, which drops what the daemon put in front of an agent's: the heavy-queue
+# shims, pnpm, cargo, the extensions' commands. Codex runs every command through `bash -lc`, so its turns met "pnpm:
+# command not found" 67 times in the ten days to 2026-10-26 (and cargo, suites, intentic-docs), with a field note telling
+# each agent to re-export PATH by hand. The daemon hands a vendor shell its full PATH as INTENTIC_LOGIN_PATH
+# (src/agent/run/vendor-shell-env.ts), which /etc/profile leaves alone; this puts it back, or the image's own dirs.
+    && printf '%s\n' \
+        'if [ -n "${INTENTIC_LOGIN_PATH:-}" ]; then PATH="$INTENTIC_LOGIN_PATH"; else PATH="/opt/sandbox/heavy-shims:/usr/local/share/pnpm/bin:/usr/local/cargo/bin:$PATH"; fi' \
+        'export PATH' \
+        > /etc/profile.d/00-intentic-path.sh
 # The daemon runs the app's `pnpm dev` (dev-server.ts) and turns run `pnpm install` in /work, so this stage
 # needs its own pnpm — the build stage's does not carry over. Installed natively rather than through corepack,
 # the same way and for the same reasons as _tools/ci-base/Dockerfile: pnpm 12 is a Rust binary that needs no

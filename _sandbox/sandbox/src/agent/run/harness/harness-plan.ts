@@ -29,7 +29,7 @@ import { agentMounts } from "./agent-mounts.js";
 import { harnessHooks, type HarnessHooksDeps } from "./harness-hooks.js";
 import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAccess } from "./harness-servers.js";
 import { surroundingsNote } from "../../prompt/surroundings.js";
-import { CLAUDE_CODE_RUNTIME } from "../../prompt/guidance.js";
+import { claudeCodeRuntime } from "../../prompt/guidance.js";
 import type { TurnNote } from "@intentic/sandbox-contract/events/transcript";
 
 // The Claude Code loop's own arm: the request no single provider owns, built for native Claude and every provider routed
@@ -170,7 +170,7 @@ const surroundingsOf = (
               input.conversationId,
               { fresh: context.base.spec.sessionId === undefined || context.compacted === true },
               {
-                  runtime: CLAUDE_CODE_RUNTIME,
+                  runtime: claudeCodeRuntime(context.toolSearch === true),
                   unattended: context.base.policy.unattended === true,
                   hostDevices: tools.hostDevices,
                   ownBrowsers: tools.ownBrowsers,

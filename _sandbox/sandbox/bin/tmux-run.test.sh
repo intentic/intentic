@@ -115,6 +115,10 @@ out="$(INTENTIC_RUN_FILTER=0 INTENTIC_RUN_OUTPUT_BYTES=3 bash "$W" "$S" 'printf 
 out="$(INTENTIC_RUN_SOFT_TIMEOUT_S=1 bash "$W" "$S" 'echo started; sleep 60' run)"; rc=$?
 [ "$rc" = 0 ] || { echo "FAIL: soft timeout exited $rc (want 0)"; exit 1; }
 case "$out" in *started*"still running"*) ;; *) echo "FAIL: soft-timeout output missing started/still-running: '$out'"; exit 1;; esac
+# The path it names is the run's own capture, there to read while the command runs on (never the pane log, which the
+# hourly prune may already have taken).
+f="${out##*output so far: }"
+grep -q started "$f" 2>/dev/null || { echo "FAIL: soft-timeout output names '$f', which does not hold the command's output"; exit 1; }
 tmux list-panes -s -t "=$S" -F '#{pane_dead}' | grep -q 0 || { echo "FAIL: long-running pane did not survive early return"; exit 1; }
 
 # A call that asked for more time says so in `soft` beside its line, and is waited on that long: a command finishing at

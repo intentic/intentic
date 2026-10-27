@@ -28,3 +28,15 @@ test("an unknown verb and a verb missing its arguments are usage errors on stdou
     expect(notVue.code).toBe(2);
     expect(notVue.stdout.split("\n")[0]).toBe("lsp: diag --from needs a Vue package's directory and at least one <file>");
 });
+
+test("asking for help is an answer: the usage on stdout, exit 0, wherever the flag sits", () => {
+    const usage =
+        "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>\n  lsp diag --changed [<file...>]\n  lsp diag --from <package dir> <file...>\n";
+    for (const argv of [["--help"], ["-h"], ["help"], ["diag", "--help"], ["rename", "-h"]]) {
+        expect({ argv, ...run(...argv) }).toEqual({ argv, code: 0, stdout: usage, stderr: "" });
+    }
+});
+
+test("`diagnostics` is diag by its long name", () => {
+    expect(run("diagnostics").stdout.split("\n")[0]).toBe("lsp: diag needs at least one <file>");
+});

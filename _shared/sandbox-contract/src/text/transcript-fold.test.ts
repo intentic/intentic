@@ -84,6 +84,20 @@ describe("foldTurn", () => {
         ]);
     });
 
+    // Devin sends a call's arguments only on its updates; a card with nothing yet takes them, one that has its own keeps it.
+    it("takes an update's input into a card that has neither target nor input, and only then", () => {
+        const events: AgentEvent[] = [
+            { kind: "tool_call", id: "t1", name: "Click", category: "other", status: "in_progress" },
+            { kind: "tool_call", id: "t2", name: "Bash", category: "execute", status: "in_progress", target: "ls" },
+            { kind: "tool_call_update", id: "t1", status: "completed", input: '{"ref":"e12"}' },
+            { kind: "tool_call_update", id: "t2", status: "completed", input: '{"command":"ls -la"}' },
+        ];
+        const [click, bash] = foldOf("act", events).flatMap((message) => message.tools ?? []);
+        expect(click?.input).toBe('{"ref":"e12"}');
+        expect(bash).toMatchObject({ target: "ls" });
+        expect(Object.keys(bash ?? {})).not.toContain("input");
+    });
+
     it("leaves an unanswered call in progress", () => {
         const events: AgentEvent[] = [{ kind: "tool_call", id: "t1", name: "Bash", category: "execute", status: "in_progress" }];
         expect(foldOf("run", events).at(-1)?.tools?.[0]?.status).toBe("in_progress");

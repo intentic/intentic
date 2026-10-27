@@ -2,19 +2,32 @@
 // Compiles every package a check or test imports before either runs, via `tsc -b` directly rather than through pnpm's
 // build (which hardlinks into `node_modules` and dies EXDEV in an agent worktree, a separate filesystem). Lets `pnpm
 // test` skip the `^build` turbo edge and still import a current dist.
+//
+// `emit-declarations.mjs [<package>...]`: no argument builds every such package; arguments (a directory such as
+// `_tools/base`, or a name such as `@intentic/base`) build only those, and whatever their tsconfig references, which
+// `tsc -b` brings up to date by itself. That is what `suites` and the daemon's after-land rebuild hand it: just the
+// stale packages (dist-staleness.mjs), where the whole set took 11 s at p50 and 41 s at p90 in agents' worktrees.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { emitsDist, packages, root } from "../../checks/lib/repo.mjs";
+import { scopedPackages } from "./emit-scope.mjs";
 
 // Needs declarations only if `exports` hand a dependent a `dist/` module a compiler reads, not `./src/...`.
 // `_shared/extension-ui` re-exports `@intentic/ui`, which `tsc -b` can't walk; its own `build` emits its declarations.
 const BUILT_BY_VUE_TSC = new Set(["_shared/extension-ui"]);
 const needsDeclarations = packages.filter(({ name, pkg }) => !BUILT_BY_VUE_TSC.has(name) && emitsDist(pkg));
 
+const scope = scopedPackages(needsDeclarations, process.argv.slice(2));
+if ("unknown" in scope) {
+    console.log(`emit-declarations: not a package dependents read from dist: ${scope.unknown.join(", ")}`);
+    process.exit(2);
+}
+
 // A package with a `generate` script has nothing for `tsc -b` to read until it runs, via a shell with its own `.bin`
-// on PATH, not pnpm. `--clean` first, or incremental build reuses `.tsbuildinfo`'s stale root list.
-const generated = needsDeclarations.filter(({ pkg }) => pkg.scripts?.generate !== undefined);
+// on PATH, not pnpm. `--clean` first, or incremental build reuses `.tsbuildinfo`'s stale root list. Scoped, only the
+// ones the asked-for packages read: `--clean` throws their whole output away, which is no part of rebuilding another.
+const generated = scope.reads.filter(({ pkg }) => pkg.scripts?.generate !== undefined);
 for (const { name, dir, pkg } of generated) {
     console.log(`generating: ${name}`);
     const bin = [join(dir, "node_modules/.bin"), join(root, "node_modules/.bin"), process.env.PATH].join(":");
@@ -32,8 +45,12 @@ if (generated.length > 0) {
     }
 }
 
-console.log(`declarations: building ${needsDeclarations.length} packages that dependents read from dist`);
-const build = spawnSync(tsc, ["-b", ...needsDeclarations.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
+console.log(
+    scope.selected.length === needsDeclarations.length
+        ? `declarations: building ${needsDeclarations.length} packages that dependents read from dist`
+        : `declarations: building ${scope.selected.map(({ name }) => name).join(", ")} and what they reference`,
+);
+const build = spawnSync(tsc, ["-b", ...scope.selected.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
 if (build.status !== 0) {
     process.exit(build.status ?? 1);
 }

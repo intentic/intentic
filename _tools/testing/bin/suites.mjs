@@ -8,7 +8,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
-import { staleDist, staleDistWarning } from "../../scripts/build/dist-staleness.mjs";
+import { staleDist } from "../../scripts/build/dist-staleness.mjs";
+import { rebuildNote, rebuildStale } from "../../scripts/build/dist-rebuild.mjs";
 import { explainExit, watchProgress } from "../../scripts/lib/bun-progress.mjs";
 import { ceilingBytes, formatGiB, formatSize, processTree, watchMemory } from "../../scripts/lib/memory-ceiling.mjs";
 import { acquireAtLeast, poolOf, SLOT_BYTES } from "../../scripts/lib/test-memory-pool.mjs";
@@ -257,12 +258,14 @@ const run = async (extra, selection, files, timeoutMs) => {
 };
 
 // A dependency whose dist is older than its source fails imports here exactly as it fails a typecheck, and reads as the
-// code's fault (dist-staleness.mjs): said once, before anything runs. CI builds its dist before it tests, so only here.
+// code's fault (dist-staleness.mjs): rebuilt before anything runs (dist-rebuild.mjs), and said once either way.
+// CI builds its dist before it tests, so only here; INTENTIC_DIST_REBUILD=0 keeps it to the warning.
 if (process.env.CI !== "true") {
     try {
-        const warning = staleDistWarning(staleDist({ forPackage: process.cwd() }));
-        if (warning !== undefined) {
-            process.stderr.write(`suites: ${warning}\n`);
+        const stale = staleDist({ forPackage: process.cwd() });
+        if (stale.length > 0) {
+            const outcome = process.env.INTENTIC_DIST_REBUILD === "0" ? { ok: false, seconds: 0, failed: "INTENTIC_DIST_REBUILD=0" } : rebuildStale(stale);
+            process.stderr.write(`suites: ${rebuildNote(stale, outcome)}\n`);
         }
     } catch (error) {
         process.stderr.write(`suites: could not check for stale dist (${error instanceof Error ? error.message : String(error)})\n`);

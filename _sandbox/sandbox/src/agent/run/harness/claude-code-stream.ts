@@ -528,10 +528,7 @@ class TurnFold {
             index?: number;
             content_block?: { type?: string; id?: string; name?: string };
             delta?: { type: string; text?: string; thinking?: string; partial_json?: string };
-            message?: {
-                model?: string;
-                usage?: RequestUsage;
-            };
+            message?: { model?: string; usage?: RequestUsage };
         };
         // A page the main thread is writing streams to the chat as it is written (agent/pages/page-draft.ts).
         if (parent === undefined) {

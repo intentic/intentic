@@ -1,5 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { CLAUDE_CODE_RUNTIME, GUIDANCE_HEADER, type GuidanceFacts, guidanceBlock, otherRuntime } from "./guidance.js";
+import { CLAUDE_CODE_RUNTIME, claudeCodeRuntime, GUIDANCE_HEADER, type GuidanceFacts, guidanceBlock, otherRuntime } from "./guidance.js";
 
 // The registry as the model reads it: one heading, and the entries a turn's mounts and runtime allow, for every runtime.
 
@@ -119,6 +119,27 @@ test("a runtime is told nothing that names a tool it does not have, and is given
     expect(other).toContain("`mcp__ui__ask`");
     expect(other).toContain("`mcp__subagents__wait`");
     expect(other).toContain("`mcp__watch__start`");
+});
+
+// A Claude Code turn the CLI runs with every schema loaded has no ToolSearch: 35 turns called it anyway in the ten days
+// to 2026-10-26, because the prompt said to. Its own tools (the checklist, the question card) are still named.
+test("a Claude Code turn without deferred schemas is never sent to ToolSearch, and still keeps its checklist", () => {
+    const loaded = guidanceBlock({ ...EVERYTHING_MOUNTED, runtime: claudeCodeRuntime(false) }, "rg");
+    expect(loaded).not.toContain("ToolSearch");
+    expect(loaded).toContain("(TaskCreate, TaskUpdate, TaskList)");
+    const deferred = guidanceBlock(EVERYTHING_MOUNTED, "rg");
+    expect(deferred).toContain("load them with ToolSearch first: `select:TaskCreate,TaskUpdate,TaskList`");
+});
+
+// "The `wait` tool" sent turns to ToolSearch for `select:wait`; the tool is named as the tool list spells it.
+test("the waiting paragraph names the wait and keep tools in full on every runtime", () => {
+    for (const facts of [EVERYTHING_MOUNTED, OTHER_MOUNTED]) {
+        const text = guidanceBlock(facts, "rg");
+        expect(text).toContain("`mcp__subagents__wait`");
+        expect(text).not.toContain("the `wait` tool");
+    }
+    expect(guidanceBlock(EVERYTHING_MOUNTED, "rg")).toContain("`mcp__subagents__keep`");
+    expect(guidanceBlock(EVERYTHING_MOUNTED, "rg")).toContain("`mcp__subagents__stop`");
 });
 
 test("an MCP tool is spelled as this runtime's tool list spells it", () => {

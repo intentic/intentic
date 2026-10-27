@@ -11,10 +11,11 @@ import { vuePackageOf } from "./vue-project.js";
 
 // lsp: TypeScript rename and diagnostics for the agent, over the native compiler; nothing stays resident.
 //   lsp rename <file> <symbol> <newName> rename a declared symbol across its TS project
-//   lsp diag <file...> print diagnostics for the given files
+//   lsp diag <file...> print diagnostics for the given files (`diagnostics` is the same verb)
 //   lsp diag --changed  the same for every file changed since the branch left main, untracked ones included
 //   lsp diag --from <package dir> <file...>  files of other packages, checked through that Vue package's own files
 //                       that import them (the end-of-turn check's dependents, _tools/scripts/verify/reach-typecheck.mjs)
+//   lsp --help | -h | help the usage, exit 0
 // A file of a Vue package (one whose typecheck is vue-tsc) is checked by that package's own vue-tsc over the files the
 // change touches and their direct importers (vue-diag.ts); every other file by the native compiler, over its project.
 // The agent-CLI contract (@intentic/agent-cli's run.ts): everything, errors included, goes to stdout, because an agent
@@ -23,6 +24,12 @@ import { vuePackageOf } from "./vue-project.js";
 
 const USAGE =
     "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>\n  lsp diag --changed [<file...>]\n  lsp diag --from <package dir> <file...>";
+
+// Asking for help is an answer, not a usage error: exit 0. Across 2026-09..10 agents' first call was `lsp --help` 180
+// times and got "unknown command: --help" with exit 2, so the next call guessed a verb instead of reading the list.
+const HELP_FLAGS = new Set(["--help", "-h"]);
+// `diagnostics` is what the skill and the compiler call them; 9 to 25 calls a week typed it and were refused.
+const DIAG = new Set(["diag", "diagnostics"]);
 
 const say = (text: string): void => void process.stdout.write(text);
 
@@ -137,10 +144,15 @@ const runDiag = async (args: readonly string[]): Promise<number> => {
 
 const main = async (argv: readonly string[]): Promise<number> => {
     const [verb, ...rest] = argv;
+    // Anywhere on the line (`lsp diag --help`), before a verb would read it as a file name.
+    if (verb === "help" || argv.some((arg) => HELP_FLAGS.has(arg))) {
+        say(`${USAGE}\n`);
+        return 0;
+    }
     if (verb === "rename") {
         return await runRename(rest);
     }
-    if (verb === "diag") {
+    if (verb !== undefined && DIAG.has(verb)) {
         return await runDiag(rest);
     }
     say(`${verb === undefined ? "" : `lsp: unknown command: ${verb}\n`}${USAGE}\n`);

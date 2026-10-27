@@ -8,6 +8,7 @@ import { environment, has, run } from "./run.js";
 import { DesktopError, type DisplayInfo, type Rect, type ScreenFrame } from "./types.js";
 import { PS_UTF8_OUTPUT } from "./windows/powershell.js";
 import { WINDOWS_DPI_AWARE } from "./windows/windows-dpi.js";
+import { nativeCapture, nativeFrame } from "./windows/native-capture.js";
 
 // Screen capture and geometry across platforms. Capture tries a list of candidate tools in order, since each
 // platform's screenshot program varies; a total failure names what to install. PNG goes to a temp file rather than
@@ -92,6 +93,14 @@ export const capture = async (region?: Rect): Promise<Buffer> => {
     const out = pngPath();
     // An installed tool that failed is reported as itself: the install hint below is only for a device that has none.
     const failures: string[] = [];
+    // Windows asks the signed launcher first, whose GDI calls no script scanner reads (windows/native-capture.ts).
+    const native = process.platform === "win32" ? await nativeCapture(`${out}.raw`, region) : undefined;
+    if (Buffer.isBuffer(native)) {
+        return native;
+    }
+    if (native !== undefined) {
+        failures.push(native);
+    }
     try {
         for (const grabber of grabbers(out, region)) {
             const failed = await attempt(grabber.command, grabber.args(out));
@@ -142,6 +151,11 @@ const WINDOWS_FRAME =
 
 export const frame = async (): Promise<ScreenFrame> => {
     if (process.platform === "win32") {
+        // The launcher's GDI read first, the script only where it has none (windows/native-capture.ts).
+        const native = await nativeFrame();
+        if (native !== undefined) {
+            return native;
+        }
         // The virtual desktop, same as CopyFromScreen; left edge can be negative for a monitor left of primary.
         const out = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_FRAME]);
         const [width, height, left, top] = out.trim().split(/\s+/).map(Number);

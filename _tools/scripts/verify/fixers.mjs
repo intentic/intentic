@@ -129,6 +129,16 @@ export const DERIVED = [
         writes: EXT_SHIMS.map((file) => `_editor/web/public/ext-shims/${file}`),
     },
     { id: "layer tables", wants: touchesTables, cwd: ".", argv: [process.execPath, "_tools/checks/layer-tables.mjs", "--fix"], writes: [] },
+    // Main's dist, which every worktree overlays, rebuilt where a landed source left it stale. Until 2026-10-27 nothing
+    // after a land did, and half a week's conversations found it stale and rebuilt their own (dist-rebuild.mjs says how
+    // many). Writes nothing git tracks, so it never shows among what a land's fixers wrote.
+    {
+        id: "dist",
+        wants: (_root, path) => /^_[\w-]+\/[\w-]+\/src\/.+\.(?:ts|mts|vue)$/u.test(path) && !/\.test\.[mc]?ts$/u.test(path),
+        cwd: ".",
+        argv: [process.execPath, "_tools/scripts/build/dist-rebuild.mjs"],
+        writes: [],
+    },
     // A translation keeps only what English still says: a key `en.json` dropped leaves every other language's copy too.
     {
         id: "translations",

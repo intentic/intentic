@@ -15,7 +15,7 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { RawRouteTable } from "../http/raw-route-server.js";
 import { createRepeatGate } from "../logs/repeat-gate.js";
-import { callFailure } from "./call-failure.js";
+import { type CallDeadline, callFailure } from "./call-failure.js";
 import type { PeerDoor, PeerKind, PeerSlug } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
 import type { PeerStore } from "./peer-store.js";
@@ -76,6 +76,9 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     readonly onConnected?: (id: string, facts: Facts) => void;
     // What a `tools/call` answer becomes on its way back to the model, by tool name.
     readonly sealAnswer?: (id: string, tool: string, answer: unknown) => unknown;
+    // How long the bridge waits on this one message, where the door knows better than its hub's ceiling (a device call
+    // carrying its own timeoutMs), and what the agent reads when that passes; undefined keeps the ceiling.
+    readonly deadline?: (message: RpcMessage) => CallDeadline | undefined;
     // The typed client over a socket that just said hello; absent means oRPC's own WebSocket link, which every door
     // but the phone's speaks. The phone's app is not TypeScript, so its door speaks plain JSON-RPC instead
     // (phones/json-rpc-link.ts) behind the same client shape.
@@ -238,10 +241,11 @@ const forwarded = async (
     request: RpcMessage,
     // The failure as the agent reads it (call-failure.ts): the transport's own words say nothing about the command.
     failed: (error: Error, tool: string | undefined) => string,
+    deadlineMs?: number,
 ): Promise<RpcMessage> => {
     const tool = typeof request.params?.["name"] === "string" ? request.params["name"] : undefined;
     try {
-        const answer = (await hub.mcp(id, request)) as RpcMessage;
+        const answer = (await (deadlineMs === undefined ? hub.mcp(id, request) : hub.mcp(id, request, { signal: AbortSignal.timeout(deadlineMs) }))) as RpcMessage;
         if (request.method === "tools/list") {
             // The peer is software on someone else's machine, at whatever build they last installed; what it publishes
             // still has to convert for a local model, where one unconvertible schema fails the whole turn's tool set.
@@ -257,6 +261,29 @@ const forwarded = async (
     } catch (error) {
         return { jsonrpc: "2.0", id: request.id ?? null, error: { code: -32000, message: failed(error instanceof Error ? error : new Error(errorMessage(error)), tool) } };
     }
+};
+
+// One forward, waited on for the door's deadline for this message when it names one (a device call's own timeoutMs plus
+// the device's answer), else the hub's ceiling; a failure in transit is said as what it means for the call.
+const forwardCall = async (
+    services: Pick<Services, "logger">,
+    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "slug" | "hub">,
+    deps: Pick<PeerRouteDeps<never, unknown, unknown, unknown, unknown>, "sealAnswer" | "deadline"> & {
+        readonly hub: Pick<PeerHub<never, unknown, unknown, unknown>, "mcp" | "rememberTools">;
+    },
+    id: string,
+    message: RpcMessage,
+): Promise<RpcMessage> => {
+    const deadline = deps.deadline?.(message);
+    const failed = (error: Error, tool: string | undefined): string => {
+        const failure = callFailure(door.noun, id, tool, error, deadline?.ms ?? door.hub.callTimeoutMs, deadline?.passed);
+        // The raw words stay in the log, where a transport bug is still diagnosable; the agent reads the sentence.
+        if (failure.kind !== "other") {
+            services.logger.info({ id, tool, kind: failure.kind, reason: errorMessage(error) }, `${door.slug}: a forwarded call failed in transit (${failure.kind})`);
+        }
+        return failure.text;
+    };
+    return await forwarded(deps.hub, deps.sealAnswer, id, message, failed, deadline?.ms);
 };
 
 // What a redeeming peer said about itself, when its door asks and the body reads as a request; otherwise nothing.
@@ -419,14 +446,7 @@ export const createPeerRoutes = <
                 await hub.whenOnline(id, deps.wake.waitMs);
             }
         }
-        return await forwarded(hub, deps.sealAnswer, id, message, (error, tool) => {
-            const failure = callFailure(door.noun, id, tool, error, door.hub.callTimeoutMs);
-            // The raw words stay in the log, where a transport bug is still diagnosable; the agent reads the sentence.
-            if (failure.kind !== "other") {
-                services.logger.info({ id, tool, kind: failure.kind, reason: errorMessage(error) }, `${door.slug}: a forwarded call failed in transit (${failure.kind})`);
-            }
-            return failure.text;
-        });
+        return await forwardCall(services, door, deps, id, message);
     };
 
     return {

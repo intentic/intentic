@@ -392,7 +392,8 @@ test("every turn pins the checklist tools on, and says so in the prompt it pins 
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect(request, capture);
+    // A native Claude turn with tool search on, as every one now runs: the prompt says how to load the deferred tools.
+    await collect({ ...request, policy: { ...request.policy, toolSearch: true } }, capture);
     // Set unconditionally: the model-version gate behind this can move without warning.
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_ENABLE_TODO_TOOLS"]).toBe("1");
     // Enables the Task* half of the tool family, the one the prompt names and task-checklist.ts parses.

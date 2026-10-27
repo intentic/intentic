@@ -7,7 +7,7 @@ import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
-import { CLAUDE_CODE_RUNTIME, GUIDANCE_TITLE, guidanceBlock, type SearchTool } from "./guidance.js";
+import { claudeCodeRuntime, GUIDANCE_TITLE, guidanceBlock, type SearchTool } from "./guidance.js";
 import { ANONYMOUS_BROWSER_SERVER } from "../../browser/tools/browser-servers.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import type { TurnPolicy, TurnSpec, TurnTools } from "../providers/agent-request.js";
@@ -188,13 +188,15 @@ export interface SdkSystemPromptInput {
     readonly search?: SearchTool;
     // The volatile guidance (who is watching, what of the owner's is online) rides the turn's message, not this block.
     readonly stable?: boolean;
+    // Whether connected tools' schemas wait behind ToolSearch this turn (TurnPolicy.toolSearch); absent reads as deferred.
+    readonly deferredTools?: boolean;
 }
 
 // The turn fields the composed prompt reads, in the groups the request holds them in, so both readers — the adapter that
 // sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
     readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim" | "search" | "stablePrompt">;
-    readonly policy: Pick<TurnPolicy, "unattended">;
+    readonly policy: Pick<TurnPolicy, "unattended" | "toolSearch">;
     readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "browserPorts" | "desktop" | "diagnostics" | "hostDevices" | "ownBrowsers" | "ownPhones" | "pages">;
 }
 
@@ -227,6 +229,8 @@ export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: 
     ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
     ...(spec.search === undefined ? {} : { search: spec.search }),
     stable: spec.stablePrompt === true,
+    // Only an explicit `true` turns the CLI's tool search on: a routed provider on this loop (undefined) runs without it.
+    deferredTools: policy.toolSearch === true,
 });
 
 // This product's guidance block, then whatever the turn composed. Shared by both built-in bases, so they differ only in
@@ -247,13 +251,14 @@ export const harnessGuidance = ({
     ownBrowsers,
     ownPhones,
     stable = false,
+    deferredTools = true,
 }: Omit<SdkSystemPromptInput, "mode" | "model" | "custom">): string[] => [
     ...(trim?.guidance === true
         ? []
         : [
               guidanceBlock(
                   {
-                      runtime: CLAUDE_CODE_RUNTIME,
+                      runtime: claudeCodeRuntime(deferredTools),
                       unattended,
                       browserOutputDir,
                       browserAccounts: browserAccounts === true,

@@ -83,6 +83,13 @@ cards.
 The persona, its fence and its shelves are resolved again on every turn, so an edit applies from each
 conversation's next turn.
 
+## A model on their own GPU, or a model server they already run
+
+That is a model endpoint, never a model built into this image: Ollama or LM Studio on the computer hosting the sandbox
+is `http://host.docker.internal:<port>/v1` (11434, 1234). The Local models panel finds and adds those by itself; for
+anything else, `capabilities request endpoint --set baseUrl=… --why …`. Local models inside the sandbox run on its CPU
+only.
+
 ## Is model routing enforced, or a polite ask?
 
 For the model a conversation runs on, it is real: the model is which provider and model the session is started

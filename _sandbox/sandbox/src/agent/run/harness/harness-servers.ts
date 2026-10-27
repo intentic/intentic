@@ -240,8 +240,8 @@ export const secretsServerFor = (deps: HarnessServersDeps, turn: TypistTurn): Mc
         ? typistServer(deps, turn)
         : undefined;
 
-// `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, and
-// `spawn` (same server) starts a full agent on any connected provider; `wait` and `keep` are always offered, the rest
+// `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, `stop` ends one by either of its ids, and
+// `spawn` (same server) starts a full agent on any connected provider; `wait`, `keep` and `stop` are always offered, the rest
 // withheld without the delegate shelf and full agency.
 export const subagentsServerFor = (deps: HarnessServersDeps, { context, persona }: DaemonServerTurn): McpSdkServerConfigWithInstance =>
     subagentWaitServer({

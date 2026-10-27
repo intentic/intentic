@@ -28,6 +28,7 @@ import { bootstrapEnvironments } from "./environment-bootstrap.js";
 import { revokeSuperseded } from "./host-dedupe.js";
 import { hostCallGate } from "./host-call-gate.js";
 import { hostCallRoute } from "./host-call-route.js";
+import { DEVICE_CALL_CEILING_MS, deviceCallDeadline } from "../peers/device-call-deadline.js";
 import type { HostGuardDeps } from "./host-guard-deps.js";
 
 // The user's own computer as a peer door: @intentic/machine dials in with an enrollment token and serves `deviceContract`
@@ -75,7 +76,7 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, typeof HostEnrollment
         // Keepalive and liveness in one, and the agent's own watchdog is timed off the same number, which is
         // why it lives in the contract both sides read (host-protocol.ts) rather than here.
         heartbeatMs: HOST_HEARTBEAT_MS,
-        callTimeoutMs: 15 * 60 * 1000,
+        callTimeoutMs: DEVICE_CALL_CEILING_MS,
         offline: (id) => `"${id}" is not connected right now: the device is asleep, offline, or its agent isn't running.`,
     },
     hello: { schema: HostHelloSchema, announced: (hello) => ({ version: hello.version }) },
@@ -271,4 +272,6 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
         // still be asked (host-call-gate.ts). The machine's own scopes remain the floor; a refusal here only stops what
         // the machine might otherwise have run.
         beforeCall: hostCallGate(services, guards),
+        // Each call waited on for its own deadline plus the device's answer, not the hub's ceiling (device-call-deadline.ts).
+        deadline: deviceCallDeadline,
     });

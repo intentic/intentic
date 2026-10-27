@@ -282,7 +282,7 @@ const parkOnWork = async (actors: Actors, conversationId: string, options: Subag
 
 // What a wait on a command at a prompt tells the model: waiting again cannot end it, and what can.
 const AT_A_PROMPT = (id: string): string =>
-    `This command is waiting for input: the process named in waitingForInput is blocked reading its terminal and nothing has moved, and nothing in your turn can type into it, so waiting again will not end it. Stop it with TaskStop (task_id "${id}") and run it so it cannot ask: a flag that answers for it (--yes, --no-input), its answer piped in, or prompting turned off (npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them its terminal with request_help.`;
+    `This command is waiting for input: the process named in waitingForInput is blocked reading its terminal and nothing has moved, and nothing in your turn can type into it, so waiting again will not end it. Stop it with the \`stop\` tool (target "${id}") and run it so it cannot ask: a flag that answers for it (--yes, --no-input), its answer piped in, or prompting turned off (npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them its terminal with request_help.`;
 
 // What a wait handed back for words said into its turn tells the model, since the words themselves come after it.
 export const WORDS_SAID =

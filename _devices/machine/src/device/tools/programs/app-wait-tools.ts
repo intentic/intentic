@@ -1,6 +1,7 @@
 import type { Desktop } from "@intentic/desktop-automation";
 import { errorMessage } from "@intentic/base/errors";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
+import { DEVICE_OWN_DEADLINES } from "@intentic/sandbox-contract/models/device-deadlines";
 import { LOG_FALLBACK_MS, waitForEnd, waitForLogMatch } from "./app-wait.js";
 import { type AppRun, appLogs, appStatus, assertEither, findRun, MAX_LOG_LINES, readRuns, refreshIsolated, runOutput, runState, waitGone } from "./programs.js";
 
@@ -8,8 +9,9 @@ import { type AppRun, appLogs, appStatus, assertEither, findRun, MAX_LOG_LINES, 
 // untilExit once it ends, each within timeoutMs, so an agent asks once instead of calling in a loop. The waits
 // themselves are app-wait.ts; this is what they are pointed at for one run.
 
-export const DEFAULT_APP_WAIT_MS = 60_000;
-export const MAX_APP_WAIT_MS = 10 * 60_000;
+// The contract's (models/device-deadlines.ts), which the daemon sizes the bridge's wait on each call from.
+export const DEFAULT_APP_WAIT_MS = DEVICE_OWN_DEADLINES.app_status.defaultMs;
+export const MAX_APP_WAIT_MS = DEVICE_OWN_DEADLINES.app_status.maxMs;
 
 export interface AppWaitOptions {
     readonly waitFor?: string | undefined;

@@ -38,6 +38,14 @@ const kindOf = (error: Error): CallFailure["kind"] => {
 
 const seconds = (ms: number): string => (ms >= 120_000 ? `${Math.round(ms / 60_000)} minutes` : `${Math.round(ms / 1000)} s`);
 
+// A door's own deadline for one call, where it knows more than its hub's ceiling does (a device call carrying its own
+// timeoutMs): how long the bridge waits on it, and what the agent reads when that passes, naming the deadline and what
+// it left running.
+export interface CallDeadline {
+    readonly ms: number;
+    readonly passed: (id: string) => string;
+}
+
 export interface CallFailure {
     // What the agent reads in place of the transport's words.
     readonly text: string;
@@ -46,13 +54,23 @@ export interface CallFailure {
 }
 
 /** A forwarded call's transport failure in words an agent can act on; anything not recognised is passed through as it was. */
-export const callFailure = (noun: string, id: string, tool: string | undefined, error: Error, deadlineMs: number): CallFailure => {
+export const callFailure = (
+    noun: string,
+    id: string,
+    tool: string | undefined,
+    error: Error,
+    deadlineMs: number,
+    // The door's own sentence for its deadline passing (CallDeadline), in place of the generic one.
+    passed?: CallDeadline["passed"],
+): CallFailure => {
     const call = tool === undefined || tool === "" ? "the call" : `the ${tool} call`;
     const kind = kindOf(error);
     if (kind === "timeout") {
         return {
             kind: "timeout",
-            text: `"${id}" did not answer ${call} within ${seconds(deadlineMs)}, so the bridge stopped waiting. It may still be running on that ${noun}: check its result before running it again.`,
+            text:
+                passed?.(id) ??
+                `"${id}" did not answer ${call} within ${seconds(deadlineMs)}, so the bridge stopped waiting. It may still be running on that ${noun}: check its result before running it again.`,
         };
     }
     if (kind === "dropped") {

@@ -14,11 +14,15 @@ export const claudeExperimentSettings = {
             "Load the schemas of connected tools (browsers, devices, accounts, phones) only when the agent looks one up, instead of sending all of them with every request. The tools the agent leans on every turn stay loaded. Applies to Claude models on the Claude Code loop.",
         ),
     // Both arms set the CLI's switch explicitly, so a shielded turn and an unshielded one compare the same two things.
+    // Measured and closed on 2026-10-26: Opus 5.5 turns on this loop, 273 deferred against 272 loaded over the same days
+    // (10-18 to 10-26), opened at 52k prompt tokens against 110k, read 120k cached tokens per model call against 194k and
+    // cost $0.055 a call against $0.072 ($5.03 a turn against $7.81 on average). Nothing is held out by default now; an
+    // owner who wants the comparison back sets a share here.
     toolSearchHoldout: z
         .number()
         .min(0)
         .max(1)
-        .default(0.5)
+        .default(0)
         .describe(
             "What share of conversations to run with every tool loaded up front, so the two can be compared. Whole conversations rather than individual turns, because switching mid-conversation would rewrite the prompt the cache holds.",
         ),

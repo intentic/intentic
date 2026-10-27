@@ -48,7 +48,7 @@ const newest = (dir, wanted) => {
 const isSource = (name) => SOURCE.test(name) && !TEST_FILE.test(name) && !name.endsWith(".d.ts");
 
 // The workspace packages `start` reads, its own dependencies and theirs, by manifest; `start` itself included.
-const dependencyClosure = (start, all) => {
+export const dependencyClosure = (start, all) => {
     const byName = new Map(all.map((entry) => [entry.pkg.name, entry]));
     const seen = new Set([start]);
     const queue = [start];

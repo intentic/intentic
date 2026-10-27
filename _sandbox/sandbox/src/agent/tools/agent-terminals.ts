@@ -24,7 +24,6 @@ import {
     fileOverrunCommand,
     jobCommandLine,
     jobOutputPath,
-    jobShellId,
     openBackgroundJob,
     stopBackgroundJob,
 } from "./jobs/background-jobs.js";
@@ -170,10 +169,13 @@ const WAITING_FOR_INPUT = /^--- waiting for input: (.+)$/mu;
 
 // What the agent is told of a call that came back early and was filed as a job: the id to wait on, and what not to do.
 // One that came back at a prompt is told that waiting is what not to do: nothing in its turn can type into a pane.
+// Stopping goes through the `stop` tool (subagent-wait.ts), never TaskStop: such a job has only the sandbox's id, which
+// the CLI's TaskStop refuses before any hook can see it (taskStopHook below). The output named is the job's own capture
+// in its run dir, which lives until the job is collected, never the pane log tmux-run's own line names (see tmux-run).
 export const overrunNote = (job: BackgroundJob, waiting?: string): string =>
     waiting === undefined
-        ? `That command is still running, now as background job ${job.id}. Wait for it with the \`wait\` tool (target "${job.id}"), which returns when it exits with its exit code and output tail; do not poll its log with sleep or re-run it beside the live one. Full output so far: ${jobOutputPath(job)}`
-        : `That command is waiting for input: ${waiting} is blocked reading its terminal and nothing has moved since, so it will sit there until something types into it, and nothing in your turn can. It is still running as background job ${job.id}: stop it with TaskStop (task_id "${job.id}"), then run it so it cannot ask (a flag that answers for it such as --yes or --no-input, its answer piped in, or prompting turned off: npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them the terminal with request_help instead. A \`| tail\` or \`| head\` after it holds back the question itself until the command exits. Output so far: ${jobOutputPath(job)}`;
+        ? `That command is still running, now as background job ${job.id}. Wait for it with the \`wait\` tool (target "${job.id}"), which returns when it exits with its exit code and output tail; do not poll its output with sleep and tail, and do not re-run it beside the live one. To end it early, use the \`stop\` tool (target "${job.id}"); TaskStop does not know this id. Full output so far: ${jobOutputPath(job)}`
+        : `That command is waiting for input: ${waiting} is blocked reading its terminal and nothing has moved since, so it will sit there until something types into it, and nothing in your turn can. It is still running as background job ${job.id}: stop it with the \`stop\` tool (target "${job.id}"; TaskStop does not know this id), then run it so it cannot ask (a flag that answers for it such as --yes or --no-input, its answer piped in, or prompting turned off: npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them the terminal with request_help instead. A \`| tail\` or \`| head\` after it holds back the question itself until the command exits. Output so far: ${jobOutputPath(job)}`;
 
 // A foreground call on its way to the pane, kept until its result shows whether it came back early.
 interface ForegroundCall {
@@ -247,64 +249,31 @@ const StopCallSchema = z
 // The id a stop call names.
 const stopTarget = (input: z.infer<typeof StopCallSchema>): string | undefined => input.task_id ?? input.shell_id;
 
-// A stop call's two hooks: the one that ends a job the CLI cannot name, and the one that ends a job the CLI only signals.
-interface TaskStopHooks {
-    readonly pre: HookCallbackMatcher;
-    readonly post: HookCallbackMatcher;
-}
-
 // The stop the CLI performs cannot reach a job: it signals tmux-run, which under `-b` must survive that very signal (it
 // is also how the turn's CLI exits), so the pane ran on while the agent was told "Successfully stopped task". After a
 // stop that names one of this conversation's jobs, the job is ended for real.
 //
-// And a job the CLI never knew it cannot stop at all: a foreground call filed as a job when it ran past its time
-// (fileOverrunCommand) has only the sandbox's id, which is the one the agent is told to use, and the CLI answered "No task
-// found" and left it running (2026-10-04). A stop naming an id the CLI does not hold is carried out here, before the CLI
-// sees it, and the answer is the call's result. A job an earlier turn's ending handed to a watch keeps that watch, as on
-// the CLI's own path: the stop's exit then wakes the conversation once, saying it ended.
-const taskStopHooks = (jobs: BackgroundJobSeed): TaskStopHooks => ({
-    pre: {
-        matcher: TASK_STOP_TOOLS,
-        hooks: [
-            async (input) => {
-                if (input.hook_event_name !== "PreToolUse") {
-                    return {};
-                }
-                const id = stopTarget(StopCallSchema.parse(input.tool_input));
-                const job = id === undefined ? undefined : backgroundJobOf(jobs.conversations, jobs.conversationId, id);
-                if (job === undefined || jobShellId(jobs.conversations, job) === id) {
-                    return {};
-                }
-                const stopped = await stopBackgroundJob(jobs.conversations, job, "agent");
-                return {
-                    hookSpecificOutput: {
-                        hookEventName: "PreToolUse",
-                        permissionDecision: "deny",
-                        permissionDecisionReason: stopped
-                            ? `Stopped background job ${job.id}: the sandbox ended it itself, since the CLI never knew this id, and it exited 143 (SIGTERM). Nothing more to stop.`
-                            : `Background job ${job.id} had already ended; there was nothing left to stop.`,
-                    },
-                };
-            },
-        ],
-    },
-    post: {
-        matcher: TASK_STOP_TOOLS,
-        hooks: [
-            async (input) => {
-                if (input.hook_event_name !== "PostToolUse") {
-                    return {};
-                }
-                const id = stopTarget(StopCallSchema.parse(input.tool_input));
-                const job = id === undefined ? undefined : backgroundJobOf(jobs.conversations, jobs.conversationId, id);
-                if (job !== undefined) {
-                    // A job this turn's CLI can name was started in this turn, so no watch holds it yet to disarm.
-                    await stopBackgroundJob(jobs.conversations, job, "agent");
-                }
+// Only after: a job the CLI never knew (a foreground call filed as a job when it ran past its time) never reaches a hook
+// at all. TaskStop's validateInput looks the id up in the CLI's own task list and answers "No task found with ID" before
+// PreToolUse runs (Claude Code 0.3.310), so the PreToolUse hook that stood here to stop such a job itself never fired:
+// 170 failed stops from 2026-10-02 to 10-26, each leaving the command running. Such a job is stopped with the `stop`
+// tool (subagent-wait.ts), which every note about it names.
+const taskStopHook = (jobs: BackgroundJobSeed): HookCallbackMatcher => ({
+    matcher: TASK_STOP_TOOLS,
+    hooks: [
+        async (input) => {
+            if (input.hook_event_name !== "PostToolUse") {
                 return {};
-            },
-        ],
-    },
+            }
+            const id = stopTarget(StopCallSchema.parse(input.tool_input));
+            const job = id === undefined ? undefined : backgroundJobOf(jobs.conversations, jobs.conversationId, id);
+            if (job !== undefined) {
+                // A job this turn's CLI can name was started in this turn, so no watch holds it yet to disarm.
+                await stopBackgroundJob(jobs.conversations, job, "agent");
+            }
+            return {};
+        },
+    ],
 });
 
 // Where a Bash call's command files are written: a fenced turn's sandbox and an agent domain each see only their own temp
@@ -346,9 +315,8 @@ export const bashTmuxHooks = (
     const envFlags = envKeyFlags(envKeys);
     // Only a turn that can file a job keeps its foreground calls to look at.
     const foreground = jobs === undefined ? undefined : new Map<string, ForegroundCall>();
-    const stops = jobs === undefined ? undefined : taskStopHooks(jobs);
     return {
-        ...(jobs === undefined || stops === undefined || foreground === undefined ? {} : { PostToolUse: [stops.post, overrunHooks(jobs, foreground)] }),
+        ...(jobs === undefined || foreground === undefined ? {} : { PostToolUse: [taskStopHook(jobs), overrunHooks(jobs, foreground)] }),
         PreToolUse: [
             {
                 matcher: "Bash",
@@ -441,8 +409,6 @@ export const bashTmuxHooks = (
                     },
                 ],
             },
-            // After the Bash rewrite, which callers find first; the SDK matches each by its tool's name, not its place.
-            ...(stops === undefined ? [] : [stops.pre]),
         ],
     };
 };

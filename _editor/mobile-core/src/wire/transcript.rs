@@ -163,6 +163,9 @@ pub struct Tool {
     /// What the call was given, as JSON text cut to a few kilobytes, where no one-line target says it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<String>,
+    /// The MCP server the call went to, where its name does not say (`web`'s browser, an account's, a device's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<Millis>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

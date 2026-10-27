@@ -6,11 +6,11 @@ import type {
     ToolKind as AcpToolKind,
     ToolCallUpdate,
 } from "@agentclientprotocol/sdk/unstable";
+import { toolInput,diffContent,workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { z } from "zod";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract/events/requests";
 import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
-import { diffContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { toolCard } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
 
@@ -95,6 +95,8 @@ const toolCallUpdated = (update: ToolCallUpdate, cwd: string, terminalExit: Term
     ...opt("content", mapContent(update.content, cwd)),
     ...opt("locations", mapLocations(update.locations, cwd)),
     ...opt("exitCode", exitCodeOf(update, terminalExit)),
+    // An agent that sends the arguments only once the call runs (Devin) leaves its card empty otherwise.
+    ...opt("input", toolInput(update.rawInput, undefined)),
 });
 
 // One session/update → at most one AgentEvent. `undefined` = no UI mapping, dropped.
