@@ -11,189 +11,642 @@
     pages by capabilities/machine-face.json): a no-cors fetch settles on ANY answer and cannot read its status, so it
     took Cloudflare's 530 for a dead platform as the workspace being back, went there, and was sent straight back here.
     The fetch stays only for an app that does not grant the command.
+
+    What the reader sees first is WHERE the line is broken, drawn as the route a request takes: this computer, the
+    internet, Intentic (2026-10-27). The browser says when this computer has no network at all (`navigator.onLine`), an
+    HTTP status says Intentic was reached and failed, and anything else is honestly "one of the two": a question mark on
+    the internet, never a guess. Each try sends a spark down that route, and it dies where the break is, so the page shows
+    it is still trying without a sentence saying so. _(Until 2026-10-27) A paragraph explained both possible causes in
+    words, in the system font (only the Latin-Extended file of Public Sans was declared) and a blue that no look of the
+    app wears._
+
+    It wears the reader's look (the app's `Look`, windows/mode.rs `look_init_script`, else what a local face stored on
+    this origin, else the OS), with each look's own canvas, inks and button plaques copied from the editor's tokens.
 -->
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Intentic</title>
+        <script>
+            // Before paint: the look the workspace was in. The app hands the window the look a page last announced
+            // (`__INTENTIC_LOOK__`); a local face on this origin may have stored one of its own; else the OS decides, as
+            // the editor does (dark wears sanctum, light the plain look).
+            (function () {
+                var PAIRS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"], silver: ["dark", "silver"] };
+                var scheme = null;
+                var skin = null;
+                try {
+                    scheme = localStorage.getItem("ui-color-scheme");
+                    skin = localStorage.getItem("ui-skin");
+                } catch (e) {}
+                var given = window.__INTENTIC_LOOK__;
+                if (typeof given === "string" && Object.prototype.hasOwnProperty.call(PAIRS, given)) {
+                    scheme = PAIRS[given][0];
+                    skin = PAIRS[given][1];
+                }
+                var os = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+                function look() {
+                    var dark = scheme === "dark" || (scheme !== "light" && !!os && os.matches);
+                    if (skin === "sanctum" || skin === "silver") return skin;
+                    if (!dark) return "light";
+                    return skin === "none" ? "dark" : "sanctum";
+                }
+                document.documentElement.setAttribute("data-look", look());
+                if (os && os.addEventListener) {
+                    os.addEventListener("change", function () {
+                        document.documentElement.setAttribute("data-look", look());
+                    });
+                }
+            })();
+        </script>
         <style>
             @font-face {
                 font-family: "Public Sans";
-                src: url("/fonts/public-sans-100-900-latin-ext.woff2") format("woff2");
                 font-weight: 100 900;
+                font-display: swap;
+                src: url("/fonts/public-sans-100-900-latin.woff2") format("woff2");
+                unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
             }
-            :root {
-                color-scheme: light dark;
-                --canvas: #f7f7f5;
-                --content: #1c1c1a;
-                --subtle: #6b6b66;
-                --line: #dcdcd6;
-                --link: #2f5bd8;
+            @font-face {
+                font-family: "Public Sans";
+                font-weight: 100 900;
+                font-display: swap;
+                src: url("/fonts/public-sans-100-900-latin-ext.woff2") format("woff2");
+                unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
             }
-            @media (prefers-color-scheme: dark) {
-                :root {
-                    --canvas: #161615;
-                    --content: #ececea;
-                    --subtle: #9a9a94;
-                    --line: #33332f;
-                    --link: #8aa6ff;
-                }
+            @font-face {
+                font-family: "JetBrains Mono";
+                font-weight: 100 800;
+                font-display: swap;
+                src: url("/fonts/jetbrains-mono-100-800-latin.woff2") format("woff2");
+                unicode-range: U+0000-00FF, U+2000-206F;
             }
+
+            /* THE FOUR LOOKS, as the editor's tokens resolve them (semantic-colors.css, skins/sanctum.css, skins/silver.css).
+               `--wire` is the route's line, a step darker than the editor's hairline so it reads at a glance; `--signal`
+               the spark that travels it; `--warn` where it breaks; `--ember` the lotus, the brand's own mark in every look. */
+            :root,
+            :root[data-look="light"] {
+                color-scheme: light;
+                --canvas: color-mix(in oklab, oklch(96% 0.005 65) 94%, oklch(80% 0.11 55));
+                --ink: color-mix(in oklab, oklch(23% 0.008 65) 92%, oklch(50% 0.135 48));
+                --muted: color-mix(in oklab, oklch(48% 0.011 65) 88%, oklch(33% 0.085 45));
+                --subtle: color-mix(in oklab, oklch(58% 0.011 65) 78%, oklch(33% 0.085 45));
+                --plate: oklch(99% 0.004 65);
+                --plate-edge: oklch(84% 0.012 65);
+                --wire: oklch(80% 0.014 65);
+                --signal: oklch(67% 0.175 55);
+                --warn: oklch(64% 0.15 68);
+                --ember: #e07b27;
+                --radius: 8px;
+                --accent-fill: oklab(0.8 0.0596 0.0855 / 0.28);
+                --accent-ink: oklch(50% 0.128 55);
+                --accent-edge: rgb(188 92 0 / 0.2);
+                --accent-lift: none;
+                --boring-fill: rgb(41 32 26 / 0.08);
+                --boring-ink: var(--ink);
+                --boring-edge: rgb(41 32 26 / 0.16);
+                --boring-lift: none;
+                --wash: rgb(41 32 26 / 0.06);
+                --grain: none;
+            }
+            :root[data-look="dark"] {
+                color-scheme: dark;
+                --canvas: oklch(16% 0.007 65);
+                --ink: oklch(94% 0.006 65);
+                --muted: oklch(71% 0.01 65);
+                --subtle: oklch(58% 0.011 65);
+                --plate: oklch(20% 0.008 65);
+                --plate-edge: oklch(32% 0.01 65);
+                --wire: oklch(36% 0.012 65);
+                --signal: oklch(75% 0.13 55);
+                --warn: oklch(76% 0.14 80);
+                --accent-fill: rgb(234 152 94 / 0.1);
+                --accent-ink: oklch(75% 0.123 55);
+                --accent-edge: rgb(234 152 94 / 0.2);
+                --boring-fill: rgb(238 234 232 / 0.08);
+                --boring-edge: rgb(238 234 232 / 0.16);
+                --wash: rgb(238 234 232 / 0.06);
+            }
+            /* Gold on warm stone: the bright gold is the signal, the button that does the thing is the bone plaque, the
+               rest the stone one, each with the editor's own lit lip and drop. */
+            :root[data-look="sanctum"] {
+                color-scheme: dark;
+                --canvas: color-mix(in oklab, oklch(16% 0.007 65) 84%, black);
+                --ink: #efe3cd;
+                --muted: #b7a68d;
+                --subtle: #9c8b73;
+                --plate: oklch(18.5% 0.01 70);
+                --plate-edge: rgb(201 160 92 / 0.26);
+                --wire: rgb(201 160 92 / 0.3);
+                --signal: #e5c489;
+                --warn: oklch(72% 0.13 62);
+                --radius: 5px;
+                --accent-fill: rgb(179 167 148);
+                --accent-ink: rgb(29 22 14);
+                --accent-edge: rgb(44 36 24 / 0.5);
+                --accent-lift: inset 0 1px 0 rgb(255 250 238 / 0.2), 0 1px 0 rgb(0 0 0 / 0.5), 0 2px 5px -2px rgb(0 0 0 / 0.6);
+                --boring-fill: oklab(0.365 0.0047 0.0155);
+                --boring-ink: #efe3cd;
+                --boring-edge: rgb(10 8 5 / 0.7);
+                --boring-lift: inset 0 1px 0 rgb(255 244 222 / 0.1), 0 1px 0 rgb(0 0 0 / 0.4), 0 2px 5px -2px rgb(0 0 0 / 0.6);
+                --wash: rgb(201 160 92 / 0.08);
+                --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cdefs%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006' numOctaves='3' seed='37' stitchTiles='stitch' result='macro'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' seed='19' stitchTiles='stitch' result='fine'/%3E%3CfeComposite in='fine' in2='macro' operator='arithmetic' k1='0.35' k2='0.65' k3='0' k4='-0.06' result='grain'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.55 0 0 0 0 0.52 0 0 0 0 0.48 0.12 0 0 0 -0.035'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='480' height='480' filter='url(%23f)'/%3E%3C/svg%3E");
+            }
+            :root[data-look="silver"] {
+                color-scheme: dark;
+                --canvas: oklch(21.2% 0.002 250);
+                --ink: oklch(96% 0.002 250);
+                --muted: oklch(74% 0.003 250);
+                --subtle: oklch(62% 0.003 250);
+                --plate: oklch(25% 0.002 250);
+                --plate-edge: rgb(255 255 255 / 0.1);
+                --wire: rgb(255 255 255 / 0.16);
+                --signal: oklch(86% 0.003 250);
+                --warn: oklch(78% 0.12 78);
+                --radius: 6px;
+                --accent-fill: rgb(255 255 255 / 0.1);
+                --accent-ink: oklch(96% 0.002 250);
+                --accent-edge: rgb(255 255 255 / 0.08);
+                --boring-fill: rgb(255 255 255 / 0.05);
+                --boring-ink: oklch(91% 0.002 250);
+                --boring-edge: transparent;
+                --wash: rgb(255 255 255 / 0.05);
+            }
+
             html,
             body {
-                height: 100%;
+                min-height: 100%;
                 margin: 0;
             }
             body {
                 display: grid;
                 place-items: center;
-                background: var(--canvas);
-                color: var(--content);
+                min-height: 100vh;
+                background: var(--canvas) var(--grain) 0 0 / 480px 480px repeat fixed;
+                color: var(--ink);
                 font: 14px/1.5 "Public Sans", system-ui, sans-serif;
+                -webkit-font-smoothing: antialiased;
             }
             main {
-                max-width: 26rem;
-                padding: 2rem;
+                box-sizing: border-box;
+                width: min(100%, 30rem);
+                padding: 2.5rem 1.25rem;
                 display: flex;
                 flex-direction: column;
-                gap: 0.75rem;
+                align-items: center;
+                text-align: center;
             }
-            h1 {
-                font-size: 1.125rem;
-                font-weight: 600;
-                margin: 0;
+
+            /* THE ROUTE. Three stations a request passes, each a plate cut at the corners like the app's own glyphs. */
+            .route {
+                width: 100%;
+                max-width: 22.5rem;
+                margin: 0 0 1.75rem;
             }
-            p {
-                margin: 0;
+            .route svg {
+                display: block;
+                width: 100%;
+                height: auto;
+                overflow: visible;
+            }
+            .stops {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                margin-top: 0.375rem;
+                font-size: 0.75rem;
+                line-height: 1.3;
                 color: var(--subtle);
             }
-            .status {
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                font-size: 0.8125rem;
-                font-variant-numeric: tabular-nums;
+            .stops span {
+                padding: 0 0.25rem;
+                transition: opacity 0.3s;
             }
-            .dot {
-                width: 0.5rem;
-                height: 0.5rem;
-                border-radius: 50%;
-                background: var(--link);
-                animation: pulse 1.6s ease-in-out infinite;
+            .wire {
+                stroke: var(--wire);
+                stroke-width: 2;
+                fill: none;
+                transition:
+                    transform 0.45s cubic-bezier(0.3, 1.5, 0.5, 1),
+                    stroke 0.3s,
+                    opacity 0.3s;
             }
-            @keyframes pulse {
+            .plate {
+                fill: var(--plate);
+                stroke: var(--plate-edge);
+                stroke-width: 1.5;
+                transition: stroke 0.3s;
+            }
+            .glyph {
+                fill: none;
+                stroke: var(--ink);
+                stroke-width: 2;
+                stroke-linecap: square;
+                stroke-miterlimit: 2;
+            }
+            .lotus {
+                fill: var(--ember);
+            }
+            .station {
+                transition: opacity 0.3s;
+            }
+            .snap {
+                fill: none;
+                stroke: var(--warn);
+                stroke-width: 2;
+                stroke-linecap: square;
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+            .badge {
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
+            .badge circle {
+                fill: var(--warn);
+                stroke: var(--canvas);
+                stroke-width: 2.5;
+            }
+            .badge text {
+                fill: var(--canvas);
+                font: 700 10px "Public Sans", system-ui, sans-serif;
+                text-anchor: middle;
+                dominant-baseline: central;
+            }
+            .spark {
+                opacity: 0;
+            }
+            .spark .core {
+                fill: var(--signal);
+                transition: fill 0.15s;
+            }
+            .spark .halo {
+                fill: var(--signal);
+                opacity: 0.22;
+            }
+            .spark.spent .core,
+            .spark.spent .halo {
+                fill: var(--warn);
+            }
+            .route.probing .spark .halo {
+                animation: breathe 0.9s ease-in-out infinite;
+                transform-box: fill-box;
+                transform-origin: center;
+            }
+            @keyframes breathe {
                 50% {
-                    opacity: 0.25;
+                    transform: scale(1.5);
+                    opacity: 0.1;
                 }
             }
-            @media (prefers-reduced-motion: reduce) {
-                .dot {
-                    animation: none;
+
+            /* Where the break is. Offline: the first link snaps, everything past it goes cold. */
+            main[data-kind="offline"] .a2,
+            main[data-kind="offline"] .b1,
+            main[data-kind="offline"] .b2,
+            main[data-kind="unknown"] .a2,
+            main[data-kind="unknown"] .b1,
+            main[data-kind="unknown"] .b2 {
+                stroke-dasharray: 2 5;
+            }
+            main[data-kind="offline"] .route:not(.joined) .a1 {
+                transform: translateX(-7px);
+            }
+            main[data-kind="offline"] .route:not(.joined) .a2 {
+                transform: translateX(7px);
+            }
+            main[data-kind="offline"] .route:not(.joined) .snap {
+                opacity: 1;
+            }
+            main[data-kind="offline"] .station.net,
+            main[data-kind="offline"] .station.ic,
+            main[data-kind="unknown"] .station.ic {
+                opacity: 0.4;
+            }
+            main[data-kind="offline"] .stops .net,
+            main[data-kind="offline"] .stops .ic,
+            main[data-kind="unknown"] .stops .ic {
+                opacity: 0.55;
+            }
+            /* Unknown: this computer has a network, and nothing says whether the internet or Intentic is the one down. */
+            main[data-kind="unknown"] .badge.net {
+                opacity: 1;
+            }
+            /* Server: the route is whole and Intentic itself answered with an error. */
+            main[data-kind="server"] .station.ic .plate {
+                stroke: var(--warn);
+            }
+            main[data-kind="server"] .badge.ic {
+                opacity: 1;
+            }
+            /* Back: the whole route lit, on the way to the workspace. */
+            main[data-kind="back"] .wire {
+                stroke: var(--signal);
+            }
+            main[data-kind="back"] .station.ic .plate {
+                stroke: var(--signal);
+            }
+            .route.hit .snap,
+            .route.hit .badge circle,
+            main[data-kind="server"] .route.hit .station.ic .plate {
+                animation: flare 0.6s ease-out;
+            }
+            @keyframes flare {
+                30% {
+                    stroke-width: 3.5;
+                    filter: brightness(1.35);
                 }
+            }
+
+            h1 {
+                margin: 0;
+                font-size: 1.375rem;
+                line-height: 1.25;
+                font-weight: 600;
+                letter-spacing: -0.012em;
+                text-wrap: balance;
+            }
+            p {
+                margin: 0.5rem 0 0;
+                max-width: 24rem;
+                color: var(--muted);
+                text-wrap: pretty;
             }
             .actions {
                 display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
                 gap: 0.5rem;
-                margin-top: 0.5rem;
+                margin-top: 1.5rem;
             }
             button {
-                font: inherit;
-                padding: 0.4rem 0.9rem;
-                border-radius: 0.375rem;
-                border: 1px solid var(--line);
-                background: transparent;
-                color: var(--content);
+                height: 2rem;
+                padding: 0 0.875rem;
+                font: 500 13px/1 "Public Sans", system-ui, sans-serif;
+                border-radius: var(--radius);
+                border: 1px solid var(--boring-edge);
+                background: var(--boring-fill);
+                box-shadow: var(--boring-lift);
+                color: var(--boring-ink);
                 cursor: pointer;
+                transition: filter 0.15s;
             }
-            button.primary {
-                background: var(--link);
-                border-color: var(--link);
-                color: #fff;
+            button:hover {
+                filter: brightness(1.08);
+            }
+            button:active {
+                filter: brightness(0.94);
+            }
+            button.accent {
+                border-color: var(--accent-edge);
+                background: var(--accent-fill);
+                box-shadow: var(--accent-lift);
+                color: var(--accent-ink);
+            }
+            button.quiet {
+                border-color: transparent;
+                background: transparent;
+                box-shadow: none;
+                color: var(--muted);
+                transition: background-color 0.15s;
+            }
+            button.quiet:hover {
+                filter: none;
+                background: var(--wash);
+                color: var(--ink);
             }
             button:focus-visible {
-                outline: 2px solid var(--link);
+                outline: 2px solid var(--signal);
                 outline-offset: 2px;
             }
-            code {
+            button[hidden] {
+                display: none;
+            }
+
+            /* The next try: a dial that drains to it, and the failure's own name for whoever is asked to read it out. */
+            .foot {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: center;
+                gap: 0.25rem 0.75rem;
+                margin-top: 1.25rem;
                 font-size: 0.75rem;
                 color: var(--subtle);
+                font-variant-numeric: tabular-nums;
+            }
+            .tick {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.375rem;
+            }
+            .dial {
+                width: 14px;
+                height: 14px;
+                transform: rotate(-90deg);
+            }
+            .dial circle {
+                fill: none;
+                stroke-width: 2;
+            }
+            .dial .track {
+                stroke: var(--wire);
+            }
+            .dial .hand {
+                stroke: var(--signal);
+                stroke-dasharray: 31.42;
+                transition: stroke-dashoffset 1s linear;
+            }
+            .dial.checking {
+                animation: turn 0.8s linear infinite;
+            }
+            .dial.checking .hand {
+                stroke-dasharray: 8 23.42;
+                stroke-dashoffset: 0 !important;
+                transition: none;
+            }
+            @keyframes turn {
+                from {
+                    transform: rotate(-90deg);
+                }
+                to {
+                    transform: rotate(270deg);
+                }
+            }
+            /* Kept in its place rather than removed, so nothing above it moves while the workspace loads. */
+            main[data-kind="back"] .foot {
+                visibility: hidden;
+            }
+            code {
+                font: 11px "JetBrains Mono", ui-monospace, monospace;
+                color: var(--subtle);
+                opacity: 0.8;
+            }
+            code:empty {
+                display: none;
+            }
+            .tick + code:not(:empty) {
+                padding-left: 0.75rem;
+                border-left: 1px solid var(--wire);
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .wire,
+                .station,
+                .stops span,
+                .snap,
+                .badge,
+                .dial .hand {
+                    transition: none;
+                }
+                .dial.checking,
+                .route.probing .spark .halo {
+                    animation: none;
+                }
             }
         </style>
     </head>
     <body>
-        <main>
+        <main id="page" data-kind="unknown">
+            <figure class="route" id="route" aria-hidden="true">
+                <svg viewBox="0 0 360 72">
+                    <defs>
+                        <path id="plate" d="M-16 -23H16L23 -16V16L16 23H-16L-23 16V-16Z" />
+                        <path id="petal-s" d="M16 9.5c2.1 3 3.2 5.7 3.2 8.1 0 2.2-1.1 4.1-3.2 5.6-2.1-1.5-3.2-3.4-3.2-5.6 0-2.4 1.1-5.1 3.2-8.1z" />
+                        <path id="petal-m" d="M16 6.4c2.4 3.4 3.6 6.4 3.6 9.1 0 2.5-1.2 4.6-3.6 6.3-2.4-1.7-3.6-3.8-3.6-6.3 0-2.7 1.2-5.7 3.6-9.1z" />
+                    </defs>
+                    <!-- The wires run under the plates, end to end, so a half pulled aside at the break never shows an end. -->
+                    <line class="wire a1" x1="60" y1="36" x2="120" y2="36" />
+                    <line class="wire a2" x1="120" y1="36" x2="180" y2="36" />
+                    <line class="wire b1" x1="180" y1="36" x2="240" y2="36" />
+                    <line class="wire b2" x1="240" y1="36" x2="300" y2="36" />
+                    <path class="snap" d="M114 44 119 28M121 44 126 28" />
+
+                    <g class="station pc">
+                        <use href="#plate" class="plate" x="60" y="36" />
+                        <path class="glyph" transform="translate(48 23.5)" d="M2 4h15v12H2Z M9 16v4 M5 20h8 M17 9h5v12h-5Z" />
+                    </g>
+                    <g class="station net">
+                        <use href="#plate" class="plate" x="180" y="36" />
+                        <path class="glyph" transform="translate(168 24)" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z M3 12h18 M12 3c-5 5-5 13 0 18 5-5 5-13 0-18Z" />
+                    </g>
+                    <g class="station ic">
+                        <use href="#plate" class="plate" x="300" y="36" />
+                        <g class="lotus" transform="translate(300 37) scale(1.12) translate(-16 -12.9)">
+                            <use href="#petal-s" transform="rotate(-74 16 22.6)" opacity=".55" />
+                            <use href="#petal-s" transform="rotate(74 16 22.6)" opacity=".55" />
+                            <use href="#petal-m" transform="rotate(-39 16 21.7)" opacity=".78" />
+                            <use href="#petal-m" transform="rotate(39 16 21.7)" opacity=".78" />
+                            <path d="M16 3.4c2.8 4 4.2 7.5 4.2 10.6 0 2.9-1.4 5.4-4.2 7.3-2.8-1.9-4.2-4.4-4.2-7.3 0-3.1 1.4-6.6 4.2-10.6z" />
+                        </g>
+                    </g>
+                    <g class="badge net" transform="translate(200 16)"><circle r="7.5" /><text>?</text></g>
+                    <g class="badge ic" transform="translate(320 16)"><circle r="7.5" /><text>!</text></g>
+
+                    <g class="spark" id="spark"><circle class="halo" r="8" /><circle class="core" r="3.25" /></g>
+                </svg>
+                <div class="stops">
+                    <span class="pc" id="stop-pc"></span>
+                    <span class="net" id="stop-net"></span>
+                    <span class="ic" id="stop-ic"></span>
+                </div>
+            </figure>
             <h1 id="title"></h1>
             <p id="body"></p>
-            <div class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="status"></span></div>
             <div class="actions">
-                <button id="retry" class="primary" type="button"></button>
+                <button id="retry" class="accent" type="button"></button>
                 <button id="face" type="button" hidden></button>
-                <button id="close" type="button"></button>
+                <button id="close" class="quiet" type="button"></button>
             </div>
-            <code id="detail"></code>
+            <div class="foot">
+                <span class="tick">
+                    <svg class="dial" id="dial" viewBox="0 0 14 14" aria-hidden="true">
+                        <circle class="track" cx="7" cy="7" r="5" />
+                        <circle class="hand" id="hand" cx="7" cy="7" r="5" />
+                    </svg>
+                    <span id="status" role="status" aria-live="polite"></span>
+                </span>
+                <code id="detail"></code>
+            </div>
         </main>
         <script>
             (function () {
-                // The reader's language among the app's catalogs; English for the rest.
+                // The reader's language among the app's catalogs (the one a local face stored, else the system's);
+                // English for the rest. One heading and one short sentence per cause, the one thing the reader can act
+                // on; that the window comes back by itself is the dial's to say, under the buttons.
                 var words = {
                     en: {
-                        title: "Intentic isn't answering right now",
-                        body: "Your workspace lives online, and it isn't answering this computer right now: either this computer has no connection, or Intentic is having trouble. We keep trying.",
-                        trying: "Trying again in {s} s",
-                        checking: "Checking...",
+                        offline: ["This computer is offline", "Check its Wi-Fi or network cable."],
+                        unknown: ["Can't reach Intentic", "Either this computer is offline or Intentic is down."],
+                        server: ["Intentic is having trouble", "Nothing on your side needs fixing."],
+                        back: ["Intentic is back", "Opening your workspace…"],
+                        stillHere: "Sandboxes on this computer still work.",
+                        stops: ["This computer", "Internet", "Intentic"],
+                        trying: "Next try in {s} s",
+                        checking: "Checking…",
                         retry: "Try now",
                         close: "Close",
                         face: "Use this computer's sandboxes",
-                        stillHere: "The sandboxes on this computer keep working in the meantime.",
-                        serverError: "Intentic's servers answered with an error ({code}).",
                     },
                     pl: {
-                        title: "Intentic w tej chwili nie odpowiada",
-                        body: "Twoje miejsce pracy jest w sieci i w tej chwili nie odpowiada temu komputerowi: albo ten komputer nie ma połączenia, albo Intentic ma problemy. Próbujemy dalej.",
+                        offline: ["Ten komputer jest offline", "Sprawdź Wi-Fi albo kabel sieciowy."],
+                        unknown: ["Nie można połączyć się z Intentic", "Albo ten komputer jest offline, albo Intentic nie działa."],
+                        server: ["Intentic ma problemy", "Po twojej stronie nie trzeba nic naprawiać."],
+                        back: ["Intentic znów odpowiada", "Otwieram miejsce pracy…"],
+                        stillHere: "Sandboxy na tym komputerze nadal działają.",
+                        stops: ["Ten komputer", "Internet", "Intentic"],
                         trying: "Kolejna próba za {s} s",
-                        checking: "Sprawdzam...",
+                        checking: "Sprawdzam…",
                         retry: "Spróbuj teraz",
                         close: "Zamknij",
                         face: "Użyj sandboxów z tego komputera",
-                        stillHere: "Sandboxy na tym komputerze w tym czasie działają dalej.",
-                        serverError: "Serwery Intentic odpowiedziały błędem ({code}).",
                     },
                     de: {
-                        title: "Intentic antwortet gerade nicht",
-                        body: "Dein Arbeitsbereich ist online und antwortet diesem Computer gerade nicht: Entweder hat dieser Computer keine Verbindung, oder Intentic hat Probleme. Wir versuchen es weiter.",
+                        offline: ["Dieser Computer ist offline", "Prüfe WLAN oder Netzwerkkabel."],
+                        unknown: ["Intentic ist nicht erreichbar", "Entweder ist dieser Computer offline oder Intentic ist ausgefallen."],
+                        server: ["Intentic hat Probleme", "Auf deiner Seite gibt es nichts zu beheben."],
+                        back: ["Intentic antwortet wieder", "Arbeitsbereich wird geöffnet…"],
+                        stillHere: "Die Sandboxen auf diesem Computer laufen weiter.",
+                        stops: ["Dieser Computer", "Internet", "Intentic"],
                         trying: "Neuer Versuch in {s} s",
-                        checking: "Wird geprüft...",
+                        checking: "Wird geprüft…",
                         retry: "Jetzt versuchen",
                         close: "Schließen",
                         face: "Sandboxen dieses Computers verwenden",
-                        stillHere: "Die Sandboxen auf diesem Computer laufen in der Zwischenzeit weiter.",
-                        serverError: "Die Server von Intentic haben mit einem Fehler geantwortet ({code}).",
                     },
                     fr: {
-                        title: "Intentic ne répond pas pour l'instant",
-                        body: "Votre espace de travail est en ligne et ne répond pas à cet ordinateur pour l'instant : soit cet ordinateur n'a pas de connexion, soit Intentic rencontre un problème. Nous continuons d'essayer.",
+                        offline: ["Cet ordinateur est hors ligne", "Vérifiez le Wi-Fi ou le câble réseau."],
+                        unknown: ["Impossible de joindre Intentic", "Soit cet ordinateur est hors ligne, soit Intentic est en panne."],
+                        server: ["Intentic rencontre un problème", "Rien à réparer de votre côté."],
+                        back: ["Intentic répond à nouveau", "Ouverture de votre espace de travail…"],
+                        stillHere: "Les sandboxes de cet ordinateur fonctionnent toujours.",
+                        stops: ["Cet ordinateur", "Internet", "Intentic"],
                         trying: "Nouvel essai dans {s} s",
-                        checking: "Vérification...",
+                        checking: "Vérification…",
                         retry: "Réessayer",
                         close: "Fermer",
                         face: "Utiliser les sandboxes de cet ordinateur",
-                        stillHere: "Les sandboxes de cet ordinateur continuent de fonctionner en attendant.",
-                        serverError: "Les serveurs d'Intentic ont répondu par une erreur ({code}).",
                     },
                     es: {
-                        title: "Intentic no responde ahora mismo",
-                        body: "Tu espacio de trabajo está en línea y ahora mismo no responde a este equipo: o este equipo no tiene conexión, o Intentic tiene problemas. Seguimos intentándolo.",
+                        offline: ["Este equipo no tiene conexión", "Revisa el wifi o el cable de red."],
+                        unknown: ["No se puede conectar con Intentic", "O este equipo no tiene conexión, o Intentic está caído."],
+                        server: ["Intentic tiene problemas", "No tienes nada que arreglar por tu parte."],
+                        back: ["Intentic vuelve a responder", "Abriendo tu espacio de trabajo…"],
+                        stillHere: "Los sandboxes de este equipo siguen funcionando.",
+                        stops: ["Este equipo", "Internet", "Intentic"],
                         trying: "Nuevo intento en {s} s",
-                        checking: "Comprobando...",
+                        checking: "Comprobando…",
                         retry: "Intentar ahora",
                         close: "Cerrar",
                         face: "Usar los sandboxes de este equipo",
-                        stillHere: "Los sandboxes de este equipo siguen funcionando mientras tanto.",
-                        serverError: "Los servidores de Intentic respondieron con un error ({code}).",
                     },
                 };
-                var lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+                var stored = null;
+                try {
+                    stored = localStorage.getItem("ui-locale");
+                } catch (e) {}
+                var lang = words[stored] ? stored : (navigator.language || "en").slice(0, 2).toLowerCase();
                 var t = words[lang] || words.en;
                 document.documentElement.lang = words[lang] ? lang : "en";
 
@@ -202,30 +655,110 @@
                 // Only ever back to a web page: this page is the app's own origin, and a script URL here would run in it.
                 var target = /^https?:\/\//i.test(to) ? to : "";
                 var status = query.get("status") || "";
-
-                document.getElementById("title").textContent = t.title;
-                document.getElementById("body").textContent = t.body;
-                document.getElementById("retry").textContent = t.retry;
-                document.getElementById("close").textContent = t.close;
-                // A dead platform's answer (`http-530`) said in words, its code kept; WebView2's own name for a network
+                // A dead platform's answer (`http-530`) is Intentic reached and failing; WebView2's own name for a network
                 // failure stays as it is, for whoever is asked to read it out.
                 var http = /^http-(\d{3})$/.exec(status);
-                document.getElementById("detail").textContent = http ? t.serverError.replace("{code}", http[1]) : status;
+
+                var page = document.getElementById("page");
+                var route = document.getElementById("route");
+                var title = document.getElementById("title");
+                var body = document.getElementById("body");
+                var said = document.getElementById("status");
+                var dial = document.getElementById("dial");
+                var hand = document.getElementById("hand");
+                var spark = document.getElementById("spark");
+
+                document.getElementById("stop-pc").textContent = t.stops[0];
+                document.getElementById("stop-net").textContent = t.stops[1];
+                document.getElementById("stop-ic").textContent = t.stops[2];
+                document.getElementById("retry").textContent = t.retry;
+                document.getElementById("close").textContent = t.close;
+                document.getElementById("detail").textContent = http ? "HTTP " + http[1] : status;
 
                 // This computer's own sandboxes, when the app built the page that opens them: only ever a page of this
                 // page's own bundle, so nothing a link put in the address can send the window anywhere else.
                 var face = query.get("face") || "";
                 var bundle = location.protocol + "//" + location.host + "/";
-                if (face.indexOf(bundle) === 0) {
+                var offered = face.indexOf(bundle) === 0;
+                if (offered) {
                     var offer = document.getElementById("face");
                     offer.textContent = t.face;
                     offer.hidden = false;
                     offer.addEventListener("click", function () {
                         location.replace(face);
                     });
-                    document.getElementById("body").textContent = t.body + " " + t.stillHere;
                 }
-                var said = document.getElementById("status");
+
+                // WHERE THE BREAK IS. No network at all is the browser's to say; an HTTP answer means Intentic was
+                // reached; a network failure with a network up could be either side, and is drawn as a question.
+                var kind = "";
+                function cause() {
+                    if (navigator.onLine === false) return "offline";
+                    return http ? "server" : "unknown";
+                }
+                function show(next) {
+                    kind = next;
+                    page.setAttribute("data-kind", next);
+                    title.textContent = t[next][0];
+                    body.textContent = offered && next !== "back" ? t[next][1] + " " + t.stillHere : t[next][1];
+                }
+                show(cause());
+
+                // EACH TRY IS A SPARK down the route that dies where the break is: out to it while the app is asked,
+                // flaring there when the answer is no, on to Intentic when it is yes. Nothing moves under reduced motion.
+                var still = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+                var END = { offline: 112, unknown: 150, server: 278 };
+                var flight = null;
+                function at(x, opacity, scale) {
+                    return { transform: "translate(" + x + "px, 36px) scale(" + scale + ")", opacity: opacity };
+                }
+                function moving() {
+                    return !still.matches && typeof spark.animate === "function";
+                }
+                function landed(animation) {
+                    return animation && animation.finished ? animation.finished.catch(function () {}) : Promise.resolve();
+                }
+                function launch() {
+                    route.classList.add("probing");
+                    if (!moving()) return;
+                    spark.classList.remove("spent");
+                    var end = END[kind] || END.unknown;
+                    var from = kind;
+                    var leg = spark.animate([at(84, 0, 0.5), at(94, 1, 1), at(end, from === "unknown" ? 0.2 : 1, 1)], {
+                        duration: 500 + (end - 84) * 2.4,
+                        easing: "cubic-bezier(.25,.7,.35,1)",
+                        fill: "forwards",
+                    });
+                    flight = { leg: leg, end: end, faded: from === "unknown" };
+                }
+                function fizzle() {
+                    route.classList.remove("probing");
+                    var was = flight;
+                    flight = null;
+                    landed(was && was.leg).then(function () {
+                        route.classList.remove("joined");
+                        route.classList.remove("hit");
+                        void route.getBoundingClientRect();
+                        route.classList.add("hit");
+                        setTimeout(function () {
+                            route.classList.remove("hit");
+                        }, 650);
+                        if (!was) return;
+                        spark.classList.add("spent");
+                        spark.animate([at(was.end, was.faded ? 0.2 : 1, 1), at(was.end, 0, 2.6)], { duration: 420, easing: "ease-out", fill: "forwards" });
+                    });
+                }
+                function arrive() {
+                    route.classList.remove("probing");
+                    route.classList.remove("joined");
+                    show("back");
+                    var was = flight;
+                    flight = null;
+                    if (!was) return;
+                    landed(was.leg).then(function () {
+                        spark.animate([at(was.end, 1, 1), at(300, 0, 1.6)], { duration: 300 + (300 - was.end) * 1.5, easing: "ease-in", fill: "forwards" });
+                    });
+                }
 
                 // Whether the workspace answers with something usable: the app's answer where it gives one (see the
                 // comment at the top), else a no-cors request, which settles on any answer at all.
@@ -245,47 +778,65 @@
                         fetched,
                     );
                 }
+
+                // THE DIAL drains to the next try, aimed each second at where it will be a second later so its slide
+                // ends as the number does.
                 var EVERY = 5;
+                var RIM = 31.42;
                 var left = EVERY;
                 var checking = false;
+                function aim(remaining, glide) {
+                    hand.style.transition = glide && !still.matches ? "" : "none";
+                    hand.style.strokeDashoffset = String(RIM * (1 - remaining / EVERY));
+                }
+                function tick() {
+                    if (checking) return;
+                    said.textContent = t.trying.replace("{s}", String(left));
+                    aim(left - 1, true);
+                }
+                function again() {
+                    checking = false;
+                    dial.classList.remove("checking");
+                    left = EVERY;
+                    aim(EVERY, false);
+                    void hand.getBoundingClientRect();
+                    tick();
+                }
                 function check() {
                     if (!target || checking) return;
                     checking = true;
                     said.textContent = t.checking;
+                    dial.classList.add("checking");
+                    launch();
                     var gave = false;
                     var timer = setTimeout(function () {
                         gave = true;
-                        checking = false;
-                        left = EVERY;
-                        tick();
+                        fizzle();
+                        again();
                     }, 8000);
                     answers().then(
                         function (usable) {
                             if (gave) return;
                             clearTimeout(timer);
                             if (usable) {
+                                arrive();
+                                said.textContent = "";
                                 location.replace(target);
                                 return;
                             }
-                            checking = false;
-                            left = EVERY;
-                            tick();
+                            fizzle();
+                            again();
                         },
                         function () {
                             if (gave) return;
                             clearTimeout(timer);
-                            checking = false;
-                            left = EVERY;
-                            tick();
+                            fizzle();
+                            again();
                         },
                     );
                 }
-                function tick() {
-                    if (checking) return;
-                    said.textContent = t.trying.replace("{s}", String(left));
-                }
                 setInterval(function () {
-                    if (checking) return;
+                    if (checking || kind === "back") return;
                     left -= 1;
                     if (left <= 0) {
                         check();
@@ -293,13 +844,29 @@
                         tick();
                     }
                 }, 1000);
-                window.addEventListener("online", check);
+                window.addEventListener("offline", function () {
+                    if (kind !== "back") show("offline");
+                });
+                window.addEventListener("online", function () {
+                    if (kind === "offline") show(cause());
+                    check();
+                });
                 document.getElementById("retry").addEventListener("click", check);
                 document.getElementById("close").addEventListener("click", function () {
                     location.href = "intentic://window?do=close";
                 });
+                aim(EVERY, false);
                 tick();
-                document.getElementById("retry").focus();
+
+                // The try that brought the window here, drawn once as the page arrives: the route whole, then the spark
+                // dying where it breaks.
+                if (moving()) {
+                    route.classList.add("joined");
+                    setTimeout(function () {
+                        launch();
+                        fizzle();
+                    }, 380);
+                }
             })();
         </script>
     </body>

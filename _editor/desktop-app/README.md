@@ -91,7 +91,10 @@ flowchart LR
   start that finds nothing answering at all while nothing has started to show (`machine_face::reached`: a 530 is left to
   the load, which the hosted editor's service worker may answer with its cached copy), sends the window to the face on a
   computer that hosts sandboxes, else to `offline.html`, which also offers the face. On Windows the offline page offers
-  it after WebView2 says a load failed or answered that way (its `status` is then `http-<code>`, said in words). To
+  it after WebView2 says a load failed or answered that way (its `status` is then `http-<code>`). The page draws where
+  the break is, in the reader's look, as the route a request takes (this computer, the internet, Intentic): no network
+  at all snaps the first link, an HTTP status marks Intentic, and any other failure puts a question mark on the
+  internet. Each retry sends a spark down that route to the break. To
   answer is to answer usably everywhere (`machine_face::answers`), and the offline page asks the app that
   (`machine_face_online`) rather than fetching the workspace itself. _(2026-10-26) Any HTTP status used to count as the
   workspace answering. The platform's editor and API sit behind one Cloudflare tunnel, so a dead platform host is
