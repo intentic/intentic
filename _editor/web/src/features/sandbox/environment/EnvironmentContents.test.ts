@@ -1,8 +1,9 @@
-// Pins EnvironmentContents' shape, not the inventory (contents.integration.test.ts has that): staples as a scannable
-// strip, a closed row costing one line, attribution said once.
+// Pins EnvironmentContents' shape, not the inventory (contents.integration.test.ts has that): the decisions as chips whose
+// card opens on a press, staples as plain names with nothing to press, attribution said once, several taken out at once.
 import "@intentic/testing/dom";
 import type { EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
-import { type App, createApp, h, nextTick } from "vue";
+import PrimeVue from "primevue/config";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -10,7 +11,9 @@ import { IconStub } from "@intentic/ui/testing";
 // mark paints its fallback tier.
 (() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
-    // jsdom ships no ResizeObserver; nothing in this suite depends on measured width.
+    // Nothing lays the page out here, so every element measures 0×0, which the opened card reads as its chip scrolled
+    // away and closes on. A chip's size is all it measures.
+    HTMLElement.prototype.getBoundingClientRect = (): DOMRect => DOMRect.fromRect({ x: 0, y: 0, width: 120, height: 32 });
 })();
 
 const { default: EnvironmentContents } = await import("./EnvironmentContents.vue");
@@ -44,6 +47,16 @@ const GROUPS: ContentsGroup[] = [
                     `produce are raw frames until something encodes them.\n\nThe promo captures go out as MP4, which its ` +
                     `bundled build cannot encode.`,
                 commands: `RUN apt-get install -y ffmpeg`,
+                block: `ffmpeg`,
+            },
+            {
+                id: `custom:sox`,
+                name: `sox`,
+                origin: `custom`,
+                state: `awaiting-approval`,
+                tools: [],
+                purpose: `Trims the voice notes.`,
+                block: `sox`,
             },
         ],
     },
@@ -83,26 +96,34 @@ const GROUPS: ContentsGroup[] = [
 ];
 
 let app: App | undefined;
+// What the list asked the card to take out, one entry per press.
+let removed: string[][] = [];
 
-const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
+const mount = (groups: ContentsGroup[] = GROUPS, removable = false): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins avoid pulling in the whole UI plugin.
     app = createApp({
-        render: () => h(EnvironmentContents, { loaded: { state: `ready`, data: groups, refreshing: false, refreshError: undefined } }),
+        render: () =>
+            h(EnvironmentContents, {
+                loaded: { state: `ready`, data: groups, refreshing: false, refreshError: undefined },
+                removable,
+                onRemove: (items: EnvironmentItem[]) => removed.push(items.map((item) => item.name)),
+            }),
     });
     app.component(`Icon`, IconStub);
+    app.component(`RouterLink`, defineComponent({ props: { to: { type: String, default: `` } }, setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots[`default`]?.()) }));
     app.directive(`tooltip`, {});
+    app.use(PrimeVue);
     app.mount(el);
     return el;
 };
 
-// Every pill in the staples strip; row-disclosure headers (`aria-expanded`) are excluded.
-const pills = (el: HTMLElement): HTMLButtonElement[] =>
-    [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter((button) => !button.hasAttribute(`aria-expanded`));
-
-// The row's own disclosure toggle: the pressable header button, marked by `aria-expanded`.
-const disclosure = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`button[aria-expanded]`)!;
+const chip = (el: HTMLElement, id: string): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`[data-environment-chip="${id}"]`)!;
+// The opened card is teleported to <body>, off the list's own element.
+const card = (): HTMLElement | null => document.querySelector<HTMLElement>(`[data-environment-card="open"]`);
+const buttonNamed = (root: ParentNode, name: string): HTMLButtonElement | undefined =>
+    [...root.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === name);
 
 // Reads text per child, since the mark/name/version siblings have no whitespace between them in textContent.
 const wordsOf = (element: Element): string =>
@@ -114,63 +135,98 @@ const wordsOf = (element: Element): string =>
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    removed = [];
     document.body.innerHTML = ``;
 });
 
-it(`draws the staples as a strip whose sentences are one click away`, async () => {
+it(`lists the staples as names and versions with nothing to press`, () => {
     const el = mount();
-    expect(pills(el).map(wordsOf)).toEqual([`Node.js 24.18.0`, `Python 3.11.2`, `ripgrep 13.0.0`]);
-    expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
-
-    pills(el)[0]!.click();
-    await nextTick();
-    expect(el.textContent).toContain(`The runtime everything JavaScript in here runs on.`);
-
-    pills(el)[1]!.click();
-    await nextTick();
-    expect(el.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
-    expect(el.textContent).toContain(`Scripting, plus anything reached for with pip.`);
+    const staples = el.querySelector(`[data-environment-staples]`)!;
+    expect([...staples.querySelectorAll(`li`)].map(wordsOf)).toEqual([`Node.js 24.18.0`, `Python 3.11.2`, `ripgrep 13.0.0`]);
+    expect(staples.querySelector(`button`)).toBeNull();
+    expect(document.body.textContent).not.toContain(`The runtime everything JavaScript in here runs on.`);
 });
 
-it(`keeps a closed row to its one line, and opens the comment in place`, async () => {
+it(`draws each decision as a chip of its name and version, its sentence left to the card`, () => {
     const el = mount();
-    const row = disclosure(el);
-    expect(el.textContent).toContain(`ffmpeg, encoding screen recordings.`);
-    expect(el.textContent).not.toContain(`raw frames until something encodes them`);
+    expect(wordsOf(chip(el, `custom:ffmpeg`))).toBe(`ffmpeg 5.1.9`);
+    expect(document.body.textContent).not.toContain(`encoding screen recordings`);
+    // A state other than live is a glyph on the chip, named for a reader who cannot see it.
+    expect(chip(el, `custom:sox`).textContent).toContain(`waiting for your approval`);
+});
 
-    row.click();
+it(`opens the whole block on a press, the rest of its comment one more click away`, async () => {
+    const el = mount();
+    chip(el, `custom:ffmpeg`).click();
     await nextTick();
-    expect(el.textContent).toContain(`raw frames until something encodes them`);
-    expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
+    expect(chip(el, `custom:ffmpeg`).getAttribute(`aria-expanded`)).toBe(`true`);
+    expect(card()?.textContent).toContain(`raw frames until something encodes them`);
+    expect(card()?.textContent).toContain(`RUN apt-get install -y ffmpeg`);
+    expect(card()?.textContent).not.toContain(`go out as MP4`);
+
+    buttonNamed(card()!, `Show more`)!.click();
+    await nextTick();
+    expect(card()?.textContent).toContain(`go out as MP4`);
 });
 
 it(`never shows the opening sentence twice`, async () => {
     const el = mount();
-    disclosure(el).click();
+    chip(el, `custom:ffmpeg`).click();
     await nextTick();
-    expect(el.textContent?.match(/encoding screen recordings/g)).toHaveLength(1);
+    expect(document.body.textContent?.match(/encoding screen recordings/g)).toHaveLength(1);
 });
 
-it(`opens on the first paragraph and keeps the rest one click away`, async () => {
+it(`only names the source when it is not already saying the block's own name`, async () => {
     const el = mount();
-    const row = disclosure(el);
-    row.click();
+    // The card's properties, not its sentence: an agent's comment may say anything.
+    const properties = (): string => card()?.querySelector(`dl`)?.textContent ?? ``;
+    chip(el, `capability:docker`).click();
     await nextTick();
-    expect(el.textContent).not.toContain(`go out as MP4`);
-
-    const more = [...el.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show more`));
-    more!.click();
+    expect(properties()).toContain(`29.7.2`);
+    expect(properties()).not.toContain(`docker capability`);
+    chip(el, `capability:tauri`).click();
     await nextTick();
-    expect(el.textContent).toContain(`go out as MP4`);
-    expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
+    expect(properties()).toContain(`workspace extension`);
 });
 
-it(`only names the source when it is not already saying the row's own name`, () => {
-    const el = mount();
-    // `.tabular-nums`: the trailing facts cluster, where a row states what pulled it in.
-    const facts = [...el.querySelectorAll(`.tabular-nums`)].map((meta) => meta.textContent?.trim() ?? ``).join(` `);
-    expect(facts).not.toContain(`docker capability`);
-    expect(facts).toContain(`workspace extension`);
+// One block goes from its own card; a capability's has no Remove, and says where its capability is turned off instead.
+it(`offers Remove on an agent-added block only, and points a capability's at Capabilities`, async () => {
+    const el = mount(GROUPS, true);
+    chip(el, `capability:docker`).click();
+    await nextTick();
+    expect(buttonNamed(card()!, `Remove from environment`)).toBeUndefined();
+    expect(card()?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/capabilities`);
+
+    chip(el, `custom:ffmpeg`).click();
+    await nextTick();
+    buttonNamed(card()!, `Remove from environment`)!.click();
+    await nextTick();
+    expect(removed).toEqual([[`ffmpeg`]]);
+    expect(card()).toBeNull();
+});
+
+it(`takes several out at once once asked to select, ticking only what can go`, async () => {
+    expect(buttonNamed(mount(GROUPS, false), `Select`)).toBeUndefined();
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    const el = mount(GROUPS, true);
+    buttonNamed(el, `Select`)!.click();
+    await nextTick();
+    expect(chip(el, `capability:docker`).disabled).toBe(true);
+    expect(buttonNamed(el, `Remove`)!.disabled).toBe(true);
+
+    chip(el, `custom:ffmpeg`).click();
+    chip(el, `custom:sox`).click();
+    await nextTick();
+    expect(chip(el, `custom:ffmpeg`).getAttribute(`aria-checked`)).toBe(`true`);
+    expect(card()).toBeNull();
+    buttonNamed(el, `Remove 2`)!.click();
+    expect(removed).toEqual([[`ffmpeg`, `sox`]]);
+
+    buttonNamed(el, `Cancel`)!.click();
+    await nextTick();
+    expect(chip(el, `custom:ffmpeg`).getAttribute(`role`)).toBeNull();
 });
 
 // Mounted with a waiting read directly rather than through the parent, since the prop is the state under test.

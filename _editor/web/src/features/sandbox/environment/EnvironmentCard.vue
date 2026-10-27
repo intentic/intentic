@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Environment, EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
-import { Button, Code, ConfirmDialog, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
+import { Button, Code, ConfirmDialog, formatList, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, nextTick, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -154,13 +154,20 @@ const approve = (): Promise<void> => {
 };
 const reject = (): Promise<void> => decide(`step`, () => sandboxRaw(`POST /environment/reject`));
 
-// TAKING ONE TOOL OUT, confirmed by name first. An approved one stays until the next rebuild, which the card then asks
-// for like any other change; one still waiting for approval is only a request, dropped with nothing to rebuild.
-const removing = ref<EnvironmentItem>();
+// TAKING TOOLS OUT, confirmed by name first: one from its opened chip, several picked through Select. An approved one
+// stays until the next rebuild, which the card then asks for like any other change; one still waiting for approval is
+// only a request, dropped with nothing to rebuild.
+const removing = ref<EnvironmentItem[]>([]);
 const removeWords = computed(() => {
-    const item = removing.value;
+    const [item, ...others] = removing.value;
     if (item === undefined) {
         return undefined;
+    }
+    if (others.length > 0) {
+        return {
+            header: t(`sandbox.environmentCard.removeManyHeader`, { count: removing.value.length }),
+            body: t(`sandbox.environmentCard.removeMany`, { names: formatList(removing.value.map((each) => each.name)) }),
+        };
     }
     const { name } = item;
     const bodies = {
@@ -170,10 +177,14 @@ const removeWords = computed(() => {
     };
     return { header: t(`sandbox.environmentCard.removeHeader`, { name }), body: bodies[item.state]() };
 });
+// One block after another, never at once: each rewrite reads the section the one before it left.
+const removeBlock = (block: string): Promise<Environment> => sandboxRaw(`POST /environment/remove`, { input: { block } });
 const remove = (): Promise<void> => {
-    const block = removing.value?.block;
-    removing.value = undefined;
-    return block === undefined ? Promise.resolve() : decide(`contents`, () => sandboxRaw(`POST /environment/remove`, { input: { block } }));
+    const [first, ...rest] = removing.value.flatMap((item) => (item.block === undefined ? [] : [item.block]));
+    removing.value = [];
+    return first === undefined
+        ? Promise.resolve()
+        : decide(`contents`, () => rest.reduce((previous, block) => previous.then(() => removeBlock(block)), removeBlock(first)));
 };
 
 // A base compiled from a checkout rebuilds from that checkout, and that rebuild applies the approved recipe as well
@@ -322,7 +333,7 @@ watch(
                 :loaded="contents"
                 :removable="canOperate"
                 :busy="busy"
-                @remove="(item) => (removing = item)"
+                @remove="(items) => (removing = items)"
             />
 
             <!-- A proposal awaiting the owner's decision, diffed against the approved custom section; capability fragments are daemon-owned and not up for review here. -->
@@ -367,7 +378,7 @@ watch(
             :description="removeWords?.body"
             :confirm-label="t(`sandbox.environmentCard.remove`)"
             confirm-icon="trash"
-            @cancel="removing = undefined"
+            @cancel="removing = []"
             @confirm="remove"
         />
     </RowGroup>

@@ -8,6 +8,10 @@ import PrimeVue from "primevue/config";
 import { type App, computed, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
+// Nothing lays the page out here, so every element measures 0×0, which an opened chip's card reads as its chip scrolled
+// away and closes on. A chip's size is all it measures.
+HTMLElement.prototype.getBoundingClientRect = (): DOMRect => DOMRect.fromRect({ x: 0, y: 0, width: 120, height: 32 });
+
 // An applied overlay and nothing pending, the ordinary baseline state.
 const OVERLAY = `FROM ghcr.io/intentic/sandbox:stable\n\n# ---- ffmpeg ----\nRUN apt-get install -y ffmpeg\n`;
 const environment: Environment = {
@@ -82,7 +86,7 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
 const vueQuery = { ...(await import(`@tanstack/vue-query`)) };
 jest.mock(`@tanstack/vue-query`, () => ({ ...vueQuery, useQueryClient: () => ({ setQueryData: () => {}, invalidateQueries: async () => {} }) }));
 // Every decision the card posts is refused, so a test can see where the refusal is said.
-const sandboxJson = jest.fn(async (..._request: unknown[]): Promise<never> => {
+const sandboxJson = jest.fn(async (..._request: unknown[]): Promise<Environment> => {
     throw new Error(`the daemon said no`);
 });
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson: (...request: unknown[]) => sandboxJson(...request) }));
@@ -375,8 +379,13 @@ it(`stands down once the only runtime installs left are ones you dismissed`, () 
     expect(mount().textContent).toBe(``);
 });
 
-// E1: a tool an agent added is the owner's to take out, one at a time, confirmed by its name first. A capability's cost
-// has no such button (it goes with the capability), nor does a row from a sandbox too old to name its block.
+// E1: a tool an agent added is the owner's to take out, confirmed by its name first. A capability's cost has no such
+// button (it goes with the capability), nor does a row from a sandbox too old to name its block. The opened chip's card
+// is teleported to <body>, so the Remove is looked for there.
+const chipOf = (el: HTMLElement, id: string): HTMLElement => el.querySelector<HTMLElement>(`[data-environment-chip="${id}"]`)!;
+const bodyButton = (name: string): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll<HTMLButtonElement>(`button`)].findLast((button) => button.textContent?.trim() === name);
+
 it(`takes one agent-added tool out, after a confirmation that names it`, async () => {
     contentsGroups.value = [
         {
@@ -392,25 +401,63 @@ it(`takes one agent-added tool out, after a confirmation that names it`, async (
     ];
     const el = mount();
     await nextTick();
-    for (const row of el.querySelectorAll<HTMLElement>(`button[aria-expanded]`)) {
-        row.click();
-    }
+    chipOf(el, `capability:docker`).click();
     await nextTick();
-    const removes = [...el.querySelectorAll(`button`)].filter((button) => button.textContent?.trim() === `Remove from environment`);
-    expect(removes).toHaveLength(1);
+    expect(bodyButton(`Remove from environment`)).toBeUndefined();
 
-    removes[0]?.click();
+    chipOf(el, `custom:zcode`).click();
+    await nextTick();
+    bodyButton(`Remove from environment`)?.click();
     await nextTick();
     expect(document.body.textContent).toContain(`Remove Zcode from the environment?`);
     expect(document.body.textContent).toContain(`Zcode stays installed until this sandbox is next rebuilt, and is gone after that.`);
     expect(sandboxJson).not.toHaveBeenCalled();
 
-    [...document.body.querySelectorAll(`button`)].findLast((button) => button.textContent?.trim() === `Remove`)?.click();
+    bodyButton(`Remove`)?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await nextTick();
     expect(sandboxJson).toHaveBeenCalledWith(`/environment/remove`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ block: `zcode` }) }));
     // The refusal is said under the list it was pressed in, not at the card's first row.
     expect([...el.querySelectorAll(`[role="alert"]`)].map((alert) => alert.textContent)).toEqual([expect.stringContaining(`the daemon said no`)]);
+});
+
+// Several at once: one confirmation naming them all, then one removal after another, each reading what the last left.
+it(`takes several tools out in turn, after one confirmation that names them all`, async () => {
+    sandboxJson.mockImplementation(async () => environment);
+    contentsGroups.value = [
+        {
+            origin: `custom`,
+            label: `Added for this workspace`,
+            items: [
+                { id: `custom:zcode`, name: `Zcode`, origin: `custom`, state: `active`, tools: [], block: `zcode` },
+                { id: `custom:sox`, name: `sox`, origin: `custom`, state: `awaiting-approval`, tools: [], block: `sox` },
+            ],
+        },
+    ];
+    try {
+        const el = mount();
+        await nextTick();
+        bodyButton(`Select`)?.click();
+        await nextTick();
+        chipOf(el, `custom:zcode`).click();
+        chipOf(el, `custom:sox`).click();
+        await nextTick();
+        bodyButton(`Remove 2`)?.click();
+        await nextTick();
+        expect(document.body.textContent).toContain(`Remove 2 tools from the environment?`);
+        expect(document.body.textContent).toContain(`Zcode and sox leave the recipe.`);
+
+        bodyButton(`Remove`)?.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await nextTick();
+        expect(sandboxJson).toHaveBeenCalledTimes(2);
+        expect(sandboxJson).toHaveBeenNthCalledWith(1, `/environment/remove`, expect.objectContaining({ body: JSON.stringify({ block: `zcode` }) }));
+        expect(sandboxJson).toHaveBeenNthCalledWith(2, `/environment/remove`, expect.objectContaining({ body: JSON.stringify({ block: `sox` }) }));
+    } finally {
+        sandboxJson.mockImplementation(async () => {
+            throw new Error(`the daemon said no`);
+        });
+    }
 });
 
 it(`says a request still waiting is only dropped, and offers no Remove to a reader who cannot decide`, async () => {
@@ -423,9 +470,9 @@ it(`says a request still waiting is only dropped, and offers no Remove to a read
     ];
     const el = mount();
     await nextTick();
-    el.querySelector<HTMLElement>(`button[aria-expanded]`)?.click();
+    chipOf(el, `custom:sox`).click();
     await nextTick();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Remove from environment`)?.click();
+    bodyButton(`Remove from environment`)?.click();
     await nextTick();
     expect(document.body.textContent).toContain(`The request to add sox is dropped. Nothing is installed or rebuilt.`);
     app?.unmount();
@@ -434,7 +481,8 @@ it(`says a request still waiting is only dropped, and offers no Remove to a read
     active.value = { id: `sb1`, role: `viewer` };
     const readOnly = mount();
     await nextTick();
-    readOnly.querySelector<HTMLElement>(`button[aria-expanded]`)?.click();
+    chipOf(readOnly, `custom:sox`).click();
     await nextTick();
-    expect(readOnly.textContent).not.toContain(`Remove from environment`);
+    expect(document.body.textContent).not.toContain(`Remove from environment`);
 });
+

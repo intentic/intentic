@@ -323,14 +323,25 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN pnpm dlx playwright@1.56 install --with-deps chromium
 `;
 
+// Blocks the visitor took out in this tab (POST /environment/remove): gone from Contents, the waiting proposal with its
+// own block, and the custom section's hash moved, which is what makes the card re-read Contents.
+const removedBlocks = new Set<string>();
+export const removeDemoBlock = (block: string): boolean => {
+    const known = environmentContents().items.some((item) => item.block === block) && !removedBlocks.has(block);
+    if (known) {
+        removedBlocks.add(block);
+    }
+    return known;
+};
+
 // `proposal: false` is a quiet recording's environment (mode.ts `demoQuiet`): nothing waiting on the owner, so the
 // sandbox's switcher carries no mark for it.
 export const demoEnvironment = ({ proposal = true }: { proposal?: boolean } = {}): Environment => ({
     container: `intentic-sandbox-acme-shop`,
     approved: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
-    custom: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
+    custom: { content: APPLIED_OVERLAY, hash: [`sha256:1f4c9ab2`, ...[...removedBlocks].sort()].join(`-`) },
     appliedHash: `sha256:1f4c9ab2`,
-    ...(proposal
+    ...(proposal && !removedBlocks.has(`imagemagick`)
         ? {
               proposal: {
                   hash: `sha256:8b07de54`,
@@ -348,8 +359,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
 // are real tool output, not round numbers. `settled` is a quiet recording's (mode.ts `demoQuiet`): only what is
 // installed and running, nothing waiting on an approval or a rebuild.
 export const demoEnvironmentContents = ({ settled = false }: { settled?: boolean } = {}): EnvironmentContents => {
-    const contents = environmentContents();
-    return settled ? { ...contents, items: contents.items.filter((item) => item.state === `active`) } : contents;
+    const items = environmentContents().items.filter((item) => item.block === undefined || !removedBlocks.has(item.block));
+    return { items: settled ? items.filter((item) => item.state === `active`) : items };
 };
 
 const environmentContents = (): EnvironmentContents => ({
@@ -362,9 +373,11 @@ const environmentContents = (): EnvironmentContents => ({
             tools: [{ name: `psql`, version: `16.4` }],
             purpose: `Reads the production replica directly, so a schema question is a query rather than a guess.`,
             detail:
+                `Reads the production replica directly, so a schema question is a query rather than a guess.\n\n` +
                 `Pinned to 16 to match the managed database: a newer client warns on every connect and its \\copy output drifts ` +
                 `from what the runbooks show.`,
             commands: `RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \\\n && rm -rf /var/lib/apt/lists/*`,
+            block: `postgresql-client`,
         },
         {
             id: `custom:playwright`,
@@ -380,9 +393,11 @@ const environmentContents = (): EnvironmentContents => ({
             extras: 34,
             purpose: `Runs the end-to-end suite the release agent goes through before it lands anything.`,
             detail:
+                `Runs the end-to-end suite the release agent goes through before it lands anything.\n\n` +
                 `Headed under a virtual display rather than headless: the headless shell is fingerprinted and blocked by the ` +
                 `checkout provider's bot protection, so a headless run fails on the one journey that matters most.`,
             commands: `ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright\nRUN pnpm dlx playwright@1.56 install --with-deps chromium`,
+            block: `playwright`,
         },
         {
             id: `custom:imagemagick`,
@@ -392,9 +407,10 @@ const environmentContents = (): EnvironmentContents => ({
             tools: [],
             purpose: `Resizes and re-encodes the product images the checkout page serves.`,
             detail:
-                `The uploads arrive as 4000px JPEGs and the page wants three widths of WebP, which nothing in this sandbox can ` +
+                `Resizes and re-encodes the product images the checkout page serves. The uploads arrive as 4000px JPEGs and the page wants three widths of WebP, which nothing in this sandbox can ` +
                 `currently produce.`,
             commands: `RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\\n && rm -rf /var/lib/apt/lists/*`,
+            block: `imagemagick`,
         },
         {
             id: `capability:whisper`,
@@ -404,7 +420,7 @@ const environmentContents = (): EnvironmentContents => ({
             state: `after-rebuild`,
             tools: [],
             purpose: `Turns voice-channel audio into text on this machine, without sending it anywhere.`,
-            detail: `Built from source and pinned to v1.9.4, so a transcript made today can be reproduced next year.`,
+            detail: `Turns voice-channel audio into text on this machine, without sending it anywhere. Built from source and pinned to v1.9.4, so a transcript made today can be reproduced next year.`,
             commands: `RUN git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \\\n    && cmake --build /tmp/whisper.cpp/build -j --target whisper-cli`,
         },
         {

@@ -7053,18 +7053,24 @@
             "removeUnbuilt": "{name} is not installed yet, and the next rebuild leaves it out. If an agent needs it, it will have to ask for it again.",
             "couldNotUpdate": "Could not update the environment.",
             "updating": "Updating the sandbox's environment",
-            "updated": "The sandbox's environment is updated"
+            "updated": "The sandbox's environment is updated",
+            "removeManyHeader": "Remove {count} tools from the environment?",
+            "removeMany": "{names} leave the recipe. What is already installed stays until this sandbox is next rebuilt, and a request still waiting is dropped. If an agent needs one again, it will have to ask for it again."
         },
         "environmentContents": {
             "arrivesAfterRebuild": "arrives after rebuild",
+            "capabilitiesLink": "Capabilities ›",
             "checkingInstalledVersions": "Checking installed versions…",
             "couldNotRead": "Could not read what the sandbox has installed.",
-            "liveVersion": "Live version",
+            "from": "From",
+            "goesWithCapability": "It goes when the capability that added it is turned off, in",
             "nothingAddedOnTop": "Nothing added on top of the stock image yet, and nothing in it answered, which usually means the sandbox is still starting.",
             "plusLibrariesHeadersCommands": "Plus {extras} libraries and headers these commands need, which nobody runs directly.",
-            "readFrom": "Read from",
+            "removeCount": "Remove {count}",
             "removeFromEnvironment": "Remove from environment",
+            "select": "Select",
             "showMore": "Show more",
+            "tools": "Tools",
             "waitingApproval": "waiting for your approval",
             "whatInstalls": "What this installs"
         },

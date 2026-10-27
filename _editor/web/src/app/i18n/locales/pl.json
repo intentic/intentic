@@ -6507,18 +6507,24 @@
             "removeUnbuilt": "{name} nie jest jeszcze zainstalowane, a najbliższa przebudowa to pominie. Jeśli agent będzie tego potrzebować, będzie musiał poprosić o to ponownie.",
             "couldNotUpdate": "Nie udało się zaktualizować środowiska.",
             "updating": "Aktualizowanie środowiska sandboxa",
-            "updated": "Środowisko sandboxa zaktualizowane"
+            "updated": "Środowisko sandboxa zaktualizowane",
+            "removeManyHeader": "Usunąć narzędzia ({count}) ze środowiska?",
+            "removeMany": "{names} wypadają z przepisu. To, co już jest zainstalowane, zostaje do najbliższej przebudowy tego sandboxa, a prośba, która wciąż czeka, przepada. Jeśli agent znów będzie czegoś z tego potrzebować, będzie musiał poprosić o to ponownie."
         },
         "environmentContents": {
             "arrivesAfterRebuild": "pojawi się po przebudowie",
+            "capabilitiesLink": "Możliwości ›",
             "checkingInstalledVersions": "Sprawdzanie zainstalowanych wersji…",
             "couldNotRead": "Nie udało się odczytać, co sandbox ma zainstalowane.",
-            "liveVersion": "Wersja na żywo",
+            "from": "Od",
+            "goesWithCapability": "Zniknie, gdy wyłączysz możliwość, która to dodała, w sekcji",
             "nothingAddedOnTop": "Nic jeszcze nie dołożono ponad standardowy obraz i nic w nim nie odpowiedziało, co zwykle znaczy, że sandbox wciąż startuje.",
             "plusLibrariesHeadersCommands": "Do tego biblioteki i nagłówki, których te polecenia potrzebują, a których nikt nie uruchamia bezpośrednio (liczba: {extras}).",
-            "readFrom": "Odczyt z",
+            "removeCount": "Usuń ({count})",
             "removeFromEnvironment": "Usuń ze środowiska",
+            "select": "Zaznacz",
             "showMore": "Pokaż więcej",
+            "tools": "Narzędzia",
             "waitingApproval": "czeka na Twoje zatwierdzenie",
             "whatInstalls": "Co to instaluje"
         },

@@ -7053,18 +7053,24 @@
             "removeUnbuilt": "{name} ist noch nicht installiert, und der nächste Neubau lässt es weg. Braucht ein Agent es, muss er erneut danach fragen.",
             "couldNotUpdate": "Die Umgebung konnte nicht aktualisiert werden.",
             "updating": "Die Umgebung der Sandbox wird aktualisiert",
-            "updated": "Die Umgebung der Sandbox ist aktualisiert"
+            "updated": "Die Umgebung der Sandbox ist aktualisiert",
+            "removeManyHeader": "{count} Werkzeuge aus der Umgebung entfernen?",
+            "removeMany": "{names} verlassen das Rezept. Was schon installiert ist, bleibt bis zum nächsten Neubau dieser Sandbox, und eine noch wartende Anfrage wird verworfen. Braucht ein Agent eines davon wieder, muss er erneut danach fragen."
         },
         "environmentContents": {
             "arrivesAfterRebuild": "kommt nach dem Neubau",
+            "capabilitiesLink": "Fähigkeiten ›",
             "checkingInstalledVersions": "Installierte Versionen werden geprüft…",
             "couldNotRead": "Es ließ sich nicht lesen, was in der Sandbox installiert ist.",
-            "liveVersion": "Live-Version",
+            "from": "Von",
+            "goesWithCapability": "Es verschwindet, wenn die Fähigkeit, die es hinzugefügt hat, abgeschaltet wird, unter",
             "nothingAddedOnTop": "Noch nichts über das Standard-Image hinaus hinzugefügt, und nichts darin hat geantwortet — meist heißt das, dass die Sandbox noch startet.",
             "plusLibrariesHeadersCommands": "Dazu {extras} Bibliotheken und Header, die diese Befehle brauchen und die niemand direkt ausführt.",
-            "readFrom": "Gelesen aus",
+            "removeCount": "{count} entfernen",
             "removeFromEnvironment": "Aus der Umgebung entfernen",
+            "select": "Auswählen",
             "showMore": "Mehr anzeigen",
+            "tools": "Werkzeuge",
             "waitingApproval": "wartet auf Ihre Genehmigung",
             "whatInstalls": "Was das installiert"
         },

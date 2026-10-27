@@ -7053,18 +7053,24 @@
             "removeUnbuilt": "{name} aún no está instalado, y la próxima reconstrucción lo deja fuera. Si un agente lo necesita, tendrá que pedirlo de nuevo.",
             "couldNotUpdate": "No se pudo actualizar el entorno.",
             "updating": "Actualizando el entorno del sandbox",
-            "updated": "El entorno del sandbox está actualizado"
+            "updated": "El entorno del sandbox está actualizado",
+            "removeManyHeader": "¿Quitar {count} herramientas del entorno?",
+            "removeMany": "{names} salen de la receta. Lo que ya está instalado se queda hasta la próxima reconstrucción de este sandbox, y una solicitud aún pendiente se descarta. Si un agente vuelve a necesitar alguna, tendrá que pedirla de nuevo."
         },
         "environmentContents": {
             "arrivesAfterRebuild": "llega tras la reconstrucción",
+            "capabilitiesLink": "Capacidades ›",
             "checkingInstalledVersions": "Comprobando las versiones instaladas…",
             "couldNotRead": "No se pudo leer lo que el sandbox tiene instalado.",
-            "liveVersion": "Versión en vivo",
+            "from": "De",
+            "goesWithCapability": "Se va cuando se desactiva la capacidad que lo añadió, en",
             "nothingAddedOnTop": "Todavía no se ha añadido nada sobre la imagen de serie, y nada dentro de ella respondió, lo que normalmente significa que el sandbox aún está arrancando.",
             "plusLibrariesHeadersCommands": "Más {extras} bibliotecas y cabeceras que estos comandos necesitan y que nadie ejecuta directamente.",
-            "readFrom": "Leída de",
+            "removeCount": "Quitar {count}",
             "removeFromEnvironment": "Quitar del entorno",
+            "select": "Seleccionar",
             "showMore": "Mostrar más",
+            "tools": "Herramientas",
             "waitingApproval": "esperando tu aprobación",
             "whatInstalls": "Qué instala esto"
         },

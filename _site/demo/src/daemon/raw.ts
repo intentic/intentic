@@ -1,4 +1,5 @@
 import { accessRefusal, memberAccess, tierOf } from "@intentic/sandbox-contract/schemas/members";
+import { EnvironmentRemoveSchema } from "@intentic/sandbox-contract/schemas/environment";
 import type { PasskeysList } from "@intentic/sandbox-contract/schemas/system";
 import { ProviderKeysApplySchema } from "@intentic/sandbox-contract/state/arrival";
 import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
@@ -19,7 +20,7 @@ import {
 } from "../fixture/knowledge";
 import { PAGE_FILES } from "../fixture/pages";
 import { officeResponse } from "../fixture/offices/office";
-import { demoEnvironment, demoEnvironmentContents, vendoredBundle } from "../fixture/sandbox";
+import { demoEnvironment, demoEnvironmentContents, removeDemoBlock, vendoredBundle } from "../fixture/sandbox";
 import { fileBody, writeFile } from "../fixture/workspace";
 import { demoQuiet } from "../mode";
 import { json } from "../transport";
@@ -245,6 +246,13 @@ export const raw = {
         } satisfies PasskeysList),
     "GET /environment": () => json(demoEnvironment({ proposal: !demoQuiet(`proposal`) })),
     "GET /environment/contents": () => json(demoEnvironmentContents({ settled: demoQuiet(`proposal`) })),
+    // Taking a tool out answers as the daemon does, with the environment it leaves; remembered for the tab.
+    "POST /environment/remove": async ({ request }) => {
+        const block = EnvironmentRemoveSchema.safeParse(await request.json()).data?.block;
+        return block !== undefined && removeDemoBlock(block)
+            ? json(demoEnvironment({ proposal: !demoQuiet(`proposal`) }))
+            : refuse(`no such block in the environment`, 404);
+    },
     // Read on first render; a published workspace and empty exports/computers are the tab's default states
     // before the visitor clicks anything.
     "GET /definition/workspace": () => json({ remote: `https://github.com/acme/intentic-sandbox-ada.git`, branch: `main`, hosts: [`github.com`] }),

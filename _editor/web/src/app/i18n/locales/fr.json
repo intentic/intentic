@@ -7053,18 +7053,24 @@
             "removeUnbuilt": "{name} n'est pas encore installé, et la prochaine reconstruction le laisse de côté. Si un agent en a besoin, il devra le redemander.",
             "couldNotUpdate": "Impossible de mettre à jour l'environnement.",
             "updating": "Mise à jour de l'environnement du sandbox",
-            "updated": "L'environnement du sandbox est à jour"
+            "updated": "L'environnement du sandbox est à jour",
+            "removeManyHeader": "Retirer {count} outils de l'environnement ?",
+            "removeMany": "{names} quittent la recette. Ce qui est déjà installé reste jusqu'à la prochaine reconstruction de ce sandbox, et une demande encore en attente est abandonnée. Si un agent en a de nouveau besoin, il devra le redemander."
         },
         "environmentContents": {
             "arrivesAfterRebuild": "arrive après la reconstruction",
+            "capabilitiesLink": "Capacités ›",
             "checkingInstalledVersions": "Vérification des versions installées…",
             "couldNotRead": "Impossible de lire ce qui est installé dans le sandbox.",
-            "liveVersion": "Version en direct",
+            "from": "De",
+            "goesWithCapability": "Il part quand la capacité qui l'a ajouté est désactivée, dans",
             "nothingAddedOnTop": "Rien n'a encore été ajouté par-dessus l'image de base, et rien dedans n'a répondu, ce qui veut généralement dire que le sandbox démarre encore.",
             "plusLibrariesHeadersCommands": "Plus {extras} bibliothèques et en-têtes dont ces commandes ont besoin, et que personne ne lance directement.",
-            "readFrom": "Lue depuis",
+            "removeCount": "Retirer {count}",
             "removeFromEnvironment": "Retirer de l'environnement",
+            "select": "Sélectionner",
             "showMore": "Afficher plus",
+            "tools": "Outils",
             "waitingApproval": "en attente de votre approbation",
             "whatInstalls": "Ce que cela installe"
         },
