@@ -101,8 +101,10 @@ export const foldCompactions = (compactions: number, event: AgentEvent): number 
 export const foldContext = (context: ContextFrame | undefined, event: AgentEvent): ContextFrame | undefined =>
     event.kind === "context_usage" ? event : context;
 
+// An advisory rides the error channel without being a failure (the turn went on and answered): counting it would end a
+// finished turn as errored, a warning in attention and a "failed" report to whoever spawned it.
 export const foldFailure = (failure: TurnFailure | undefined, event: AgentEvent): TurnFailure | undefined =>
-    event.kind === "error" ? { code: event.code, message: event.message } : failure;
+    event.kind === "error" && event.code !== "codex-advisory" ? { code: event.code, message: event.message } : failure;
 
 // The session the turn runs on, replaced by the stream's own frame.
 export const foldSession = (sessionId: string | undefined, event: AgentEvent): string | undefined =>

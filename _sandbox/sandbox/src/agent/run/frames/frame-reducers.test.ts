@@ -125,6 +125,19 @@ describe("each fold reads only its own frames", () => {
             ],
             { code: "provider-outage", message: "second" },
         ],
+        [
+            "none from an advisory alone",
+            [{ kind: "error", code: "codex-advisory", message: "Model metadata for `gpt-6.1-terra` not found." }, { kind: "done" }],
+            undefined,
+        ],
+        [
+            "the real one, not a later advisory",
+            [
+                { kind: "error", code: "provider-outage", message: "down" },
+                { kind: "error", code: "codex-advisory", message: "note" },
+            ],
+            { code: "provider-outage", message: "down" },
+        ],
     ];
     test.each(failures)("failure: %s", (_case, frames, failure) => {
         expect(walk<TurnFailure | undefined>(undefined, foldFailure, frames)).toStrictEqual(failure);
