@@ -51,7 +51,9 @@ when the daemon runs from a checkout), the process environment, then command-lin
   `projects-host-leftovers` step deletes the folder registry (`/history/projects.json`) nothing reads any more.
 - The setup page's Docker Compose file sets `SANDBOX_MANAGER=compose`. Such a sandbox never updates itself and offers
   `docker compose pull && docker compose up -d` on its update card instead of an `ic` swap, which would recreate the
-  container behind Compose's back. `REPLAY_ENV` leaves it out on purpose, so a sandbox `ic` takes over loses it.
+  container behind Compose's back. `REPLAY_ENV` leaves it out: `ic` reads Compose's ownership off the container's
+  `com.docker.compose.*` labels, and a swap it still makes there (an environment rebuild) sets the variable again and
+  carries those labels, so Compose's next `up` keeps the replacement as its own.
 - The daemon sets `INTENTIC_LOG_DIR`, `INTENTIC_TERMINAL_LOGS_DIR` and `INTENTIC_AGENT_TMUX` for its own children
   ([src/bootstrap/daemon-env.ts](../src/bootstrap/daemon-env.ts)).
 - The nightly update drill sets `INTENTIC_FAULT` (`crash-at-boot`, `crash-after-ready`, `fail-conversion`) to make a

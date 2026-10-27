@@ -95,8 +95,7 @@ export const composeFile = (args: ComposeArgs): string => {
         `            INGRESS_URL: \${INGRESS_URL:-}`,
         `            SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`,
         // Tells the daemon Compose owns this container, so its update card offers `docker compose pull && up` rather
-        // than an `ic` swap that would recreate the container out from under Compose. Not replayed: `ic` taking the
-        // sandbox over drops it, which is the truth then.
+        // than an `ic` swap. A swap `ic` still makes (an environment rebuild) keeps it, and Compose's labels with it.
         `            SANDBOX_MANAGER: ${COMPOSE_MANAGER}`,
         ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),
         `networks:`,

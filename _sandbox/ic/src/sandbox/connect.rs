@@ -645,6 +645,11 @@ fn connect(
         ),
     };
     stamped_run.extend(at_rest::stamp(&key));
+    // A container Docker Compose runs stays Compose's, as on a recreate (compose.rs).
+    if let Some(replacing) = &replacing {
+        let labels = crate::sandbox::compose::labels_of(&replacing.container);
+        stamped_run.extend(crate::sandbox::compose::carry_args(&labels));
+    }
     // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
     let argv = crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(
         &contract::run_command(&request, &env_pairs, false, &unsupported, &[], &log)?,

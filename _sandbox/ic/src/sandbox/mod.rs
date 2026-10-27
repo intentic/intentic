@@ -1,6 +1,7 @@
 pub mod at_rest;
 pub mod attention;
 pub mod backup;
+pub mod compose;
 pub mod composition;
 pub mod connect;
 pub mod desired;

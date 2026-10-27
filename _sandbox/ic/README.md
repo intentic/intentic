@@ -164,7 +164,12 @@ flowchart LR
   neither comes up, the message names that code and the two commands that fix it. (2026-10-06: a swap onto a daemon
   that could not load a package said "Your previous sandbox was restored" over a restored container that crashed the
   same way.) After that
-  first check the old container stays parked for a 24-hour probation (`probation.rs`): `ic sandbox watch`, which the
+  first check the old container stays parked for a 24-hour probation (`probation.rs`), except on a sandbox Docker Compose
+  runs (Komodo's stacks included), which keeps no parked copy once the new one is up. There the replacement inherits the
+  old container's `com.docker.compose.*` labels and `SANDBOX_MANAGER=compose` (`compose.rs`), so Compose's next `up`
+  keeps it as the service's container. A parked copy with the same labels would be a second container of that service,
+  and Compose 5.6.1 then removed the live one or failed on the name. A recreate without the labels is what used to
+  break the stack: "The container name … is already in use". Elsewhere, `ic sandbox watch`, which the
   machine agent runs every minute while a probation is on, puts it back by itself (a rename and a start, nothing
   downloaded or built) when the new version keeps crashing, never becomes ready, or loses the tunnel the old one had.
   A sandbox its owner stopped is waited for rather than judged, and a start or restart made through ic (noted in the
@@ -462,6 +467,7 @@ flowchart LR
 ## Key files
 
 - [src/main.rs](src/main.rs) — every command and flag, with its help text.
+- [src/sandbox/compose.rs](src/sandbox/compose.rs) — keeps a sandbox Docker Compose runs Compose's across a swap.
 - [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup one-liner's flow after Docker: claim, launch, reachability.
 - [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — every image swap (update, prepare, rollback, rebuild, reshape) as one flow.
 - [src/sandbox/probation.rs](src/sandbox/probation.rs) — the watch that finishes interrupted swaps and rolls a failing new version back.

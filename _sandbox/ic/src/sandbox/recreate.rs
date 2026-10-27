@@ -12,8 +12,8 @@ use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
 use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{
-    at_rest, composition, desired, identity, mirror, now_ms, preparing, probation, resolve_slug,
-    resume, staged, storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
+    at_rest, compose, composition, desired, identity, mirror, now_ms, preparing, probation,
+    resolve_slug, resume, staged, storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::ui;
@@ -951,6 +951,17 @@ fn recreate(
 
     /* What the record's rollback targets become — `previous` first, older builds behind it — decided by identity above; the build being left is pinned under a protected local tag. */
     let new_base_id = docker::image_id(&base_image);
+    // A container Docker Compose runs stays Compose's: the replacement inherits its labels (compose.rs).
+    let compose_labels = compose::labels_of(&container);
+    stamped_run.extend(compose::carry_args(&compose_labels));
+    if reach == Reach::Applied && compose::owns(&compose_labels) {
+        ui::note(&format!(
+            "Docker Compose runs {slug}{}: the new container stays Compose's, and keeps no parked copy once it is up.",
+            compose::working_dir(&compose_labels)
+                .map(|dir| format!(" (from {dir})"))
+                .unwrap_or_default()
+        ));
+    }
     let left_version =
         staged::container_version(&container).or_else(|| saved.current_version.clone());
     // The environment build being left, pinned beside its base so a rollback runs it instead of rebuilding today's recipe.
@@ -1243,7 +1254,12 @@ fn recreate(
     /* PROBATION: the previous version stays parked and ready, and `ic sandbox watch` (run every minute by the machine agent) goes back to it by itself if this one keeps failing. The dogfood loop swaps many times a day onto builds its developer is watching, so it keeps no probation. */
     heartbeat.stop();
     let probation = probation::probation_ms();
-    let keep_until = (probation > 0 && !matches!(mode, Mode::Dev)).then(|| now_ms() + probation);
+    // Nor does a sandbox Compose runs: a parked container still carries Compose's labels, and Compose's next `up` would
+    // count it as a second container of the service and might keep it in place of this one (compose.rs). Going back
+    // is still there, through the pin the swap recorded.
+    let keep_until =
+        (probation > 0 && !matches!(mode, Mode::Dev) && !compose::owns(&compose_labels))
+            .then(|| now_ms() + probation);
     let settled = ChannelRecord {
         swap: keep_until.map(|until| Swap {
             phase: Phase::Probation,
