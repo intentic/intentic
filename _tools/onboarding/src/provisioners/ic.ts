@@ -49,7 +49,7 @@ export const icProvisioner = (): Provisioner => {
     // platform into the command only when the api is on loopback.
     const readSetupCode = async (context: ProvisionContext, apiUrl: string): Promise<string> => {
         const { page } = context;
-        // Creates the sandbox from Home's dialog as a command for a server, then opens that command's shell tab.
+        // Create through Home's dialog, then open the shell tab on the new sandbox's run page.
         await openRunTab(page, /Linux \/ macOS/u, `Linux / macOS`);
 
         await page.getByRole(`button`, { name: `Copy`, exact: true }).first().click();

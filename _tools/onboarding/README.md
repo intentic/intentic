@@ -1,11 +1,11 @@
 # onboarding
 
-A Playwright tier that stands up the whole platform from the branch's own images and walks a new account through Home's new sandbox dialog (a command for a server) to a connected sandbox, once per provisioning path.
+A Playwright tier that stands up the whole platform from the branch's own images and walks a new account through Home's new sandbox dialog and its command for a server to a connected sandbox, once per provisioning path.
 
 ```mermaid
 flowchart LR
     setup["global setup"] --> world["loopback world<br/>postgres · stand-in model<br/>api · SPA over TLS"]
-    journey(["onboarding journey"]) --> wizard["new sandbox dialog<br/>on Home, in Chromium"]
+    journey(["onboarding journey"]) --> wizard["Home's new sandbox dialog<br/>in Chromium"]
     wizard --> compose["compose lane<br/>the rendered compose file"]
     wizard --> ic["ic lane<br/>ic sandbox connect"]
     compose --> box["sandbox container"]

@@ -32,7 +32,7 @@ export const composeProvisioner = (): Provisioner => {
 
             await page.goto(`${world.webUrl ?? ``}${NEW_SANDBOX_PATH}`);
 
-            // Creates the sandbox from Home's dialog as a command for a server, then opens that command's compose tab.
+            // Create through Home's dialog, then open the compose tab on the new sandbox's run page.
             await openRunTab(page, /Docker Compose|^Compose$/u, `Docker Compose`);
 
             const yaml = await copiedText(context, `Add these services to your docker-compose.yml`);

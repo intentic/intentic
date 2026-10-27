@@ -158,6 +158,29 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: windows-artifacts
 
+      # THE MACHINE TO ITSELF for deep runs. This box also hosts the Linux fleet's workers in WSL2.
+      # Pause them before the desktop tiers too: run 40428670601 failed tier 1 before it could reach
+      # this pause, with window probes repeatedly hitting their 15s PowerShell deadline.
+      # wsl-workers.sh drains current jobs and arms a failsafe to restore the workers if this job disappears.
+      # Ordinary push/release smoke still skips this pause; only the deep and engine runs wait on the fleet.
+      - name: Pause the fleet's workers on this machine
+        if: ${{ inputs.deep || inputs.engine-only || inputs.engine-move }}
+        # A pause that could not happen pauses nothing (the script arms its timer first and stops nothing without it), so
+        # the tiers still run, on a busy machine, rather than being skipped.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) {
+            Write-Output "no $env:FLEET_DISTRO distro on this machine: no fleet workers to pause"
+            exit 0
+          }
+          # Past this job's own timeout, so the timer never gives the workers back while the tiers still run.
+          $failsafe = [int]$env:JOB_TIMEOUT_MINUTES + 15
+          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe
+        env:
+          FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
+          JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+
       # Restart Manager ends the Tao event loop without ExitRequested. Exercise those exact shipped bytes
       # before tier 1, then uninstall so its first-install assertions still start from a clean machine.
       - name: Session end exits cleanly
@@ -194,31 +217,6 @@ jobs:
       # keeps for them. The API-only shape needs an editor build and is skipped without `--editor-dist`.
       - run: node _tools/desktop-smoke-windows/dist/main.js outage
         if: ${{ inputs.deep && !inputs.engine-only }}
-
-      # THE MACHINE TO ITSELF for the tiers that run containers. This box also hosts the Linux fleet's six worker runners,
-      # in the same WSL2 VM as Docker Desktop and the engine tier's distro, and a nightly that ran beside six typechecks
-      # starved that VM until it could not open the vsock channel Windows reaches the engine through: `docker stop` hung
-      # mid-move and the tier failed on the fleet's load rather than on the product (2026-10-20). wsl-workers.sh stops each
-      # worker once its current job ends, so nothing is cut, and arms a timer that gives them back by itself after this
-      # job's own timeout, for a run that is cancelled or loses its runner before the resume below gets to run. Tier 1 is
-      # left out: it runs no container, and it gates every push, which must not wait on the fleet.
-      - name: Pause the fleet's workers on this machine
-        if: ${{ inputs.deep || inputs.engine-only || inputs.engine-move }}
-        # A pause that could not happen pauses nothing (the script arms its timer first and stops nothing without it), so
-        # the tiers still run, on a busy machine, rather than being skipped.
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) {
-            Write-Output "no $env:FLEET_DISTRO distro on this machine: no fleet workers to pause"
-            exit 0
-          }
-          # Past this job's own timeout, so the timer never gives the workers back while the tiers still run.
-          $failsafe = [int]$env:JOB_TIMEOUT_MINUTES + 15
-          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe
-        env:
-          FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
-          JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
 
       # TIER 2 — runs the connect.ps1 the INSTALLER put on this machine, with the direct-token path that needs
       # no Cloudflare and no platform, and waits for the sandbox daemon to answer. Reading those scripts from
