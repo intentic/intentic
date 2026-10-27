@@ -1,5 +1,6 @@
 <!-- Shared shell for cards that ask the user something. -->
 <script lang="ts">
+import type { InjectionKey, Ref } from "vue";
 // Shared shell for every card that asks the user something: header, slot, and the answers below. Every title sits at the
 // body tier and carries its weight, whether it is a sentence or a name. Every inset comes from `.chat-card`'s own
 // measures in chat.css, not from each card.
@@ -9,10 +10,17 @@ export interface CardStatus {
     readonly label: string;
     readonly tone: "done" | "gone";
 }
+
+/**
+ * Provided over cards whose reader may not answer them (a chat they follow but cannot drive): the one quiet line a live
+ * card draws in place of its answers, saying who it waits on. Undefined, or not provided, draws the answers.
+ */
+export const CARD_ANSWERS_WITHHELD: InjectionKey<Readonly<Ref<string | undefined>>> = Symbol(`card-answers-withheld`);
 </script>
 
 <script setup lang="ts">
 import { Icon, type IconName } from "@intentic/ui";
+import { computed, inject } from "vue";
 
 const {
     icon,
@@ -30,6 +38,10 @@ const {
     // Whether the title is a sentence (wraps, body tier) rather than a name (truncates, one size up).
     prose?: boolean;
 }>();
+
+const injected = inject(CARD_ANSWERS_WITHHELD, undefined);
+// Only a live card waits on anybody; a settled one keeps its record either way.
+const withheld = computed(() => (status === undefined ? injected?.value : undefined));
 </script>
 
 <template>
@@ -59,8 +71,12 @@ const {
 
         <slot />
 
-        <!-- Answers row, rendered only when there are any; an empty strip would read as a missing element. -->
-        <div v-if="$slots[`actions`]" class="chat-card-row chat-card-actions flex flex-wrap items-center gap-2">
+        <!-- Answers row, rendered only when there are any; an empty strip would read as a missing element. A reader who may
+             not answer gets who it waits on in its place, quiet, since following along is how this chat is for them. -->
+        <div v-if="$slots[`actions`] && withheld" class="chat-card-row flex items-center gap-2 text-2xs text-muted" data-card-withheld>
+            <Icon name="lock" aria-hidden="true" class="shrink-0" />{{ withheld }}
+        </div>
+        <div v-else-if="$slots[`actions`]" class="chat-card-row chat-card-actions flex flex-wrap items-center gap-2">
             <slot name="actions" />
         </div>
     </div>

@@ -11,6 +11,8 @@ import { useChat } from "../../../models/conversations/run/useChat";
 import { conversationView, PANE_VIEW } from "../../../models/conversations/panel/useChat-view";
 import { useChatRoute } from "../routing/chatRoute";
 import { useRole } from "../../../client/sandbox/useRole";
+import { useDriveRefusal } from "../session/driveRefusal";
+import AccessNote from "../../../components/access/AccessNote.vue";
 import { useAudience } from "../../../app/useAudience";
 import { useChatAttachments } from "../drafts/useChatAttachments";
 import { useQueuedAttachments } from "../drafts/pendingAttachments";
@@ -104,8 +106,8 @@ const { reachable, connection } = useSandbox();
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const blocked = computed(() => connection.value.failure !== undefined && isBlocked(connection.value.failure));
 const { mobile } = useDevice();
-// A viewer's composer is present but inert (the daemon floors every route at collaborator).
-const { canDrive, isGuest } = useRole();
+const { isGuest, canShip } = useRole();
+const readOnly = useDriveRefusal(); // a viewer, or a writer with agents off: one quiet line stands in the composer's place
 // Plain words name the assistant and simplify shaping controls. Model and effort remain available to non-guests
 // in either audience: the way somebody reads the app does not decide which model they can use.
 const { maker } = useAudience();
@@ -300,7 +302,7 @@ const composerSend = useComposerSend({
     route: chatRoute,
     history,
     reachable,
-    canDrive,
+    canDrive: computed(() => readOnly.value === undefined),
     mobile,
     words: computed(() => ({
         provider: providerName.value,
@@ -365,7 +367,7 @@ const wideActions = computed(
 const pillNamed = computed(() => modelReading.value.unset || onTrial.value);
 // A narrow composer gives the mic and Send one slot (`composer-yields` hides the other there): Send steps aside while there is
 // nothing to send and the mic is there to take it, since a greyed Send is the row's one press that does nothing.
-const micShares = computed(() => canDrive.value && !props.strip && !staged.value);
+const micShares = computed(() => !props.strip && !staged.value);
 // An empty box is as tall as its placeholder, and the placeholder changes under it (a plan waiting, a turn going live), so
 // it is measured again then: sized for the old one, a phone's two-line ask is cut off after its first line.
 watch(composerPlaceholder, () => grow(), { flush: `post` });
@@ -409,7 +411,7 @@ const caretHint = computed((): TooltipValue => ({ title: t(`chat.sendLater.title
 const voice = useComposerVoice({
     draft,
     reachable,
-    manages: useRole().canShip,
+    manages: canShip,
     grew: grow,
     send: submit,
     intercept: (heard) => talk.intercept(heard),
@@ -531,9 +533,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2"
                     :class="strip ? 'chat-footer-strip' : 'px-2 pt-3'"
                 >
-                    <!-- The composer stands whatever this chat can or cannot send with: a box that vanishes reads as the app
-                         breaking, and a first-run reader has nowhere to type their task. Having no model is said in a line
-                         above it (ChatPaneNotices), whose one press is the way on; Send is disabled meanwhile and says why. -->
+                    <!-- The composer stands whatever this chat can send with (no model: ChatPaneNotices), unless the reader cannot drive. -->
                     <Notice v-if="denied" tone="danger">{{ t(`chat.chatPane.googleAccountNoAccess`) }}</Notice>
                     <Notice v-else-if="blocked" tone="info" icon="clock">{{ t(`chat.chatPane.chatAvailableAfterSandbox`) }}</Notice>
                     <template v-if="!blocked">
@@ -541,7 +541,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatPaneNotices />
                         <!-- The turn stopped before finishing, and the way on (ChatContinueStrip): a word to it, so a subagent's is its parent's. -->
                         <ChatContinueStrip
-                            v-if="!subagentOf && !strip"
+                            v-if="!subagentOf && !strip && !readOnly"
                             :visible="continueStrip"
                             :ready="pickUpPressable"
                             :enter-continues="continueOffer"
@@ -553,18 +553,22 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
                         <ChatLeftRunning v-if="!strip" />
                         <!-- What waits on the reader (a card the agent is parked on, a message held for memory), pinned where it cannot scroll away (ChatWaitingBar). A subagent's chat too: a permission there is the reader's. -->
-                        <ChatWaitingBar v-if="!strip" :can-drive="canDrive" @approve="approvePlan()" @keep-planning="keepPlanning()" />
+                        <ChatWaitingBar v-if="!strip" :can-drive="!readOnly" @approve="approvePlan()" @keep-planning="keepPlanning()" />
                         <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's or a stop. -->
                         <ChatSubagentBar
                             v-if="subagentOf"
                             :child="subagentOf.child"
                             :parent-title="agentDisplayTitle(subagentOf.parent)"
                             :provider="subagentOf.parent.provider"
-                            :stoppable="streaming && !ending && canDrive"
+                            :stoppable="streaming && !ending && !readOnly"
                             @back="backToParent()"
                             @stop="conversation.turn.stop()"
                             @write="writeTo(conversation)"
                         />
+                        <template v-else-if="readOnly">
+                            <ChatAgentStatus v-if="!strip" />
+                            <AccessNote :reason="readOnly" :place="t(`shared.chat`)" class="px-1 py-1.5" />
+                        </template>
                         <template v-else>
                             <!-- What the queue holds is drawn at the transcript's foot (ChatPaneTurns); with no transcript, here, a line each. -->
                             <ChatHeldMessages v-if="strip" compact />
@@ -624,7 +628,6 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     rows="1"
                                     v-model="draft"
                                     name="draft"
-                                    :disabled="!canDrive"
                                     :placeholder="composerPlaceholder"
                                     class="field-bare block w-full resize-none overflow-y-auto px-4 pb-3 leading-relaxed md:text-xs"
                                     :class="chipRow ? `pt-1` : `pt-3`"
@@ -829,7 +832,6 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
 
                                         <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->
                                         <button
-                                            v-if="canDrive"
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                             :disabled="!reachable || !connected"
@@ -869,7 +871,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                              and Send one slot between them, the way a phone's messengers do: the mic while there is nothing to send,
                                              Send from the first keystroke, and the mic again for as long as it is listening. -->
                                         <button
-                                            v-if="canDrive && !strip"
+                                            v-if="!strip"
                                             type="button"
                                             class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-10"
                                             :class="{ 'composer-active': voiceOn, 'composer-yields': staged && !voiceOn }"
@@ -1018,11 +1020,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
             </div>
         </div>
 
-        <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
-        <!-- Withheld from the strip: floating over another page, readouts about a chat are a second row of text around a box
-             asked for as one. -->
-        <!-- The composer's own hints and refusals say nothing where the subagent bar stands in the composer's place. -->
-        <ChatPaneStatus v-if="connected && !strip" :block="subagentOf ? undefined : statusBlock" :hint="subagentOf ? `` : composerHint" />
+        <!-- The pane's status bar, outside the scroller: about the pane (context, subscription, daemon liveness), not the message. Withheld
+             from the strip; its hints and refusals say nothing where the subagent bar or the read-only line stands in the composer's place. -->
+        <ChatPaneStatus v-if="connected && !strip" :block="subagentOf || readOnly ? undefined : statusBlock" :hint="subagentOf || readOnly ? `` : composerHint" />
 
         <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay

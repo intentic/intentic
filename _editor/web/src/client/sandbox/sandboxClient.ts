@@ -7,6 +7,9 @@ import { CHUNK_BYTES } from "../../lib/files/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
 import { loadContract } from "./daemon/contract";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
+import { reasonOfAnswer } from "./access/accessReason";
+import { accessWords } from "./access/accessWords";
+import { refusedUnforeseen } from "./access/forecast";
 import { useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
 import { encodedPart, type SentPart } from "../../lib/files/uploadEncoding";
@@ -39,6 +42,15 @@ export async function sandboxRequest(path: string, init?: RequestInit): Promise<
 export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
     const route = request === undefined ? undefined : (await loadContract()).sandboxRouteName(request.method, request.path);
     const said = wordsOf(await response.json().catch(() => undefined));
+    // An access refusal says the person's access in the app's words, as the typed client's does (sandboxRpc.ts).
+    const access = reasonOfAnswer(response.status, said);
+    if (access !== undefined) {
+        // The active daemon refused what the editor thought the person could do: its record of their access is stale.
+        if (request !== undefined && said.predicted !== true) {
+            refusedUnforeseen();
+        }
+        return new SandboxHttpError(response.status, accessWords(access).note, said);
+    }
     const routes = route === undefined ? undefined : routeRefusalText(route, response.status, said);
     return new SandboxHttpError(response.status, routes ?? refusalText(response.status, said), said);
 }

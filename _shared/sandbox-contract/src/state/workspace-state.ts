@@ -708,7 +708,7 @@ export const LOCKED_STATE_ENTRIES: ReadonlySet<string> = new Set([
 export const PLAN_DOCUMENTS_DIR = `${STATE_DIR}/records/sessions/claude/plans`;
 
 // Where message attachments land: the browser posts to `<this>/<uuid>/<name>` before the message is sent, and the
-// turn reads them back (schemas/agent.ts). The role floor (auth/role-floor.ts) keys off this path: attaching is
+// turn reads them back (schemas/agent.ts). The role floor (protocol/member-reach.ts) keys off this path: attaching is
 // part of sending (a collaborator's grant), writing elsewhere in the workspace is the operating tier's, and both
 // travel through the same upload route.
 export const ATTACHMENTS_DIR = `${STATE_DIR}/records/artifacts/attachments`;

@@ -551,6 +551,11 @@ export const procedures = {
             broadcastRoster();
             return need;
         },
+        release: ({ id, answer }) => {
+            const need = answerDemoNeed(id, { kind: answer });
+            broadcastRoster();
+            return need;
+        },
         provideSecret: ({ id }) => {
             const need = provideDemoSecret(id);
             broadcastRoster();

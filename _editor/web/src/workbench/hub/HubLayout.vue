@@ -27,6 +27,7 @@ const {
     routeName,
     defaultSlug,
     addressable = false,
+    withheld = [],
     ready = true,
     search,
 } = defineProps<{
@@ -43,6 +44,11 @@ const {
      */
     addressable?: boolean;
     groups: readonly NavGroup<HubTab>[];
+    /**
+     * Sections this reader may not open: no row in the index, but still an address. A link or a bookmark to one opens
+     * it rather than being sent to the default without a word, and the hub draws there what stands in its place.
+     */
+    withheld?: readonly string[];
     /** Holds the unknown-slug redirect while the set is still filling in. */
     ready?: boolean;
     /**
@@ -59,7 +65,8 @@ const router = useRouter();
 // each at an address of its own.
 const rows = computed<readonly HubTab[]>(() => groups.flatMap((group) => group.items));
 const tabs = computed<readonly HubTab[]>(() => rows.value.flatMap(hubRowSections));
-const slugs = computed<readonly string[]>(() => tabs.value.map((tab) => tab.slug));
+// Every address this hub answers: the sections its index offers, and the ones it withholds from this reader.
+const slugs = computed<readonly string[]>(() => [...tabs.value.map((tab) => tab.slug), ...withheld]);
 
 // The section the address names, if it names one: the param-less URL is the default section on a desktop and the
 // index itself on a phone.

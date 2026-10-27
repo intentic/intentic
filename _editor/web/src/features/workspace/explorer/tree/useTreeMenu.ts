@@ -21,9 +21,9 @@ export interface TreeMenuHost {
     // A directory's own actions, none when the surface supplied no source.
     readonly rowActions: (dir: string) => readonly RowAction[];
     readonly isBarren: (path: string) => boolean;
-    readonly rules: Pick<ReturnType<typeof useTreeRules>, "archiveDir" | "unlockedOnly">;
+    readonly rules: Pick<ReturnType<typeof useTreeRules>, "archiveDir" | "unlockedOnly" | "writable">;
     readonly selecting: Pick<MultiSelect, "selection" | "selectSingle">;
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "canEditFiles" | "clipboard">;
+    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "clipboard">;
     // The surface's own rows around the verbs: the home's Open first, the tree's Collapse Folders last.
     readonly frame: (target: WorkspaceTreeEntry | undefined, multi: boolean) => Pick<EntryMenuInput, "head" | "tail">;
     readonly beginCreate: (dir: string, type: "file" | "dir") => void;
@@ -52,6 +52,11 @@ const dirOf = (target: WorkspaceTreeEntry | undefined, rootDir: () => string): s
     }
     return target.type === `dir` ? target.path : parentDir(target.path);
 };
+
+// The write verbs are offered only where the member may change the folder they act in and every entry they name;
+// anywhere else the menu is the read-only one, which says why once.
+const editsHere = (rules: TreeMenuHost[`rules`], dir: string, named: readonly string[]): boolean =>
+    rules.writable(dir) && rules.unlockedOnly([...named]).every(rules.writable);
 
 export const useTreeMenu = (host: TreeMenuHost) => {
     const { selection, selectSingle } = host.selecting;
@@ -118,7 +123,7 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             target,
             locked: target !== undefined && isLockedWorkspacePath(target.path),
             kept: target !== undefined && (multi ? [...selection.value] : [target.path]).some(holdsLockedWorkspacePath),
-            canEdit: host.store.canEditFiles.value,
+            canEdit: editsHere(host.rules, dir, multi ? [...selection.value] : target === undefined ? [] : [target.path]),
             // The folder the verbs would act in decides it: the archive's own row keeps its verbs, a row inside it does not.
             archived: host.rules.archiveDir(dir),
             multi,

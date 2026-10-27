@@ -70,6 +70,11 @@ flowchart LR
   Off-switch track and handle contrast is measured separately because axe does not detect every non-text contrast failure. These
   checks do not establish screen-reader or legal conformance. `A11Y_DEMO_URL` reuses an explicitly chosen demo;
   without it the suite starts its own server on port 47237 and refuses to reuse another session's server.
+- `access/demo-access.playwright.config.ts` walks every screen of the same demo as a maintainer, collaborator, viewer
+  and guest (`?as=`), with the demo's daemon refusing each tier below its routes' floors through the daemon's own check
+  (`_site/demo/src/floors.ts`). It fails on any request the daemon refused, since the editor is meant to foresee each
+  refusal and never send it, and on any alert that says an access refusal in the daemon's words. `ACCESS_DEMO_URL`
+  reuses a running demo; without it the suite starts its own on port 47238.
 - `local-face/` boots the desktop app's local face (`_editor/desktop-app`, `dist/files`, built by its global setup) the
   way a window on a folder boots it, without Tauri: the bundle behind a server that resolves paths as the app's asset
   protocol does, the real `intentic-files` sidecar from source granted a temp folder on its stdin, and
@@ -106,4 +111,5 @@ DEMO_URL=http://127.0.0.1:47160/demo node --experimental-strip-types _tools/e2e/
 pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
 cd _tools/e2e && pnpm exec playwright test -c window-sync/window-sync.playwright.config.ts
 pnpm -C _tools/e2e exec playwright test -c accessibility/demo.playwright.config.ts
+pnpm -C _tools/e2e exec playwright test -c access/demo-access.playwright.config.ts
 ```

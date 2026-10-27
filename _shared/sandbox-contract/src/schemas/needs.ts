@@ -256,6 +256,10 @@ export type NeedAnswer = z.infer<typeof NeedAnswerSchema>;
 
 export const NeedIdParamSchema = z.object({ id: z.string().min(1).describe("Which need.") });
 export const NeedAnswerInputSchema = NeedIdParamSchema.extend({ answer: NeedAnswerSchema });
+// POST /needs/{id}/release: a release need's own answer, from the people its gate names, whatever their tier.
+export const NeedReleaseInputSchema = NeedIdParamSchema.extend({
+    answer: z.enum(["release", "decline"]).describe("Release the credential to the conversation, or decline it."),
+});
 export const NeedSecretInputSchema = NeedIdParamSchema.extend({
     value: z.string().min(1).max(64_000).describe("The secret's value. Stored, never echoed, never written into a transcript."),
     // "Keep it on my computer": the value is sealed to that computer's keyring inbox (schemas/keyring.ts) and kept there,

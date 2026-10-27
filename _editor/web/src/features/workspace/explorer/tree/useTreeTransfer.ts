@@ -32,7 +32,7 @@ export interface TreeTransferHost {
     readonly openLanding: (dir: string, landed?: readonly LandedEntry[]) => void;
     // The nest alone, for a drag onto a folder row, which leaves that folder as it was.
     readonly openNest: (dir: string, landed?: readonly LandedEntry[]) => void;
-    readonly rules: Pick<ReturnType<typeof useTreeRules>, "unlockedOnly" | "archived" | "noDrops" | "refuseIn" | "refuseKept">;
+    readonly rules: Pick<ReturnType<typeof useTreeRules>, "unlockedOnly" | "archived" | "noDrops" | "refuseIn" | "refuseKept" | "writable">;
     readonly selecting: Pick<MultiSelect, "selection" | "lead" | "selectLanded">;
     readonly inline: Pick<ReturnType<typeof useInlineEdit>, "edit" | "editing">;
     // The tree element: a clipboard write goes through its window, so a popped-out explorer writes to its own.
@@ -127,8 +127,10 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }
         const led = lead.value;
         const paths = rules.unlockedOnly(selection.value.size > 0 ? [...selection.value] : led !== null ? [led] : []);
-        // A cut is a move made later; refused now, while the reader still has the selection in front of them.
-        if (paths.length === 0 || (mode === `cut` && rules.refuseKept(paths))) {
+        // A cut is a move made later, which takes its entries away from where they are: the member must be able to change
+        // them, as the menu says, and a folder holding the sandbox's settings is refused now, while the reader still has
+        // the selection in front of them.
+        if (paths.length === 0 || (mode === `cut` && (!paths.every(rules.writable) || rules.refuseKept(paths)))) {
             return [];
         }
         clipboard.value = { mode, paths };
@@ -163,7 +165,8 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // as Finder's ⌥⌘V does with what ⌘C took.
     const paste = async (dir: string, as?: `move`): Promise<void> => {
         const clip = clipboard.value;
-        if (clip === undefined || rules.refuseIn(dir)) {
+        // Move Here takes what was copied away from where it was: only offered where the member may change that too.
+        if (clip === undefined || rules.refuseIn(dir) || (as === `move` && !clip.paths.every(rules.writable))) {
             return;
         }
         if (clip.mode === `copy` && as !== `move`) {
@@ -244,6 +247,9 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // Where a dragged row lands. Out of an archive it is a copy: the member stays in the archive, since nothing here
     // rewrites one, and a drag that silently deleted from a zip would be the wrong surprise either way.
     const dragOnto = async (paths: readonly string[], dir: string): Promise<void> => {
+        if (rules.refuseIn(dir)) {
+            return;
+        }
         if (paths.some((path) => rules.archived(path))) {
             await copyInto(paths, dir, t(`workspace.fileVerbs.couldntCopyOut`));
             return;
@@ -263,15 +269,19 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         const copies = isMac && event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey;
         const modified = !copies && (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey);
         // A backend that moves nothing (a folder on this computer) has no drag to offer: the press stays a click.
+        // Dragging a selected entry moves the whole selection; otherwise just that entry.
         const picked =
             modified || (edit.kind === `renaming` && edit.path === path) || !supportsRoute(copies ? VERB_ROUTES.copy : VERB_ROUTES.cut)
                 ? []
-                : // Dragging a selected entry moves the whole selection; otherwise just that entry.
-                  rules.unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
-        // A move that would carry `.intentic` or one of its groups never lifts: the press stays a click, quietly, since a
-        // notice on every press of the row would answer a click nobody meant as a drag.
-        const held = copies || !picked.some(holdsLockedWorkspacePath) ? picked : [];
-        const onDrop = copies ? (dir: string) => void copyInto(held, dir, t(`workspace.fileVerbs.couldntPaste`)) : (dir: string) => void dragOnto(held, dir);
+                : rules.unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
+        // A move takes its entries away from where they are, so it travels only what the member may change, as Cut, and
+        // never `.intentic` or one of its groups: the press stays a click, quietly, since a notice on every press of the
+        // row would answer a click nobody meant as a drag. Where it lands is held to their fence by the drop targets
+        // themselves (useTreeRules' noDrops).
+        const held = copies || (picked.every(rules.writable) && !picked.some(holdsLockedWorkspacePath)) ? picked : [];
+        const onDrop = copies
+            ? (dir: string) => void (rules.refuseIn(dir) ? undefined : copyInto(held, dir, t(`workspace.fileVerbs.couldntPaste`)))
+            : (dir: string) => void dragOnto(held, dir);
         beginEntryDrag(event, { paths: held, copies, onDrop });
     };
     const { dragging, paths: dragged, over } = useEntryDrag();

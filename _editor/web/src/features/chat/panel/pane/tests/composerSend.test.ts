@@ -9,7 +9,6 @@ import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/sch
 import { loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { advertisedLoops } from "../../../../../models/providers/offeredLoops";
 import { providerAccounts, translatorAccounts, providerRefusals } from "../../../../../models/providers/providerAccounts";
-import { viewerPlaceholder } from "../../../composer/composerIntent";
 import { inputHistoryFor } from "../../../drafts/inputHistory";
 import type { PendingAttachment } from "../../../drafts/useChatAttachments";
 import { Conversation } from "../../../../../models/conversations/session/conversation";
@@ -556,12 +555,21 @@ describe(`what the composer says`, () => {
         expect(send.sendShown.value).toBe(true);
     });
 
-    it(`tells a viewer the box is not theirs to write in`, () => {
-        const { host, send } = composerOf();
-
+    // A reader who cannot drive has no box (ChatPane's read-only line stands there); a press reaching the composer another
+    // way (a key, the voice pause) sends nothing for them and leaves their words where they were.
+    it(`sends nothing for a reader who cannot drive`, () => {
+        const { chat, host, say, send } = composerOf();
         host.canDrive.value = false;
+        chat.draft.value = `fix the footer`;
 
-        expect(send.composerPlaceholder.value).toBe(viewerPlaceholder());
+        send.submit();
+        send.continueTurn();
+
+        expect(say).not.toHaveBeenCalled();
+        expect(chat.draft.value).toBe(`fix the footer`);
+        host.canDrive.value = true;
+        send.submit();
+        expect(say).toHaveBeenCalledTimes(1);
     });
 });
 

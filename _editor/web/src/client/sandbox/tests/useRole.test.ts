@@ -11,7 +11,11 @@ jest.mock(`../useSandbox`, () => ({
 // said by the tier alone.
 const agents = ref<string | undefined>(undefined);
 const lands = ref(false);
-jest.mock(`../useMembers`, () => ({ selfAgents: () => computed(() => agents.value), selfLands: () => computed(() => lands.value) }));
+jest.mock(`../useMembers`, () => ({
+    selfAgents: () => computed(() => agents.value),
+    selfLands: () => computed(() => lands.value),
+    selfMember: () => computed(() => undefined),
+}));
 
 const { useRole } = await import(`../useRole`);
 

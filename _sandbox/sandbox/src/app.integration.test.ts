@@ -1486,7 +1486,7 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     expect(await seen.json()).toEqual({ proposal: { content: proposal, hash }, waitsForAgents: true });
     const approveDenied = await postJson(memberApp, "/environment/approve", { hash });
     expect(approveDenied.status).toBe(403);
-    expect(await approveDenied.json()).toEqual({ error: "maintainer access required", floor: "maintainer" });
+    expect(await approveDenied.json()).toEqual({ error: "maintainer access required", floor: "maintainer", reason: "floor" });
     expect((await postJson(memberApp, "/environment/reject")).status).toBe(403);
     expect((await postJson(memberApp, "/environment/remove", { block: "" })).status).toBe(403);
     expect((await postJson(memberApp, "/environment/rebuild-when-idle", { host: "rog", hash })).status).toBe(403);

@@ -2,7 +2,7 @@
 // persona" means on the attended side.
 import "@intentic/testing/dom";
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
-import { type App, createApp, h, ref } from "vue";
+import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
@@ -13,7 +13,11 @@ const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 // The reader's tier: a guest is offered its own personas and nothing wider.
 const isGuest = ref(false);
-jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+// Whether the reader holds a maintainer's tier, which opens Sandbox ▸ Personas: the way there is offered only to them,
+// and never to a guest, whose tier is below every other (useRole's `canShip`).
+const maintainer = ref(true);
+const canShip = computed(() => maintainer.value && !isGuest.value);
+jest.mock(`../../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest, canShip }) }));
 
 jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
@@ -57,6 +61,7 @@ beforeEach(() => {
     personas.value = [];
     connected.value = [];
     isGuest.value = false;
+    maintainer.value = true;
     events.length = 0;
 });
 
@@ -118,6 +123,15 @@ it(`explains the empty workspace and offers the way in`, () => {
     expect(text(element)).toContain(`No personas yet`);
     // A real href, so the row can be hovered, copied, and opened in a new tab like any other link.
     expect(linkLabelled(element, `Set up a persona`)?.getAttribute(`href`)).toBe(`/sandbox/personas`);
+});
+
+// Sandbox ▸ Personas is a maintainer's section: below that, a link there would only open a gate.
+it(`offers no way to the personas page to a member below maintainer`, () => {
+    maintainer.value = false;
+    const element = mount();
+
+    expect(text(element)).toContain(`No personas yet`);
+    expect(linkLabelled(element, `Set up a persona`)).toBeUndefined();
 });
 
 // A guest holds only its assigned personas; both built-ins and persona management stay with the owner.

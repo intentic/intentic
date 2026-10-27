@@ -3861,7 +3861,6 @@
             "stopTurn": "Detener turno",
             "unconnectedHint": "Conecta un modelo",
             "unconnectedPlaceholder": "¿Qué debe hacer este agente?",
-            "viewerPlaceholder": "Solo estás mirando: pide al propietario el rol de colaborador para dirigir agentes",
             "placeholderLater": "Escribe el mensaje que quieres programar…",
             "hintLater": "Programar",
             "hintLaterNote": "Espera en este chat, donde puedes enviarlo antes, cambiar cuándo sale o retirarlo.",
@@ -3878,8 +3877,7 @@
                 "placeholderQueue": "Escribe un mensaje para cuando termine…",
                 "placeholderEdit": "Pregúntalo otra vez, de otra forma…",
                 "hintSteer": "Enviar ahora, mientras trabaja",
-                "hintQueue": "Se envía cuando termine",
-                "viewerPlaceholder": "Puedes leer esta conversación. Pide permiso al propietario si también quieres escribir aquí."
+                "hintQueue": "Se envía cuando termine"
             },
             "unconnectedNote": "Tu mensaje espera aquí.",
             "otherModelHint": "Modelo sin conectar",
@@ -4264,7 +4262,13 @@
             "wait": "Esperar",
             "waitHint": "En espera hasta que envíes",
             "sendsWhenRoom": "se envía cuando se libere memoria",
-            "waitHintRoom": "Se sigue enviando cuando se libere memoria"
+            "waitHintRoom": "Se sigue enviando cuando se libere memoria",
+            "others": {
+                "plan": "Plan a la espera de alguien que ejecute agentes",
+                "question": "Pregunta a la espera de alguien que ejecute agentes",
+                "permission": "Permiso a la espera de alguien que ejecute agentes",
+                "other": "A la espera de alguien que ejecute agentes"
+            }
         },
         "sendLater": {
             "title": "Enviar más tarde",
@@ -4375,7 +4379,8 @@
             "decisionTurnEnded": "No se pudo registrar tu decisión: puede que el turno haya terminado.",
             "planNotRecorded": "No se pudo registrar tu decisión sobre el plan: puede que el turno haya terminado.",
             "questionNotDismissed": "No se pudo descartar la pregunta: puede que el turno haya terminado.",
-            "sendTurnEnded": "No se pudo enviar: puede que el turno haya terminado."
+            "sendTurnEnded": "No se pudo enviar: puede que el turno haya terminado.",
+            "waitsOnDriver": "A la espera de que responda alguien que ejecute agentes."
         },
         "composerSelection": {
             "resets": "se restablece {when}",
@@ -4778,6 +4783,45 @@
         },
         "restartQuiet": {
             "detail": "Esta página se reconecta sola. Tus archivos en /work se conservan."
+        },
+        "access": {
+            "short": {
+                "owner": "Solo el propietario",
+                "maintainer": "Solo responsables",
+                "writer": "Requiere edición",
+                "collaborator": "Requiere agentes",
+                "agentsOff": "Agentes desactivados",
+                "notShared": "No compartido contigo",
+                "org": "Gestionado por {org}"
+            },
+            "title": {
+                "owner": "Solo el propietario puede abrir {place}",
+                "maintainer": "Solo los responsables pueden abrir {place}",
+                "writer": "Solo quien edita archivos puede abrir {place}",
+                "collaborator": "Solo quien ejecuta agentes puede abrir {place}",
+                "agentsOff": "Ejecutar agentes está desactivado para ti aquí",
+                "guest": "{place} no está compartido contigo",
+                "area": "Esta carpeta no está compartida contigo",
+                "org": "{org} gestiona {place}"
+            },
+            "note": {
+                "owner": "Puedes mirar. Solo el propietario puede cambiar cosas aquí.",
+                "maintainer": "Puedes mirar. Solo los responsables pueden cambiar cosas aquí.",
+                "writer": "Puedes leer aquí. Cambiar archivos requiere permiso de edición.",
+                "collaborator": "Puedes seguir la conversación. Ejecutar agentes requiere acceso a agentes.",
+                "agentsOff": "Puedes seguir la conversación. Ejecutar agentes está desactivado para ti aquí.",
+                "guest": "Esto no está compartido contigo.",
+                "area": "Esta carpeta no está compartida contigo.",
+                "org": "{org} gestiona esto. Puedes verlo, pero los cambios los hace el administrador de tu organización."
+            },
+            "line": {
+                "ask": "Pide acceso al propietario. Se abrirá aquí en cuanto lo conceda.",
+                "asked": "Pediste acceso al propietario. Se abrirá aquí en cuanto lo conceda.",
+                "org": "Los cambios aquí los hace el administrador de tu organización."
+            },
+            "ask": "Pedir acceso",
+            "asked": "Pedido",
+            "askFailed": "No se pudo enviar tu solicitud."
         }
     },
     "connect": {
@@ -5415,7 +5459,12 @@
     },
     "needs": {
         "strip": {
-            "waiting": "Esperando una cosa de ti: | Esperando {count} cosas de ti:"
+            "waiting": "Esperando una cosa de ti: | Esperando {count} cosas de ti:",
+            "waitingOn": {
+                "maintainer": "A la espera de un responsable por una cosa: | A la espera de un responsable por {count} cosas:",
+                "owner": "A la espera del propietario por una cosa: | A la espera del propietario por {count} cosas:",
+                "approvers": "A la espera de quienes lo aprueban por una cosa: | A la espera de quienes las aprueban por {count} cosas:"
+            }
         },
         "plan": {
             "alsoWaiting": "Este plan también necesita una cosa de ti: | Este plan también necesita {count} cosas de ti:",
@@ -5441,7 +5490,11 @@
             "declineSend": "Rechazar",
             "couldNotAnswer": "No se pudo registrar tu respuesta.",
             "answering": "Respondiendo a «{title}»",
-            "declining": "Rechazando «{title}»"
+            "declining": "Rechazando «{title}»",
+            "waitsOn": {
+                "maintainer": "A la espera de que responda un responsable.",
+                "owner": "A la espera de que responda el propietario."
+            }
         },
         "capability": {
             "connecting": "Conectando {name}",
@@ -5498,7 +5551,6 @@
             "site": "Esperando a que permitas {site} en la extensión de Intentic de tu navegador."
         },
         "release": {
-            "approversOnly": "Solo aprobadores",
             "whole": "Liberarlo cubre el resto de esta conversación, a partir de su próximo turno.",
             "approvers": "Aprobadores: {approvers}",
             "release": "Liberar"
@@ -6997,7 +7049,6 @@
             "noSecurityAuditRecord": "Sin registro de auditoría de seguridad",
             "notBrowserIsolated": "Sin aislamiento en el navegador",
             "notSecurityAudited": "Sin auditoría de seguridad.",
-            "onlySandboxOwnerInstall": "Solo el propietario del sandbox puede instalar extensiones.",
             "passedExactSourceUnder": "pasó exactamente este código fuente bajo",
             "pinned": "Fijada",
             "reCheckedAtExact": "Vuelta a comprobar en este commit exacto por el escaneo nocturno del registro: el manifiesto se analiza y carga.",
@@ -7852,7 +7903,8 @@
             "portsTaken": "{count} puerto ocupado por otro sandbox en tu máquina | {count} puertos ocupados por otro sandbox en tu máquina",
             "rebuildNeededToFinish": "Hace falta reconstruir para terminar de preparar tus nuevas capacidades",
             "requiredSecretsMissing": "Falta {count} secreto obligatorio | Faltan {count} secretos obligatorios",
-            "sandboxUpdateReadyTo": "Hay una actualización del sandbox lista para aplicar: un reinicio de medio minuto aproximadamente"
+            "sandboxUpdateReadyTo": "Hay una actualización del sandbox lista para aplicar: un reinicio de medio minuto aproximadamente",
+            "peopleAskForAccess": "{count} persona pide acceso | {count} personas piden acceso"
         },
         "sandboxBackupCard": {
             "detail": "Este sandbox se ejecuta en la nube y nada en este ordenador guarda una copia de sus archivos. La sincronización de escritorio mantiene aquí una carpeta a la par, para que el trabajo sobreviva a lo que le pase a la máquina.",
@@ -8862,7 +8914,6 @@
             "nameEGWork": "Ponle nombre, p. ej. portátil del trabajo",
             "addPasskey": "Añadir una passkey",
             "export": "Exportar",
-            "ownerOnly": "Solo el propietario.",
             "areas": "Áreas",
             "never": "Nunca",
             "recentlyDeleted": "Eliminados recientemente",
@@ -9292,7 +9343,9 @@
             "receiptDetail": "Se ha reiniciado automáticamente mientras no había actividad.",
             "waitingFor": "Qué está esperando",
             "switchTipTitle": "En momentos sin actividad",
-            "switchTipNote": "Nunca mientras trabajan los agentes."
+            "switchTipNote": "Nunca mientras trabajan los agentes.",
+            "on": "Activadas",
+            "off": "Desactivadas"
         },
         "sandboxClient": {
             "noBackgroundSession": "Este navegador aún no tiene una sesión para ese sandbox.",
@@ -10522,6 +10575,19 @@
             "empty": "Aún no hay servicios",
             "namePlaceholder": "p. ej. Bot de marketing",
             "nameTaken": "Ya existe un servicio llamado {name}."
+        },
+        "accessRequests": {
+            "title": "Piden acceso",
+            "wants": {
+                "viewer": "Pide ver el espacio de trabajo",
+                "collaborator": "Pide ejecutar agentes",
+                "writer": "Pide editar archivos",
+                "maintainer": "Pide gestionar el sandbox",
+                "agents": "Pide ejecutar agentes",
+                "areas": "Pide más carpetas"
+            },
+            "from": "desde {place}",
+            "review": "Revisar"
         }
     },
     "settings": {
@@ -12429,7 +12495,6 @@
             "insideArchive": "Dentro de un archivo",
             "notInItsCopy": "No está en su copia",
             "notUtf8ReadOnly": "Este archivo no es texto UTF-8, así que aquí se abre en solo lectura.",
-            "noWriteAccess": "Sin acceso de escritura",
             "pageSandboxed": "Aislada del editor",
             "preview": "Vista previa",
             "readAsText": "Leer como texto",
@@ -12721,7 +12786,6 @@
         },
         "useChanges": {
             "abortFailed": "No se pudo abortar",
-            "accessToSandboxRead": "Tu acceso a este sandbox es de solo lectura: esto necesita acceso de responsable.",
             "commitFailed": "No se pudo hacer commit",
             "committing": "Haciendo commit",
             "discardFailed": "No se pudo descartar",
@@ -12927,7 +12991,6 @@
             "keptPrivateBySandbox": "El sandbox lo mantiene privado",
             "keptInPlaceBySandbox": "El sandbox lo mantiene en su sitio",
             "insideArchiveExtractTo": "Dentro de un archivo comprimido: extráelo para cambiar algo",
-            "readOnlyChangingFiles": "Solo lectura: cambiar archivos requiere acceso de editor",
             "whatAgentsRead": "Lo que leen los agentes",
             "wholeFile": "Archivo completo",
             "working": "Trabajando",
@@ -12957,7 +13020,6 @@
             "pathCopied": "Ruta copiada",
             "archiveReadOnly": "El contenido de un archivo comprimido es de solo lectura. Extráelo para modificarlo.",
             "keptInPlace": "«{name}» guarda ajustes del sandbox; se queda donde está.",
-            "needsWriter": "Modificar archivos requiere permiso de escritura. Aquí solo tienes acceso de lectura.",
             "couldntRestore": "No se pudo restaurar.",
             "couldntDelete": "No se ha podido eliminar.",
             "couldntKeepFolder": "No se ha podido conservar esa carpeta.",

@@ -4,6 +4,7 @@ import { waitFor } from "@intentic/testing/bun";
 import { effectScope, type EffectScope } from "vue";
 import { z } from "zod";
 import { queryClient } from "../../../lib/queryPersistence";
+import { SandboxHttpError, wordsOf } from "../sandboxHttpError";
 import { useSandboxQuery } from "../useSandboxQuery";
 
 let scope: EffectScope | undefined;
@@ -27,6 +28,16 @@ describe(`useSandboxQuery`, () => {
         await waitFor(() => expect(error.value).toEqual(expect.any(String)));
         expect(error.value).toStartWith(`This sandbox answered in a shape this app doesn't expect.`);
         expect(error.value).not.toContain(`invalid_value`);
+    });
+
+    // A read the person's access refuses was never theirs to load: no failure to draw, no wait, nothing held from before.
+    it(`says a read the person's access refuses is locked, with why, and draws it as not asked for`, async () => {
+        const { error, loaded, locked } = failingRead(`capabilities`, () => {
+            throw new SandboxHttpError(403, `maintainer access required`, wordsOf({ error: `maintainer access required`, floor: `maintainer`, reason: `floor` }));
+        });
+        await waitFor(() => expect(locked.value).toEqual({ kind: `tier`, floor: `maintainer` }));
+        expect(error.value).toBeUndefined();
+        expect(loaded.value).toEqual({ state: `idle` });
     });
 
     it(`shows the daemon's own message for any other failure`, async () => {

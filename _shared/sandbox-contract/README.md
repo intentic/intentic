@@ -79,6 +79,9 @@ flowchart LR
   rebuild, runner parity, and (2026-10-20) whether a swap landed. `/info` reports what answers (`running`: the build
   and when its daemon started), and `swapVerdict` says landed, came back unmoved, or still waiting. A page used to
   tell an update by the version moving, which a checkout build (always 0.0.0) never does.
+- Who reaches a route is decided here once for both sides: `memberRefusal` in `src/protocol/member-reach.ts` reads a
+  route's floor and a guest's list off its `RouteMeta`, the daemon's bearer middleware refuses with it, and the editor
+  asks it before sending, so a request the daemon would refuse is never sent and the two cannot disagree.
 - What a credential looks like is decided here too: `CREDENTIAL_ISSUERS` in `src/policy/credential-material.ts` (each
   issuer's prefix and token body, as data) and `SECRET_REFERENCE` in `src/schemas/needs.ts` (the `{{secret:name}}`
   pattern, non-global, so each site that scans derives its own `/g` copy). The terminal output filter

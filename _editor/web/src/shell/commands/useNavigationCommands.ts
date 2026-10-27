@@ -9,6 +9,7 @@ import { openBrowsers, openPreview } from "../../workbench/browsers/browsersSurf
 import { browsersPath } from "../../workbench/browsers/browsersPaths";
 import { DELETED_PATH, DEVICES_PATH } from "../../models/sandbox/devices/deviceLinks";
 import { sandboxKeyAllowed, sandboxSectionPath, sandboxSections } from "../../models/sandbox/sandboxNav";
+import { useHeldDoor } from "../../components/heldPlace";
 import { useRole } from "../../client/sandbox/useRole";
 import { useOrgPolicy } from "../../features/organisations/useOrgPolicy";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
@@ -34,6 +35,9 @@ interface NavCommand {
     readonly run?: () => void;
 }
 
+// A maintainer's page: below that it is no destination (components/heldPlace.ts).
+const capabilitiesCommand = (): NavCommand => ({ command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` });
+
 export function useNavigationCommands(): void {
     const router = useRouter();
     const { panels } = usePanels();
@@ -45,7 +49,7 @@ export function useNavigationCommands(): void {
     const { hidden: orgHidden } = useOrgPolicy();
     const requestAddSandbox = useRequestAddSandbox();
     const words = useVocabulary();
-
+    const capabilitiesDoor = useHeldDoor(`capabilities.list`);
     // Shell routes named as the rail names them, including the two the maker's vocabulary renames.
     const shellSections = computed<readonly NavCommand[]>(() => [
         { command: `view.chat`, title: t(`shared.chat`), category: GO_TO, icon: `comments`, to: `/chat` },
@@ -58,7 +62,7 @@ export function useNavigationCommands(): void {
         // a bare push would not.
         { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/browsers`, run: () => openPreview(router) },
         { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `browsers`, to: `/browsers`, run: () => openBrowsers(router) },
-        { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
+        ...(capabilitiesDoor.value ? [capabilitiesCommand()] : []),
         // A rail view of its own since it left the sandbox hub; maintainer and up, as its tile is.
         ...(canShip.value ? [{ command: `view.devices`, title: t(`sandbox.words.devicesSection`), category: GO_TO, icon: `desktop`, to: DEVICES_PATH }] : []),
         // The account's deleted sandboxes, at the board's foot; for every member, as the restore is the account's own.

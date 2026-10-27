@@ -7,7 +7,7 @@ import type { AppEnv } from "../../app-env.js";
 import { services } from "../../harness/route-services.testing.js";
 import { proven, rejectForbidden } from "../../harness/route-client.testing.js";
 
-// role-floor.test.ts asserts the table; this asserts the surface the browser drives, where the two can drift apart.
+// sandbox-contract protocol/member-reach.test.ts asserts the table; this asserts the surface the browser drives, where the two can drift apart.
 // An editor's explorer writes through /workspace/upload but everything else through oRPC, so a tier missing one route
 // can create a file it can't then rename or delete.
 
@@ -158,7 +158,7 @@ test("every co-working act answers at its own tier, and at none below it", async
     }
 });
 
-// A guest sits under the tiers with a list of its own (role-floor.ts guestReach): the chat it drives, the cards its
+// A guest sits under the tiers with a list of its own (sandbox-contract protocol/member-reach.ts guestReach): the chat it drives, the cards its
 // areas reach, and those folders read-only are open; the archive of past conversations, the box and every ship
 // control are shut. Every guest holds an area, so the workspace reads below are cut by that fence, never whole.
 test("a guest reaches its chat and its own folders, and nothing of the past or the box", async () => {

@@ -3,7 +3,7 @@ import type { Service } from "@intentic/sandbox-contract/schemas/services";
 import type { ToolCeiling } from "@intentic/sandbox-contract/schemas/tool-ceiling";
 import { tierOf } from "@intentic/sandbox-contract/schemas/members";
 import type { InviteRecord } from "@intentic/api-contract";
-import type { AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
+import type { AccessAsk, AccessRequest, AgentAccess, CredentialReach, EditScope } from "@intentic/sandbox-contract/schemas/members";
 import type { GrantedRole } from "@intentic/sandbox-contract/schemas/shared";
 import { demoQuiet } from "../mode";
 
@@ -60,6 +60,28 @@ const roster: DemoMember[] = [
 ];
 
 const index = (email: string): number => roster.findIndex((member) => member.email === email.toLowerCase());
+
+// What people have asked the owner for (POST /members/requests): Jo, refused on Secrets, asked to be a maintainer two
+// hours ago, which the owner's Access tab lists beside the roster. A quiet recording has nobody waiting.
+const requests = new Map<string, AccessRequest>(
+    demoQuiet() ? [] : [[`jo@acme.dev`, { email: `jo@acme.dev`, want: `maintainer`, place: `Secrets`, at: Date.now() - 2 * 3_600_000 }]],
+);
+
+/** Every open request, newest first. */
+export const accessRequests = (): AccessRequest[] => [...requests.values()].sort((left, right) => right.at - left.at);
+
+/** This person's open request, if they have one. */
+export const accessRequestOf = (email: string): AccessRequest | undefined => requests.get(email.toLowerCase());
+
+/** Records an ask, replacing any the person made before. */
+export const askAccess = (email: string, ask: AccessAsk): void => {
+    requests.set(email.toLowerCase(), { email: email.toLowerCase(), ...ask, at: Date.now() });
+};
+
+/** Answers a person's request: by a grant, a removal, or the owner dismissing it. */
+export const settleAccess = (email: string): void => {
+    requests.delete(email.toLowerCase());
+};
 
 /** The platform's copy: tier and invite state, never the fence. */
 export const inviteRecords = (): InviteRecord[] =>

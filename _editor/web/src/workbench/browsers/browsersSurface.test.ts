@@ -2,11 +2,13 @@
 /* THE BROWSERS VIEW'S STRIP, AND THE WELCOME THAT MUST NOT BECOME A HABIT. */
 import "@intentic/testing/dom";
 import { freshImport, mocked } from "@intentic/testing/bun";
+import { ref } from "vue";
 import { browsersPath, parseTabKey, previewRedirect, tabKey, type LiveTab } from "./browsersPaths";
 
 const SANDBOX = `sbx-1`;
-// The active sandbox's row, whose `role` decides whether the reader may see the view at all.
-const active = { value: undefined as { role: string } | undefined };
+// The active sandbox's row, whose `role` decides whether the reader may see the view at all. A ref, as the real row is:
+// the reader's access is one answer for the page, which follows the row rather than reading it once.
+const active = ref<{ role: string } | undefined>(undefined);
 
 jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: { value: SANDBOX }, active }) }));
 

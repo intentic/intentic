@@ -25,6 +25,7 @@ jest.mock("../useSandbox", () => ({
 }));
 
 const { sandboxAuthenticatedFetch } = await import("../sandboxAuthFetch");
+const { forecastWith } = await import("../access/forecast");
 
 const fetchMock = jest.fn<(request: Request) => Promise<Response>>();
 const bearerOf = (call: number): string | null => {
@@ -64,4 +65,33 @@ it(`a 403 is a verdict on the identity, not the bearer: no retry, nothing blamed
     expect(response.status).toBe(403);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(state.rejected).toEqual([]);
+});
+
+// A request the person's access already refuses is answered here, in the daemon's own words, and never sent: it would
+// only be refused, logged and retried (access/forecast.ts). Only for the active sandbox, whose person the check knows.
+describe(`a refusal the person's access foresees`, () => {
+    const refused = jest.fn();
+    beforeAll(() =>
+        forecastWith(
+            (sandboxId, method, path) =>
+                sandboxId === `s1` && method === `GET` && path === `/secrets` ? { error: `maintainer access required`, floor: `maintainer`, reason: `floor` } : undefined,
+            refused,
+        ),
+    );
+    afterAll(() => forecastWith(() => undefined, () => undefined));
+
+    it(`is answered with the daemon's refusal, marked as foreseen, and nothing goes out`, async () => {
+        const response = await sandboxAuthenticatedFetch(new Request(`https://daemon.test/secrets`));
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ error: `maintainer access required`, floor: `maintainer`, reason: `floor`, predicted: true });
+        expect(fetchMock).toHaveBeenCalledTimes(0);
+        expect(refused).toHaveBeenCalledTimes(0);
+    });
+
+    it(`leaves every request the check lets through to the daemon`, async () => {
+        fetchMock.mockResolvedValueOnce(new Response(`{}`, { status: 200 }));
+        const response = await sandboxAuthenticatedFetch(new Request(`https://daemon.test/settings`));
+        expect(response.status).toBe(200);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
 });

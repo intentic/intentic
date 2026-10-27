@@ -1,5 +1,6 @@
 import { noteAudit } from "../../audit/audit-http.js";
 import {
+    AccessAskSchema,
     accessRefusal,
     type AgentAccess,
     type CredentialReach,
@@ -23,13 +24,24 @@ import { orgAdmits } from "../../org/org-roster.js";
 import { revokeHeld } from "./revoke-held.js";
 import { callerLands } from "../operator.js";
 import { opt } from "../../opt.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
 // revokable grant must not change.
 
 export type MembersRoutesDeps = Pick<Services, "auth" | "members" | "ownerEmail" | "wsTickets" | "mediaTickets" | "personas" | "areas"> &
-    Partial<Pick<Services, "orgPolicy" | "accessProfiles">>;
+    Partial<Pick<Services, "orgPolicy" | "accessProfiles" | "accessRequests">>;
+
+// A person's request for more access was answered or withdrawn: by a grant, a removal, or the owner dismissing it. The
+// owner's list and the asker's "asked" move with it.
+const settleRequest = async (services: MembersRoutesDeps, email: string): Promise<void> => {
+    if (services.accessRequests === undefined || (await services.accessRequests.of(email)) === undefined) {
+        return;
+    }
+    await services.accessRequests.settle(email);
+    publishRuntimeChange("access-requests");
+};
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -178,11 +190,29 @@ const guestReachRefusal = async (services: PersonaReachDeps, grant: MemberGrantR
 };
 
 
+// The roster row's answers that ride on a person's own: the AI accounts, the tool ceiling, the assistants, the profile.
+type RosterRow = Awaited<ReturnType<Services["members"]["list"]>>[number];
+const withRowFacts = (self: MemberSelf, row: RosterRow | undefined): void => {
+    if (row?.aiAccounts !== undefined) {
+        self.aiAccounts = [...row.aiAccounts];
+    }
+    if (row?.tools !== undefined) {
+        self.tools = { ...row.tools };
+    }
+    if (row?.assistants !== undefined) {
+        self.assistants = [...row.assistants];
+    }
+    if (row?.profile !== undefined) {
+        self.profile = row.profile;
+    }
+};
+
 // GET /members/self: what the signed-in person may do here, as the request's own identity carries it; the owner, and a
 // caller the sandbox cannot name (loopback, a panel), manage everything. The AI accounts are read off the roster rather
 // than the identity, which carries only what a route's floor reads; a roster that cannot be read leaves them out, and
-// the turn's own planning still refuses what is not theirs.
-const selfAccess = async (services: Pick<Services, "members">, c: Context<AppEnv>): Promise<Response> => {
+// the turn's own planning still refuses what is not theirs. Whether they have asked the owner for more rides along, so
+// the editor draws "asked" rather than offering the ask again.
+const selfAccess = async (services: Pick<MembersRoutesDeps, "members" | "accessRequests">, c: Context<AppEnv>): Promise<Response> => {
     const identity = c.get("identity");
     if (identity === undefined || identity.role === "owner") {
         return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true } satisfies MemberSelf);
@@ -197,18 +227,11 @@ const selfAccess = async (services: Pick<Services, "members">, c: Context<AppEnv
     }
     const email = identity.email.toLowerCase();
     // allow(silent-catch): the list is a picker's courtesy; planning reads the roster again and refuses on its own.
-    const row = (await services.members.list().catch(() => [])).find((member) => member.email.toLowerCase() === email);
-    if (row?.aiAccounts !== undefined) {
-        self.aiAccounts = [...row.aiAccounts];
-    }
-    if (row?.tools !== undefined) {
-        self.tools = { ...row.tools };
-    }
-    if (row?.assistants !== undefined) {
-        self.assistants = [...row.assistants];
-    }
-    if (row?.profile !== undefined) {
-        self.profile = row.profile;
+    withRowFacts(self, (await services.members.list().catch(() => [])).find((member) => member.email.toLowerCase() === email));
+    // allow(silent-catch): an unreadable request file costs the person only the "asked" mark, never their access answer.
+    const asked = await services.accessRequests?.of(email).catch(() => undefined);
+    if (asked !== undefined) {
+        self.askedAt = asked.at;
     }
     return c.json(self);
 };
@@ -258,6 +281,8 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
             const before = (await services.members.list()).find((member) => member.email === grant.email.toLowerCase());
             await services.members.add(grant.email, grant);
             noteAudit({ target: grant.email.toLowerCase(), details: grantDetails(grant, before?.role) });
+            // Granting the person anything is the owner's answer to what they asked, whatever they asked.
+            await settleRequest(services, grant.email);
             // A role is frozen into an open socket/ticket; closing both re-enters the authorizer with the new tier. A media
             // ticket names a file the new tier may no longer reach.
             revokeHeld(services, grant.email);
@@ -277,6 +302,7 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         return unavailableIfUnreadable(c, async () => {
             await services.members.remove(email);
             noteAudit({ target: email.toLowerCase() });
+            await settleRequest(services, email);
             revokeHeld(services, email);
             return c.json({ members: await services.members.list() });
         });
@@ -295,20 +321,72 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
         // Normalized: the roster holds lowercase, but identity carries Google's claim as sent; raw form hits no row.
         return unavailableIfUnreadable(c, async () => {
             await services.members.remove(identity.email.toLowerCase());
+            await settleRequest(services, identity.email);
             revokeHeld(services, identity.email);
             return c.json({ ok: true });
         });
     },
 });
 
+// What people on the roster ask the owner for, and the owner's list of it (members/access-requests.ts). Asking is every
+// member's own, a guest's included; reading and dismissing is ownership's, beside the roster a grant answers them on.
+const createRequestRoutes = (services: MembersRoutesDeps) => ({
+    /** POST /members/requests */
+    ask: async (c: Context<AppEnv>): Promise<Response> => {
+        const identity = c.get("identity");
+        if (identity === undefined) {
+            return c.json({ error: "verified member required" }, 401);
+        }
+        if (identity.role === "owner") {
+            return c.json({ error: "the owner already holds every access here" }, 400);
+        }
+        // allow(silent-catch): a body that is not JSON is refused below as one that says nothing, which it is.
+        const asked = AccessAskSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!asked.success) {
+            return c.json({ error: "say what you are asking for, and where you were" }, 400);
+        }
+        if (services.accessRequests === undefined) {
+            return c.json({ error: "this sandbox cannot take requests for access" }, 503);
+        }
+        await services.accessRequests.ask(identity.email, asked.data, Date.now());
+        publishRuntimeChange("access-requests");
+        return selfAccess(services, c);
+    },
+    /** GET /members/requests */
+    list: async (c: Context<AppEnv>): Promise<Response> => {
+        const denied = await ownershipDenied(services, c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ requests: (await services.accessRequests?.list()) ?? [] });
+    },
+    /** DELETE /members/requests */
+    dismiss: async (c: Context<AppEnv>): Promise<Response> => {
+        const denied = await ownershipDenied(services, c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const email = await memberEmail(c);
+        if (email === undefined) {
+            return c.json({ error: "email required" }, 400);
+        }
+        await settleRequest(services, email);
+        return c.json({ requests: (await services.accessRequests?.list()) ?? [] });
+    },
+});
+
 // Shared-access roster, gated by ownership rather than the operating gate other privileged routes use.
 export const membersRawRoutes = defineRawRoutes((services: MembersRoutesDeps) => {
     const members = createMembersRoutes(services);
+    const requests = createRequestRoutes(services);
     return {
         "GET /members": members.list,
         "POST /members": members.add,
         "DELETE /members": members.remove,
         "DELETE /members/self": members.removeSelf,
         "GET /members/self": members.self,
+        "POST /members/requests": requests.ask,
+        "GET /members/requests": requests.list,
+        "DELETE /members/requests": requests.dismiss,
     };
 });

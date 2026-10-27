@@ -148,13 +148,13 @@ describe(`the entry menu`, () => {
 
     it(`keeps a read-only member to the readable rows and says why`, () => {
         const items = entryMenuItems(input({ canEdit: false, lead: [{ label: `Open management panel` }] }));
-        expect(labels(items)).toEqual([`Open management panel`, `—`, `Download`, `—`, `Read-only: changing files needs writer access`]);
+        expect(labels(items)).toEqual([`Open management panel`, `—`, `Download`, `—`, `You can read here. Changing files needs edit access.`]);
         expect(items.at(-1)?.disabled).toBe(true);
     });
 
     it(`does not lead a read-only menu with a separator when nothing else is readable`, () => {
         const items = entryMenuItems(input({ canEdit: false }));
-        expect(labels(items)).toEqual([`Download`, `—`, `Read-only: changing files needs writer access`]);
+        expect(labels(items)).toEqual([`Download`, `—`, `You can read here. Changing files needs edit access.`]);
         expect(items[0]?.separator).not.toBe(true);
     });
 
@@ -234,7 +234,7 @@ describe(`the entry menu`, () => {
             `Collapse Folders`,
         ]);
         expect(labels(entryMenuItems(input({ multi: true, count: 2, serves })))).toEqual([`New File`]);
-        expect(labels(entryMenuItems(input({ canEdit: false, target: dir, serves })))).toEqual([`Read-only: changing files needs writer access`]);
+        expect(labels(entryMenuItems(input({ canEdit: false, target: dir, serves })))).toEqual([`You can read here. Changing files needs edit access.`]);
         expect(labels(entryMenuItems(input({ archived: true, serves })))).toEqual([
             `Download`,
             `—`,
@@ -308,7 +308,7 @@ describe(`the entry menu`, () => {
         expect(labels(entryMenuItems(input({ canEdit: false, verbs: localVerbs() })))).toEqual([
             `Ask an agent about this`,
             `—`,
-            `Read-only: changing files needs writer access`,
+            `You can read here. Changing files needs edit access.`,
         ]);
         // Never about a folder, a selection, the background, or an entry inside an archive, which is no file on disk.
         const elsewhere: readonly Partial<EntryMenuInput>[] = [{ target: dir }, { multi: true, count: 2 }, { target: undefined }, { archived: true }];

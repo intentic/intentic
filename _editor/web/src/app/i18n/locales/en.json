@@ -3861,7 +3861,6 @@
             "stopTurn": "Stop turn",
             "unconnectedHint": "Connect a model",
             "unconnectedPlaceholder": "What should this agent do?",
-            "viewerPlaceholder": "You’re viewing: ask the owner for a collaborator role to drive agents",
             "placeholderLater": "Write the message to schedule…",
             "hintLater": "Schedule",
             "hintLaterNote": "It waits in this chat, where you can send it sooner, change when, or take it back.",
@@ -3878,8 +3877,7 @@
                 "placeholderQueue": "Write a message for when it's done…",
                 "placeholderEdit": "Ask this again, differently…",
                 "hintSteer": "Send it now, while it works",
-                "hintQueue": "Goes once it's done",
-                "viewerPlaceholder": "You can read this conversation. Ask the owner if you'd like to write here too."
+                "hintQueue": "Goes once it's done"
             },
             "unconnectedNote": "Your message waits here.",
             "otherModelHint": "Model not connected",
@@ -4264,7 +4262,13 @@
             "wait": "Wait",
             "waitHint": "Held until you send",
             "sendsWhenRoom": "sends once memory frees up",
-            "waitHintRoom": "Still sends when memory frees"
+            "waitHintRoom": "Still sends when memory frees",
+            "others": {
+                "plan": "Plan waiting on someone who runs agents",
+                "question": "Question waiting on someone who runs agents",
+                "permission": "Permission waiting on someone who runs agents",
+                "other": "Waiting on someone who runs agents"
+            }
         },
         "sendLater": {
             "title": "Send later",
@@ -4375,7 +4379,8 @@
             "decisionTurnEnded": "Could not record your decision: the turn may have ended.",
             "planNotRecorded": "Could not record your plan decision: the turn may have ended.",
             "questionNotDismissed": "Could not dismiss the question: the turn may have ended.",
-            "sendTurnEnded": "Could not send that: the turn may have ended."
+            "sendTurnEnded": "Could not send that: the turn may have ended.",
+            "waitsOnDriver": "Waiting on someone who runs agents to answer."
         },
         "composerSelection": {
             "resets": "resets {when}",
@@ -4778,6 +4783,45 @@
         },
         "restartQuiet": {
             "detail": "This page reconnects by itself. Your files in /work are kept."
+        },
+        "access": {
+            "short": {
+                "owner": "Owner only",
+                "maintainer": "Maintainers only",
+                "writer": "Needs edit access",
+                "collaborator": "Needs agent access",
+                "agentsOff": "Agents off for you",
+                "notShared": "Not shared with you",
+                "org": "Managed by {org}"
+            },
+            "title": {
+                "owner": "Only the owner can open {place}",
+                "maintainer": "Only maintainers can open {place}",
+                "writer": "Only people who edit files can open {place}",
+                "collaborator": "Only people who run agents can open {place}",
+                "agentsOff": "Running agents is off for you here",
+                "guest": "{place} isn't shared with you",
+                "area": "This folder isn't shared with you",
+                "org": "{org} manages {place}"
+            },
+            "note": {
+                "owner": "You can look around. Only the owner can change things here.",
+                "maintainer": "You can look around. Only maintainers can change things here.",
+                "writer": "You can read here. Changing files needs edit access.",
+                "collaborator": "You can follow along. Running agents needs agent access.",
+                "agentsOff": "You can follow along. Running agents is off for you here.",
+                "guest": "This isn't shared with you.",
+                "area": "This folder isn't shared with you.",
+                "org": "{org} manages this. You can look; changes go through your organisation's admin."
+            },
+            "line": {
+                "ask": "Ask the owner for access. It opens here as soon as they grant it.",
+                "asked": "You asked the owner for access. It opens here as soon as they grant it.",
+                "org": "Changes here go through your organisation's admin."
+            },
+            "ask": "Ask for access",
+            "asked": "Asked",
+            "askFailed": "Couldn't send your request."
         }
     },
     "connect": {
@@ -5415,7 +5459,12 @@
     },
     "needs": {
         "strip": {
-            "waiting": "Waiting on you for one thing: | Waiting on you for {count} things:"
+            "waiting": "Waiting on you for one thing: | Waiting on you for {count} things:",
+            "waitingOn": {
+                "maintainer": "Waiting on a maintainer for one thing: | Waiting on a maintainer for {count} things:",
+                "owner": "Waiting on the owner for one thing: | Waiting on the owner for {count} things:",
+                "approvers": "Waiting on its approvers for one thing: | Waiting on their approvers for {count} things:"
+            }
         },
         "plan": {
             "alsoWaiting": "This plan also needs one thing from you: | This plan also needs {count} things from you:",
@@ -5441,7 +5490,11 @@
             "declineSend": "Decline",
             "couldNotAnswer": "Could not record your answer.",
             "answering": "Answering “{title}”",
-            "declining": "Declining “{title}”"
+            "declining": "Declining “{title}”",
+            "waitsOn": {
+                "maintainer": "Waiting on a maintainer to answer.",
+                "owner": "Waiting on the owner to answer."
+            }
         },
         "capability": {
             "connecting": "Connecting {name}",
@@ -5498,7 +5551,6 @@
             "site": "Waiting for you to allow {site} in your browser's Intentic extension."
         },
         "release": {
-            "approversOnly": "Approvers only",
             "whole": "Releasing it covers the rest of this conversation, from its next turn.",
             "approvers": "Approvers: {approvers}",
             "release": "Release"
@@ -6997,7 +7049,6 @@
             "noSecurityAuditRecord": "No security audit record",
             "notBrowserIsolated": "Not browser-isolated",
             "notSecurityAudited": "Not security-audited.",
-            "onlySandboxOwnerInstall": "Only the sandbox owner can install extensions.",
             "passedExactSourceUnder": "passed this exact source under",
             "pinned": "Pinned",
             "reCheckedAtExact": "Re-checked at this exact commit by the registry's nightly scan: the manifest parses and it loads.",
@@ -7852,7 +7903,8 @@
             "portsTaken": "{count} port taken by another sandbox on your machine | {count} ports taken by another sandbox on your machine",
             "rebuildNeededToFinish": "Rebuild needed to finish setting up your new capabilities",
             "requiredSecretsMissing": "{count} required secret missing | {count} required secrets missing",
-            "sandboxUpdateReadyTo": "A sandbox update is ready to apply — a restart of about half a minute"
+            "sandboxUpdateReadyTo": "A sandbox update is ready to apply — a restart of about half a minute",
+            "peopleAskForAccess": "{count} person asks for access | {count} people ask for access"
         },
         "sandboxBackupCard": {
             "detail": "This sandbox runs in the cloud and nothing on this computer holds a copy of its files. Desktop sync keeps a folder here in step with it, so the work survives anything that happens to the machine.",
@@ -8862,7 +8914,6 @@
             "nameEGWork": "Name it, e.g. work laptop",
             "addPasskey": "Add a passkey",
             "export": "Export",
-            "ownerOnly": "Owner only.",
             "areas": "Areas",
             "never": "Never",
             "recentlyDeleted": "Recently deleted",
@@ -9292,7 +9343,9 @@
             "receiptDetail": "It restarted by itself while nothing was going on.",
             "waitingFor": "What it is waiting for",
             "switchTipTitle": "At quiet moments",
-            "switchTipNote": "Never while agents work."
+            "switchTipNote": "Never while agents work.",
+            "on": "On",
+            "off": "Off"
         },
         "sandboxClient": {
             "noBackgroundSession": "This browser holds no session for that sandbox yet.",
@@ -10522,6 +10575,19 @@
             "empty": "No services yet",
             "namePlaceholder": "e.g. Marketing bot",
             "nameTaken": "A service named {name} already exists."
+        },
+        "accessRequests": {
+            "title": "Asking for access",
+            "wants": {
+                "viewer": "Asks to see the workspace",
+                "collaborator": "Asks to run agents",
+                "writer": "Asks to edit files",
+                "maintainer": "Asks to manage the sandbox",
+                "agents": "Asks to run agents",
+                "areas": "Asks for more folders"
+            },
+            "from": "from {place}",
+            "review": "Review"
         }
     },
     "settings": {
@@ -12429,7 +12495,6 @@
             "insideArchive": "Inside archive",
             "notInItsCopy": "Not in its copy",
             "notUtf8ReadOnly": "This file isn't UTF-8 text, so it opens read-only here.",
-            "noWriteAccess": "No write access",
             "pageSandboxed": "Sandboxed, apart from the editor",
             "preview": "Preview",
             "readAsText": "Read as text",
@@ -12721,7 +12786,6 @@
         },
         "useChanges": {
             "abortFailed": "Abort failed",
-            "accessToSandboxRead": "Your access to this sandbox is read-only: this needs maintainer access.",
             "commitFailed": "Commit failed",
             "committing": "Committing",
             "discardFailed": "Discard failed",
@@ -12927,7 +12991,6 @@
             "keptPrivateBySandbox": "Kept private by the sandbox",
             "keptInPlaceBySandbox": "Kept in place by the sandbox",
             "insideArchiveExtractTo": "Inside an archive: extract it to change anything",
-            "readOnlyChangingFiles": "Read-only: changing files needs writer access",
             "whatAgentsRead": "What agents read",
             "wholeFile": "Whole file",
             "working": "Working",
@@ -12957,7 +13020,6 @@
             "pathCopied": "Path copied",
             "archiveReadOnly": "An archive's contents are read-only. Extract it to change them.",
             "keptInPlace": "\"{name}\" holds sandbox settings, so it stays put.",
-            "needsWriter": "Changing files needs writer access. Yours is read-only here.",
             "couldntRestore": "Couldn't restore that.",
             "couldntDelete": "Couldn't delete that.",
             "couldntKeepFolder": "Couldn't keep that folder.",

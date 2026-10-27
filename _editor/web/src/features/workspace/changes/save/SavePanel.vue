@@ -22,6 +22,8 @@ import IndexRunPrompt from "../commit/IndexRunPrompt.vue";
 import { useRunLine } from "../commit/runLine";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
+import AccessNote from "../../../../components/access/AccessNote.vue";
+import { useRole } from "../../../../client/sandbox/useRole";
 
 // The maker's half of the Changes sidebar, over the same read the developer's ReviewPanel uses. Everything git asks a
 // developer to decide is decided here instead: there is no index (a save records the whole tree), no message to write
@@ -40,6 +42,9 @@ const words = useVocabulary();
 const actions = useSaveActions();
 const { fleet } = useAgents();
 const { mobile } = useDevice();
+// Saving, backing up and throwing changes away are a maintainer's: below that the list is to read, every press that
+// changes it is left out, and one line says why.
+const { canShip } = useRole();
 
 const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
 // The body lands in the tabs store directly, not through the host: on a phone the host swaps this panel out for the
@@ -196,8 +201,8 @@ const saveTip = computed(
         note: t(`workspace.savePanel.canGoBack`),
     }),
 );
-// The bar stands whenever either press has something to do.
-const actionBar = computed(() => pending.value > 0 || actions.backupRepos.value.length > 0);
+// The bar stands whenever either press has something to do, for a member who may press them.
+const actionBar = computed(() => canShip.value && (pending.value > 0 || actions.backupRepos.value.length > 0));
 
 
 // Every failure that isn't the save's own, named by the project it happened in.
@@ -221,6 +226,8 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
         <Notice v-if="changes.error.value" tone="danger" class="mx-2 mt-2 shrink-0">{{
             t(`workspace.savePanel.couldntReadWhatChanged`, { error: changes.error.value })
         }}</Notice>
+
+        <AccessNote v-if="!canShip" :reason="{ kind: `tier`, floor: `maintainer` }" :place="words.changes" class="shrink-0 px-2 py-1.5" />
 
         <!-- The developer's commit box, in a maker's words: the version's name, then one bar of presses. A container, so
              the bar thins against its own width (sidebar, phone or pop-out) rather than the window's. -->
@@ -349,6 +356,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                             >{{ group.files.length }}</span
                         >
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="rowGlyph(HEAD_ACTION)"
                             :disabled="changes.actionBusy.value || savingNow"
@@ -382,6 +390,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                             }}</span>
                         </button>
                         <button
+                            v-if="canShip"
                             type="button"
                             :class="rowGlyph(ROW_ACTION, `max-md:ml-2`)"
                             :disabled="changes.actionBusy.value"

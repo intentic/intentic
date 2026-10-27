@@ -12,6 +12,7 @@ import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { isNavigationFailure, NavigationFailureType, RouterView, useRoute, useRouter } from "vue-router";
 import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { useRole } from "../client/sandbox/useRole";
+import { useHeldDoor } from "../components/heldPlace";
 import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../features/terminal/terminalFloating";
 import { CARD_METRICS_KEY, LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../models/sandbox/liveMetrics";
@@ -103,8 +104,9 @@ followMasterRail();
 // The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
 // A reader who does not write code meets the rail's + as the start of a conversation, which is what they came to do;
-// connecting Docker, SSH or a wallet is an owner's errand, kept one press further in, under the overflow.
+// connecting Docker, SSH or a wallet is a maintainer's errand, one press further in and no door for anyone below one.
 const { maker } = useAudience();
+const connects = useHeldDoor(`capabilities.list`);
 
 // Prefix match, not active-class: a splat/optional param (workspace/:path) drops it once one is set.
 const isNavActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
@@ -499,7 +501,7 @@ useGettingStarted();
                 <div class="flex w-48 flex-col gap-0.5 p-1">
                     <!-- With every section pinned the menu is empty, and saying only that sent its reader back four times: it
                          says where the way back is too (the tile's own menu, onTileContextMenu). -->
-                    <template v-if="moreTiles.length === 0 && !(maker && !isGuest)">
+                    <template v-if="moreTiles.length === 0 && !(maker && connects)">
                         <p class="px-2 pt-1.5 text-xs text-subtle">{{ t(`shell.shellDesktop.everySectionOnRail`) }}</p>
                         <p class="px-2 pb-1.5 text-2xs text-subtle">{{ t(`shell.shellDesktop.howToUnpin`) }}</p>
                     </template>
@@ -549,7 +551,7 @@ useGettingStarted();
                     </div>
                     <!-- Plain words gave the rail's + to a new conversation; what it used to open stays here, one press in. -->
                     <RouterLink
-                        v-if="maker && !isGuest"
+                        v-if="maker && connects"
                         to="/capabilities"
                         class="ui-row-select flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-xs"
                         :class="isNavActive('/capabilities') ? 'ui-row-select-on text-link' : 'text-content'"
@@ -563,9 +565,8 @@ useGettingStarted();
                 </div>
             </AnchoredOverlay>
 
-            <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. -->
-            <!-- A guest connects nothing: what this box can reach is the operator's decision, and the page says so at
-                 the maintainer tier. -->
+            <!-- Every "add" here writes to the sandbox's deploy.config.ts or clones into /work, never platform storage. A
+                 guest or anyone below a maintainer connects nothing: what this box can reach is the operator's decision. -->
             <button
                 v-if="!isGuest && maker"
                 type="button"
@@ -577,7 +578,7 @@ useGettingStarted();
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
             </button>
             <RouterLink
-                v-else-if="!isGuest"
+                v-else-if="connects"
                 to="/capabilities"
                 :class="[ui.addTile(`icon-rail-tile ui-row-select-horizontal rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isNavActive('/capabilities') }]"
                 :aria-label="t(`shell.words.addCapability`)"

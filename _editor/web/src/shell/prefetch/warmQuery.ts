@@ -2,16 +2,18 @@ import { type MaybeRefOrGetter, toValue } from "vue";
 import type { QueryFunction } from "@tanstack/vue-query";
 import { queryClient } from "../../lib/queryPersistence";
 import type { WarmBand, WarmTask } from "./warmPlan";
+import { accessReasonOf } from "../../client/sandbox/access/accessReason";
 
 // Turns a cached read into a wish: every task reads through the same query the screen uses, so a warmed
 // answer and a clicked one are one cache entry (fetchQuery dedupes per key). A wish is declared as a
 // query, not a callback, so the key it's satisfied by is necessarily the key its fetch writes.
 
 // In hand only if data is present and not invalidated; invalidated data must count as missing, or the
-// loader would go quiet exactly when the screen behind it goes stale.
+// loader would go quiet exactly when the screen behind it goes stale. A read the person's access refuses is in hand
+// too: there is nothing to warm, and asking again would only be refused again (client/sandbox/access/).
 export const heldInCache = (queryKey: readonly unknown[]): boolean => {
     const state = queryClient.getQueryState([...queryKey]);
-    return state?.data !== undefined && !state.isInvalidated;
+    return (state?.data !== undefined && !state.isInvalidated) || accessReasonOf(state?.error) !== undefined;
 };
 
 // One cached read, as the query that defines it. Caching terms (staleTime, gcTime) are optional and
@@ -29,6 +31,12 @@ export const warmQuery = (key: string, band: WarmBand, query: WarmSpec): WarmTas
     key,
     band,
     have: () => heldInCache(toValue(query.queryKey)),
-    // No retry: a failed warm leaves nothing cached, so the next click retries for real and can surface the error.
-    read: () => queryClient.fetchQuery({ ...query, queryKey: [...toValue(query.queryKey)], retry: false }),
+    // No retry: a failed warm leaves nothing cached, so the next click retries for real and can surface the error. A
+    // refusal of the person's access is the wish answered, not a failure the loader should pause for.
+    read: () =>
+        queryClient.fetchQuery({ ...query, queryKey: [...toValue(query.queryKey)], retry: false }).catch((error: Error) => {
+            if (accessReasonOf(error) === undefined) {
+                throw error;
+            }
+        }),
 });

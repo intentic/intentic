@@ -73,7 +73,7 @@ describe("POST /platform/relink", () => {
         const { relink, press } = stage({ gate });
         const res = await press();
         expect(res.status).toBe(403);
-        expect(await res.json()).toEqual({ error: "only this sandbox's owner can do that" });
+        expect(await res.json()).toEqual({ error: "only this sandbox's owner can do that", floor: "owner" });
         expect(relink).not.toHaveBeenCalled();
     });
 });

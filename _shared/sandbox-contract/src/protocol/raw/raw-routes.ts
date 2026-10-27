@@ -84,13 +84,19 @@ export const RAW_ROUTES = {
     "GET /intake/{id}/config": { auth: "door", embedded: true },
     "GET /intake/{id}/challenge": { auth: "door", embedded: true },
     "POST /intake/{id}/report": { auth: "door", embedded: true },
-    // The roster is ownership's to change; giving up one's own grant is every tier's.
-    "GET /members": { control: "never" },
+    // The roster is ownership's to read and change; giving up one's own grant is every tier's. Reading it is floored at
+    // the owner here as well as in its handler (members.routes.ts), so the editor knows before asking.
+    "GET /members": { floor: "owner", control: "never" },
     "POST /members": { control: "never" },
     "DELETE /members": { control: "never" },
     "DELETE /members/self": { floor: "viewer", guest: true, control: "never" },
     // What one's own grant allows, read by the editor to offer only what will be taken.
     "GET /members/self": { floor: "viewer", guest: true, control: "never" },
+    // Asking the owner for more access is every member's, a guest's included, from wherever they were refused; reading
+    // and dismissing the requests is the owner's, beside the roster they are answered on (schemas/members.ts).
+    "POST /members/requests": { floor: "viewer", guest: true, control: "never" },
+    "GET /members/requests": { floor: "owner", control: "never" },
+    "DELETE /members/requests": { floor: "owner", control: "never" },
     // The owner's Reconnect: register with the platform now, having it adopt the sandbox first when it holds no record.
     "POST /platform/relink": { control: "never" },
     "GET /environment": {},
@@ -107,7 +113,7 @@ export const RAW_ROUTES = {
     "POST /engines/channel": {},
     "POST /engines/update": {},
     "POST /engines/revert": {},
-    "GET /bundles": { control: "never" },
+    "GET /bundles": { floor: "maintainer", control: "never" },
     "POST /bundles": { control: "never" },
     "DELETE /bundles": { control: "never" },
     "POST /bundles/ticket": { control: "never" },
@@ -267,7 +273,7 @@ export const RAW_ROUTES = {
     "POST /link/conversations/{id}/answer": { auth: "door", control: "never" },
     "POST /link/conversations/{id}/stop": { auth: "door", control: "never" },
     "POST /system/control/tokens": { control: "never" },
-    "GET /system/control/tokens": { control: "never" },
+    "GET /system/control/tokens": { floor: "maintainer", control: "never" },
     "DELETE /system/control/tokens/{id}": { control: "never" },
     // One's own passkeys are identity, like staying signed in; the policy and recovery codes are ownership's.
     "GET /system/passkeys": { guest: true, control: "never" },

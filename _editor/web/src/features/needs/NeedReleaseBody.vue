@@ -1,4 +1,5 @@
-<!-- A release need's own answer: only the people the gate names may release it, or decline it. -->
+<!-- A release need's own answer: only the people the gate names may release it, or decline it, whatever their tier
+     (needs.contract.ts `release`). Anyone else sees whom it waits on and no press, rather than presses that refuse them. -->
 <script setup lang="ts">
 import type { Need, ReleaseNeed } from "@intentic/sandbox-contract/schemas/needs";
 import { Notice } from "@intentic/ui";
@@ -20,17 +21,15 @@ const mayAnswer = computed(() => {
     const me = presentedEmail.value?.toLowerCase();
     return me === undefined || props.subject.approvers.some((approver) => approver.toLowerCase() === me);
 });
-// The names are on the line above, so the hover only says why the buttons are off.
-const onlyThem = computed(() => t(`needs.release.approversOnly`));
 // The need's answer, wherever it is drawn (needAnswer.ts). Its no is its approvers' alone, so it is this card's too.
 const { busy, notice, answer } = useNeedAnswer(() => props.need);
 const release = async (): Promise<void> => {
     const id = props.need.id;
-    await answer({ tag: `release`, failed: t(`needs.card.couldNotAnswer`), task: () => needs.answer.mutateAsync({ id, answer: { kind: `release` } }) });
+    await answer({ tag: `release`, failed: t(`needs.card.couldNotAnswer`), task: () => needs.release.mutateAsync({ id, answer: `release` }) });
 };
 const decline = async (): Promise<void> => {
     const id = props.need.id;
-    await answer({ tag: `decline`, failed: t(`needs.card.couldNotAnswer`), task: () => needs.answer.mutateAsync({ id, answer: { kind: `decline` } }) });
+    await answer({ tag: `decline`, failed: t(`needs.card.couldNotAnswer`), task: () => needs.release.mutateAsync({ id, answer: `decline` }) });
 };
 </script>
 
@@ -40,9 +39,9 @@ const decline = async (): Promise<void> => {
         <span class="truncate text-2xs text-subtle" v-tooltip.left.overflow="subject.approvers.join(`, `)">{{
             t(`needs.release.approvers`, { approvers: subject.approvers.join(`, `) })
         }}</span>
-        <div class="flex flex-wrap items-center gap-2" v-tooltip.top="mayAnswer ? undefined : onlyThem">
-            <ChatDecisionButton tone="primary" icon="unlock" :disabled="busy || !mayAnswer" @click="release">{{ t(`needs.release.release`) }}</ChatDecisionButton>
-            <ChatDecisionButton tone="secondary" icon="times" :disabled="busy || !mayAnswer" @click="decline">{{ t(`needs.card.notNow`) }}</ChatDecisionButton>
+        <div v-if="mayAnswer" class="flex flex-wrap items-center gap-2">
+            <ChatDecisionButton tone="primary" icon="unlock" :disabled="busy" @click="release">{{ t(`needs.release.release`) }}</ChatDecisionButton>
+            <ChatDecisionButton tone="secondary" icon="times" :disabled="busy" @click="decline">{{ t(`needs.card.notNow`) }}</ChatDecisionButton>
         </div>
         <Notice v-if="notice" :of="notice" />
     </div>

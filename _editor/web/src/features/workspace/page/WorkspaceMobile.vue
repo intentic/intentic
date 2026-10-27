@@ -66,6 +66,7 @@ import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import { basename, parentDir } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
+import { accessWords } from "../../../client/sandbox/access/accessWords";
 
 // Drill-down file browser (one directory per screen) plus Changes/Restore Points panels and a full-screen
 // read-only viewer. Navigation state lives in the route (`?dir=`, `?file=`, `?diff=`), so OS back is up/close
@@ -83,7 +84,7 @@ const words = useVocabulary();
 const { maker } = useAudience();
 const changes = useChanges();
 const store = useWorkspaceTree();
-const { entriesByPath, entry, listingOf, hiddenIn, keepListed, error, isLoading, refetch, run, busy, actionError, canEditFiles, lazyLoading } = store;
+const { entriesByPath, entry, listingOf, hiddenIn, keepListed, error, isLoading, refetch, run, busy, actionError, canWriteAt, lazyLoading } = store;
 // The tree query reports a raw message; this view knows the user was trying to see their files.
 const treeNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: t(`workspace.workspaceMobile.couldntLoadFiles`), detail: error.value },
@@ -238,7 +239,7 @@ const { rules, selecting, inline, edits, deleting } = createFileVerbs({
     sayRenamed: true,
 });
 // A file still arriving is drawn but takes nothing, a folder still arriving drills in; an archive's contents are read-only.
-const { pendingRow, pending, archived } = rules;
+const { pendingRow, pending, archived, writable } = rules;
 const openEntry = (node: WorkspaceTreeEntry): void => {
     if (node.type === `dir` && !isLockedWorkspacePath(node.path) && !deadLink(node)) {
         openDir(node.path);
@@ -307,11 +308,13 @@ const download = (target: WorkspaceTreeEntry): void => {
     );
 };
 
-// Upload (the drag-drop replacement): a picker FAB targeting the current directory.
+// Upload (the drag-drop replacement): a picker FAB targeting the current directory, offered only where the member may
+// change files.
+const uploadsHere = computed(() => canWriteAt(dir.value));
 const fileInput = ref<HTMLInputElement>();
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
-    if (input.files !== null && input.files.length > 0) {
+    if (input.files !== null && input.files.length > 0 && uploadsHere.value) {
         void enqueue(dir.value, filesToEntries(input.files));
     }
     input.value = ``;
@@ -617,7 +620,7 @@ const onPick = (event: Event): void => {
 
                 <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                 <FloatingAction
-                    v-if="!contentMode"
+                    v-if="!contentMode && uploadsHere"
                     icon="upload"
                     :label="t(`workspace.workspaceMobile.uploadFilesHere`)"
                     @click="fileInput?.click()"
@@ -699,7 +702,7 @@ const onPick = (event: Event): void => {
                         {{ sheetEntry.type === "dir" ? t(`workspace.entryMenu.downloadZip`) : t(`ui.action.download`) }}
                     </button>
                     <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
-                    <template v-if="canEditFiles && !archived(sheetEntry.path) && !holdsLockedWorkspacePath(sheetEntry.path)">
+                    <template v-if="writable(sheetEntry.path) && !archived(sheetEntry.path) && !holdsLockedWorkspacePath(sheetEntry.path)">
                         <button
                             type="button"
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
@@ -719,11 +722,12 @@ const onPick = (event: Event): void => {
                     <p v-else-if="archived(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
                         <Icon name="box" class="text-base text-subtle" /> {{ t(`workspace.words.insideArchiveExtractTo`) }}
                     </p>
-                    <p v-else-if="canEditFiles" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
+                    <!-- Writable yet not offered: the entry holds the sandbox's settings, which stay where they are. -->
+                    <p v-else-if="writable(sheetEntry.path)" class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
                         <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.words.keptInPlaceBySandbox`) }}
                     </p>
                     <p v-else class="flex h-12 items-center gap-3 px-3 text-sm text-subtle">
-                        <Icon name="lock" class="text-base text-subtle" /> {{ t(`workspace.words.readOnlyChangingFiles`) }}
+                        <Icon name="lock" class="text-base text-subtle" /> {{ accessWords({ kind: `tier`, floor: `writer` }).note }}
                     </p>
                 </template>
             </div>

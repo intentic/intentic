@@ -25,6 +25,11 @@ export function useNeeds() {
         mutationFn: ({ id, answer: reply }: { id: string; answer: NeedAnswer }) => sandboxRpc.needs.answer({ id, answer: reply }),
         onSuccess: settled,
     });
+    // A release need's own answer, from the approvers its gate names, whatever their tier (needs.contract.ts `release`).
+    const release = useMutation({
+        mutationFn: ({ id, answer: reply }: { id: string; answer: `release` | `decline` }) => sandboxRpc.needs.release({ id, answer: reply }),
+        onSuccess: settled,
+    });
     // The value goes to the daemon's secret store through its own route and is never kept here past the call. With
     // `keepOn` it is kept in the keyring on one of the owner's computers instead, and the sandbox holds a pointer.
     const provideSecret = useMutation({
@@ -36,6 +41,7 @@ export function useNeeds() {
     return {
         needs,
         error,
+        release,
         isLoading: query.isLoading,
         byId: (id: string): Need | undefined => needs.value.find((need) => need.id === id),
         open: computed(() => needs.value.filter(isOpenNeed)),

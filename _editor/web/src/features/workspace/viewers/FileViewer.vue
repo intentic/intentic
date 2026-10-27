@@ -2,7 +2,7 @@
 import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { useLoaded } from "@intentic/extension-api";
-import { Await, Button, CopyButton, EmptyState, Notice, type Tip, ui, useDevice } from "@intentic/ui";
+import { Await, Button, CopyButton, EmptyState, Notice, ui, useDevice } from "@intentic/ui";
 import { messageOr, useLatest } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { extensionOf } from "@intentic/ui/file-format";
@@ -10,6 +10,9 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } fro
 import { localFace } from "../../../app/environments/local";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
+import { type AccessReason, accessReasonOf } from "../../../client/sandbox/access/accessReason";
+import AccessGate from "../../../components/access/AccessGate.vue";
+import { readOnlyTip, sharedCopyTip } from "./readOnlyTip";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { isArchiveContent } from "../../../models/workspace/files/archiveEntries";
@@ -83,6 +86,12 @@ const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: stri
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
 const error = ref<string | null>(null);
+// A refusal of the person's access (a folder outside their areas, reached by a link) draws as the gate, not in red.
+const refused = shallowRef<AccessReason | undefined>(undefined);
+const failWith = (err: Error | undefined, fallback: string): void => {
+    [error.value, refused.value] = [messageOr(err, fallback), accessReasonOf(err)];
+};
+const clearFailure = (): void => void ([error.value, refused.value] = [null, undefined]);
 // What the surface below has of its file, while no failure (of its read, a reload or a download) covers it.
 const fileLoaded = useLoaded(() => ({ data: loading.value ? undefined : open.value, error: undefined, fetching: loading.value, wanted: true }));
 // Set when the file changed on disk with unsaved edits: buffer kept, Reload offered instead of overwriting.
@@ -96,6 +105,9 @@ const lossy = ref(false);
 const reloadNonce = ref(0);
 // Edit buffers: the read trigger's dirty-guard below reads this, so it must exist before the watch.
 const edit = useEditBuffers();
+const { saveText, run, canWriteAt, entry: entryAt } = useWorkspaceTree();
+// Whether the member may change this file (their tier and edit fence): outside it the file opens read-only.
+const memberWrites = computed(() => canWriteAt(path));
 // Whose copy this surface reads: the Workspace's scope, unless the surface around it names another (the side panel).
 const viewAgent = useViewScope();
 const viewScope = computed<ViewScope>(() => ({ agent: viewAgent.value }));
@@ -136,7 +148,7 @@ const pathViewerProps = (target: string, agent: string | undefined): PathViewerP
     if (agent !== undefined) {
         props.agent = agent;
     }
-    if (readOnly || !writableHere(target)) {
+    if (readOnly || !writableHere(target) || !canWriteAt(target)) {
         props.readOnly = true;
     }
     return props;
@@ -198,7 +210,7 @@ const reconcileOpenFile = (currentPath: string): void => {
                 return;
             }
             // A read that came back clears what an earlier failed one said, or that failure would cover the editor for good.
-            error.value = null;
+            clearFailure();
             // Equal to the last known disk baseline: a save echo or no-op touch, leave the view alone.
             if (content === edit.baselineOf(currentPath)) {
                 return;
@@ -236,7 +248,7 @@ const reconcileOpenFile = (currentPath: string): void => {
                 }
                 return;
             }
-            error.value = messageOr(err, t(`workspace.fileViewer.loadFailed`));
+            failWith(err, t(`workspace.fileViewer.loadFailed`));
         },
     );
 };
@@ -249,7 +261,7 @@ const refreshLook = (currentPath: string): void => {
             if (!isLatest()) {
                 return;
             }
-            error.value = null;
+            clearFailure();
             if (window.content === text.value) {
                 return;
             }
@@ -265,7 +277,7 @@ const refreshLook = (currentPath: string): void => {
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = messageOr(err, t(`workspace.fileViewer.loadFailed`));
+            failWith(err, t(`workspace.fileViewer.loadFailed`));
         },
     );
 };
@@ -323,7 +335,7 @@ const resetFor = (currentPath: string): OpenFile => {
     letGo();
     firstWindow.value = undefined;
     fromShared.value = false;
-    error.value = null;
+    clearFailure();
     loading.value = false;
     open.value = resolution;
     lang.value = resolution.kind === `code` || resolution.kind === `markdown` ? resolution.lang : undefined;
@@ -385,7 +397,7 @@ watch(
                 emit(`gone`, currentPath);
                 return;
             }
-            error.value = messageOr(err, t(`workspace.fileViewer.loadFailed`));
+            failWith(err instanceof Error ? err : undefined, t(`workspace.fileViewer.loadFailed`));
         };
 
         if (resolution.kind === `code` || resolution.kind === `markdown`) {
@@ -458,7 +470,7 @@ const reloadFromDisk = (): void => {
             reloadNonce.value++;
         },
         (err) => {
-            error.value = messageOr(err, t(`workspace.fileViewer.reloadFailed`));
+            failWith(err, t(`workspace.fileViewer.reloadFailed`));
         },
     );
 };
@@ -512,7 +524,6 @@ const derivedDownloadable = computed(() => open.value.kind !== `code` && open.va
 // Inline editing (text only): direct editing in Monaco or Markdown, seeded from the live
 // buffer or disk text. Ctrl+S/Save persists via upload; the tree refetch then refreshes size and the read view.
 const { hideFileComments, toggleHideFileComments } = useLayout();
-const { saveText, run, canEditFiles, entry: entryAt } = useWorkspaceTree();
 // Inside an archive: what is open is a member of a copy the daemon keeps out of sight, and nothing repacks a zip.
 const inArchive = computed(() => isArchiveContent(path, entryAt));
 // Editable CodeView instance; toolbar Save calls its exposed save(), so toolbar and Ctrl+S share one path.
@@ -531,45 +542,32 @@ const editableKind = computed(() => (open.value.kind === `code` || open.value.ki
 const canEdit = computed(
     () =>
         !readOnly &&
-        canEditFiles.value &&
+        memberWrites.value &&
         viewAgent.value === undefined &&
         !inArchive.value &&
         editableKind.value &&
         !lossy.value &&
         writableHere(path),
 );
-// Reason lives here, where a reader would look for edit capability.
-// Four causes: tier (checked first, outranks the rest), scope, an archive, or a document window's other file; any one
+// Reason lives here, where a reader would look for edit capability (readOnlyTip.ts names the four causes); any one
 // disables Edit. A lossy read says why in a line of its own over the text instead.
 const scopedReadOnly = computed(
-    () => !mobile.value && editableKind.value && (!canEditFiles.value || viewAgent.value !== undefined || inArchive.value || !writableHere(path)),
+    () => !mobile.value && editableKind.value && (!memberWrites.value || viewAgent.value !== undefined || inArchive.value || !writableHere(path)),
 );
 // A look at a file this reader could edit in the Workspace: says where the caret is, rather than leaving it missing.
 const lookReadOnly = computed(() => readOnly && !mobile.value && !scopedReadOnly.value && editableKind.value && !lossy.value);
 const scopeTitle = useScopeTitle(viewAgent);
 const words = useVocabulary();
-const readOnlyReason = computed((): Tip => {
-    if (!canEditFiles.value) {
-        return { title: t(`workspace.fileViewer.noWriteAccess`) };
-    }
-    if (inArchive.value) {
-        return { title: t(`workspace.fileViewer.insideArchive`), note: t(`workspace.fileViewer.extractToEdit`) };
-    }
-    if (soleDocument !== undefined && !writableHere(path)) {
-        return { title: t(`workspace.fileViewer.soleDocumentOnly`, { name: basename(soleDocument) }) };
-    }
-    return {
-        title: t(`workspace.words.privateCopy`),
-        rows: [{ label: words.value.Agent, value: scopeTitle.value }],
-        note: t(`workspace.words.cantEditHere`),
-    };
-});
-// The file came from the shared tree because the agent's own copy has none.
-const sharedTip = computed((): Tip => ({
-    title: t(`workspace.fileViewer.sharedVersion`),
-    rows: [{ label: words.value.Agent, value: scopeTitle.value }],
-    note: t(`workspace.fileViewer.notInItsCopy`),
-}));
+const readOnlyReason = computed(() =>
+    readOnlyTip({
+        memberWrites: memberWrites.value,
+        inArchive: inArchive.value,
+        otherThan: soleDocument !== undefined && !writableHere(path) ? soleDocument : undefined,
+        agentWord: words.value.Agent,
+        scopeTitle: scopeTitle.value,
+    }),
+);
+const sharedTip = computed(() => sharedCopyTip(words.value.Agent, scopeTitle.value));
 // Monaco's own save chord, drawn the platform's way.
 const saveKeys = formatChord(`Mod+S`, isApplePlatform());
 // The lossy line's place: over text this viewer shows, which a big file's window is too.
@@ -812,6 +810,7 @@ const onEditorSave = (value: string): void =>
             </div>
             <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
+            <AccessGate v-else-if="refused" :reason="refused" :place="basename(path)" size="panel" />
             <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full" />
             <!-- Text waits as the lines it will be, anything else as a spinner, since its shape is not known. -->
             <Await v-else :of="fileLoaded">

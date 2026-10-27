@@ -30,6 +30,7 @@ import { usePushRun } from "../workspace/push/usePushRun";
 import { runIndexJob } from "./indexRuns";
 import { agentReviewPrefixes, GIT_LOG, rpcKey, rpcPrefix, workingReviewKeys } from "../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
+import { accessWords } from "../../client/sandbox/access/accessWords";
 import { dismissOperation, operationAt, startOperation } from "../../workbench/operations/operations";
 
 // VSCode's SCM model over real repos: `staged` is index-vs-HEAD, `unstaged` is worktree-vs-index; a path can be on
@@ -133,13 +134,14 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
     if (actionBusy.value) {
         return;
     }
-    // A member below maintainer tier is refused here, before anything is sent, filed as an ordinary per-scope failure.
+    // A member below maintainer tier is refused here, before anything is sent, filed as an ordinary per-scope failure in
+    // the words every access refusal uses. The save panel offers them none of these presses (SavePanel.vue).
     if (!canShip.value) {
         failures.value = new Map([
             ...failures.value,
             ...tasks.map((task): [string, ActionFailure] => [
                 task.scope,
-                { action: task.action, detail: t(`workspace.useChanges.accessToSandboxRead`) },
+                { action: task.action, detail: accessWords({ kind: `tier`, floor: `maintainer` }).note },
             ]),
         ]);
         return;

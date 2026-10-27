@@ -8,6 +8,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { type ComponentPublicInstance, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
+import { useDriveRefusal } from "../session/driveRefusal";
 import { laneOf } from "../../../models/agent-status/agentStatus-lanes";
 import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../models/fleet/useAgents";
@@ -35,6 +36,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 const vocabulary = useVocabulary();
+// A reader who cannot drive a chat (a viewer, a writer with agents off) is offered no new one: it would only be refused.
+const readOnly = useDriveRefusal();
 
 const emit = defineEmits<{
     select: [id: string];
@@ -426,6 +429,7 @@ onBeforeUnmount(() => {
              switcher's sheet, not here. -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
             <button
+                v-if="!readOnly"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="startAgent()"
@@ -457,7 +461,7 @@ onBeforeUnmount(() => {
 
         <!-- Foot of the rail: New agent (the fleet board's own wording), and nothing else. The rail is one form whether it stands
              in /chat or in a popped-out window, so neither grows an action the other lacks; past chats are the docked sheet's. -->
-        <div v-else class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
+        <div v-else-if="!readOnly" class="flex shrink-0 flex-wrap items-center justify-center gap-2 pb-2.5 pt-3">
             <!-- The kit's compact secondary tier. It starts as no one in particular: the new chat's posture is picked in its
                  composer, or matched from its first message. -->
             <Button size="small" tier="boring" @click="startAgent()">

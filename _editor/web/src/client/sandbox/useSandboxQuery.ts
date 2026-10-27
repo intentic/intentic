@@ -6,9 +6,12 @@ import { reportQueryFreshness } from "./freshness/queryFreshness";
 import { readFailure } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../../app/perf/perf";
+import { type AccessReason, accessReasonOf } from "./access/accessReason";
 
 // Daemon-backed vue-query wrapper: every read gates on the active daemon being reachable, a failure surfaces as the
-// message the daemon threw, and `loaded` says what the view has of it (@intentic/extension-api's `Loaded`).
+// message the daemon threw, and `loaded` says what the view has of it (@intentic/extension-api's `Loaded`). A read the
+// person's access refuses is not a failure: it surfaces as `locked`, with why, and never as `error`, and `loaded` reads
+// it as a read not asked for, so no view draws "couldn't load" for something that was never theirs to load.
 
 const { reachable } = useSandbox();
 
@@ -41,7 +44,9 @@ export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Err
         // plain handler doesn't have.
         queryClient,
     );
-    const error = computed(() => (query.error.value === null ? undefined : readFailure(query.error.value)));
+    // Why the person may not read this, when that is why it has no answer (access/accessReason.ts).
+    const locked = computed<AccessReason | undefined>(() => accessReasonOf(query.error.value));
+    const error = computed(() => (query.error.value === null || locked.value !== undefined ? undefined : readFailure(query.error.value)));
     // The query's last failure, kept through a try it makes by itself afterwards. vue-query clears `error` the moment a
     // query with no answer starts fetching again (an interval, a push, a refocus), which drew every such try as a fresh
     // wait over the failure; `useLoaded` keeps the failure on screen unless the person asked for the retry. Tied to the
@@ -67,16 +72,18 @@ export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Err
     // What the view draws from: wanted is the caller's own gate alone, so a read held while the sandbox wakes is a wait,
     // never an empty answer, and one the view has not asked for yet is never a wait. Joined to the <Await> region it is
     // read in, which keeps that region's remembered look until it has answered.
+    // A locked read draws nothing it held from before the person lost access to it, and no wait for a try it makes
+    // again by itself (an interval, a push), which the access check answers at once.
     const loaded = useLoaded<Selected>(() => ({
-        data: query.data.value,
+        data: locked.value === undefined ? query.data.value : undefined,
         error: standingFailure.value,
-        fetching: query.isFetching.value,
-        wanted: resolved.enabled === undefined || toValue(resolved.enabled) !== false,
+        fetching: query.isFetching.value && locked.value === undefined,
+        wanted: (resolved.enabled === undefined || toValue(resolved.enabled) !== false) && locked.value === undefined,
         retry: () => void query.refetch(),
     }));
     // The pane it is read in says when the answer drawn may be out of date (a slow refresh, one that failed).
     reportQueryFreshness(query, () => standingFailure.value);
     // `error` is the standing failure too, so a view that says the failure from it agrees with `loaded` and does not go
     // blank for a retry the read makes by itself.
-    return { query, error: standingFailure, loaded };
+    return { query, error: standingFailure, loaded, locked };
 }

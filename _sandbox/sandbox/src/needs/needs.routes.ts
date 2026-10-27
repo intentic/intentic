@@ -69,6 +69,17 @@ export const createNeedsRoutes = ({ needs, grants, visible }: NeedsRoutesDeps) =
             await seen(input.id, context);
             return answered(needs.answer(input.id, input.answer, { email: context.identity?.email }));
         }),
+        // The release's own door: below the operating tier, so the approvers its gate names may reach it, and only for a
+        // release, whose own rule then admits exactly them (kinds/release-need.ts `mayAnswer`).
+        release: i.release.handler(async ({ input, context }) => {
+            await seen(input.id, context);
+            const need = await needs.get(input.id);
+            if (need?.subject.kind !== "release") {
+                throw new ORPCError("BAD_REQUEST", { message: "Only a release is answered here; a maintainer answers the rest." });
+            }
+            const answer = input.answer === "release" ? ({ kind: "release" } as const) : ({ kind: "decline" } as const);
+            return answered(needs.answer(input.id, answer, { email: context.identity?.email }));
+        }),
         provideSecret: i.provideSecret.handler(async ({ input, context }) => {
             await seen(input.id, context);
             return answered(needs.provide(input.id, input.value, { email: context.identity?.email }, input.keepOn));

@@ -17,10 +17,15 @@ import { type Listener, listenerIn, listenerOf } from "./proofs/listener.js";
 type AuthDeps = Pick<Services, "auth">;
 type Auth = NonNullable<Services["auth"]>;
 
-// The bearer, and the way the request came in that a channel-bound proof is checked against (listener.ts).
-type Check = (auth: Auth, bearer: string, listener: Listener) => Promise<void>;
-const maintainer: Check = authorizeMaintainer;
-const owner: Check = (auth, bearer, listener) => auth.authorizeOwner(bearer, listener);
+// The bearer, and the way the request came in that a channel-bound proof is checked against (listener.ts), with the
+// tier the check holds it to: named in the refusal (`floor`), as the role floor names its own, so the editor reads
+// which tier was wanted instead of matching the sentence.
+interface Check {
+    readonly floor: "maintainer" | "owner";
+    readonly run: (auth: Auth, bearer: string, listener: Listener) => Promise<void>;
+}
+const maintainer: Check = { floor: "maintainer", run: authorizeMaintainer };
+const owner: Check = { floor: "owner", run: (auth, bearer, listener) => auth.authorizeOwner(bearer, listener) };
 
 const bearerOf = (headers: Headers): string => bearerFrom(headers.get("authorization") ?? undefined);
 
@@ -30,10 +35,10 @@ const denied = async (services: AuthDeps, c: Context, check: Check): Promise<Res
         return undefined;
     }
     try {
-        await check(services.auth, bearerFrom(c.req.header("authorization")), listenerOf((name) => c.req.header(name)));
+        await check.run(services.auth, bearerFrom(c.req.header("authorization")), listenerOf((name) => c.req.header(name)));
         return undefined;
     } catch (error) {
-        return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
+        return error instanceof ForbiddenError ? c.json({ error: error.message, floor: check.floor }, 403) : c.json({ error: "unauthorized" }, 401);
     }
 };
 
@@ -49,7 +54,7 @@ export const requireMaintainer = async (services: AuthDeps, headers: Headers, re
     try {
         await authorizeMaintainer(services.auth, bearerOf(headers), listenerIn(headers));
     } catch {
-        throw new ORPCError("FORBIDDEN", { message: refusal });
+        throw new ORPCError("FORBIDDEN", { message: refusal, data: { floor: maintainer.floor } });
     }
 };
 
@@ -59,10 +64,10 @@ const refused = async (services: AuthDeps, headers: Headers, check: Check): Prom
         return;
     }
     try {
-        await check(services.auth, bearerOf(headers), listenerIn(headers));
+        await check.run(services.auth, bearerOf(headers), listenerIn(headers));
     } catch (error) {
         if (error instanceof ForbiddenError) {
-            throw new ORPCError("FORBIDDEN", { message: error.message });
+            throw new ORPCError("FORBIDDEN", { message: error.message, data: { floor: check.floor } });
         }
         throw new ORPCError("UNAUTHORIZED");
     }

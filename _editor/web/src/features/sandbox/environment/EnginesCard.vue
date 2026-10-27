@@ -7,6 +7,7 @@ import { useHubWork } from "../../../workbench/hub/hubWork";
 import { engineVisual } from "./engineVisual";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { accessWords } from "../../../client/sandbox/access/accessWords";
 
 // Agent engines this sandbox runs, and where each version comes from (the image bake vs. this machine's
 // store). Each row shows what's running, its channel (recommended/latest/pinned/image), and a revert.
@@ -15,6 +16,9 @@ import { computed } from "vue";
 const t = useT();
 
 const { canShip: canOperate } = useRole();
+// Below maintainer the card is read: where each engine gets its version stays as words, and nothing offers to change it.
+const maintainersOnly = computed(() => accessWords({ kind: `tier`, floor: `maintainer` }).short);
+const channelLabel = (kind: string): string | undefined => CHANNELS.value.find((option) => option.value === kind)?.label;
 const {
     engines,
     updatable,
@@ -89,10 +93,10 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                 <div class="flex flex-wrap items-center justify-end gap-2">
                     <Button
                         tier="boring"
-                        v-if="updatable.length > 0"
+                        v-if="canOperate && updatable.length > 0"
                         size="small"
                         :loading="updatingAll"
-                        :disabled="isAnyBusy || !canOperate"
+                        :disabled="isAnyBusy"
                         :label="t(`sandbox.enginesCard.updateAll`)"
                         @click="runUpdateAll"
                     />
@@ -143,11 +147,15 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                     <span v-else>{{ t(`sandbox.enginesCard.notInstalledHere`) }}</span>
                 </template>
                 <template #control>
+                    <span v-if="!canOperate" v-tooltip.top="maintainersOnly" class="shrink-0 text-xs text-muted">{{
+                        channelLabel(engine.channel.kind)
+                    }}</span>
                     <Picker
+                        v-else
                         :model-value="engine.channel.kind"
                         :options="CHANNELS"
                         variant="ghost"
-                        :disabled="isEngineBusy(engine) || !canOperate"
+                        :disabled="isEngineBusy(engine)"
                         class="shrink-0"
                         :aria-label="t(`sandbox.enginesCard.whereGetsVersion`, { label: engine.label })"
                         :header="t(`sandbox.enginesCard.versionSource`, { label: engine.label })"
@@ -155,19 +163,19 @@ const CHANNELS = computed((): readonly PickerOption<`blessed` | `latest` | `pinn
                     />
                     <Button
                         tier="boring"
-                        v-if="engine.offered"
+                        v-if="canOperate && engine.offered"
                         size="small"
                         :loading="isEngineUpdating(engine)"
-                        :disabled="isEngineBusy(engine) || !canOperate"
+                        :disabled="isEngineBusy(engine)"
                         :label="t(`sandbox.enginesCard.updateTo`, { version: engine.offered.version })"
                         @click="runUpdate(engine)"
                     />
                     <Button
-                        v-if="engine.previous || engine.running.source === `store`"
+                        v-if="canOperate && (engine.previous || engine.running.source === `store`)"
                         size="small"
                         tier="boring"
                         :loading="isEngineReverting(engine)"
-                        :disabled="isEngineBusy(engine) || !canOperate"
+                        :disabled="isEngineBusy(engine)"
                         :label="
                             engine.previous
                                 ? t(`sandbox.enginesCard.backTo`, { previous: engine.previous })

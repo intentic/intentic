@@ -33,6 +33,8 @@ export const refuseFenced = (fence: Fence, relPath: string): void => {
             folders.length === 0
                 ? "your access to this workspace holds no folders; ask the owner for an area"
                 : `outside your access to this workspace, which holds ${folders.join(", ")}`,
+        // The same answer for the editor to act on: an area refusal, and the folders the person does hold.
+        data: { reason: "area", areas: folders },
     });
 };
 

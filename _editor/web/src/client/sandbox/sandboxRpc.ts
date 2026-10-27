@@ -11,6 +11,9 @@ import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAut
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
 import { type ContractModule, loadContract } from "./daemon/contract";
+import { reasonOfAnswer } from "./access/accessReason";
+import { accessWords } from "./access/accessWords";
+import { refusedUnforeseen } from "./access/forecast";
 
 // The typed oRPC client for the sandbox daemons, the one way the app calls a contract procedure. A call's context
 // aims and paces it; a refusal reads as a SandboxHttpError in the daemon's words, and an answer arrives parsed by the
@@ -61,16 +64,25 @@ const refusalBody = (error: ORPCError<string, unknown>): unknown => {
     return data !== undefined && typeof data === `object` && `body` in data ? data.body : { message: error.message, data: error.data };
 };
 
-// What a failed call throws: an HTTP refusal as a SandboxHttpError, in the daemon's own words, with what the active
-// daemon's routes add to them (routeRefusalText); anything that never got an answer (a dead tunnel, an abort) as it was.
-const refusalOf = (error: unknown, route: string | undefined): unknown => {
-    if (!(error instanceof ORPCError)) {
-        return error;
-    }
+// An HTTP refusal as a SandboxHttpError, in the daemon's own words with what the active daemon's routes add to them
+// (routeRefusalText), or, for an access refusal, the person's access in the app's words wherever its message is drawn,
+// not the daemon's "maintainer access required" (access/accessWords.ts).
+const daemonRefusal = (error: ORPCError<string, unknown>, route: string | undefined): SandboxHttpError => {
     const said = wordsOf(refusalBody(error));
+    const access = reasonOfAnswer(error.status, said);
+    if (access !== undefined) {
+        // The active daemon refused what the editor thought the person could do: its record of their access is stale.
+        if (route !== undefined && said.predicted !== true) {
+            refusedUnforeseen();
+        }
+        return new SandboxHttpError(error.status, accessWords(access).note, said);
+    }
     const routes = route === undefined ? undefined : routeRefusalText(route, error.status, said);
     return new SandboxHttpError(error.status, routes ?? refusalText(error.status, said), said);
 };
+
+// What a failed call throws: a refusal (above), and anything that never got an answer (a dead tunnel, an abort) as it was.
+const refusalOf = (error: unknown, route: string | undefined) => (error instanceof ORPCError ? daemonRefusal(error, route) : error);
 
 /** The same answer, its body reporting each chunk to `heard` on the way through (SandboxCallContext.heard). */
 export const overheard = (response: Response, heard: () => void): Response => {

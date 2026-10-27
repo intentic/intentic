@@ -19,7 +19,7 @@ import ChatAttachmentStrip from "../../composer/ChatAttachmentStrip.vue";
 import { PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { uuid } from "../../../../lib/uuid";
-import ChatCard from "../../../../components/ChatCard.vue";
+import ChatCard, { CARD_ANSWERS_WITHHELD } from "../../../../components/ChatCard.vue";
 import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
 import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
@@ -31,6 +31,10 @@ const t = useT();
 
 const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (answer: CardAnswer) => Promise<void> }>();
 const card = computed(() => props.message.question!);
+// A reader who follows this chat without driving it reads the options as a list, with nothing to pick (ChatCard says
+// who it waits on in place of the answers).
+const withheld = inject(CARD_ANSWERS_WITHHELD, undefined);
+const choosing = computed(() => card.value.status === `pending` && withheld?.value === undefined);
 
 const { mobile } = useDevice();
 
@@ -308,7 +312,7 @@ const decidedFiles = (question: AskQuestion): { name: string; path: string }[] =
                     question.question
                 }}</span>
 
-                <template v-if="card.status === 'pending'">
+                <template v-if="choosing">
                     <!-- States in words what the square marks say by shape; becomes a running count once picked. -->
                     <span v-if="question.multiSelect" class="text-2xs text-subtle">{{
                         pickedCount(index) > 0

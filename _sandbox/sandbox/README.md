@@ -361,7 +361,7 @@ flowchart LR
   home and the sessions it started or opened to judge, and nothing else (`auth/fleet-scope.ts visibleTo`). The grant's
   `lands` is one answer to two questions, whether their home lands by itself and whether they may press Land on it
   (`landsHere` in the contract's `schemas/members.ts`; `POST /agents/{id}/land` carries `home: "land"`, read by
-  `auth/role-floor.ts`). For every home, that answer is read from its owner's grant at the land, not latched when the
+  `sandbox-contract` `protocol/member-reach.ts`). For every home, that answer is read from its owner's grant at the land, not latched when the
   home opened, so a re-grade holds the next land (`turn-landing.ts decideLanding`).
 - Who a turn acts for decides what it reaches (2026-10-26, [access.md](../../docs/architecture/access.md)). A
   conversation latches `people` and `services` (`conversations/actor/identity-latch.ts`); `access/principal-chain.ts`

@@ -355,7 +355,7 @@ export const createAgentsRoutes = (services: Services) => {
             }
             return summary;
         }),
-        // The one write in this family a viewer may make (auth/role-floor.ts): a mark says something about the people
+        // The one write in this family a viewer may make (sandbox-contract protocol/member-reach.ts): a mark says something about the people
         // reading the board, not about the work. Legal in every state — mid-turn, archived, conflicted — since it
         // touches none of it.
         react: i.react.handler(async ({ input, context }) => {
@@ -518,7 +518,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input, context }) => {
-            // A home-only member reaches this press only when their home lands by itself (auth/role-floor.ts), and only on it.
+            // A home-only member reaches this press only when their home lands by itself (sandbox-contract protocol/member-reach.ts), and only on it.
             const entry = isolatedEntryOf(input.id, context, "drive");
             landable(input.id, input.force === true);
             // A second press while one is in flight would rebase the worktree the first is reading; the card already

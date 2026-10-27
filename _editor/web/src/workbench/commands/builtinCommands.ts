@@ -7,6 +7,7 @@ import { useVocabulary } from "../views/vocabulary";
 import { ACCOUNT, AGENTS, BROWSERS, CHAT, GO_TO, SANDBOX, SIDE_PANEL, TERMINAL, WORKSPACE } from "./categories";
 import { type CommandRegistration, commands, registerCommand } from "./useCommands";
 import { inAppWindow } from "./windowKind";
+import { belowMaintainer } from "../../components/heldPlace";
 
 // EVERY BUILT-IN COMMAND WITH A FIXED ID, declared once: its name, family, glyph, default chord and the condition that
 // gates that chord. The component that can run one binds a handler to it by id (registerBuiltin) while it is mounted;
@@ -49,6 +50,8 @@ export interface CommandDeclaration extends PlatformChords {
     readonly offered?: () => boolean;
 }
 
+const terminalOffered = (): boolean => !belowMaintainer();
+
 const onSurface = (surface: string): string => `tabSurface == '${surface}'`;
 const REVIEW_WHEN = `agentReviewOnScreen && !editableTarget`;
 
@@ -87,9 +90,11 @@ export const BUILTIN_COMMANDS = {
     "workspace.goToAnything": { title: () => t(`shell.useShellCommands.anything`), category: GO_TO, icon: `search`, keybinding: `Mod+P` },
     // The one command with no family: it is the list the others are read from.
     "workspace.commandPalette": { title: () => t(`shell.useShellCommands.commandPalette`), icon: `search`, keybinding: `Mod+Shift+P` },
-    "terminal.toggle": { title: () => t(`shell.useShellCommands.togglePanel`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+\`` },
+    // The terminal's three are a maintainer's, as the terminal is (components/heldPlace.ts); the shell registers them only
+    // for one, and the Keyboard page lists them only for one.
+    "terminal.toggle": { title: () => t(`shell.useShellCommands.togglePanel`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+\``, offered: terminalOffered },
     // Matches the physical key globally so terminal.new works while its panel is closed.
-    "terminal.new": { title: () => t(`shell.words.new`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+Shift+\`` },
+    "terminal.new": { title: () => t(`shell.words.new`), category: TERMINAL, icon: `code`, keybinding: `Ctrl+Shift+\``, offered: terminalOffered },
     // The three window toggles say which way a press goes; their live titles follow the state, these name the toggle.
     // Gated off the terminal, where F9 belongs to whatever's there.
     "chat.toggleFloating": {
@@ -101,7 +106,12 @@ export const BUILTIN_COMMANDS = {
     },
     // `layout-left`, not `expand`: the rail is a left-edge dock, not something this command maximises. Unbound: F9 is spent.
     "chat.toggleHome": { title: () => t(`shell.useShellCommands.dockToRail`), category: CHAT, icon: `layout-left` },
-    "terminal.toggleFloating": { title: () => t(`shell.useShellCommands.moveIntoNewWindow`), category: TERMINAL, icon: `external-link` },
+    "terminal.toggleFloating": {
+        title: () => t(`shell.useShellCommands.moveIntoNewWindow`),
+        category: TERMINAL,
+        icon: `external-link`,
+        offered: terminalOffered,
+    },
     "browsers.toggleFloating": { title: () => t(`shell.useShellCommands.moveIntoNewWindow`), category: BROWSERS, icon: `external-link` },
     "view.previousSection": { title: () => t(`shell.shellDesktop.previousRailSection`), category: GO_TO, icon: `chevron-up`, keybinding: `Alt+ArrowUp` },
     "view.nextSection": { title: () => t(`shell.shellDesktop.nextRailSection`), category: GO_TO, icon: `chevron-down`, keybinding: `Alt+ArrowDown` },

@@ -59,10 +59,10 @@ export const deleteEntries = (
 export interface TreeDeleteHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
     readonly targetDir: (path: string | null) => string;
-    readonly rules: Pick<ReturnType<typeof useTreeRules>, "refuseIn" | "unlockedOnly" | "refuseKept">;
+    readonly rules: Pick<ReturnType<typeof useTreeRules>, "refuseIn" | "unlockedOnly" | "refuseKept" | "writable">;
     readonly emptyDirs: ReturnType<typeof useEmptyDirs>;
     readonly selecting: Pick<MultiSelect, "selection" | "lead" | "clear">;
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "removeEntries" | "createFile" | "refuseWrite">;
+    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "removeEntries" | "createFile">;
     readonly say: ReturnType<typeof useNotifications>["say"];
     // The receipt for a delete that landed, offering to take back exactly that batch.
     readonly sayDeleted: (receipt: string, batch: DeleteBatch) => void;
@@ -77,11 +77,13 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
     };
     // A backend that serves no delete (a folder on this computer) is offered neither the key nor the sweep line.
     const deletes = (): boolean => supportsRoute(VERB_ROUTES.remove);
+    // Only the branches the member may change: one outside their edit fence is neither named nor swept.
     const sweep = (roots: readonly string[]): void => {
-        if (roots.length === 0 || !deletes() || store.refuseWrite()) {
+        const mine = roots.filter(host.rules.writable);
+        if (mine.length === 0 || !deletes()) {
             return;
         }
-        remove(roots, sweepReceipt(roots, emptyDirs.chainOf));
+        remove(mine, sweepReceipt(mine, emptyDirs.chainOf));
     };
     // A barren-only selection reads as the sweep line does, since that is what it is.
     const requestDelete = (): void => {
@@ -89,7 +91,9 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
             return;
         }
         const paths = host.rules.unlockedOnly([...selecting.selection.value]);
-        if (paths.length === 0 || host.rules.refuseKept(paths)) {
+        // The menu offers Delete only when the member may change every entry it names, and the key is held to the same; a
+        // folder holding the sandbox's settings is refused with its own word.
+        if (paths.length === 0 || !paths.every(host.rules.writable) || host.rules.refuseKept(paths)) {
             return;
         }
         if (paths.every((path) => host.byPath.value.get(path)?.type === `dir` && emptyDirs.isBarren(path))) {
@@ -115,7 +119,7 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
     const sweepOpen = ref(false);
     const pointedBarren = ref<string | undefined>(undefined);
     const barrenBranches = computed<readonly BarrenBranch[]>(() =>
-        deletes() ? emptyDirs.roots.value.map((path) => branchOf(path, emptyDirs.chainOf)) : [],
+        deletes() ? emptyDirs.roots.value.filter(host.rules.writable).map((path) => branchOf(path, emptyDirs.chainOf)) : [],
     );
     // One branch needs no disclosure: the line just says it.
     const soleBarren = computed(() => (barrenBranches.value.length === 1 ? barrenBranches.value[0] : undefined));
@@ -129,7 +133,7 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
         }
     });
     // The line's Clean up: every branch it names.
-    const sweepAll = (): void => sweep(emptyDirs.roots.value);
+    const sweepAll = (): void => sweep(barrenBranches.value.map((branch) => branch.path));
 
     return {
         requestDelete,

@@ -24,13 +24,17 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { query, mode, publishedMatches } = defineProps<{
+const { query, mode, publishedMatches, manage } = defineProps<{
     /** The section's search text: matches the id and everything the extension contributes. */
     query: string;
     /** The section's state pills: which of 'I have it on' / 'I switched it off' is asked for. */
     mode: `all` | `on` | `off`;
     /** How many published extensions the same search matches; the section knows, this half doesn't. */
     publishedMatches: number;
+    /** Whether this reader may change what is installed; below maintainer the list is read, with nothing to press. */
+    manage: boolean;
+    /** Whether Browse is offered to this reader, which an empty list points at. */
+    browsable: boolean;
 }>();
 const emit = defineEmits<{
     /** The list's own read failing, raised so the section keeps one notice region above the instrument. */
@@ -251,6 +255,7 @@ const confirmRemove = async (): Promise<void> => {
             :key="opened.extension.id"
             :entry="opened"
             :pending="extensionBusy(opened.extension.id, extensionIdOf(opened.extension.manifest))"
+            :manage="manage"
             @toggle="toggle"
             @remove="(extension) => (removing = extension)"
             @dev-clear="leaveDev"
@@ -268,7 +273,7 @@ const confirmRemove = async (): Promise<void> => {
                         <span class="block truncate">.intentic/config/workspace-extensions/{{ extension.dir }}</span>
                     </template>
                     <template #meta><StatusBadge variant="warning" :label="t(`sandbox.extensionsInstalled.pendingBadge`)" size="xs" /></template>
-                    <template #control>
+                    <template v-if="manage" #control>
                         <Button
                             tier="accent"
                             size="small"
@@ -326,6 +331,7 @@ const confirmRemove = async (): Promise<void> => {
                             :data-extension="entry.extension.id"
                             :entry="entry"
                             :pending="extensionBusy(entry.extension.id, extensionIdOf(entry.extension.manifest))"
+                            :manage="manage"
                             @toggle="(enabled) => toggle(entry.extension, enabled)"
                             @open="openExtension(entry.extension.id)"
                         />
@@ -334,11 +340,16 @@ const confirmRemove = async (): Promise<void> => {
                     <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                         <span>{{ emptyNote }}</span>
                         <!-- An empty list is the moment to answer 'where do extensions come from', not just point at another surface. -->
-                        <button v-if="entries.length === 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
+                        <button v-if="browsable && entries.length === 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
                             {{ t(`sandbox.extensionsInstalled.discoverWhatPeoplePublished`) }}
                         </button>
                         <!-- The empty state answers the active filter before offering reset. -->
-                        <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
+                        <button
+                            v-if="browsable && matches.length === 0 && publishedMatches > 0"
+                            type="button"
+                            :class="ui.textButton()"
+                            @click="emit(`browse`)"
+                        >
                             {{
                                 t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches)
                             }}

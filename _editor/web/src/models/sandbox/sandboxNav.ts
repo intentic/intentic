@@ -167,6 +167,9 @@ const builtInSections = (): readonly SandboxSection[] =>
 // asks it which sections an organisation's lock may wrap (organisations/OrgHeldSection.vue).
 export const sandboxBuiltInSlugs = (): ReadonlySet<string> => new Set(builtInSections().map((section) => section.slug));
 
+/** One built-in section by its slug, a tabbed row's part or a page's own part included. */
+export const sandboxSectionOf = (slug: string): SandboxSection | undefined => builtInSections().find((section) => section.slug === slug);
+
 /** The extension whose view a section draws as one of its parts, if it draws one. */
 export const sandboxEmbedOf = (slug: string): string | undefined => builtInSections().find((section) => section.slug === slug)?.embeds;
 

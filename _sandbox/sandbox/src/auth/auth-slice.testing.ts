@@ -5,6 +5,7 @@ import { memoryDoorTokens } from "./tokens/door-tokens.js";
 import { createMediaTickets } from "./tokens/media-tickets.js";
 import { createWsTickets } from "./tokens/ws-tickets.js";
 import type { AuthSlice } from "./auth-slice.js";
+import { memoryAccessRequests } from "./members/access-requests.testing.js";
 
 // The auth slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
@@ -90,6 +91,8 @@ export const authSliceFake = ({ auth }: AuthFakeOverrides, passkeys: AuthSlice["
             revoke: async () => true,
         },
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
+        // Nobody has asked the owner for anything until a suite asks.
+        accessRequests: memoryAccessRequests(),
         // Real ceremonies over an empty memory store, every origin allowed: a suite that registers a passkey drives the
         // actual verifier, and one that only lists sees nothing.
         passkeys: passkeyStore,

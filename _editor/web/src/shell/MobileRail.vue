@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { useAudience } from "../app/useAudience";
 import { useRole } from "../client/sandbox/useRole";
+import { useHeldDoor } from "../components/heldPlace";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import TileMark from "../components/TileMark.vue";
 import GettingStartedRing from "../features/gettingStarted/GettingStartedRing.vue";
@@ -44,6 +45,8 @@ const { user } = useAuth();
 const route = useRoute();
 const { canShip, isGuest } = useRole();
 const { maker } = useAudience();
+// Capabilities is a maintainer's page: below that the + is no door (components/heldPlace.ts).
+const connects = useHeldDoor(`capabilities.list`);
 
 // Agents, the Workspace, Devices and every rail extension, banded as the desktop rail bands them.
 const { tiles } = useSectionTiles();
@@ -174,7 +177,7 @@ const frame = phoneRailFrame();
         <!-- What this sandbox can reach, added here as on the desktop's +; a guest connects nothing. A new agent is the
              board's own floating press, beside this rail. -->
         <RouterLink
-            v-if="!isGuest"
+            v-if="connects"
             to="/capabilities"
             :class="ui.addTile(`icon-rail-tile rounded-lg`)"
             :aria-label="t(`shell.words.addCapability`)"

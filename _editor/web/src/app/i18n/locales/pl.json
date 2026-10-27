@@ -3861,7 +3861,6 @@
             "stopTurn": "Zatrzymaj turę",
             "unconnectedHint": "Podłącz model",
             "unconnectedPlaceholder": "Co ma zrobić ten agent?",
-            "viewerPlaceholder": "Tylko patrzysz: poproś właściciela o rolę współpracownika, żeby sterować agentami",
             "placeholderLater": "Napisz wiadomość do zaplanowania…",
             "hintLater": "Zaplanuj",
             "hintLaterNote": "Czeka w tym czacie, gdzie możesz wysłać ją wcześniej, zmienić termin albo ją wycofać.",
@@ -3878,8 +3877,7 @@
                 "placeholderQueue": "Napisz wiadomość na moment, gdy skończy…",
                 "placeholderEdit": "Zapytaj o to jeszcze raz, inaczej…",
                 "hintSteer": "Wyślij teraz, gdy pracuje",
-                "hintQueue": "Pójdzie, gdy skończy",
-                "viewerPlaceholder": "Możesz czytać tę rozmowę. Poproś właściciela, jeśli chcesz też tu pisać."
+                "hintQueue": "Pójdzie, gdy skończy"
             },
             "unconnectedNote": "Twoja wiadomość tu poczeka.",
             "otherModelHint": "Model niepodłączony",
@@ -4264,7 +4262,13 @@
             "wait": "Poczekaj",
             "waitHint": "Wiadomość zostaje wstrzymana. Wyślesz ją z czatu, gdy zwolni się pamięć.",
             "sendsWhenRoom": "wyśle się, gdy zwolni się pamięć",
-            "waitHintRoom": "Wyśle się po zwolnieniu pamięci"
+            "waitHintRoom": "Wyśle się po zwolnieniu pamięci",
+            "others": {
+                "plan": "Plan czeka na kogoś, kto uruchamia agentów",
+                "question": "Pytanie czeka na kogoś, kto uruchamia agentów",
+                "permission": "Zgoda czeka na kogoś, kto uruchamia agentów",
+                "other": "Czeka na kogoś, kto uruchamia agentów"
+            }
         },
         "sendLater": {
             "title": "Wyślij później",
@@ -4375,7 +4379,8 @@
             "decisionTurnEnded": "Nie udało się zapisać Twojej decyzji: tura mogła się już skończyć.",
             "planNotRecorded": "Nie udało się zapisać Twojej decyzji co do planu: tura mogła się już skończyć.",
             "questionNotDismissed": "Nie udało się odrzucić pytania: tura mogła się już skończyć.",
-            "sendTurnEnded": "Nie udało się tego wysłać: tura mogła się już skończyć."
+            "sendTurnEnded": "Nie udało się tego wysłać: tura mogła się już skończyć.",
+            "waitsOnDriver": "Czeka na odpowiedź kogoś, kto uruchamia agentów."
         },
         "composerSelection": {
             "resets": "odnowienie {when}",
@@ -4778,6 +4783,45 @@
         },
         "restartQuiet": {
             "detail": "Ta strona sama połączy się ponownie. Twoje pliki w /work zostają."
+        },
+        "access": {
+            "short": {
+                "owner": "Tylko właściciel",
+                "maintainer": "Tylko opiekunowie",
+                "writer": "Wymaga edycji",
+                "collaborator": "Wymaga agentów",
+                "agentsOff": "Agenci wyłączeni",
+                "notShared": "Nieudostępnione Tobie",
+                "org": "Zarządza {org}"
+            },
+            "title": {
+                "owner": "Tylko właściciel może otworzyć: {place}",
+                "maintainer": "Tylko opiekunowie mogą otworzyć: {place}",
+                "writer": "Tylko osoby edytujące pliki mogą otworzyć: {place}",
+                "collaborator": "Tylko osoby uruchamiające agentów mogą otworzyć: {place}",
+                "agentsOff": "Uruchamianie agentów jest tu dla Ciebie wyłączone",
+                "guest": "{place}: nieudostępnione Tobie",
+                "area": "Ten folder nie jest Ci udostępniony",
+                "org": "{place}: zarządza {org}"
+            },
+            "note": {
+                "owner": "Możesz się rozejrzeć. Zmieniać coś tutaj może tylko właściciel.",
+                "maintainer": "Możesz się rozejrzeć. Zmieniać coś tutaj mogą tylko opiekunowie.",
+                "writer": "Możesz tu czytać. Zmiana plików wymaga uprawnień do edycji.",
+                "collaborator": "Możesz śledzić rozmowę. Uruchamianie agentów wymaga dostępu do agentów.",
+                "agentsOff": "Możesz śledzić rozmowę. Uruchamianie agentów jest tu dla Ciebie wyłączone.",
+                "guest": "To nie jest Ci udostępnione.",
+                "area": "Ten folder nie jest Ci udostępniony.",
+                "org": "Tym zarządza {org}. Możesz to przeglądać, ale zmiany wprowadza administrator Twojej organizacji."
+            },
+            "line": {
+                "ask": "Poproś właściciela o dostęp. Otworzy się tutaj, gdy tylko go przyzna.",
+                "asked": "Poprosiłeś właściciela o dostęp. Otworzy się tutaj, gdy tylko go przyzna.",
+                "org": "Zmiany tutaj wprowadza administrator Twojej organizacji."
+            },
+            "ask": "Poproś o dostęp",
+            "asked": "Wysłano prośbę",
+            "askFailed": "Nie udało się wysłać prośby."
         }
     },
     "connect": {
@@ -6451,7 +6495,6 @@
             "noSecurityAuditRecord": "Brak zapisu audytu bezpieczeństwa",
             "notBrowserIsolated": "Nieodizolowane w przeglądarce",
             "notSecurityAudited": "Bez audytu bezpieczeństwa.",
-            "onlySandboxOwnerInstall": "Tylko właściciel sandboxa może instalować rozszerzenia.",
             "passedExactSourceUnder": "przepuścił dokładnie ten kod źródłowy pod",
             "pinned": "Przypięte",
             "reCheckedAtExact": "Sprawdzone ponownie dokładnie na tym commicie przez nocne skanowanie rejestru: manifest się parsuje i rozszerzenie się wczytuje.",
@@ -7331,7 +7374,8 @@
             "portsTaken": "{count} port zajęty przez inny sandbox na Twoim komputerze | {count} porty zajęte przez inny sandbox na Twoim komputerze | {count} portów zajętych przez inny sandbox na Twoim komputerze",
             "rebuildNeededToFinish": "Potrzebna przebudowa, żeby dokończyć konfigurację nowych możliwości",
             "requiredSecretsMissing": "Brakuje {count} wymaganego sekretu | Brakuje {count} wymaganych sekretów | Brakuje {count} wymaganych sekretów",
-            "sandboxUpdateReadyTo": "Aktualizacja sandboxa jest gotowa do zastosowania — restart na jakieś pół minuty"
+            "sandboxUpdateReadyTo": "Aktualizacja sandboxa jest gotowa do zastosowania — restart na jakieś pół minuty",
+            "peopleAskForAccess": "{count} osoba prosi o dostęp | {count} osoby proszą o dostęp | {count} osób prosi o dostęp"
         },
         "sandboxBackupCard": {
             "detail": "Ten sandbox działa w chmurze, a na tym komputerze nie ma kopii jego plików. Synchronizacja z pulpitem utrzymuje tutejszy folder w zgodzie z nim, więc praca przetrwa wszystko, co stanie się z maszyną.",
@@ -8270,7 +8314,6 @@
             "nameEGWork": "Nazwij go, np. laptop służbowy",
             "addPasskey": "Dodaj klucz dostępu",
             "export": "Eksportuj",
-            "ownerOnly": "Tylko właściciel.",
             "areas": "Obszary",
             "never": "Nigdy",
             "recentlyDeleted": "Ostatnio usunięte",
@@ -8699,7 +8742,9 @@
             "receiptDetail": "Zrestartował się sam, gdy nic się nie działo.",
             "waitingFor": "Na co czeka",
             "switchTipTitle": "W spokojnych chwilach",
-            "switchTipNote": "Nigdy podczas pracy agentów."
+            "switchTipNote": "Nigdy podczas pracy agentów.",
+            "on": "Włączone",
+            "off": "Wyłączone"
         },
         "sandboxClient": {
             "noBackgroundSession": "Ta przeglądarka nie ma jeszcze sesji dla tego sandboxa.",
@@ -9929,6 +9974,19 @@
             "empty": "Brak usług",
             "namePlaceholder": "np. Bot marketingowy",
             "nameTaken": "Usługa o nazwie {name} już istnieje."
+        },
+        "accessRequests": {
+            "title": "Prośby o dostęp",
+            "wants": {
+                "viewer": "Prosi o wgląd w obszar roboczy",
+                "collaborator": "Prosi o uruchamianie agentów",
+                "writer": "Prosi o edycję plików",
+                "maintainer": "Prosi o zarządzanie sandboxem",
+                "agents": "Prosi o uruchamianie agentów",
+                "areas": "Prosi o więcej folderów"
+            },
+            "from": "z: {place}",
+            "review": "Przejrzyj"
         }
     },
     "settings": {
@@ -11758,7 +11816,6 @@
             "insideArchive": "W archiwum",
             "notInItsCopy": "Brak w jego kopii",
             "notUtf8ReadOnly": "Ten plik nie jest tekstem UTF-8, więc otwiera się tutaj tylko do odczytu.",
-            "noWriteAccess": "Brak prawa zapisu",
             "pageSandboxed": "Odizolowana od edytora",
             "preview": "Podgląd",
             "readAsText": "Czytaj jako tekst",
@@ -12110,7 +12167,6 @@
         },
         "useChanges": {
             "abortFailed": "Nie udało się przerwać",
-            "accessToSandboxRead": "Twój dostęp do tego sandboxa jest tylko do odczytu: to wymaga dostępu opiekuna.",
             "commitFailed": "Commit się nie udał",
             "committing": "Zatwierdzanie",
             "discardFailed": "Nie udało się odrzucić zmian",
@@ -12308,7 +12364,6 @@
             "keptPrivateBySandbox": "Sandbox trzyma to prywatnie",
             "keptInPlaceBySandbox": "Sandbox trzyma to na swoim miejscu",
             "insideArchiveExtractTo": "Wewnątrz archiwum: wypakuj je, żeby cokolwiek zmienić",
-            "readOnlyChangingFiles": "Tylko do odczytu: zmiana plików wymaga dostępu edytora",
             "whatAgentsRead": "To czytają agenci",
             "wholeFile": "Cały plik",
             "working": "Pracuje",
@@ -12338,7 +12393,6 @@
             "pathCopied": "Skopiowano ścieżkę",
             "archiveReadOnly": "Zawartość archiwum jest tylko do odczytu. Wypakuj je, żeby ją zmienić.",
             "keptInPlace": "„{name}” trzyma ustawienia sandboxa, więc zostaje na miejscu.",
-            "needsWriter": "Zmienianie plików wymaga uprawnień do zapisu. Twoje są tutaj tylko do odczytu.",
             "couldntRestore": "Nie udało się tego przywrócić.",
             "couldntDelete": "Nie udało się tego usunąć.",
             "couldntKeepFolder": "Nie udało się zachować tego folderu.",
@@ -12530,7 +12584,12 @@
     },
     "needs": {
         "strip": {
-            "waiting": "Czeka na Ciebie jedna sprawa: | Czekają na Ciebie {count} sprawy: | Czeka na Ciebie {count} spraw:"
+            "waiting": "Czeka na Ciebie jedna sprawa: | Czekają na Ciebie {count} sprawy: | Czeka na Ciebie {count} spraw:",
+            "waitingOn": {
+                "maintainer": "Jedna sprawa czeka na opiekuna: | {count} sprawy czekają na opiekuna: | {count} spraw czeka na opiekuna:",
+                "owner": "Jedna sprawa czeka na właściciela: | {count} sprawy czekają na właściciela: | {count} spraw czeka na właściciela:",
+                "approvers": "Jedna sprawa czeka na zatwierdzających: | {count} sprawy czekają na zatwierdzających: | {count} spraw czeka na zatwierdzających:"
+            }
         },
         "plan": {
             "alsoWaiting": "Ten plan potrzebuje od Ciebie jeszcze jednej rzeczy: | Ten plan potrzebuje od Ciebie jeszcze {count} rzeczy: | Ten plan potrzebuje od Ciebie jeszcze {count} rzeczy:",
@@ -12556,7 +12615,11 @@
             "declineSend": "Odmów",
             "couldNotAnswer": "Nie udało się zapisać Twojej odpowiedzi.",
             "answering": "Odpowiadanie: „{title}”",
-            "declining": "Odmawianie: „{title}”"
+            "declining": "Odmawianie: „{title}”",
+            "waitsOn": {
+                "maintainer": "Czeka na odpowiedź opiekuna.",
+                "owner": "Czeka na odpowiedź właściciela."
+            }
         },
         "capability": {
             "connecting": "Łączenie {name}",
@@ -12613,7 +12676,6 @@
             "site": "Czekam, aż pozwolisz na {site} w rozszerzeniu Intentic w swojej przeglądarce."
         },
         "release": {
-            "approversOnly": "Tylko zatwierdzający",
             "whole": "Zwolnienie obejmuje resztę tej rozmowy, od jej następnej tury.",
             "approvers": "Zatwierdzający: {approvers}",
             "release": "Zwolnij"

@@ -6,6 +6,7 @@ import { computed } from "vue";
 import { askLocalApp, localFace } from "../../../app/environments/local";
 import BringProjectModal from "./BringProjectModal.vue";
 import { useBringProject } from "./useBringProject";
+import { useRole } from "../../../client/sandbox/useRole";
 
 const { look = `sidebar` } = defineProps<{ look?: `sidebar` | `phone` | `home` }>();
 // The page owns the file picker, so the dialog's upload choice is passed up. A button of the phone's carries its dialog;
@@ -14,6 +15,10 @@ const emit = defineEmits<{ pick: [] }>();
 const t = useT();
 const { show } = useBringProject();
 const local = computed(() => localFace() !== undefined);
+// Bringing a project in writes files: a member who may change none (below the writer tier, which is what editing
+// somewhere makes) is not offered it. A folder window opens one instead.
+const { canWrite } = useRole();
+const offered = computed(() => local.value || canWrite.value);
 const label = computed(() => t(local.value ? `local.emptyFolder.openFolder` : `workspace.bringProject.title`));
 const icon = computed(() => local.value ? `folder-open` : `arrow-down-left`);
 const bring = (): void => {
@@ -29,7 +34,7 @@ const bring = (): void => {
 
 <template>
     <button
-        v-if="look === `home`"
+        v-if="offered && look === `home`"
         type="button"
         class="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-2xs font-medium text-muted transition-colors hover:text-content"
         @click.stop="bring"
@@ -38,7 +43,7 @@ const bring = (): void => {
         {{ label }}
     </button>
     <button
-        v-else
+        v-else-if="offered"
         type="button"
         :class="look === `phone` ? ui.iconButton({ size: `xl` }) : ui.iconButton({ size: `xs` }, `shrink-0 hover:bg-transparent`)"
         v-tooltip.bottom="look === `phone` ? undefined : local ? label : t(`workspace.bringProject.tip`)"
@@ -47,5 +52,5 @@ const bring = (): void => {
     >
         <Icon :name="icon" :class="look === `phone` ? `text-base` : `text-xs`" />
     </button>
-    <BringProjectModal v-if="look === `phone` && !local" @pick="emit(`pick`)" />
+    <BringProjectModal v-if="offered && look === `phone` && !local" @pick="emit(`pick`)" />
 </template>

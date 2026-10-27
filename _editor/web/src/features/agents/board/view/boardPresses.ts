@@ -3,6 +3,7 @@ import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref, watch } from "vue";
 import type { Router } from "vue-router";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { runPress } from "../../../../models/conversations/run/chatRun";
 import type { Strip } from "../../../../models/conversations/tabs/tabFacts";
 import { synthesizeSessions } from "../../fleet/synthesizeSessions";
@@ -10,12 +11,19 @@ import { useOperations } from "../../../../workbench/operations/operations";
 import { WORKFLOWS } from "../../../../workbench/views/listedViews";
 
 // The board's presses that land on no agent card: a workflow run's row (a run is not an agent, see WorkflowRunCard), a
-// held wake's approve or reject, and the header's Synthesize.
+// held wake's approve or reject, and the header's Synthesize; and whether its New agent and Clear are offered at all.
 
 // One write on a run, as the ledger's mutations take it (useWorkflowRuns).
 interface RunWrite {
     readonly mutateAsync: (runId: string) => Promise<unknown>;
 }
+
+// Starting an agent and clearing a lane are offered only to a reader the daemon would take them from (a viewer follows
+// the board without either), asked of the same check (useAccess); while it is not known yet, offered as before.
+const boardOffers = () => {
+    const { refusal } = useAccess();
+    return { starts: computed(() => refusal(`agent.run`) === undefined), clears: computed(() => refusal(`agents.archive`) === undefined) };
+};
 
 export interface PressesHost {
     readonly workflows: {
@@ -147,5 +155,5 @@ export const useBoardPresses = (host: PressesHost) => {
             agents.notice.value = result.why;
         }
     };
-    return { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, releaseWake, synthesize };
+    return { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, releaseWake, synthesize, ...boardOffers() };
 };

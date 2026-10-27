@@ -1,7 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import type { ViewBadge } from "@intentic/extension-api";
 import { useNow } from "@intentic/ui/async";
-import { computed } from "vue";
+import { computed, type ComputedRef } from "vue";
 import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
 import { acpProviders, endpointProviders } from "../../../models/providers/providerCatalog";
@@ -23,6 +23,7 @@ import { useUnbackedWork } from "./backup/useUnbackedWork";
 import { t } from "@intentic/ui/i18n";
 import { MODELS_PATH } from "../../../lib/routes/modelsPath";
 import { useExtensions } from "../../../models/extensions/useExtensions";
+import { useAccessRequests } from "../../../client/sandbox/access/accessRequest";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the getting-started ring on the desktop rail (gettingStarted/SandboxErrands.vue) and the mobile menu so they agree.
@@ -93,23 +94,34 @@ const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[
     ];
 };
 
+// People who asked the owner for more access, from where they were refused (Access ▸ People lists them): the owner's
+// alone to answer, so it may badge the chip, worded as the count of who is waiting.
+const accessRequestItems = (count: number): SandboxAttentionItem[] =>
+    count === 0
+        ? []
+        : [{ icon: `users`, tone: `info`, message: t(`sandbox.sandboxAttention.peopleAskForAccess`, { count }, count), to: `/sandbox/access`, kind: `needs`, count }];
+
+// A hosted sandbox's build, which the platform runs for minutes: "Rebuild needed" over a build already under way
+// asked an hour of its reader for something they had already done, or that nobody needed to do. Ticks only while a
+// finished build of the waiting recipe is in its swap's window, the one phase that ends on the clock
+// (hostedBuildPhase.ts): past it, the row asks for the rebuild again rather than calling it under way.
+const useRebuildUnderWay = (pending: ReturnType<typeof useEnvironment>[`pending`]): ComputedRef<boolean> => {
+    const { active } = useSandbox();
+    const { build, applied } = useHostedBuild(() => (active.value?.hosted ? active.value.id : undefined));
+    const now = useNow(() => build.value?.state === `built` && build.value.hash === pending.value?.hash, 60_000);
+    return computed(() => {
+        const recipe = pending.value;
+        return recipe !== undefined && buildUnderWay(hostedBuildPhase(build.value, applied.value, recipe.hash, now.value));
+    });
+};
+
 export function useSandboxAttention() {
     const { isGuest, role } = useRole();
     const { pending, proposal } = useEnvironment();
     // Extensions an agent wrote into this workspace, which run nothing until a maintainer approves the powers they ask
     // for. They were a row in the Needs you inbox until 2026-10-12; the Extensions tab is where the yes is given.
     const { pending: waitingExtensions } = useExtensions();
-    // A hosted sandbox's build, which the platform runs for minutes: "Rebuild needed" over a build already under way
-    // asked an hour of its reader for something they had already done, or that nobody needed to do.
-    const { active } = useSandbox();
-    const { build, applied } = useHostedBuild(() => (active.value?.hosted ? active.value.id : undefined));
-    // Ticks only while a finished build of the waiting recipe is in its swap's window, the one phase that ends on the
-    // clock (hostedBuildPhase.ts): past it, the row asks for the rebuild again rather than calling it under way.
-    const now = useNow(() => build.value?.state === `built` && build.value.hash === pending.value?.hash, 60_000);
-    const rebuilding = computed(() => {
-        const recipe = pending.value;
-        return recipe !== undefined && buildUnderWay(hostedBuildPhase(build.value, applied.value, recipe.hash, now.value));
-    });
+    const rebuilding = useRebuildUnderWay(pending);
     const { updateAvailable, updateStaged } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
     const { stoppedOn, heldPorts } = useSyncHealth();
@@ -118,6 +130,9 @@ export function useSandboxAttention() {
     // makes them rows here rather than events.
     const { unbacked: noCopyOffBox } = useSandboxBackup();
     const { unbacked: noRepoRemote } = useUnbackedWork();
+    // People waiting on the owner's answer to what they asked for, from where they were refused: the owner's alone to
+    // grant, so read and counted only on the owner's own page.
+    const { requests: accessRequests } = useAccessRequests(computed(() => role.value === `owner`));
 
     // Declared worst-first: the head sets the badge, the rest fills the popover. A row is its condition and its
     // item side by side rather than a spread ternary, so adding one is a line and reading the order is a column.
@@ -252,8 +267,8 @@ export function useSandboxAttention() {
             rows
                 .filter((row) => row.when)
                 .map((row) => row.item)
-                // Split by whether the update is already downloaded; see updateItems.
-                .concat(updateItems(updateAvailable.value, updateStaged.value))
+                // Split by whether the update is already downloaded (updateItems); then who waits on the owner's answer.
+                .concat(updateItems(updateAvailable.value, updateStaged.value), accessRequestItems(accessRequests.value.length))
         );
     });
 

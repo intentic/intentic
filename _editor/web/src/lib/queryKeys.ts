@@ -166,6 +166,9 @@ export const INBOUND_LINKS = family(`inbound-links`);
 // What the signed-in person's own grant allows (GET /members/self), read for a writer, whose tier alone does not say
 // whether it runs agents.
 export const SANDBOX_SELF_ACCESS = family(`members-self`);
+// What people on the roster have asked the owner for (GET /members/requests), read beside the roster on the owner's
+// Access tab and counted on the sandbox's attention; the daemon's `access-requests` push refreshes it and the line above.
+export const ACCESS_REQUESTS = family(`access-requests`);
 // Desktop sync's sandbox-level state (GET /system/sync): the one read behind the sync badges and the Add device card.
 export const SYNC_HEALTH = family(`sync-health`);
 // The voices this sandbox can speak with (GET /speech/voices), read by the Agent tab's Voice card. Not one contract read

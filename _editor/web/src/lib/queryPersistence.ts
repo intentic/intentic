@@ -33,18 +33,47 @@ export const mirrors = (queryKey: readonly unknown[]): boolean => queryKey[0] !=
 // heals on the next visit.
 const NAVIGATION_STALE_MS = 30_000;
 
+// How many times a read that failed is tried again before it is drawn as failed: vue-query's own default.
+const READ_RETRIES = 3;
+
+// Whether a failed read was the person's access rather than a failure: `foreseen`, refused by the editor before it was
+// sent; `refused`, refused by the daemon on access grounds the editor did not foresee. Read by the sandbox client, which
+// knows what an access refusal looks like and registers its reading when it loads (client/sandbox/access/accessReason.ts).
+export type RefusalKind = `foreseen` | `refused`;
+// allow(module-state): the one reading of refusals, registered once by the sandbox client
+let refusalKindOf: (error: Error) => RefusalKind | undefined = () => undefined;
+export const readRefusalsWith = (read: (error: Error) => RefusalKind | undefined): void => {
+    refusalKindOf = read;
+};
+
 // Every read that finally failed is logged here, the one place all of them pass: a view that draws only `data` shows
-// a failure as an empty list, and without this line nothing anywhere would say it happened.
+// a failure as an empty list, and without this line nothing anywhere would say it happened. A read the person's access
+// refuses did not fail (`refusalKindOf`, above): one the editor foresaw is never logged, one the daemon refused that the
+// editor did not foresee is reported under its own name, the trace of a route whose handler holds a tier its
+// declaration does not, and neither is tried again, since its answer cannot change by asking.
 export const queryClient = new QueryClient({
     queryCache: new QueryCache({
         onError: (error, query) => {
             const key = JSON.stringify(query.queryKey);
+            const refusal = refusalKindOf(error);
+            if (refusal === `foreseen`) {
+                return;
+            }
+            if (refusal === `refused`) {
+                reportClient("query.refused", errorMessage(error), { level: `warn`, fields: { key: key.slice(0, 300) } });
+                return;
+            }
             console.warn(`query ${key} failed`, error);
             // Also durable: a read that failed in the owner's tab is otherwise invisible to whoever investigates it.
             reportClient("query.failed", errorMessage(error), { fields: { key: key.slice(0, 300) } });
         },
     }),
-    defaultOptions: { queries: { staleTime: NAVIGATION_STALE_MS } },
+    defaultOptions: {
+        queries: {
+            staleTime: NAVIGATION_STALE_MS,
+            retry: (failures, error) => refusalKindOf(error) === undefined && failures < READ_RETRIES,
+        },
+    },
 });
 
 let uninstall: (() => void) | undefined;

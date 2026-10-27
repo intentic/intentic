@@ -29,7 +29,6 @@ export interface FileVerbSeams {
     readonly store: Pick<
         ReturnType<typeof useWorkspaceTree>,
         | "actionError"
-        | "refuseWrite"
         | "run"
         | "moveEntry"
         | "createDir"
@@ -39,7 +38,7 @@ export interface FileVerbSeams {
         | "copyEntries"
         | "moveIntoMany"
         | "loadChildren"
-        | "canEditFiles"
+        | "canWriteAt"
     > &
         // Unpacks an archive beside itself (the daemon's `workspace.extract`).
         Partial<Pick<ReturnType<typeof useWorkspaceTree>, "extractEntry">>;

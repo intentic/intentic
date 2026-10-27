@@ -9,7 +9,7 @@ import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { isolatedAgent } from "./registry/agents-store.testing.js";
-import { guestReach } from "../auth/role-floor.js";
+import { guestReach } from "@intentic/sandbox-contract/protocol/member-reach";
 import type { PersistedAgent } from "./registry/agents-store.js";
 import { createProducedFileRoute, includeProducedFiles } from "./produced-files.js";
 

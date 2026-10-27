@@ -95,8 +95,7 @@ const {
     run,
     busy,
     actionError,
-    canEditFiles,
-    refuseWrite,
+    canWriteAt,
 } = useWorkspaceTree();
 
 // The tree the explorer draws: the whole workspace, or one folder's contents when rooted there (workspaceDir).
@@ -373,10 +372,11 @@ onBeforeUnmount(() => reportOpenPath(undefined));
 const fileInput = ref<HTMLInputElement>();
 // The whole body takes OS files a row or tile didn't: they land in the folder the explorer is rooted at, since with a
 // project open the workspace root isn't on screen and files dropped there would vanish from the view that took them. A
-// read-only member is told the tier at the drop rather than refused after the upload.
+// member who may not change that folder is offered no drop: the no-drop cursor, and no hint drawn.
+const uploadsHere = computed(() => canWriteAt(workspaceDir.value));
 const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDrop } = useRootDrop({
     targetDir: () => workspaceDir.value,
-    refuse: refuseWrite,
+    accepts: () => uploadsHere.value,
 });
 
 // Pointer coordinates here, while the stored width is app pixels; <ResizeSeam> reports a size, not a position.
@@ -642,7 +642,7 @@ onBeforeUnmount(() => {
 });
 const onPick = (event: Event): void => {
     const input = event.target as HTMLInputElement;
-    if (input.files !== null && input.files.length > 0 && !refuseWrite()) {
+    if (input.files !== null && input.files.length > 0 && uploadsHere.value) {
         void enqueue(workspaceDir.value, filesToEntries(input.files));
     }
     input.value = ``;
@@ -843,7 +843,7 @@ const homeTooltip = computed((): Tip => ({
                     @keep="keepTab"
                     @close="closeTab"
                     @contextmenu="openTabMenu"
-                    @pick="canEditFiles ? fileInput?.click() : refuseWrite()"
+                    @pick="fileInput?.click()"
                 >
                     <template #lead>
                         <!-- The explorer control shows when a split pane is hidden. -->
@@ -920,7 +920,7 @@ const homeTooltip = computed((): Tip => ({
                 </div>
                 <!-- Drop-to-root hint for OS files; a row or tile on the move lights the folder it is over instead. -->
                 <div
-                    v-if="rootDragging && canEditFiles"
+                    v-if="rootDragging"
                     class="pointer-events-none absolute inset-2 z-10 flex flex-col items-center justify-center gap-2 rounded-sm border-2 border-dashed border-primary-500/60 bg-primary-500/6 text-accent"
                 >
                     <Icon name="upload" class="text-2xl" />
@@ -932,7 +932,7 @@ const homeTooltip = computed((): Tip => ({
         <!-- Right-click tab menu, plus the confirm shown before a bulk close discards unsaved edits. -->
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
         <CloseGuardDialog :open="askingToClose" :question="closeQuestion" @cancel="keepOpen" @confirm="closeAnyway" />
-        <BringProjectModal @pick="canEditFiles ? fileInput?.click() : refuseWrite()" />
+        <BringProjectModal @pick="fileInput?.click()" />
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
         <DirectoryChecks v-model="checksDir" />

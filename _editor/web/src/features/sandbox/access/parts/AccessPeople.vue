@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AccessRequests from "./AccessRequests.vue";
 import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
 import type { MemberGrant } from "@intentic/sandbox-contract/schemas/members";
 import {
@@ -443,6 +444,9 @@ const revoke = async (target: string): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
+        <!-- What people have asked for, above who they are, at the page's own rhythm: Review opens the person, where a
+             grant answers it. -->
+        <AccessRequests v-if="isOwner" @review="(email) => (selected = email)" />
         <!-- WHO HAS ACCESS, as Personas and Models lay theirs out: a tile per person, and the open one's panel under the
              tiles. Adding asks for an address alone; everything else is decided in the panel, which saves as it goes. -->
         <div class="flex flex-col gap-2.5">

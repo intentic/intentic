@@ -18,7 +18,7 @@ const { default: ChatWaitingBar } = await import("../ChatWaitingBar.vue");
 type Chat = InstanceType<typeof Conversation>;
 
 let unmount: (() => void) | undefined;
-const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement) => {
+const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement, canDrive = true) => {
     const view = conversationView(
         computed(() => chat),
         () => card,
@@ -27,7 +27,7 @@ const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement) => {
     inside?.append(element);
     const approve = jest.fn();
     const keepPlanning = jest.fn();
-    const app = createApp({ render: () => h(ChatWaitingBar, { canDrive: true, onApprove: approve, onKeepPlanning: keepPlanning }) });
+    const app = createApp({ render: () => h(ChatWaitingBar, { canDrive, onApprove: approve, onKeepPlanning: keepPlanning }) });
     app.provide(PANE_VIEW, view);
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
@@ -116,6 +116,20 @@ describe(`a card the agent is parked on`, () => {
         expect(document.activeElement).toBe(plan.card);
         expect(retryHydrate).not.toHaveBeenCalled();
         pane.remove();
+    });
+
+    // A viewer, or a writer with agents off, may read the plan but not answer it: the bar names who it waits on, never
+    // "your approval", and offers only the press that shows it.
+    it(`tells a reader who cannot answer who the plan waits on, with no answers to press`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.transcript.adopt([
+            { id: 1, role: `user`, text: `plan it` },
+            { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `# Ship the importer\n\nSteps.`, status: `pending` } },
+        ]);
+        const bar = mountBar(chat, undefined, undefined, false);
+        await nextTick();
+
+        expect(bar.rows()).toEqual([[`Plan waiting on someone who runs agents · Ship the importer`, `Read plan`]]);
     });
 
     it(`says nothing for a chat that waits on nobody`, async () => {

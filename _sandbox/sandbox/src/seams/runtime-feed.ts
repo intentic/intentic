@@ -42,6 +42,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     grants: 250,
     // A draft is written every few hundred milliseconds while somebody types; each frame makes their windows read it back.
     drafts: 250,
+    // A person asking, or the owner answering, is one press; a grant that answers several at once still reads as one.
+    "access-requests": 250,
 };
 
 // Each subscriber, with where its own failure is reported: the /events connection's logger, or none.

@@ -28,6 +28,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "host-pair-consumed.json", portability: "identity" },
     { path: "host-setup-seeded.json", portability: "carry" },
     { path: "identity/access-profiles.json", portability: "identity", note: "Write the access profiles again on the target's Access page; services and roster rows pointing at them reach nothing until then." },
+    { path: "identity/access-requests.json", portability: "identity", note: "People ask for access again from where they were refused." },
     { path: "identity/control-tokens.json", portability: "identity", note: "Mint fresh control tokens, the old ones authenticate against the source sandbox." },
     { path: "identity/links.json", portability: "identity", note: "Pair the sandboxes that hand this one tasks again from its Access tab: their links name the source sandbox." },
     { path: "identity/members.json", portability: "identity", note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy." },

@@ -3861,7 +3861,6 @@
             "stopTurn": "Arrêter le tour",
             "unconnectedHint": "Connectez un modèle",
             "unconnectedPlaceholder": "Que doit faire cet agent ?",
-            "viewerPlaceholder": "Vous regardez seulement : demandez au propriétaire un rôle de collaborateur pour piloter des agents",
             "placeholderLater": "Rédigez le message à programmer…",
             "hintLater": "Programmer",
             "hintLaterNote": "Il attend dans ce chat, où vous pouvez l'envoyer plus tôt, changer l'heure ou le reprendre.",
@@ -3878,8 +3877,7 @@
                 "placeholderQueue": "Écrivez un message pour quand il aura fini…",
                 "placeholderEdit": "Redemandez-le autrement…",
                 "hintSteer": "Envoyer maintenant, pendant qu'il travaille",
-                "hintQueue": "Part dès qu'il a fini",
-                "viewerPlaceholder": "Vous pouvez lire cette conversation. Demandez au propriétaire si vous souhaitez aussi y écrire."
+                "hintQueue": "Part dès qu'il a fini"
             },
             "unconnectedNote": "Votre message attend ici.",
             "otherModelHint": "Modèle non connecté",
@@ -4264,7 +4262,13 @@
             "wait": "Attendre",
             "waitHint": "Attend votre envoi",
             "sendsWhenRoom": "envoi quand la mémoire se libère",
-            "waitHintRoom": "Enverra toujours quand la mémoire se libère"
+            "waitHintRoom": "Enverra toujours quand la mémoire se libère",
+            "others": {
+                "plan": "Plan en attente d’une personne qui lance des agents",
+                "question": "Question en attente d’une personne qui lance des agents",
+                "permission": "Autorisation en attente d’une personne qui lance des agents",
+                "other": "En attente d’une personne qui lance des agents"
+            }
         },
         "sendLater": {
             "title": "Envoyer plus tard",
@@ -4375,7 +4379,8 @@
             "decisionTurnEnded": "Impossible d'enregistrer votre décision : le tour est peut-être terminé.",
             "planNotRecorded": "Impossible d'enregistrer votre décision sur le plan : le tour est peut-être terminé.",
             "questionNotDismissed": "Impossible de fermer la question : le tour est peut-être terminé.",
-            "sendTurnEnded": "Impossible d'envoyer : le tour est peut-être terminé."
+            "sendTurnEnded": "Impossible d'envoyer : le tour est peut-être terminé.",
+            "waitsOnDriver": "En attente de la réponse d’une personne qui lance des agents."
         },
         "composerSelection": {
             "resets": "se réinitialise {when}",
@@ -4778,6 +4783,45 @@
         },
         "restartQuiet": {
             "detail": "Cette page se reconnecte d'elle-même. Vos fichiers dans /work sont conservés."
+        },
+        "access": {
+            "short": {
+                "owner": "Propriétaire uniquement",
+                "maintainer": "Mainteneurs uniquement",
+                "writer": "Accès en écriture requis",
+                "collaborator": "Accès aux agents requis",
+                "agentsOff": "Agents désactivés",
+                "notShared": "Non partagé avec vous",
+                "org": "Géré par {org}"
+            },
+            "title": {
+                "owner": "Seul le propriétaire peut ouvrir {place}",
+                "maintainer": "Seuls les mainteneurs peuvent ouvrir {place}",
+                "writer": "Seules les personnes qui modifient les fichiers peuvent ouvrir {place}",
+                "collaborator": "Seules les personnes qui lancent des agents peuvent ouvrir {place}",
+                "agentsOff": "Le lancement d'agents est désactivé pour vous ici",
+                "guest": "{place} n'est pas partagé avec vous",
+                "area": "Ce dossier n'est pas partagé avec vous",
+                "org": "{org} gère {place}"
+            },
+            "note": {
+                "owner": "Vous pouvez regarder. Seul le propriétaire peut modifier les choses ici.",
+                "maintainer": "Vous pouvez regarder. Seuls les mainteneurs peuvent modifier les choses ici.",
+                "writer": "Vous pouvez lire ici. Modifier des fichiers demande un accès en écriture.",
+                "collaborator": "Vous pouvez suivre la conversation. Lancer des agents demande un accès aux agents.",
+                "agentsOff": "Vous pouvez suivre la conversation. Le lancement d'agents est désactivé pour vous ici.",
+                "guest": "Ceci n'est pas partagé avec vous.",
+                "area": "Ce dossier n'est pas partagé avec vous.",
+                "org": "{org} gère ceci. Vous pouvez le consulter, mais les modifications passent par l'administrateur de votre organisation."
+            },
+            "line": {
+                "ask": "Demandez l'accès au propriétaire. Il s'ouvrira ici dès qu'il l'accordera.",
+                "asked": "Vous avez demandé l'accès au propriétaire. Il s'ouvrira ici dès qu'il l'accordera.",
+                "org": "Les modifications ici passent par l'administrateur de votre organisation."
+            },
+            "ask": "Demander l'accès",
+            "asked": "Demandé",
+            "askFailed": "Votre demande n'a pas pu être envoyée."
         }
     },
     "connect": {
@@ -5415,7 +5459,12 @@
     },
     "needs": {
         "strip": {
-            "waiting": "Une chose attend votre réponse : | {count} choses attendent votre réponse :"
+            "waiting": "Une chose attend votre réponse : | {count} choses attendent votre réponse :",
+            "waitingOn": {
+                "maintainer": "En attente d’un mainteneur pour une chose : | En attente d’un mainteneur pour {count} choses :",
+                "owner": "En attente du propriétaire pour une chose : | En attente du propriétaire pour {count} choses :",
+                "approvers": "En attente de ses approbateurs pour une chose : | En attente de leurs approbateurs pour {count} choses :"
+            }
         },
         "plan": {
             "alsoWaiting": "Ce plan a aussi besoin d'une chose de votre part : | Ce plan a aussi besoin de {count} choses de votre part :",
@@ -5441,7 +5490,11 @@
             "declineSend": "Refuser",
             "couldNotAnswer": "Impossible d'enregistrer votre réponse.",
             "answering": "Réponse à « {title} »",
-            "declining": "Refus de « {title} »"
+            "declining": "Refus de « {title} »",
+            "waitsOn": {
+                "maintainer": "En attente de la réponse d’un mainteneur.",
+                "owner": "En attente de la réponse du propriétaire."
+            }
         },
         "capability": {
             "connecting": "Connexion de {name}",
@@ -5498,7 +5551,6 @@
             "site": "En attente de votre autorisation pour {site} dans l'extension Intentic de votre navigateur."
         },
         "release": {
-            "approversOnly": "Approbateurs seuls",
             "whole": "Le libérer couvre le reste de cette conversation, à partir de son prochain tour.",
             "approvers": "Approbateurs : {approvers}",
             "release": "Libérer"
@@ -6997,7 +7049,6 @@
             "noSecurityAuditRecord": "Aucune trace d'audit de sécurité",
             "notBrowserIsolated": "Pas isolée du navigateur",
             "notSecurityAudited": "Non audité pour la sécurité.",
-            "onlySandboxOwnerInstall": "Seul le propriétaire du sandbox peut installer des extensions.",
             "passedExactSourceUnder": "a validé exactement ce code source sous",
             "pinned": "Épinglée",
             "reCheckedAtExact": "Revérifiée à ce commit exact par l'analyse nocturne du registre : le manifeste s'analyse et elle charge.",
@@ -7852,7 +7903,8 @@
             "portsTaken": "{count} port pris par un autre sandbox sur votre machine | {count} ports pris par un autre sandbox sur votre machine",
             "rebuildNeededToFinish": "Une reconstruction est nécessaire pour finir d'installer vos nouvelles capacités",
             "requiredSecretsMissing": "{count} secret requis manquant | {count} secrets requis manquants",
-            "sandboxUpdateReadyTo": "Une mise à jour du sandbox est prête à appliquer — un redémarrage d'une demi-minute environ"
+            "sandboxUpdateReadyTo": "Une mise à jour du sandbox est prête à appliquer — un redémarrage d'une demi-minute environ",
+            "peopleAskForAccess": "{count} personne demande l'accès | {count} personnes demandent l'accès"
         },
         "sandboxBackupCard": {
             "detail": "Ce bac à sable tourne dans le cloud et rien sur cet ordinateur n'en détient une copie. La synchronisation bureau garde ici un dossier aligné sur lui, pour que le travail survive à tout ce qui peut arriver à la machine.",
@@ -8862,7 +8914,6 @@
             "nameEGWork": "Nommez-la, p. ex. portable du travail",
             "addPasskey": "Ajouter une passkey",
             "export": "Exporter",
-            "ownerOnly": "Propriétaire uniquement.",
             "areas": "Zones",
             "never": "Jamais",
             "recentlyDeleted": "Supprimés récemment",
@@ -9292,7 +9343,9 @@
             "receiptDetail": "Il a redémarré de lui-même pendant que rien ne se passait.",
             "waitingFor": "Ce qu'il attend",
             "switchTipTitle": "Aux moments calmes",
-            "switchTipNote": "Jamais pendant que des agents travaillent."
+            "switchTipNote": "Jamais pendant que des agents travaillent.",
+            "on": "Activées",
+            "off": "Désactivées"
         },
         "sandboxClient": {
             "noBackgroundSession": "Ce navigateur n'a pas encore de session pour ce sandbox.",
@@ -10522,6 +10575,19 @@
             "empty": "Aucun service pour le moment",
             "namePlaceholder": "p. ex. Bot marketing",
             "nameTaken": "Un service nommé {name} existe déjà."
+        },
+        "accessRequests": {
+            "title": "Demandes d'accès",
+            "wants": {
+                "viewer": "Demande à voir l'espace de travail",
+                "collaborator": "Demande à lancer des agents",
+                "writer": "Demande à modifier des fichiers",
+                "maintainer": "Demande à gérer le sandbox",
+                "agents": "Demande à lancer des agents",
+                "areas": "Demande plus de dossiers"
+            },
+            "from": "depuis {place}",
+            "review": "Examiner"
         }
     },
     "settings": {
@@ -12429,7 +12495,6 @@
             "insideArchive": "Dans une archive",
             "notInItsCopy": "Absent de sa copie",
             "notUtf8ReadOnly": "Ce fichier n'est pas du texte UTF-8 : il s'ouvre donc en lecture seule ici.",
-            "noWriteAccess": "Pas d'accès en écriture",
             "pageSandboxed": "Isolée de l'éditeur",
             "preview": "Aperçu",
             "readAsText": "Lire en texte",
@@ -12721,7 +12786,6 @@
         },
         "useChanges": {
             "abortFailed": "Échec de l'abandon",
-            "accessToSandboxRead": "Votre accès à ce sandbox est en lecture seule : ceci demande un accès mainteneur.",
             "commitFailed": "Échec du commit",
             "committing": "Commit en cours",
             "discardFailed": "Échec de l'abandon des changements",
@@ -12927,7 +12991,6 @@
             "keptPrivateBySandbox": "Gardé privé par le sandbox",
             "keptInPlaceBySandbox": "Maintenu en place par le sandbox",
             "insideArchiveExtractTo": "Dans une archive : extrayez-la pour changer quoi que ce soit",
-            "readOnlyChangingFiles": "Lecture seule : modifier des fichiers demande un accès rédacteur",
             "whatAgentsRead": "Ce que lisent les agents",
             "wholeFile": "Fichier entier",
             "working": "Travaille",
@@ -12957,7 +13020,6 @@
             "pathCopied": "Chemin copié",
             "archiveReadOnly": "Le contenu d'une archive est en lecture seule. Extrayez-la pour le modifier.",
             "keptInPlace": "« {name} » contient les réglages du sandbox : il reste en place.",
-            "needsWriter": "Modifier des fichiers nécessite un accès en écriture. Le vôtre est en lecture seule ici.",
             "couldntRestore": "Impossible de restaurer cet élément.",
             "couldntDelete": "Impossible de supprimer cet élément.",
             "couldntKeepFolder": "Impossible de conserver ce dossier.",

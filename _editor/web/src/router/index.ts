@@ -10,6 +10,7 @@ import {
     START_LOCATION,
 } from "vue-router";
 import { asyncView } from "../components/asyncView";
+import { heldView } from "../components/heldPlace";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
 import { setupRoutes } from "./setupRoutes";
@@ -290,8 +291,9 @@ const routes: RouteRecordRaw[] = [
                 name: `capabilities`,
                 meta: { title: () => t(`shared.capabilities`) },
                 // Title and description mirror the page's own copy, so the outline wears the real heading immediately.
+                // Held for maintainers: anyone below meets the gate naming it, never the catalog's refused reads.
                 component: asyncView(
-                    () => import(`../features/capabilities/Capabilities.vue`),
+                    async () => heldView((await import(`../features/capabilities/Capabilities.vue`)).default, () => t(`shared.capabilities`), `capabilities.list`),
                     hubOutline(
                         () => t(`shared.capabilities`),
                         () => t(`capabilities.slices.catalogDescription`),

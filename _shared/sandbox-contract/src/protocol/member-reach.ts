@@ -1,17 +1,29 @@
-import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
-import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
-import { defaultFloor } from "@intentic/sandbox-contract/protocol/route-meta";
-import { isAttachmentPath } from "@intentic/sandbox-contract/state/workspace-state";
-import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
-import { sandboxRouteFor } from "@intentic/sandbox-contract";
+import type { AgentAccess } from "../schemas/members.js";
+import { type MemberRole, roleAtLeast } from "../schemas/shared.js";
+import { defaultFloor } from "./route-meta.js";
+import { isAttachmentPath } from "../state/workspace-state.js";
+import { sandboxRouteFor } from "../index.js";
 
-// Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (sandbox-contract
-// route-meta.ts) by the bearer middleware right after the caller's role resolves. A floor, not the whole answer:
-// operating routes still keep their own in-route maintainer gates; membership stays owner-only.
+// Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (route-meta.ts). One
+// function for both sides: the daemon's bearer middleware refuses with it right after the caller's role resolves, and
+// the editor asks it before sending, so a request the daemon would refuse is never sent and the two cannot disagree.
+// A floor, not the whole answer: operating routes still keep their own in-route maintainer gates; membership stays
+// owner-only.
 
 // `target` is the upload's `?path=`, written by the caller: isAttachmentPath folds `..` first, so a traversal out of
 // the attachments dir never buys an attachment's floor.
 const attachment = (target: string | undefined): boolean => target !== undefined && isAttachmentPath(target);
+
+// Why a member was refused, in a word the editor can act on without reading the sentence: below the route's tier,
+// running agents is off for them, or a guest asking for a door not on its list.
+export type MemberRefusalReason = "floor" | "agents-off" | "guest";
+
+// The body of that refusal, as the daemon sends it and as the editor predicts it before sending.
+export interface MemberRefusal {
+    readonly error: string;
+    readonly floor: MemberRole;
+    readonly reason: MemberRefusalReason;
+}
 
 // The one refusal the bearer middleware hands a verified member: the tier a route wants, or a guest asking for a door
 // not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
@@ -26,17 +38,19 @@ export const memberRefusal = (
     method: string,
     path: string,
     target?: string,
-): { readonly error: string; readonly floor: MemberRole } | undefined => {
+): MemberRefusal | undefined => {
     if (caller.role === "guest") {
-        return guestReach(method, path, target) || homeReach(caller, method, path) ? undefined : { error: "not open to a guest member", floor: "viewer" };
+        return guestReach(method, path, target) || homeReach(caller, method, path)
+            ? undefined
+            : { error: "not open to a guest member", floor: "viewer", reason: "guest" };
     }
     const floor = routeFloor(method, path, target);
     if (!roleAtLeast(caller.role, floor)) {
-        return { error: `${floor} access required`, floor };
+        return { error: `${floor} access required`, floor, reason: "floor" };
     }
     // The collaborator floor is driving agents. A person who edits files by hand without running agents holds the
     // writer tier, which clears that floor by rank: their own answer keeps them off it.
-    return floor === "collaborator" && caller.agents === "off" ? { error: "running agents is not on for you here", floor } : undefined;
+    return floor === "collaborator" && caller.agents === "off" ? { error: "running agents is not on for you here", floor, reason: "agents-off" } : undefined;
 };
 
 // Whether a guest member may reach this request at all: a route on the guest's list, or an upload into the attachments

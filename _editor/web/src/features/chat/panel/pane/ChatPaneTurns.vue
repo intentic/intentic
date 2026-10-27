@@ -28,6 +28,8 @@ import { usePaneView } from "../../../../models/conversations/panel/useChat-view
 import FileRefPeek from "../../../../parts/workspace/FileRefPeek.vue";
 import { retryHydrate } from "../../../../models/conversations/run/useChat-sessions";
 import { useBusySince, useElapsedWords } from "../../../../components/progress/useProgress";
+import { CARD_ANSWERS_WITHHELD } from "../../../../components/ChatCard.vue";
+import { useDriveRefusal } from "../../session/driveRefusal";
 
 // A pane's turns: rows grouped by prompt, the marks between them, each turn's pictures and the one viewer walking them.
 
@@ -40,6 +42,13 @@ const props = defineProps<{
 }>();
 
 const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
+// A reader who follows this chat without driving it reads every card the agent parks on, and is told who answers it
+// instead of being handed answers the daemon would refuse (ChatCard).
+const driveRefusal = useDriveRefusal();
+provide(
+    CARD_ANSWERS_WITHHELD,
+    computed(() => (driveRefusal.value === undefined ? undefined : t(`chat.cardReplies.waitsOnDriver`))),
+);
 const { showToolCalls } = useToolCalls();
 const { agentById } = useAgents();
 // How the last read of this chat went, when it has not answered yet (TranscriptView.refresh).

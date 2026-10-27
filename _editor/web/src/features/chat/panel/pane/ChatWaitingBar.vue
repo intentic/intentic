@@ -18,7 +18,8 @@ import { showWaitingCard, waitingCardIn } from "./waitingCard";
 // a question waited 3 h 36 min, a held message 6 minutes while its writer thought it had gone out.
 
 const props = defineProps<{
-    // Whether this reader may answer (a viewer may look, not press).
+    // Whether this reader may answer. One who may not (a viewer, a writer with agents off) is told who it waits on, and
+    // gets only the press that shows it: no answer they would be refused.
     canDrive: boolean;
 }>();
 // The plan's two answers, done by the composer (composerSend), whose box holds the notes either one may carry.
@@ -43,7 +44,17 @@ const LOOK = {
     permission: { icon: `shield`, label: () => t(`chat.chatWaitingBar.permissionNeeded`) },
     other: { icon: `exclamation-circle`, label: () => t(`chat.chatWaitingBar.waitingOnYou`) },
 } as const satisfies Record<WaitKind, { readonly icon: IconName; readonly label: () => string }>;
-const look = computed(() => (decision.value === undefined ? undefined : LOOK[decision.value.kind]));
+// To a reader who cannot answer, the same ask names who it waits on instead of "you".
+const OTHERS = {
+    plan: () => t(`chat.chatWaitingBar.others.plan`),
+    question: () => t(`chat.chatWaitingBar.others.question`),
+    permission: () => t(`chat.chatWaitingBar.others.permission`),
+    other: () => t(`chat.chatWaitingBar.others.other`),
+} as const satisfies Record<WaitKind, () => string>;
+const look = computed(() => {
+    const kind = decision.value?.kind;
+    return kind === undefined ? undefined : { icon: LOOK[kind].icon, label: props.canDrive ? LOOK[kind].label : OTHERS[kind] };
+});
 
 // The press beside the words: to the card when it is drawn, else a fresh ask for it (a new one even while an earlier ask
 // still hangs, as a transcript stuck loading did for minutes), which lands there once drawn.
@@ -51,7 +62,10 @@ const showLabel = computed(() => {
     if (decision.value?.requestId === undefined) {
         return t(`chat.chatWaitingBar.showIt`);
     }
-    return decision.value.kind === `plan` ? t(`chat.chatWaitingBar.readPlan`) : t(`ui.action.answer`);
+    if (decision.value.kind === `plan`) {
+        return t(`chat.chatWaitingBar.readPlan`);
+    }
+    return props.canDrive ? t(`ui.action.answer`) : t(`chat.chatWaitingBar.showIt`);
 });
 // To this ask's own card, on screen or not: scrolled to, given the keyboard and ringed, so the press always shows where
 // to answer (waitingCard.ts).
@@ -132,11 +146,11 @@ const memoryLine = computed(() => {
                 <!-- A phone's presses fill the bar, each line of them edge to edge, rather than leaving a ragged gap after them. -->
                 <span class="flex max-w-full shrink-0 flex-wrap items-center gap-1 max-md:w-full max-md:[&>*]:flex-auto">
                     <!-- The plan's answers stand here alone, not on its card too: pinned, and beside the box whose notes they carry. -->
-                    <template v-if="decision.kind === `plan` && decision.requestId !== undefined">
-                        <Button tier="accent" size="small" thumb :disabled="!props.canDrive || replying" @click="emit(`approve`)">
+                    <template v-if="decision.kind === `plan` && decision.requestId !== undefined && props.canDrive">
+                        <Button tier="accent" size="small" thumb :disabled="replying" @click="emit(`approve`)">
                             {{ staged ? t(`chat.chatWaitingBar.approveWithNotes`) : t(`ui.action.approve`) }}
                         </Button>
-                        <Button size="small" thumb tier="boring" :disabled="!props.canDrive || replying" @click="emit(`keepPlanning`)">
+                        <Button size="small" thumb tier="boring" :disabled="replying" @click="emit(`keepPlanning`)">
                             {{ t(`chat.chatWaitingBar.keepPlanning`) }}
                         </Button>
                     </template>
@@ -148,19 +162,19 @@ const memoryLine = computed(() => {
                 <template #actions>
                     <Button
                         tier="accent"
-                        v-if="reopen.reopenAt.value !== undefined"
+                        v-if="reopen.reopenAt.value !== undefined && props.canDrive"
                         size="small"
                         thumb
-                        :disabled="!props.canDrive"
                         v-tooltip.top="reopen.hint.value"
                         @click="reopen.bookWords(heldIds)"
                         ><Icon name="clock" class="mr-1 text-2xs" />{{ reopen.label.value }}</Button
                     >
                     <Button
+                        v-if="props.canDrive"
                         size="small"
                         thumb
                         :tier="reopen.reopenAt.value === undefined ? `accent` : `quiet`"
-                        :disabled="!props.canDrive || reopen.blockedLine.value !== undefined"
+                        :disabled="reopen.blockedLine.value !== undefined"
                         v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()"
                         @click="sendHeld()"
                         >{{ t(`chat.chatHeld.sendAnyway`) }}</Button

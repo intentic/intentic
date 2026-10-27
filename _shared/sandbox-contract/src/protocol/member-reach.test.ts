@@ -1,5 +1,5 @@
-import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
-import { guestReach, memberRefusal, routeFloor } from "./role-floor.js";
+import { ATTACHMENTS_DIR } from "../state/workspace-state.js";
+import { guestReach, memberRefusal, routeFloor } from "./member-reach.js";
 
 describe("routeFloor", () => {
     test("reads floor at viewer: fleet, transcripts, workspace files, git log", () => {
@@ -140,17 +140,19 @@ describe("guestReach", () => {
 
 describe("memberRefusal", () => {
     test("a tier below the floor is refused with the floor named; a guest off its list with its own sentence", () => {
-        expect(memberRefusal({ role: "viewer" }, "POST", "/agent")).toEqual({ error: "collaborator access required", floor: "collaborator" });
+        expect(memberRefusal({ role: "viewer" }, "POST", "/agent")).toEqual({ error: "collaborator access required", floor: "collaborator", reason: "floor" });
         expect(memberRefusal({ role: "collaborator" }, "POST", "/agent")).toBeUndefined();
         expect(memberRefusal({ role: "guest", areas: ["support"] }, "POST", "/agent")).toBeUndefined();
         expect(memberRefusal({ role: "guest", areas: ["support"] }, "POST", "/workspace/move")).toEqual({
             error: "not open to a guest member",
             floor: "viewer",
+            reason: "guest",
         });
         // A guest never clears a floor by rank: the list is the whole of its admission.
         expect(memberRefusal({ role: "guest", areas: ["support"] }, "GET", "/no/such/route")).toEqual({
             error: "not open to a guest member",
             floor: "viewer",
+            reason: "guest",
         });
         expect(memberRefusal({ role: "viewer" }, "GET", "/no/such/route")).toBeUndefined();
     });
@@ -158,14 +160,16 @@ describe("memberRefusal", () => {
     test("a writer clears the file routes and nothing that ships or operates", () => {
         expect(memberRefusal({ role: "writer", areas: ["support"] }, "POST", "/workspace/move")).toBeUndefined();
         expect(memberRefusal({ role: "writer", areas: ["support"] }, "POST", "/workspace/upload", "support/note.md")).toBeUndefined();
-        expect(memberRefusal({ role: "collaborator" }, "POST", "/workspace/move")).toEqual({ error: "writer access required", floor: "writer" });
+        expect(memberRefusal({ role: "collaborator" }, "POST", "/workspace/move")).toEqual({ error: "writer access required", floor: "writer", reason: "floor" });
         expect(memberRefusal({ role: "writer", areas: ["support"] }, "POST", "/agents/abc/land")).toEqual({
             error: "maintainer access required",
             floor: "maintainer",
+            reason: "floor",
         });
         expect(memberRefusal({ role: "writer", areas: ["support"] }, "GET", "/secrets")).toEqual({
             error: "maintainer access required",
             floor: "maintainer",
+            reason: "floor",
         });
     });
 });
@@ -175,7 +179,7 @@ describe("memberRefusal", () => {
 describe("memberRefusal for a person with agents off", () => {
     test("refuses every agent door and keeps the file doors open", () => {
         const editor = { role: "writer" as const, agents: "off" as const };
-        expect(memberRefusal(editor, "POST", "/agent")).toEqual({ error: "running agents is not on for you here", floor: "collaborator" });
+        expect(memberRefusal(editor, "POST", "/agent")).toEqual({ error: "running agents is not on for you here", floor: "collaborator", reason: "agents-off" });
         expect(memberRefusal(editor, "POST", "/agents/abc/request-land")).toMatchObject({ floor: "collaborator" });
         expect(memberRefusal(editor, "POST", "/workspace/dir")).toBeUndefined();
         expect(memberRefusal(editor, "GET", "/workspace/tree")).toBeUndefined();
@@ -191,7 +195,7 @@ describe("a home-only member", () => {
     test("reaches what a guest reaches, and the land press only when its work lands by itself", () => {
         expect(memberRefusal(homeOnly, "POST", "/agent")).toBeUndefined();
         expect(memberRefusal(homeOnly, "GET", "/agents/home")).toBeUndefined();
-        expect(memberRefusal(homeOnly, "POST", "/agents/abc/land")).toEqual({ error: "not open to a guest member", floor: "viewer" });
+        expect(memberRefusal(homeOnly, "POST", "/agents/abc/land")).toEqual({ error: "not open to a guest member", floor: "viewer", reason: "guest" });
         expect(memberRefusal({ ...homeOnly, lands: true }, "POST", "/agents/abc/land")).toBeUndefined();
     });
 
@@ -203,7 +207,7 @@ describe("a home-only member", () => {
             ["POST", "/agents/abc/auto-land"],
             ["POST", "/git/root/commit"],
         ] as const) {
-            expect(memberRefusal(lands, method, path)).toEqual({ error: "not open to a guest member", floor: "viewer" });
+            expect(memberRefusal(lands, method, path)).toEqual({ error: "not open to a guest member", floor: "viewer", reason: "guest" });
         }
     });
 
@@ -211,6 +215,7 @@ describe("a home-only member", () => {
         expect(memberRefusal({ role: "guest", agents: "chat", lands: true }, "POST", "/agents/abc/land")).toEqual({
             error: "not open to a guest member",
             floor: "viewer",
+            reason: "guest",
         });
     });
 });

@@ -4,7 +4,9 @@ import { settledRequests } from "@intentic/sandbox-contract/policy/request-statu
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { type AnsweredPark, cardAnswered } from "./cardAnswered";
-import { postTurnControl } from "../../../client/sandbox/streams/turnStream";
+import { sendTurnControl } from "../../../client/sandbox/streams/turnStream";
+import { accessReasonOf } from "../../../client/sandbox/access/accessReason";
+import { accessWords } from "../../../client/sandbox/access/accessWords";
 import type { ChatAttachment, ChatMessage } from "../transcript/transcript";
 import type { Conversation } from "./conversation";
 import type { TranscriptView } from "./transcriptView";
@@ -138,8 +140,12 @@ export class CardReplies {
         this.replying.value = new Set(this.replying.value).add(requestId);
         try {
             const body = { ...answer, requestId } as AgentReply;
-            if (!(await postTurnControl(this.host.box.value, `reply`, body))) {
-                this.host.error.value = refusalOf(answer);
+            const failed = await sendTurnControl(this.host.box.value, `reply`, body);
+            if (failed !== undefined) {
+                // Refused on the reader's access (a viewer, agents off): said as that, never as an expired card or one
+                // that "may not be yours".
+                const reason = accessReasonOf(failed);
+                this.host.error.value = reason === undefined ? refusalOf(answer) : accessWords(reason).note;
                 return false;
             }
             // The same derivation the daemon uses for the `resolved` row, applied here so the card reads answered; only

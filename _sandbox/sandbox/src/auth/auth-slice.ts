@@ -40,6 +40,7 @@ import { createMediaTickets, type MediaTickets } from "./tokens/media-tickets.js
 import { createWsTickets, type WsTickets } from "./tokens/ws-tickets.js";
 import { type AccessProfiles, accessProfilesDocument, fileAccessProfiles } from "./principals/access-profiles-store.js";
 import { fileServices, servicesDocument, type ServicesStore } from "./principals/services-store.js";
+import { type AccessRequestsStore, fileAccessRequests } from "./members/access-requests.js";
 
 // What authenticates a caller: sessions, per-boot and per-extension tokens, passkeys and the member roster.
 export interface AuthSlice {
@@ -60,6 +61,8 @@ export interface AuthSlice {
     readonly passkeyCeremonies: PasskeyCeremonies;
     // Shared-access grants besides the owner; the daemon enforces these, the platform only mirrors them.
     readonly members: MembersStore;
+    // What people on that roster have asked the owner for, answered by granting it (members/access-requests.ts).
+    readonly accessRequests: AccessRequestsStore;
     // The access profiles people and services hold, the sandbox's own and its organisation's (docs/architecture/access.md).
     readonly accessProfiles: AccessProfiles;
     // Who unattended work runs as: each a steward's authority narrowed by a profile.
@@ -228,6 +231,7 @@ export const createAuthSlice = (
         passkeys,
         passkeyCeremonies,
         members,
+        accessRequests: fileAccessRequests(config.historyRoot),
         accessProfiles: fileAccessProfiles({
             path: join(config.historyRoot, accessProfilesDocument.path),
             orgPolicy,

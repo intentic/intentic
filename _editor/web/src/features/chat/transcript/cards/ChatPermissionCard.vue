@@ -4,11 +4,11 @@ import type { ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requ
 import { ContextMenu, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import { type CardAnswer, SKIP_CALL } from "../../../../models/conversations/session/cardReplies";
 import ChatCommandBlock from "../../../../components/ChatCommandBlock.vue";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
-import ChatCard from "../../../../components/ChatCard.vue";
+import ChatCard, { CARD_ANSWERS_WITHHELD } from "../../../../components/ChatCard.vue";
 import ChatChildAgentAsk from "./ChatChildAgentAsk.vue";
 import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import { permissionStatus } from "./cardStatus";
@@ -21,6 +21,9 @@ const card = computed(() => props.message.permission!);
 // The child-agent gate's request carries the child it is about; every other permission ask carries none.
 const child = computed(() => card.value.child);
 const pending = computed(() => card.value.status === `pending`);
+// A reader who follows this chat without driving it reads the ask; its answers, and the run picker, are not theirs.
+const withheld = inject(CARD_ANSWERS_WITHHELD, undefined);
+const answering = computed(() => withheld?.value === undefined);
 // The owner's pick for a start, held here until the allow carries it; a settled card reads what started off its own row.
 const staged = ref<ChildRun | undefined>(undefined);
 const livePick = computed(() => (pending.value ? staged.value : undefined));
@@ -126,7 +129,7 @@ const allowItems = computed<MenuItem[]>(() => [
                 v-if="child"
                 :ask="child"
                 :staged="livePick"
-                :repointable="pending && child.move === `spawn`"
+                :repointable="pending && child.move === `spawn` && answering"
                 :disabled="settling"
                 :settled="!pending"
                 @repoint="staged = $event"

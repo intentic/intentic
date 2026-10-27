@@ -74,6 +74,11 @@ const RUNTIME_DOMAINS = [
     // live under the auth root, which no file push watches, and the Allowed list must move with the card that wrote one.
     { domain: "grants", invalidates: [["grants"]] },
 
+    // Somebody asked the owner for more access, or a request was answered (auth/members/access-requests.ts): the owner's
+    // list beside the roster moves, and so does the asker's own "asked" (GET /members/self). Like grants, they live under
+    // a root no file push watches.
+    { domain: "access-requests", invalidates: [["access-requests"], ["members-self"]] },
+
     // Somebody's composer draft was written, cleared or sent. The frame names no conversation and carries no words, since
     // every member hears it: each window reads back its own caller's drafts (agents.drafts). The key is the editor's draft
     // store's, which reads them back itself rather than through a cached query (models/conversations/drafts/).

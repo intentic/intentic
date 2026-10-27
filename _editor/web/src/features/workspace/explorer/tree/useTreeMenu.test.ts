@@ -165,8 +165,54 @@ describe(`what the menu offers`, () => {
         expect([archived, locked, labels(reader.menu.menuItems.value)]).toEqual([
             [`Copy`, `Download`, `—`, `Inside an archive: extract it to change anything`],
             [`Kept private by the sandbox`],
-            [`What src is`, `—`, `Download as ZIP`, `—`, `Read-only: changing files needs writer access`],
+            [`What src is`, `—`, `Download as ZIP`, `—`, `You can read here. Changing files needs edit access.`],
         ]);
+    });
+});
+
+// A writer changes files only inside the folders their edit areas name; a maintainer (no fence) everywhere; edit "none"
+// nowhere. The menu offers a write verb exactly there, and the keys reach no further than the menu.
+describe(`the member's edit fence`, () => {
+    const DOCS = dir(`docs`, [file(`docs/a.md`)]);
+    const A = file(`docs/a.md`);
+    const B = file(`src/b.ts`);
+    const fenced = (options: SurfaceOptions) => {
+        const surface = treeSurface([DOCS, dir(`src`, [B])], options);
+        surface.menu.menu.value = { show: jest.fn() };
+        const open = (target: WorkspaceTreeEntry | undefined): string[] => {
+            surface.menu.openMenu(new MouseEvent(`contextmenu`), target);
+            return labels(surface.menu.menuItems.value);
+        };
+        return { ...surface, open };
+    };
+    const READ_ONLY = `You can read here. Changing files needs edit access.`;
+
+    it(`offers a writer with edit ["docs"] Rename on docs/a.md and only reading on src/b.ts`, () => {
+        const { open } = fenced({ editFence: [`docs`] });
+        const inDocs = open(A);
+        const inSrc = open(B);
+        expect([inDocs.includes(`Rename`), inDocs.includes(`Delete`), inSrc.includes(`Rename`), inSrc.at(-1)]).toEqual([true, true, false, READ_ONLY]);
+        expect(open(undefined)).toEqual([READ_ONLY]);
+    });
+
+    it(`keeps rename, delete, cut and paste by key to the same fence`, () => {
+        const { inline, edits, deleting, transfer, store, select } = fenced({ editFence: [`docs`] });
+        edits.beginRename(B.path);
+        const onSrc = inline.edit.value.kind;
+        select(B.path);
+        deleting.requestDelete();
+        const cut = transfer.stage(`cut`, `event`);
+        store.clipboard.value = { mode: `copy`, paths: [A.path] };
+        void transfer.paste(`src`);
+        edits.beginRename(A.path);
+        expect([onSrc, store.removeEntries.mock.calls, cut, store.copyEntries.mock.calls, inline.edit.value.kind]).toEqual([`idle`, [], [], [], `renaming`]);
+    });
+
+    it(`offers no write verb at all to a member whose edit is "none", and every one to a maintainer`, () => {
+        const none = fenced({ editFence: [] }).open(A);
+        const maintainer = fenced({}).open(A);
+        expect(none).toEqual([`Download`, `—`, READ_ONLY]);
+        expect(maintainer).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Download`]);
     });
 });
 
@@ -228,7 +274,7 @@ describe(`a surface without a sandbox's seams`, () => {
                 rootDir: () => `app`,
                 rowActions: () => [],
                 isBarren: (path) => path === WEB.path,
-                rules: { archiveDir: () => false, unlockedOnly: (paths) => [...paths] },
+                rules: { archiveDir: () => false, unlockedOnly: (paths) => [...paths], writable: () => true },
                 selecting: useMultiSelect(ref([SRC.path, MAIN.path, ZIP.path, WEB.path])),
                 store,
                 frame: () => ({}),

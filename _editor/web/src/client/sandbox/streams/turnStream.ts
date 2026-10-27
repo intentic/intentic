@@ -274,14 +274,18 @@ export interface TurnControl {
 }
 
 // Sends a turn-control message to the conversation's own box, per followRun's addressing rule: the wrong daemon would
-// report success for a turn still running elsewhere. True once the daemon took it.
-export const postTurnControl = async <K extends keyof TurnControl>(at: string | undefined, control: K, input: TurnControl[K]): Promise<boolean> => {
+// report success for a turn still running elsewhere. Undefined once the daemon took it, else why it did not.
+export const sendTurnControl = async <K extends keyof TurnControl>(at: string | undefined, control: K, input: TurnControl[K]): Promise<Error | undefined> => {
     const options = { context: { at } };
     const send: { readonly [C in keyof TurnControl]: (input: TurnControl[C]) => Promise<unknown> } = {
         reply: (body) => sandboxRpc.agent.reply(body, options),
     };
     return send[control](input).then(
-        () => true,
-        () => false,
+        () => undefined,
+        (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
     );
 };
+
+// The same, answering only whether the daemon took it.
+export const postTurnControl = async <K extends keyof TurnControl>(at: string | undefined, control: K, input: TurnControl[K]): Promise<boolean> =>
+    (await sendTurnControl(at, control, input)) === undefined;

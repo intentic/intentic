@@ -3861,7 +3861,6 @@
             "stopTurn": "Zug stoppen",
             "unconnectedHint": "Modell verbinden",
             "unconnectedPlaceholder": "Was soll dieser Agent tun?",
-            "viewerPlaceholder": "Sie sehen nur zu: bitten Sie den Eigentümer um die Rolle „Mitarbeiter“, um Agenten zu steuern",
             "placeholderLater": "Nachricht zum Planen schreiben…",
             "hintLater": "Planen",
             "hintLaterNote": "Sie wartet in diesem Chat, wo Sie sie früher senden, den Zeitpunkt ändern oder sie zurücknehmen können.",
@@ -3878,8 +3877,7 @@
                 "placeholderQueue": "Schreib eine Nachricht für danach…",
                 "placeholderEdit": "Frag das noch einmal, anders…",
                 "hintSteer": "Jetzt senden, während es arbeitet",
-                "hintQueue": "Geht raus, sobald es fertig ist",
-                "viewerPlaceholder": "Du kannst dieses Gespräch lesen. Frag den Eigentümer, wenn du hier auch schreiben möchtest."
+                "hintQueue": "Geht raus, sobald es fertig ist"
             },
             "unconnectedNote": "Ihre Nachricht wartet hier.",
             "otherModelHint": "Modell nicht verbunden",
@@ -4264,7 +4262,13 @@
             "wait": "Warten",
             "waitHint": "Zurückgehalten, bis Sie senden",
             "sendsWhenRoom": "sendet, sobald Speicher frei wird",
-            "waitHintRoom": "Sendet trotzdem, wenn Speicher frei wird"
+            "waitHintRoom": "Sendet trotzdem, wenn Speicher frei wird",
+            "others": {
+                "plan": "Plan wartet auf jemanden, der Agenten ausführt",
+                "question": "Frage wartet auf jemanden, der Agenten ausführt",
+                "permission": "Freigabe wartet auf jemanden, der Agenten ausführt",
+                "other": "Wartet auf jemanden, der Agenten ausführt"
+            }
         },
         "sendLater": {
             "title": "Später senden",
@@ -4375,7 +4379,8 @@
             "decisionTurnEnded": "Ihre Entscheidung konnte nicht erfasst werden: Der Zug ist möglicherweise beendet.",
             "planNotRecorded": "Ihre Entscheidung zum Plan konnte nicht erfasst werden: Der Zug ist möglicherweise beendet.",
             "questionNotDismissed": "Die Frage konnte nicht verworfen werden: Der Zug ist möglicherweise beendet.",
-            "sendTurnEnded": "Konnte nicht gesendet werden: Der Zug ist möglicherweise beendet."
+            "sendTurnEnded": "Konnte nicht gesendet werden: Der Zug ist möglicherweise beendet.",
+            "waitsOnDriver": "Wartet auf die Antwort von jemandem, der Agenten ausführt."
         },
         "composerSelection": {
             "resets": "wird {when} zurückgesetzt",
@@ -4778,6 +4783,45 @@
         },
         "restartQuiet": {
             "detail": "Diese Seite verbindet sich von selbst neu. Ihre Dateien in /work bleiben erhalten."
+        },
+        "access": {
+            "short": {
+                "owner": "Nur Eigentümer",
+                "maintainer": "Nur Maintainer",
+                "writer": "Braucht Schreibzugriff",
+                "collaborator": "Braucht Agentenzugriff",
+                "agentsOff": "Agenten für dich aus",
+                "notShared": "Nicht mit dir geteilt",
+                "org": "Verwaltet von {org}"
+            },
+            "title": {
+                "owner": "Nur der Eigentümer kann {place} öffnen",
+                "maintainer": "Nur Maintainer können {place} öffnen",
+                "writer": "Nur wer Dateien bearbeitet, kann {place} öffnen",
+                "collaborator": "Nur wer Agenten ausführt, kann {place} öffnen",
+                "agentsOff": "Agenten auszuführen ist für dich hier ausgeschaltet",
+                "guest": "{place} ist nicht mit dir geteilt",
+                "area": "Dieser Ordner ist nicht mit dir geteilt",
+                "org": "{org} verwaltet {place}"
+            },
+            "note": {
+                "owner": "Du kannst dich umsehen. Ändern kann hier nur der Eigentümer.",
+                "maintainer": "Du kannst dich umsehen. Ändern können hier nur Maintainer.",
+                "writer": "Du kannst hier lesen. Dateien zu ändern braucht Schreibzugriff.",
+                "collaborator": "Du kannst mitlesen. Agenten auszuführen braucht Agentenzugriff.",
+                "agentsOff": "Du kannst mitlesen. Agenten auszuführen ist für dich hier ausgeschaltet.",
+                "guest": "Das ist nicht mit dir geteilt.",
+                "area": "Dieser Ordner ist nicht mit dir geteilt.",
+                "org": "{org} verwaltet das. Du kannst es ansehen, Änderungen nimmt der Admin deiner Organisation vor."
+            },
+            "line": {
+                "ask": "Bitte den Eigentümer um Zugriff. Es öffnet sich hier, sobald er ihn gewährt.",
+                "asked": "Du hast den Eigentümer um Zugriff gebeten. Es öffnet sich hier, sobald er ihn gewährt.",
+                "org": "Änderungen hier nimmt der Admin deiner Organisation vor."
+            },
+            "ask": "Zugriff anfragen",
+            "asked": "Angefragt",
+            "askFailed": "Deine Anfrage konnte nicht gesendet werden."
         }
     },
     "connect": {
@@ -5415,7 +5459,12 @@
     },
     "needs": {
         "strip": {
-            "waiting": "Wartet auf eine Sache von Ihnen: | Wartet auf {count} Dinge von Ihnen:"
+            "waiting": "Wartet auf eine Sache von Ihnen: | Wartet auf {count} Dinge von Ihnen:",
+            "waitingOn": {
+                "maintainer": "Wartet bei einer Sache auf einen Maintainer: | Wartet bei {count} Dingen auf einen Maintainer:",
+                "owner": "Wartet bei einer Sache auf den Eigentümer: | Wartet bei {count} Dingen auf den Eigentümer:",
+                "approvers": "Wartet bei einer Sache auf die Freigebenden: | Wartet bei {count} Dingen auf die Freigebenden:"
+            }
         },
         "plan": {
             "alsoWaiting": "Dieser Plan braucht außerdem eine Sache von Ihnen: | Dieser Plan braucht außerdem {count} Dinge von Ihnen:",
@@ -5441,7 +5490,11 @@
             "declineSend": "Ablehnen",
             "couldNotAnswer": "Ihre Antwort konnte nicht gespeichert werden.",
             "answering": "„{title}“ wird beantwortet",
-            "declining": "„{title}“ wird abgelehnt"
+            "declining": "„{title}“ wird abgelehnt",
+            "waitsOn": {
+                "maintainer": "Wartet auf die Antwort eines Maintainers.",
+                "owner": "Wartet auf die Antwort des Eigentümers."
+            }
         },
         "capability": {
             "connecting": "{name} wird verbunden",
@@ -5498,7 +5551,6 @@
             "site": "Wartet darauf, dass Sie {site} in der intentic-Erweiterung Ihres Browsers erlauben."
         },
         "release": {
-            "approversOnly": "Nur Freigebende",
             "whole": "Die Freigabe gilt für den Rest dieser Unterhaltung ab ihrem nächsten Zug.",
             "approvers": "Genehmigende: {approvers}",
             "release": "Freigeben"
@@ -6997,7 +7049,6 @@
             "noSecurityAuditRecord": "Kein Sicherheitsprüfungs-Nachweis",
             "notBrowserIsolated": "Nicht browser-isoliert",
             "notSecurityAudited": "Nicht sicherheitsgeprüft.",
-            "onlySandboxOwnerInstall": "Nur der Eigentümer der Sandbox kann Erweiterungen installieren.",
             "passedExactSourceUnder": "hat genau diesen Quelltext bestanden, unter",
             "pinned": "Angeheftet",
             "reCheckedAtExact": "Vom nächtlichen Scan der Registry an genau diesem Commit erneut geprüft: das Manifest wird geparst und es lädt.",
@@ -7852,7 +7903,8 @@
             "portsTaken": "{count} Port von einer anderen Sandbox auf Ihrem Rechner belegt | {count} Ports von einer anderen Sandbox auf Ihrem Rechner belegt",
             "rebuildNeededToFinish": "Ein Neubau ist nötig, um Ihre neuen Fähigkeiten fertig einzurichten",
             "requiredSecretsMissing": "{count} erforderliches Secret fehlt | {count} erforderliche Secrets fehlen",
-            "sandboxUpdateReadyTo": "Ein Sandbox-Update ist bereit — ein Neustart von etwa einer halben Minute"
+            "sandboxUpdateReadyTo": "Ein Sandbox-Update ist bereit — ein Neustart von etwa einer halben Minute",
+            "peopleAskForAccess": "{count} Person bittet um Zugriff | {count} Personen bitten um Zugriff"
         },
         "sandboxBackupCard": {
             "detail": "Diese Sandbox läuft in der Cloud, und auf diesem Computer liegt keine Kopie ihrer Dateien. Desktop-Sync hält hier einen Ordner mit ihr im Gleichschritt, damit die Arbeit alles überlebt, was der Maschine zustößt.",
@@ -8862,7 +8914,6 @@
             "nameEGWork": "Benennen Sie ihn, z. B. Arbeitslaptop",
             "addPasskey": "Einen Passkey hinzufügen",
             "export": "Exportieren",
-            "ownerOnly": "Nur für den Eigentümer.",
             "areas": "Bereiche",
             "never": "Nie",
             "recentlyDeleted": "Kürzlich gelöscht",
@@ -9292,7 +9343,9 @@
             "receiptDetail": "Sie hat sich von selbst neu gestartet, als nichts los war.",
             "waitingFor": "Worauf sie wartet",
             "switchTipTitle": "In ruhigen Momenten",
-            "switchTipNote": "Nie während Agenten arbeiten."
+            "switchTipNote": "Nie während Agenten arbeiten.",
+            "on": "An",
+            "off": "Aus"
         },
         "sandboxClient": {
             "noBackgroundSession": "Dieser Browser hat noch keine Sitzung für diese Sandbox.",
@@ -10522,6 +10575,19 @@
             "empty": "Noch keine Dienste",
             "namePlaceholder": "z. B. Marketing-Bot",
             "nameTaken": "Einen Dienst namens {name} gibt es schon."
+        },
+        "accessRequests": {
+            "title": "Bitten um Zugriff",
+            "wants": {
+                "viewer": "Möchte den Arbeitsbereich sehen",
+                "collaborator": "Möchte Agenten ausführen",
+                "writer": "Möchte Dateien bearbeiten",
+                "maintainer": "Möchte die Sandbox verwalten",
+                "agents": "Möchte Agenten ausführen",
+                "areas": "Möchte mehr Ordner"
+            },
+            "from": "aus {place}",
+            "review": "Ansehen"
         }
     },
     "settings": {
@@ -12429,7 +12495,6 @@
             "insideArchive": "Im Archiv",
             "notInItsCopy": "Nicht in seiner Kopie",
             "notUtf8ReadOnly": "Diese Datei ist kein UTF-8-Text, daher öffnet sie sich hier schreibgeschützt.",
-            "noWriteAccess": "Kein Schreibzugriff",
             "pageSandboxed": "Abgeschottet vom Editor",
             "preview": "Vorschau",
             "readAsText": "Als Text lesen",
@@ -12721,7 +12786,6 @@
         },
         "useChanges": {
             "abortFailed": "Abbrechen fehlgeschlagen",
-            "accessToSandboxRead": "Ihr Zugriff auf diese Sandbox ist nur lesend: dafür braucht es Maintainer-Zugriff.",
             "commitFailed": "Commit fehlgeschlagen",
             "committing": "Committet",
             "discardFailed": "Verwerfen fehlgeschlagen",
@@ -12927,7 +12991,6 @@
             "keptPrivateBySandbox": "Von der Sandbox privat gehalten",
             "keptInPlaceBySandbox": "Von der Sandbox an ihrem Platz gehalten",
             "insideArchiveExtractTo": "In einem Archiv: entpacken Sie es, um etwas zu ändern",
-            "readOnlyChangingFiles": "Nur Lesen: Dateien ändern erfordert Bearbeiter-Zugriff",
             "whatAgentsRead": "Was Agenten lesen",
             "wholeFile": "Ganze Datei",
             "working": "Arbeitet",
@@ -12957,7 +13020,6 @@
             "pathCopied": "Pfad kopiert",
             "archiveReadOnly": "Der Inhalt eines Archivs ist schreibgeschützt. Entpacken Sie es, um ihn zu ändern.",
             "keptInPlace": "„{name}“ enthält Sandbox-Einstellungen und bleibt, wo es ist.",
-            "needsWriter": "Zum Ändern von Dateien brauchen Sie Schreibzugriff. Ihrer ist hier nur lesend.",
             "couldntRestore": "Ließ sich nicht wiederherstellen.",
             "couldntDelete": "Ließ sich nicht löschen.",
             "couldntKeepFolder": "Der Ordner ließ sich nicht behalten.",

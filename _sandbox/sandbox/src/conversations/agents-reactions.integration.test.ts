@@ -38,7 +38,7 @@ test("a mark is attributed to the verified caller, and a second person's press j
     const marked = await client.agents.react({ id: "conv1", emoji: "👍", on: true });
     expect(marked.reactions).toEqual([{ emoji: "👍", by: [{ email: "ada@example.com", name: "Ada Lovelace", at: expect.any(Number) }] }]);
 
-    // A viewer may leave one: the floor for this route is the lowest tier there is (auth/role-floor.ts).
+    // A viewer may leave one: the floor for this route is the lowest tier there is (sandbox-contract protocol/member-reach.ts).
     actAs(`bob@example.com`, `viewer`, `Bob`);
     const joined = await client.agents.react({ id: "conv1", emoji: "👍", on: true });
     expect(joined.reactions?.[0]?.by.map((who) => who.name)).toEqual(["Ada Lovelace", "Bob"]);

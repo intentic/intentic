@@ -9,12 +9,20 @@ import { useAddRepo } from "./useAddRepo";
 import { repoNameFromUrl } from "../health/repoName";
 import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { useT } from "@intentic/ui/i18n";
+import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
+import { workspaceDir } from "../../../app/workspaceScope";
 
 const t = useT();
 const router = useRouter();
 
 // `pick` opens the page's file picker; `done` says something was started, so a dialog around this can close.
 const emit = defineEmits<{ pick: []; done: [] }>();
+
+// Each way in is offered only where the member may change files: a clone lands at the workspace's root, an upload in
+// the folder the explorer is rooted at. An agent fetching the code is the member's agents' to answer, not this list's.
+const { canWriteAt } = useWorkspaceTree();
+const clones = computed(() => canWriteAt(``));
+const uploads = computed(() => canWriteAt(workspaceDir.value));
 
 const { addRepo, cloning, failure: cloneNotice, url: cloningUrl, meter: cloneWait } = useAddRepo();
 // The daemon runs `git clone` to the end in one request, so there is no progress to read: only how long it has run,
@@ -59,7 +67,7 @@ const connectHost = (): void => {
 <template>
     <div class="flex w-full flex-col gap-2 text-left">
         <!-- 1: repository, the common case. -->
-        <div class="rounded-xl bg-card shadow-sm p-3">
+        <div v-if="clones" class="rounded-xl bg-card shadow-sm p-3">
             <button v-if="!cloneOpen" type="button" class="flex w-full items-center gap-3 text-left" v-action="openClone">
                 <Icon name="code" class="shrink-0 text-lg text-link" />
                 <span class="min-w-0 flex-1">
@@ -101,6 +109,7 @@ const connectHost = (): void => {
 
         <!-- 2: local files; drag-and-drop still works over the whole pane, this is just its button. -->
         <button
+            v-if="uploads"
             type="button"
             class="flex items-center gap-3 rounded-xl bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay"
             @click="emit('pick')"

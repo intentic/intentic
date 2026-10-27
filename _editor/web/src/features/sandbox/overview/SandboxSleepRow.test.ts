@@ -73,8 +73,10 @@ test("a hosted sandbox, or a daemon that does not know the setting, draws no row
     expect((await mount()).textContent).toBe(``);
 });
 
+// The words are the row: no switch at all, rather than a disabled one that says nothing about why.
 test("a member below maintainer reads it without being able to flip it", async () => {
     canShip.value = false;
     const el = await mount();
-    expect(toggle(el)?.disabled).toBe(true);
+    expect(toggle(el)).toBeNull();
+    expect(el.textContent).toContain(`Sleep`);
 });

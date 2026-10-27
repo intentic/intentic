@@ -81,6 +81,9 @@ const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
     return self as ComputedRef<MemberSelf | undefined>;
 };
 
+// The whole answer, for the one reader that needs every field of it: what the person may do here (access/useAccess.ts).
+export const selfMember = (): ComputedRef<MemberSelf | undefined> => selfAccess();
+
 export const selfAgents = (): ComputedRef<AgentAccess | undefined> => {
     const access = selfAccess();
     return computed(() => access.value?.agents);

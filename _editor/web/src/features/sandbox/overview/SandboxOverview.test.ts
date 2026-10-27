@@ -103,7 +103,6 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
 };
 
 const logoTile = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button[aria-label$="logo"]`)!;
-const anyLogoTile = (el: HTMLElement): HTMLButtonElement => el.querySelector<HTMLButtonElement>(`button`)!;
 const fileField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[type="file"]`)!;
 // The title itself is the rename control (<InlineRename>, pinned in design-system/inlineRename.test.ts); the
 // heading it sits in is this card's own decision.
@@ -211,11 +210,11 @@ it(`says the tile does two things once a logo is set, and one thing before that`
     expect(logoTile(mount(sandboxRow({ image: `data:image/webp;base64,OLD` }))).getAttribute(`aria-label`)).toBe(`Change or remove the logo`);
 });
 
-// Disabled, not a no-op handler, so a keyboard user is also kept out.
+// No control at all, rather than a disabled one with no reason: a member sees the logo, and nothing offers to change it.
 it(`keeps a member out of the tile entirely`, () => {
-    const tile = anyLogoTile(mount(sandboxRow({ role: `collaborator` })));
-    expect(tile.disabled).toBe(true);
-    expect(tile.getAttribute(`aria-label`)).toBeNull();
+    const el = mount(sandboxRow({ role: `collaborator` }));
+    expect(el.querySelector(`button[aria-haspopup="dialog"]`)).toBeNull();
+    expect(logoTile(el)).toBeNull();
 });
 
 it(`saves the picked file on its own, fitted rather than cropped`, async () => {

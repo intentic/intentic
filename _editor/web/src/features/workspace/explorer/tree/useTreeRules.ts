@@ -15,7 +15,7 @@ import { deadLink, dropDirOf, type Row } from "./treeRows";
 
 export interface TreeRulesHost {
     readonly byPath: Readonly<Ref<ReadonlyMap<string, WorkspaceTreeEntry>>>;
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "actionError" | "refuseWrite">;
+    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "actionError" | "canWriteAt">;
 }
 
 export const useTreeRules = (host: TreeRulesHost) => {
@@ -34,17 +34,22 @@ export const useTreeRules = (host: TreeRulesHost) => {
     // nothing repacks a zip. The archive FILE itself is ordinary workspace content.
     const archiveDir = (dir: string): boolean => archiveAbove(dir, entryAt) !== undefined;
     const archived = (path: string): boolean => isArchiveContent(path, entryAt);
-    // A folder that takes no drop: the sandbox keeps it private, or it is an archive's contents.
-    const noDrops = (dir: string): boolean => isLockedWorkspacePath(dir) || archiveDir(dir);
+    // Whether the member may change this path by hand (their edit fence; useWorkspaceTree's `canWriteAt`).
+    const writable = (path: string): boolean => host.store.canWriteAt(path);
+    // A folder that takes no drop: the sandbox keeps it private, it is an archive's contents, or the member may not
+    // change it, so neither drag lights it as a place to land.
+    const noDrops = (dir: string): boolean => isLockedWorkspacePath(dir) || archiveDir(dir) || !writable(dir);
     // What a row offers a move: its folder, unless the sandbox keeps that folder private or the link leads nowhere.
     const dropTargetOf = (row: Row): string | undefined => (noDrops(dropDirOf(row)) || deadLink(row.entry) ? undefined : dropDirOf(row));
-    // `refuseWrite` for the member tier, plus the archive rule, for a verb aimed at `dir`.
+    // Whether a verb aimed at `dir` is refused: an archive's contents say why in words, since the menu offers Extract
+    // there; outside the member's edit fence the verb was never offered (the menus withdraw it), so a key that still
+    // reaches it does nothing rather than explaining a press nobody was shown.
     const refuseIn = (dir: string): boolean => {
         if (archiveDir(dir)) {
             host.store.actionError.value = noticeOf(t(`workspace.fileVerbs.archiveReadOnly`));
             return true;
         }
-        return host.store.refuseWrite();
+        return !writable(dir);
     };
 
     // `.intentic` and its groups are opened and written inside like any folder, but stay where they are: deleting one
@@ -58,5 +63,5 @@ export const useTreeRules = (host: TreeRulesHost) => {
         return kept !== undefined;
     };
 
-    return { pendingRow, pending, unlockedOnly, archiveDir, archived, noDrops, dropTargetOf, refuseIn, refuseKept };
+    return { pendingRow, pending, unlockedOnly, archiveDir, archived, noDrops, dropTargetOf, refuseIn, refuseKept, writable };
 };

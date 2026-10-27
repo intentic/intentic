@@ -245,6 +245,17 @@ it(`reads a hand-written route's { error } the same way, and a wordless refusal 
     expect(await sandboxRpc.settings.get().catch((error: unknown) => error)).toMatchObject({ status: 502, message: `Request failed (502).` });
 });
 
+// The daemon's "maintainer access required" names a tier nobody chose a word for; wherever a refusal's message is drawn
+// (an extension's view, a toast, a notice's detail) it says the person's access in the app's words instead.
+it(`says an access refusal in the app's words, and keeps what the daemon said beside it`, async () => {
+    stubGlobal(`fetch`, jest.fn(async () => json(403, { error: `maintainer access required`, floor: `maintainer`, reason: `floor` })));
+    expect(await sandboxRpc.settings.get().catch((error: unknown) => error)).toMatchObject({
+        status: 403,
+        message: `You can look around. Only maintainers can change things here.`,
+        said: { error: `maintainer access required`, floor: `maintainer`, reason: `floor` },
+    });
+});
+
 it(`blames the sandbox's image for a 404 on a route its daemon never advertised`, async () => {
     setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
     stubGlobal(

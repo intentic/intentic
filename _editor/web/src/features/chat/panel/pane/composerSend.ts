@@ -25,7 +25,6 @@ import {
     sendRefusalTitle,
     unconnectedHint,
     unconnectedPlaceholder,
-    viewerPlaceholder,
 } from "../../composer/composerIntent";
 import type { InputHistory } from "../../drafts/inputHistory";
 import { continueKeyHintOf } from "./continueKeyHint";
@@ -61,7 +60,8 @@ export interface SendHost {
     // The sandbox's recall ring every sent sentence joins.
     readonly history: Readonly<Ref<InputHistory | undefined>>;
     readonly reachable: Readonly<Ref<boolean>>;
-    // A viewer's composer is present but inert.
+    // Whether the reader may drive this chat. One who may not has no composer (ChatPane draws a read-only line in its
+    // place), and nothing here sends, continues or answers a plan for them.
     readonly canDrive: Readonly<Ref<boolean>>;
     readonly mobile: Readonly<Ref<boolean>>;
     readonly words: Readonly<Ref<ComposerWords>>;
@@ -106,6 +106,9 @@ const nameBlockedAccount = (view: ConversationView, block: SendBlock | undefined
     }
 };
 
+// Whether a press may go at all: the sandbox answers, and the reader may drive this chat.
+const pressable = (host: Pick<SendHost, "reachable" | "canDrive">): boolean => host.reachable.value && host.canDrive.value;
+
 // The turn as the composer treats it: a turn a person already ended is over here from the press, whatever is still
 // unwinding behind it, so what is typed next is the next turn's (TurnClient.say waits the unwind out), never words for
 // the ended one or an answer to a card it took with it.
@@ -129,7 +132,7 @@ const planAnswers = (
     const { draft, attachments, staged } = view;
     const approvePlan = async (): Promise<void> => {
         const plan = planMessage.value?.plan;
-        if (plan === undefined || !host.reachable.value) {
+        if (plan === undefined || !pressable(host)) {
             return;
         }
         const text = draft.value.trim();
@@ -159,7 +162,7 @@ const planAnswers = (
     };
     const keepPlanning = (): void => {
         const plan = planMessage.value?.plan;
-        if (plan === undefined || !host.reachable.value) {
+        if (plan === undefined || !pressable(host)) {
             return;
         }
         if (staged.value) {
@@ -396,7 +399,7 @@ export const useComposerSend = (host: SendHost) => {
     // Continuing says nothing of the person's (a held turn re-runs, or the daemon carries the session on), so nothing
     // joins the recall ring.
     const continueTurn = (options?: ContinueOptions): void => {
-        if (!host.reachable.value || sendBlockOf(view.servingState.value, paneNow.value) !== undefined) {
+        if (!pressable(host) || sendBlockOf(view.servingState.value, paneNow.value) !== undefined) {
             return;
         }
         void view.continueTurn(options);
@@ -487,7 +490,7 @@ export const useComposerSend = (host: SendHost) => {
     // that just made room itself (a reset claimed, an account switched).
     const submit = (options: { readonly now?: boolean } = {}): void => {
         host.runThrough.clearFailures();
-        if (!host.reachable.value) {
+        if (!pressable(host)) {
             return;
         }
         if (intent.value === `place` || intent.value === `edit`) {
@@ -561,9 +564,6 @@ export const useComposerSend = (host: SendHost) => {
         sendShown: computed(() => !live.value || staged.value),
         composerPlaceholder: computed(() => {
             const plain = words.value.plain === true;
-            if (!host.canDrive.value) {
-                return plain ? t(`chat.composerIntent.plain.viewerPlaceholder`) : viewerPlaceholder();
-            }
             // Nothing to send with: the box still takes the task, without naming a vendor nobody chose.
             if (connected.value) {
                 return placeholderFor(intent.value, words.value);

@@ -5,6 +5,7 @@ import type { WorkspaceFile } from "@intentic/sandbox-contract/schemas/workspace
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { MINIMUM_HOLD_MS, REVEAL_DELAY_MS } from "@intentic/ui";
+import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
 // whose copy it asked for, since a surface may read another than the Workspace's. An answer may take its time (a
@@ -29,12 +30,13 @@ jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     // Imported on the way in (sandboxRaw, useDirectoryUi); no daemon answers here, so a read never settles.
     sandboxJson: () => new Promise(() => undefined),
 }));
-// The tree's write half and tier: the owner's, with nothing written here.
+// The tree's write half and the member's edit fence: the owner's (everywhere) unless a test narrows it, nothing written.
+let writable = (path: string): boolean => path.length >= 0;
 jest.mock("../../../../models/workspace/tree/useWorkspaceTree", () => ({
     useWorkspaceTree: () => ({
         saveText: () => Promise.resolve(),
         run: (work: () => Promise<void>) => work(),
-        canEditFiles: ref(true),
+        canWriteAt: (path: string) => writable(path),
         entry: () => undefined,
     }),
 }));
@@ -165,6 +167,7 @@ afterEach(() => {
     setups = 0;
     reads.length = 0;
     answer = (path) => ({ present: false, path });
+    writable = (path) => path.length >= 0;
     document.body.innerHTML = ``;
 });
 
@@ -261,6 +264,43 @@ describe(`a file that isn't UTF-8`, () => {
         expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
         expect(element.textContent).not.toContain(`isn't UTF-8`);
         expect(element.querySelector(`[aria-label="Save file"]`)).not.toBeNull();
+    });
+});
+
+// A writer changes files only inside their edit areas, and a link may lead anyone to a file outside what they may see.
+describe(`the member's access`, () => {
+    it(`opens a file outside the member's edit fence read-only, with no Save and the chip saying why`, async () => {
+        writable = (path) => path.startsWith(`docs/`);
+        answer = (path) => text(path, `export {};`);
+        const element = mount(`src/b.ts`);
+        await settle();
+        expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`false`);
+        expect(element.querySelector(`[aria-label="Save file"]`)).toBeNull();
+        expect(element.textContent).toContain(`Read-only`);
+    });
+
+    it(`edits a file inside it as ever`, async () => {
+        writable = (path) => path.startsWith(`docs/`);
+        answer = (path) => text(path, `# Notes`);
+        const element = mount(`docs/a.txt`);
+        await settle();
+        expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
+    });
+
+    it(`draws a file outside the member's areas as the folder not shared with them, not the daemon's sentence`, async () => {
+        const sentence = `outside your access to this workspace, which holds docs`;
+        answer = () => Promise.reject(new SandboxHttpError(403, sentence, { message: sentence, reason: `area` }));
+        const element = mount(`finance/q3.txt`);
+        await settle();
+        expect(element.textContent).toContain(`This folder isn't shared with you`);
+        expect(element.textContent).not.toContain(sentence);
+    });
+
+    it(`still says any other failure as it is`, async () => {
+        answer = () => Promise.reject(new SandboxHttpError(500, `The disk is full.`, { message: `The disk is full.` }));
+        const element = mount(`notes.txt`);
+        await settle();
+        expect(element.textContent).toContain(`The disk is full.`);
     });
 });
 

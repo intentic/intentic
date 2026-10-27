@@ -225,28 +225,25 @@ const saveStyledLogo = async (image: string): Promise<void> => {
         <Card data-setting="overview-name" class="flex flex-col gap-4">
             <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
                 <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <!-- The logo tile is the control itself: live for owners in every state, disabled for members. -->
+                    <!-- The logo tile is the control itself for the owner, in every state; a member sees the logo alone. -->
+                    <SandboxLogo v-if="!isOwner" :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" class="shrink-0" />
                     <!-- allow(recipes): THE OVERVIEW HEADING'S 48px SANDBOX LOGO is the button: its box is the logo's
                          (SandboxLogo :size="48"), drawn nowhere else, not a glyph at any of the recipe's sizes, and
                          its width is the logo's too. -->
                     <button
+                        v-else
                         ref="logoTrigger"
                         type="button"
-                        :disabled="!isOwner || logoBusy"
+                        :disabled="logoBusy"
                         aria-haspopup="dialog"
                         :aria-expanded="logoMenuOpen"
-                        :aria-label="
-                            isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
-                        "
-                        v-tooltip.bottom="
-                            isOwner ? (logo ? t(`sandbox.sandboxOverview.logoChange`) : t(`sandbox.sandboxOverview.logoAdd`)) : undefined
-                        "
+                        :aria-label="logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)"
+                        v-tooltip.bottom="logo ? t(`sandbox.sandboxOverview.logoChange`) : t(`sandbox.sandboxOverview.logoAdd`)"
                         :class="ui.iconButton(`group h-12 w-12 overflow-hidden`)"
                         @click="pressLogo"
                     >
                         <SandboxLogo :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" />
                         <span
-                            v-if="isOwner"
                             class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-content transition-opacity"
                             :class="logoBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'"
                         >

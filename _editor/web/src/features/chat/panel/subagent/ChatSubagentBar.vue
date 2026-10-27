@@ -7,6 +7,7 @@ import { computed } from "vue";
 import { childLook } from "../../../../models/fleet/board/childLook";
 import RunFacts from "../../../../parts/fleet/RunFacts.vue";
 import { inProcess, type TrayChild } from "../../../../models/fleet/board/childFold";
+import { useDriveRefusal } from "../../session/driveRefusal";
 
 // WHERE THE COMPOSER STANDS WHEN THE CHAT IS A SUBAGENT'S. A subagent is its parent's to direct: the parent wrote its
 // ask, reads its report, and decides what it does next, so a box to type into here would invite words the parent never
@@ -35,6 +36,8 @@ const props = defineProps<{
 const emit = defineEmits<{ back: []; stop: []; write: [] }>();
 
 const t = useT();
+// A reader who cannot run agents follows along: the press that writes to it is not theirs to make.
+const readOnly = useDriveRefusal();
 
 const look = computed(() => childLook(props.child, props.provider, props.account));
 const now = useNow(() => look.value.working);
@@ -94,7 +97,7 @@ const clock = computed(() =>
             <Button v-if="!spawned" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`back`)">
                 <Icon name="arrow-left" class="text-2xs" />{{ t(`chat.chatSubagentBar.writeParent`) }}
             </Button>
-            <Button v-if="spawned" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`write`)">
+            <Button v-if="spawned && !readOnly" size="small" thumb tier="quiet" class="shrink-0" @click="emit(`write`)">
                 <Icon name="pencil" class="text-2xs" />{{ t(`chat.chatSubagentBar.write`) }}
             </Button>
             <Button v-if="stoppable" size="small" thumb tier="boring" class="shrink-0" @click="emit(`stop`)">

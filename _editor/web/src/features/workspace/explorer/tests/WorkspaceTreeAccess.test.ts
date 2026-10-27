@@ -1,5 +1,5 @@
-// jsdom: the subject is a keystroke and its answer, a refusal in words or silence. Tests what a
-// member below the write tier sees in the explorer, not just the daemon's 403.
+// jsdom: the subject is a keystroke and its answer. Tests what a member below the write tier sees in the explorer, not
+// just the daemon's 403: a verb the menu does not offer them is not reachable by its key either, and says nothing.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
@@ -53,6 +53,14 @@ jest.mock("../../../../client/sandbox/useRole", () => {
     };
 });
 
+// The person's own access answer: a writer edits everything they see here, anyone else nothing.
+const realMembers = { ...(await import("../../../../client/sandbox/useMembers")) };
+jest.mock("../../../../client/sandbox/useMembers", () => ({
+    ...realMembers,
+    selfMember: () =>
+        computed(() => (role.canWrite ? { role: `writer`, agents: `off`, edit: `all` } : { role: `collaborator`, agents: `run`, edit: `none` })),
+}));
+
 const { default: WorkspaceTree } = await import("../WorkspaceTree.vue");
 const { useWorkspaceTree } = await import("../../../../models/workspace/tree/useWorkspaceTree");
 const { queryClient } = await import("../../../../lib/queryPersistence");
@@ -97,7 +105,7 @@ afterEach(() => {
     app = undefined;
 });
 
-it(`answers a read-only member's Delete with the tier, and asks the daemon nothing`, async () => {
+it(`answers a read-only member's Delete with nothing, and asks the daemon nothing`, async () => {
     const el = await mount();
     const row = rowFor(el, `notes.txt`);
     row.click();
@@ -107,7 +115,7 @@ it(`answers a read-only member's Delete with the tier, and asks the daemon nothi
 
     expect(daemon.calls.filter((call) => call.procedure === `workspace.delete`)).toEqual([]);
     expect(document.body.textContent).not.toContain(`Delete file?`);
-    expect(feedback?.actionError.value?.title).toMatch(/writer access/i);
+    expect(feedback?.actionError.value).toBeUndefined();
 });
 
 it(`does not open the rename field for a read-only member`, async () => {
@@ -119,7 +127,7 @@ it(`does not open the rename field for a read-only member`, async () => {
     await nextTick();
 
     expect(el.querySelector(`input`)).toBeNull();
-    expect(feedback?.actionError.value?.title).toMatch(/writer access/i);
+    expect(feedback?.actionError.value).toBeUndefined();
 });
 
 it(`lets the writing tier through unchanged`, async () => {

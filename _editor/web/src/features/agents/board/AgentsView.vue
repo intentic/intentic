@@ -228,7 +228,7 @@ provide(CHILD_ROWS, {
     setRowEl: setCardEl,
 });
 const { announcement, pendingPurge, purging, pulsing, toggleArchive, confirmPurge } = useArchiveDoor({ view, move, agents });
-const { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, releaseWake, synthesize } = useBoardPresses({
+const { stoppingRuns, stopRun, archiveRun, restoreRun, openRun, openRunGraph, releaseWake, synthesize, starts, clears } = useBoardPresses({
     workflows,
     agents,
     router,
@@ -352,7 +352,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     {{ chatStrip.panes.length }}
                 </Button>
                 <!-- A phone floats it over the board instead (below), where the thumb is and the filters get the row. -->
-                <Button tier="boring" v-if="!mobile" size="small" thumb @click="startAgent()">
+                <Button tier="boring" v-if="!mobile && starts" size="small" thumb @click="startAgent()">
                     <Icon name="plus" />{{ words.newAgent }}
                 </Button>
             </div>
@@ -422,7 +422,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                 </button>
                                 <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
                                 <Button
-                                    v-if="clearable > 0 && !filtering"
+                                    v-if="clearable > 0 && !filtering && clears"
                                     size="small"
                                     tier="quiet" thumb
                                     class="shrink-0"
@@ -766,7 +766,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         </div>
         <!-- The board's one creating press on a phone: over the board's corner rather than in its header, where it spent a
              thumb-high row the filters needed and sat furthest from the thumb. -->
-        <FloatingAction v-if="mobile" icon="plus" labelled :label="words.newAgent" @click="startAgent()" />
+        <FloatingAction v-if="mobile && starts" icon="plus" labelled :label="words.newAgent" @click="startAgent()" />
         <!-- One menu for every card on the board; see cardMenuItems. -->
         <ContextMenu ref="cardMenu" :model="cardMenuItems" :min-width="12" />
     </div>

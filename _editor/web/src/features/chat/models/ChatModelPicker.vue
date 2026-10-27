@@ -12,12 +12,14 @@ import PickerStatus from "../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../models/providers/offeredLoops";
 import { accessKnown, anyProviderReady } from "../../../models/providers/access";
 import { useT } from "@intentic/ui/i18n";
+import { useRole } from "../../../client/sandbox/useRole";
 
 // Chat's binding of the shared model picker: the list, then a footer every picker draws in the same three parts: one status
 // line (PickerStatus), the account rows (PickerAccounts) and one toolbar (PickerRunSettings). Edits the given conversation, not the active tab, so
 // a proposed session's picker can be re-pointed before it starts. Harness is a separate axis from the model.
 
 const t = useT();
+const { canShip } = useRole();
 
 const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
@@ -168,8 +170,8 @@ const footerVisible = computed(() =>
                 <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
                 <div v-if="auto" class="flex flex-col gap-1">
                     <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
-                    <!-- The one part of Auto a sandbox configures: which model does the reading. -->
-                    <RouterLink to="/sandbox/agent#models" class="text-2xs text-link hover:underline" @click="emit(`selected`)">
+                    <!-- The one part of Auto a sandbox configures: which model does the reading; a maintainer's page to open. -->
+                    <RouterLink v-if="canShip" to="/sandbox/agent#models" class="text-2xs text-link hover:underline" @click="emit(`selected`)">
                         {{ t(`chat.chatModelPicker.chooseWhichModelReads`) }}
                     </RouterLink>
                 </div>

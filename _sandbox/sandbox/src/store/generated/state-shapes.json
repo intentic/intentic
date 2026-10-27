@@ -383,6 +383,12 @@
       "since": "v1.364.0"
     }
   ],
+  "history:identity/access-requests.json": [
+    {
+      "type": "{ requests: Record<string, { at: number; place: string; want: \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" | \"agents\" | \"areas\" }> }",
+      "since": "unreleased"
+    }
+  ],
   "history:identity/control-tokens.json": [
     {
       "type": "{ tokens: ({ createdAt: number; createdBy?: string; expiresAt?: number; hash: string; id: string; label: string; lastUsedAt?: number; scope: \"editor\" | \"read\" | \"drive\" | \"land\" })[] }",

@@ -1,5 +1,4 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { noticeOf } from "@intentic/ui/async";
 import { mapPool } from "@intentic/base/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
@@ -12,6 +11,9 @@ import { opensAsFolder } from "../files/archiveEntries";
 import { readFileWindow } from "../files/fileWindow";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useRole } from "../../../client/sandbox/useRole";
+import { selfMember } from "../../../client/sandbox/useMembers";
+import { rpcQuery } from "../../../client/sandbox/rpcQuery";
+import { editFenceOf, fenceWrites, writesSomewhere } from "./editScope";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { awaitingListing, dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
@@ -25,7 +27,6 @@ import { scopeQuery, workspaceAgent } from "../../../app/workspaceScope";
 import { basename, joinPath, parentDir } from "@intentic/ui/path";
 import { rpcPrefix } from "../../../lib/queryKeys";
 import { workspaceTreeKey } from "./workspaceTreeKey";
-import { t } from "@intentic/ui/i18n";
 
 // How long a confirmed write waits for the pushed delta before the listing is read again. The daemon re-lists its own
 // writes as it answers them (the sandbox's workspace.routes.ts `wrote`), so this only runs out when that push was lost.
@@ -117,18 +118,19 @@ export const fetchWorkspaceTree = treeRead(() => sandboxRpc.workspace.tree({ age
 
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
-    // Whether this member may edit the shared tree; the daemon floors writes at writer, so others get read-only
-    // access. Menus withdraw write items for them; refuseWrite reports the tier for actions with none to withdraw.
-    // The tier, not the fence: a writer is offered every verb and is refused per path by the daemon, since only it
-    // knows which areas that person holds.
-    const { canWrite: canEditFiles } = useRole();
-    const refuseWrite = (): boolean => {
-        if (canEditFiles.value) {
-            return false;
-        }
-        actionError.value = noticeOf(t(`workspace.fileVerbs.needsWriter`));
-        return true;
-    };
+    // Where this member may change files by hand (editScope.ts): everywhere for the tiers that manage the sandbox,
+    // nowhere below writer, and a writer's own edit areas otherwise, resolved to folders the way the daemon resolves
+    // them. Every write verb is offered only where `canWriteAt` says yes, so nothing is drawn that would be refused.
+    const { role } = useRole();
+    const self = selfMember();
+    // The manifest only matters for a writer whose edit names areas; everyone else's answer needs none of it.
+    const namesAreas = computed(() => role.value === `writer` && Array.isArray(self.value?.edit));
+    const { query: areasQuery } = useSandboxQuery({ ...rpcQuery(`areas.list`), enabled: namesAreas });
+    const editFence = computed(() => editFenceOf(role.value, self.value, areasQuery.data.value?.areas));
+    // Whether the member may change `path` (a file, or a folder and what goes in it).
+    const canWriteAt = (path: string): boolean => fenceWrites(editFence.value, path);
+    // Whether they may change anything at all: what decides a surface's read-only look as a whole.
+    const canEditFiles = computed(() => writesSomewhere(editFence.value));
 
     const { query, error } = useSandboxQuery({
         queryKey: computed(() => workspaceTreeKey()),
@@ -478,6 +480,6 @@ export function useWorkspaceTree() {
         actionError,
         run,
         canEditFiles,
-        refuseWrite,
+        canWriteAt,
     };
 }

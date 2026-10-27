@@ -105,7 +105,12 @@ jest.mock("../conversations/run/summon", () => ({
     summonChat: (summons: Summons) => summoned.push(summons),
     summonTurn: (conversation: { turn: { say: (prompt: string) => void } }, prompt: string) => conversation.turn.say(prompt),
 }));
-jest.mock("../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
+jest.mock("../../lib/queryPersistence", () => ({
+    queryClient: { invalidateQueries: async () => undefined },
+    UNPERSISTED: `unpersisted`,
+    // The sandbox client registers how a refused read is told from a failure (client/sandbox/access/accessReason.ts).
+    readRefusalsWith: () => undefined,
+}));
 jest.mock("../../client/sandbox/useSandbox", () => ({
     useSandbox: () => ({
         active: { value: { token: `connect` } },

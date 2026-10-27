@@ -13,7 +13,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { entry, pending } = defineProps<{ entry: ExtensionEntry; pending: boolean }>();
+// `manage` is whether this reader may switch it: below maintainer the row is a fact, with no switch to press.
+const { entry, pending, manage } = defineProps<{ entry: ExtensionEntry; pending: boolean; manage: boolean }>();
 
 const emit = defineEmits<{ toggle: [enabled: boolean]; open: [] }>();
 
@@ -82,7 +83,7 @@ const hidden = computed(() => places.value.slice(PLACES_SHOWN));
             <span v-else-if="entry.state.label !== undefined">{{ entry.state.label }}</span>
         </template>
 
-        <template #control>
+        <template v-if="manage" #control>
             <ExtensionSwitch :extension="entry.extension" :pending="pending" @toggle="(enabled) => emit(`toggle`, enabled)" />
         </template>
     </Row>

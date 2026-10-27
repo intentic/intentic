@@ -26,7 +26,9 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { entry, pending } = defineProps<{ entry: ExtensionEntry; pending: boolean }>();
+// `manage` is whether this reader may change it. Below maintainer the page is a record: what it is, where it shows up and
+// what it may reach, with none of the switch, settings, updates or removal the daemon would refuse them.
+const { entry, pending, manage } = defineProps<{ entry: ExtensionEntry; pending: boolean; manage: boolean }>();
 
 // Each verb names the extension it acts on, so the list that owns the verbs needs no handle on which page is open.
 const emit = defineEmits<{
@@ -57,7 +59,7 @@ const updateAnchor = computed(() => `extension-update-${entry.extension.id}`);
 // Offered only where removal means something: a baked extension has no files here to delete, and an essential one is
 // the control surface for work that carries on regardless. Both refuse daemon-side too; this is what stops the button
 // being an invitation to be told no.
-const removable = computed(() => entry.extension.source !== `builtin` && entry.extension.essential !== true);
+const removable = computed(() => manage && entry.extension.source !== `builtin` && entry.extension.essential !== true);
 // The one consequence worth naming beside the button, because it is the one nobody expects: connections the owner
 // configured themselves go too. The dialog spells out the rest.
 const removalHint = computed(() =>
@@ -161,7 +163,7 @@ const places = computed(() =>
                 :label="entry.extension.update.securityFix ? t(`sandbox.extensionRow.securityUpdate`) : t(`sandbox.extensionRow.update`)"
             />
         </template>
-        <template #actions>
+        <template v-if="manage" #actions>
             <ExtensionSwitch :extension="entry.extension" :pending="pending" @toggle="(enabled) => emit(`toggle`, entry.extension, enabled)" />
         </template>
 
@@ -172,7 +174,7 @@ const places = computed(() =>
             <!-- Where it runs from, and the way back; the checkout itself is never touched from here. -->
             <Notice v-if="devLine !== undefined" :tone="dev?.held === undefined ? `info` : `warning`" size="sm">
                 {{ devLine }}
-                <template #actions>
+                <template v-if="manage" #actions>
                     <Button
                         size="small"
                         tier="boring"
@@ -185,17 +187,17 @@ const places = computed(() =>
                 </template>
             </Notice>
 
-            <ExtensionUpdateOffer v-if="installed" :extension="entry.extension" :anchor="updateAnchor" />
+            <ExtensionUpdateOffer v-if="manage && installed" :extension="entry.extension" :anchor="updateAnchor" />
 
             <!-- The record proper: one section per question, ruled apart, each headed the same way. -->
             <div>
                 <div class="divide-y divide-line">
-                    <ExtensionSection v-if="settings.length > 0" :label="t(`shared.settings`)">
+                    <ExtensionSection v-if="manage && settings.length > 0" :label="t(`shared.settings`)">
                         <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
                     </ExtensionSection>
 
                     <!-- Only git-installed extensions have an update lifecycle to set a policy for. -->
-                    <ExtensionUpdatePolicy v-if="installed" :extension="entry.extension" />
+                    <ExtensionUpdatePolicy v-if="manage && installed" :extension="entry.extension" />
 
                     <!-- The reach approved at install, and whether it was ever used. -->
                     <ExtensionSection v-if="routes.length > 0" :label="t(`sandbox.extensionRow.sandboxAccess`)" :caption="routesCaption">

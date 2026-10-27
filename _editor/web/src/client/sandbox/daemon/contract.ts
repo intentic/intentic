@@ -13,12 +13,23 @@ export type ContractModule = typeof import("@intentic/sandbox-contract");
 // allow(module-state): the one loaded contract, the same for every sandbox and every window lifetime
 export const contractModule = shallowRef<ContractModule | undefined>(undefined);
 
+// The access check the daemon refuses with (sandbox-contract protocol/member-reach.ts), which reads every route's floor
+// off the contract and so loads with it: the editor asks it before sending (../access/useAccess.ts).
+export type AccessPolicyModule = typeof import("@intentic/sandbox-contract/protocol/member-reach");
+
+// allow(module-state): the access check, loaded with the contract it reads
+export const accessPolicy = shallowRef<AccessPolicyModule | undefined>(undefined);
+
 let loading: Promise<ContractModule> | undefined;
 
 const load = async (): Promise<ContractModule> => {
     try {
-        const module = await loadChunk(() => import(`@intentic/sandbox-contract`));
+        const [module, policy] = await Promise.all([
+            loadChunk(() => import(`@intentic/sandbox-contract`)),
+            loadChunk(() => import(`@intentic/sandbox-contract/protocol/member-reach`)),
+        ]);
         contractModule.value = module;
+        accessPolicy.value = policy;
         return module;
     } catch (error) {
         // A later call loads again rather than replaying this failure; a dead chunk has already reloaded the page.

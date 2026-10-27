@@ -13,6 +13,9 @@ import { useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import ChatPanel from "../../features/chat/panel/ChatPanel.vue";
 import LiveBrowser from "../browsers/LiveBrowser.vue";
 import TerminalPanel from "../../features/terminal/TerminalPanel.vue";
+import AccessGate from "../../components/access/AccessGate.vue";
+import { useHeldPlace } from "../../components/heldPlace";
+import { t } from "@intentic/ui/i18n";
 import { browsersSlot, chatBarSlot, chatSlot, chatFullSlot, sideBrowsersSlot, terminalSlot } from "../../workbench/window/panelSlots";
 import { tabsOfView } from "../../workbench/side/sideTabs";
 
@@ -25,6 +28,9 @@ const chat = useChatFloating();
 const terminalFloat = useTerminalFloating();
 const terminal = useTerminalPanel();
 const browsers = useBrowsersFloating();
+// A terminal is a maintainer's: below one it never connects (its socket would only be refused), and its own window says
+// so where the panel would be. Docked, the panel stays shut: none of its doors are offered below a maintainer.
+const terminalHeld = useHeldPlace();
 const router = useRouter();
 
 // Offscreen, not display:none: a zero-size box would zero the terminal's PTY grid and scroll anchor.
@@ -70,8 +76,14 @@ browsers.onDocked(() => {
         <ChatPanel v-else-if="chat.shows.value && !masterRail" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
+        <div
+            v-if="terminal.open.value && terminalFloat.shows.value && terminalFloat.floats.value && terminalHeld.refused.value !== undefined"
+            class="flex h-full min-h-0 flex-col"
+        >
+            <AccessGate :reason="terminalHeld.refused.value" :place="t(`shared.terminal`)" size="panel" />
+        </div>
         <TerminalPanel
-            v-if="terminal.open.value && terminalFloat.shows.value"
+            v-else-if="terminal.open.value && terminalFloat.shows.value && terminalHeld.open.value"
             :source="globalTerminalSource"
             storage-key="sandbox"
             :initial="terminal.requested.value"

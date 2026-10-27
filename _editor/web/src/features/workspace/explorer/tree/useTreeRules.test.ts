@@ -63,15 +63,20 @@ describe(`an archive's contents`, () => {
 
         expect(rules.refuseIn(`assets.zip/img`)).toBe(true);
         expect(store.actionError.value).toEqual({ tone: `danger`, title: `An archive's contents are read-only. Extract it to change them.` });
-        expect(store.refuseWrite).not.toHaveBeenCalled();
     });
 
-    it(`pass any other folder to the member tier, whose answer is the answer`, () => {
+    it(`pass any other folder to the member's edit fence, refused without a word since no verb was offered there`, () => {
         const writer = treeSurface(TREE);
         const reader = treeSurface(TREE, { canWrite: false });
+        const docsWriter = treeSurface(TREE, { editFence: [`docs`] });
 
-        expect([writer.rules.refuseIn(`src`), reader.rules.refuseIn(`src`)]).toEqual([false, true]);
-        expect(writer.store.actionError.value).toBeUndefined();
+        expect([writer.rules.refuseIn(`src`), reader.rules.refuseIn(`src`), docsWriter.rules.refuseIn(`src`), docsWriter.rules.refuseIn(`docs/guides`)]).toEqual([
+            false,
+            true,
+            true,
+            false,
+        ]);
+        expect([writer.store.actionError.value, reader.store.actionError.value]).toEqual([undefined, undefined]);
     });
 });
 
@@ -89,6 +94,13 @@ describe(`drops`, () => {
             ].map(rules.dropTargetOf),
         ).toEqual([`src`, `src`, undefined, undefined, undefined]);
         expect([rules.noDrops(`.intentic/secrets/auth`), rules.noDrops(`assets.zip`), rules.noDrops(`.intentic`)]).toEqual([true, true, false]);
+    });
+
+    it(`offers no folder outside the member's edit fence as a place to land`, () => {
+        const { rules } = treeSurface(TREE, { editFence: [`src`] });
+
+        expect([row(dir(`src`)), row(file(`src/main.ts`)), row(dir(`docs`))].map(rules.dropTargetOf)).toEqual([`src`, `src`, undefined]);
+        expect([rules.noDrops(``), rules.noDrops(`src`)]).toEqual([true, false]);
     });
 });
 

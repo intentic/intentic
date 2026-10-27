@@ -9,7 +9,7 @@ import { defineDocument } from "../../store/evolution/documents.js";
 import { ManifestUnreadableError } from "../../store/json-file.js";
 import { openDocument } from "../../store/open-document.js";
 import { tokenEquals } from "../auth.js";
-import { routeFloor } from "../role-floor.js";
+import { routeFloor } from "@intentic/sandbox-contract/protocol/member-reach";
 import { opt } from "../../opt.js";
 
 // Control tokens: the credential anything outside the browser (an editor bridge, CI, a script) presents via

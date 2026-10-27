@@ -10,6 +10,7 @@ import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "../../
 import type { useAgentChanges } from "../../review/useAgentChanges";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useRole } from "../../../../client/sandbox/useRole";
+import { useAccess } from "../../../../client/sandbox/access/useAccess";
 import { useAuth } from "../../../../client/auth/useAuth";
 import { agentWork, assignAgent } from "../../../../models/fleet/agentActions";
 import { canStartFresh, draftFreshSession } from "../../../../models/fleet/freshSession";
@@ -154,6 +155,9 @@ const toggleWarm = async (): Promise<void> => {
 // Ship-tier items are hidden below maintainer, not shown disabled: a collaborator's request lives on the card instead.
 // A menu of grey rows reads as broken, not as tiered.
 const { canShip } = useRole();
+// Each of the rest is offered only to a reader the daemon would take it from, asked of the same check (useAccess): a
+// viewer's menu is the reads and nothing that would only be refused.
+const { can } = useAccess();
 
 const run = (action: () => void): void => {
     action();
@@ -247,7 +251,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.handOverHint`) }}</span>
             </span>
         </button>
-        <button v-if="renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
+        <button v-if="renameable && can(`agents.rename`)" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
             <Icon name="pencil" class="text-xs text-subtle" />
             <span class="text-sm text-content md:text-xs">{{ t(`ui.action.rename`) }}</span>
         </button>
@@ -261,7 +265,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         <!-- A second look at this work by a session that never read how it was made (freshSession.ts), one row per kind of
              check and the reader's own ask, none of them first or required. The ask goes into its composer, for a model,
              a level or words first. -->
-        <template v-if="freshable">
+        <template v-if="freshable && can(`agent.run`)">
             <button v-for="kind in FRESH_KINDS" :key="kind" type="button" :class="ITEM" @click="run(() => startFresh(kind))">
                 <Icon :name="FRESH_ICONS[kind]" class="text-xs text-subtle" />
                 <span class="text-sm text-content md:text-xs">{{
@@ -285,7 +289,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             </span>
         </button>
         <!-- Only where a hold can be kept or is running: a cold cache or one this sandbox cannot replay has nothing to offer. -->
-        <button v-if="warmHold !== undefined || warmable" type="button" :class="ITEM" :disabled="archived" @click="toggleWarm">
+        <button v-if="(warmHold !== undefined || warmable) && can(`agents.keepWarm`)" type="button" :class="ITEM" :disabled="archived" @click="toggleWarm">
             <Icon :name="warmHold === undefined ? 'sun' : 'moon'" class="text-xs" :class="warmHold === undefined ? 'text-link' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{
@@ -300,7 +304,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         </button>
         <!-- What happens next at the wall this card is held at, shown only on a card actually waiting on one: one question,
              one answer, the same words the chat uses. -->
-        <template v-if="heldWall !== undefined">
+        <template v-if="heldWall !== undefined && can(`agents.breakPolicy`)">
             <span class="px-2.5 pt-2 pb-1 text-2xs text-subtle">{{ breakLabel(heldWall) }}</span>
             <button
                 v-for="row in wallRows"
@@ -324,7 +328,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         </template>
         <!-- Archive keeps everything and only removes the agent from the board; discard actually throws work away. -->
         <button
-            v-if="!archived"
+            v-if="!archived && can(`agents.archive`)"
             type="button"
             :class="ITEM"
             :disabled="changes.actionBusy.value || archiveBusy || streaming"
@@ -338,7 +342,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
                 </span>
             </span>
         </button>
-        <button v-else type="button" :class="ITEM" :disabled="archiveBusy" @click="run(() => restore([agentId]))">
+        <button v-else-if="archived && can(`agents.unarchive`)" type="button" :class="ITEM" :disabled="archiveBusy" @click="run(() => restore([agentId]))">
             <Icon name="history" class="text-xs text-link" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-link md:text-xs">{{ t(`ui.action.restore`) }}</span>

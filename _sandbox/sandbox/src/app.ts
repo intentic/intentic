@@ -14,7 +14,7 @@ import { watchResponseLength } from "./http/response-length.js";
 import { bearerFrom, ForbiddenError, OwnerUnreadableError, PasskeyRequiredError, PlatformKeyUnknownError } from "./auth/auth.js";
 import { allowedOriginsOf, desktopBundleOnLoopback, originAllowedBy } from "./auth/browser-origins.js";
 import { LISTENER_HEADER, listenerOf } from "./auth/proofs/listener.js";
-import { memberRefusal } from "./auth/role-floor.js";
+import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
 import { orgLocks } from "./org/org-locks.middleware.js";
 import { admitByGrant, grantsOf } from "./auth/grants.js";
 import type { Services } from "./composition.js";
@@ -213,7 +213,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                     listener: listenerOf((name) => c.req.header(name)),
                 });
                 c.set("identity", caller);
-                // The role floor (auth/role-floor.ts) applies here, after authentication, in one place: a member below
+                // The role floor (sandbox-contract protocol/member-reach.ts) applies here, after authentication, in one place: a member below
                 // a route's tier gets a 403 naming the tier, and a guest gets one for any door off its own list.
                 // Owner-only routes still keep their own in-route gates besides; this floor only keeps a viewer
                 // read-only and a collaborator off ship controls.

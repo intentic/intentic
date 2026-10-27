@@ -80,7 +80,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         if (insideArchive(services.workspace.root, relPath)) {
             throw new ORPCError("BAD_REQUEST", { message: "an archive's contents are read-only; extract it to change them" });
         }
-        // The writer tier's whole boundary: the floor (auth/role-floor.ts) admits the route, this decides the path, by
+        // The writer tier's whole boundary: the floor (sandbox-contract protocol/member-reach.ts) admits the route, this decides the path, by
         // where the caller may edit rather than where it may look. Maintainer and above are unfenced and pass through.
         refuseFenced(callerEditFence(await services.areas.list(), context.identity), relPath);
         return containedIn(services.workspace.root, relPath);

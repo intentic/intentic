@@ -57,13 +57,17 @@ import {
     sandboxEmbedOf,
     sandboxKeyAllowed,
     sandboxSectionGroups,
+    sandboxSectionOf,
 } from "../../models/sandbox/sandboxNav";
 import { useCapabilities } from "../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../models/extensions/useExtensions";
 import { usePanels } from "../../models/extensions/usePanels";
 import { useRegistry } from "../extensions/useRegistry";
 import { useHostedBuild } from "./secrets/useHostedBuild";
+import { useAccess } from "../../client/sandbox/access/useAccess";
+import type { AccessReason } from "../../client/sandbox/access/accessReason";
 import { useRole } from "../../client/sandbox/useRole";
+import AccessGate from "../../components/access/AccessGate.vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { type ActiveExtension, activationBadge, detectActivations } from "../../workbench/views/registry";
 import ExtensionView from "../../core-views/ExtensionView.vue";
@@ -131,6 +135,19 @@ const builtIn = computed(() => sandboxBuiltInSlugs());
 const { canShip, isGuest } = useRole();
 // A guest's hub is one section, so it opens on it rather than on an overview the daemon would refuse.
 const defaultSlug = computed(() => (isGuest.value ? GUEST_SECTION : DEFAULT));
+
+// A section held for maintainers, reached by a link or a bookmark by someone below: it is still an address, which draws
+// who it is for and the way to ask in the section's place, never the section itself (its reads would only be refused).
+// A guest's fence keeps it off every section but its own (shell/guestFence.ts), so nothing is withheld for one here.
+// Until the tier is known, a held section draws nothing rather than mounting for whoever this turns out to be.
+const MAINTAINERS: AccessReason = { kind: `tier`, floor: `maintainer` };
+const { role: knownRole } = useAccess();
+const tierKnown = computed(() => knownRole.value !== undefined);
+const held = (slug: string): boolean => sandboxSectionOf(slug)?.maintainer === true;
+const withheld = computed<readonly string[]>(() =>
+    tierKnown.value && !isGuest.value && !canShip.value ? [...builtIn.value].filter((slug) => held(slug) && !orgHidden.value.has(slug)) : [],
+);
+const placeOf = (slug: string): string => sandboxSectionOf(slug)?.label ?? slug;
 const { allPanels: panels, isLoading } = usePanels();
 const { capabilities } = useCapabilities();
 // Extensions row's count reads the cached registry only (`read: false`), never triggering a clone.
@@ -238,12 +255,16 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
         :default-slug="defaultSlug"
         :addressable="isGuest"
         :groups="groups"
+        :withheld="withheld"
         :ready="!isLoading"
         :search="search"
     >
         <template #default="{ slug }">
+            <AccessGate v-if="withheld.includes(slug)" :reason="MAINTAINERS" :place="placeOf(slug)" />
+            <!-- Nothing until the tier is known: a maintainer's section must not send its reads for someone below. -->
+            <template v-else-if="held(slug) && !tierKnown" />
             <!-- An organisation's lock draws the section read-only; every personal sandbox passes straight through. -->
-            <OrgHeldSection v-if="builtIn.has(slug)" :slug="slug">
+            <OrgHeldSection v-else-if="builtIn.has(slug)" :slug="slug">
                 <SandboxOverview v-if="slug === `overview`" />
                 <SandboxUsage v-else-if="slug === `usage`" />
                 <SandboxSecrets v-else-if="slug === `secrets`" />

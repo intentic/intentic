@@ -4,6 +4,7 @@ import { type SandboxBearer, useSandboxSession } from "../session/sandboxSession
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 import { useEndpoint } from "../endpoint/useEndpoint";
 import { useSandbox } from "./useSandbox";
+import { forecastRefusal } from "./access/forecast";
 
 const { getSessionToken, rejectSessionToken } = useSandboxSession();
 const { usingLocal, demoteIfUnreachable, routeRechecked, onRouteLost } = useEndpoint();
@@ -14,6 +15,24 @@ export class SandboxUnaddressedError extends Error {
         super(t(`sandbox.sandboxClient.unaddressed`));
     }
 }
+
+// The path a request names on its daemon: the URL's, less any path the daemon's own address already carries.
+const daemonPath = (request: Request, target: SandboxTarget): URL => {
+    const url = new URL(request.url);
+    const prefix = new URL(target.base).pathname.replace(/\/$/, ``);
+    return prefix !== `` && url.pathname.startsWith(prefix) ? new URL(`${url.pathname.slice(prefix.length)}${url.search}`, url.origin) : url;
+};
+
+// The refusal the daemon would send, answered here instead of sent: the person's access already says no
+// (access/forecast.ts), so the request would only be refused, logged and retried. The body is the daemon's own, marked
+// `predicted`, so a caller reads it exactly as it reads the daemon's.
+const foreseen = (request: Request, target: SandboxTarget): Response | undefined => {
+    const url = daemonPath(request, target);
+    const refusal = forecastRefusal(target.sandboxId, request.method, url.pathname, url.searchParams.get(`path`) ?? undefined);
+    return refusal === undefined
+        ? undefined
+        : new Response(JSON.stringify({ ...refusal, predicted: true }), { status: 403, headers: { "content-type": `application/json` } });
+};
 
 // 401 is a bearer the daemon no longer takes; 428 is one it takes but that the sandbox's passkey rule holds short.
 // Both drop the bearer and re-establish once: the second road runs through the step-up gate.
@@ -156,6 +175,10 @@ export const sandboxAuthenticatedFetch = async (
     }
     if (!belongsTo(given, givenTarget)) {
         throw new DOMException(`The selected sandbox changed while this request was signing in.`, `AbortError`);
+    }
+    const refused = foreseen(given, givenTarget);
+    if (refused !== undefined) {
+        return refused;
     }
     // A streamed upload is never held or re-aimed: its body cannot be read twice.
     const bounds = options?.deadline !== false;

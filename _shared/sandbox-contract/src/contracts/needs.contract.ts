@@ -6,6 +6,7 @@ import {
     NeedIdParamSchema,
     NeedRaisedSchema,
     NeedRaiseSchema,
+    NeedReleaseInputSchema,
     NeedSchema,
     NeedSecretInputSchema,
     NeedsListSchema,
@@ -19,6 +20,9 @@ import {
 
 const agentDoor = procedure.meta({ agent: true, control: "never" });
 const answerRoute = procedure.meta({ floor: "maintainer", control: "never" });
+// A release is the one need its gate answers rather than the tier: the owner names its approvers from the whole roster
+// (secrets.routes.ts `releasableBy`), so any member may reach the route, and the need admits exactly the people it names.
+const releaseRoute = procedure.meta({ floor: "viewer", control: "never" });
 
 export const needsContract = {
     ask: agentDoor
@@ -68,6 +72,16 @@ export const needsContract = {
                 "Declines it, or says yes the way its card offered: accept a connection being set up, apply a change, grant for this conversation or the persona, release a gated credential, approve an environment proposal. A release is refused from anyone the gate does not name.",
         })
         .input(NeedAnswerInputSchema)
+        .output(NeedSchema),
+    release: releaseRoute
+        .route({
+            method: "POST",
+            path: "/needs/{id}/release",
+            summary: "Release a gated credential, or decline",
+            description:
+                "A release need's answer, from one of the approvers its gate names, whatever their tier: release the credential to the conversation that asked, or decline. Any other need is answered through /needs/{id}/answer.",
+        })
+        .input(NeedReleaseInputSchema)
         .output(NeedSchema),
     provideSecret: answerRoute
         .route({

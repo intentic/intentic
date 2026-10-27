@@ -178,7 +178,7 @@ watch(
     () => selectedPath,
     (path) => selecting.follow(path ?? null),
 );
-const { pendingRow, pending, dropTargetOf } = rules;
+const { pendingRow, pending, dropTargetOf, noDrops } = rules;
 // An arriving row holding nothing a press can reach: a pending file, not a pending folder, which still expands.
 const notYetOpenable = (row: Row): boolean => pending(row.entry.path) && !expandable(row);
 const { personas } = usePersonas();
@@ -296,7 +296,7 @@ defineExpose({ focusTree });
             role="tree"
             aria-multiselectable="true"
             tabindex="-1"
-            :data-drop-dir="rootDir"
+            :data-drop-dir="noDrops(rootDir) ? undefined : rootDir"
             @keydown="onKeydown"
             @mousedown.self="treeEl?.focus()"
             @click.self="onBackgroundClick"

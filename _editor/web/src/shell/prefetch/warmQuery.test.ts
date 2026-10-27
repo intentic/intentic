@@ -1,4 +1,5 @@
 import { queryClient } from "../../lib/queryPersistence";
+import { SandboxHttpError, wordsOf } from "../../client/sandbox/sandboxHttpError";
 import { heldInCache, warmQuery } from "./warmQuery";
 
 /* THE ONE PROPERTY EVERY WISH IN THE APP RESTS ON: reading a wish fills the entry that wish says it is satisfied by. */
@@ -18,6 +19,25 @@ describe(`a warm wish`, () => {
 
         expect(wish.have()).toBe(true);
         expect<unknown>(queryClient.getQueryData(KEY)).toEqual({ chores: 3 });
+    });
+
+    // The loader must neither pause for a refusal (three in a row cooled it off for half a minute) nor pick the wish
+    // again on its next beat: the person's access answered it, and asking again would only be refused again.
+    it(`counts a read the person's access refuses as answered, not as a failure to pause for`, async () => {
+        const refused = new SandboxHttpError(403, `maintainer access required`, wordsOf({ error: `maintainer access required`, floor: `maintainer`, reason: `floor` }));
+        const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn: () => Promise.reject(refused) });
+
+        await wish.read();
+
+        expect(wish.have()).toBe(true);
+        expect(heldInCache(KEY)).toBe(true);
+    });
+
+    it(`still fails, and stays wanted, for any other failure`, async () => {
+        const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn: () => Promise.reject(new Error(`The sandbox is restarting.`)) });
+
+        await expect(wish.read()).rejects.toThrow(`The sandbox is restarting.`);
+        expect(wish.have()).toBe(false);
     });
 
     it(`joins a read already in flight instead of opening a second one beside it`, async () => {

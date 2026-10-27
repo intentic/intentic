@@ -7,6 +7,7 @@ import { demoMode } from "./mode";
 import { demoOutage, withOutage } from "./outage";
 import { DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_USER, platform } from "./platform";
 import { readsNote, withReads } from "./reads";
+import { withFloors } from "./floors";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 import { coverage } from "./unserved";
 
@@ -49,8 +50,9 @@ const openOnFleet = (): void => {
     }
 };
 
-// The outage outside the reads: a sandbox that does not answer has no reads to slow.
-const answering = withOutage(withReads(daemon));
+// The outage outside the reads: a sandbox that does not answer has no reads to slow. The tier's floors outside both: a
+// refused request is refused before the sandbox is reached, as the daemon's bearer middleware refuses it.
+const answering = withFloors(withOutage(withReads(daemon)));
 installFetch({ platform, daemon: answering });
 installXhr({ platform, daemon: answering });
 installWebSocket((url) => SOCKETS.get(url.pathname));

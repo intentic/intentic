@@ -1,4 +1,4 @@
-import { accessRefusal, memberAccess, tierOf } from "@intentic/sandbox-contract/schemas/members";
+import { AccessAskSchema, accessRefusal, MemberEmailSchema, memberAccess, tierOf } from "@intentic/sandbox-contract/schemas/members";
 import { EnvironmentRemoveSchema } from "@intentic/sandbox-contract/schemas/environment";
 import type { PasskeysList } from "@intentic/sandbox-contract/schemas/system";
 import { ProviderKeysApplySchema } from "@intentic/sandbox-contract/state/arrival";
@@ -6,7 +6,17 @@ import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/br
 import type { VoicesView } from "@intentic/sandbox-contract/schemas/voice";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
-import { type DemoGrant, grantProfile, grantAccess, grants, revokeAccess } from "../fixture/access";
+import {
+    accessRequests,
+    askAccess,
+    type DemoGrant,
+    grantProfile,
+    grantAccess,
+    grants,
+    revokeAccess,
+    settleAccess,
+} from "../fixture/access";
+import { DEMO_USER } from "../platform";
 import { SEPTEMBER_PRINT_DOCX, SEPTEMBER_PRINT_PATH, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "../fixture/desk";
 import { HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_DOCX_BEFORE, HANDOVER_PATH } from "../fixture/document";
 import {
@@ -23,6 +33,7 @@ import { officeResponse } from "../fixture/offices/office";
 import { demoEnvironment, demoEnvironmentContents, removeDemoBlock, vendoredBundle } from "../fixture/sandbox";
 import { fileBody, writeFile } from "../fixture/workspace";
 import { demoQuiet } from "../mode";
+import { demoSelf } from "../floors";
 import { json } from "../transport";
 import { STARTED_AT } from "./roster";
 
@@ -64,6 +75,8 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
         credentials?: DemoGrant["credentials"] | `all`;
         aiAccounts?: DemoGrant["aiAccounts"] | `all`;
     };
+    // Granting the person anything answers what they asked, as the daemon's grant does.
+    settleAccess(grant.email);
     if (grant.profile !== undefined) {
         grantProfile(grant.email, grant.profile, grant.emailSignIn);
         return json({ members: grants() });
@@ -91,8 +104,28 @@ const grantMember = async ({ request }: RawContext): Promise<Response> => {
 };
 
 const revokeMember = async ({ request }: RawContext): Promise<Response> => {
-    revokeAccess(((await request.json()) as { email: string }).email);
+    const { email } = MemberEmailSchema.parse(await request.json());
+    revokeAccess(email);
+    settleAccess(email);
     return json({ members: grants() });
+};
+
+// The demo's reader asking the owner for more, as the tier it is read as (`?as=`); the owner holds every access already.
+const askForAccess = async ({ request }: RawContext): Promise<Response> => {
+    if (demoSelf().role === `owner`) {
+        return refuse(`the owner already holds every access here`, 400);
+    }
+    const asked = AccessAskSchema.safeParse(await request.json());
+    if (!asked.success) {
+        return refuse(`say what you are asking for, and where you were`, 400);
+    }
+    askAccess(DEMO_USER.email, asked.data);
+    return json(demoSelf());
+};
+
+const dismissRequest = async ({ request }: RawContext): Promise<Response> => {
+    settleAccess(MemberEmailSchema.parse(await request.json()).email);
+    return json({ requests: accessRequests() });
 };
 
 // Served under the extension's own namespace and paths, so a boundary move is a compile error, not an empty panel.
@@ -205,8 +238,11 @@ export const raw = {
     "GET /members": () => json({ owner: `ada@acme.dev`, members: grants() }),
     "POST /members": grantMember,
     "DELETE /members": revokeMember,
-    // The demo's reader is the owner, who manages everything.
-    "GET /members/self": () => json({ role: `owner`, agents: `run`, edit: `all` }),
+    // The demo's reader, as the tier it is read as (`?as=`, floors.ts): the owner manages everything.
+    "GET /members/self": () => json(demoSelf()),
+    "POST /members/requests": askForAccess,
+    "GET /members/requests": () => json({ requests: accessRequests() }),
+    "DELETE /members/requests": dismissRequest,
     // Two tokens on the roster (one unused, one expiring) make the roster's states visible; a mint answers
     // the once-shown value.
     "GET /system/control/tokens": () =>

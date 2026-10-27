@@ -8,7 +8,7 @@ import { call } from "@orpc/server";
 import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
-import { memberRefusal } from "../auth/role-floor.js";
+import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
 import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { createAttentionRoutes } from "./attention.routes.js";
 
@@ -76,8 +76,8 @@ test("a held automation wake needs the owner too, with no card of its own", asyn
 });
 
 test("only the owner reaches it, never a member, a program's token or a panel", () => {
-    expect(memberRefusal({ role: "maintainer" }, "GET", "/agents/attention")).toEqual({ error: "owner access required", floor: "owner" });
-    expect(memberRefusal({ role: "guest" }, "GET", "/agents/attention")).toEqual({ error: "not open to a guest member", floor: "viewer" });
+    expect(memberRefusal({ role: "maintainer" }, "GET", "/agents/attention")).toEqual({ error: "owner access required", floor: "owner", reason: "floor" });
+    expect(memberRefusal({ role: "guest" }, "GET", "/agents/attention")).toEqual({ error: "not open to a guest member", floor: "viewer", reason: "guest" });
     expect(memberRefusal({ role: "owner" }, "GET", "/agents/attention")).toBeUndefined();
     const access = routeAccess("GET", agentsContract.attention["~orpc"].meta);
     expect(access).toMatchObject({ auth: "session", floor: "owner", guest: false, agent: false, panel: false, control: "never" });

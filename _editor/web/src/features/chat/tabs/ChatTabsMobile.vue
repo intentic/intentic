@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { startAgent } from "../../../models/fleet/agentActions";
+import { useDriveRefusal } from "../session/driveRefusal";
 import { statusIcon } from "../models/catalog";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
@@ -11,6 +12,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 const vocabulary = useVocabulary();
+// A reader who cannot drive a chat (a viewer, a writer with agents off) is offered no new one: it would only be refused.
+const readOnly = useDriveRefusal();
 
 /* The mobile counterpart of ChatTabs: a compact header naming the active conversation, over the shared switcher sheet. */
 
@@ -45,7 +48,7 @@ const sheetOpen = ref(false);
             />
             <Icon name="chevron-down" class="shrink-0 text-2xs text-subtle" />
         </button>
-        <button type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" :aria-label="vocabulary.newAgent">
+        <button v-if="!readOnly" type="button" class="composer-ghost h-10 w-10 shrink-0" @click="startAgent()" :aria-label="vocabulary.newAgent">
             <Icon name="plus" class="text-base" />
         </button>
 

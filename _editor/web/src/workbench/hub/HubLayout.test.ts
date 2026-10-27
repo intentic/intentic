@@ -47,7 +47,10 @@ const PRIVACY = {
 
 // `listed` is the index as it stands this render — a hub whose sections arrive with a read has fewer of them for as
 // long as the read takes, which is what `ready` is about. `tabbed` adds the row above as a group of its own.
-const mount = async (path: string, index: { ready?: boolean; listed?: readonly string[]; tabbed?: boolean } = {}): Promise<HTMLElement> => {
+const mount = async (
+    path: string,
+    index: { ready?: boolean; listed?: readonly string[]; tabbed?: boolean; withheld?: readonly string[] } = {},
+): Promise<HTMLElement> => {
     await router.push(path);
     await router.isReady();
     const el = document.createElement(`div`);
@@ -72,7 +75,14 @@ const mount = async (path: string, index: { ready?: boolean; listed?: readonly s
             return () =>
                 h(
                     HubLayout,
-                    { title: `Sandbox`, routeName: `sandbox`, defaultSlug: `overview`, groups: groups.value, ready: index.ready ?? true },
+                    {
+                        title: `Sandbox`,
+                        routeName: `sandbox`,
+                        defaultSlug: `overview`,
+                        groups: groups.value,
+                        ready: index.ready ?? true,
+                        withheld: index.withheld ?? [],
+                    },
                     // The marker carries the slug the hub handed its body, which is the section on screen.
                     { default: ({ slug }: { slug: string }) => [h(`p`, { "data-section": slug }), h(Section)] },
                 );
@@ -135,6 +145,16 @@ it(`cleans a slug that is still unknown once the index is in`, async () => {
     await settle();
     expect(router.currentRoute.value.path).toBe(`/sandbox`);
     expect(section(el)).toBe(`overview`);
+});
+
+// A section this reader may not open is no row, but a link to it still lands on it, so the hub can say whose it is
+// there rather than swap it for the default without a word.
+it(`keeps the address of a withheld section, which the index does not offer`, async () => {
+    const el = await mount(`/sandbox/devices`, { listed: [`overview`], withheld: [`devices`] });
+    await settle();
+    expect(router.currentRoute.value.path).toBe(`/sandbox/devices`);
+    expect(section(el)).toBe(`devices`);
+    expect(el.querySelector(`a[href="/sandbox/devices"]`)).toBeNull();
 });
 
 // The load-bearing half: a card deep inside the section's body reports its work without being told which row it

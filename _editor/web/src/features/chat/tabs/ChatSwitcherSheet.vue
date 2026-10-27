@@ -14,6 +14,7 @@ import { modelOrProvider } from "./cardView";
 import { twinTitles } from "./tabs";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { useT } from "@intentic/ui/i18n";
+import { useDriveRefusal } from "../session/driveRefusal";
 
 // The phone's chat switcher: the open chats, a new one, and the stored sessions behind a search box. One sheet with
 // two hosts (ChatTabsMobile's header, the agent screen's title), so where a past chat can be reached from cannot
@@ -21,6 +22,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 const vocabulary = useVocabulary();
+// A reader who cannot drive a chat (a viewer, a writer with agents off) is offered no new one: it would only be refused.
+const readOnly = useDriveRefusal();
 
 const open = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ select: [id: string]; close: [ids: ReadonlySet<string>]; open: [id: string]; new: [] }>();
@@ -77,6 +80,7 @@ const startNew = (): void => {
         <div class="flex flex-col gap-0.5">
             <!-- First, where a thumb lands: the one press that isn't a choice among what's already open. -->
             <button
+                v-if="!readOnly"
                 type="button"
                 class="flex h-12 items-center gap-2.5 rounded-lg px-2 text-left text-sm text-link active:bg-overlay"
                 @click="startNew"

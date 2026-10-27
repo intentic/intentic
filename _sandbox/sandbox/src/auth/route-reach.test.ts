@@ -9,9 +9,9 @@ import { unstubbed } from "@intentic/testing";
 import type { ControlTokens } from "./tokens/control-tokens.js";
 import { controlScoped } from "./tokens/control-tokens.js";
 import { grantsOf } from "./grants.js";
-import { guestReach, homeLandReach, routeFloor } from "./role-floor.js";
+import { guestReach, homeLandReach, routeFloor } from "@intentic/sandbox-contract/protocol/member-reach";
 
-// Every route the contract declares, and what each gate in front of it decides (app.ts, role-floor.ts, grants.ts,
+// Every route the contract declares, and what each gate in front of it decides (app.ts, member-reach.ts, grants.ts,
 // control-tokens.ts), held to what the route's own RouteMeta says it should be. The expectation is read off the
 // declaration by route-meta.ts's own words, never through the gates, so a route added to the contract is covered here
 // without an edit, and a gate that stops honouring a field fails on every route declaring it.
@@ -58,7 +58,7 @@ const PINNED = {
     "POST /agents/{id}/place": "bearer waits timed maintainer panel",
     "GET /capabilities/{id}/otp": "bearer waits timed maintainer panel agent",
     "GET /listeners/{provider}/state": "bearer waits timed maintainer",
-    "GET /members": "bearer waits timed viewer panel",
+    "GET /members": "bearer waits timed owner panel",
     "GET /sessions": "bearer waits timed viewer panel editor read drive land",
     "POST /system/passkeys/register": "bearer waits timed viewer guest enrolment panel",
     "POST /system/sync/report": "bearer waits timed maintainer panel sync",

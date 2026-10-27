@@ -16,6 +16,8 @@ import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
 import { INSTALLS, type InstallVerb, installNotice, installsInFlight, listingOf } from "./installsInFlight";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
+import { useAccess } from "../../../client/sandbox/access/useAccess";
+import AccessNote from "../../../components/access/AccessNote.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The sandbox hub's Extensions section, laid out as the Capabilities page is, less the rail the hub already provides:
@@ -37,11 +39,21 @@ const VIEW_KEY = `intentic.extensionsView`;
 const route = useRoute();
 const router = useRouter();
 
+// Below maintainer the section is read, not changed: Browse is not offered (the registry is a maintainer's read, and
+// installing a maintainer's verb), the list keeps no switches, and one line over it says who changes things here.
+const access = useAccess();
+const manage = computed(() => access.can(`extensions.setEnabled`));
+const browsable = computed(() => access.can(`capabilities.marketplace`));
+const manageRefusal = computed(() => access.refusal(`extensions.setEnabled`));
+
 const lastPicked = (): View => {
     const stored = storedValue(VIEW_KEY);
     return isView(stored) ? stored : `browse`;
 };
 const view = computed<View>(() => {
+    if (!browsable.value) {
+        return `installed`;
+    }
     const asked = route.query[`view`];
     return isView(asked) ? asked : lastPicked();
 });
@@ -86,23 +98,25 @@ const clearFilters = (): void => {
     trust.value = `all`;
 };
 
-// Both counts are inventories; the update count is a mark instead, since it isn't the size of either list.
+// Both counts are inventories; the update count is a mark instead, since it isn't the size of either list. Browse is
+// offered only to a reader who may read the registry.
+const browseOption = computed(() => ({
+    label: t(`ui.action.browse`),
+    value: `browse` as View,
+    badge: listings.value.length,
+    ...(updatable.value > 0
+        ? {
+              mark: `arrow-circle-up` as const,
+              markTitle: {
+                  title: t(`sandbox.sandboxExtensions.newerCommits`),
+                  rows: [{ label: t(`sandbox.sandboxExtensions.updatable`), value: updatable.value }],
+              },
+          }
+        : {}),
+}));
 const viewOptions = computed(() => [
     { label: t(`sandbox.words.installed`), value: `installed` as View, badge: entries.value.length },
-    {
-        label: t(`ui.action.browse`),
-        value: `browse` as View,
-        badge: listings.value.length,
-        ...(updatable.value > 0
-            ? {
-                  mark: `arrow-circle-up` as const,
-                  markTitle: {
-                      title: t(`sandbox.sandboxExtensions.newerCommits`),
-                      rows: [{ label: t(`sandbox.sandboxExtensions.updatable`), value: updatable.value }],
-                  },
-              }
-            : {}),
-    },
+    ...(browsable.value ? [browseOption.value] : []),
 ]);
 
 // Work started from this section, kept in the operations ledger rather than here (extensionWork.ts): the section's own
@@ -249,7 +263,9 @@ const dismissWork = (notice: NoticeModel): void => {
     <div ref="root" class="flex flex-col gap-6">
         <!-- Installed and Browse are two lists, so they are tabs, as every page's parts are. The section's verbs end the
              strip, as a page's own actions end its header, which leaves the filter below free to span the list. -->
-        <div :class="ui.tabStrip(`flex items-end gap-3`)">
+        <!-- Read-only: the one line saying so takes the strip's place, since a single tab switches to nothing. -->
+        <AccessNote v-if="!browsable && manageRefusal !== undefined" :reason="manageRefusal" :place="t(`sandbox.sandboxNav.extensions`)" />
+        <div v-else :class="ui.tabStrip(`flex items-end gap-3`)">
             <SegmentedControl
                 class="min-w-0 flex-1"
                 :model-value="view"
@@ -262,7 +278,7 @@ const dismissWork = (notice: NoticeModel): void => {
             <div v-if="!detailOpen" class="flex shrink-0 items-center gap-1.5 pb-1.5">
                 <!-- A labelled button, not an icon: it creates something, unlike the refresh, which only reads again. -->
                 <template v-if="view === `installed`">
-                    <Button :label="t(`sandbox.words.newExtension`)" size="small" tier="boring" @click="creating = true">
+                    <Button v-if="manage" :label="t(`sandbox.words.newExtension`)" size="small" tier="boring" @click="creating = true">
                         <template #icon><Icon name="plus" /></template>
                     </Button>
                     <button
@@ -338,6 +354,8 @@ const dismissWork = (notice: NoticeModel): void => {
             :query="query"
             :mode="mode"
             :published-matches="publishedMatches"
+            :manage="manage"
+            :browsable="browsable"
             @notice="viewNotice = $event"
             @matched="matched = $event"
             @browse="show(`browse`)"
@@ -356,7 +374,7 @@ const dismissWork = (notice: NoticeModel): void => {
         />
 
         <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
-        <p v-if="updatesCheckedAt !== undefined && !detailOpen" class="text-right text-2xs text-subtle">
+        <p v-if="manage && updatesCheckedAt !== undefined && !detailOpen" class="text-right text-2xs text-subtle">
             <template v-if="updatable > 0">
                 <button v-if="view === `installed`" type="button" :class="ui.textButton({ size: `xs` })" @click="show(`browse`)">
                     {{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}

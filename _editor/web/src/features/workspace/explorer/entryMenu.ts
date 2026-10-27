@@ -3,6 +3,8 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 import type { MenuItem } from "primevue/menuitem";
 import { t } from "@intentic/ui/i18n";
 import { formatChord } from "../../../workbench/commands/keybindings";
+import { accessWords } from "../../../client/sandbox/access/accessWords";
+import { belowMaintainer } from "../../../components/heldPlace";
 
 // The right-click menu both file surfaces (the tree, the home) build: one list, so a verb never exists in one and not
 // the other, and the wording of a bulk verb ("Delete 3 items") is decided once. Each surface supplies its own rows in
@@ -68,7 +70,8 @@ export interface EntryMenuInput {
     // The target, or the selection it sits in, holds `.intentic` or one of its groups, which stay where they are: Rename,
     // Delete and Cut are left out and a note at the bottom says why. Everything else, writing inside included, stays.
     readonly kept: boolean;
-    // A read-only member: write verbs are dropped, not disabled, and the tier is named once at the bottom.
+    // Whether the member may change what the verbs would act on (their tier and edit fence): when not, write verbs are
+    // dropped, not disabled, and why is said once at the bottom.
     readonly canEdit: boolean;
     // The target is an archive's contents. Read verbs only: nothing here repacks a zip, and Extract is how you get
     // something changeable.
@@ -118,7 +121,8 @@ const offers = (input: Pick<EntryMenuInput, "serves">, route: string): boolean =
 const keyed = (item: MenuItem, keys: string | undefined): MenuItem => (keys === undefined ? item : { ...item, shortcut: keys });
 
 const lockedNote = (): MenuItem => ({ label: t(`workspace.words.keptPrivateBySandbox`), icon: `lock`, disabled: true });
-const readOnlyNote = (): MenuItem => ({ label: t(`workspace.words.readOnlyChangingFiles`), icon: `lock`, disabled: true });
+// Read-only here, whether below the writer tier or outside the folders a writer edits: the one line every surface says it in.
+const readOnlyNote = (): MenuItem => ({ label: accessWords({ kind: `tier`, floor: `writer` }).note, icon: `lock`, disabled: true });
 const archiveNote = (): MenuItem => ({ label: t(`workspace.words.insideArchiveExtractTo`), icon: `box`, disabled: true });
 const keptNote = (): MenuItem => ({ label: t(`workspace.words.keptInPlaceBySandbox`), icon: `lock`, disabled: true });
 
@@ -263,13 +267,15 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
     }
     const { head = [], lead = [], tail = [], verbs } = input;
     const opening = [...head, ...askRow(input)];
+    // A terminal is a maintainer's (components/heldPlace.ts): below one, no row opening a socket that would be refused.
+    const terminal = input.target?.type === `dir` && !input.multi && verbs.openTerminal !== undefined && !belowMaintainer();
     return [
         ...opening,
         ...(opening.length > 0 ? [{ separator: true }] : []),
         { label: t(`workspace.entryMenu.newFile`), icon: `file`, command: verbs.newFile },
         ...(offers(input, VERB_ROUTES.newFolder) ? [{ label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder }] : []),
         ...lead,
-        ...(input.target?.type === `dir` && !input.multi && verbs.openTerminal !== undefined && offers(input, VERB_ROUTES.openTerminal)
+        ...(terminal && offers(input, VERB_ROUTES.openTerminal)
             ? [{ label: t(`workspace.entryMenu.openTerminal`), icon: `terminal`, command: verbs.openTerminal }]
             : []),
         ...entryVerbs(input),

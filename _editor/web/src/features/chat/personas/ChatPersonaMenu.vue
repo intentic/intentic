@@ -20,8 +20,9 @@ const emit = defineEmits<{ picked: [persona: string | undefined] }>();
 
 const { personas, isConnected } = usePersonas();
 // A guest picks among the personas it holds and nothing wider: Full access would reach every account, which is exactly
-// what a guest is not handed, No accounts the whole toolbox, and the personas are the owner's to manage.
-const { isGuest } = useRole();
+// what a guest is not handed, No accounts the whole toolbox, and the personas are the owner's to manage: the links to
+// their page are offered only to a maintainer, who may open it.
+const { isGuest, canShip } = useRole();
 
 // True once any one of a persona's accounts is connected; only a persona that reaches nothing is marked.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
@@ -77,7 +78,7 @@ const closeMenu = (event: MouseEvent): void => {
                 {{ isGuest ? t(`chat.chatPersonaMenu.noGuestYet`) : t(`chat.chatPersonaMenu.noPersonasYetChat`) }}
             </p>
             <RouterLink
-                v-if="!isGuest"
+                v-if="canShip"
                 to="/sandbox/personas"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"
@@ -116,7 +117,7 @@ const closeMenu = (event: MouseEvent): void => {
 
             <!-- Link to the page that owns these personas, placed where a list's "manage" row always is. -->
             <RouterLink
-                v-if="!isGuest"
+                v-if="canShip"
                 to="/sandbox/personas"
                 class="ui-row-select flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
                 @click="closeMenu"

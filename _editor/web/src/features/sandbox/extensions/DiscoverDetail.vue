@@ -8,6 +8,8 @@ import { INSTALLS } from "./installsInFlight";
 import { operationAt, useOperationProgress } from "../../../workbench/operations/operations";
 import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { useT } from "@intentic/ui/i18n";
+import type { AccessReason } from "../../../client/sandbox/access/accessReason";
+import AccessNote from "../../../components/access/AccessNote.vue";
 
 // One listing, read before it's run, opened where the Browse grid stood, the way Capabilities opens a tile: where this
 // product's trust argument gets made explicit rather than implied (DiscoverTrust, docked beside the actions on a wide
@@ -37,6 +39,8 @@ const shortRef = computed(() => ref40.value?.slice(0, 10));
 
 // Offered exactly when there's a commit to read; everything else on the panel renders regardless of installability.
 const auditable = computed(() => ref40.value !== undefined && listing.state.kind !== `blocked`);
+// Installing is a maintainer's, as the daemon holds it.
+const MAINTAINERS: AccessReason = { kind: `tier`, floor: `maintainer` };
 const actionable = computed(() => listing.state.action !== undefined && canInstall);
 // Leads wherever the registry hasn't vouched for the code.
 const auditLeads = computed(() => auditable.value && !verified.value);
@@ -169,9 +173,7 @@ const actionLabel = computed(() => {
 
             <Notice v-if="failure" :of="failure" />
             <ProgressMeter v-if="installWait" :progress="installWait" :what="installWhat" :details="run?.lines ?? []" />
-            <p v-if="listing.state.action !== undefined && !canInstall" class="text-2xs text-subtle">
-                {{ t(`sandbox.discoverDetail.onlySandboxOwnerInstall`) }}
-            </p>
+            <AccessNote v-if="listing.state.action !== undefined && !canInstall" :reason="MAINTAINERS" :place="t(`sandbox.sandboxNav.extensions`)" />
 
             <!-- Stuck to the foot as Capabilities' save is: the trust record above can be long on a narrow pane. -->
             <div class="sticky bottom-0 -mx-1 flex flex-wrap items-center justify-end gap-3 px-1 py-3">

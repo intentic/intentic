@@ -184,12 +184,6 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => TooltipValue> = {
 };
 
 /**
- * A viewer's composer is present but inert, the daemon floors every turn route at collaborator. A getter rather
- * than a constant, for the same reason the tables above hold functions: a constant would freeze one language in.
- */
-export const viewerPlaceholder = (): string => t(`chat.composerIntent.viewerPlaceholder`);
-
-/**
  * A chat with nothing to send with. The box still takes the task — it is what a first-run reader came to write — and
  * neither line names a vendor, since nothing has been chosen for one to be named. Send is disabled there and says why
  * (unconnectedHint); the draft waits, so the sentence already typed is what the model, once connected, answers.

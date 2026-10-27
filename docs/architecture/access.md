@@ -57,6 +57,38 @@ A service always acts for its steward, so the oldest rule here still holds for u
 
 A member's row holds either answers of its own or `profile: <id>`. A row holding a profile carries that profile's answers written out on it, so every reader of the row (the route floors, the authorizer, the platform's copy of the tier, the presence list) reads one shape. Saving a profile rewrites the rows of everyone who holds it and closes their open sockets, as a re-grade does, and answers with each holder's tier so the editor can bring the platform's copy along. A profile cannot make a maintainer: that tier holds the owner's operating authority and is granted to a person, never through something shared.
 
+## Where a person's access ends
+
+A person below the owner opens the same editor, so every place, press and read has to know what they may do before it
+is drawn. One check answers that on both sides: the daemon refuses with it ([`member-reach.ts`](../../_shared/sandbox-contract/src/protocol/member-reach.ts)
+`memberRefusal`: each route's floor, a guest's list, running agents off), and the editor asks the same function over the
+same facts (their tier and `GET /members/self`) through [`useAccess`](../../_editor/web/src/client/sandbox/access/useAccess.ts).
+A route whose handler holds a stricter tier declares it as its floor too (`GET /members` is the owner's), so the
+declaration tells the truth.
+
+- **Nothing is sent that would be refused.** The fetch layer asks the check before every request to the active
+  sandbox ([`forecast.ts`](../../_editor/web/src/client/sandbox/access/forecast.ts)) and answers a refusal itself, in the
+  daemon's own body marked `predicted`. A read refused that way is `locked`, not failed: never retried, never logged as
+  a failure, never drawn as "couldn't load", and the background loader counts it as done. A refusal the editor did not
+  foresee asks for the person's access again, since its record is stale, and is reported as `query.refused`.
+- **A refusal is said in the app's words.** Its reason (a tier, agents off, a guest's door, a folder outside the areas,
+  an organisation's lock) reads as one sentence from [`accessWords`](../../_editor/web/src/client/sandbox/access/accessWords.ts),
+  wherever it is drawn, never as "maintainer access required".
+- **What it looks like** depends on what was refused. A place the person can never open is not in the rail, the hub,
+  the palette or search, and a link to it opens a gate saying who it is for (`AccessGate`), never a silent redirect. A
+  place they can read but not change is drawn read-only, its edit controls gone and one quiet line saying why
+  (`AccessNote`). The one press they came for becomes an explained substitute (Request land, a read-only composer, a
+  card saying whom it waits on); every other press they cannot make is not drawn. A tone is never `danger`: being
+  read-only is how the place is for them, not something that broke.
+- **They can ask.** The gate and the line carry "Ask for access" (`POST /members/requests`), which records what stood
+  in the way and where they were ([`access-requests.ts`](../../_sandbox/sandbox/src/auth/members/access-requests.ts)). The
+  owner sees the requests above the roster on Access ▸ People and counted on the sandbox's attention; granting the
+  person anything answers theirs, and the asker's own answer says they asked. An organisation's lock and the owner's
+  own tier offer no ask: no grant could change them.
+- **Checked by walking it.** The demo's daemon holds `?as=<tier>` to the same floors ([`floors.ts`](../../_site/demo/src/floors.ts)),
+  and [`demo-access.spec.ts`](../../_tools/e2e/access/demo-access.spec.ts) walks every screen as a maintainer,
+  collaborator, viewer and guest, failing on any request the daemon refused and any refusal shown in its words.
+
 ## Where it is stored
 
 Profiles and services are on the history volume beside the roster (`identity/access-profiles.json`, `identity/services.json`), and they do not travel with an export bundle. An automation that arrives in another sandbox naming a service that sandbox lacks is skipped with that reason until someone gives it one there.
@@ -73,6 +105,12 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
 - **Written onto the row** (2026-10-26). Reading a member's profile live at every request was the alternative. Every reader of the roster, the platform's copy of the tier included, would then have had to learn profiles at once, and a profile edit would have moved tiers with nothing telling the platform.
 - **Off the workspace** (2026-10-26), unlike areas, which are tracked so their edits show up in review. A profile bounds unattended runs, and a run that could edit the file bounding it would hold nothing; the roster left the workspace on 2026-10-06 for the same reason.
 - **The built-in personas stay, as postures** (2026-10-26). The first sketch removed Full access and No accounts. Automations and links already name them, and once the ceiling comes from the chain they are exactly the two postures worth having built in.
+- **Access is a state, not an error** (2026-10-26). Before this the editor asked first and drew whatever came back: a
+  viewer met red "maintainer access required" notices with a Try again that could never work, a composer that looked
+  live, cards saying "Waiting on you" for answers the daemon refused them, hub links that bounced to Overview without a
+  word, and a guest's shell polled about two refused reads a second. Gating each surface by hand had already been tried
+  (159 places, six treatments, about forty-five phrasings); predicting every refusal from the contract in one place is
+  what keeps a new surface from regressing.
 - **No separate assistant record** (2026-10-26). An outward assistant is already a listener automation (persona, `runAs`, sender rules), and an inward one is a persona a profile lists. A third record would have said the same thing twice. Under a guest's own authority the guest's fence still has to hold an assistant's starting folder, so a listed assistant must work in the guest's areas.
 
 ## Key files
@@ -82,3 +120,4 @@ A bound sandbox's policy may carry profiles of its own and a ceiling ([`organisa
 - [principal-chain.ts](../../_sandbox/sandbox/src/access/principal-chain.ts): who a conversation acts for, resolved to limits.
 - [credential-reach.ts](../../_sandbox/sandbox/src/secrets/credential-reach.ts): credentials and AI accounts within the chain.
 - [service-standing.ts](../../_sandbox/sandbox/src/access/service-standing.ts): whether a service may still run.
+- [member-reach.ts](../../_shared/sandbox-contract/src/protocol/member-reach.ts): the one check a request meets, asked by the daemon and the editor alike.

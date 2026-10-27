@@ -37,7 +37,7 @@ const { block, hint } = defineProps<{
     hint: string;
 }>();
 
-const { isGuest, homeOnly } = useRole();
+const { isGuest, homeOnly, canShip } = useRole();
 // A maker's strip keeps the one reading they can act on, how much of the allowance is left, said as that; the context
 // window and the prompt cache's clock are a developer's instruments and stay off it.
 const { maker } = useAudience();
@@ -222,9 +222,10 @@ const usageChip = computed(() => {
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>
-            <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->
+            <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost,
+                 for a maintainer, who may open that page; anyone else reads the chip alone. -->
             <RouterLink
-                v-if="usageChip && !isGuest"
+                v-if="usageChip && canShip"
                 to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
@@ -232,6 +233,9 @@ const usageChip = computed(() => {
                     ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
                 >
             </RouterLink>
+            <UsageMeter v-else-if="usageChip && !isGuest" :headroom="usageChip.headroom"
+                ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
+            >
         </div>
     </div>
 </template>

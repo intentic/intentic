@@ -1,10 +1,12 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { noticeOf, type NoticeModel } from "@intentic/ui/async";
+import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
+import type { NoticeModel } from "@intentic/ui/async";
 import { unstubbed } from "@intentic/testing";
 import { mock } from "bun:test";
 import { computed, effectScope, ref, shallowRef } from "vue";
 import type { DownloadTarget } from "../features/workspace/files/downloadEntries";
 import type { DeleteBatch } from "../models/workspace/tree/deleteUndo";
+import { fenceWrites, writesSomewhere } from "../models/workspace/tree/editScope";
 import { barrenChainOf, barrenChildren, barrenRoots } from "../features/workspace/explorer/emptyDirs";
 import type { RowAction } from "../features/workspace/explorer/rowActions";
 import type { DroppedFile } from "../models/workspace/tree/dropEntries";
@@ -55,6 +57,8 @@ export const emptyDirsOver = (barren: readonly string[]) => {
 
 export interface StoreOptions {
     readonly canWrite?: boolean;
+    // Where the member may change files (editScope.ts): everywhere by default, as an owner.
+    readonly editFence?: Fence;
     // Park every daemon answer until `release()`, so a test can read the surface while a write is in flight.
     readonly park?: boolean;
     // Paths the daemon will not write: the call answers, and the listing never gains them.
@@ -62,7 +66,7 @@ export interface StoreOptions {
 }
 
 // useWorkspaceTree's writes and listings: a write answers after `park`, and a create or a rename relists the tree.
-export const fakeTreeStore = (listing: readonly WorkspaceTreeEntry[], { canWrite = true, park = false, refused = new Set() }: StoreOptions = {}) => {
+export const fakeTreeStore = (listing: readonly WorkspaceTreeEntry[], { canWrite = true, editFence, park = false, refused = new Set() }: StoreOptions = {}) => {
     const calls: string[] = [];
     let release = (): void => undefined;
     const answered = park
@@ -93,13 +97,8 @@ export const fakeTreeStore = (listing: readonly WorkspaceTreeEntry[], { canWrite
         expanded: shallowRef<ReadonlySet<string>>(new Set()),
         clipboard: shallowRef<{ readonly mode: "copy" | "cut"; readonly paths: readonly string[] } | undefined>(undefined),
         actionError,
-        canEditFiles: computed(() => canWrite),
-        refuseWrite: mock((): boolean => {
-            if (!canWrite) {
-                actionError.value = noticeOf(`Changing files needs writer access. Yours is read-only here.`);
-            }
-            return !canWrite;
-        }),
+        canEditFiles: computed(() => canWrite && writesSomewhere(editFence)),
+        canWriteAt: (path: string): boolean => canWrite && fenceWrites(editFence, path),
         run: mock(async (task: () => Promise<void>, wrote: string): Promise<void> => {
             calls.push(`run: ${wrote}`);
             await task();

@@ -152,7 +152,7 @@ test("a fenced member may attach a file to a message but may not write into the 
     expect(elsewhere.status).toBe(403);
 });
 
-// The write half of the same fence. The floor (auth/role-floor.ts) admits a writer to these routes at all; what is
+// The write half of the same fence. The floor (sandbox-contract protocol/member-reach.ts) admits a writer to these routes at all; what is
 // pinned here is that the path still has to be one the fence admits, on every door that changes the tree.
 test("a writer changes files inside its areas and is refused on every route outside them", async () => {
     const { client, app, actAs } = await guest();

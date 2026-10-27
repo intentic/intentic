@@ -271,8 +271,38 @@ export const MemberSelfSchema = z.object({
     tools: ToolCeilingSchema.optional().describe("The most their conversations' tools may be. Absent means no limit."),
     assistants: z.array(entryId).optional().describe("For a guest who chats: the assistants they may talk to. Absent means every one in their areas."),
     profile: entryId.optional().describe("The access profile their access comes from. Absent means answers of their own."),
+    askedAt: z
+        .number()
+        .int()
+        .optional()
+        .describe("When they asked the owner for more access, while that request is still open (POST /members/requests). Absent when they have not, or it was answered."),
 });
 export type MemberSelf = z.infer<typeof MemberSelfSchema>;
+
+// ASKING THE OWNER FOR MORE ACCESS, from where the person was refused: the editor draws an "Ask for access" press on a
+// place or an action their access refuses, and the owner sees each open request beside the roster (Access ▸ People),
+// where granting the person what they asked for answers it. One open request per person: a later ask replaces theirs.
+// `want` is what stood in the way, in the terms a grant answers: a tier (`viewer` is a guest asking to see more),
+// running agents (`agents`), or a folder outside their areas (`areas`).
+export const AccessWantSchema = z.enum(["viewer", "collaborator", "writer", "maintainer", "agents", "areas"]);
+export type AccessWant = z.infer<typeof AccessWantSchema>;
+
+// POST /members/requests: what the person asks for, and where they were when they asked.
+export const AccessAskSchema = z.object({
+    want: AccessWantSchema.describe("What stood in the way: a tier, running agents, or a folder outside their areas."),
+    place: z.string().min(1).max(80).describe("Where they were, as that page or section is titled (\"Secrets\"), so the owner knows what it is for."),
+});
+export type AccessAsk = z.infer<typeof AccessAskSchema>;
+
+export const AccessRequestSchema = AccessAskSchema.extend({
+    email: z.string().describe("Who asked."),
+    at: z.number().int().describe("When they asked, in ms since the epoch."),
+});
+export type AccessRequest = z.infer<typeof AccessRequestSchema>;
+
+// GET /members/requests, and the answer to dismissing one: every open request, newest first.
+export const AccessRequestsSchema = z.object({ requests: z.array(AccessRequestSchema) });
+export type AccessRequests = z.infer<typeof AccessRequestsSchema>;
 
 // DELETE /members: whose access to take back.
 export const MemberEmailSchema = z.object({ email: z.string() });

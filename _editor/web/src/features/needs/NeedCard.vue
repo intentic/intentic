@@ -7,6 +7,7 @@ import ChatCard from "../../components/ChatCard.vue";
 import NeedAnswer from "./NeedAnswer.vue";
 import { NEED_ICONS, needStatus, toldLine, workingLine } from "../../models/needs/needStatus";
 import { useNeeds } from "../../models/needs/useNeeds";
+import { useNeedReach } from "./needReach";
 
 const t = useT();
 
@@ -17,13 +18,21 @@ const props = defineProps<{ needId: string; snapshot?: Need | undefined }>();
 const needs = useNeeds();
 const need = computed<Need | undefined>(() => needs.byId(props.needId) ?? props.snapshot);
 const open = computed(() => need.value !== undefined && isOpenNeed(need.value));
+// A reader who may not answer reads the need and who it waits on, with no answers drawn. A release keeps its own card,
+// which names its approvers and answers only for them (NeedReleaseBody).
+const { mayAnswer, waiter } = useNeedReach();
+const release = computed(() => need.value?.subject.kind === `release`);
+const answerable = computed(() => need.value !== undefined && (release.value || mayAnswer(need.value)));
 </script>
 
 <template>
     <ChatCard v-if="need" :icon="NEED_ICONS[need.subject.kind]" :title="need.title" :status="needStatus(need)" prose>
         <div class="chat-card-body flex flex-col gap-1">
             <span v-if="need.why" class="text-2xs text-subtle">{{ t(`needs.card.agentsCase`, { why: need.why }) }}</span>
-            <span v-if="need.unattended && open" class="text-2xs text-subtle">{{ t(`needs.card.unattended`) }}</span>
+            <span v-if="need.unattended && open && answerable" class="text-2xs text-subtle">{{ t(`needs.card.unattended`) }}</span>
+            <span v-if="open && !answerable" class="flex items-center gap-1.5 text-2xs text-muted">
+                <Icon name="lock" aria-hidden="true" class="shrink-0" />{{ t(`needs.card.waitsOn.${waiter}`) }}
+            </span>
             <span v-if="workingLine(need)" class="flex items-center gap-1.5 text-2xs text-muted">
                 <Icon name="spinner" spin class="text-link" />{{ workingLine(need) }}
             </span>
@@ -33,6 +42,6 @@ const open = computed(() => need.value !== undefined && isOpenNeed(need.value));
         </div>
 
         <!-- The kind's own way of saying yes, only while it waits. -->
-        <NeedAnswer v-if="open" :need="need" />
+        <NeedAnswer v-if="open && answerable" :need="need" />
     </ChatCard>
 </template>

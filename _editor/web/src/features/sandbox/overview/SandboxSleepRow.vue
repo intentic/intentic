@@ -27,7 +27,7 @@ const id = useId();
 <template>
     <div v-if="shown" data-setting="overview-sleep" class="grid gap-x-3 gap-y-0.5 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
         <dt class="text-subtle">
-            <label :for="id" class="cursor-pointer">{{ t(`sandbox.sandboxOverview.sleep`) }}</label>
+            <label :for="canShip ? id : undefined" :class="{ 'cursor-pointer': canShip }">{{ t(`sandbox.sandboxOverview.sleep`) }}</label>
         </dt>
         <dd class="flex min-w-0 flex-col gap-1 @md:items-end">
             <div class="flex min-w-0 items-center gap-2">
@@ -36,10 +36,12 @@ const id = useId();
                     class="min-w-0 break-words text-content"
                     >{{ on ? t(`sandbox.sandboxOverview.sleepOn`) : t(`sandbox.sandboxOverview.sleepOff`) }}</span
                 >
+                <!-- Below maintainer the words above are the whole row: the setting is read, with no switch to press. -->
                 <ToggleSwitch
+                    v-if="canShip"
                     :input-id="id"
                     :model-value="on"
-                    :disabled="!canShip || save.isPending.value"
+                    :disabled="save.isPending.value"
                     class="ui-switch-sm shrink-0"
                     @update:model-value="(value: boolean) => patch({ sleepWhenUnused: value })"
                 />

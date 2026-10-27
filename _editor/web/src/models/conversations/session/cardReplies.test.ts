@@ -174,6 +174,19 @@ describe(`reply`, () => {
         expect(chat.cardOf(`paymentOffer`, `r1`)).toMatchObject({ status: `approved` });
     });
 
+    // A viewer, or a writer with agents off, refused on their access: said as what they may do, not as a card that expired
+    // or one that "may not be yours".
+    it(`says an access refusal in the access words, not the card's`, async () => {
+        const chat = parkedOn({ kind: `permission`, requestId: `r1`, toolName: `Bash` });
+        replyRoute.mockImplementationOnce(async () => {
+            throw new SandboxHttpError(403, `collaborator access required`, { floor: `collaborator`, reason: `floor` });
+        });
+
+        expect(await chat.replies.reply(`r1`, { kind: `permission`, decision: `once` })).toBe(false);
+        expect(chat.host.error.value).toBe(`You can follow along. Running agents needs agent access.`);
+        expect(chat.cardOf(`permission`, `r1`)).toMatchObject({ status: `pending` });
+    });
+
     it(`answers a card once: a second press while the first is on its way sends nothing`, async () => {
         const chat = parkedOn({ kind: `permission`, requestId: `r1`, toolName: `Bash` });
         let land = (): void => undefined;
