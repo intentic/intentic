@@ -19,6 +19,8 @@ import { useAudience } from "../../../app/useAudience";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import HomeDoor from "./pane/HomeDoor.vue";
+import HomeMemory from "./pane/HomeMemory.vue";
+import { useHomeMemory } from "../../../models/home/homeMemory";
 import { homeConversation } from "../../../models/home/homeChat";
 import UsageMeter from "../session/UsageMeter.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -84,7 +86,8 @@ const cacheReused = computed(() => {
         session === undefined ||
         readsAsContinuing(session, { agent: provider.value, account: account.value, harness: conversation.value.selection.harness.value });
     const ranOn = card.value?.model;
-    return sameSession && (ranOn === undefined || ranOn === `` || ranOn === model.value);
+    // A home set to start fresh opens a new session whatever is picked (models/home/homeMemory.ts).
+    return sameSession && card.value?.freshPending === undefined && (ranOn === undefined || ranOn === `` || ranOn === model.value);
 });
 // Why a hold stopped early, as the cold chip's headline; the full line, with the daemon's specifics, is in the panel a press opens.
 const coldWhy = (reason: Exclude<KeepWarmEnd, `elapsed`>): string => {
@@ -148,6 +151,9 @@ const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hi
         tone: cacheCooling(agent, now.value)?.near === true ? `text-link` : ``,
     };
 });
+// A home's fill against the budget its fresh starts are measured by (pane/HomeMemory.vue), for every reader: where it
+// shows, the context ring would be a second percentage, of another whole, beside it.
+const { reading: homeMemory } = useHomeMemory(() => card.value);
 const cacheOpen = ref(false);
 const cacheTrigger = ref<HTMLElement>();
 
@@ -196,7 +202,8 @@ const usageChip = computed(() => {
         <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only the refusal stands here, and the strip takes no room without it:
              the readouts are the desktop's. Under a phone's composer each held a whole row for a glance nobody takes there,
              and each has its own place on the phone (running jobs on their transcript rows and the card, keeping the chat
-             warm in the session menu, the allowance in Sandbox ▸ Usage). -->
+             warm in the session menu, the allowance in Sandbox ▸ Usage). A home's memory has none yet: it starts fresh by
+             itself there, and the two presses that empty it by hand are the desktop's. -->
         <div v-if="!mobile" class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
@@ -218,7 +225,8 @@ const usageChip = computed(() => {
                     <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
                 </ResponsiveOverlay>
             </template>
-            <span v-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
+            <HomeMemory v-if="homeMemory !== undefined && card !== undefined" :card="card" />
+            <span v-else-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>

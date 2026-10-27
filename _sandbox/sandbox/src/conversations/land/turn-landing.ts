@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
@@ -59,13 +60,14 @@ export const landedOutcomeOf = (landed: LandOutcome): LandedOutcome => {
     return landed.landed ? "landed" : "conflict";
 };
 
-export const landedFrame = (landed: LandOutcome, deps: ReconcileOutcome | undefined): Extract<AgentEvent, { kind: "landed" }> => ({
+export const landedFrame = (landed: LandOutcome, deps: ReconcileOutcome | undefined, land?: string): Extract<AgentEvent, { kind: "landed" }> => ({
     kind: "landed",
     landed: landed.landed,
     ...opt("conflicts", landed.conflicts),
     ...(landed.held === true ? { held: true } : {}),
     ...opt("deps", deps),
     ...opt("into", landed.into),
+    ...opt("land", land),
 });
 
 // The turn's books its land shares with its placement: the span a rebase moves, and what the land did.
@@ -97,8 +99,9 @@ export type LandingDeps = Pick<
 
 // The hand-off a land makes that needs the whole daemon, bound by the caller that has it.
 export interface LandingHooks {
-    // Drafts what a land did and commits it where the version rule stands, off the turn's clock.
-    readonly settleLanding: (conversationId: string) => void;
+    // Drafts what a land did and commits it where the version rule stands, off the turn's clock. `land` names the land
+    // as its transcript row does, where a home files the commit (version-landed.ts fileHomeCommit).
+    readonly settleLanding: (conversationId: string, land?: string) => void;
     // Hands a home conversation's clash with the main tree back to it to resolve (home/home-conflict.ts), off the turn's clock.
     readonly resolveConflict: (conversationId: string, conflicts: LandOutcome["conflicts"]) => void;
 }
@@ -205,13 +208,15 @@ async function* recordLand(
         await settleParentBooks(deps, landed);
         return;
     }
+    // A home's land is named, so the commit it becomes can be told on the very row that says it landed.
+    const land = landed.landed && finished.identity.home === true ? randomUUID() : undefined;
     if (landed.landed) {
-        hooks.settleLanding(id);
+        hooks.settleLanding(id, land);
     }
     // The moment a dependency change starts costing every later turn's node_modules.
     const origin: DependencyLandOrigin = { kind: "land", agentId: id, ...opt("title", finished.social.title?.text), branch: books.branch, repos: books.span };
     const reconciled = landed.landed ? await deps.dependencies.reconcileLand(origin) : undefined;
-    yield landedFrame(landed, reconciled);
+    yield landedFrame(landed, reconciled, land);
     if (!landed.landed) {
         // A resolve turn's own clash is not sent back: recognised by its prompt, whoever sent it.
         if (books.outcome === "conflict" && finished.identity.home === true && !isLandConflict(turn.prompt)) {

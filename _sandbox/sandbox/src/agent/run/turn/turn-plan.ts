@@ -40,6 +40,7 @@ export type TurnExperimentStamps = Partial<
         | "stablePromptArm"
         | "coldTrimArm"
         | "coldTrimmed"
+        | "homeFresh"
         | "turnContext"
         | "turnContextMs"
     >

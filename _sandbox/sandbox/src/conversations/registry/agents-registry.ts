@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentSummary, LandConflictReason, LandedMessageDraft, SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
+import { type AgentStatus, type AgentSummary, HOME_COMMITS_KEPT, type HomeCommit, type LandConflictReason, type LandedMessageDraft, type SessionOwner } from "@intentic/sandbox-contract/schemas/agents";
 import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { planParts } from "@intentic/sandbox-contract/text/title";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
@@ -325,6 +325,11 @@ export interface AgentsRegistry {
     // record said of it before: a delivery speaks for one land, so the next land that moves the tips clears it
     // (recordLanded), and only this writes one.
     readonly recordDelivery: (id: string, delivery: LandingDelivery) => Promise<void>;
+    // Files one of a home conversation's lands as committed, keeping the newest HOME_COMMITS_KEPT (AgentSummary.commits).
+    readonly recordHomeCommit: (id: string, commit: HomeCommit) => Promise<void>;
+    // Marks (or, undefined, clears) that a home's next turn opens a fresh session, and why (home/home-rollover.ts).
+    // Leaves `updatedAt` alone: a person asking for a fresh start is not the conversation doing something.
+    readonly setFreshPending: (id: string, why: "asked" | "cleared" | undefined) => Promise<AgentSummary | undefined>;
     // Rewrites what a land still owes once the daemon is back (land-marks.ts); written at once, never broadcast.
     readonly amendLandMarks: (id: string, change: (marks: LandMarks) => LandMarks) => Promise<void>;
     // Somebody about to take changes out of the main tree by hand (a discard in the Changes panel), for the presence
@@ -1093,6 +1098,14 @@ export const createFleet = (
         recordLandFailure: landFailureRecorder({ entryOf, replace, persist, broadcast }),
         clearCheckFailure: checkFailureClearer({ entryOf, replace, persist, broadcast }),
         recordDelivery: deliveryRecorder({ entryOf, replace, persist, broadcast }),
+        recordHomeCommit: async (id, commit) => {
+            await amend(id, (entry) => ({ ...entry, commits: [...(entry.commits ?? []), commit].slice(-HOME_COMMITS_KEPT) }));
+        },
+        setFreshPending: (id, why) =>
+            amend(id, (entry) => {
+                const { freshPending: _cleared, ...rest } = entry;
+                return why === undefined ? rest : { ...rest, freshPending: why };
+            }),
         amendLandMarks: landMarksAmender({ entryOf, replace, persist }),
         noteRemover: presences.note,
         markLandingAbsorbed: async (id, repo, landedHead, landedTip, size) => {

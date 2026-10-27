@@ -3140,7 +3140,8 @@
                 "intoParent": "Zmiany trafiły do kopii agenta nadrzędnego, tak jak zmiany jego wewnętrznych podagentów: dotrą do Twojej przestrzeni roboczej, gdy jego praca zostanie scalona.",
                 "intoParentClash": "{count} plik koliduje z własnymi zmianami agenta nadrzędnego, więc nic nie zostało zapisane w jego kopii. Agent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby rozwiązać konflikt. | {count} pliki kolidują z własnymi zmianami agenta nadrzędnego, więc nic nie zostało zapisane w jego kopii. Agent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby rozwiązać konflikt. | {count} plików koliduje z własnymi zmianami agenta nadrzędnego, więc nic nie zostało zapisane w jego kopii. Agent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby rozwiązać konflikt.",
                 "rebased": "Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twój ostatni {count} commit. | Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie {count} commity. | Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie {count} commitów.",
-                "rebaseBlocked": "Nie udało się przenieść gałęzi na Twoją przestrzeń roboczą w {repos}: tura działa na starszej bazie, więc jej scalenie może wymagać rozwiązania konfliktów."
+                "rebaseBlocked": "Nie udało się przenieść gałęzi na Twoją przestrzeń roboczą w {repos}: tura działa na starszej bazie, więc jej scalenie może wymagać rozwiązania konfliktów.",
+                "homeLanded": "Scalono z Twoją przestrzenią roboczą i zacommitowano."
             },
             "maker": {
                 "landed": "Zmiany zostały przyjęte do Twoich plików: zobacz je w „Co się zmieniło”.",
@@ -3149,7 +3150,8 @@
                 "intoParent": "Zmiany trafiły do szkicu asystenta nadrzędnego, tak jak zmiany jego pomocników: dotrą do Twoich plików, gdy przyjmiesz pracę tego asystenta.",
                 "intoParentClash": "{count} plik koliduje z własnymi zmianami asystenta nadrzędnego, więc nic nie zostało zapisane w jego szkicu. Asystent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby to rozwiązać. | {count} pliki kolidują z własnymi zmianami asystenta nadrzędnego, więc nic nie zostało zapisane w jego szkicu. Asystent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby to rozwiązać. | {count} plików koliduje z własnymi zmianami asystenta nadrzędnego, więc nic nie zostało zapisane w jego szkicu. Asystent nadrzędny o tym wie i może przenieść zmiany do siebie, żeby to rozwiązać.",
                 "rebased": "Twoje pliki zmieniły się, gdy ten asystent czekał, więc jego szkic uzupełniono o Twoją ostatnią {count} zmianę. | Twoje pliki zmieniły się, gdy ten asystent czekał, więc jego szkic uzupełniono o Twoje ostatnie {count} zmiany. | Twoje pliki zmieniły się, gdy ten asystent czekał, więc jego szkic uzupełniono o Twoje ostatnie {count} zmian.",
-                "rebaseBlocked": "Nie udało się uzupełnić szkicu o Twoje pliki w {repos}: asystent pracuje na starszej wersji, więc przyjęcie jego pracy może najpierw wymagać poprawki."
+                "rebaseBlocked": "Nie udało się uzupełnić szkicu o Twoje pliki w {repos}: asystent pracuje na starszej wersji, więc przyjęcie jego pracy może najpierw wymagać poprawki.",
+                "homeLanded": "Zmiany zostały przyjęte do Twoich plików i zapisane jako wersja."
             },
             "keptWarm": "Wznowiono na ciepło: {tokens} tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez {span} ({refreshes} odświeżenie). | Wznowiono na ciepło: {tokens} tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez {span} ({refreshes} odświeżenia). | Wznowiono na ciepło: {tokens} tokenów odczytanych z pamięci podręcznej, podtrzymywanej przez {span} ({refreshes} odświeżeń).",
             "keptCold": "Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez {span} ({refreshes} odświeżenie): {tokens} tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej. | Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez {span} ({refreshes} odświeżenia): {tokens} tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej. | Wznowiono na zimno, choć pamięć podręczną podtrzymywano przez {span} ({refreshes} odświeżeń): {tokens} tokenów wysłano ponownie, bo prompt tej tury nie pasował już do pamięci podręcznej.",
@@ -3175,7 +3177,24 @@
                 "summaryFellBack": "Nie udało się napisać streszczenia do przekazania, więc nowa sesja otworzyła się ostatnią częścią rozmowy i stanem pracy."
             },
             "stoppedPartway": "{message} Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: wyślij wiadomość, żeby podjąć pracę od tego miejsca.",
-            "stoppedPartwaySwitch": "{message} Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca."
+            "stoppedPartwaySwitch": "{message} Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca.",
+            "freshStart": {
+                "budget": "Pamięć tego czatu była pełna, więc kontynuował w nowej sesji",
+                "budgetFrom": "Pamięć tego czatu była pełna przy około {from} tokenów, więc kontynuował w nowej sesji",
+                "cold": "Ten czat był bezczynny tak długo, że ponowne wczytanie go kosztowałoby więcej niż zaczęcie od nowa, więc kontynuował w nowej sesji",
+                "coldFrom": "Ten czat był bezczynny tak długo, że ponowne wczytanie go (około {from} tokenów) kosztowałoby więcej niż zaczęcie od nowa, więc kontynuował w nowej sesji",
+                "asked": "Zaczęto od nowa, zgodnie z Twoją prośbą",
+                "cleared": "Historia wyczyszczona: zaczęto od nowa",
+                "summary": ", zaczynając od streszczenia rozmowy i jej najnowszych wiadomości.",
+                "summaryBy": ", zaczynając od streszczenia rozmowy napisanego przez {model} i jej najnowszych wiadomości.",
+                "recent": ", zaczynając od najnowszych wiadomości i bieżącej pracy.",
+                "plain": {
+                    "budget": "Pamięć tego czatu była pełna, więc kontynuował z nową",
+                    "cold": "Ten czat przez chwilę milczał, więc kontynuował z nową pamięcią",
+                    "summary": ", zaczynając od streszczenia rozmowy i jej najnowszych wiadomości.",
+                    "recent": ", zaczynając od najnowszych wiadomości i bieżącej pracy."
+                }
+            }
         },
         "failure": {
             "access": "Dostawca odrzucił to konto: jego plan lub organizacja na to nie pozwala.",
@@ -4679,6 +4698,72 @@
             "spentToday": "Wydano dziś",
             "spentOf": "{spent} $ z {cap} $",
             "savedAs": "Zapisane jako"
+        },
+        "composerLandPill": {
+            "landsCommits": "Scala i commituje",
+            "asksMaintainer": "Prosi opiekuna",
+            "when": "Kiedy",
+            "turnEnds": "Po każdej turze",
+            "commit": "Commit",
+            "draftedSubject": "Temat napisany na podstawie jego pracy",
+            "work": "Praca",
+            "waitsOnBranch": "Czeka na swojej gałęzi",
+            "nobodyPressesLand": "Nikt nie musi naciskać Scal",
+            "maintainerLands": "Opiekun ją scala",
+            "plain": {
+                "savesItself": "Zapisuje się sam",
+                "replyEnds": "Po każdej odpowiedzi",
+                "version": "Wersja",
+                "namedFromWork": "Nazwana od tego, co się zmieniło",
+                "nothingToAccept": "Nie musisz niczego przyjmować",
+                "waitsInDraft": "Czeka w swoim szkicu",
+                "maintainerAccepts": "Opiekun ją przyjmuje"
+            }
+        },
+        "noticeFreshStart": {
+            "label": "Nowa sesja"
+        },
+        "noticeHomeCommit": {
+            "subject": "„{subject}”",
+            "revert": "Revert",
+            "reverted": "Wycofano",
+            "confirmHeader": "Wycofać ten commit? | Wycofać te {count} commity? | Wycofać tych {count} commitów?",
+            "confirmBody": "Nowy commit wycofuje tę pracę, a historia zachowuje oba. | Nowy commit w każdym repozytorium wycofuje tę pracę, a historia zachowuje oba. | Nowy commit w każdym repozytorium wycofuje tę pracę, a historia zachowuje oba.",
+            "revertFailed": "Nie udało się wycofać w {repo}.",
+            "revertFailedWhy": "Nie udało się wycofać w {repo}: {reason}",
+            "writing": "Zapisywanie commita…",
+            "plain": {
+                "undo": "Cofnij",
+                "undone": "Cofnięto",
+                "confirmHeader": "Cofnąć te zmiany?",
+                "confirmBody": "Nowa wersja wycofuje te zmiany z Twoich plików. Nic wcześniejszego nie przepada.",
+                "saving": "Zapisywanie wersji…"
+            }
+        },
+        "homeMemory": {
+            "title": "Pamięć",
+            "fill": "Pamięć {percent}%",
+            "soon": "wkrótce zacznie od nowa",
+            "pending": "Zacznie od nowa przy Twojej następnej wiadomości",
+            "used": "Użyte",
+            "freshAt": "Od nowa przy",
+            "tipNote": "Zaczyna od nowa po zapełnieniu",
+            "explain": "Gdy pamięć tego czatu się zapełni, kontynuuje on w nowej sesji, która zaczyna od streszczenia i najnowszych wiadomości, więc każda wiadomość pozostaje szybka i tania. Wszystkie Twoje wiadomości zostają tutaj.",
+            "filled": "Jego pamięć jest zapełniona w {percent}%.",
+            "neverByItself": "Ten sandbox jest ustawiony tak, by nigdy nie zaczynać go od nowa samodzielnie.",
+            "pendingAsked": "Twoja następna wiadomość rozpocznie nową sesję, zgodnie z Twoją prośbą.",
+            "pendingCleared": "Historia wyczyszczona. Twoja następna wiadomość rozpocznie nową sesję.",
+            "startFresh": "Zacznij od nowa",
+            "clear": "Wyczyść historię…",
+            "waitForReply": "Najpierw poczekaj, aż odpowiedź się skończy.",
+            "busy": "Twoja rozmowa główna właśnie pracuje: poczekaj, aż skończy, albo najpierw ją zatrzymaj.",
+            "failed": "Nie udało się połączyć z sandboxem. Spróbuj ponownie.",
+            "confirmHeader": "Wyczyścić historię tego czatu?",
+            "confirmBody": "Każda wiadomość tutaj zostanie usunięta, razem z punktami, do których można wrócić. Nic, co już scalił lub zacommitował, się nie zmieni, a jego subagenci zostają. Tego nie da się cofnąć.",
+            "confirmLabel": "Wyczyść historię",
+            "plain": {
+                "confirmBody": "Każda wiadomość tutaj zostanie usunięta, razem z punktami, do których można wrócić. Nic, co już jest w Twoich plikach, się nie zmieni, a jego pomocnicy zachowują swoją pracę. Tego nie da się cofnąć."
+            }
         }
     },
     "common": {

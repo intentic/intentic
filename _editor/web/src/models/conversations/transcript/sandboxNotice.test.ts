@@ -72,6 +72,13 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `handoff`, mode: `summary`, model: `claude-haiku-5-5`, from: 431_000 }]),
     ...turn([{ kind: `handoff`, mode: `summary` }]),
     ...turn([{ kind: `handoff`, mode: `summary`, fellBack: true }]),
+    // A home conversation's memory starting over, for each reason and each way the fresh session opened (handoff.ts).
+    ...turn([{ kind: `fresh_start`, why: `budget`, from: 182_000, model: `claude-haiku-5-5`, summarized: true }]),
+    ...turn([{ kind: `fresh_start`, why: `budget`, summarized: true }]),
+    ...turn([{ kind: `fresh_start`, why: `cold`, from: 91_000, summarized: false }]),
+    ...turn([{ kind: `fresh_start`, why: `cold`, model: `claude-haiku-5-5`, summarized: true }]),
+    ...turn([{ kind: `fresh_start`, why: `asked`, summarized: true }]),
+    ...turn([{ kind: `fresh_start`, why: `cleared`, summarized: false }]),
 ];
 
 // What the daemon writes outside the fold, each as it writes it.
@@ -143,6 +150,34 @@ describe(`a sandbox notice, as the chat says it`, () => {
         ]);
     });
 
+    // A home's land is committed by itself as well, so the Changes panel the plain sentence points to holds none of it.
+    it(`says a home's land was committed too, and keeps its dependency clause`, () => {
+        const [plain, withDeps] = [
+            ...turn([{ kind: `landed`, landed: true, land: `land-1` }]),
+            ...turn([{ kind: `landed`, landed: true, land: `land-2`, deps: { missing: 1, started: [`deps-1`], deferred: false } }]),
+        ];
+        expect(noticeLine(plain!, `developer`, { home: true })).toBe(`Landed in your workspace and committed.`);
+        expect(noticeLine(plain!, `maker`, { home: true })).toBe(`The changes were accepted into your files and saved as a version.`);
+        expect(noticeLine(withDeps!, `developer`, { home: true })).toBe(
+            `Landed in your workspace and committed. Installing 1 dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.`,
+        );
+        // Only a home's land is named, so the row reads the same drawn anywhere, and as the sandbox's own sentence.
+        expect(noticeLine(plain!, `developer`)).toBe(plain!.text);
+        expect(plain!.text).toBe(`Landed in your workspace and committed.`);
+    });
+
+    it(`says where a home's memory starts over in a maker's words: no token counts, no model names`, () => {
+        const fresh = FOLDED.filter((row) => row.noticeCode?.code === `freshStart`);
+        expect(fresh.map((row) => noticeLine(row, `maker`))).toEqual([
+            `This chat's memory was full, so it carried on with a fresh one, picking up from a summary of the conversation and its latest messages.`,
+            `This chat's memory was full, so it carried on with a fresh one, picking up from a summary of the conversation and its latest messages.`,
+            `This chat had been quiet for a while, so it carried on with a fresh memory, picking up from its latest messages and the work in hand.`,
+            `This chat had been quiet for a while, so it carried on with a fresh memory, picking up from a summary of the conversation and its latest messages.`,
+            `Started fresh, as you asked, picking up from a summary of the conversation and its latest messages.`,
+            `History cleared: started fresh, picking up from its latest messages and the work in hand.`,
+        ]);
+    });
+
     it(`says the sandbox's notices in Polish, with Polish plurals and the provider's own words kept as said`, async () => {
         await setLocale(`pl`);
         const line = (row: TranscriptRow | undefined): string | undefined => (row === undefined ? undefined : noticeLine(row, `developer`));
@@ -180,6 +215,9 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(UNSPOKEN.slice(0, 1).map(line)).toEqual([`CI run 316 — obserwacja zadziałała po 43m.`]);
         expect(line(UNSPOKEN.at(-2))).toBe(`Podagent „Port the parser” (sub-x7) skończył.`);
         expect(noticeLine(coded(`landed`)!, `maker`)).toBe(`Zmiany zostały przyjęte do Twoich plików: zobacz je w „Co się zmieniło”.`);
+        expect(line(coded(`freshStart`))).toBe(
+            `Pamięć tego czatu była pełna przy około 182k tokenów, więc kontynuował w nowej sesji, zaczynając od streszczenia rozmowy napisanego przez claude-haiku-5-5 i jej najnowszych wiadomości.`,
+        );
         // A turn already running, as an older sandbox refused a message and as this one refuses a re-run.
         expect(refusalWords(`a turn is already running for this conversation`)).toBe(`W tej rozmowie trwa już tura.`);
         expect(refusalWords(`a turn is already running in that conversation`)).toBe(`W tej rozmowie trwa już tura.`);

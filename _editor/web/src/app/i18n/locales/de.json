@@ -3140,7 +3140,8 @@
                 "intoParent": "Die Änderungen gingen in den Checkout des übergeordneten Agenten, wie es die Änderungen seiner prozessinternen Subagenten tun: Sie erreichen Ihren Workspace, wenn er landet.",
                 "intoParentClash": "{count} Datei kollidiert mit den eigenen Änderungen des übergeordneten Agenten, daher wurde nichts in seinen Checkout geschrieben. Der übergeordnete Agent wurde informiert und kann die Änderungen zum Auflösen übernehmen. | {count} Dateien kollidieren mit den eigenen Änderungen des übergeordneten Agenten, daher wurde nichts in seinen Checkout geschrieben. Der übergeordnete Agent wurde informiert und kann die Änderungen zum Auflösen übernehmen.",
                 "rebased": "Ihr Workspace hat sich weiterbewegt, während dieser Agent wartete; sein Branch wurde auf Ihren neuesten {count} Commit rebased. | Ihr Workspace hat sich weiterbewegt, während dieser Agent wartete; sein Branch wurde auf Ihre neuesten {count} Commits rebased.",
-                "rebaseBlocked": "Rebase auf Ihren Workspace in {repos} nicht möglich: Der Zug läuft von der älteren Basis aus, daher muss beim Landen eventuell etwas aufgelöst werden."
+                "rebaseBlocked": "Rebase auf Ihren Workspace in {repos} nicht möglich: Der Zug läuft von der älteren Basis aus, daher muss beim Landen eventuell etwas aufgelöst werden.",
+                "homeLanded": "In Ihrem Workspace gelandet und committet."
             },
             "maker": {
                 "landed": "Die Änderungen wurden in Ihre Dateien übernommen: Sie sehen sie unter „Was sich geändert hat“.",
@@ -3149,7 +3150,8 @@
                 "intoParent": "Die Änderungen gingen in den Entwurf des übergeordneten Assistenten, wie es die Änderungen seiner Helfer tun: Sie erreichen Ihre Dateien, wenn Sie die Arbeit dieses Assistenten übernehmen.",
                 "intoParentClash": "{count} Datei kollidiert mit den eigenen Änderungen des übergeordneten Assistenten, daher wurde nichts in seinen Entwurf geschrieben. Der übergeordnete Assistent wurde informiert und kann die Änderungen übernehmen, um das zu klären. | {count} Dateien kollidieren mit den eigenen Änderungen des übergeordneten Assistenten, daher wurde nichts in seinen Entwurf geschrieben. Der übergeordnete Assistent wurde informiert und kann die Änderungen übernehmen, um das zu klären.",
                 "rebased": "Ihre Dateien haben sich weiterentwickelt, während dieser Assistent wartete, daher wurde sein Entwurf auf Ihre neueste {count} Änderung aktualisiert. | Ihre Dateien haben sich weiterentwickelt, während dieser Assistent wartete, daher wurde sein Entwurf auf Ihre neuesten {count} Änderungen aktualisiert.",
-                "rebaseBlocked": "Der Entwurf konnte in {repos} nicht auf den Stand Ihrer Dateien gebracht werden: Der Assistent arbeitet mit einer älteren Version, daher muss vor der Übernahme seiner Arbeit eventuell erst etwas korrigiert werden."
+                "rebaseBlocked": "Der Entwurf konnte in {repos} nicht auf den Stand Ihrer Dateien gebracht werden: Der Assistent arbeitet mit einer älteren Version, daher muss vor der Übernahme seiner Arbeit eventuell erst etwas korrigiert werden.",
+                "homeLanded": "Die Änderungen wurden in Ihre Dateien übernommen und als Version gesichert."
             },
             "keptWarm": "Warm aufgenommen: {tokens} Tokens aus dem Cache gelesen, {span} warm gehalten mit {refreshes} Auffrischung. | Warm aufgenommen: {tokens} Tokens aus dem Cache gelesen, {span} warm gehalten mit {refreshes} Auffrischungen.",
             "keptCold": "Kalt aufgenommen, obwohl {span} mit {refreshes} Auffrischung warm gehalten: {tokens} Tokens erneut gesendet, weil der Prompt dieses Zugs nicht mehr zum Cache passte. | Kalt aufgenommen, obwohl {span} mit {refreshes} Auffrischungen warm gehalten: {tokens} Tokens erneut gesendet, weil der Prompt dieses Zugs nicht mehr zum Cache passte.",
@@ -3175,7 +3177,24 @@
                 "summaryFellBack": "Für die Übergabe konnte keine Zusammenfassung geschrieben werden, daher beginnt die neue Sitzung stattdessen mit der jüngsten Unterhaltung und dem aktuellen Stand der Arbeit."
             },
             "stoppedPartway": "{message} Der Lauf hat mittendrin angehalten. Die bisherigen Änderungen bleiben erhalten: Senden Sie eine Nachricht, um hier weiterzumachen.",
-            "stoppedPartwaySwitch": "{message} Der Lauf hat mittendrin angehalten. Die bisherigen Änderungen bleiben erhalten: Fahren Sie mit einem anderen Modell fort, um hier weiterzumachen."
+            "stoppedPartwaySwitch": "{message} Der Lauf hat mittendrin angehalten. Die bisherigen Änderungen bleiben erhalten: Fahren Sie mit einem anderen Modell fort, um hier weiterzumachen.",
+            "freshStart": {
+                "budget": "Das Gedächtnis dieses Chats war voll, also ging es in einer neuen Sitzung weiter",
+                "budgetFrom": "Das Gedächtnis dieses Chats war bei etwa {from} Tokens voll, also ging es in einer neuen Sitzung weiter",
+                "cold": "Dieser Chat lag so lange still, dass ihn neu einzulesen mehr gekostet hätte als ein Neuanfang, also ging es in einer neuen Sitzung weiter",
+                "coldFrom": "Dieser Chat lag so lange still, dass ihn mit etwa {from} Tokens neu einzulesen mehr gekostet hätte als ein Neuanfang, also ging es in einer neuen Sitzung weiter",
+                "asked": "Neu begonnen, wie Sie es wollten",
+                "cleared": "Verlauf gelöscht: neu begonnen",
+                "summary": ", ausgehend von einer Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
+                "summaryBy": ", ausgehend von einer von {model} geschriebenen Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
+                "recent": ", ausgehend von den neuesten Nachrichten und der laufenden Arbeit.",
+                "plain": {
+                    "budget": "Das Gedächtnis dieses Chats war voll, also ging es mit einem frischen weiter",
+                    "cold": "Dieser Chat war eine Weile still, also ging es mit einem frischen Gedächtnis weiter",
+                    "summary": ", ausgehend von einer Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
+                    "recent": ", ausgehend von den neuesten Nachrichten und der laufenden Arbeit."
+                }
+            }
         },
         "failure": {
             "access": "Der Anbieter hat dieses Konto abgelehnt: Sein Tarif oder seine Organisation erlaubt es nicht.",
@@ -4679,6 +4698,72 @@
             "spentToday": "Heute ausgegeben",
             "spentOf": "{spent} $ von {cap} $",
             "savedAs": "Gespeichert als"
+        },
+        "composerLandPill": {
+            "landsCommits": "Landet & committet",
+            "asksMaintainer": "Fragt einen Maintainer",
+            "when": "Wann",
+            "turnEnds": "Am Ende jedes Zugs",
+            "commit": "Commit",
+            "draftedSubject": "Betreff aus seiner Arbeit entworfen",
+            "work": "Arbeit",
+            "waitsOnBranch": "Wartet auf seinem Branch",
+            "nobodyPressesLand": "Niemand muss „Landen“ drücken",
+            "maintainerLands": "Ein Maintainer landet sie",
+            "plain": {
+                "savesItself": "Sichert von selbst",
+                "replyEnds": "Nach jeder Antwort",
+                "version": "Version",
+                "namedFromWork": "Benannt nach den Änderungen",
+                "nothingToAccept": "Sie müssen nichts übernehmen",
+                "waitsInDraft": "Wartet in seinem Entwurf",
+                "maintainerAccepts": "Ein Maintainer übernimmt sie"
+            }
+        },
+        "noticeFreshStart": {
+            "label": "Neue Sitzung"
+        },
+        "noticeHomeCommit": {
+            "subject": "„{subject}“",
+            "revert": "Revert",
+            "reverted": "Revertiert",
+            "confirmHeader": "Diesen Commit reverten? | Diese {count} Commits reverten?",
+            "confirmBody": "Ein neuer Commit nimmt diese Arbeit wieder heraus, und der Verlauf behält beide. | Ein neuer Commit in jedem Repository nimmt diese Arbeit wieder heraus, und der Verlauf behält beide.",
+            "revertFailed": "Der Revert in {repo} ist fehlgeschlagen.",
+            "revertFailedWhy": "Der Revert in {repo} ist fehlgeschlagen: {reason}",
+            "writing": "Commit wird geschrieben…",
+            "plain": {
+                "undo": "Rückgängig machen",
+                "undone": "Rückgängig gemacht",
+                "confirmHeader": "Diese Änderungen rückgängig machen?",
+                "confirmBody": "Eine neue Version nimmt diese Änderungen wieder aus Ihren Dateien heraus. Nichts Früheres geht verloren.",
+                "saving": "Version wird gesichert…"
+            }
+        },
+        "homeMemory": {
+            "title": "Gedächtnis",
+            "fill": "Gedächtnis {percent} %",
+            "soon": "beginnt bald neu",
+            "pending": "Beginnt bei Ihrer nächsten Nachricht neu",
+            "used": "Belegt",
+            "freshAt": "Neu ab",
+            "tipNote": "Beginnt neu, wenn voll",
+            "explain": "Wenn das Gedächtnis dieses Chats voll ist, geht es in einer neuen Sitzung weiter, die von einer Zusammenfassung und den neuesten Nachrichten ausgeht. So bleibt jede Nachricht schnell und günstig. Alle Ihre Nachrichten bleiben hier.",
+            "filled": "Sein Gedächtnis ist zu {percent} % voll.",
+            "neverByItself": "Diese Sandbox ist so eingestellt, dass sie ihn nie von selbst neu beginnen lässt.",
+            "pendingAsked": "Ihre nächste Nachricht beginnt eine neue Sitzung, wie Sie es wollten.",
+            "pendingCleared": "Verlauf gelöscht. Ihre nächste Nachricht beginnt eine neue Sitzung.",
+            "startFresh": "Neu beginnen",
+            "clear": "Verlauf löschen…",
+            "waitForReply": "Warten Sie zuerst, bis die Antwort fertig ist.",
+            "busy": "Ihre Startunterhaltung arbeitet gerade: Warten Sie, bis sie fertig ist, oder stoppen Sie sie zuerst.",
+            "failed": "Die Sandbox war nicht erreichbar. Versuchen Sie es noch einmal.",
+            "confirmHeader": "Den Verlauf dieses Chats löschen?",
+            "confirmBody": "Jede Nachricht hier wird gelöscht, ebenso die Punkte, zu denen Sie zurückgehen können. Was er schon gelandet oder committet hat, bleibt unberührt, und seine Subagenten bleiben erhalten. Das lässt sich nicht rückgängig machen.",
+            "confirmLabel": "Verlauf löschen",
+            "plain": {
+                "confirmBody": "Jede Nachricht hier wird gelöscht, ebenso die Punkte, zu denen Sie zurückgehen können. Was schon in Ihren Dateien ist, ändert sich nicht, und seine Helfer behalten ihre Arbeit. Das lässt sich nicht rückgängig machen."
+            }
         }
     },
     "common": {

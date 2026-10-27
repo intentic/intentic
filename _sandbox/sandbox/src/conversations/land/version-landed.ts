@@ -4,6 +4,7 @@ import { sleep } from "@intentic/base/async";
 import type { Services } from "../../composition.js";
 import { AgentDomainRefusedError } from "../../workload/agent-execution.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
+import { headSha } from "../../git/changes/changes.js";
 import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
 import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
 import { isProjectFolderRepo } from "../../git/remote/project-repo.js";
@@ -61,14 +62,21 @@ const claimsOf = async (services: Services, id: string, repos: readonly string[]
     return claims;
 };
 
+// What one landing's commit made: the subject it went under, and the commit each repo took.
+interface ClaimCommitted {
+    readonly subject: string;
+    readonly commits: readonly { readonly repo: string; readonly sha: string }[];
+}
+const NOTHING_COMMITTED: ClaimCommitted = { subject: "", commits: [] };
+
 // Commits one landing's claimed paths in each repo it spans, under the repo lock so a land or a discard queues behind
-// it. Returns the repos it committed in. Every land reaches the main tree's history here (a turn's, one by hand, a
+// it. Returns the commits it made. Every land reaches the main tree's history here (a turn's, one by hand, a
 // conflict's re-land, a fix-up's), so this is where its subject is judged: whichever path drafted or stored it. With
 // `drafted` false the draft was not waited for, so the record's message is not this land's and the title heads it.
-const commitClaim = async (services: Services, id: string, drafted = true): Promise<string[]> => {
+const commitClaim = async (services: Services, id: string, drafted = true): Promise<ClaimCommitted> => {
     const entry = services.agents.entry(id);
     if (entry === undefined) {
-        return [];
+        return NOTHING_COMMITTED;
     }
     const claims = await claimsOf(
         services,
@@ -76,7 +84,7 @@ const commitClaim = async (services: Services, id: string, drafted = true): Prom
         reposOf(entry).map((composed) => composed.repo),
     );
     if (claims.length === 0) {
-        return [];
+        return NOTHING_COMMITTED;
     }
     // The drafted message with its trailers; a land nobody drafted keeps the conversation's Test-Note and Allow lines all
     // the same.
@@ -101,19 +109,37 @@ const commitClaim = async (services: Services, id: string, drafted = true): Prom
         }),
         id,
     );
-    const committed: string[] = [];
+    const committed: { repo: string; sha: string }[] = [];
     for (const claim of claims) {
-        const did = await withRederivedRepo(claim.dir, (run) => services.agentWorktrees.withRepoLock(claim.repo, run), async () => {
+        const sha = await withRederivedRepo(claim.dir, (run) => services.agentWorktrees.withRepoLock(claim.repo, run), async () => {
             // Another land may have reached the tree while this commit queued. Read the claim under the same lock
             // as the commit, after that land's writers, rather than staging a file list captured before them.
             const [current] = await claimsOf(services, id, [claim.repo]);
-            return current === undefined ? false : commitOnly(current.dir, current.paths, message, AGENT_GIT_AUTHOR);
+            if (current === undefined || !(await commitOnly(current.dir, current.paths, message, AGENT_GIT_AUTHOR))) {
+                return undefined;
+            }
+            // Read under the same lock, so it is this commit and not one a later land made on top of it.
+            return (await headSha(current.dir)) ?? "";
         });
-        if (did) {
-            committed.push(claim.repo);
+        if (sha !== undefined) {
+            committed.push({ repo: claim.repo, sha });
         }
     }
-    return committed;
+    return { subject, commits: committed };
+};
+
+// A home's land as committed, filed on its card under the land its transcript row names (AgentSummary.commits), so the
+// chat can say what went into history and offer to take it back. Best-effort: the commit stands whatever this does.
+const fileHomeCommit = async (services: Services, id: string, land: string | undefined, made: ClaimCommitted): Promise<void> => {
+    const commits = made.commits.filter((commit) => commit.sha !== "");
+    if (land === undefined || commits.length === 0 || !commitsItsOwnLands(services.agents.entry(id))) {
+        return;
+    }
+    try {
+        await services.agents.recordHomeCommit(id, { land, at: Date.now(), subject: made.subject, commits });
+    } catch (error) {
+        services.logger.warn({ err: error, agent: id }, "landed: the home's commit could not be filed on its card");
+    }
 };
 
 // The land's version-pending mark (registry/land-marks.ts) answered: the settle that ran for it is over, however it
@@ -166,6 +192,8 @@ export const settleLanding = async (
     id: string,
     unhold: () => void = () => undefined,
     hurried?: Promise<void>,
+    // The land's id, as its transcript row names it: where a home files the commit it made (fileHomeCommit).
+    land?: string,
 ): Promise<void> => {
     const since = landMarksOf(services.agents.entry(id)).versionPending;
     try {
@@ -183,10 +211,12 @@ export const settleLanding = async (
         // they ride the commit of the work they were derived from. Seconds, and usually over while the draft was written.
         const entry = services.agents.entry(id);
         await rederiveSettled(entry === undefined ? [] : reposOf(entry).map((composed) => services.agentWorktrees.mainDir(composed.repo)));
-        const committed = await commitClaim(services, id, drafted);
+        const made = await commitClaim(services, id, drafted);
+        const committed = made.commits.map((commit) => commit.repo);
         if (committed.length === 0) {
             return;
         }
+        await fileHomeCommit(services, id, land, made);
         // The commit itself moves HEAD, which the daemon's ref watcher already announces to every panel; only the firing
         // needs recording here.
         if (rule !== undefined) {
@@ -258,7 +288,7 @@ export const versionCommitsSettled = async (
 
 // Never throws and never awaited on a land's own response: a land that already succeeded must not fail on its
 // bookkeeping. Holds the repos it landed in synchronously, before anything else can land into them.
-export const settleLandingInBackground = (services: Services, id: string): void => {
+export const settleLandingInBackground = (services: Services, id: string, land?: string): void => {
     const entry = services.agents.entry(id);
     const { promise: settled, resolve: unhold } = Promise.withResolvers<void>();
     const { promise: hurried, resolve: hurry } = Promise.withResolvers<void>();
@@ -268,12 +298,12 @@ export const settleLandingInBackground = (services: Services, id: string): void 
             { settled, hurry: () => hurry() },
         );
     }
-    void settleQuietly(services, id, unhold, hurried);
+    void settleQuietly(services, id, unhold, hurried, land);
 };
 
-const settleQuietly = async (services: Services, id: string, unhold: () => void, hurried: Promise<void>): Promise<void> => {
+const settleQuietly = async (services: Services, id: string, unhold: () => void, hurried: Promise<void>, land: string | undefined): Promise<void> => {
     try {
-        await settleLanding(services, id, unhold, hurried);
+        await settleLanding(services, id, unhold, hurried, land);
     } catch (error) {
         services.logger.warn({ err: error, agent: id }, "landed: settling failed");
     }

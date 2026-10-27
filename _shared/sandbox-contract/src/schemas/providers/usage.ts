@@ -1,5 +1,6 @@
 // Durable spend ledger: per-account token and cost totals.
 import { z } from "zod";
+import { FreshStartWhySchema } from "./handoff.js";
 // One row per attributed turn, appended at turn end and never pruned, unlike the activity log which shrinks as it
 // prunes. Rollups project this on read, so a new grouping needs no new storage.
 export const UsageTurnSchema = z.object({
@@ -107,6 +108,9 @@ export const UsageTurnSchema = z.object({
     // Assigned on cold-eligible follow-ups only, including controls; cleared results only when a copy was resumed.
     coldTrimArm: z.boolean().optional(),
     coldTrimmed: z.number().int().min(0).optional(),
+    // A home conversation's turn that opened a fresh session rather than resuming its old one, and why (handoff.ts
+    // FreshStartSchema). Absent on every other turn, a home's included. What `bench:home` reads the rollover's cost off.
+    homeFresh: FreshStartWhySchema.optional(),
     // What became of pre-turn retrieval on this turn, and how long it took. Assignment and DELIVERY are different
     // facts: the first version of this mechanism was assigned to every eligible turn and reached four in five of them,
     // which is the difference between a null result and a mechanism that never ran. Absent means the flag was off, so

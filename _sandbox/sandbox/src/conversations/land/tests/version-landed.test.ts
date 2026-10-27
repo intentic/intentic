@@ -1,11 +1,12 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { LandedMessage } from "@intentic/sandbox-contract/schemas/agents";
+import type { HomeCommit, LandedMessage } from "@intentic/sandbox-contract/schemas/agents";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { committableSubject, subjectFromPaths } from "../../../git/ops/commit-message.js";
 import { settleLanding, settleLandingInBackground, versionCommitsSettled, versionRuleOf } from "../version-landed.js";
 import { isolatedAgent } from "../../registry/agents-store.testing.js";
+import * as changesOriginal from "../../../git/changes/changes.js";
 
 const describeLanding = jest.fn<() => Promise<void>>();
 jest.mock("../landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
@@ -14,6 +15,9 @@ jest.mock("../../../git/changes/changes-index.js", () => ({
     commitOnly: (dir: string, paths: readonly string[], subject: string) => commitOnly(dir, paths, subject),
 }));
 jest.mock("../../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
+// The commit a home files is read off HEAD right after it is made; only that read is stood in for.
+const HEAD = "f".repeat(40);
+jest.mock("../../../git/changes/changes.js", () => ({ ...changesOriginal, headSha: async () => HEAD }));
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({ label: over.id, enabled: true, ...over });
 
@@ -35,7 +39,15 @@ const landedMessage = (subject: string, landed: { testNote?: string; breaking?: 
 const servicesWith = (
     rules: readonly Rule[],
     landedSubject?: string,
-    landed: { testNote?: string; breaking?: string; said?: string; title?: string; origins?: Record<string, string[]>; home?: boolean } = {},
+    landed: {
+        testNote?: string;
+        breaking?: string;
+        said?: string;
+        title?: string;
+        origins?: Record<string, string[]>;
+        home?: boolean;
+        filed?: HomeCommit[];
+    } = {},
 ): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
@@ -46,6 +58,7 @@ const servicesWith = (
                     social: { title: { text: landed.title ?? "Recent commits", source: "derived" }, reactions: [] },
                     landing: landedSubject === undefined ? {} : { message: landedMessage(landedSubject, landed) },
                 }),
+            recordHomeCommit: async (_id, commit) => void landed.filed?.push(commit),
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
             lastSaid: async () => landed.said,
@@ -113,6 +126,19 @@ describe(`settling a landing`, () => {
         expect(commitOnly).not.toHaveBeenCalled();
         await settleLanding(servicesWith([], `fix: keep the return path`, { home: true }), `c1`);
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: keep the return path\n\nConversation-Id: c1`);
+    });
+
+    // The chat says what its home's land became in history, on the row that said it landed (AgentSummary.commits).
+    test(`a home files the commit its land made under the land's own id; nothing is filed for anyone else`, async () => {
+        const filed: HomeCommit[] = [];
+        await settleLanding(servicesWith([], `fix: keep the return path`, { home: true, filed }), `c1`, undefined, undefined, `land-1`);
+        expect(filed).toEqual([{ land: `land-1`, at: expect.any(Number), subject: `fix: keep the return path`, commits: [{ repo: `root`, sha: HEAD }] }]);
+        await settleLanding(servicesWith([version(`auto-version`)], `fix: keep the return path`, { filed }), `c1`, undefined, undefined, `land-2`);
+        expect(filed).toHaveLength(1);
+        // A commit that took nothing files nothing.
+        commitOnly.mockResolvedValueOnce(false);
+        await settleLanding(servicesWith([], `fix: keep the return path`, { home: true, filed }), `c1`, undefined, undefined, `land-3`);
+        expect(filed).toHaveLength(1);
     });
 
     // The report already tells the owner the draft failed; the landing must still reach history.

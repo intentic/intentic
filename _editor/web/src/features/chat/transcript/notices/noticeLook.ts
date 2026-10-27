@@ -15,6 +15,10 @@ const AGENT_NOTICE_LOOK = {
 export const agentNoticeLookOf = (message: ChatMessage): (typeof AGENT_NOTICE_LOOK)[keyof typeof AGENT_NOTICE_LOOK] | undefined =>
     message.agentNotice === undefined ? undefined : AGENT_NOTICE_LOOK[message.agentNotice.level];
 
+/** A home conversation going on in a fresh session (sandbox-notice.ts `freshStart`): drawn across the column as a
+ *  divider (NoticeFreshStart), not as one more line down its edge, since the model's memory starts over there. */
+export const isFreshStart = (message: ChatMessage): boolean => message.role === `notice` && message.noticeCode?.code === `freshStart`;
+
 /** The repositories' end-of-turn checks said back to the agent: their own glyph, a line that names itself, and the
  *  findings the agent was told one press away. */
 export const isTurnChecks = (message: ChatMessage): boolean => message.agentNotice?.source === TURN_CHECKS_SOURCE;

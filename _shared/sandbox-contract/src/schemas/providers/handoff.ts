@@ -126,3 +126,52 @@ export const handedOffLine = (event: HandedOff): string => {
             return `Continued in a fresh session opened with a summary of the conversation${event.model === undefined ? "" : ` written by ${event.model}`}.`;
     }
 };
+
+// HOW A HOME CONVERSATION STAYS CHEAP (the daemon's conversations/home/home-rollover.ts). A home is one chat kept for
+// good, so its session would grow until the model's window forced a compaction, every call of every turn re-reading all
+// of it on the way. Instead, once it has grown past the sandbox's budget (`homeFreshOver`), or half of it with the
+// prompt cache already cold, its next turn opens a fresh session: a summary where a model is set for hand-off summaries,
+// the newest part of the conversation word for word, its subagents and what they hold, and its home policy again. Its
+// person may also start one fresh by hand, or clear its history. The chat itself keeps every row; only what the model
+// re-reads starts over.
+export const FRESH_START_WHYS = ["budget", "cold", "asked", "cleared"] as const;
+export const FreshStartWhySchema = z.enum(FRESH_START_WHYS);
+export type FreshStartWhy = z.infer<typeof FreshStartWhySchema>;
+
+export const FreshStartSchema = z.object({
+    why: FreshStartWhySchema.describe(
+        "Why the conversation went on in a fresh session: it outgrew the budget (`budget`), it had grown past half of it while its prompt cache was already cold (`cold`), its person asked (`asked`), or its person cleared its history (`cleared`).",
+    ),
+    from: z.number().optional().describe("The context the old session had grown to, in tokens. Absent where nothing measured it."),
+    model: z.string().optional().describe("The model that wrote the summary the fresh session opened with."),
+    summarized: z.boolean().describe("Whether a summary was written; false where the fresh session opened with the recent conversation alone."),
+});
+export type FreshStart = z.infer<typeof FreshStartSchema>;
+
+export const freshStartNotice = (event: FreshStart): Extract<SandboxNotice, { code: "freshStart" }> => {
+    const params: Extract<SandboxNotice, { code: "freshStart" }>["params"] = { why: event.why, summarized: event.summarized };
+    if (event.from !== undefined) {
+        params.from = tokensLabel(event.from);
+    }
+    if (event.model !== undefined) {
+        params.model = event.model;
+    }
+    return { code: "freshStart", params };
+};
+
+/** The transcript's line for a fresh session, in the English the record keeps. */
+export const freshStartLine = (event: FreshStart): string => {
+    const from = event.from === undefined ? "" : ` at about ${tokensLabel(event.from)} tokens`;
+    const why =
+        event.why === "budget"
+            ? `This chat's memory was full${from}, so it went on in a fresh session`
+            : event.why === "cold"
+              ? `This chat had been idle long enough that re-reading it${from} would cost more than starting over, so it went on in a fresh session`
+              : event.why === "asked"
+                ? "Started fresh, as you asked"
+                : "History cleared: started fresh";
+    const carried = event.summarized
+        ? `, opened with a summary of the conversation${event.model === undefined ? "" : ` written by ${event.model}`} and its latest messages.`
+        : ", opened with its latest messages and the work in hand.";
+    return `${why}${carried}`;
+};

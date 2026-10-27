@@ -104,8 +104,12 @@ export const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): Trans
     const deps = event.deps === undefined || event.deps.missing === 0 ? undefined : event.deps;
     return {
         role: "notice",
-        text: `Changes landed in your workspace: review them in the Changes panel.${dependencyLine(event.deps)}`,
+        // A home's land (the only one named) is committed too, by nobody pressing anything: said, not left to the Changes panel.
+        text: `${event.land === undefined ? "Changes landed in your workspace: review them in the Changes panel." : "Landed in your workspace and committed."}${dependencyLine(event.deps)}`,
         noticeAction: (event.deps?.started.length ?? 0) > 0 ? "depsInstall" : "landHold",
-        noticeCode: noticeCode({ code: "landed", params: deps === undefined ? undefined : { deps: deps.missing, queued: deps.deferred || undefined } }),
+        noticeCode: noticeCode({
+            code: "landed",
+            params: deps === undefined && event.land === undefined ? undefined : { deps: deps?.missing, queued: deps?.deferred || undefined, land: event.land },
+        }),
     };
 };

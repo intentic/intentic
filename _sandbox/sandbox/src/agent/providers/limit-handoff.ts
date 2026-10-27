@@ -215,6 +215,9 @@ export const summaryNote = async (
         readonly rows: readonly TranscriptRow[];
         readonly contextTokens: number | undefined;
         readonly signal: AbortSignal | undefined;
+        // What the model is asked to write; a held turn's hand-off by default, a home's own fresh start its own
+        // (home/home-rollover.ts HOME_SUMMARY_INSTRUCTIONS).
+        readonly instructions?: string;
     },
 ): Promise<{ readonly note?: TurnNote; readonly event: HandedOff }> => {
     const from = params.contextTokens;
@@ -225,7 +228,7 @@ export const summaryNote = async (
             "handoff-summary",
             {
                 prompt: (room) =>
-                    `${SUMMARY_INSTRUCTIONS}\n\n<transcript>\n${renderRecord(params.rows, Number.isFinite(room) ? Math.max(20_000, room - PROMPT_SLACK) : 600_000)}\n</transcript>`,
+                    `${params.instructions ?? SUMMARY_INSTRUCTIONS}\n\n<transcript>\n${renderRecord(params.rows, Number.isFinite(room) ? Math.max(20_000, room - PROMPT_SLACK) : 600_000)}\n</transcript>`,
                 answer: SUMMARY_ANSWER,
             },
             params.signal ?? new AbortController().signal,

@@ -65,6 +65,7 @@ import { agentTabOf } from "../../../models/conversations/panel/useChat-reveal";
 import { parentCardOf, writesTo, writeTo } from "../../../models/conversations/panel/subagentView";
 import ChatRunThroughMenu from "../models/run-settings/ChatRunThroughMenu.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
+import ComposerLandPill from "../composer/ComposerLandPill.vue";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
 import ComposerMoreMenu from "../composer/ComposerMoreMenu.vue";
 import ComposerSendLater from "../composer/later/ComposerSendLater.vue";
@@ -798,36 +799,14 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                                 <span class="@max-md:hidden">{{ t(`chat.chatPane.agent`) }}</span>
                                             </button>
 
-                                            <!-- This chat's own answer to whether its finished work lands by itself; the press turns it back to the sandbox's. -->
-                                            <button
-                                                v-if="inRow.land"
-                                                type="button"
-                                                class="composer-ghost composer-glyph h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                                :class="{
-                                                    'composer-active': pickedWorkflow === undefined,
-                                                    'composer-steered': pickedWorkflow !== undefined,
-                                                    'composer-flash': flashed === 'land',
-                                                }"
-                                                :disabled="pickedWorkflow !== undefined"
-                                                @click="landing.toggle()"
-                                                v-tooltip.top="{
-                                                    title: landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`),
-                                                    note: landing.midTurn.value
-                                                        ? t(`chat.chatPane.appliesAfterTurn`)
-                                                        : landing.lands.value
-                                                          ? t(`chat.chatPane.landsWhenDoneNote`)
-                                                          : t(`chat.chatPane.holdsOnBranchNote`),
-                                                }"
-                                                :aria-pressed="landing.lands.value"
-                                                :aria-label="
-                                                    landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)
-                                                "
-                                            >
-                                                <Icon :name="landing.lands.value ? `download` : `pause`" class="text-2xs text-link" />
-                                                <span class="@max-md:hidden">{{
-                                                    landing.lands.value ? t(`chat.chatPane.landsWhenDone`) : t(`chat.chatPane.holdsOnBranch`)
-                                                }}</span>
-                                            </button>
+                                            <!-- Whether its finished work lands by itself: this chat's own answer, or a home's, which is said and not pressed. -->
+                                            <ComposerLandPill
+                                                :landing="landing"
+                                                :toggle="inRow.land"
+                                                :steered="pickedWorkflow !== undefined"
+                                                :flashed="flashed === 'land'"
+                                                :plain="plainWords"
+                                            />
                                         </div>
 
                                         <!-- Files from this device; the same chips as a drop or a paste, since one `attach` serves all three. -->

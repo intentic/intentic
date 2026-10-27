@@ -3140,7 +3140,8 @@
                 "intoParent": "Les modifications sont allées dans la copie de l'agent parent, comme celles de ses sous-agents internes : elles atteignent votre espace de travail avec son intégration.",
                 "intoParentClash": "{count} fichier entre en conflit avec les propres modifications de l'agent parent : rien n'a donc été écrit dans sa copie. Le parent a été informé et peut récupérer les modifications pour résoudre. | {count} fichiers entrent en conflit avec les propres modifications de l'agent parent : rien n'a donc été écrit dans sa copie. Le parent a été informé et peut récupérer les modifications pour résoudre.",
                 "rebased": "Votre espace de travail a avancé pendant que cet agent attendait : sa branche a été rebasée sur votre dernier commit ({count}). | Votre espace de travail a avancé pendant que cet agent attendait : sa branche a été rebasée sur vos {count} derniers commits.",
-                "rebaseBlocked": "Impossible de rebaser sur votre espace de travail dans {repos} : le tour s'exécute depuis l'ancienne base, son intégration pourra donc nécessiter une résolution."
+                "rebaseBlocked": "Impossible de rebaser sur votre espace de travail dans {repos} : le tour s'exécute depuis l'ancienne base, son intégration pourra donc nécessiter une résolution.",
+                "homeLanded": "Intégré dans votre espace de travail et committé."
             },
             "maker": {
                 "landed": "Les modifications ont été acceptées dans vos fichiers : voyez-les dans Ce qui a changé.",
@@ -3149,7 +3150,8 @@
                 "intoParent": "Les modifications sont allées dans le brouillon de l'assistant parent, comme celles de ses assistants : elles atteignent vos fichiers quand vous acceptez le travail de cet assistant.",
                 "intoParentClash": "{count} fichier entre en conflit avec les propres modifications de l'assistant parent : rien n'a donc été écrit dans son brouillon. Le parent a été informé et peut récupérer les modifications pour arranger cela. | {count} fichiers entrent en conflit avec les propres modifications de l'assistant parent : rien n'a donc été écrit dans son brouillon. Le parent a été informé et peut récupérer les modifications pour arranger cela.",
                 "rebased": "Vos fichiers ont évolué pendant que cet assistant attendait : son brouillon a donc été mis à jour avec votre dernière modification ({count}). | Vos fichiers ont évolué pendant que cet assistant attendait : son brouillon a donc été mis à jour avec vos {count} dernières modifications.",
-                "rebaseBlocked": "Impossible de mettre le brouillon à jour avec vos fichiers dans {repos} : l'assistant travaille sur une version plus ancienne, accepter son travail pourra donc nécessiter une correction d'abord."
+                "rebaseBlocked": "Impossible de mettre le brouillon à jour avec vos fichiers dans {repos} : l'assistant travaille sur une version plus ancienne, accepter son travail pourra donc nécessiter une correction d'abord.",
+                "homeLanded": "Les modifications ont été acceptées dans vos fichiers et enregistrées comme une version."
             },
             "keptWarm": "Repris à chaud : {tokens} tokens lus depuis le cache, gardé chaud pendant {span} avec {refreshes} rafraîchissement. | Repris à chaud : {tokens} tokens lus depuis le cache, gardé chaud pendant {span} avec {refreshes} rafraîchissements.",
             "keptCold": "Repris à froid bien que gardé chaud pendant {span} avec {refreshes} rafraîchissement : {tokens} tokens renvoyés, car le prompt de ce tour ne correspondait plus au cache. | Repris à froid bien que gardé chaud pendant {span} avec {refreshes} rafraîchissements : {tokens} tokens renvoyés, car le prompt de ce tour ne correspondait plus au cache.",
@@ -3175,7 +3177,24 @@
                 "summaryFellBack": "Impossible de rédiger un résumé pour la passation : la nouvelle session s'est donc ouverte avec la conversation récente et l'état du travail à la place."
             },
             "stoppedPartway": "{message} L'exécution s'est arrêtée en cours de route. Les modifications déjà faites sont conservées : envoyez un message pour reprendre à partir d'ici.",
-            "stoppedPartwaySwitch": "{message} L'exécution s'est arrêtée en cours de route. Les modifications déjà faites sont conservées : continuez avec un autre modèle pour reprendre à partir d'ici."
+            "stoppedPartwaySwitch": "{message} L'exécution s'est arrêtée en cours de route. Les modifications déjà faites sont conservées : continuez avec un autre modèle pour reprendre à partir d'ici.",
+            "freshStart": {
+                "budget": "La mémoire de ce chat était pleine, il a donc continué dans une nouvelle session",
+                "budgetFrom": "La mémoire de ce chat était pleine à environ {from} tokens, il a donc continué dans une nouvelle session",
+                "cold": "Ce chat était inactif depuis assez longtemps pour que le relire coûte plus cher que de repartir de zéro, il a donc continué dans une nouvelle session",
+                "coldFrom": "Ce chat était inactif depuis assez longtemps pour que le relire, à environ {from} tokens, coûte plus cher que de repartir de zéro, il a donc continué dans une nouvelle session",
+                "asked": "Reparti de zéro, comme vous l'avez demandé",
+                "cleared": "Historique effacé : reparti de zéro",
+                "summary": ", en partant d'un résumé de la conversation et de ses derniers messages.",
+                "summaryBy": ", en partant d'un résumé de la conversation rédigé par {model} et de ses derniers messages.",
+                "recent": ", en partant de ses derniers messages et du travail en cours.",
+                "plain": {
+                    "budget": "La mémoire de ce chat était pleine, il a donc continué avec une mémoire neuve",
+                    "cold": "Ce chat était resté calme un moment, il a donc continué avec une mémoire neuve",
+                    "summary": ", en partant d'un résumé de la conversation et de ses derniers messages.",
+                    "recent": ", en partant de ses derniers messages et du travail en cours."
+                }
+            }
         },
         "failure": {
             "access": "Le fournisseur a refusé ce compte : son forfait ou son organisation ne le permet pas.",
@@ -4679,6 +4698,72 @@
             "spentToday": "Dépensé aujourd'hui",
             "spentOf": "{spent} $ sur {cap} $",
             "savedAs": "Enregistré sous"
+        },
+        "composerLandPill": {
+            "landsCommits": "Intègre et committe",
+            "asksMaintainer": "Demande à un mainteneur",
+            "when": "Quand",
+            "turnEnds": "À la fin de chaque tour",
+            "commit": "Commit",
+            "draftedSubject": "Sujet rédigé d'après son travail",
+            "work": "Travail",
+            "waitsOnBranch": "Attend sur sa branche",
+            "nobodyPressesLand": "Personne n'appuie sur Intégrer",
+            "maintainerLands": "Un mainteneur l'intègre",
+            "plain": {
+                "savesItself": "S'enregistre tout seul",
+                "replyEnds": "À la fin de chaque réponse",
+                "version": "Version",
+                "namedFromWork": "Nommée d'après ce qui a changé",
+                "nothingToAccept": "Rien à accepter de votre part",
+                "waitsInDraft": "Attend dans son brouillon",
+                "maintainerAccepts": "Un mainteneur l'accepte"
+            }
+        },
+        "noticeFreshStart": {
+            "label": "Nouvelle session"
+        },
+        "noticeHomeCommit": {
+            "subject": "« {subject} »",
+            "revert": "Revert",
+            "reverted": "Annulé",
+            "confirmHeader": "Annuler ce commit (revert) ? | Annuler ces {count} commits (revert) ?",
+            "confirmBody": "Un nouveau commit retire ce travail, et l'historique garde les deux. | Un nouveau commit dans chaque dépôt retire ce travail, et l'historique garde les deux.",
+            "revertFailed": "Impossible de l'annuler dans {repo}.",
+            "revertFailedWhy": "Impossible de l'annuler dans {repo} : {reason}",
+            "writing": "Rédaction du commit…",
+            "plain": {
+                "undo": "Annuler",
+                "undone": "Annulé",
+                "confirmHeader": "Annuler ces modifications ?",
+                "confirmBody": "Une nouvelle version retire ces modifications de vos fichiers. Rien d'antérieur n'est perdu.",
+                "saving": "Enregistrement d'une version…"
+            }
+        },
+        "homeMemory": {
+            "title": "Mémoire",
+            "fill": "Mémoire {percent} %",
+            "soon": "repart bientôt de zéro",
+            "pending": "Repart de zéro à votre prochain message",
+            "used": "Utilisé",
+            "freshAt": "Repart à",
+            "tipNote": "Repart de zéro une fois pleine",
+            "explain": "Quand la mémoire de ce chat est pleine, il continue dans une nouvelle session qui part d'un résumé et de ses derniers messages, pour que chaque message reste rapide et peu coûteux. Tous vos messages restent ici.",
+            "filled": "Sa mémoire est pleine à {percent} %.",
+            "neverByItself": "Ce sandbox est réglé pour ne jamais le faire repartir de zéro tout seul.",
+            "pendingAsked": "Votre prochain message démarre une nouvelle session, comme vous l'avez demandé.",
+            "pendingCleared": "Historique effacé. Votre prochain message démarre une nouvelle session.",
+            "startFresh": "Repartir de zéro",
+            "clear": "Effacer l'historique…",
+            "waitForReply": "Attendez d'abord la fin de la réponse.",
+            "busy": "Votre conversation d'accueil travaille en ce moment : attendez qu'elle finisse, ou arrêtez-la d'abord.",
+            "failed": "Impossible de joindre le sandbox. Réessayez.",
+            "confirmHeader": "Effacer l'historique de ce chat ?",
+            "confirmBody": "Tous les messages d'ici sont supprimés, ainsi que les points où revenir. Rien de ce qu'il a déjà intégré ou committé n'est touché, et ses sous-agents sont conservés. Impossible d'annuler.",
+            "confirmLabel": "Effacer l'historique",
+            "plain": {
+                "confirmBody": "Tous les messages d'ici sont supprimés, ainsi que les points où revenir. Rien de ce qui est déjà dans vos fichiers ne change, et ses assistants gardent leur travail. Impossible d'annuler."
+            }
         }
     },
     "common": {

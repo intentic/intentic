@@ -13,6 +13,23 @@ import type { Conversation } from "../../../models/conversations/session/convers
 // wait for is waitTargets.ts's.
 
 /**
+ * How a home conversation's finished work arrives, which is no answer of anybody's (the daemon's turn-landing.ts
+ * homeOverride): when a turn ends, what it merged lands and is committed (`lands`), or, for a person who may not land
+ * here, waits on its branch for a maintainer (`asks`). Undefined for every other chat, and for a home drawn from another
+ * box, whose reader's standing there this tab does not know.
+ */
+export type HomeLanding = `lands` | `asks`;
+export const homeLandingOf = (
+    chat: { readonly conversationId: string; readonly box: string | undefined },
+    canLandHome: boolean,
+): HomeLanding | undefined => {
+    if (!isHomeConversationId(chat.conversationId) || chat.box !== undefined) {
+        return undefined;
+    }
+    return canLandHome ? `lands` : `asks`;
+};
+
+/**
  * This conversation's answer to whether its finished work lands by itself: its own where it gave one, else the
  * sandbox's. Offered where landing is this conversation's own business and the reader's to decide: a private copy on
  * this sandbox, for a maintainer, whose land it is. Before the daemon has a record of the conversation the answer is held
@@ -22,7 +39,7 @@ import type { Conversation } from "../../../models/conversations/session/convers
 export const useComposerLanding = (conversation: () => Conversation) => {
     const { agentById, setAutoLand } = useAgents();
     const { settings } = useSandboxSettings();
-    const { canShip } = useRole();
+    const { canShip, canLandHome } = useRole();
     const sandboxLands = computed(() => landsByDefault(settings.value?.rules ?? []));
     const registered = computed(() => conversation().registered.value);
     const card = computed(() => (registered.value ? agentById(conversation().conversationId) : undefined));
@@ -56,6 +73,8 @@ export const useComposerLanding = (conversation: () => Conversation) => {
         own: computed(() => own.value !== undefined),
         // A turn is running, so a change now holds or lands that turn's work when it finishes.
         midTurn: computed(() => card.value !== undefined && turnInFlight(card.value)),
+        // A home's fixed answer, said on the row where this chat's own would be offered (ComposerLandPill).
+        home: computed(() => homeLandingOf({ conversationId: conversation().conversationId, box: conversation().box.value }, canLandHome.value)),
         sandboxLands,
         set,
         toggle: (): void => set(!lands.value),

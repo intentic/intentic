@@ -10,10 +10,10 @@ import { whenIdle } from "../../../lib/whenIdle";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { AttachEntry, TurnContext } from "../../../client/sandbox/streams/turnStream";
-import { olderTranscriptPage, PHONE_TURNS } from "../transcript/agentTranscript";
+import { invalidateAgentTranscript, olderTranscriptPage, PHONE_TURNS } from "../transcript/agentTranscript";
 import { type ChatAttachment, type ChatMessage, lastTurns, recordedRows, withCancelledCards } from "../transcript/transcript";
 import { type RecordCursor, recordCursor } from "../transcript/transcriptState";
-import { mirrorKeyOf, readTranscript, saveTranscript } from "../transcript/transcriptCache";
+import { dropTranscript, mirrorKeyOf, readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
 import { firstWhere, runningTotal } from "../transcript/transcriptScan";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
@@ -192,6 +192,17 @@ export class TranscriptView extends TranscriptClock {
         this.host.error.value = null;
         this.host.failures.crashed.value = false;
         this.persist(true);
+    }
+
+    // The daemon's record was emptied under this transcript (a home's Clear history, models/home/homeMemory.ts), so its
+    // rows go here too, and with them every copy a later read would paint from: the mirror and the cached opening page.
+    // Nothing else would ever empty it, since a redraw takes an empty record for absence and an empty mirror is never
+    // written (replayStoredSession, saveTranscript). The session goes with them, as the daemon's did.
+    async clearRecord(): Promise<void> {
+        this.restoreMessages([]);
+        this.host.session.value = undefined;
+        invalidateAgentTranscript(this.host.conversationId, this.host.box.value);
+        await dropTranscript(mirrorKeyOf(this.host));
     }
 
     // Page above what's drawn, for a reader at the top; rows are prepended, never rebuilt, so a live turn survives.

@@ -3140,7 +3140,8 @@
                 "intoParent": "Los cambios fueron a la copia del agente padre, como las ediciones de sus subagentes internos: llegan a tu espacio de trabajo cuando él integre.",
                 "intoParentClash": "{count} archivo choca con las propias ediciones del agente padre, así que no se escribió nada en su copia. Se avisó al padre, que puede traer los cambios para resolverlo. | {count} archivos chocan con las propias ediciones del agente padre, así que no se escribió nada en su copia. Se avisó al padre, que puede traer los cambios para resolverlo.",
                 "rebased": "Tu espacio de trabajo avanzó mientras este agente esperaba; su rama se rebasó sobre tu último commit. | Tu espacio de trabajo avanzó mientras este agente esperaba; su rama se rebasó sobre tus últimos {count} commits.",
-                "rebaseBlocked": "No se pudo rebasar sobre tu espacio de trabajo en {repos}: el turno parte de la base antigua, así que su integración puede requerir resolver conflictos."
+                "rebaseBlocked": "No se pudo rebasar sobre tu espacio de trabajo en {repos}: el turno parte de la base antigua, así que su integración puede requerir resolver conflictos.",
+                "homeLanded": "Integrado en tu espacio de trabajo y con su commit hecho."
             },
             "maker": {
                 "landed": "Los cambios se aceptaron en tus archivos: míralos en Qué ha cambiado.",
@@ -3149,7 +3150,8 @@
                 "intoParent": "Los cambios fueron al borrador del asistente principal, como las ediciones de sus ayudantes: llegan a tus archivos cuando aceptes el trabajo de ese asistente.",
                 "intoParentClash": "{count} archivo choca con las propias ediciones del asistente principal, así que no se escribió nada en su borrador. Se le avisó, y puede traer los cambios para arreglarlo. | {count} archivos chocan con las propias ediciones del asistente principal, así que no se escribió nada en su borrador. Se le avisó, y puede traer los cambios para arreglarlo.",
                 "rebased": "Tus archivos cambiaron mientras este asistente esperaba, así que su borrador se puso al día con tu último cambio. | Tus archivos cambiaron mientras este asistente esperaba, así que su borrador se puso al día con tus últimos {count} cambios.",
-                "rebaseBlocked": "No se pudo poner el borrador al día con tus archivos en {repos}: el asistente trabaja sobre una versión anterior, así que aceptar su trabajo puede requerir antes un arreglo."
+                "rebaseBlocked": "No se pudo poner el borrador al día con tus archivos en {repos}: el asistente trabaja sobre una versión anterior, así que aceptar su trabajo puede requerir antes un arreglo.",
+                "homeLanded": "Los cambios se aceptaron en tus archivos y se guardaron como una versión."
             },
             "keptWarm": "Retomado en caliente: {tokens} tokens leídos de la caché, mantenida caliente durante {span} con {refreshes} actualización. | Retomado en caliente: {tokens} tokens leídos de la caché, mantenida caliente durante {span} con {refreshes} actualizaciones.",
             "keptCold": "Retomado en frío pese a mantenerse caliente durante {span} con {refreshes} actualización: {tokens} tokens enviados de nuevo, porque el prompt de este turno ya no coincidía con la caché. | Retomado en frío pese a mantenerse caliente durante {span} con {refreshes} actualizaciones: {tokens} tokens enviados de nuevo, porque el prompt de este turno ya no coincidía con la caché.",
@@ -3175,7 +3177,24 @@
                 "summaryFellBack": "No se pudo escribir un resumen para el traspaso, así que la sesión nueva empezó con la conversación reciente y el estado del trabajo."
             },
             "stoppedPartway": "{message} La ejecución se detuvo a medias. Los cambios hechos hasta ahora se conservan: envía un mensaje para seguir desde aquí.",
-            "stoppedPartwaySwitch": "{message} La ejecución se detuvo a medias. Los cambios hechos hasta ahora se conservan: continúa con otro modelo para seguir desde aquí."
+            "stoppedPartwaySwitch": "{message} La ejecución se detuvo a medias. Los cambios hechos hasta ahora se conservan: continúa con otro modelo para seguir desde aquí.",
+            "freshStart": {
+                "budget": "La memoria de este chat estaba llena, así que siguió en una sesión nueva",
+                "budgetFrom": "La memoria de este chat estaba llena con unos {from} tokens, así que siguió en una sesión nueva",
+                "cold": "Este chat llevaba tanto tiempo inactivo que volver a leerlo costaría más que empezar de cero, así que siguió en una sesión nueva",
+                "coldFrom": "Este chat llevaba tanto tiempo inactivo que volver a leerlo, con unos {from} tokens, costaría más que empezar de cero, así que siguió en una sesión nueva",
+                "asked": "Empezó de nuevo, como pediste",
+                "cleared": "Historial borrado: empezó de nuevo",
+                "summary": ", partiendo de un resumen de la conversación y sus últimos mensajes.",
+                "summaryBy": ", partiendo de un resumen de la conversación escrito por {model} y sus últimos mensajes.",
+                "recent": ", partiendo de sus últimos mensajes y el trabajo en curso.",
+                "plain": {
+                    "budget": "La memoria de este chat estaba llena, así que siguió con una nueva",
+                    "cold": "Este chat llevaba un rato en silencio, así que siguió con una memoria nueva",
+                    "summary": ", partiendo de un resumen de la conversación y sus últimos mensajes.",
+                    "recent": ", partiendo de sus últimos mensajes y el trabajo en curso."
+                }
+            }
         },
         "failure": {
             "access": "El proveedor rechazó esta cuenta: su plan u organización no lo permite.",
@@ -4679,6 +4698,72 @@
             "spentToday": "Gastado hoy",
             "spentOf": "{spent} $ de {cap} $",
             "savedAs": "Guardado como"
+        },
+        "composerLandPill": {
+            "landsCommits": "Integra y hace commit",
+            "asksMaintainer": "Pide a un mantenedor",
+            "when": "Cuándo",
+            "turnEnds": "Al terminar cada turno",
+            "commit": "Commit",
+            "draftedSubject": "Asunto redactado a partir de su trabajo",
+            "work": "Trabajo",
+            "waitsOnBranch": "Espera en su rama",
+            "nobodyPressesLand": "Nadie tiene que pulsar Integrar",
+            "maintainerLands": "Un mantenedor lo integra",
+            "plain": {
+                "savesItself": "Se guarda solo",
+                "replyEnds": "Al terminar cada respuesta",
+                "version": "Versión",
+                "namedFromWork": "Nombrada según lo que cambió",
+                "nothingToAccept": "No tienes que aceptar nada",
+                "waitsInDraft": "Espera en su borrador",
+                "maintainerAccepts": "Un mantenedor lo acepta"
+            }
+        },
+        "noticeFreshStart": {
+            "label": "Sesión nueva"
+        },
+        "noticeHomeCommit": {
+            "subject": "«{subject}»",
+            "revert": "Revertir",
+            "reverted": "Revertido",
+            "confirmHeader": "¿Revertir este commit? | ¿Revertir estos {count} commits?",
+            "confirmBody": "Un commit nuevo retira este trabajo, y el historial conserva ambos. | Un commit nuevo en cada repositorio retira este trabajo, y el historial conserva ambos.",
+            "revertFailed": "No se pudo revertir en {repo}.",
+            "revertFailedWhy": "No se pudo revertir en {repo}: {reason}",
+            "writing": "Escribiendo el commit…",
+            "plain": {
+                "undo": "Deshacer",
+                "undone": "Deshecho",
+                "confirmHeader": "¿Deshacer estos cambios?",
+                "confirmBody": "Una versión nueva retira estos cambios de tus archivos. No se pierde nada anterior.",
+                "saving": "Guardando una versión…"
+            }
+        },
+        "homeMemory": {
+            "title": "Memoria",
+            "fill": "Memoria {percent} %",
+            "soon": "pronto empieza de nuevo",
+            "pending": "Empieza de nuevo en tu próximo mensaje",
+            "used": "Usado",
+            "freshAt": "De nuevo al llegar a",
+            "tipNote": "Empieza de nuevo al llenarse",
+            "explain": "Cuando la memoria de este chat se llena, sigue en una sesión nueva que parte de un resumen y sus últimos mensajes, para que cada mensaje siga siendo rápido y barato. Todos tus mensajes se quedan aquí.",
+            "filled": "Su memoria está llena al {percent} %.",
+            "neverByItself": "Este sandbox está configurado para no empezarlo nunca de nuevo por sí solo.",
+            "pendingAsked": "Tu próximo mensaje empieza una sesión nueva, como pediste.",
+            "pendingCleared": "Historial borrado. Tu próximo mensaje empieza una sesión nueva.",
+            "startFresh": "Empezar de nuevo",
+            "clear": "Borrar historial…",
+            "waitForReply": "Espera primero a que termine la respuesta.",
+            "busy": "Tu conversación de inicio está trabajando ahora: espera a que termine o detenla primero.",
+            "failed": "No se pudo contactar con el sandbox. Vuelve a intentarlo.",
+            "confirmHeader": "¿Borrar el historial de este chat?",
+            "confirmBody": "Se borran todos los mensajes de aquí y los puntos a los que volver. No se toca nada de lo que ya integró o confirmó con commit, y sus subagentes se conservan. No se puede deshacer.",
+            "confirmLabel": "Borrar historial",
+            "plain": {
+                "confirmBody": "Se borran todos los mensajes de aquí y los puntos a los que volver. Nada de lo que ya está en tus archivos cambia, y sus ayudantes conservan su trabajo. No se puede deshacer."
+            }
         }
     },
     "common": {

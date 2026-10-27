@@ -122,6 +122,9 @@ const manifests = (
     settings: SandboxSettings,
 ) => {
     const { capabilities, conversationTurns } = runtime;
+    // A home's session opened fresh (home-rollover.ts), seeded from the record rather than resumed: the notes its old
+    // session carried are not in this one, so they ride again.
+    const homeFresh = entry?.identity.home === true && context.base.spec.sessionId === undefined;
     return Promise.all([
         // What the owner installed, not the persona-filtered record, which answers what a runtime can do instead.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -144,7 +147,7 @@ const manifests = (
                   ),
               )
             : Promise.resolve(undefined),
-        services.perf.track("turn.plan.context", {}, () => contextNoteIfDue(services, input, entry, conversationTurns)),
+        services.perf.track("turn.plan.context", {}, () => contextNoteIfDue(services, input, entry, conversationTurns, homeFresh)),
         // Every turn, never cached: a check the owner switched off this morning must not keep running.
         services.perf.track("turn.plan.repo-checks", {}, () => repoCheckRules(services)),
         // Beside the rest rather than ahead of it, on its own deadline: a turn must not wait on an optimisation.
@@ -155,7 +158,9 @@ const manifests = (
         entry?.identity.fresh === undefined
             ? Promise.resolve(undefined)
             : services.perf.track("turn.plan.fresh", {}, () => freshFactsIfAny(services, input.conversationId, entry, conversationTurns)),
-        entry?.identity.home === true ? services.perf.track("turn.plan.home", {}, () => homeNoteIfDue(services, entry, conversationTurns)) : Promise.resolve(undefined),
+        entry?.identity.home === true
+            ? services.perf.track("turn.plan.home", {}, () => homeNoteIfDue(services, entry, conversationTurns, homeFresh))
+            : Promise.resolve(undefined),
     ]);
 };
 

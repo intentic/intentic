@@ -39,10 +39,14 @@ import ChatTodoList from "./ChatTodoList.vue";
 import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
-import { agentNoticeLookOf, isTurnChecks, noticeIconOf } from "./notices/noticeLook";
+import { agentNoticeLookOf, isFreshStart, isTurnChecks, noticeIconOf } from "./notices/noticeLook";
 import NoticeFailureDetails from "./notices/NoticeFailureDetails.vue";
 import NoticeSwitchModel from "./notices/NoticeSwitchModel.vue";
 import NoticeHeld from "./notices/NoticeHeld.vue";
+import NoticeFreshStart from "./notices/NoticeFreshStart.vue";
+import NoticeHomeCommit from "./notices/NoticeHomeCommit.vue";
+import { landOfRow } from "../../../models/home/homeCommits";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
@@ -217,7 +221,10 @@ const watchGaveUp = computed(
 // A notice in the reader's language and words where the row says which one it is (sandboxNotice.ts), else as it was
 // written: a sandbox older than this app sends no code, and a newer one may send a code this build does not know.
 const { audience } = useAudience();
-const noticeText = computed(() => noticeLine(props.message, audience.value) ?? props.message.text);
+// A home's lands are committed too, which its landed rows say, and then what they were committed as (NoticeHomeCommit).
+const home = computed(() => isHomeConversationId(conversation.value.conversationId));
+const homeLand = computed(() => home.value && landOfRow(props.message) !== undefined);
+const noticeText = computed(() => noticeLine(props.message, audience.value, { home: home.value }) ?? props.message.text);
 // A failure row: its own glyph and line, and the provider's or the harness's own words, where it carries any, a press away.
 const failure = computed(() => (props.message.role === `notice` ? noticeFailure(props.message) : undefined));
 const failureOpen = ref(false);
@@ -533,6 +540,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <NoticeMemory v-else-if="isMemoryHold(message)" :message="message" />
         <!-- Something the agent asked a person for: a card of its own, drawn from the need's live state, which outlives the turn (docs/architecture/needs.md). -->
         <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
+        <!-- Where a home's memory starts over: a divider across the column, not a line down its edge. -->
+        <NoticeFreshStart v-else-if="isFreshStart(message)" :message="message" />
         <!-- A META ROW (chat.css `.chat-meta`): on the column's edge, its glyph in the mark box and its words on the hang, so a
              run of notices reads as one log down a single edge rather than a stack of centred lines of every width. -->
         <div
@@ -590,6 +599,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 >{{ unspokenSent }}</pre>
             <!-- The one follow-up this notice offers, by its action's name (NOTICE_ACTIONS). -->
             <component :is="noticeAction" v-if="noticeAction" :message="message" />
+            <NoticeHomeCommit v-if="homeLand" :message="message" />
         </div>
         <template v-else>
             <!-- Live marks the bubble currently receiving streamed text. -->

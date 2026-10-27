@@ -8,8 +8,8 @@ import { compactedSinceLastTurn, type PersistedAgent } from "../registry/agents-
 // WHAT A HOME CONVERSATION WORKS BY (home-conversation.ts): when it delegates, how it judges what comes back, what it
 // merges, and the little it asks a person. Its owner never reviews here, so this is the review. The owner may rewrite it in
 // `.intentic/config/home.md`, tracked and versioned like the safety policy, since it governs what lands unasked; absent,
-// this default stands. It rides the turn as a note, on the opening turn and the one after a compaction, as the fresh
-// session's does (agent/context/fresh-session.ts), since history carries it between: a policy rather than a persona,
+// this default stands. It rides the turn as a note, on the opening turn, the one after a compaction and any that opens a
+// fresh session, as the fresh session's does (agent/context/fresh-session.ts), since history carries it between: a policy rather than a persona,
 // because a persona card holds its accounts by naming them, and a home must keep its owner's.
 
 export const DEFAULT_HOME_POLICY = `You are the home conversation of the person you are talking with: the one long-running chat they keep with this sandbox, from a view that shows every sandbox they have. They do not review code here and will not press Land. You orchestrate: you decide what to delegate, how to judge what comes back, what to accept, and you land it.
@@ -34,6 +34,9 @@ Accept and land
 - If it clashes with the workspace, the sandbox sends it back to you as a resolve turn: rebase, resolve, check, and it lands when that turn ends. Resolve it yourself; a clash only the person's own uncommitted edits make is the one thing to tell them about.
 - If your person may not merge here, it waits and a maintainer is asked: say so.
 
+Stay lean
+This conversation is kept for good, and everything in it is read again on every call, so keep what enters it small. Read a subagent's report and verification rather than its diff; ask it for what you need rather than opening its files yourself; leave long output in the files and logs it lives in. When this conversation grows large it goes on in a fresh session: a summary, its latest messages and a list of your subagents ride in, and you carry on from there by subagent id.
+
 Ask a person only for what only a person can give
 A secret, a connection, a device or a switch on one, a payment, a permission, or a decision the request genuinely leaves open. Everything else, decide, and say what you decided.
 
@@ -47,13 +50,17 @@ export const readHomePolicy = async (root: string): Promise<string> => {
     return text === undefined || text === "" ? DEFAULT_HOME_POLICY : text;
 };
 
-/** The note a home conversation's turn carries: on its opening turn and the one after a compaction, else nothing. */
+/**
+ * The note a home conversation's turn carries: on its opening turn, the one after a compaction, and any that opens a
+ * fresh session (`fresh`, home-rollover.ts), whose history holds none of it; else nothing.
+ */
 export const homeNoteIfDue = async (
     deps: { readonly workspace: { readonly root: string } },
     entry: Pick<PersistedAgent, "identity" | "compactedTurn"> | undefined,
     conversationTurns: number,
+    fresh = false,
 ): Promise<TurnNote | undefined> => {
-    if (entry?.identity.home !== true || (conversationTurns > 0 && !compactedSinceLastTurn(entry, conversationTurns))) {
+    if (entry?.identity.home !== true || (conversationTurns > 0 && !fresh && !compactedSinceLastTurn(entry, conversationTurns))) {
         return undefined;
     }
     return { title: HOME_NOTE_TITLE, text: `${HOME_NOTE_HEADER}\n\n${await readHomePolicy(deps.workspace.root)}` };

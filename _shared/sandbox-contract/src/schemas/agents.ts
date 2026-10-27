@@ -239,6 +239,19 @@ export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
 // offer the press that clears a refusal without knowing whose refusal it is.
 export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
 export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
+// One land of a home conversation's, as committed: the land its transcript row names, and each repository's commit.
+export const HomeCommitSchema = z.object({
+    land: z.string().describe("The land's id, as its `landed` transcript row names it."),
+    at: z.number().describe("When it was committed, in milliseconds."),
+    subject: z.string().describe("The commit's subject line."),
+    commits: z
+        .array(z.object({ repo: z.string().describe('Which repository: "root" for the workspace itself, else its folder.'), sha: z.string().describe("The commit, in full.") }))
+        .describe("The commit each repository the land reached took, in the order they were made."),
+});
+export type HomeCommit = z.infer<typeof HomeCommitSchema>;
+// How many of a home's commits its card keeps.
+export const HOME_COMMITS_KEPT = 20;
+
 export const AgentSummarySchema = z.object({
     id: z.string().describe("The conversation id, which is how every other call addresses it."),
     sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
@@ -390,6 +403,23 @@ export const AgentSummarySchema = z.object({
         .optional()
         .describe(
             "This is its owner's home conversation in this sandbox: the one long-running chat the master view opens, which orchestrates its own subagents, holds their work until it accepts it, and lands and commits by itself. Only its owner and the sandbox's owner see it. Absent for every other conversation.",
+        ),
+    // A home's own record of what its lands became in history (conversations/land/version-landed.ts): each land's commit,
+    // under the land id its transcript row names (`landed` notice), so the chat can say what was committed and offer its
+    // revert. The newest few only, newest last.
+    commits: z
+        .array(HomeCommitSchema)
+        .optional()
+        .describe(
+            "A home conversation's latest lands as they were committed, newest last: which land, when, under what subject, and the commit each repository took. Kept for the last few only. Absent for every other conversation.",
+        ),
+    // Set by Start fresh or Clear history (agents.startFresh / clearHistory) and cleared by the turn that opens the fresh
+    // session: what lets the chat say its next message starts over.
+    freshPending: z
+        .enum(["asked", "cleared"])
+        .optional()
+        .describe(
+            "A home conversation whose next message opens a fresh session, because its person asked (`asked`) or cleared its history (`cleared`). Absent once that message has gone, and for every other conversation.",
         ),
     // Root repo's short base sha; per-repo bases stay daemon-internal.
     base: z.string().optional().describe("The commit its private copy started from, shortened."),

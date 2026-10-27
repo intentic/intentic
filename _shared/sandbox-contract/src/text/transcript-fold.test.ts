@@ -498,6 +498,23 @@ describe("foldTurn", () => {
         });
     });
 
+    // A home's land is named on its row, so the commit its card files under that name is told on the same row.
+    it("names a home's land on its row", () => {
+        expect(foldOf("go", [{ kind: "landed", landed: true, land: "land-1" }]).at(-1)).toMatchObject({
+            text: "Landed in your workspace and committed.",
+            noticeCode: { code: "landed", params: { land: "land-1" } },
+        });
+    });
+
+    // Where a home's model memory starts over: a row of its own, which a reader can tell from any other notice.
+    it("marks a home's fresh session with a row of its own", () => {
+        expect(foldOf("go", [{ kind: "fresh_start", why: "budget", from: 182_000, summarized: true, model: "haiku" }]).at(-1)).toEqual({
+            role: "notice",
+            text: "This chat's memory was full at about 182k tokens, so it went on in a fresh session, opened with a summary of the conversation written by haiku and its latest messages.",
+            noticeCode: { code: "freshStart", params: { why: "budget", from: "182k", model: "haiku", summarized: true } },
+        });
+    });
+
     // A spawned child's work goes into its parent's checkout, as the parent's in-process subagents' edits do: the row
     // says so, never that it reached the owner's workspace, and says who is to bring in a clash.
     it("says a child's work went into its parent's checkout, or was held off it by a clash", () => {

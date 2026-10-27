@@ -17,10 +17,17 @@ import { type FailureView, failureView, legacyFailure } from "../../agent-status
 
 type NoticeRow = Pick<TranscriptRow, "noticeCode" | "watchWake" | "needWake" | "agentWords"> & { readonly text?: string };
 
+/** Where the row is read: a home conversation's lands are committed as well (the daemon's version-landed.ts). */
+export interface NoticePlace {
+    readonly home?: boolean;
+}
+
 // The land outcomes, whole sentences per audience rather than a word swapped into one: "land" and "branch" for a
 // developer, "accept" and "draft" for a maker (workbench/views/vocabulary.ts).
 interface LandWords {
     readonly landed: () => string;
+    // A home's land, which its own commit follows, so the Changes panel the plain one points to holds none of it.
+    readonly homeLanded: () => string;
     readonly landHeld: () => string;
     readonly landConflict: (files: number, repos: string) => string;
     readonly intoParent: () => string;
@@ -32,6 +39,7 @@ interface LandWords {
 const LAND_WORDS = {
     developer: {
         landed: () => t(`chat.sandboxNotice.developer.landed`),
+        homeLanded: () => t(`chat.sandboxNotice.developer.homeLanded`),
         landHeld: () => t(`chat.sandboxNotice.developer.landHeld`),
         landConflict: (count, repos) => t(`chat.sandboxNotice.developer.landConflict`, { count, repos }, count),
         intoParent: () => t(`chat.sandboxNotice.developer.intoParent`),
@@ -41,6 +49,7 @@ const LAND_WORDS = {
     },
     maker: {
         landed: () => t(`chat.sandboxNotice.maker.landed`),
+        homeLanded: () => t(`chat.sandboxNotice.maker.homeLanded`),
         landHeld: () => t(`chat.sandboxNotice.maker.landHeld`),
         landConflict: (count, repos) => t(`chat.sandboxNotice.maker.landConflict`, { count, repos }, count),
         intoParent: () => t(`chat.sandboxNotice.maker.intoParent`),
@@ -137,7 +146,7 @@ const FAILURE_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([
 const isFailure = (notice: SandboxNotice): notice is FailureNotice => FAILURE_CODES.has(notice.code);
 
 // Where the work went, in the audience's own words.
-const landLine = (notice: LandNotice, land: LandWords): string => {
+const landLine = (notice: LandNotice, land: LandWords, place: NoticePlace): string => {
     switch (notice.code) {
         case `synced`: {
             const { commits, blocked } = notice.params;
@@ -152,7 +161,11 @@ const landLine = (notice: LandNotice, land: LandWords): string => {
         case `landConflict`:
             return land.landConflict(notice.params.files, notice.params.repos);
         case `landed`:
-            return sentences(land.landed(), dependencies(notice.params?.deps, notice.params?.queued));
+            // Only a home's land is named (the daemon's land-rows.ts), so a named one reads as committed wherever it is drawn.
+            return sentences(
+                place.home === true || notice.params?.land !== undefined ? land.homeLanded() : land.landed(),
+                dependencies(notice.params?.deps, notice.params?.queued),
+            );
     }
 };
 
@@ -187,9 +200,9 @@ const failureLine = (notice: FailureNotice): string => {
     }
 };
 
-const codedLine = (notice: SandboxNotice, audience: Audience): string => {
+const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace): string => {
     if (isLand(notice)) {
-        return landLine(notice, LAND_WORDS[audience]);
+        return landLine(notice, LAND_WORDS[audience], place);
     }
     if (isFailure(notice)) {
         return failureLine(notice);
@@ -215,6 +228,8 @@ const codedLine = (notice: SandboxNotice, audience: Audience): string => {
             return t(`chat.sandboxNotice.keptWarm`, notice.params, notice.params.refreshes);
         case `handedOff`:
             return handedOffLine(notice.params);
+        case `freshStart`:
+            return audience === `maker` ? freshStartPlain(notice.params) : freshStartLine(notice.params);
         case `keptCold`:
             return t(`chat.sandboxNotice.keptCold`, notice.params, notice.params.refreshes);
         case `installing`:
@@ -251,6 +266,32 @@ const handedOffLine = (params: Extract<SandboxNotice, { code: "handedOff" }>["pa
         : t(`chat.sandboxNotice.handedOff.trimFrom`, { tokens, from, cleared }, cleared);
 };
 
+// Where a home conversation's memory starts over (handoff.ts freshStartLine): why, then what the fresh session opened
+// with, two clauses the sandbox's own sentence joins with a comma.
+type FreshStart = Extract<SandboxNotice, { code: "freshStart" }>["params"];
+const FRESH_WHY = {
+    budget: (from) => (from === undefined ? t(`chat.sandboxNotice.freshStart.budget`) : t(`chat.sandboxNotice.freshStart.budgetFrom`, { from })),
+    cold: (from) => (from === undefined ? t(`chat.sandboxNotice.freshStart.cold`) : t(`chat.sandboxNotice.freshStart.coldFrom`, { from })),
+    asked: () => t(`chat.sandboxNotice.freshStart.asked`),
+    cleared: () => t(`chat.sandboxNotice.freshStart.cleared`),
+} as const satisfies Readonly<Record<FreshStart["why"], (from: string | undefined) => string>>;
+const freshStartLine = ({ why, from, model, summarized }: FreshStart): string => {
+    if (!summarized) {
+        return `${FRESH_WHY[why](from)}${t(`chat.sandboxNotice.freshStart.recent`)}`;
+    }
+    const carried = model === undefined ? t(`chat.sandboxNotice.freshStart.summary`) : t(`chat.sandboxNotice.freshStart.summaryBy`, { model });
+    return `${FRESH_WHY[why](from)}${carried}`;
+};
+// A maker's: the same two clauses without a token count or the model's name, which say nothing to them.
+const FRESH_WHY_PLAIN = {
+    budget: () => t(`chat.sandboxNotice.freshStart.plain.budget`),
+    cold: () => t(`chat.sandboxNotice.freshStart.plain.cold`),
+    asked: () => t(`chat.sandboxNotice.freshStart.asked`),
+    cleared: () => t(`chat.sandboxNotice.freshStart.cleared`),
+} as const satisfies Readonly<Record<FreshStart["why"], () => string>>;
+const freshStartPlain = ({ why, summarized }: FreshStart): string =>
+    `${FRESH_WHY_PLAIN[why]()}${summarized ? t(`chat.sandboxNotice.freshStart.plain.summary`) : t(`chat.sandboxNotice.freshStart.plain.recent`)}`;
+
 // Another agent's words, named by its title where it had one, else by its id.
 const agentWordsLine = ({ kind, from, title, failed }: NonNullable<TranscriptRow["agentWords"]>): string => {
     if (kind === `peer`) {
@@ -267,10 +308,10 @@ const agentWordsLine = ({ kind, from, title, failed }: NonNullable<TranscriptRow
 };
 
 /** The notice's line in the reader's language and words; undefined when only its own text can say it. */
-export const noticeLine = (row: NoticeRow, audience: Audience): string | undefined => {
+export const noticeLine = (row: NoticeRow, audience: Audience, place: NoticePlace = {}): string | undefined => {
     const notice = sandboxNoticeOf(row);
     if (notice !== undefined) {
-        return codedLine(notice, audience);
+        return codedLine(notice, audience, place);
     }
     if (row.watchWake !== undefined) {
         return WATCH_WAKE[row.watchWake.outcome](row.watchWake.note, row.watchWake.elapsed);

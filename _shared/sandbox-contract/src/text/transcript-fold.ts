@@ -11,9 +11,8 @@ import {
     type TranscriptSubagent,
     type TranscriptTool,
 } from "../events/transcript.js";
-import { contextTrimLine, contextTrimNotice } from "../schemas/context-trim.js";
 import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
-import { handedOffLine, handedOffNotice } from "../schemas/providers/handoff.js";
+import { startingRow } from "./notice-rows.js";
 import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { errorRow, RENEWAL_WITHDRAWN, RENEWING } from "../events/failure-rows.js";
@@ -244,12 +243,12 @@ export class TranscriptFold {
                 const notice = keptWarmNotice(event);
                 return line === undefined || notice === undefined ? [] : this.pushRow({ role: "notice", text: line, noticeCode: noticeCode(notice) });
             }
+            // Each a row of its own rather than a stamp on the message: what was left out is not part of what was sent, and
+            // the fold beside the message only ever lists notes that actually rode.
             case "context_trim":
-                // A row of its own rather than a stamp on the message: what was left out is not part of what was sent,
-                // and the fold beside the message only ever lists notes that actually rode.
-                return this.pushRow({ role: "notice", text: contextTrimLine(event), noticeCode: noticeCode(contextTrimNotice(event)) });
             case "handoff":
-                return this.pushRow({ role: "notice", text: handedOffLine(event), noticeCode: noticeCode(handedOffNotice(event)) });
+            case "fresh_start":
+                return this.pushRow(startingRow(event));
             case "worktree":
                 return this.synced(event.sync);
             case "landed":

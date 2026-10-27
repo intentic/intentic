@@ -64,7 +64,11 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     z.object({ code: z.literal("landHeld") }),
     z.object({ code: z.literal("landConflict"), params: z.object({ files: count, repos: z.string() }) }),
     // `deps` dependencies the turn added or changed, installing now, or `queued` behind any other install.
-    z.object({ code: z.literal("landed"), params: z.object({ deps: count.optional(), queued: z.boolean().optional() }).optional() }),
+    // `land` names this land, which a home conversation's card files its commit under (AgentSummary.commits).
+    z.object({
+        code: z.literal("landed"),
+        params: z.object({ deps: count.optional(), queued: z.boolean().optional(), land: z.string().optional() }).optional(),
+    }),
     z.object({ code: z.literal("retrying"), params: z.object({ ...failure, attempt: count, of: count }) }),
     z.object({ code: z.literal("retried"), params: z.object({ ...failure, made: count, of: count }) }),
     z.object({ code: z.literal("outageWaiting"), params: z.object(failure) }),
@@ -106,6 +110,18 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
             cleared: count.optional(),
             model: z.string().optional(),
             fellBack: z.boolean().optional(),
+        }),
+    }),
+    // A home conversation going on in a fresh session (schemas/providers/handoff.ts FreshStartSchema): `why` it did,
+    // `from` the context the old session had grown to (worded, "182k"), `model` the one that wrote its summary, and
+    // `summarized` false where it opened with the recent conversation alone.
+    z.object({
+        code: z.literal("freshStart"),
+        params: z.object({
+            why: z.enum(["budget", "cold", "asked", "cleared"]),
+            from: z.string().optional(),
+            model: z.string().optional(),
+            summarized: z.boolean(),
         }),
     }),
     // An agent's own dependency install starting: into its conversation's own copy (`ownCopy`) or the main tree; the

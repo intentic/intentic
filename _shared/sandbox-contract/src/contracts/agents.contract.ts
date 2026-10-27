@@ -66,6 +66,27 @@ export const agentsContract = {
         })
         .meta({ guest: true })
         .output(HomeConversationSchema),
+    // Your own home, like `home`: the id is the verified caller's, never a body's. Refused mid-turn, as a rewind is.
+    startFreshHome: procedure
+        .route({
+            method: "POST",
+            path: "/agents/home/fresh",
+            summary: "Start your home conversation fresh",
+            description:
+                "Makes your next message to your home conversation open a fresh session: a summary of the conversation where a model is set for hand-off summaries, its latest messages and the work it has in hand, instead of the whole conversation re-read on every call. Every message stays in the chat; only what the model reads starts over. It also starts fresh by itself once it grows past the sandbox's `homeFreshOver`. Refused while it is working.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .output(OkSchema),
+    clearHomeHistory: procedure
+        .route({
+            method: "POST",
+            path: "/agents/home/clear",
+            summary: "Clear your home conversation's history",
+            description:
+                "Deletes every message of your home conversation and the saved points to go back to, and makes your next message open a fresh session that knows only the work it has in hand: its subagents and what they hold. Nothing it already landed or committed is touched, and neither are its subagents. Refused while it is working.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .output(z.object({ dropped: z.number().describe("How many messages were deleted.") })),
     archived: procedure
         .route({
             method: "GET",

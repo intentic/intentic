@@ -7,6 +7,7 @@ import { sdk } from "../../../engines/claude-sdk.js";
 import { type AgentHarness, AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { z } from "zod";
 import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNote } from "../children.js";
 import type { ChildResultDoor } from "../child-records.js";
@@ -47,20 +48,36 @@ export interface SubagentWaitDeps {
     readonly logsDir?: string;
 }
 
+// How much of one report a wait hands over whole: its head and its tail, the rest kept behind a retrieval handle.
+export interface ReportBound {
+    readonly whole: number;
+    readonly head: number;
+    readonly tail: number;
+}
+const REPORT_BOUND: ReportBound = { whole: 12_000, head: 4_000, tail: 7_000 };
+// A home conversation keeps every report it reads in a session it means to keep small (home/home-rollover.ts), and its
+// policy reads the report and its verification to judge, not to rewrite it: the shape and the verdict fit in this.
+export const HOME_REPORT_BOUND: ReportBound = { whole: 4_000, head: 1_500, tail: 2_000 };
+
 // Bound each report before JSON serialization, preserving the surrounding wait status and verification fields.
-export const boundChildReport = (report: string | undefined, options: McpOutputOptions): string | undefined => {
-    if (report === undefined || report.length <= 12_000) {
+export const boundChildReport = (report: string | undefined, options: McpOutputOptions, bound: ReportBound = REPORT_BOUND): string | undefined => {
+    if (report === undefined || report.length <= bound.whole) {
         return report;
     }
     const path = retainToolText(report, options);
     if (path === undefined) {
         return report;
     }
-    return `${report.slice(0, 4_000)}\n… report middle omitted …\n${report.slice(-7_000)}\n--- ${report.length - 11_000} chars cut · full: retrieve-output ${path} [pattern]`;
+    const kept = bound.head + bound.tail;
+    return `${report.slice(0, bound.head)}\n… report middle omitted …\n${report.slice(-bound.tail)}\n--- ${report.length - kept} chars cut · full: retrieve-output ${path} [pattern]`;
 };
 
 const reportOf = (deps: SubagentWaitDeps, childId: string): string | undefined =>
-    boundChildReport(deps.children?.report(childId), { logsDir: deps.logsDir ?? join(HISTORY_ROOT, "logs") });
+    boundChildReport(
+        deps.children?.report(childId),
+        { logsDir: deps.logsDir ?? join(HISTORY_ROOT, "logs") },
+        deps.conversationId !== undefined && isHomeConversationId(deps.conversationId) ? HOME_REPORT_BOUND : REPORT_BOUND,
+    );
 
 const UNTIL = z.enum(["blocked", "finished"]);
 

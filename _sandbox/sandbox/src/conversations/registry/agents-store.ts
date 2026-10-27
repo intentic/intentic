@@ -9,6 +9,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/agent";
 import {
     type AgentStatus,
+    HomeCommitSchema,
     LandConflictSchema,
     LandedMessageSchema,
     ReviewTallySchema,
@@ -244,6 +245,12 @@ export const PersistedAgentSchema = z.object({
     limitHold: StoredLimitHoldSchema.optional(),
     // What a land still owes once the daemon is back: its version commit, or the land a wake held (land-marks.ts).
     landMarks: LandMarksSchema.optional(),
+    // A home conversation's latest lands as committed, newest last, kept to HOME_COMMITS_KEPT (version-landed.ts). Added
+    // 2026-10-27, optional: a home from before it simply has none on record.
+    commits: z.array(HomeCommitSchema).optional(),
+    // A home whose next turn opens a fresh session because its person asked or cleared its history
+    // (home/home-rollover.ts); cleared by the turn that opens it. Added 2026-10-27, optional.
+    freshPending: z.enum(["asked", "cleared"]).optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 

@@ -33,7 +33,7 @@ const NOT_ISOLATED =
 type Caller = Pick<OrpcContext, "identity">;
 
 // The caller's home conversation id, or the refusal: only a verified person, or the loopback owner, has one.
-const homeIdOf = (services: Pick<Services, "auth">, context: Caller): string => {
+export const homeIdOf = (services: Pick<Services, "auth">, context: Caller): string => {
     const email = context.identity?.email ?? (services.auth === undefined ? LOOPBACK_OWNER : undefined);
     if (email === undefined) {
         throw new ORPCError("FORBIDDEN", { message: NOT_A_PERSON });

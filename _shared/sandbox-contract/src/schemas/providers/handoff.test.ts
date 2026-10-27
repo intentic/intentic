@@ -1,4 +1,4 @@
-import { type HandoffMode, handedOffLine, handedOffNotice, suggestHandoff } from "./handoff.js";
+import { freshStartLine, freshStartNotice, type HandoffMode, handedOffLine, handedOffNotice, suggestHandoff } from "./handoff.js";
 
 const THRESHOLDS = { carryUnder: 150_000, summaryOver: 700_000 };
 const all = (): boolean => true;
@@ -38,5 +38,27 @@ describe("handedOffLine", () => {
     it("says plainly when the way picked could not be built", () => {
         expect(handedOffLine({ mode: "trim", fellBack: true })).toBe("Could not trim the session for the hand-off, so it was carried whole.");
         expect(handedOffNotice({ mode: "summary", fellBack: true })).toStrictEqual({ code: "handedOff", params: { mode: "summary", fellBack: true } });
+    });
+});
+
+describe("a home's fresh start", () => {
+    it("says why the chat started over and what the fresh session opened with", () => {
+        expect(freshStartLine({ why: "cold", from: 90_000, summarized: false })).toBe(
+            "This chat had been idle long enough that re-reading it at about 90k tokens would cost more than starting over, so it went on in a fresh session, opened with its latest messages and the work in hand.",
+        );
+        expect(freshStartLine({ why: "asked", summarized: true })).toBe(
+            "Started fresh, as you asked, opened with a summary of the conversation and its latest messages.",
+        );
+        expect(freshStartLine({ why: "cleared", summarized: false })).toBe("History cleared: started fresh, opened with its latest messages and the work in hand.");
+    });
+
+    it("carries only the facts it has", () => {
+        expect(freshStartNotice({ why: "asked", summarized: false })).toEqual({ code: "freshStart", params: { why: "asked", summarized: false } });
+        expect(freshStartNotice({ why: "budget", from: 151_400, model: "haiku", summarized: true }).params).toEqual({
+            why: "budget",
+            from: "151k",
+            model: "haiku",
+            summarized: true,
+        });
     });
 });

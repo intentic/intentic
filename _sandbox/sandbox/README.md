@@ -355,6 +355,16 @@ flowchart LR
   without a naming-model call. Older automatic titles follow the same rule when loaded; a person's rename stands,
   and neither a model nor a plan heading replaces it (`withHomeTitle` in `conversations/registry/agents-registry.ts`).
   `GET /agents/attention/mine` is every member's own attention count, which each sandbox's icon wears there.
+- A home stays as cheap as an ordinary chat (2026-10-27, `conversations/home/home-rollover.ts`): once its context
+  reaches the sandbox's `homeFreshOver` (150k tokens by default), or half of it with the prompt cache already cold, its
+  next turn opens a fresh session instead of resuming the old one. That session gets a summary (where a model is set for
+  hand-off summaries), the latest messages, its subagents and where each one's work stands, and the home policy again.
+  The chat keeps every row, and a `fresh_start` row marks where the model's memory starts over. Its owner can also
+  start it fresh (`POST /agents/home/fresh`) or clear its history (`POST /agents/home/clear`: every row and saved
+  point goes, nothing landed or committed moves). The subagent reports a home waits on come back shorter
+  (`HOME_REPORT_BOUND`, with the retrieval handle). Each of its lands is named on its `landed` row, and the commit it
+  became is filed on its card (`AgentSummary.commits`), so the chat can say what was committed. `pnpm --filter
+  @intentic/sandbox bench:home` compares a home's turns with everyone else's off the spend ledger.
 - Home-only members (2026-10-22): a grant of `agents: "home"` (tier `guest`, areas optional) makes a person's home
   conversation their only way in. Every write that names a conversation refuses any other
   (`conversations/home/home-conversation.ts refuseUnlessHome`), so they start nothing of their own. They see their

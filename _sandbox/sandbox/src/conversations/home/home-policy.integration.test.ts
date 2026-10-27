@@ -47,3 +47,15 @@ test("rides a home's opening turn and the one after a compaction, as its own not
     expect(await homeNoteIfDue(deps, { identity: { home: true }, compactedTurn: 3 }, 3)).toMatchObject({ title: "How this home conversation works" });
     expect(await homeNoteIfDue(deps, { identity: {} }, 0)).toBeUndefined();
 });
+
+// A home that outgrew its budget goes on in a fresh session (home-rollover.ts), whose history holds none of the note.
+test("rides a home's fresh session too, whatever turn it is", async () => {
+    const deps = { workspace: { root: await workspace() } };
+    expect(await homeNoteIfDue(deps, { identity: { home: true } }, 7, true)).toMatchObject({ title: "How this home conversation works" });
+    expect(await homeNoteIfDue(deps, { identity: {} }, 7, true)).toBeUndefined();
+});
+
+test("the default keeps the conversation lean and says it goes on fresh", () => {
+    expect(DEFAULT_HOME_POLICY).toContain("Stay lean");
+    expect(DEFAULT_HOME_POLICY).toContain("goes on in a fresh session");
+});

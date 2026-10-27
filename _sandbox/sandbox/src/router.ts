@@ -7,6 +7,7 @@ import { createAgentRoutes } from "./agent/routes/agent.routes.js";
 import { createProvidersRoutes } from "./agent/routes/providers.routes.js";
 import { createAgentsRoutes } from "./conversations/agents.routes.js";
 import { createAttentionRoutes } from "./conversations/attention.routes.js";
+import { createHomeFreshRoutes } from "./conversations/home/home-fresh.routes.js";
 import { portJobOf } from "./agent/tools/jobs/background-jobs.js";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
@@ -80,7 +81,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     activity: createActivityRoutes(services),
     audit: createAuditRoutes(services),
     agent: { ...createAgentRoutes(services), ...createAgentContinueRoutes(services), ...createAgentQueueRoutes(services) },
-    agents: { ...createAgentsRoutes(services), ...createAttentionRoutes(services) },
+    agents: { ...createAgentsRoutes(services), ...createAttentionRoutes(services), ...createHomeFreshRoutes(services) },
     automations: createAutomationsRoutes(services),
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),
     chores: createChoresRoutes(services),

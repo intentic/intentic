@@ -83,14 +83,16 @@ export const ensureComposedWorktree = async (
 };
 
 // Builds the note only for turns that owe it: the opening turn and the one after a compaction, when history can't carry
-// it. Reads the just-recorded composition, so the note matches the tree the turn opens on.
+// it, and a home's fresh session (`fresh`, home-rollover.ts), which opens with none of it. Reads the just-recorded
+// composition, so the note matches the tree the turn opens on.
 export const contextNoteIfDue = (
     services: Pick<Services, "agents" | "workspace" | "personas" | "areas">,
     input: AgentTurn,
     entry: { readonly compactedTurn?: number | undefined } | undefined,
     conversationTurns: number,
+    fresh = false,
 ): Promise<TurnNote | undefined> => {
-    if (input.conversationId === undefined || (conversationTurns !== 0 && !compactedSinceLastTurn(entry, conversationTurns))) {
+    if (input.conversationId === undefined || (conversationTurns !== 0 && !fresh && !compactedSinceLastTurn(entry, conversationTurns))) {
         return Promise.resolve(undefined);
     }
     return contextNoteFor(services, input.conversationId);

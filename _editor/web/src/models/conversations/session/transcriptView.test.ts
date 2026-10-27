@@ -269,3 +269,19 @@ describe(`the transcript's own lines`, () => {
         expect(view.historyMore.value).toBe(false);
     });
 });
+
+// A home's Clear history empties the daemon's record under the transcript, which no read would ever redraw as empty.
+describe(`clearRecord`, () => {
+    it(`empties the rows and the paging, retires the session, and disarms an edit`, async () => {
+        const { host, view, row } = viewOf();
+        view.restoreMessages(ROWS, { from: 3, more: true });
+        view.beginEdit(row(1));
+
+        await view.clearRecord();
+        expect(view.messages.value).toEqual([]);
+        expect([view.historyFrom.value, view.historyMore.value]).toEqual([0, false]);
+        expect(view.editing.value).toBeUndefined();
+        expect(host.session.value).toBeUndefined();
+        expect([host.error.value, host.failures.crashed.value]).toEqual([null, false]);
+    });
+});

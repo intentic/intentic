@@ -457,6 +457,18 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "For the suggested hand-off: at or above this many tokens of context, suggest a summary rather than a trimmed session, where a model is set for hand-off summaries.",
         ),
+    // A home conversation is one chat kept for good (handoff.ts FreshStartSchema): past this, its next turn opens a fresh
+    // session instead of re-reading all of the old one. 150k sits under where a typical conversation here peaked (the spend
+    // ledger, 2026-10-13..27: median peak 172k), and a turn ending at 100-150k cost about $1 on average there against about
+    // $9 for one ending at 300-500k.
+    homeFreshOver: z
+        .number()
+        .int()
+        .min(0)
+        .default(150_000)
+        .describe(
+            "How large a home conversation's context may grow, in tokens, before its next message starts a fresh session: a summary and its latest messages instead of the whole conversation re-read on every call. Half of it is enough once the prompt cache has gone cold, since re-reading then costs a full write anyway. The chat keeps every message; only what the model reads starts over. Zero never starts one by itself.",
+        ),
     // Off by default: every refresh spends the account's own allowance on a conversation nobody is using yet. Before
     // 2026-09-26 these were four top-level settings (settings-history.ts folds them).
     keepWarm: KeepWarmSettingsSchema.prefault({}).describe(

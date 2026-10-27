@@ -83,7 +83,7 @@ export const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queu
 
 // What the card says the conversation is: where it works, where it came from and as whom, its name, who answers for it
 // and what people left on it, and the settings its last turn ran under.
-export const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt }: PersistedAgent) => ({
+export const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt, commits, freshPending }: PersistedAgent) => ({
     provider: profile.provider,
     harness: profile.harness,
     ...(placement.kind === "worktree" ? { branch: placement.branch, ...opt("runner", placement.runner) } : {}),
@@ -100,6 +100,8 @@ export const describedBy = ({ placement, identity, profile, social, sessionId, a
     ...opt("forkedFrom", identity.forkedFrom),
     ...opt("fresh", identity.fresh),
     ...opt("home", identity.home),
+    ...opt("commits", commits),
+    ...opt("freshPending", freshPending),
     ...opt("title", social.title?.text),
     ...opt("titleAction", social.title?.action),
     ...opt("model", profile.model),

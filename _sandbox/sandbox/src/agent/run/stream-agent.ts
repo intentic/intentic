@@ -9,7 +9,7 @@ import type { ContextTrim } from "@intentic/sandbox-contract/schemas/context-tri
 import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
-import type { HandedOff, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
+import type { FreshStart, HandedOff, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { Logger } from "pino";
 import { createOutboundSniffer } from "../../activity/outbound.js";
 import { turnCliEnv } from "./harness/turn-env.js";
@@ -51,12 +51,12 @@ import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../../sessions/vocabulary/runtime-history.js";
-import { summaryNote } from "../providers/limit-handoff.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { nameAgentTitle } from "../models/title-namer.js";
 import { sessionToResume, handoffOf, attachmentsOf } from "./turn/turn-preflight-input.js";
-import { resumeTrimTurn, trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
-import { carriedHandoff, carriedOffOf, keptHandoffOf, type Replaced, replaceHeld, withoutSession } from "./turn/holds/handoff-way.js";
+import { trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
+import { carriedOffOf, keptHandoffOf, type Replaced, replaceHeld } from "./turn/holds/handoff-way.js";
+import { continuationInput, continuationOf, continuationTrim, type HomeContinuation, homeContinuationOf } from "./turn/holds/turn-continuation.js";
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
 import { codedFailure } from "./frames/error-frames.js";
@@ -214,7 +214,7 @@ const placementOf = (
             compose: (base) => ensureComposedWorktree(services, input, id, base, entersNamespace(input), true),
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
-            settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
+            settleLanding: (conversationId, land) => settleLandingInBackground(services, conversationId, land),
             resolveConflict: (conversationId, conflicts) => void resolveHomeConflict(services, conversationId, conflicts),
         },
     );
@@ -520,6 +520,8 @@ interface Preflight {
     readonly handoffNotes: readonly TurnNote[];
     // How a spent allowance's held turn continued, where a person had a choice of ways (agent/providers/limit-handoff.ts).
     readonly handedOff: HandedOff | undefined;
+    // How a home conversation went on in a fresh session instead of its old one (conversations/home/home-rollover.ts).
+    readonly freshStart: FreshStart | undefined;
     readonly coldTrimStamps: TurnExperimentStamps;
     readonly repoSync: Promise<RepoSync[]> | undefined;
     readonly carriedOff: boolean;
@@ -535,6 +537,7 @@ const preflight = async (
     clock: ReturnType<typeof preflightClock>,
     coldTrimBasis: ColdTrimBasis | undefined,
     replaced: Replaced,
+    rollover: HomeContinuation | undefined,
 ): Promise<Preflight | { readonly refused: string } | SetupRefusal> => {
     const { held, way } = replaced;
     // Shared with the boot-time condition-watch restore, so a drifted second copy can't quietly stop working.
@@ -563,23 +566,17 @@ const preflight = async (
                   services.logger.warn({ err: error }, "repo sync failed");
                   return [];
               });
-    // A trimmed hand-off resumes a copy of the session with older tool output cleared, written before the store is asked.
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
-    const trim = await resumeTrimTurn(services, input, settings, held, coldTrimBasis, way);
-    // A summary opens a fresh session: a re-run was sent without one (turn-resume.ts), new words leave theirs here.
-    const turnInput = way === "summary" ? withoutSession(trim.turn) : trim.turn;
+    // A trimmed hand-off resumes a copy of the session; a summary or a home starting fresh opens a fresh one instead.
+    const trim = await continuationTrim(services, input, settings, held, coldTrimBasis, way, rollover);
+    const turnInput = continuationInput(trim.turn, way, rollover);
     // Asks the runtime's store whether it still holds the named session: a session id is a claim, not a fact.
     const resumed = await sessionToResume(services, turnInput, execution);
     const delivery = trimDelivery(trim, resumed);
     const history = await handoffOf(services, turnInput, resumed);
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, held);
-    const summarized =
-        way === "summary" && history.length > 0 && input.conversationId !== undefined
-            ? await summaryNote(services, execution, { conversationId: input.conversationId, rows: history, contextTokens: held?.contextTokens, signal })
-            : undefined;
-    const handedOff =
-        delivery.event ?? summarized?.event ?? carriedHandoff(way, held, resumed);
+    const going = await continuationOf(services, execution, { input, history, held, way, rollover, resumed, delivery, signal });
     clock.mark("history");
     const base = baseRequestOf(services, turnInput, { execution, history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
     const frames = createTurnFrames(effectiveCwd, resumed);
@@ -595,15 +592,16 @@ const preflight = async (
         ...opt("children", childrenOf(services, input, localCwd)),
         ...opt("workflows", workflowsOf(services, input, localCwd)),
     };
-    const handoffNotes = [...(summarized?.note === undefined ? [] : [summarized.note]), ...(handoffNote === undefined ? [] : [handoffNote])];
+    const handoffNotes = [...going.notes, ...(handoffNote === undefined ? [] : [handoffNote])];
     return {
         context,
         isolation,
         effectiveCwd,
         frames,
         handoffNotes,
-        handedOff,
-        coldTrimStamps: delivery.stamps,
+        handedOff: going.handedOff,
+        freshStart: going.freshStart,
+        coldTrimStamps: going.stamps,
         repoSync,
         carriedOff: carriedOffOf(input, held),
     };
@@ -721,12 +719,18 @@ async function* prepareTurn(
 ): AsyncGenerator<AgentEvent, PreparedTurn | undefined> {
     const clock = preflightClock();
     const replaced = replaceHeld(services, input);
+    // A home grown past its budget starts fresh rather than re-reading its whole session (home/home-rollover.ts).
+    const rollover = await homeContinuationOf(services, input, coldTrimBasis, replaced.way !== undefined);
     // A summary hand-off asks a model before the turn's own does, which takes a while on a long conversation: said.
-    const summarizing = replaced.way === "summary";
+    const summarizing = replaced.way === "summary" || rollover?.summarize === true;
     if (summarizing) {
-        yield { kind: "agent_status", key: HANDOFF_STATUS, text: "Writing a summary of the conversation for the hand-off…" };
+        yield {
+            kind: "agent_status",
+            key: HANDOFF_STATUS,
+            text: rollover === undefined ? "Writing a summary of the conversation for the hand-off…" : "Starting a fresh session: writing a summary of the conversation…",
+        };
     }
-    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock, coldTrimBasis, replaced);
+    const ready = await preflight(services, input, executionScope, signal, worktree, steering, clock, coldTrimBasis, replaced, rollover);
     if (summarizing) {
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
     }
@@ -737,6 +741,9 @@ async function* prepareTurn(
     }
     if (ready.handedOff !== undefined) {
         yield { kind: "handoff", ...ready.handedOff };
+    }
+    if (ready.freshStart !== undefined) {
+        yield { kind: "fresh_start", ...ready.freshStart };
     }
     const planned = await planTurn(services, input, ready.context);
     const plan = planned.ok ? { ...planned, experiments: { ...planned.experiments, ...ready.coldTrimStamps } } : planned;

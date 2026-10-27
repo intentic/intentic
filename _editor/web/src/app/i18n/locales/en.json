@@ -3140,7 +3140,8 @@
                 "intoParent": "Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.",
                 "intoParentClash": "{count} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve. | {count} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.",
                 "rebased": "Your workspace moved on while this agent waited, its branch was rebased onto your latest {count} commit. | Your workspace moved on while this agent waited, its branch was rebased onto your latest {count} commits.",
-                "rebaseBlocked": "Couldn't rebase onto your workspace in {repos}: the turn is running from the older base, so its land may need a resolve."
+                "rebaseBlocked": "Couldn't rebase onto your workspace in {repos}: the turn is running from the older base, so its land may need a resolve.",
+                "homeLanded": "Landed in your workspace and committed."
             },
             "maker": {
                 "landed": "The changes were accepted into your files: see them in What changed.",
@@ -3149,7 +3150,8 @@
                 "intoParent": "Changes went into the parent assistant's draft, as its helpers' edits do: they reach your files when you accept that assistant's work.",
                 "intoParentClash": "{count} file clashes with the parent assistant's own edits, so nothing was written into its draft. The parent was told, and can bring the changes in to sort it out. | {count} files clash with the parent assistant's own edits, so nothing was written into its draft. The parent was told, and can bring the changes in to sort it out.",
                 "rebased": "Your files moved on while this assistant waited, so its draft was brought up to date with your latest {count} change. | Your files moved on while this assistant waited, so its draft was brought up to date with your latest {count} changes.",
-                "rebaseBlocked": "Couldn't bring the draft up to date with your files in {repos}: the assistant is working from an older version, so accepting its work may need a fix first."
+                "rebaseBlocked": "Couldn't bring the draft up to date with your files in {repos}: the assistant is working from an older version, so accepting its work may need a fix first.",
+                "homeLanded": "The changes were accepted into your files and saved as a version."
             },
             "keptWarm": "Picked up warm: {tokens} tokens read from the cache, kept warm for {span} with {refreshes} refresh. | Picked up warm: {tokens} tokens read from the cache, kept warm for {span} with {refreshes} refreshes.",
             "keptCold": "Picked up cold despite being kept warm for {span} with {refreshes} refresh: {tokens} tokens sent again, because this turn's prompt no longer matched the cache. | Picked up cold despite being kept warm for {span} with {refreshes} refreshes: {tokens} tokens sent again, because this turn's prompt no longer matched the cache.",
@@ -3175,7 +3177,24 @@
                 "summaryFellBack": "Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead."
             },
             "stoppedPartway": "{message} The run stopped partway. The changes it made so far are kept: send a message to pick up from here.",
-            "stoppedPartwaySwitch": "{message} The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here."
+            "stoppedPartwaySwitch": "{message} The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here.",
+            "freshStart": {
+                "budget": "This chat's memory was full, so it went on in a fresh session",
+                "budgetFrom": "This chat's memory was full at about {from} tokens, so it went on in a fresh session",
+                "cold": "This chat had been idle long enough that re-reading it would cost more than starting over, so it went on in a fresh session",
+                "coldFrom": "This chat had been idle long enough that re-reading it at about {from} tokens would cost more than starting over, so it went on in a fresh session",
+                "asked": "Started fresh, as you asked",
+                "cleared": "History cleared: started fresh",
+                "summary": ", opened with a summary of the conversation and its latest messages.",
+                "summaryBy": ", opened with a summary of the conversation written by {model} and its latest messages.",
+                "recent": ", opened with its latest messages and the work in hand.",
+                "plain": {
+                    "budget": "This chat's memory was full, so it carried on with a fresh one",
+                    "cold": "This chat had been quiet for a while, so it carried on with a fresh memory",
+                    "summary": ", picking up from a summary of the conversation and its latest messages.",
+                    "recent": ", picking up from its latest messages and the work in hand."
+                }
+            }
         },
         "failure": {
             "access": "The provider refused this account: its plan or organization does not allow it.",
@@ -4679,6 +4698,72 @@
             "spentToday": "Spent today",
             "spentOf": "${spent} of ${cap}",
             "savedAs": "Saved as"
+        },
+        "composerLandPill": {
+            "landsCommits": "Lands & commits",
+            "asksMaintainer": "Asks a maintainer",
+            "when": "When",
+            "turnEnds": "Each turn ends",
+            "commit": "Commit",
+            "draftedSubject": "Subject drafted from its work",
+            "work": "Work",
+            "waitsOnBranch": "Waits on its branch",
+            "nobodyPressesLand": "Nobody presses Land",
+            "maintainerLands": "A maintainer lands it",
+            "plain": {
+                "savesItself": "Saves by itself",
+                "replyEnds": "Each reply ends",
+                "version": "Version",
+                "namedFromWork": "Named from what changed",
+                "nothingToAccept": "Nothing for you to accept",
+                "waitsInDraft": "Waits in its draft",
+                "maintainerAccepts": "A maintainer accepts it"
+            }
+        },
+        "noticeFreshStart": {
+            "label": "Fresh session"
+        },
+        "noticeHomeCommit": {
+            "subject": "“{subject}”",
+            "revert": "Revert",
+            "reverted": "Reverted",
+            "confirmHeader": "Revert this commit? | Revert these {count} commits?",
+            "confirmBody": "A new commit takes this work back out, and the history keeps both. | A new commit in each repository takes this work back out, and the history keeps both.",
+            "revertFailed": "Couldn't revert it in {repo}.",
+            "revertFailedWhy": "Couldn't revert it in {repo}: {reason}",
+            "writing": "Writing the commit…",
+            "plain": {
+                "undo": "Undo",
+                "undone": "Undone",
+                "confirmHeader": "Undo these changes?",
+                "confirmBody": "A new version takes these changes back out of your files. Nothing earlier is lost.",
+                "saving": "Saving a version…"
+            }
+        },
+        "homeMemory": {
+            "title": "Memory",
+            "fill": "Memory {percent}%",
+            "soon": "starts fresh soon",
+            "pending": "Starts fresh on your next message",
+            "used": "Used",
+            "freshAt": "Fresh at",
+            "tipNote": "Starts fresh when full",
+            "explain": "When this chat's memory fills up, it carries on in a fresh session that starts from a summary and its latest messages, so every message stays quick and cheap. All your messages stay here.",
+            "filled": "Its memory is {percent}% full.",
+            "neverByItself": "This sandbox is set never to start it fresh by itself.",
+            "pendingAsked": "Your next message starts a fresh session, as you asked.",
+            "pendingCleared": "History cleared. Your next message starts a fresh session.",
+            "startFresh": "Start fresh",
+            "clear": "Clear history…",
+            "waitForReply": "Wait for the reply to finish first.",
+            "busy": "Your home conversation is working right now: wait for it to finish, or stop it first.",
+            "failed": "Couldn't reach the sandbox. Try again.",
+            "confirmHeader": "Clear this chat's history?",
+            "confirmBody": "Every message here is deleted, and so are the points to go back to. Nothing it landed or committed is touched, and its subagents are kept. This can't be undone.",
+            "confirmLabel": "Clear history",
+            "plain": {
+                "confirmBody": "Every message here is deleted, and so are the points to go back to. Nothing already in your files changes, and its helpers keep their work. This can't be undone."
+            }
         }
     },
     "common": {

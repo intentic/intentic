@@ -13,7 +13,7 @@ import { standingsForRead } from "./standings-read.js";
 // wakes. `GET /agents/attention/mine` is every member's own share of it, which a sandbox's icon in the master view wears:
 // only the conversations the caller answers for, their subagents counted through their family's one card, and no held
 // wake, which is the owner's to allow. `GET /agents/home` is the caller's home conversation (home/home-conversation.ts).
-// Beside agents.routes.ts rather than in it: router.ts merges the three into the `agents` group.
+// Beside agents.routes.ts rather than in it: router.ts merges these with home/home-fresh.routes.ts into the `agents` group.
 export const createAttentionRoutes = (services: Pick<Services, "agents" | "heldWakes" | "auth">) => {
     const i = implement(agentsContract).$context<OrpcContext>();
     return {
