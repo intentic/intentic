@@ -266,6 +266,16 @@ export const entryFields = (entry: CapabilityCatalogEntry): readonly Field[] => 
     });
 };
 
+/**
+ * The fields the core adds to every tile of a kind, in the reader's language: the settings a connection still carries
+ * when the tile it was added from is no longer in the catalog (its extension switched off since).
+ */
+export const coreFieldWords = (kind: CapabilityKind): readonly Field[] =>
+    coreFields(kind).map((field) => {
+        const own = CORE_FIELDS.get(kind)?.get(field.key);
+        return own === undefined ? field : fieldWords(coreCopy(kind, field.key), ``, field, own);
+    });
+
 /** The tile with its add-form's words in the reader's language, for every surface that renders the form. */
 export const withFieldWords = (entry: CapabilityCatalogEntry): CapabilityCatalogEntry => ({ ...entry, fields: entryFields(entry) });
 

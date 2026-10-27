@@ -5,6 +5,7 @@ import type { Need, ReleaseNeed } from "@intentic/sandbox-contract/schemas/needs
 import { Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import ChatCardFacts from "../../components/card/ChatCardFacts.vue";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useSandboxSession } from "../../client/session/sandboxSession";
 import { useNeedAnswer } from "./needAnswer";
@@ -36,9 +37,7 @@ const decline = async (): Promise<void> => {
 <template>
     <div class="chat-card-body flex flex-col gap-2">
         <span class="text-xs text-content/85">{{ t(`needs.release.whole`) }}</span>
-        <span class="truncate text-2xs text-subtle" v-tooltip.left.overflow="subject.approvers.join(`, `)">{{
-            t(`needs.release.approvers`, { approvers: subject.approvers.join(`, `) })
-        }}</span>
+        <ChatCardFacts :facts="[{ key: `approvers`, label: t(`chat.cardFacts.approvers`), value: subject.approvers.join(`, `) }]" />
         <div v-if="mayAnswer" class="flex flex-wrap items-center gap-2">
             <ChatDecisionButton tone="primary" icon="unlock" :disabled="busy" @click="release">{{ t(`needs.release.release`) }}</ChatDecisionButton>
             <ChatDecisionButton tone="secondary" icon="times" :disabled="busy" @click="decline">{{ t(`needs.card.notNow`) }}</ChatDecisionButton>

@@ -19,6 +19,7 @@ import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useExtensions } from "../../models/extensions/useExtensions";
 import { dismissOperation, operationsUnder } from "../../workbench/operations/operations";
 import { applyNow } from "./applyNow";
+import NeedChangeFacts from "./NeedChangeFacts.vue";
 import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "../../models/needs/useNeeds";
 
@@ -190,7 +191,6 @@ const setupAt = computed(() => ({ path: `/capabilities/${props.subject.entry}`, 
 // Where the credential comes from, folded: the provider's token page first, then the catalog's own steps.
 const tokenUrl = computed(() => (entry.value === undefined ? undefined : guideTokenUrl(entry.value, values)));
 const guideSteps = computed<readonly string[]>(() => entry.value?.guide?.steps ?? []);
-const settingOf = (key: string): string => entry.value?.fields.find((field) => field.key === key)?.label ?? key;
 </script>
 
 <template>
@@ -266,14 +266,9 @@ const settingOf = (key: string): string => entry.value?.fields.find((field) => f
 
         <!-- A setting on a connected one: each change as it would land, applied in one press. -->
         <div v-else-if="subject.mode === `change` && instance" class="flex flex-col gap-2">
-            <ul class="flex flex-col gap-0.5">
-                <li v-for="(value, key) in subject.changes" :key="key" class="flex items-center gap-2 text-xs">
-                    <span class="text-content/85">{{ settingOf(String(key)) }}</span>
-                    <span class="font-mono text-2xs text-subtle">{{ instance.config[key] ?? `—` }}</span>
-                    <Icon name="arrow-right" class="text-2xs text-subtle" />
-                    <span class="font-mono text-2xs text-content">{{ value }}</span>
-                </li>
-            </ul>
+            <div class="flex flex-col gap-1 text-xs">
+                <NeedChangeFacts :subject="subject" :current="instance.config" />
+            </div>
             <div class="flex flex-wrap items-center gap-2">
                 <ChatDecisionButton tone="primary" icon="check" :disabled="busy" @click="change">{{ t(`needs.capability.apply`) }}</ChatDecisionButton>
                 <slot name="decline" />

@@ -1,12 +1,11 @@
-// Needs jsdom: the line under a resolved ask is one sentence joined from three messages, and only a render shows whether a
-// space survives the joins, in every language the editor ships.
+// Needs jsdom: a resolved ask folds to the one fact its chip does not say, the name setup saved the connection under, with
+// the agent's case one press away; the clause saying the agent carried on is what any answer means, so it is not drawn.
 import "@intentic/testing/dom";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CapabilityOutcome } from "@intentic/sandbox-contract/events/requests";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { type Locale, setLocale } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatCapabilityCard from "./ChatCapabilityCard.vue";
@@ -15,7 +14,7 @@ import ChatCapabilityCard from "./ChatCapabilityCard.vue";
 const settledAs = (outcome: CapabilityOutcome): ChatMessage => {
     const fold = new TranscriptFold([userRow(`go`, 1, [])]);
     const frames: AgentEvent[] = [
-        { kind: `capability_offer`, requestId: `c1`, offer: { entry: `github`, name: `GitHub` } },
+        { kind: `capability_offer`, requestId: `c1`, offer: { entry: `github`, name: `GitHub`, why: `To open an issue for each bug.` } },
         { kind: `resolved`, requestId: `c1`, reply: { kind: `capability_offer`, requestId: `c1`, connect: true } },
         { kind: `capability_outcome`, requestId: `c1`, ...outcome },
     ];
@@ -30,8 +29,7 @@ const settledAs = (outcome: CapabilityOutcome): ChatMessage => {
 };
 
 let app: App | undefined;
-// What the card says under the resolved ask, the only text this suite is about.
-const outcomeLine = (message: ChatMessage): string | null | undefined => {
+const mount = (message: ChatMessage): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatCapabilityCard, { message, settling: false, reply: async () => {} }) });
@@ -40,34 +38,32 @@ const outcomeLine = (message: ChatMessage): string | null | undefined => {
     // Read only by the Connect press, which nothing here makes.
     app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: defineComponent({ render: () => null }) }] }));
     app.mount(element);
-    return element.querySelector(`.chat-card-row > span`)?.textContent;
+    return element;
 };
 
-afterEach(async () => {
+afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    await setLocale(`en`);
 });
 
-it(`says who it connected as, with a space between the words and none before the clause`, () => {
-    expect(outcomeLine(settledAs({ outcome: `connected`, id: `github` }))).toBe(`Connected as "github": the agent is continuing with it.`);
+it(`names the connection setup saved, and nothing the chip already says`, () => {
+    const element = mount(settledAs({ outcome: `connected`, id: `github-work` }));
+    const saved = element.querySelector(`[data-capability-saved-as]`);
+    expect(saved?.firstChild?.textContent?.trim()).toBe(`Saved as`);
+    expect(saved?.querySelector(`.font-mono`)?.textContent).toBe(`github-work`);
+    expect(element.textContent).not.toContain(`continuing`);
 });
 
-it(`goes straight to the clause when setup named no account`, () => {
-    expect(outcomeLine(settledAs({ outcome: `connected` }))).toBe(`Connected: the agent is continuing with it.`);
+it(`folds the agent's case behind a press`, async () => {
+    const element = mount(settledAs({ outcome: `connected`, id: `github-work` }));
+    expect(element.querySelector(`[data-agent-case]`)).toBeNull();
+    element.querySelector<HTMLButtonElement>(`[data-card-outcome-toggle]`)?.click();
+    await nextTick();
+    expect(element.querySelector(`[data-agent-case]`)?.textContent).toContain(`To open an issue for each bug.`);
 });
 
-// Each language's clause brings its own lead-in (French spaces its colon), so the join adds one space and nothing else.
-const IN_EACH_LANGUAGE: readonly (readonly [Locale, string])[] = [
-    [`de`, `Verbunden als „github“: der Agent macht damit weiter.`],
-    [`es`, `Conectado como «github»: el agente sigue con ello.`],
-    [`fr`, `Connecté sous « github » : l'agent continue avec.`],
-    [`pl`, `Podłączone jako „github”: agent idzie z tym dalej.`],
-];
-for (const [locale, line] of IN_EACH_LANGUAGE) {
-    it(`reads as one sentence in ${locale}`, async () => {
-        await setLocale(locale);
-        expect(outcomeLine(settledAs({ outcome: `connected`, id: `github` }))).toBe(line);
-    });
-}
+it(`says no name when setup named no account`, () => {
+    const element = mount(settledAs({ outcome: `connected` }));
+    expect(element.querySelector(`[data-capability-saved-as]`)).toBeNull();
+});

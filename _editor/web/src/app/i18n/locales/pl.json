@@ -3249,22 +3249,16 @@
             "nothingMatches": "Nic nie pasuje do „{query}”."
         },
         "chatMessageView": {
-            "agentContinuing": ": agent idzie z tym dalej.",
             "agentNeedsAtTerminal": "Agent potrzebuje Cię przy tym terminalu",
             "agentsVoice": "Głos agenta",
-            "agentToldToCarry": ": agentowi kazano iść dalej bez tego.",
             "agentsBrowserNeeds": "Przeglądarka agenta potrzebuje Cię: {account}",
-            "agentsCase": "Argument agenta: {why}",
             "agentsTerminalNeeds": "Terminal agenta potrzebuje Cię",
             "allowOnce": "Zezwól raz",
             "allowOnceHint": "Tylko to wywołanie",
             "allowMore": "Więcej sposobów zezwolenia",
             "allowEverything": "Zezwól na wszystko w tej rozmowie",
             "allowEverythingHint": "Cofniesz w Potrzebuje Cię → Dozwolone · twarde reguły nadal pytają",
-            "approvers": "Zatwierdzający: {approvers}",
             "approversOnly": "Tylko zatwierdzający",
-            "as": "jako „{id}”",
-            "by": "przez {approvedBy}",
             "chatStaysPutInstead": "(ten czat zostaje na miejscu zamiast sam się podejmować)",
             "collapseMessage": "Zwiń wiadomość",
             "connect": "Podłącz {name}",
@@ -3289,15 +3283,10 @@
             "paymentOwnerOnly": "Tylko właściciel tego sandboxa może zatwierdzić płatność: płaci jego portfel.",
             "placedBy": "Zlecone przez Ciebie",
             "readAsItsOwn": "Czyta jak własne",
-            "refused": "Odrzucone",
             "release": "Zwolnij",
             "releaseToAgent": "Zwolnić {subject} dla agenta?",
-            "releasedBy": "Zwolnione przez {approvedBy}",
-            "releasingCoversOneUse": "Zwolnienie obejmuje to jedno użycie. Następne pyta znowu.",
-            "releasingCoversRestConversation": "Zwolnienie obejmuje resztę tej rozmowy.",
             "replacesWhatFollows": "Zastępuje to, co dalej",
             "requestedBecause": "Poproszono, ponieważ: {reason}",
-            "setupDidntFinishWhile": "Konfiguracja nie skończyła się, kiedy agent czekał: poszedł dalej bez niej.",
             "showCheck": "Pokaż sprawdzenie",
             "showFindings": "Pokaż wyniki",
             "showCommand": "Pokaż polecenie",
@@ -3305,8 +3294,6 @@
             "showPrompt": "Pokaż prompt",
             "skipCall": "Pomiń i idź dalej",
             "skipFree": "Pomiń: za darmo",
-            "spentToday": "{amountUsd} $ · dziś wydano {spentTodayUsd} $ z {dailyCapUsd} $",
-            "to": "Do {payTo}",
             "waitingToFinishSetup": "Czekamy, aż dokończysz konfigurację…",
             "waitsReadyToLand": "(czeka jako „Gotowe do scalenia”, aż to scalisz)",
             "watchInstall": "Obejrzyj instalację",
@@ -4675,6 +4662,23 @@
             "xhigh": "Bardzo wysoki",
             "max": "Maksymalny",
             "ultra": "Ultra"
+        },
+        "cardOutcome": {
+            "agentsCase": "Argument agenta:",
+            "why": "Dlaczego prosił",
+            "details": "Szczegóły",
+            "hide": "Ukryj"
+        },
+        "cardFacts": {
+            "approvers": "Zatwierdzający",
+            "covers": "Obejmuje",
+            "coversOneUse": "To jedno użycie: następne pyta znowu",
+            "coversConversation": "Resztę tej rozmowy",
+            "endpoint": "Endpoint",
+            "paysTo": "Płaci do",
+            "spentToday": "Wydano dziś",
+            "spentOf": "{spent} $ z {cap} $",
+            "savedAs": "Zapisane jako"
         }
     },
     "common": {
@@ -12619,15 +12623,11 @@
             "withdrawn": "Wycofane"
         },
         "card": {
-            "agentsCase": "Uzasadnienie agenta: {why}",
             "unattended": "Zapytał o to przebieg, którego nikt nie obserwował, więc poczekał na Ciebie.",
             "settingUp": "Czekam na koniec konfiguracji…",
             "approvedRebuild": "Zatwierdzone. Pojawi się po przebudowie sandboxa.",
-            "toldCall": "Agent od razu dostał odpowiedź.",
-            "toldTurn": "Agent dostał informację i pracuje dalej.",
             "toldQueued": "Agent dowie się o tym, gdy tylko skończy bieżącą pracę.",
             "toldNot": "Agent jeszcze o tym nie wie: dowie się przy następnym uruchomieniu tej rozmowy.",
-            "answeredBy": "Odpowiedź: {who}",
             "notNow": "Nie teraz",
             "declineNote": "Coś, co agent powinien wiedzieć (opcjonalnie)",
             "declineSend": "Odmów",
@@ -12637,7 +12637,8 @@
             "waitsOn": {
                 "maintainer": "Czeka na odpowiedź opiekuna.",
                 "owner": "Czeka na odpowiedź właściciela."
-            }
+            },
+            "onPersona": "Dodano do {persona}"
         },
         "capability": {
             "connecting": "Łączenie {name}",
@@ -12666,8 +12667,6 @@
             "remove": "Usuń \"{id}\""
         },
         "secret": {
-            "where": "Używany do: {where}",
-            "hint": "Jak wygląda: {hint}",
             "replace": "Wartość zapisana jako {name} jest odrzucana. Wklej nową:",
             "getOne": "Skąd go wziąć",
             "stored": "Zapisany w tym sandboxie jako {name}. Agent widzi tylko jego nazwę, nigdy wartość.",
@@ -12683,7 +12682,9 @@
             "modeCopy": "Trzymaj kopię tutaj",
             "lockedThere": "{machine} jest zablokowany: wartość czeka tam do następnego odblokowania pęku kluczy.",
             "keptOn": "Trzymany w pęku kluczy na {machine} jako {name}. Agent widzi tylko jego nazwę, nigdy wartość.",
-            "waitsForUnlock": "Wysłano na {machine}. Czeka tam do następnego odblokowania pęku kluczy."
+            "waitsForUnlock": "Wysłano na {machine}. Czeka tam do następnego odblokowania pęku kluczy.",
+            "usedFor": "Używany do",
+            "looksLike": "Jak wygląda"
         },
         "grant": {
             "withheld": "Ta rozmowa nie ma dostępu do {label}.",
@@ -12695,7 +12696,6 @@
         },
         "release": {
             "whole": "Zwolnienie obejmuje resztę tej rozmowy, od jej następnej tury.",
-            "approvers": "Zatwierdzający: {approvers}",
             "release": "Zwolnij"
         },
         "grants": {

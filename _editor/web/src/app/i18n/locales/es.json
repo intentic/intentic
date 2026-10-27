@@ -3249,22 +3249,16 @@
             "nothingMatches": "Nada coincide con «{query}»."
         },
         "chatMessageView": {
-            "agentContinuing": ": el agente sigue con ello.",
             "agentNeedsAtTerminal": "El agente te necesita en este terminal",
             "agentsVoice": "Voz del agente",
-            "agentToldToCarry": ": al agente se le dijo que continuara sin ello.",
             "agentsBrowserNeeds": "El navegador del agente te necesita: {account}",
-            "agentsCase": "El argumento del agente: {why}",
             "agentsTerminalNeeds": "El terminal del agente te necesita",
             "allowOnce": "Permitir una vez",
             "allowOnceHint": "Solo esta llamada",
             "allowMore": "Más formas de permitir",
             "allowEverything": "Permitir todo en esta conversación",
             "allowEverythingHint": "Se deshace en Needs you → Permitido · las reglas estrictas siguen preguntando",
-            "approvers": "Quién aprueba: {approvers}",
             "approversOnly": "Solo aprobadores",
-            "as": "como «{id}»",
-            "by": "por {approvedBy}",
             "chatStaysPutInstead": "(este chat se queda quieto en vez de retomarse solo)",
             "collapseMessage": "Plegar el mensaje",
             "connect": "Conectar {name}",
@@ -3289,15 +3283,10 @@
             "paymentOwnerOnly": "Solo el propietario de este sandbox puede aprobar un pago: el monedero que paga es el suyo.",
             "placedBy": "Lo has puesto tú",
             "readAsItsOwn": "Lo lee como suyo",
-            "refused": "Rechazado",
             "release": "Liberar",
             "releaseToAgent": "¿Liberar {subject} al agente?",
-            "releasedBy": "Liberado por {approvedBy}",
-            "releasingCoversOneUse": "Liberarlo cubre este único uso. El siguiente vuelve a preguntar.",
-            "releasingCoversRestConversation": "Liberarlo cubre el resto de esta conversación.",
             "replacesWhatFollows": "Reemplaza lo que sigue",
             "requestedBecause": "Solicitado porque: {reason}",
-            "setupDidntFinishWhile": "La configuración no terminó mientras el agente esperaba: continuó sin ella.",
             "showCheck": "Mostrar la comprobación",
             "showFindings": "Mostrar hallazgos",
             "showMessage": "Mostrar el mensaje",
@@ -3305,8 +3294,6 @@
             "showPrompt": "Ver prompt",
             "skipCall": "Omitir y seguir",
             "skipFree": "Omitir: gratis",
-            "spentToday": "{amountUsd} $ · {spentTodayUsd} $ de {dailyCapUsd} $ gastados hoy",
-            "to": "A {payTo}",
             "waitingToFinishSetup": "Esperando a que termines la configuración…",
             "waitsReadyToLand": "(espera como «Listo para integrar» hasta que lo integres)",
             "watchInstall": "Ver la instalación",
@@ -4675,6 +4662,23 @@
             "xhigh": "Muy alto",
             "max": "Máximo",
             "ultra": "Ultra"
+        },
+        "cardOutcome": {
+            "agentsCase": "El argumento del agente:",
+            "why": "Por qué lo pidió",
+            "details": "Detalles",
+            "hide": "Ocultar"
+        },
+        "cardFacts": {
+            "approvers": "Aprobadores",
+            "covers": "Cubre",
+            "coversOneUse": "Este único uso: el siguiente vuelve a preguntar",
+            "coversConversation": "El resto de esta conversación",
+            "endpoint": "Endpoint",
+            "paysTo": "Paga a",
+            "spentToday": "Gastado hoy",
+            "spentOf": "{spent} $ de {cap} $",
+            "savedAs": "Guardado como"
         }
     },
     "common": {
@@ -5476,15 +5480,11 @@
             "withdrawn": "Retirado"
         },
         "card": {
-            "agentsCase": "Lo que alega el agente: {why}",
             "unattended": "Lo pidió una ejecución que nadie estaba vigilando, así que te esperó.",
             "settingUp": "Esperando a que termine la configuración…",
             "approvedRebuild": "Aprobado. Llega cuando se reconstruya el sandbox.",
-            "toldCall": "El agente tuvo la respuesta al instante.",
-            "toldTurn": "Se avisó al agente y siguió adelante.",
             "toldQueued": "El agente se entera en cuanto termine su trabajo actual.",
             "toldNot": "Aún no se ha avisado al agente: se enterará la próxima vez que se ejecute esta conversación.",
-            "answeredBy": "Respondido por {who}",
             "notNow": "Ahora no",
             "declineNote": "Algo que el agente deba saber (opcional)",
             "declineSend": "Rechazar",
@@ -5494,7 +5494,8 @@
             "waitsOn": {
                 "maintainer": "A la espera de que responda un responsable.",
                 "owner": "A la espera de que responda el propietario."
-            }
+            },
+            "onPersona": "Añadido a {persona}"
         },
         "capability": {
             "connecting": "Conectando {name}",
@@ -5523,8 +5524,6 @@
             "remove": "Quitar «{id}»"
         },
         "secret": {
-            "where": "Se usa para: {where}",
-            "hint": "Aspecto: {hint}",
             "replace": "El valor guardado como {name} se está rechazando. Pega uno nuevo:",
             "getOne": "Dónde conseguirlo",
             "stored": "Guardado en este sandbox como {name}. El agente solo ve su nombre, nunca el valor.",
@@ -5540,7 +5539,9 @@
             "modeCopy": "Guardar una copia aquí",
             "lockedThere": "{machine} está bloqueado: el valor espera allí hasta el próximo desbloqueo de su llavero.",
             "keptOn": "Guardado en el llavero de {machine} como {name}. El agente solo ve su nombre, nunca el valor.",
-            "waitsForUnlock": "Enviado a {machine}. Espera allí hasta el próximo desbloqueo de su llavero."
+            "waitsForUnlock": "Enviado a {machine}. Espera allí hasta el próximo desbloqueo de su llavero.",
+            "usedFor": "Se usa para",
+            "looksLike": "Aspecto"
         },
         "grant": {
             "withheld": "Esta conversación no puede acceder a {label}.",
@@ -5552,7 +5553,6 @@
         },
         "release": {
             "whole": "Liberarlo cubre el resto de esta conversación, a partir de su próximo turno.",
-            "approvers": "Aprobadores: {approvers}",
             "release": "Liberar"
         },
         "grants": {

@@ -7,6 +7,7 @@ import { Notice, SegmentedControl, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import SecretField from "../../parts/capabilities/SecretField.vue";
+import ChatCardFacts, { type CardFact } from "../../components/card/ChatCardFacts.vue";
 import { keyringModeExplained } from "../capabilities/connect/secrets/keyringWords";
 import { useKeyrings } from "../capabilities/connect/secrets/useKeyrings";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
@@ -61,6 +62,12 @@ const onComputer = computed(() => where.value === `computer` && device.value !==
 // A locked keyring takes a value in only once it is unlocked: its inbox key is inside the vault.
 const lockedThere = computed(() => onComputer.value && online.value.find((keyring) => keyring.machine === device.value)?.locked === true);
 
+// How it will be used and what a good one looks like, as facts beside the box it goes in.
+const facts = computed<CardFact[]>(() => [
+    ...(props.subject.where === undefined ? [] : [{ key: `where`, label: t(`needs.secret.usedFor`), value: props.subject.where }]),
+    ...(props.subject.hint === undefined ? [] : [{ key: `hint`, label: t(`needs.secret.looksLike`), value: props.subject.hint }]),
+]);
+
 const save = async (): Promise<void> => {
     const given = value.value.trim();
     if (given === `` || busy.value) {
@@ -93,8 +100,7 @@ const storedElsewhere = async (): Promise<void> => {
 <template>
     <div class="chat-card-body flex flex-col gap-2">
         <span v-if="subject.replace" class="text-xs text-content/85">{{ t(`needs.secret.replace`, { name: subject.name }) }}</span>
-        <span v-if="subject.where" class="text-xs text-content/85">{{ t(`needs.secret.where`, { where: subject.where }) }}</span>
-        <span v-if="subject.hint" class="text-2xs text-subtle">{{ t(`needs.secret.hint`, { hint: subject.hint }) }}</span>
+        <ChatCardFacts :facts="facts" />
         <a v-if="subject.link" :href="subject.link" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-2xs text-link">
             <Icon name="external-link" />{{ t(`needs.secret.getOne`) }}
         </a>

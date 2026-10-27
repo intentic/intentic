@@ -3,9 +3,11 @@
 import { isOpenNeed, type Need } from "@intentic/sandbox-contract/schemas/needs";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import ChatAgentCase from "../../components/card/ChatAgentCase.vue";
 import ChatCard from "../../components/ChatCard.vue";
 import NeedAnswer from "./NeedAnswer.vue";
-import { NEED_ICONS, needStatus, toldLine, workingLine } from "../../models/needs/needStatus";
+import NeedOutcome from "./NeedOutcome.vue";
+import { NEED_ICONS, needStatus, workingLine } from "../../models/needs/needStatus";
 import { useNeeds } from "../../models/needs/useNeeds";
 import { useNeedReach } from "./needReach";
 
@@ -23,25 +25,30 @@ const open = computed(() => need.value !== undefined && isOpenNeed(need.value));
 const { mayAnswer, waiter } = useNeedReach();
 const release = computed(() => need.value?.subject.kind === `release`);
 const answerable = computed(() => need.value !== undefined && (release.value || mayAnswer(need.value)));
+const working = computed(() => (need.value === undefined ? undefined : workingLine(need.value)));
+const unattended = computed(() => need.value?.unattended === true && answerable.value);
+// Anything to say above the kind's own answer: the agent's case first, since the decision rests on it.
+const lead = computed(() => Boolean(need.value?.why) || unattended.value || !answerable.value || working.value !== undefined);
 </script>
 
 <template>
     <ChatCard v-if="need" :icon="NEED_ICONS[need.subject.kind]" :title="need.title" :status="needStatus(need)" prose>
-        <div class="chat-card-body flex flex-col gap-1">
-            <span v-if="need.why" class="text-2xs text-subtle">{{ t(`needs.card.agentsCase`, { why: need.why }) }}</span>
-            <span v-if="need.unattended && open && answerable" class="text-2xs text-subtle">{{ t(`needs.card.unattended`) }}</span>
-            <span v-if="open && !answerable" class="flex items-center gap-1.5 text-2xs text-muted">
-                <Icon name="lock" aria-hidden="true" class="shrink-0" />{{ t(`needs.card.waitsOn.${waiter}`) }}
-            </span>
-            <span v-if="workingLine(need)" class="flex items-center gap-1.5 text-2xs text-muted">
-                <Icon name="spinner" spin class="text-link" />{{ workingLine(need) }}
-            </span>
-            <span v-if="!open && need.outcome" class="text-xs text-content/85">{{ need.outcome }}</span>
-            <span v-if="toldLine(need)" class="text-2xs text-muted">{{ toldLine(need) }}</span>
-            <span v-if="!open && need.answeredBy" class="text-2xs text-subtle">{{ t(`needs.card.answeredBy`, { who: need.answeredBy }) }}</span>
-        </div>
+        <!-- Waiting: the case for it, then the kind's own way of saying yes. -->
+        <template v-if="open">
+            <div v-if="lead" class="chat-card-body flex flex-col gap-1.5">
+                <ChatAgentCase v-if="need.why" :text="need.why" />
+                <span v-if="unattended" class="text-2xs text-subtle">{{ t(`needs.card.unattended`) }}</span>
+                <span v-if="!answerable" class="flex items-center gap-1.5 text-2xs text-muted">
+                    <Icon name="lock" aria-hidden="true" class="shrink-0" />{{ t(`needs.card.waitsOn.${waiter}`) }}
+                </span>
+                <span v-if="working" class="flex items-center gap-1.5 text-2xs text-muted">
+                    <Icon name="spinner" spin class="text-link" />{{ working }}
+                </span>
+            </div>
+            <NeedAnswer v-if="answerable" :need="need" />
+        </template>
 
-        <!-- The kind's own way of saying yes, only while it waits. -->
-        <NeedAnswer v-if="open && answerable" :need="need" />
+        <!-- Over: one line of what it ended as, with the case one press away. -->
+        <NeedOutcome v-else :need="need" />
     </ChatCard>
 </template>

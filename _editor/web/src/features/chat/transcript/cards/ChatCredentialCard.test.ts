@@ -1,12 +1,11 @@
-// Needs jsdom: the line under a refused release is one sentence joined from three messages, and only a render shows
-// whether a space survives the joins, in every language the editor ships.
+// Needs jsdom: an answered release folds to who answered it when that was somebody other than the reader, with the ask
+// one press away. The chip says which way it went, and the agent carrying on is what any answer means.
 import "@intentic/testing/dom";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CredentialReceipt } from "@intentic/sandbox-contract/events/requests";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { type Locale, setLocale } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
-import { type App, createApp, h, ref } from "vue";
+import { type App, createApp, h, nextTick, ref } from "vue";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 
 // The viewer, one of the card's approvers; the card reads nothing else of the session.
@@ -14,14 +13,14 @@ jest.mock("../../../../client/session/sandboxSession", () => ({ useSandboxSessio
 
 const { default: ChatCredentialCard } = await import("./ChatCredentialCard.vue");
 
-const CREDENTIAL = { subject: `DATABASE_URL`, kind: `secret`, lane: `shell`, approvers: [`bob@corp.com`], scope: `use` } as const;
+const CREDENTIAL = { subject: `DATABASE_URL`, kind: `secret`, lane: `shell`, approvers: [`bob@corp.com`, `grace@acme.dev`], scope: `use` } as const;
 
-// The card's row once an approver said no and the daemon reported it as `receipt` says, as the daemon's own fold leaves it.
-const refusedWith = (receipt: CredentialReceipt): ChatMessage => {
+// The card's row once an approver answered and the daemon reported it as `receipt` says, as the daemon's own fold leaves it.
+const answeredWith = (receipt: CredentialReceipt): ChatMessage => {
     const fold = new TranscriptFold([userRow(`go`, 1, [])]);
     const frames: AgentEvent[] = [
         { kind: `credential_offer`, requestId: `k1`, offer: { ...CREDENTIAL, approvers: [...CREDENTIAL.approvers] } },
-        { kind: `resolved`, requestId: `k1`, reply: { kind: `credential_offer`, requestId: `k1`, approve: false } },
+        { kind: `resolved`, requestId: `k1`, reply: { kind: `credential_offer`, requestId: `k1`, approve: receipt.outcome === `released` } },
         { kind: `credential_receipt`, requestId: `k1`, ...receipt },
     ];
     for (const frame of frames) {
@@ -34,45 +33,41 @@ const refusedWith = (receipt: CredentialReceipt): ChatMessage => {
     return { ...row, id: 2 };
 };
 
+// Each label and value the facts list holds, in reading order.
+const factWords = (element: HTMLElement): string[] => [...element.querySelectorAll(`[data-card-facts] > *`)].map((part) => part.textContent?.trim() ?? ``);
+
 let app: App | undefined;
-// What the card says under the answered release, the only text this suite is about.
-const receiptLine = (message: ChatMessage): string | null | undefined => {
+const mount = (message: ChatMessage): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatCredentialCard, { message, settling: false, reply: async () => {} }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
-    return element.querySelector(`.chat-card-row > span`)?.textContent;
+    return element;
 };
 
-afterEach(async () => {
+afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    await setLocale(`en`);
 });
 
-it(`names who refused, with a space between the words and none before the clause`, () => {
-    expect(receiptLine(refusedWith({ outcome: `refused`, approvedBy: `bob@corp.com` }))).toBe(
-        `Refused by bob@corp.com: the agent was told to carry on without it.`,
-    );
+it(`names a teammate who answered, by face and address`, () => {
+    const element = mount(answeredWith({ outcome: `refused`, approvedBy: `grace@acme.dev` }));
+    expect(element.querySelector(`[data-card-person]`)?.textContent).toContain(`grace@acme.dev`);
+    expect(element.textContent).not.toContain(`carry on`);
 });
 
-it(`goes straight to the clause when no one was verified as refusing`, () => {
-    expect(receiptLine(refusedWith({ outcome: `refused` }))).toBe(`Refused: the agent was told to carry on without it.`);
+it(`names nobody when the reader answered it`, () => {
+    const element = mount(answeredWith({ outcome: `released`, approvedBy: `bob@corp.com` }));
+    expect(element.querySelector(`[data-card-person]`)).toBeNull();
 });
 
-// Each language's clause brings its own lead-in (French spaces its colon), so the join adds one space and nothing else.
-const IN_EACH_LANGUAGE: readonly (readonly [Locale, string])[] = [
-    [`de`, `Abgelehnt von bob@corp.com: dem Agenten wurde gesagt, er solle ohne es weitermachen.`],
-    [`es`, `Rechazado por bob@corp.com: al agente se le dijo que continuara sin ello.`],
-    [`fr`, `Refusé par bob@corp.com : il a été dit à l'agent de continuer sans.`],
-    [`pl`, `Odrzucone przez bob@corp.com: agentowi kazano iść dalej bez tego.`],
-];
-for (const [locale, line] of IN_EACH_LANGUAGE) {
-    it(`reads as one sentence in ${locale}`, async () => {
-        await setLocale(locale);
-        expect(receiptLine(refusedWith({ outcome: `refused`, approvedBy: `bob@corp.com` }))).toBe(line);
-    });
-}
+it(`keeps the ask, with who may answer and what one yes covers, one press away`, async () => {
+    const element = mount(answeredWith({ outcome: `released`, approvedBy: `bob@corp.com` }));
+    expect(element.querySelector(`[data-card-facts]`)).toBeNull();
+    element.querySelector<HTMLButtonElement>(`[data-card-outcome-toggle]`)?.click();
+    await nextTick();
+    expect(factWords(element)).toEqual([`Approvers`, `bob@corp.com, grace@acme.dev`, `Covers`, `This one use: the next one asks again`]);
+});

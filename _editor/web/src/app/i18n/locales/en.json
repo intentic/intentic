@@ -3249,22 +3249,16 @@
             "nothingMatches": "Nothing matches \"{query}\"."
         },
         "chatMessageView": {
-            "agentContinuing": ": the agent is continuing with it.",
             "agentNeedsAtTerminal": "The agent needs you at this terminal",
             "agentsVoice": "Agent's voice",
-            "agentToldToCarry": ": the agent was told to carry on without it.",
             "agentsBrowserNeeds": "The agent's browser needs you: {account}",
-            "agentsCase": "The agent's case: {why}",
             "agentsTerminalNeeds": "The agent's terminal needs you",
             "allowOnce": "Allow once",
             "allowOnceHint": "Only this call",
             "allowMore": "More ways to allow",
             "allowEverything": "Allow everything in this conversation",
             "allowEverythingHint": "Undo in Needs you → Allowed · hard rules still ask",
-            "approvers": "Approvers: {approvers}",
             "approversOnly": "Approvers only",
-            "as": "as \"{id}\"",
-            "by": "by {approvedBy}",
             "chatStaysPutInstead": "(this chat stays put instead of picking itself back up)",
             "collapseMessage": "Collapse message",
             "connect": "Connect {name}",
@@ -3289,15 +3283,10 @@
             "paymentOwnerOnly": "Only this sandbox's owner can approve a payment: the wallet that pays is theirs.",
             "placedBy": "Placed by you",
             "readAsItsOwn": "Read as its own",
-            "refused": "Refused",
             "release": "Release",
             "releaseToAgent": "Release {subject} to the agent?",
-            "releasedBy": "Released by {approvedBy}",
-            "releasingCoversOneUse": "Releasing it covers this one use. The next one asks again.",
-            "releasingCoversRestConversation": "Releasing it covers the rest of this conversation.",
             "replacesWhatFollows": "Replaces what follows",
             "requestedBecause": "Requested because: {reason}",
-            "setupDidntFinishWhile": "The setup didn't finish while the agent waited: it continued without it.",
             "showCheck": "Show the check",
             "showFindings": "Show findings",
             "showMessage": "Show the message",
@@ -3305,8 +3294,6 @@
             "showPrompt": "Show prompt",
             "skipCall": "Skip this, keep going",
             "skipFree": "Skip: free",
-            "spentToday": "${amountUsd} · ${spentTodayUsd} of ${dailyCapUsd} spent today",
-            "to": "To {payTo}",
             "waitingToFinishSetup": "Waiting for you to finish setup…",
             "waitsReadyToLand": "(it waits as \"Ready to land\" until you land it)",
             "watchInstall": "Watch the install",
@@ -4675,6 +4662,23 @@
             "xhigh": "X-High",
             "max": "Max",
             "ultra": "Ultra"
+        },
+        "cardOutcome": {
+            "agentsCase": "The agent's case:",
+            "why": "Why it asked",
+            "details": "Details",
+            "hide": "Hide"
+        },
+        "cardFacts": {
+            "approvers": "Approvers",
+            "covers": "Covers",
+            "coversOneUse": "This one use: the next one asks again",
+            "coversConversation": "The rest of this conversation",
+            "endpoint": "Endpoint",
+            "paysTo": "Pays to",
+            "spentToday": "Spent today",
+            "spentOf": "${spent} of ${cap}",
+            "savedAs": "Saved as"
         }
     },
     "common": {
@@ -5476,15 +5480,11 @@
             "withdrawn": "Withdrawn"
         },
         "card": {
-            "agentsCase": "The agent's case: {why}",
             "unattended": "Asked by a run nobody was watching, so it waited for you.",
             "settingUp": "Waiting for the setup to finish…",
             "approvedRebuild": "Approved. It arrives when the sandbox is rebuilt.",
-            "toldCall": "The agent had the answer straight away.",
-            "toldTurn": "The agent was told, and carried on.",
             "toldQueued": "The agent hears it as soon as its current work ends.",
             "toldNot": "The agent has not been told yet: it hears when this conversation next runs.",
-            "answeredBy": "Answered by {who}",
             "notNow": "Not now",
             "declineNote": "Anything the agent should know (optional)",
             "declineSend": "Decline",
@@ -5494,7 +5494,8 @@
             "waitsOn": {
                 "maintainer": "Waiting on a maintainer to answer.",
                 "owner": "Waiting on the owner to answer."
-            }
+            },
+            "onPersona": "Added to {persona}"
         },
         "capability": {
             "connecting": "Connecting {name}",
@@ -5523,8 +5524,6 @@
             "remove": "Remove \"{id}\""
         },
         "secret": {
-            "where": "Used for: {where}",
-            "hint": "What it looks like: {hint}",
             "replace": "The value stored as {name} is being refused. Paste a new one:",
             "getOne": "Where to get one",
             "stored": "Stored in this sandbox as {name}. The agent only ever sees its name, never the value.",
@@ -5540,7 +5539,9 @@
             "modeCopy": "Keep a copy here",
             "lockedThere": "{machine} is locked: the value waits there until its keyring is next unlocked.",
             "keptOn": "Kept in the keyring on {machine} as {name}. The agent only ever sees its name, never the value.",
-            "waitsForUnlock": "Sent to {machine}. It waits there until its keyring is next unlocked."
+            "waitsForUnlock": "Sent to {machine}. It waits there until its keyring is next unlocked.",
+            "usedFor": "Used for",
+            "looksLike": "Looks like"
         },
         "grant": {
             "withheld": "This conversation cannot reach {label}.",
@@ -5552,7 +5553,6 @@
         },
         "release": {
             "whole": "Releasing it covers the rest of this conversation, from its next turn.",
-            "approvers": "Approvers: {approvers}",
             "release": "Release"
         },
         "grants": {

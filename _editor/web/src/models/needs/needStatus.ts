@@ -40,19 +40,25 @@ export const workingLine = (need: Pick<Need, "status" | "subject">): string | un
     return need.subject.kind === `environment` ? t(`needs.card.approvedRebuild`) : t(`needs.card.settingUp`);
 };
 
-// How the agent heard the outcome, said for the person reading the closed card.
-export const toldLine = (need: Pick<Need, "status" | "told">): string | undefined => {
+// Said on a closed card only when the agent has not heard the outcome yet. Hearing it, on the call or in a turn, is what
+// a closed card means, so it goes unsaid.
+export const unheardLine = (need: Pick<Need, "status" | "told">): string | undefined => {
     if (need.status !== `met` && need.status !== `declined`) {
         return undefined;
     }
     switch (need.told) {
         case `call`:
-            return t(`needs.card.toldCall`);
         case `turn`:
-            return t(`needs.card.toldTurn`);
+            return undefined;
         case `queued`:
             return t(`needs.card.toldQueued`);
         case undefined:
             return need.status === `met` ? t(`needs.card.toldNot`) : undefined;
     }
 };
+
+// The person's own words back to the agent on a decline. The daemon stores them after a lead-in written for the agent
+// ("They said: …", needs.ts); the card quotes them under the face of who said them, so the lead-in goes.
+const SAID = /^They said: /u;
+export const declineNote = (need: Pick<Need, "status" | "outcome">): string | undefined =>
+    need.status === `declined` && need.outcome !== undefined && SAID.test(need.outcome) ? need.outcome.replace(SAID, ``) : undefined;

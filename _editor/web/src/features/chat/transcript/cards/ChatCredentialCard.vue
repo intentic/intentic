@@ -4,7 +4,12 @@ import { computed } from "vue";
 import { useSandboxSession } from "../../../../client/session/sandboxSession";
 import type { CardAnswer } from "../../../../models/conversations/session/cardReplies";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import ChatAgentCase from "../../../../components/card/ChatAgentCase.vue";
 import ChatCard from "../../../../components/ChatCard.vue";
+import ChatCardFacts, { type CardFact } from "../../../../components/card/ChatCardFacts.vue";
+import ChatCardOutcome from "../../../../components/card/ChatCardOutcome.vue";
+import ChatCardPerson from "../../../../components/card/ChatCardPerson.vue";
+import { useSomeoneElse } from "../../../../components/card/cardPerson";
 import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import { credentialLane, offerStatus } from "./cardStatus";
 
@@ -12,6 +17,7 @@ const t = useT();
 
 const props = defineProps<{ message: ChatMessage; settling: boolean; reply: (answer: CardAnswer) => Promise<void> }>();
 const card = computed(() => props.message.credentialOffer!);
+const pending = computed(() => card.value.status === `pending`);
 
 // Whether the viewer is a named approver, case-insensitively; a courtesy only, since the daemon verifies identity.
 const { presentedEmail } = useSandboxSession();
@@ -20,49 +26,50 @@ const mayRelease = computed(() => {
     return me === undefined || card.value.offer.approvers.some((approver) => approver.toLowerCase() === me);
 });
 
-// "Refused", then by whom when the daemon verified someone, then the clause saying what the agent was told. Joined here,
-// since the template compiler drops the space a `<template v-if>` opens with; the clause brings its own lead-in.
-const refusedLine = computed(() => {
-    const by = card.value.receipt?.approvedBy;
-    const refused =
-        by === undefined || by === ``
-            ? t(`chat.chatMessageView.refused`)
-            : `${t(`chat.chatMessageView.refused`)} ${t(`chat.chatMessageView.by`, { approvedBy: by })}`;
-    return `${refused}${t(`chat.chatMessageView.agentToldToCarry`)}`;
-});
+// Who may say yes and how far one yes goes. Scope comes from policy, not the click, so it never overstates what one yes
+// covers.
+const facts = computed<CardFact[]>(() => [
+    { key: `approvers`, label: t(`chat.cardFacts.approvers`), value: card.value.offer.approvers.join(`, `) },
+    {
+        key: `covers`,
+        label: t(`chat.cardFacts.covers`),
+        value: card.value.offer.scope === `conversation` ? t(`chat.cardFacts.coversConversation`) : t(`chat.cardFacts.coversOneUse`),
+    },
+]);
+
+// Settled, the receipt says who answered; the chip already says which way, and the agent carrying on is what any
+// answer means.
+const someoneElse = useSomeoneElse();
 </script>
 
 <template>
     <!-- The only card addressed to named approvers, not whoever's reading: the daemon verifies identity against that list (secrets/credential-gate.ts). -->
     <ChatCard icon="key" :title="t(`chat.chatMessageView.releaseToAgent`, { subject: card.offer.subject })" :status="offerStatus(card)">
-        <div class="chat-card-body flex flex-col gap-1">
-            <!-- What's about to happen, phrased for the reader, not the daemon's internal terms. -->
+        <!-- Waiting: what is about to happen, phrased for the reader, then the agent's case and the terms of a yes. -->
+        <div v-if="pending" class="chat-card-body flex flex-col gap-2">
             <span class="text-xs text-content/85">{{ credentialLane(card.offer) }}</span>
             <!-- Reference-form, not yet substituted with the real value, which is what makes it safe to show. -->
             <span v-if="card.offer.detail" class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="card.offer.detail">{{
                 card.offer.detail
             }}</span>
-            <span v-if="card.offer.why" class="text-2xs text-subtle">{{ t(`chat.chatMessageView.agentsCase`, { why: card.offer.why }) }}</span>
-            <span class="truncate text-2xs text-subtle" v-tooltip.left.overflow="card.offer.approvers.join(`, `)">{{
-                t(`chat.chatMessageView.approvers`, { approvers: card.offer.approvers.join(`, `) })
-            }}</span>
-            <!-- Scope comes from policy, not the click, so the label never overstates what one yes covers. -->
-            <span class="pt-1 text-xs text-content">{{
-                card.offer.scope === `conversation`
-                    ? t(`chat.chatMessageView.releasingCoversRestConversation`)
-                    : t(`chat.chatMessageView.releasingCoversOneUse`)
-            }}</span>
+            <ChatAgentCase v-if="card.offer.why" :text="card.offer.why" />
+            <ChatCardFacts :facts="facts" />
         </div>
 
-        <!-- Nothing shown for an unanswered card; the header chip already says so. -->
-        <div v-if="card.receipt" class="chat-card-row">
-            <span v-if="card.receipt.outcome === 'released'" class="truncate text-2xs text-muted">{{
-                t(`chat.chatMessageView.releasedBy`, { approvedBy: card.receipt.approvedBy })
-            }}</span>
-            <span v-else class="text-2xs text-muted">{{ refusedLine }}</span>
-        </div>
+        <!-- Over: who answered when it was not the reader, with the ask one press away. -->
+        <ChatCardOutcome v-else :facts="someoneElse(card.receipt?.approvedBy)" :more="t(`chat.cardOutcome.details`)">
+            <ChatCardPerson :who="card.receipt?.approvedBy" />
+            <template #folded>
+                <span class="text-xs text-content/85">{{ credentialLane(card.offer) }}</span>
+                <span v-if="card.offer.detail" class="truncate font-mono text-2xs text-subtle" v-tooltip.left.overflow="card.offer.detail">{{
+                    card.offer.detail
+                }}</span>
+                <ChatAgentCase v-if="card.offer.why" :text="card.offer.why" />
+                <ChatCardFacts :facts="facts" />
+            </template>
+        </ChatCardOutcome>
 
-        <template v-if="card.status === 'pending'" #actions>
+        <template v-if="pending" #actions>
             <ChatDecisionButton
                 tone="primary"
                 icon="check"
