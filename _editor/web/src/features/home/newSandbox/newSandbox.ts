@@ -3,7 +3,7 @@ import { type HostedTierId, isHostedTierId } from "@intentic/constants";
 import { t } from "@intentic/ui/i18n";
 import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import { ref, shallowRef, type Ref } from "vue";
-import type { LocationQuery } from "vue-router";
+import type { HistoryState, LocationQuery } from "vue-router";
 import { z } from "zod";
 import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE } from "../../../models/sandbox/addSandbox";
 import { FINISH_QUERY } from "../../../models/sandbox/finishOnHome";
@@ -44,11 +44,29 @@ type HomeAddress = { readonly name?: unknown; readonly query: LocationQuery };
 export const newSandboxShownBy = (route: HomeAddress): boolean => route.name === `home` && route.query[ADD_SANDBOX_QUERY] === ADD_SANDBOX_VALUE;
 
 const RowId = z.string().min(1);
+const BackPath = z.string().startsWith(`/`);
 
 /** The row an address of Home asks to finish (`/home?add=sandbox&finish=<id>`), or undefined when it asks for a new one. */
 export const finishAskedBy = (route: HomeAddress): string | undefined => {
     const asked = RowId.safeParse(route.query[FINISH_QUERY]);
     return newSandboxShownBy(route) && asked.success ? asked.data : undefined;
+};
+
+/**
+ * Whether closing the dialog may step Back to the entry before it. Not onto a sign-in page: a returning reader is signed in
+ * again there without a press and sent on to the same ask, so the dialog came straight back, for as long as it was
+ * closed (2026-10-27). Not onto an address that is itself the ask (Home's, or an old setup address that lands on it).
+ */
+export const closesBackTo = (back: HistoryState[`back`]): boolean => {
+    const read = BackPath.safeParse(back);
+    if (!read.success) {
+        return false;
+    }
+    const [path = ``, search = ``] = read.data.split(`?`, 2);
+    if (path.startsWith(`/login`) || path === `/setup` || path === `/start/hosted`) {
+        return false;
+    }
+    return new URLSearchParams(search).get(ADD_SANDBOX_QUERY) !== ADD_SANDBOX_VALUE;
 };
 
 /** The rung Home's address asks for (`machine=hosted`), and the tier asked of it (`tier=`); undefined where none is named. */

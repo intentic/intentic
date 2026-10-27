@@ -11,12 +11,12 @@ import { installI18n } from "@intentic/ui/i18n";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-const push = jest.fn();
+const replace = jest.fn();
 // Where the guard that turned somebody away wrote the page they were headed to (lib/routes/signIn.ts).
 const query = ref<Record<string, string>>({});
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRouter: () => ({ push, replace: jest.fn() }) as never,
+    useRouter: () => ({ push: jest.fn(), replace }) as never,
     useRoute: () =>
         ({
             get query() {
@@ -99,7 +99,7 @@ const withFedCm = (): void => {
 
 beforeEach(() => {
     query.value = {};
-    push.mockReset();
+    replace.mockReset();
     signInWithGoogle.mockReset().mockResolvedValue(undefined);
     signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
     // Steady state: Google's button renders and yields a credential.
@@ -139,18 +139,18 @@ it(`signs in to the platform with the token the browser minted`, async () => {
     // Direction is the security property: a credential this window holds goes into the platform, nothing comes back,
     // so sandbox trust never depends on the platform's honesty.
     expect(signInWithGoogleCredential).toHaveBeenCalledWith(`google-id-token`);
-    expect(push).toHaveBeenCalledWith(`/`);
+    expect(replace).toHaveBeenCalledWith(`/`);
 });
 
 // Both exits from this page must return to where the guard sent the visitor, not hardcode `/`, or a deep link is
-// lost the moment sign-in redirects home. Asserted on both paths since one pushes and the other hands it to Better
+// lost the moment sign-in redirects home. Asserted on both paths since one replaces and the other hands it to Better
 // Auth as an OAuth callback.
 it(`lands on the page that asked for the sign-in`, async () => {
     query.value = { returnTo: `/sandbox/usage` };
 
     await mount();
 
-    expect(push).toHaveBeenCalledWith(`/sandbox/usage`);
+    expect(replace).toHaveBeenCalledWith(`/sandbox/usage`);
 });
 
 it(`keeps the cloud purpose and destination after sign-in without suggesting a local install`, async () => {
@@ -160,7 +160,7 @@ it(`keeps the cloud purpose and destination after sign-in without suggesting a l
     expect(el.textContent).toContain(`Start in the cloud`);
     expect(el.textContent).toContain(`Start a cloud sandbox`);
     expect(el.textContent).not.toContain(`Install the app`);
-    expect(push).toHaveBeenCalledWith(destination);
+    expect(replace).toHaveBeenCalledWith(destination);
 });
 
 it(`brings Google's redirect back to that same page`, async () => {
@@ -182,7 +182,7 @@ it(`refuses a destination that leaves this origin`, async () => {
 
     await mount();
 
-    expect(push).toHaveBeenCalledWith(`/`);
+    expect(replace).toHaveBeenCalledWith(`/`);
 });
 
 it(`asks Google without raising the shared overlay, since its own button is the gate`, async () => {
@@ -219,7 +219,7 @@ it(`falls back to the redirect when the platform refuses a token Google signed`,
     // the user gets another way in instead of a dead page.
     expect(redirectButton()).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`Continue with Google below instead`);
-    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
 });
 
 it(`always offers a way in that does not depend on Google's embedded button`, async () => {
@@ -259,7 +259,7 @@ it(`leaves the page usable when the user dismisses Google`, async () => {
     const el = await mount();
 
     expect(signInWithGoogleCredential).not.toHaveBeenCalled();
-    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
     // A dismissal says nothing; the button the user turned away from is still there.
     expect(el.textContent).not.toContain(`Continue with Google below instead`);
 });
@@ -349,7 +349,7 @@ describe(`when Google's button goes nowhere`, () => {
         await new Promise((resolve) => setTimeout(resolve));
 
         expect(signInWithGoogleCredential).toHaveBeenCalledWith(`google-id-token`);
-        expect(push).toHaveBeenCalledWith(`/`);
+        expect(replace).toHaveBeenCalledWith(`/`);
     });
 });
 
@@ -463,7 +463,7 @@ describe(`with email sign-in offered`, () => {
         await settle();
 
         expect(signInWithEmailCode).toHaveBeenCalledWith(`ana@corp.example`, `123456`);
-        expect(push).toHaveBeenCalledWith(`/sandbox/usage`);
+        expect(replace).toHaveBeenCalledWith(`/sandbox/usage`);
     });
 
     it(`points a Google address at Google without refusing it`, async () => {

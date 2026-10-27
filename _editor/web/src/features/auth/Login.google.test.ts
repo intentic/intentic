@@ -20,10 +20,10 @@ import * as actualDesktop from "../../app/environments/desktop";
     };
 })();
 
-const push = jest.fn();
+const replace = jest.fn();
 jest.mock(`vue-router`, () => ({
     ...actualVueRouter,
-    useRouter: () => ({ push, replace: jest.fn() }) as never,
+    useRouter: () => ({ push: jest.fn(), replace }) as never,
     useRoute: () => ({ query: {} }) as never,
 }));
 const signInWithGoogle = jest.fn().mockResolvedValue(undefined);
@@ -85,7 +85,7 @@ beforeEach(() => {
     localStorage.clear();
     initialize.mockReset();
     gisRenderButton.mockClear();
-    push.mockReset();
+    replace.mockReset();
     signInWithGoogle.mockClear();
     signInWithGoogleCredential.mockClear();
     track.mockReset();
@@ -120,7 +120,7 @@ it(`signs in with the next answer after one it refused, and says why the first d
     await flush();
 
     expect(signInWithGoogleCredential).toHaveBeenCalledWith(GOOD);
-    expect(push).toHaveBeenCalledWith(`/`);
+    expect(replace).toHaveBeenCalledWith(`/`);
 });
 
 it(`tells the reader a press came back with nothing, and offers Google's own page`, async () => {
@@ -165,6 +165,6 @@ it(`counts the sign-in the platform took`, async () => {
     answer(GOOD);
     await flush();
 
-    expect(push).toHaveBeenCalledWith(`/`);
+    expect(replace).toHaveBeenCalledWith(`/`);
     expect(track).toHaveBeenCalledWith(`signin_completed`, { method: `google`, surface: `login`, stall_shown: false });
 });

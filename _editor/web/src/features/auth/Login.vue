@@ -96,6 +96,9 @@ const redirectSignIn = async (): Promise<void> => {
 // Started on mount so a click has something to resolve, and a returning user needs none at all (Google's silent
 // re-auth). Only fires for someone who's signed in this way before; a first-time visitor still sees the visible
 // button and consent line.
+// Both roads REPLACE this page with the destination, never push: left in the history, Back (or a dialog closing with
+// Back, as Home's new-sandbox dialog does) returned here, where the silent re-auth signed in again and pushed the same
+// destination, so `/home?add=sandbox` reopened its dialog every time it was closed (2026-10-27).
 const signInWithCredential = async (): Promise<void> => {
     // The mechanism refuses this window anyway; skip loading Google's script where it can never be used.
     if (desktop.value) {
@@ -111,7 +114,7 @@ const signInWithCredential = async (): Promise<void> => {
         press.answered();
         await signInWithGoogleCredential(idToken);
         press.completed();
-        await router.push(destination.value);
+        await router.replace(destination.value);
     } catch {
         // The platform can refuse a token Google actually signed (no endpoint, client-id mismatch); the redirect
         // doesn't
@@ -126,7 +129,7 @@ onMounted(() => void signInWithCredential());
 
 // The emailed code signed this window in: on to where the guard was sending the reader, as Google's road goes.
 const arrive = async (): Promise<void> => {
-    await router.push(destination.value);
+    await router.replace(destination.value);
 };
 
 // Always rendered in light theme, never following the app's scheme: this screen has one near-black ground, and a

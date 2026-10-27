@@ -10,7 +10,7 @@ import { useRouter } from "vue-router";
 import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import AddSandboxForm from "../../setup/add/AddSandboxForm.vue";
 import { ATTACH } from "../../setup/add/useAddSandbox";
-import type { NewSandboxRun } from "./newSandbox";
+import { closesBackTo, type NewSandboxRun } from "./newSandbox";
 
 const { run } = defineProps<{ run: NewSandboxRun }>();
 
@@ -20,7 +20,8 @@ const { blocked, pick, busy: creating } = run.here.add;
 // An address already answering is connected, not created: the press says which.
 const pressLabel = computed(() => (pick.value === ATTACH ? t(`ui.action.connect`) : t(`home.newSandbox.create`)));
 
-// Put away. Never pressed: back where the press came from (the chat, or a sandbox the reader was in), else Home's chat.
+// Put away. Never pressed: back where the press came from (the chat, or a sandbox the reader was in), else Home's chat;
+// never Back onto a page that would ask again (newSandbox.ts `closesBackTo`).
 // Pressed and refused: the run is let go, which takes the reader to Home's chat as well.
 const close = (): void => {
     if (creating.value) {
@@ -30,8 +31,7 @@ const close = (): void => {
         run.dismiss();
         return;
     }
-    const back = router.options.history.state[`back`];
-    if (back !== null && back !== undefined) {
+    if (closesBackTo(router.options.history.state[`back`])) {
         router.back();
         return;
     }

@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { finishOnHome } from "../../../models/sandbox/finishOnHome";
 import {
+    closesBackTo,
     finishAskedBy,
     machineAskedBy,
     markReady,
@@ -172,5 +173,28 @@ describe(`a sandbox made ready while its reader was elsewhere`, () => {
         expect([...readySandboxes.value]).toEqual([`sbx-2`]);
         seenReady(`sbx-2`);
         expect(readySandboxes.value.size).toBe(0);
+    });
+});
+
+describe(`closing the dialog by stepping Back`, () => {
+    it(`goes back where the press came from`, () => {
+        for (const back of [`/home`, `/home/box-1`, `/agents`, `/sandbox/models?tab=keys`]) {
+            expect(closesBackTo(back)).toBe(true);
+        }
+    });
+
+    it(`never onto a sign-in page, which signs a returning reader in again and asks for the dialog once more`, () => {
+        expect(closesBackTo(`/login?returnTo=/home?add=sandbox`)).toBe(false);
+        expect(closesBackTo(`/login`)).toBe(false);
+        expect(closesBackTo(`/login/confirm?email=a&code=b`)).toBe(false);
+    });
+
+    it(`never onto an address that is itself the ask, nor with nothing behind it`, () => {
+        expect(closesBackTo(`/home?add=sandbox`)).toBe(false);
+        expect(closesBackTo(`/home?add=sandbox&machine=hosted`)).toBe(false);
+        expect(closesBackTo(`/setup`)).toBe(false);
+        expect(closesBackTo(`/start/hosted?tier=pro`)).toBe(false);
+        expect(closesBackTo(null)).toBe(false);
+        expect(closesBackTo(undefined)).toBe(false);
     });
 });
