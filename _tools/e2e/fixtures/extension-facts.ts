@@ -49,7 +49,7 @@ const capability = (id: string, provider: string): CapabilitySummary => ({
 export const FIXTURE_CAPABILITIES: CapabilitySummary[] = [
     // → pipelines (github or gitlab).
     capability(`github`, `github`),
-    // → deployments, keyed by capability id, not view id; this name is the route segment below.
+    // → deployments: one tile however many komodo connections, the connection picked in the view (`?connection=`).
     capability(`production`, `komodo`),
     // → activity, which watches only providers with a live feed (discord, slack).
     capability(`discord`, `discord`),
@@ -76,7 +76,7 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `acceptance`, key: `acceptance`, surface: `rail`, why: `platform has user stories` },
     { id: `approvals`, key: `approvals`, surface: `rail`, why: `always on` },
     { id: `automations`, key: `automations`, surface: `rail`, why: `always on` },
-    { id: `deployments`, key: `production`, surface: `rail`, why: `the komodo capability named production` },
+    { id: `deployments`, key: `deployments`, surface: `rail`, why: `a komodo capability is connected` },
     { id: `documentation`, key: `documentation`, surface: `rail`, why: `any repo at all` },
     { id: `maintenance`, key: `maintenance`, surface: `rail`, why: `any repo at all` },
     { id: `passwords`, key: `passwords`, surface: `rail`, why: `always on` },
