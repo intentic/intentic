@@ -7,6 +7,7 @@ import { computed, ref } from "vue";
 import { useMembers } from "../../../../client/sandbox/useMembers";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { idFromName } from "../../../../lib/idFromName";
+import ServicesExplainer from "./ServicesExplainer.vue";
 import { useServices } from "./useServices";
 import { useAccessProfiles } from "./useAccessProfiles";
 const t = useT();
@@ -105,7 +106,7 @@ const profileName = (id: string | undefined): string =>
                     @click="start()"
                     ><template #icon><Icon name="plus" /></template></Button
             ></template>
-            <RowNote variant="block">{{ t(`sandbox.accessServices.explain`) }}</RowNote>
+            <template #info><ServicesExplainer /></template>
             <RowNote v-if="notice" variant="block"><Notice :of="notice" /></RowNote>
             <RowNote v-if="draft" variant="block">
                 <form class="flex flex-col gap-3" @submit.prevent="submit">
