@@ -1,7 +1,9 @@
 <!-- The shared agent: a round head with smiling crescent eyes, seated on two swept loops that meet beneath it, crowned with a
      flame and set with a gem on the brow and a lotus gem where everything meets. Drawn for the headline's cap height, standing between the first word and the rest.
      The head and the short bar under it are one stroked path, the loops are filled shapes; every rim goes down before
-     any ribbon, so every join merges cleanly. Colours sit on the SVG itself; the style block only sizes it and turns the glow on. -->
+     any ribbon, so every join merges cleanly. Colours sit on the SVG itself; the style block sizes it, turns the glow on
+     and animates it. Every animated part is a wrapper or a bare shape with no transform attribute of its own, because a
+     CSS transform replaces that attribute instead of adding to it. -->
 <svg class="shared-agent-emblem" viewBox="7 -4 82 88" fill="none" aria-hidden="true" focusable="false">
     <defs>
         <linearGradient id="shared-ribbon" x1="22" y1="4" x2="70" y2="86" gradientUnits="userSpaceOnUse">
@@ -26,18 +28,21 @@
         <!-- A unit almond, scaled into each gem. -->
         <path id="shared-gem" d="M0 -1Q0.95 0 0 1Q-0.95 0 0 -1Z" />
     </defs>
-    <g stroke-linejoin="round" stroke-linecap="round">
+    <g class="shared-agent-figure" stroke-linejoin="round" stroke-linecap="round">
         <g class="shared-agent-glow" filter="url(#shared-blur)" opacity="0">
             <use href="#shared-body" stroke="var(--color-primary-400)" stroke-width="9" />
             <use href="#shared-lobe" fill="var(--color-primary-400)" />
             <use href="#shared-lobe" fill="var(--color-primary-400)" transform="translate(96 0) scale(-1 1)" />
         </g>
-        <path
-            d="M48 -2.5C49.6 1 52 3.2 52 6C52 8.3 50.2 9.6 48 9.6C45.8 9.6 44 8.3 44 6C44 3.2 46.4 1 48 -2.5Z"
-            fill="url(#shared-ribbon)"
-            stroke="var(--color-gold)"
-            stroke-width="0.9"
-        />
+        <g class="shared-agent-crown shared-agent-pivot">
+            <path
+                class="shared-agent-flame shared-agent-pivot"
+                d="M48 -2.5C49.6 1 52 3.2 52 6C52 8.3 50.2 9.6 48 9.6C45.8 9.6 44 8.3 44 6C44 3.2 46.4 1 48 -2.5Z"
+                fill="url(#shared-ribbon)"
+                stroke="var(--color-gold)"
+                stroke-width="0.9"
+            />
+        </g>
         <use href="#shared-body" stroke="var(--color-gold)" stroke-width="9" />
         <use href="#shared-lobe" fill="var(--color-gold)" stroke="var(--color-gold)" stroke-width="2.5" />
         <use href="#shared-lobe" fill="var(--color-gold)" stroke="var(--color-gold)" stroke-width="2.5" transform="translate(96 0) scale(-1 1)" />
@@ -49,19 +54,32 @@
             <path d="M13.5 57C16.5 51 21 48.3 27 47.4" />
             <path d="M82.5 57C79.5 51 75 48.3 69 47.4" />
         </g>
-        <g transform="translate(48 13.4)">
-            <use href="#shared-gem" transform="scale(3.4 2.8)" fill="url(#shared-ribbon)" stroke="var(--color-gold)" stroke-width="0.3" />
-            <use href="#shared-gem" transform="scale(1.87 1.68)" fill="var(--color-primary-600)" />
-            <circle r="0.54" fill="var(--color-gold-bright)" />
+        <g class="shared-agent-brow">
+            <g transform="translate(48 13.4)">
+                <use href="#shared-gem" transform="scale(3.4 2.8)" fill="url(#shared-ribbon)" stroke="var(--color-gold)" stroke-width="0.3" />
+                <use href="#shared-gem" transform="scale(1.87 1.68)" fill="var(--color-primary-600)" />
+                <circle class="shared-agent-glint" r="0.54" fill="var(--color-gold-bright)" />
+            </g>
         </g>
         <g transform="translate(48 48)">
             <use href="#shared-gem" transform="scale(5.2 5)" fill="url(#shared-ribbon)" stroke="var(--color-gold)" stroke-width="0.19" />
             <use href="#shared-gem" transform="scale(2.86 3)" fill="var(--color-primary-600)" />
-            <circle r="0.83" fill="var(--color-gold-bright)" />
+            <circle class="shared-agent-glint" r="0.83" fill="var(--color-gold-bright)" />
         </g>
-        <g fill="var(--color-gold-bright)">
-            <path d="M34.8 32Q40 24.4 45.2 32Q40 29 34.8 32Z" />
-            <path d="M50.8 32Q56 24.4 61.2 32Q56 29 50.8 32Z" />
+        <!-- A four-point glint off the lotus gem's shoulder; drawn at nothing until its beat. -->
+        <g transform="translate(52.4 43.2)">
+            <path
+                class="shared-agent-sparkle"
+                d="M0 -4.4Q0.55 -0.55 4.4 0Q0.55 0.55 0 4.4Q-0.55 0.55 -4.4 0Q-0.55 -0.55 0 -4.4Z"
+                fill="var(--color-white)"
+            />
+        </g>
+        <!-- Three layers so the moves never fight: the gaze slides, the joy squeezes on hover, each eye blinks. -->
+        <g class="shared-agent-gaze">
+            <g class="shared-agent-joy shared-agent-pivot" fill="var(--color-gold-bright)">
+                <path class="shared-agent-eye shared-agent-pivot" d="M34.8 32Q40 24.4 45.2 32Q40 29 34.8 32Z" />
+                <path class="shared-agent-eye shared-agent-pivot" d="M50.8 32Q56 24.4 61.2 32Q56 29 50.8 32Z" />
+            </g>
         </g>
     </g>
 </svg>
@@ -84,5 +102,250 @@
 
     :global(html[data-variant="desk"]) .shared-agent-glow {
         opacity: 0;
+    }
+
+    /* Scales and turns pivot on a shape's own bottom centre: the flame on its stem, the eyes on their lids' line. */
+    .shared-agent-pivot,
+    .shared-agent-figure {
+        transform-box: fill-box;
+        transform-origin: 50% 100%;
+    }
+
+    .shared-agent-glint,
+    .shared-agent-sparkle {
+        transform-box: fill-box;
+        transform-origin: center;
+    }
+
+    .shared-agent-sparkle {
+        opacity: 0;
+    }
+
+    /* ALIVE, NOT BUSY. It sits inside the headline, so the idle is small and mostly still: the flame sways on its own
+       clock, and one 12s routine carries everything else. A blink just before each glance (as people do when they
+       look away), a look at "Shared", a look at "AI agents", a double blink, a glint off the lotus gem between them.
+       The first blink lands at 1.6s, as the headline's entrance settles. The brow gem and the flame travel a fraction
+       of the eyes' distance, so the glance reads as the head turning, and the flame lags each turn and overshoots.
+       Lengths are user units: a CSS px inside the SVG is one viewBox unit. */
+    @media (prefers-reduced-motion: no-preference) {
+        .shared-agent-flame {
+            animation: shared-agent-sway 3.2s ease-in-out infinite;
+        }
+        .shared-agent-crown {
+            animation: shared-agent-crown 12s ease-in-out infinite;
+        }
+        .shared-agent-gaze,
+        .shared-agent-brow {
+            --reach: 2.4;
+            animation: shared-agent-look 12s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+        .shared-agent-brow {
+            --reach: 1.1;
+        }
+        .shared-agent-eye {
+            animation: shared-agent-blink 12s ease-in-out infinite;
+        }
+        .shared-agent-glint {
+            animation: shared-agent-glint 12s ease-in-out infinite;
+        }
+        /* The light runs up the body: the lotus gem first, the brow gem a beat later. */
+        .shared-agent-brow .shared-agent-glint {
+            animation-delay: 0.3s;
+        }
+        .shared-agent-sparkle {
+            animation: shared-agent-sparkle 12s ease-out infinite;
+        }
+        .shared-agent-glow {
+            animation: shared-agent-breathe 3.6s ease-in-out infinite alternate;
+        }
+        :global(html[data-variant="desk"]) .shared-agent-glow {
+            animation: none;
+        }
+    }
+
+    /* A hand over it gets a hop: squash, stretch up, land, squash, and the eyes squeeze shut with it. The figure inside
+       moves, never the SVG box, so the pointer can't slip off mid-hop and restart it. */
+    @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+        .shared-agent-emblem:hover .shared-agent-figure {
+            animation: shared-agent-hop 0.72s cubic-bezier(0.3, 0, 0.3, 1);
+        }
+        .shared-agent-emblem:hover .shared-agent-joy {
+            animation: shared-agent-squint 0.72s ease-in-out;
+        }
+    }
+
+    @keyframes shared-agent-sway {
+        0%,
+        100% {
+            transform: rotate(-3deg) scale(1, 1);
+        }
+        22% {
+            transform: rotate(2deg) scale(0.95, 1.08);
+        }
+        41% {
+            transform: rotate(4deg) scale(1.03, 0.96);
+        }
+        63% {
+            transform: rotate(-1deg) scale(0.96, 1.1);
+        }
+        82% {
+            transform: rotate(-4.5deg) scale(1.02, 0.97);
+        }
+    }
+
+    @keyframes shared-agent-look {
+        0%,
+        15%,
+        40.5%,
+        58%,
+        79.5%,
+        100% {
+            transform: translateX(0);
+        }
+        17.5%,
+        38% {
+            transform: translateX(calc(var(--reach) * -1px));
+        }
+        60.5%,
+        77% {
+            transform: translateX(calc(var(--reach) * 1px));
+        }
+    }
+
+    /* The flame rides the turn at a third of the eyes' reach, leaning against it and settling past upright. */
+    @keyframes shared-agent-crown {
+        0%,
+        15%,
+        46%,
+        58%,
+        85%,
+        100% {
+            transform: translateX(0) rotate(0deg);
+        }
+        17.5% {
+            transform: translateX(-0.8px) rotate(8deg);
+        }
+        20.5% {
+            transform: translateX(-0.8px) rotate(-2.5deg);
+        }
+        23%,
+        38% {
+            transform: translateX(-0.8px) rotate(0deg);
+        }
+        40.5% {
+            transform: translateX(0) rotate(-7deg);
+        }
+        43.5% {
+            transform: translateX(0) rotate(2deg);
+        }
+        60.5% {
+            transform: translateX(0.8px) rotate(-8deg);
+        }
+        63.5% {
+            transform: translateX(0.8px) rotate(2.5deg);
+        }
+        66%,
+        77% {
+            transform: translateX(0.8px) rotate(0deg);
+        }
+        79.5% {
+            transform: translateX(0) rotate(7deg);
+        }
+        82.5% {
+            transform: translateX(0) rotate(-2deg);
+        }
+    }
+
+    /* Lids close fast and open a touch slower. */
+    @keyframes shared-agent-blink {
+        0%,
+        12.5%,
+        14.5%,
+        55.5%,
+        57.5%,
+        88%,
+        89.8%,
+        91%,
+        93%,
+        100% {
+            transform: scaleY(1);
+        }
+        13.3%,
+        56.3%,
+        88.8%,
+        91.8% {
+            transform: scaleY(0.1);
+        }
+    }
+
+    @keyframes shared-agent-glint {
+        0%,
+        44%,
+        50%,
+        100% {
+            transform: scale(1);
+        }
+        46.5% {
+            transform: scale(2);
+        }
+    }
+
+    @keyframes shared-agent-sparkle {
+        0%,
+        44% {
+            opacity: 0;
+            transform: scale(0) rotate(0deg);
+        }
+        46.5% {
+            opacity: 0.95;
+            transform: scale(1) rotate(45deg);
+        }
+        50%,
+        100% {
+            opacity: 0;
+            transform: scale(0) rotate(90deg);
+        }
+    }
+
+    @keyframes shared-agent-breathe {
+        from {
+            opacity: 0.3;
+        }
+        to {
+            opacity: 0.6;
+        }
+    }
+
+    @keyframes shared-agent-hop {
+        0%,
+        100% {
+            transform: translateY(0) scale(1, 1);
+        }
+        14% {
+            transform: translateY(0) scale(1.08, 0.9);
+        }
+        40% {
+            transform: translateY(-10px) scale(0.95, 1.07);
+        }
+        58% {
+            transform: translateY(-12px) scale(1, 1);
+        }
+        80% {
+            transform: translateY(0) scale(1.06, 0.93);
+        }
+        91% {
+            transform: translateY(0) scale(0.99, 1.02);
+        }
+    }
+
+    @keyframes shared-agent-squint {
+        0%,
+        100% {
+            transform: scale(1, 1);
+        }
+        18%,
+        72% {
+            transform: scale(1.06, 0.5);
+        }
     }
 </style>
