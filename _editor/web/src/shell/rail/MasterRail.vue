@@ -31,7 +31,8 @@ const signedOut = computed(() => user.value === null);
             :aria-label="t(`home.firstRun.signIn`)"
             v-tooltip.right="t(`home.firstRun.signIn`)"
         >
-            <Icon name="sign-in" class="icon-rail-glyph" aria-hidden="true" />
+            <!-- The account's empty place, as LocalAccountTile.vue draws it: an arrow into a door reads as leaving here. -->
+            <Icon name="user" class="icon-rail-glyph" aria-hidden="true" />
         </RouterLink>
         <AccountPanel v-else />
     </nav>

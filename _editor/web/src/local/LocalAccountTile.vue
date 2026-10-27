@@ -77,7 +77,8 @@ const signIn = async (): Promise<void> => {
         v-tooltip.right="open ? undefined : label"
         @click="open = !open"
     >
-        <Icon name="robot" class="icon-rail-glyph" />
+        <!-- The account's empty place, the same tile the master rail shows signed out (MasterRail.vue). -->
+        <Icon name="user" class="icon-rail-glyph" />
     </button>
 
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="right" cross="end" menu>
