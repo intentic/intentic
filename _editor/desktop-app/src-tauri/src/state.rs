@@ -150,15 +150,12 @@ pub fn default_home_folder(home: &Path) -> PathBuf {
     home.join("intentic").join("local")
 }
 
-/// The face an install that has no `last-face.json` yet was last using. Before the file existed the only record
-/// was whether the workspace had ever been shown, and from its first showing a launch always opened it; an
-/// install that never showed it opened Home. The file, once written, is the answer.
-fn face_or_migrated(stored: Option<Face>, workspace_seen: bool) -> Face {
-    match stored {
-        Some(face) => face,
-        None if workspace_seen => Face::Workspace,
-        None => Face::Home,
-    }
+/// The face a launch opens: the one in `last-face.json`, and the workspace (its Home, `/home`) on an install that has
+/// none, a fresh one or one whose app data the uninstaller removed. _(Until 2026-10-27) An install without the file
+/// opened the workspace only if it had ever shown it (`workspace-seen.json`), and the main window on
+/// `~/intentic/local` otherwise, so every clean reinstall landed on This computer's folder instead of Home._
+fn face_or_first(stored: Option<Face>) -> Face {
+    stored.unwrap_or(Face::Workspace)
 }
 
 /// A folder or document the user opened in a local window (local.rs), newest first: what Home and the tray
@@ -264,9 +261,8 @@ pub struct AppState {
     /// Whether a sandbox has ever run on THIS machine. Kept on disk because the question is asked at the one
     /// moment nothing can be measured: a launch whose Docker is not running cannot be asked what it hosts.
     hosts_sandboxes: Mutex<bool>,
-    /// Whether this install has ever shown the workspace. What decided a launch before `last_face` existed, and
-    /// still the migration for an install that has no `last-face.json` (see [`face_or_migrated`]), and the older
-    /// half of [`AppState::account_seen`].
+    /// Whether this install has ever shown the workspace: the older half of [`AppState::account_seen`]. It no longer
+    /// decides what a launch opens (see [`face_or_first`]).
     workspace_seen: Mutex<bool>,
     /// The face a launch and the tray's "Open Intentic" open onto (lib.rs `opening`).
     last_face: Mutex<Face>,
@@ -334,10 +330,7 @@ impl AppState {
         let ui_look = read_json(&config_dir.join("ui-look.json"));
         let hosts_sandboxes = read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false);
         let workspace_seen = read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false);
-        let last_face = face_or_migrated(
-            read_json(&config_dir.join("last-face.json")),
-            workspace_seen,
-        );
+        let last_face = face_or_first(read_json(&config_dir.join("last-face.json")));
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         let home_folder = read_json(&config_dir.join("home-folder.json"));
         let roster = read_roster(&config_dir);
@@ -829,10 +822,7 @@ mod tests {
             workspace_seen: Mutex::new(
                 read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
             ),
-            last_face: Mutex::new(face_or_migrated(
-                read_json(&config_dir.join("last-face.json")),
-                read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
-            )),
+            last_face: Mutex::new(face_or_first(read_json(&config_dir.join("last-face.json")))),
             account_seen: Mutex::new(
                 read_json(&config_dir.join("account-seen.json")).unwrap_or(false),
             ),
@@ -1148,24 +1138,19 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// An install from before `last-face.json` keeps opening what it opened: the workspace once it had been shown,
-    /// Home until then. The file, once there, is the answer whatever the older one says.
+    /// An install with no `last-face.json` (a first launch, or one after an uninstall that removed the app's data)
+    /// opens the workspace's Home; the file, once there, is the answer.
     #[test]
-    fn the_last_face_is_migrated_from_the_workspace_having_been_seen() {
-        assert_eq!(face_or_migrated(None, true), Face::Workspace);
-        assert_eq!(face_or_migrated(None, false), Face::Home);
-        assert_eq!(face_or_migrated(Some(Face::Home), true), Face::Home);
-        assert_eq!(
-            face_or_migrated(Some(Face::Workspace), false),
-            Face::Workspace
-        );
+    fn a_launch_with_no_last_face_opens_the_workspace() {
+        assert_eq!(face_or_first(None), Face::Workspace);
+        assert_eq!(face_or_first(Some(Face::Home)), Face::Home);
+        assert_eq!(face_or_first(Some(Face::Workspace)), Face::Workspace);
     }
 
     #[test]
     fn the_last_face_survives_a_launch_and_its_file_is_the_wire_word() {
         let dir = std::env::temp_dir().join(format!("intentic-face-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        state_in(&dir).remember_workspace_seen();
         assert_eq!(state_in(&dir).last_face(), Face::Workspace);
         state_in(&dir).remember_last_face(Face::Home);
         assert_eq!(state_in(&dir).last_face(), Face::Home);

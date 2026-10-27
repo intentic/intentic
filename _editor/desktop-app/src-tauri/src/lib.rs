@@ -88,9 +88,10 @@ fn sign_in(
 /// one opened This device instead, and an engine that woke then handed over to the workspace by itself._
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Opening {
+    /// The workspace, on its Home: an install last used through it, and a first launch (state.rs `face_or_first`).
     Workspace,
-    /// An install last used through the main window (a first launch included): the editor's shell on a folder of
-    /// this computer, `~/intentic/local` at first (local.rs), which needs no account at all.
+    /// An install last used through the main window: the editor's shell on a folder of this computer,
+    /// `~/intentic/local` at first (local.rs), which needs no account at all.
     Home,
 }
 

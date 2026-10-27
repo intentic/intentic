@@ -1,6 +1,6 @@
 # desktop-app
 
-The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its Devices view, and shows the hosted workspace in the same window once they sign in.
+The Tauri app for Windows and Linux that opens on the hosted workspace's Home from the first launch, opens the editor on a folder of the user's own computer with no account, runs sandboxes on that computer from its Devices view, and shows both in the same window.
 
 ```mermaid
 flowchart LR
@@ -128,8 +128,8 @@ flowchart LR
   whether it is shared, and no count or state, and the account an address, a name and an `https` avatar. Before the
   workspace has listed any, Add sandbox is the place chip's one row; the account menu shows the named account at once
   and then what the platform answers (below). It opens on the folder it was last
-  pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
-  first screen. A folder picked in the system's dialog from an empty folder's page, or one of the folders that page
+  pointed at (`home-folder.json`), or on `~/intentic/local`, which its first opening creates: nothing is asked before
+  the first screen. A folder picked in the system's dialog from an empty folder's page, or one of the folders that page
   offers (below), takes the window's place
   (`local_pick`, then `point`: a grant of its own, and the new face handed to the page as `intentic:repoint`). The page
   moves to the folder in place, with no reload (the web's `local/folderSwitch.ts`): to the editor a folder is one
@@ -425,8 +425,10 @@ flowchart LR
   Before that, a sandbox just made from Home asked for the browser trip the moment it answered.
 - **The last face.** `last-face.json` (`home` or `workspace`) is the face the user was last seen choosing: every
   showing of the workspace writes `workspace`, and the main window shown on purpose (a launch into it, the tray's "This
-  computer", the workspace's way back) writes `home`. An install without the file reads `workspace` if it ever showed the
-  workspace (`workspace-seen.json`) and `home` otherwise. A launch opens the last face, whatever else is going on
+  computer", the workspace's way back) writes `home`. An install without the file (a first launch, or one after an
+  uninstall that removed the app's data) reads `workspace`, so it opens on the workspace's Home (`/home`). _(Until
+  2026-10-27) It read `workspace` only if the install had ever shown the workspace (`workspace-seen.json`), so every clean
+  reinstall opened the main window on `~/intentic/local` instead of Home._ A launch opens the last face, whatever else is going on
   (`opening` in `src-tauri/src/lib.rs`): a setup parked across a Windows restart and an engine asleep under a sandbox of
   this computer are the main window's work, built out of sight for it when the launch opens the workspace, and are
   processes on both faces' rails (`work_for_main_window`). A launch at sign-in (`--background`, above) shows nothing;
