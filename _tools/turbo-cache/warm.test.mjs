@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cacheEnv, installMatchesLockfile } from "./warm.mjs";
+import { cacheEnv, installMatchesLockfile, warmable } from "./warm.mjs";
 
 test("the card's variables are found under whatever instance suffix they carry", () => {
     assert.deepEqual(cacheEnv({ TURBO_CACHE_URL_TURBO_CACHE: "http://127.0.0.1:9/gw/", TURBO_CACHE_TOKEN_TURBO_CACHE: "placeholder", TURBO_CACHE_TEAM_TURBO_CACHE: "fleet" }), {
@@ -44,4 +44,26 @@ test("an install matches its lockfile when pnpm's record is the lockfile, with o
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
+});
+
+const task = (name, dependencies = []) => ({ taskId: `${name}#typecheck`, package: name, dependencies: dependencies.map((dep) => `${dep}#typecheck`) });
+
+test("the editor's full typecheck, and whatever depends on it while it is missing, is left to CI", () => {
+    const base = task("@intentic/base");
+    const web = task("@intentic/web", ["@intentic/base"]);
+    const site = task("@intentic/site", ["@intentic/web"]);
+    const ext = task("@intentic/ext-approvals", ["@intentic/base"]);
+    const plan = [base, web, site, ext];
+    const { run, left } = warmable([base, web, site, ext], plan);
+    assert.deepEqual(run.map((each) => each.package), ["@intentic/base", "@intentic/ext-approvals"]);
+    assert.deepEqual(left.map((each) => each.package), ["@intentic/web", "@intentic/site"]);
+});
+
+test("a dependency already in the shared cache blocks nothing, and a cycle in the plan ends", () => {
+    const web = task("@intentic/web");
+    const site = task("@intentic/site", ["@intentic/web"]);
+    assert.deepEqual(warmable([site], [web, site]).run, [site]);
+    const a = task("a", ["b"]);
+    const b = task("b", ["a"]);
+    assert.deepEqual(warmable([a, b], [a, b]).run, [a, b]);
 });

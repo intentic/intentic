@@ -17,6 +17,11 @@ const QUEUE_SKIPPED_EXIT_CODE = 75;
 // Characters of an invocation a rule's regex runs against; bounds backtracking, since node has no regex timeout.
 const MATCH_LIMIT = 4096;
 
+// `vue-tsc` as the program, not a word joined to it (`check-vue-tsc`).
+const VUE_TSC = "(?<![-.])\\bvue-tsc\\b(?![-.])";
+// The two packages whose typecheck compiles the editor's whole source, by package name or by path.
+const EDITOR_PACKAGE = "(@intentic/(web|demo)|_editor/web|_site/demo)(?![-\\w])";
+
 // The shipped rules and settings. Every rule is something measured pinning a sandbox, not merely slow.
 const SHIPPED_HEAVY_COMMANDS = Object.freeze({
     // How many matching programs may run at once across the sandbox; two fits twice the peak of one bounded run.
@@ -61,6 +66,48 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
             pool: "install",
             limit: 1,
         },
+        // The editor's typecheck, one at a time in a lane of its own, priced at what it holds (memory-room.mjs
+        // SIZE_BYTES): `vue-tsc` over `_editor/web` peaks at 6.8 GiB of its 8 GiB heap, and `_site/demo`'s check compiles
+        // the same source (measured 2026-10-26: 418-571 s each). Two at once, priced at a toolchain's 1 GiB, were the
+        // 20 GiB peaks of 2026-10-26, holding both heavy slots for 13-29 minutes while ten commands queued behind them.
+        // `nests`: judged again under a program that already holds a slot of a pool no `nests` rule names, so the
+        // `vue-tsc` a `pnpm -r typecheck` or a repository verification starts still takes this lane (see matchInvocation
+        // for why that cannot deadlock).
+        // - A changed-files check (`lsp diag` on a Vue package, _search/lsp/src/vue-check.ts) names the tsconfig it
+        //   writes, `tsconfig.lsp-changed.<pid>.json`, and is priced as what it loads (measured 2026-10-27: 1.0-3.9 GiB,
+        //   5-55 s). A lane of its own, two at once, so it never waits behind a full check's ten minutes; the memory gate
+        //   still prices each one.
+        // - The program, or the package script, naming the editor or the demo: `vue-tsc -p tsconfig.app.json` (only the
+        //   editor has one), `pnpm --filter @intentic/web typecheck`, `turbo run typecheck --filter=@intentic/demo`.
+        //   Never two at once, not even after the wait, for the reason `repo-verify` gives.
+        // - The same program or script run from inside either package, which its arguments cannot say (`cwd`).
+        {
+            id: "vue-typecheck-changed",
+            pattern: `${VUE_TSC}.*\\btsconfig\\.lsp-changed\\b`,
+            pool: "vue-typecheck-changed",
+            limit: 2,
+            size: "scoped-typecheck",
+            nests: true,
+        },
+        {
+            id: "editor-typecheck",
+            pattern: `${VUE_TSC}.*(\\btsconfig\\.app\\.json\\b|${EDITOR_PACKAGE})|^(pnpm|npm|yarn|bun|turbo)\\b(?=.*${EDITOR_PACKAGE})(?=.*\\btypecheck\\b)`,
+            pool: "vue-typecheck",
+            limit: 1,
+            size: "editor-typecheck",
+            nests: true,
+            onDeadline: "skip",
+        },
+        {
+            id: "editor-typecheck-here",
+            pattern: `^${VUE_TSC}|^(pnpm|npm|yarn|bun)\\b.*\\btypecheck\\b`,
+            cwd: "(^|/)(_editor/web|_site/demo)/?$",
+            pool: "vue-typecheck",
+            limit: 1,
+            size: "editor-typecheck",
+            nests: true,
+            onDeadline: "skip",
+        },
         // A program's name joined to `.` or `-` is another word (`check-tsc`), not the program.
         { id: "vitest", pattern: "(?<![-.])\\b(vitest|jest)\\b(?![-.])" },
         { id: "typechecker", pattern: "(?<![-.])\\b(tsc|tsgo|vue-tsc)\\b(?![-.])" },
@@ -90,7 +137,10 @@ const EARLIER_SHIPPED_RULES = Object.freeze([
 ]);
 
 const SETTING_KEYS = Object.freeze(["limit", "defaultPool", "waitSeconds", "memoryGateSeconds", "maxHoldSeconds", "onDeadline"]);
-const RULE_KEYS = Object.freeze(["id", "pattern", "pool", "limit", "maxHoldSeconds", "exempt", "onDeadline"]);
+// `cwd`: a regex the program's working directory must match too, for what its arguments cannot name. `size`: the
+// memory gate's price for it (memory-room.mjs SIZE_BYTES) instead of its class's. `nests`: judged even under a program
+// already holding a slot of another pool.
+const RULE_KEYS = Object.freeze(["id", "pattern", "pool", "limit", "maxHoldSeconds", "exempt", "onDeadline", "cwd", "size", "nests"]);
 
 // Two rules are the same when every field either names is equal; key order and absent-versus-undefined do not count.
 const sameRule = (left, right) => RULE_KEYS.every((key) => left[key] === right[key]);
@@ -150,26 +200,91 @@ const compileRule = (rule, report) => {
     }
 };
 
+// A rule's `cwd` against the program's working directory: absent matches anywhere, and one that does not compile or a
+// directory nobody named matches nothing.
+const inDirectory = (rule, cwd, report) => {
+    if (rule.cwd === undefined) {
+        return true;
+    }
+    if (cwd === undefined) {
+        return false;
+    }
+    try {
+        return new RegExp(rule.cwd, "i").test(cwd.slice(0, MATCH_LIMIT));
+    } catch (error) {
+        report?.(`${rule.id}: cwd ${error instanceof Error ? error.message : "bad pattern"}`);
+        return false;
+    }
+};
+
+// The pools some `nests` rule queues into: a program holding a slot of one of them is never judged again.
+const nestingPools = (config) => new Set(config.rules.filter((rule) => rule.nests === true && rule.exempt !== true).map((rule) => rule.pool ?? config.defaultPool));
+
+// Whether a rule is judged at all for a program whose ancestors already hold slots of `held`. Nothing held: every rule.
+// Under a held slot, an `exempt` rule still ends the search (a watch is no less long-lived for running under a
+// verification), and a `nests` rule is judged only while every held pool is one no `nests` rule names.
+//
+// WHY THIS CANNOT DEADLOCK. A program waits for a slot while holding others only through a `nests` rule, so every wait
+// that holds something goes from a pool no `nests` rule names to one that a `nests` rule names, and never from a nesting
+// pool to anything. Waits-for edges between pools all point one way, so no cycle of them exists, across sessions too;
+// and a program never waits on a pool it holds, which is the flock on its own ancestor's slot that would never be free.
+// The owner's overrides cannot break this: a `nests` rule they add makes its pool a nesting pool, whose holders are then
+// never judged again.
+const judgedUnder = (rule, held, nesting) => {
+    if (held.length === 0 || rule.exempt === true) {
+        return true;
+    }
+    return rule.nests === true && held.every((pool) => !nesting.has(pool));
+};
+
 // The rule a program's invocation falls under, with what the queue does with it; undefined for one that is not heavy.
-const matchInvocation = (invocation, config, report) => {
+// `where.cwd` is the program's working directory, for a rule with a `cwd`; `where.heldPools` the pools programs above
+// this one already hold slots of (heldPoolsOf), which narrows the rules judged (judgedUnder).
+const matchInvocation = (invocation, config, report, where = {}) => {
     const text = invocation.slice(0, MATCH_LIMIT);
+    const held = where.heldPools ?? [];
+    const nesting = held.length === 0 ? new Set() : nestingPools(config);
     for (const rule of config.rules) {
+        if (!judgedUnder(rule, held, nesting)) {
+            continue;
+        }
         const compiled = compileRule(rule, report);
-        if (compiled === undefined || !compiled.regex.test(text)) {
+        if (compiled === undefined || !compiled.regex.test(text) || !inDirectory(rule, where.cwd, report)) {
             continue;
         }
         if (rule.exempt === true) {
             return undefined;
         }
-        return {
+        const match = {
             id: rule.id,
             pool: rule.pool ?? config.defaultPool,
             limit: rule.limit ?? config.limit,
             maxHold: rule.maxHoldSeconds ?? config.maxHoldSeconds,
             onDeadline: rule.onDeadline ?? config.onDeadline,
         };
+        if (rule.size !== undefined) {
+            match.size = rule.size;
+        }
+        return match;
     }
     return undefined;
+};
+
+// The pools programs above this one hold slots of, from what they handed down: the rule the nearest was queued under
+// (INTENTIC_HEAVY_HELD, by its id in the merged table) and the slot queue-run took last (INTENTIC_QUEUE_SLOT,
+// `<queue dir>/<pool>/slot.<n>`), which differ when a script queued itself under a queued program. Empty for a program
+// nothing above has queued.
+const heldPoolsOf = (env, config) => {
+    const pools = new Set();
+    const held = env.INTENTIC_HEAVY_HELD ?? "";
+    if (held !== "") {
+        pools.add(ruleById(config, held)?.pool ?? config.defaultPool);
+    }
+    const slot = env.INTENTIC_QUEUE_SLOT ?? "";
+    if (slot !== "") {
+        pools.add(slot.split("/").filter((part) => part !== "").at(-2) ?? config.defaultPool);
+    }
+    return [...pools];
 };
 
 // queue-run's flags for a match (bin/queue-run), before its `--`.
@@ -218,9 +333,14 @@ const targetedRun = (invocation) => {
     });
 };
 
-// queue-run's `--size` for a match: `targeted` for a test run aimed at named files, nothing for everything else.
-const sizeArgs = (match, invocation) =>
-    ["vitest", "package-script"].includes(match.id) && targetedRun(invocation) ? ["--size", "targeted"] : [];
+// queue-run's `--size` for a match: its rule's own price where it names one, `targeted` for a test run aimed at named
+// files, nothing for everything else.
+const sizeArgs = (match, invocation) => {
+    if (match.size !== undefined) {
+        return ["--size", match.size];
+    }
+    return ["vitest", "package-script"].includes(match.id) && targetedRun(invocation) ? ["--size", "targeted"] : [];
+};
 
 // When a slot held this long is worth a line in the log: half of what its own rule lets it hold, never for a rule that
 // lets it hold forever.
@@ -242,4 +362,5 @@ module.exports = {
     sizeArgs,
     holdWarnSeconds,
     ruleById,
+    heldPoolsOf,
 };

@@ -66,6 +66,14 @@ in the foreground, one at a time. Do not run the whole repository (`pnpm test`, 
 `turbo run` without `--filter`): several conversations share this machine, and one of those runs can take all of its
 memory. CI runs all of it on what the owner pushes.
 
+A Vue package (one whose typecheck is `vue-tsc`: `_editor/web`, `_editor/ui`, the extensions) is typechecked with
+`lsp diag --changed`, not its `typecheck` script. It runs the package's own `vue-tsc` over the files you changed and
+the files that import them directly: 5-55 s and 1-4 GB on `_editor/web`, where the full check takes 7-10 minutes and
+6.8 GB, and the heavy-command queue runs only one full editor check at a time across the sandbox. When it cannot
+vouch for the change (a `.d.ts`, a tsconfig, a `package.json`, or a file more than 300 of the package's files import
+at some depth) it says so and names the full command; run that then, or leave it to CI. Run `_site/demo`'s typecheck
+only when `_site/demo` itself changed: it compiles the whole editor source again.
+
 **After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile, or brought a
 project the main tree never installed (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
 checks the commit (`.github/workflows/ci.yml`: its `quick` job runs the push check within minutes, and the verify

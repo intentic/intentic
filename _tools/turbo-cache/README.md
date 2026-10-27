@@ -28,7 +28,7 @@ What remains is the risk the design accepts: a sandbox could claim a typecheck p
 
 1. It skips everything if `node_modules` was not installed from this checkout's `pnpm-lock.yaml`.
 2. It sends the typecheck passes turbo already holds in its local cache for the changed packages. Turbo never uploads a local hit by itself.
-3. It typechecks what is still missing, with the server as turbo's remote.
+3. It typechecks what is still missing, with the server as turbo's remote. It leaves the editor's full typecheck (`@intentic/web`, and `@intentic/demo`, which compiles the same source) to CI, along with anything that would wait on it, because those take 418–571 s and never finish inside the budget.
 4. It files each pass under the `--only` hash as well. [reach-typecheck.mjs](../scripts/verify/reach-typecheck.mjs) asks under `--only`, which gives a package a different hash whenever the change does not select its dependencies.
 
 The hashes match because a sandbox and CI run the same turbo on the same lockfile with the same Node. For commit `6d4c368`, a sandbox's dry run reproduced every typecheck and build hash in CI's log. Test hashes match only with `CI=true`, which `turbo.json` hashes on purpose, so tests are not warmed today.

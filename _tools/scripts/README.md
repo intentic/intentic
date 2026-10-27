@@ -33,6 +33,11 @@ flowchart LR
   edits, nearest first and fast compilers before vue-tsc. A failure is charged only where CI's record (the turbo-cache
   card's server) or this machine's turbo cache shows that package typechecked clean before the change; one with no record
   is never run, since main may fail it already. Without the card it plans nothing and says so. `--no-reach` skips it.
+  A dependent whose typecheck is vue-tsc is checked over its own files that import what the change edited
+  (`lsp diag --from <package>`, run from source with bun), not its whole source: the editor's full check takes 418-571 s
+  and 6.8 GB, so inside this budget it was always killed unfinished. Where that check cannot vouch for the change (a
+  barrel-exported file most of the editor reaches, a package import it does not trace) the package is left to CI, and
+  the note says why. (2026-10-27)
   What a change brought in is read one way (`verify/measure-change.mjs`: oxlint's lines, and the checks judged against
   the change's base with its `Allow:` trailers, which excuse a tidy finding and never a code one).
 - `verify` waits for the sandbox's heavy slot however it is started (`lib/heavy-slot.mjs`), and sizes its workers and

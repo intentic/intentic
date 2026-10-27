@@ -1,0 +1,68 @@
+#!/usr/bin/env node
+// The in-sandbox PREVIEW command: this conversation's managed dev preview of a workspace app, started, found, listed or
+// stopped. It owns no preview logic: `preview demo` is the demo's own dev script (_site/demo/scripts/dev.mjs in the
+// intentic repository), which a turn also reaches as `pnpm -C _site/demo dev`; this is the one name the skills teach,
+// from any directory. The records, the cap and the idle stop are @intentic/constants/dev-previews, and the daemon's half
+// is src/processes/dev-previews.ts.
+//
+// The script runs in this shell, so the server starts inside this turn's mount namespace and serves this
+// conversation's worktree, and carries this conversation's stamp (INTENTIC_TURN_OWNER), which is whose page it is.
+
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+const USAGE = `preview — this conversation's own dev preview, kept across its turns
+
+  preview demo            start this conversation's demo (the editor on its fixture), or find it running; prints its address
+  preview demo --stop     stop it
+  preview demo --list     every running preview, and why this conversation's last one stopped (also: preview --list)
+
+Each conversation's preview is its own origin, http://<conversation>.demo.localhost:<port>/demo/, so its sign-in and look
+stay its own. At most 3 run at once (starting a 4th stops the least recently used) and one unused for 10 minutes stops by
+itself; the next start says why.`;
+
+// Where each app's script sits in its repository, and the repository it belongs to.
+const APPS = { demo: join("_site", "demo", "scripts", "dev.mjs") };
+const DEFAULT_REPO = "/work/intentic";
+
+// The intentic checkout this shell stands in, else the workspace's: every conversation sees its own at /work/intentic.
+const repoOf = (script) => {
+    for (let dir = process.cwd(); ; dir = dirname(dir)) {
+        if (existsSync(join(dir, script))) {
+            return dir;
+        }
+        if (dir === dirname(dir)) {
+            return DEFAULT_REPO;
+        }
+    }
+};
+
+const run = (app, flags) => {
+    const script = join(repoOf(APPS[app]), APPS[app]);
+    if (!existsSync(script)) {
+        process.stdout.write(`preview: ${script} is not there: this command previews the intentic repository's ${app}.\n`);
+        process.exit(2);
+    }
+    const ran = spawnSync(process.execPath, [script, ...flags], { stdio: "inherit" });
+    process.exit(ran.status ?? 1);
+};
+
+const [target, ...rest] = process.argv.slice(2);
+if (target === undefined || target === "--help" || target === "-h" || target === "help") {
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(target === undefined ? 2 : 0);
+}
+if (target === "--list" || target === "list") {
+    run("demo", ["--list"]);
+}
+if (!Object.hasOwn(APPS, target)) {
+    process.stdout.write(`preview: no app called ${target}; the one there is: ${Object.keys(APPS).join(", ")}.\n\n${USAGE}\n`);
+    process.exit(2);
+}
+const unknown = rest.filter((flag) => flag !== "--stop" && flag !== "--list");
+if (unknown.length > 0) {
+    process.stdout.write(`preview: unknown option ${unknown.join(" ")}\n\n${USAGE}\n`);
+    process.exit(2);
+}
+run(target, rest);

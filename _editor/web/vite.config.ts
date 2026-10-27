@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
 import { defineConfig, type Plugin } from "vite";
-import { BUILD_ID, shared } from "./vite.shared.ts";
+import { BUILD_ID, shared, sharedCacheConfig } from "./vite.shared.ts";
 import { offlinePrecache } from "./vite.offline.ts";
 
 // Resolve a path relative to this config file (which lives at the app root, _editor/web/).
@@ -63,15 +63,25 @@ const contractFreshness = (): Plugin => ({
     },
 });
 
+// The optimizer's cache, shared by every tree with the same inputs, outside node_modules (vite.shared.ts, "SHARED
+// OPTIMIZER CACHE").
+const cache = sharedCacheConfig(
+    `web`,
+    { files: [here(`./vite.config.ts`), here(`./vite.shared.ts`), here(`./source-aliases.ts`)], optimizeDeps: shared.optimizeDeps, resolve: shared.resolve },
+    here(`.`),
+);
+
 export default defineConfig(({ command }) => ({
     ...shared,
     // offlinePrecache: the chunks public/sw.js keeps for when this origin cannot answer (vite.offline.ts).
-    plugins: [...shared.plugins, buildStamp(), contractFreshness(), offlinePrecache(BUILD_ID)],
+    plugins: [...shared.plugins, buildStamp(), contractFreshness(), offlinePrecache(BUILD_ID), cache.plugin],
+    cacheDir: cache.cacheDir,
     server: {
         host: "localhost",
         // Must stay 47145: CORS, Better Auth's WEB_ORIGIN, and Google's OAuth client all trust this exact origin.
         port: 47145,
         strictPort: true,
+        fs: { allow: cache.fsAllow },
         // The start's own modules, transformed as the server comes up rather than while the first page waits on them:
         // after a restart every module is untransformed, and the boot graph is what a reload asks for first. Only the
         // transform cache is filled, which the watcher invalidates exactly as it does for a module a page asked for.

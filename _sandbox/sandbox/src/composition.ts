@@ -142,6 +142,7 @@ import { previousRunDied } from "./system/boot/restarts/boot-marker.js";
 import { createConversationsSlice, type ConversationsSlice } from "./conversations/conversations-slice.js";
 import { createWorkspaceSlice, type DerivedMembers, type WorkspaceSlice } from "./workspace/workspace-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions/sessions-slice.js";
+import { createPreviewKeeper, withPreviewHolders } from "./processes/dev-previews.js";
 import { createProcessesSlice, type PortsMembers, type ProcessesSlice } from "./processes/processes-slice.js";
 import { buildLeafSlices, type LeafMembers, leafTeardown } from "./bootstrap/slices/slice-registry.js";
 
@@ -401,7 +402,8 @@ const createReaper = ({ conversations, agents, events, logger, resources }: Pick
                 // the wake armed on the job would time out instead of firing (agent/tools/jobs/background-jobs.ts).
                 ...backgroundJobSessions(conversations),
             ]),
-        panePids,
+        // A conversation's managed dev preview outlives its turn as a pane's process does (processes/dev-previews.ts).
+        panePids: withPreviewHolders(panePids, createPreviewKeeper({ logger })),
         keptJobDirs,
         onOwnerStopped: (listener) => events.subscribe("run.settled", (settled) => listener(settled.conversationId)),
         logger,

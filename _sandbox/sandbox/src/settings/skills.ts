@@ -30,9 +30,17 @@ The \`lsp\` CLI (on PATH) drives the native TypeScript compiler. Prefer it over 
 \`lsp diag <file...>\`
 - Prints syntactic + semantic diagnostics as \`path:line:col: error TS<code>: message\`; "no diagnostics" means the file type-checks. Faster than a full build for confirming an edit is sound, run it after edits to verify you updated all usages.
 
+\`lsp diag --changed\`
+- The same for every file your branch changed since it left \`main\`, uncommitted and untracked files included, grouped by package. Run it before you finish instead of a package's full typecheck.
+
+## Vue packages (the editor, its kit, the extensions, the demo)
+A file of a package whose typecheck is \`vue-tsc\` (\`.vue\` and \`.ts\` alike) is checked by that package's own \`vue-tsc\` over the files you changed and the files that import them directly, not the whole package. In \`_editor/web\` that is 5-55 seconds and 1-4 GB, where the full \`vue-tsc\` takes 7-10 minutes and 6.8 GB, and only one of those runs at a time on the sandbox.
+- It ends with one line per package: \`vue-tsc checked N changed files and M direct importers ...: K errors\`. Errors in those files are yours. "More errors in files they import, outside the change" is a count only: usually a stale \`dist\` of a library, or main's own.
+- It does NOT check a \`.d.ts\`, a tsconfig, a \`package.json\`, or a file more than 300 of the package's files import at some depth (a store, a client, a shared composable): for those it says "Only the full check answers for it", names the command (\`pnpm --filter <package> typecheck\`) and exits 2. Run that command then, or leave it to CI, which typechecks every package on push. Do not run \`_site/demo\`'s typecheck unless you changed \`_site/demo\` itself: it compiles the whole editor too.
+
 Both verbs refuse rather than guess: when a file's tsconfig or type foundations cannot be loaded (say the dependencies are not installed where the checker runs), they print an \`unavailable\` message and exit 2 instead of answering from a half-loaded project. Treat that as "not checked", use the package's own typecheck or tests, never as a verdict on the code.
 
-Notes: TypeScript/JavaScript only. Pass workspace paths.
+Notes: TypeScript/JavaScript and Vue only. Pass workspace paths.
 `;
 
 // fileq's teaching is fileq's own (@intentic/fileq/skill), the same text the Claude Code plugin ships; the sandbox host

@@ -939,6 +939,10 @@
     {
       "type": "{ defaultPool?: string; limit?: number; maxHoldSeconds?: number; memoryGateSeconds?: number; onDeadline?: \"run\" | \"skip\"; queue?: boolean; ruleEdits?: ({ disabled?: boolean; exempt?: boolean; id: string; limit?: number; maxHoldSeconds?: number; onDeadline?: \"run\" | \"skip\"; pattern?: string; pool?: string })[]; waitSeconds?: number }",
       "since": "v1.313.0"
+    },
+    {
+      "type": "{ defaultPool?: string; limit?: number; maxHoldSeconds?: number; memoryGateSeconds?: number; onDeadline?: \"run\" | \"skip\"; queue?: boolean; ruleEdits?: ({ cwd?: string; disabled?: boolean; exempt?: boolean; id: string; limit?: number; maxHoldSeconds?: number; nests?: boolean; onDeadline?: \"run\" | \"skip\"; pattern?: string; pool?: string; size?: string })[]; waitSeconds?: number }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/config/loop-designs.json": [

@@ -5,7 +5,9 @@
 // A heavy program is put in the toolchain class (its rank for the OOM killer, its CPU and IO priority) right away,
 // whether or not anything queues it, then replaces itself with the same run behind queue-run (a slot, and memory first),
 // or behind offload-run when the owner sends that kind of work to a runner. Everything it starts inherits both, and
-// nothing below it is judged again: INTENTIC_HEAVY_HELD and queue-run's INTENTIC_QUEUE_SLOT say it is already covered.
+// nothing below it is judged again (INTENTIC_HEAVY_HELD and queue-run's INTENTIC_QUEUE_SLOT say it is already covered)
+// except by a `nests` rule while every pool held above is one no `nests` rule names (heavy-rules.cjs judgedUnder): the
+// editor's `vue-tsc` takes its own lane even under a `pnpm -r typecheck` that holds a heavy slot.
 //
 // The daemon hands the table in INTENTIC_HEAVY, as JSON: { rules (heavy-rules.cjs mergeHeavyRules), queue, queueRun,
 // offloadRun, offload: { <rule id>: <runner> }, klass: { oomScoreAdj, nice, lowIo } }. Every failure here is a program
@@ -15,16 +17,17 @@
 const { spawnSync } = require("node:child_process");
 const { accessSync, constants, readFileSync, writeFileSync } = require("node:fs");
 const { getPriority, setPriority } = require("node:os");
-const { matchInvocation, queueArgs, sizeArgs } = require("./heavy-rules.cjs");
+const { heldPoolsOf, matchInvocation, queueArgs, sizeArgs } = require("./heavy-rules.cjs");
+
+// The spec the daemon handed down, or undefined when this program is not under it.
+const handedSpec = (env) => {
+    const raw = env.INTENTIC_HEAVY;
+    return raw === undefined || raw === "" ? undefined : JSON.parse(raw);
+};
 
 // The spec the daemon handed down, or undefined when this program is not under it or is already covered.
-const pendingSpec = (env = process.env) => {
-    const raw = env.INTENTIC_HEAVY;
-    if (raw === undefined || raw === "" || env.INTENTIC_HEAVY_HELD !== undefined || env.INTENTIC_QUEUE_SLOT !== undefined) {
-        return undefined;
-    }
-    return JSON.parse(raw);
-};
+const pendingSpec = (env = process.env) =>
+    env.INTENTIC_HEAVY_HELD !== undefined || env.INTENTIC_QUEUE_SLOT !== undefined ? undefined : handedSpec(env);
 
 // The class applied to this very process, raised only: descendants inherit all three at fork.
 const applyClass = (klass) => {
@@ -87,13 +90,13 @@ const become = (argv, env) => {
  * Judges one program as it starts. Returns false for one that is not heavy (or not under the daemon's table), true for
  * one that was classed and runs in place; a queued or offloaded one does not return.
  */
-const takeTurn = ({ program, args, command, env = process.env }) => {
-    const spec = pendingSpec(env);
+const takeTurn = ({ program, args, command, env = process.env, cwd = process.cwd() }) => {
+    const spec = handedSpec(env);
     if (spec === undefined) {
         return false;
     }
     const invocation = [program, ...args].join(" ");
-    const match = matchInvocation(invocation, spec.rules);
+    const match = matchInvocation(invocation, spec.rules, undefined, { cwd, heldPools: heldPoolsOf(env, spec.rules) });
     if (match === undefined) {
         return false;
     }

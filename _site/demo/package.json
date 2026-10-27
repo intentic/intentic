@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "node scripts/sync-extensions.mjs && vite",
+        "dev": "node scripts/dev.mjs",
         "build": "node scripts/sync-extensions.mjs && vite build",
         "sync": "node scripts/sync-extensions.mjs",
         "smoke": "node scripts/smoke-daemon.ts",

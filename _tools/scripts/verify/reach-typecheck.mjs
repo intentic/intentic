@@ -112,10 +112,10 @@ export const passedBefore = async ({ root, base, tasks, env, timeoutMs }) => {
 // How much of a typecheck's output is kept: its errors are at the start, and a crash says why at the end.
 const KEPT_OUTPUT = 256 * 1024;
 
-/** One package's own `typecheck` script, killed with its process group at `ms`; never throws. */
-export const typecheckPackage = (root, task, ms, env) =>
+// A command run to completion or killed with its process group at `ms`: `{ code, late, output }`; never throws.
+const runGroup = (command, args, { cwd, ms, env }) =>
     new Promise((resolve) => {
-        const child = spawn("pnpm", ["run", "--silent", "typecheck"], { cwd: join(root, task.directory), env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+        const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
         let output = "";
         const keep = (chunk) => {
             output = output.length < KEPT_OUTPUT ? `${output}${chunk}` : `${output.slice(0, KEPT_OUTPUT / 2)}${`${output}${chunk}`.slice(-KEPT_OUTPUT / 2)}`;
@@ -136,13 +136,50 @@ export const typecheckPackage = (root, task, ms, env) =>
         );
         child.on("close", (code) => {
             clearTimeout(timer);
-            resolve({ status: late ? "stopped" : code === 0 ? "passed" : "failed", output });
+            resolve({ code, late, output });
         });
         child.on("error", (error) => {
             clearTimeout(timer);
-            resolve({ status: "failed", output: String(error.message) });
+            resolve({ code: 1, late: false, output: String(error.message) });
         });
     });
+
+/** One package's own `typecheck` script, killed with its process group at `ms`; never throws. */
+export const typecheckPackage = async (root, task, ms, env) => {
+    const ran = await runGroup("pnpm", ["run", "--silent", "typecheck"], { cwd: join(root, task.directory), ms, env });
+    return { status: ran.late ? "stopped" : ran.code === 0 ? "passed" : "failed", output: ran.output };
+};
+
+// What a scoped check is handed of the change: code, and the files that configure it (which send it to the full check).
+const SCOPED_INPUT = /\.([cm]?[jt]sx?|vue)$|(^|\/)(package\.json|tsconfig[^/]*\.json)$/;
+
+/** What a changed-files check of a vue-tsc package said, as a typecheck result: `passed` or `failed` over the package's
+ *  files that import the change, `unscoped` (with lsp's reason) where only the full check could answer. */
+export const scopedResultOf = ({ code, late, output }) => {
+    if (late) {
+        return { status: "stopped", output };
+    }
+    if (code !== 0) {
+        return { status: "unscoped", output, reason: output.split("\n").find((line) => line.startsWith("lsp: "))?.replace(/^lsp: [^:]+: /, "") ?? output.trim() };
+    }
+    return { status: /\berror TS\d+:/.test(output) ? "failed" : "passed", output };
+};
+
+/**
+ * A dependent whose typecheck is vue-tsc, checked over its own files that import what the change edited
+ * (`lsp diag --from`, _search/lsp/src/vue-check.ts) instead of its whole source: the editor's full check takes 418-571 s
+ * and 6.8 GB (measured 2026-10-26), so inside this budget it never finished, and only cost the machine its memory until
+ * it was killed. Run from source with bun, so it is the tree's own lsp and never a stale build of it.
+ */
+export const scopedTypecheck = async (root, task, changed, ms, env) => {
+    const files = changed.filter((path) => SCOPED_INPUT.test(path)).map((path) => join(root, path));
+    if (files.length === 0) {
+        return { status: "passed", output: "" };
+    }
+    const cli = join(root, "_search/lsp/src/cli.ts");
+    const ran = await runGroup("bun", ["--conditions=@intentic/src", cli, "diag", "--from", join(root, task.directory), ...files], { cwd: root, ms, env });
+    return scopedResultOf(ran);
+};
 
 // Why the packages a change reaches cannot be planned here, or the plan: the tasks by package, the order to run the
 // ones with a clean record in, and the ones without.
@@ -190,7 +227,11 @@ const reported = ({ order, unrecorded, tasks, results }) => {
     if (unrecorded.length > 0) {
         notes.push(`${listed(unrecorded)}: no record of a clean typecheck before this change, so a failure there could be main's own; left to CI`);
     }
-    const unread = order.filter((name) => statusOf(name) !== "passed" && statusOf(name) !== "failed");
+    const unscoped = order.filter((name) => statusOf(name) === "unscoped");
+    if (unscoped.length > 0) {
+        notes.push(`${listed(unscoped)}: a changed-files check could not answer (${results.get(unscoped[0]).reason}); left to CI`);
+    }
+    const unread = order.filter((name) => !["passed", "failed", "unscoped"].includes(statusOf(name)));
     if (unread.length > 0) {
         notes.push(`stopped at the typecheck budget with ${listed(unread)} unread; CI typechecks them`);
     }
@@ -226,7 +267,7 @@ export const reachTypecheck = async ({
     concurrency,
     plan = (names, ms) => plannedTasks(root, names, env, ms),
     passed = (tasks, ms) => passedBefore({ root, base, tasks, env, timeoutMs: ms }),
-    typecheck = (task, ms) => typecheckPackage(root, task, ms, env),
+    typecheck = (task, ms) => (SLOW.test(task.command) ? scopedTypecheck(root, task, changed, ms, env) : typecheckPackage(root, task, ms, env)),
     // A typecheck against an install that is not this lockfile's can fail for the install's sake, which is nobody's change.
     installed = () => turboBin(root) !== undefined && installMatchesLockfile(root),
     fleet = cacheEnv(env),

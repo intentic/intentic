@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { dependentsOf, errorLines, reachTypecheck, runOrder } from "./reach-typecheck.mjs";
+import { dependentsOf, errorLines, reachTypecheck, runOrder, scopedResultOf } from "./reach-typecheck.mjs";
 
 // contract <- web <- demo, contract <- daemon; ui is nobody's.
 const graph = {
@@ -168,4 +168,34 @@ test("without the fleet's cache, where CI's records live, nothing is planned and
     assert.equal(planned, false);
     assert.equal(said.code, 0);
     assert.match(said.notes[0], /no turbo-cache card is connected/);
+});
+
+test("a vue-tsc dependent's changed-files check reads as a typecheck: clean, failing, unanswerable, or stopped", () => {
+    const summary = "lsp: @x/web: vue-tsc checked 0 changed files and 3 direct importers under tsconfig.app.json in 12s: no errors in them\n";
+    assert.deepEqual(scopedResultOf({ code: 0, late: false, output: summary }), { status: "passed", output: summary });
+    const broken = `/w/_editor/web/src/a.vue:3:7: error TS2322: Type 'string' is not assignable to type 'number'.\n${summary}`;
+    assert.equal(scopedResultOf({ code: 0, late: false, output: broken }).status, "failed");
+    const full = "lsp: @x/web: not checked here: ../ui/src/lib/format.ts is imported by more than 300 of the package's files at some depth. Only the full check answers for it\n";
+    assert.deepEqual(scopedResultOf({ code: 2, late: false, output: full }), {
+        status: "unscoped",
+        output: full,
+        reason: "not checked here: ../ui/src/lib/format.ts is imported by more than 300 of the package's files at some depth. Only the full check answers for it",
+    });
+    assert.equal(scopedResultOf({ code: null, late: true, output: "" }).status, "stopped");
+});
+
+test("a dependent only the full check could answer for is left to CI and charged nothing", async () => {
+    const root = installed();
+    try {
+        const said = await reach(root, {
+            typecheck: async (one) =>
+                one.package === "@x/web" ? { status: "unscoped", output: "", reason: "not checked here: src/env.d.ts is a declaration file" } : { status: "passed", output: "" },
+        });
+        assert.equal(said.code, 0);
+        assert.deepEqual(said.out, []);
+        assert.ok(said.notes.includes("@x/web: a changed-files check could not answer (not checked here: src/env.d.ts is a declaration file); left to CI"), said.notes.join("\n"));
+        assert.ok(!said.notes.some((note) => note.includes("unread")), said.notes.join("\n"));
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
 });

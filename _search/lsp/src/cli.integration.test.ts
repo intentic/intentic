@@ -10,7 +10,7 @@ const run = (...args: string[]) => {
 };
 
 test("no verb prints the usage to stdout and exits 2", () => {
-    expect(run()).toEqual({ code: 2, stdout: "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>\n", stderr: "" });
+    expect(run()).toEqual({ code: 2, stdout: "usage:\n  lsp rename <file> <symbol> <newName>\n  lsp diag <file...>\n  lsp diag --changed [<file...>]\n  lsp diag --from <package dir> <file...>\n", stderr: "" });
 });
 
 test("an unknown verb and a verb missing its arguments are usage errors on stdout, exit 2", () => {
@@ -24,4 +24,7 @@ test("an unknown verb and a verb missing its arguments are usage errors on stdou
     expect(short.stdout.split("\n")[0]).toBe("lsp: rename needs <file> <symbol> <newName>");
 
     expect(run("diag").stdout.split("\n")[0]).toBe("lsp: diag needs at least one <file>");
+    const notVue = run("diag", "--from", "/", "a.ts");
+    expect(notVue.code).toBe(2);
+    expect(notVue.stdout.split("\n")[0]).toBe("lsp: diag --from needs a Vue package's directory and at least one <file>");
 });

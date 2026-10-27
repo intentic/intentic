@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size targeted] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -132,8 +132,10 @@ case "$poll_seconds" in *[1-9]*) ;; *) poll_seconds=0.25 ;; esac
 [ "$limit" -lt 1 ] && limit=1
 # Two words only; anything else is "run", since an unknown mode must not become the reason a command did not run.
 case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
-# One word, or none: a size the gate does not know is priced as the whole class.
-case "$size" in targeted) ;; *) size="" ;; esac
+# One word of lowercase letters, digits and dashes, or none: memory-room knows the names (SIZE_BYTES in
+# @intentic/constants/memory-room: targeted, editor-typecheck, scoped-typecheck) and prices one it does not know as the
+# whole class, so the list is not repeated here, where an image's copy would lag the daemon's.
+case "$size" in '' | *[!a-z0-9-]*) size="" ;; esac
 
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
 # sitting in it. `memory-room` asks the daemon's resource budget (the same verdict that holds a turn, and the same

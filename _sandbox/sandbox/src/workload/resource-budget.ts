@@ -69,7 +69,7 @@ export interface AdmitRequest {
     // Who is asking, for the once-a-spell warning; "" when the daemon cannot name them.
     readonly actor?: string | undefined;
     readonly where?: WorkPlace;
-    // A toolchain command aimed at named files, priced below its class (TARGETED_RUN_BYTES).
+    // A toolchain command priced by its named shape (SIZE_BYTES in @intentic/constants/memory-room) instead of its class.
     readonly size?: RoomSize | undefined;
     // The process the admitted work runs as: its reservation is handed back the moment it exits, rather than held for
     // RESERVATION_MS by a one-second test that has long finished (measured: 5 GiB held that way on a quiet sandbox).

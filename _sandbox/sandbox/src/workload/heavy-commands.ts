@@ -47,6 +47,12 @@ const RuleEditSchema = z.object({
     maxHoldSeconds: z.number().int().nonnegative().optional(),
     exempt: z.boolean().optional(),
     onDeadline: OnDeadlineSchema.optional(),
+    // A regex the program's working directory must match too.
+    cwd: z.string().min(1).optional(),
+    // The memory gate's price by name (@intentic/constants/memory-room SIZE_BYTES); a name it does not know is the class's.
+    size: z.string().min(1).optional(),
+    // Judged even under a program that already holds a slot (heavy-rules.cjs judgedUnder).
+    nests: z.boolean().optional(),
     // Removes the shipped rule of this id.
     disabled: z.boolean().optional(),
 });

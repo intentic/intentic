@@ -505,6 +505,15 @@ flowchart LR
 - **Gotcha.** The dev server must stay on `https://localhost:47145`: CORS, Better Auth and the Google OAuth client
   trust that exact origin. It serves with the local certificate from
   [localhost-https](../../_tools/localhost-https).
+- **The optimizer's cache is shared and named by its inputs** (2026-10-27, `vite.shared.ts` `sharedCacheConfig`). It
+  lives in `/tmp/intentic-vite/<app>-<hash>/node_modules/.vite`, not in the package's own `node_modules/.vite`, keyed by
+  the installed lockfile, the config files, the optimizeDeps list and the resolve map. In a sandbox every conversation's
+  node_modules is an overlay of its own, and each started on the main tree's stale copy and optimized monaco, mermaid
+  and shiki again (118 overlays held 7.9 GB of copies on 2026-10-26); now trees with the same inputs share one
+  directory and a changed input names a new one. The first start of a cold key holds a lock until its first commit,
+  so a second start waits and reuses it instead of bundling the same packages beside it. The `node_modules/.vite` in
+  the path keeps the served URLs reading as dependencies to `loadChunk.ts`, `agentDevTools.ts` and perf's coverage.
+  The demo uses the same helper.
 
 ## Words
 

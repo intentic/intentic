@@ -46,14 +46,42 @@ labels as the fake daemon. A fresh sandbox therefore exercises disconnected brow
 | `src/terminal.ts`, `src/browser.ts` | Recorded terminal and browser-view sockets |
 | `src/switcher.ts` | The mode buttons, plain DOM, mounted before the app |
 | `src/fixture/` | The data: files, repos, fleet, transcripts, automations, the desk workspace |
-| `vite.config.ts` | Shared app build, base path, port and output directory |
+| `vite.config.ts` | Shared app build, base path, port, output directory, the shared optimizer cache and a managed preview's idle stop |
+| `scripts/dev.mjs` | `pnpm dev`: Vite in the foreground by hand, this conversation's managed preview in an agent's turn |
 | `scripts/smoke-daemon.ts` | One request per served procedure, answers parsed by the contract schemas |
 | `vendor/` | [Pinned first-party extensions](vendor) the demo runs |
+
+## Dev server: by hand, or one managed preview per conversation
+
+`pnpm dev` (`scripts/dev.mjs`) syncs `vendor/` and then starts Vite one of two ways (2026-10-27):
+
+- **By hand** (no conversation stamp in the environment): in the foreground on `http://127.0.0.1:47146/demo/`, as
+  before; arguments go to Vite.
+- **In an agent's turn** (`INTENTIC_TURN_OWNER` names its conversation): the conversation's **managed preview**,
+  which the `preview demo` command also starts. A second start finds the first; a new one starts in the background
+  on the conversation's own port in 47150-47199, at `http://<conversation>.demo.localhost:<port>/demo/`, so each
+  conversation's seeded sign-in and chosen look stay in its own origin. The command prints the address once the server
+  answers and returns; the server outlives the turn. It writes a record (`@intentic/constants/dev-previews`), which
+  `vite.config.ts`'s `previewKeeper` keeps current while the page is used and which the daemon reads to spare the
+  server from the sweep that ends a finished turn's processes (`_sandbox/sandbox/src/processes/dev-previews.ts`).
+  It stops by itself after 10 minutes with no request and no open HMR client, and at most 3 run across the sandbox:
+  starting a fourth stops the least recently used. The reason is kept, and that conversation's next start prints it.
+  `--stop` and `--list` stop this conversation's and list every one. `INTENTIC_PREVIEW_DIRECT=1` forces the
+  foreground server in a turn.
+
+Why: on 2026-10-26 five to seven conversations each ran a demo server of their own at 1.5-1.9 GB, up for the whole
+turn and idle most of it, on one 21 GB sandbox, and the skill's `pkill -f vite`, run by one of them, stopped all of
+them. One server measured 0.8 GB resident warm and 2.2 GB at its peak while the optimizer bundled (2026-10-27).
+
+The optimizer cache is not in `node_modules/.vite`: it is shared between every tree with the same lockfile, config
+and optimizeDeps list, under `/tmp/intentic-vite/demo-<hash>/` (`_editor/web/vite.shared.ts`, `sharedCacheConfig`).
+A cold key takes a minute or two to bundle monaco, mermaid and shiki; every later start reuses it.
 
 ## Commands
 
 ```sh
-pnpm -C _site/demo dev        # http://127.0.0.1:47146/demo/, syncs vendor/ first
+pnpm -C _site/demo dev        # by hand: http://127.0.0.1:47146/demo/; in a turn: this conversation's preview (`preview demo`)
+pnpm -C _site/demo dev --stop # in a turn: stop this conversation's preview
 pnpm -C _site/demo build      # into _site/site/public/demo/
 pnpm -C _site/demo smoke
 pnpm -C _site/demo typecheck

@@ -1,12 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { repoRoot } from "@intentic/constants/node";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
-import { defaultClientConditions, type Plugin, type ResolvedConfig } from "vite";
+import { defaultClientConditions, type Plugin, type ResolvedConfig, searchForWorkspaceRoot } from "vite";
 import { shikiLangDeps } from "../../_tools/code-read/src/langs.ts";
 import { sourceAliases } from "./source-aliases.ts";
 
@@ -172,6 +174,164 @@ const compactDevJson = (): Plugin => ({
 });
 
 export const MONACO_WORKER = `monaco-editor-core/esm/vs/editor/editor.worker.start.js`;
+
+// SHARED OPTIMIZER CACHE (2026-10-27). Vite keeps its pre-bundled dependencies in `<root>/node_modules/.vite` by
+// default, and in a sandbox every conversation's node_modules is an overlay of its own over the main tree's: each one
+// started from the main tree's stale copy, optimized monaco, mermaid and shiki again, and kept a 57-67 MB copy (118
+// overlays held 7.9 GB on 2026-10-26). The cache now lives outside the tree, in a directory named by what its contents
+// depend on: the installed lockfile, the config files, the optimizeDeps list and the resolve map. Two trees with the
+// same inputs share one directory, and a change to any input names a new one, so there is no stale cache to clear.
+// Every conversation sees its checkout at the same path (/work/intentic), so the absolute and cacheDir-relative paths
+// Vite writes into `_metadata.json` and the bundles hold in all of them.
+// - `/tmp`, not the home directory: every conversation's mount namespace and the daemon share it, and an agent domain's
+//   HOME is its own. INTENTIC_VITE_CACHE moves it.
+// - `<key>/node_modules/.vite`, so the URLs the deps are served under (`/@fs/…/node_modules/.vite/deps/x.js`) still
+//   read as dependencies to everything that classifies them by path (loadChunk.ts, agentDevTools.ts, perf's coverage).
+// - Two servers optimizing the same cold key at once: Vite already writes each run into a `deps_temp_*` directory of
+//   its own and renames it into place, but two commits can interleave between its two renames. The first start of a
+//   cold key holds a lock until its first commit lands, and a second start waits for it, then reuses what it wrote.
+// - A key unused for two weeks is removed by the next start of the same app.
+const CACHE_ROOT = process.env[`INTENTIC_VITE_CACHE`] ?? join(tmpdir(), `intentic-vite`);
+const CACHE_UNUSED_MS = 14 * 86_400_000;
+// How long a cold start may hold the priming lock before a waiter treats it as abandoned.
+const PRIMING_STALE_MS = 5 * 60_000;
+const PRIMING_POLL_MS = 1_000;
+
+// The installed lockfile Vite itself hashes (pnpm's `node_modules/.pnpm/lock.yaml`: what is installed, not what is
+// asked for), else the workspace's pnpm-lock.yaml.
+const installedLockfile = (root: string): string => {
+    for (const path of [join(root, `node_modules`, `.pnpm`, `lock.yaml`), join(root, `pnpm-lock.yaml`)]) {
+        if (existsSync(path)) {
+            return readFileSync(path, `utf8`);
+        }
+    }
+    return ``;
+};
+
+interface CacheInputs {
+    // The config modules whose text shapes the optimizer's output: the app's own config and this file, at least.
+    readonly files: readonly string[];
+    readonly optimizeDeps: { readonly include: readonly string[] };
+    readonly resolve: { readonly alias: unknown; readonly conditions: readonly string[] };
+}
+
+/** The content key of a cache: 16 hex digits of a hash over everything listed in CacheInputs. */
+const cacheKey = (inputs: CacheInputs, lockfile = installedLockfile(repoRoot(import.meta.url))): string => {
+    const hash = createHash(`sha256`).update(lockfile).update(`\0`);
+    for (const file of inputs.files) {
+        hash.update(file).update(`\0`).update(readFileSync(file, `utf8`)).update(`\0`);
+    }
+    hash.update(JSON.stringify({ include: inputs.optimizeDeps.include, alias: inputs.resolve.alias, conditions: inputs.resolve.conditions }));
+    return hash.digest(`hex`).slice(0, 16);
+};
+
+/** Where an app's optimizer cache lives (`name` is the app: `web`, `demo`), and the root Vite must allow serving from. */
+const sharedCache = (name: string, inputs: CacheInputs) => ({
+    cacheDir: join(CACHE_ROOT, `${name}-${cacheKey(inputs)}`, `node_modules`, `.vite`),
+    root: CACHE_ROOT,
+});
+
+// Whoever holds a lock directory, from the `owner` file in it: alive (a signal 0 reaches it) and younger than the stale
+// bound, or abandoned.
+const lockHeld = (lock: string): boolean => {
+    try {
+        const age = Date.now() - statSync(lock).mtimeMs;
+        const pid = Number(readFileSync(join(lock, `owner`), `utf8`));
+        if (age > PRIMING_STALE_MS || !Number.isSafeInteger(pid) || pid <= 0) {
+            return false;
+        }
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        // allow(silent-catch): no lock, no owner file yet, or a dead owner: none of them is a holder to wait for.
+        return false;
+    }
+};
+
+const takeLock = (lock: string): boolean => {
+    try {
+        mkdirSync(lock);
+    } catch {
+        if (lockHeld(lock)) {
+            return false;
+        }
+        // Abandoned: taken over in place, so a third start still finds it held.
+    }
+    writeFileSync(join(lock, `owner`), String(process.pid));
+    utimesSync(lock, new Date(), new Date());
+    return true;
+};
+
+// Keys of the same app nobody has started for CACHE_UNUSED_MS; the key in use is touched first, so it is never one.
+const pruneUnused = (cacheDir: string): void => {
+    const keyDir = resolve(cacheDir, `..`, `..`);
+    const prefix = `${keyDir.slice(keyDir.lastIndexOf(`/`) + 1).replace(/-[0-9a-f]+$/u, ``)}-`;
+    for (const entry of readdirSync(dirname(keyDir), { withFileTypes: true })) {
+        const path = join(dirname(keyDir), entry.name);
+        if (entry.isDirectory() && entry.name.startsWith(prefix) && path !== keyDir && Date.now() - statSync(path).mtimeMs > CACHE_UNUSED_MS) {
+            rmSync(path, { recursive: true, force: true });
+        }
+    }
+};
+
+/**
+ * SERVE ONLY: the shared cache's housekeeping. A cold key (no `deps/_metadata.json` yet) is primed by one server at a
+ * time: the first takes `<key>/priming` and lets go once its first commit lands (or it stops); a second waits for that,
+ * at most PRIMING_STALE_MS, and then starts on the primed cache.
+ */
+const sharedCacheKeeper = (cacheDir: string): Plugin => {
+    const metadata = join(cacheDir, `deps`, `_metadata.json`);
+    const lock = resolve(cacheDir, `..`, `..`, `priming`);
+    let holding = false;
+    const release = (): void => {
+        if (holding) {
+            holding = false;
+            rmSync(lock, { recursive: true, force: true });
+        }
+    };
+    return {
+        name: `intentic-shared-cache`,
+        apply: `serve`,
+        config: async () => {
+            mkdirSync(cacheDir, { recursive: true });
+            const keyDir = resolve(cacheDir, `..`, `..`);
+            utimesSync(keyDir, new Date(), new Date());
+            pruneUnused(cacheDir);
+            const deadline = Date.now() + PRIMING_STALE_MS;
+            while (!existsSync(metadata) && !(holding = takeLock(lock)) && Date.now() < deadline) {
+                await delay(PRIMING_POLL_MS);
+            }
+            process.once(`exit`, release);
+        },
+        configureServer: (server) => {
+            if (!holding) {
+                return;
+            }
+            const poll = setInterval(() => {
+                if (existsSync(metadata)) {
+                    clearInterval(poll);
+                    release();
+                }
+            }, PRIMING_POLL_MS);
+            poll.unref();
+            server.httpServer?.once(`close`, () => {
+                clearInterval(poll);
+                release();
+            });
+        },
+    };
+};
+
+/** The cache settings an app's config spreads in: where it lives, the housekeeping plugin, and serving access to it. */
+export const sharedCacheConfig = (name: string, inputs: CacheInputs, appRoot: string) => {
+    const cache = sharedCache(name, inputs);
+    return {
+        cacheDir: cache.cacheDir,
+        plugin: sharedCacheKeeper(cache.cacheDir),
+        // An explicit allow list replaces Vite's default (the workspace root), so that root is named again beside the cache.
+        fsAllow: [searchForWorkspaceRoot(appRoot), cache.root],
+    };
+};
 
 export const shared = {
     plugins: [vue(), tailwindcss(), stableDevStyles(), devSource(), compactDevJson()],

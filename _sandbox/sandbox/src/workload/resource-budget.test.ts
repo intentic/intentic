@@ -349,3 +349,14 @@ describe("held work wakes on events", () => {
         budget.stop();
     });
 });
+
+test("the editor's full typecheck is held for its peak, and the ledger keeps what it was priced at", async () => {
+    const budget = budgetOf(() => box(20, 6));
+    // 14 GiB free: the editor's 7 GiB and a person's turn fit once; with that held, a second does not.
+    expect((await budget.admit({ workload: "toolchain", attended: false, size: "editor-typecheck" })).verdict).toBe("run");
+    expect((await budget.snapshot()).reservedBytes).toBe(7 * GIB);
+    expect((await budget.admit({ workload: "toolchain", attended: false, size: "editor-typecheck" })).verdict).toBe("wait");
+    // A changed-files check still fits beside it.
+    expect((await budget.admit({ workload: "toolchain", attended: false, size: "scoped-typecheck" })).verdict).toBe("run");
+    expect((await budget.snapshot()).reservedBytes).toBe(11 * GIB);
+});

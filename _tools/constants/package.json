@@ -29,6 +29,8 @@
         "src/memory-room.d.mts",
         "src/allow.mjs",
         "src/allow.d.mts",
+        "src/dev-previews.mjs",
+        "src/dev-previews.d.mts",
         "src/heavy/heavy-rules.cjs",
         "src/heavy/heavy-rules.d.cts",
         "src/heavy/heavy-turn.cjs",
@@ -82,6 +84,10 @@
         "./allow": {
             "types": "./src/allow.d.mts",
             "default": "./src/allow.mjs"
+        },
+        "./dev-previews": {
+            "types": "./src/dev-previews.d.mts",
+            "default": "./src/dev-previews.mjs"
         },
         "./heavy-rules": {
             "types": "./src/heavy/heavy-rules.d.cts",

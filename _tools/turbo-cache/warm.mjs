@@ -165,9 +165,48 @@ const sendLocal = async (run, pending) => {
     return sent;
 };
 
-// 3. What is still not in the shared cache, while the budget lasts. The declarations first, as `pnpm typecheck` emits
-// them. Local reads are off: a local hit is replayed and never sent, so whatever step 2 could not send is run again.
-const typecheckMissing = async (run, missing) => {
+// The packages whose typecheck never finishes inside a warm's budget: the editor's full `vue-tsc`, and `_site/demo`'s,
+// which compiles the same source (418-571 s and 6.8 GB each, measured 2026-10-26). Started anyway, they were killed at
+// the deadline at every turn's end, having held that memory for nothing. CI typechecks them.
+export const UNWARMABLE = new Set(["@intentic/web", "@intentic/demo"]);
+
+/**
+ * Which of the `missing` tasks a warm can run, and which it leaves to CI: one of UNWARMABLE's, and every one that
+ * depends on one still missing, since turbo would run that dependency first (`typecheck` depends on `^typecheck`).
+ * `tasks` is the whole plan, read for each task's dependencies; a dependency already in the shared cache is a hit, and
+ * blocks nothing.
+ */
+export const warmable = (missing, tasks) => {
+    const byId = new Map(tasks.map((task) => [task.taskId, task]));
+    const missingIds = new Set(missing.map((task) => task.taskId));
+    const blocked = new Map();
+    const isBlocked = (task) => {
+        if (blocked.has(task.taskId)) {
+            return blocked.get(task.taskId);
+        }
+        // Unblocked until proven otherwise, so a cycle in a malformed plan ends instead of recursing.
+        blocked.set(task.taskId, false);
+        const verdict =
+            UNWARMABLE.has(task.package) ||
+            (task.dependencies ?? []).some((id) => missingIds.has(id) && byId.has(id) && isBlocked(byId.get(id)));
+        blocked.set(task.taskId, verdict);
+        return verdict;
+    };
+    return { run: missing.filter((task) => !isBlocked(task)), left: missing.filter((task) => isBlocked(task)) };
+};
+
+// 3. What is still not in the shared cache, while the budget lasts, less what never fits in it (warmable). The
+// declarations first, as `pnpm typecheck` emits them. Local reads are off: a local hit is replayed and never sent, so
+// whatever step 2 could not send is run again. The packages are named one by one rather than as the change's filter, so
+// the ones left out stay out; a task's hash does not depend on the filter that selected it.
+const typecheckMissing = async (run, missingTasks) => {
+    const { run: missing, left } = warmable(missingTasks, run.tasks);
+    if (left.length > 0) {
+        run.said.push(`left ${named(left)} to CI: the editor's full typecheck never finishes inside the ${run.budgetSeconds}s budget`);
+    }
+    if (missing.length === 0) {
+        return;
+    }
     const { root, env } = run;
     const emit = await runFor(process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")], { cwd: root, env, ms: run.deadline - run.now() });
     if (emit.code !== 0) {
@@ -178,7 +217,14 @@ const typecheckMissing = async (run, missing) => {
     const concurrency = sizing.stdout?.trim() || "2";
     const ran = await runFor(
         join(root, "node_modules/.bin/turbo"),
-        ["run", "typecheck", run.filter, "--cache=local:w,remote:rw", "--output-logs=none", `--concurrency=${concurrency}`],
+        [
+            "run",
+            "typecheck",
+            ...[...new Set(missing.map((task) => task.package))].map((name) => `--filter=${name}`),
+            "--cache=local:w,remote:rw",
+            "--output-logs=none",
+            `--concurrency=${concurrency}`,
+        ],
         { cwd: root, env: run.turboEnv, ms: run.deadline - run.now() },
     );
     run.said.push(
@@ -250,7 +296,7 @@ export const warm = async ({ root, env = process.env, budgetSeconds = DEFAULT_BU
     }
     const turboEnv = { ...planEnv, TURBO_API: cache.url, TURBO_TOKEN: cache.token, TURBO_TEAM: cache.team };
     delete turboEnv.TURBO_REMOTE_CACHE_READ_ONLY;
-    const run = { root, env, cache, filter, planEnv, turboEnv, localDir: localCacheDir(root, env), deadline, now, budgetSeconds, said: [] };
+    const run = { root, env, cache, filter, tasks, planEnv, turboEnv, localDir: localCacheDir(root, env), deadline, now, budgetSeconds, said: [] };
     const shared = await heldRemotely(cache, tasks.map((task) => task.hash));
     const pending = tasks.filter((task) => !shared.has(task.hash));
     const sent = await sendLocal(run, pending);

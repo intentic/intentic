@@ -43,3 +43,13 @@ test("an unreadable file reports and falls back to the shipped table rather than
     expect(await store.read()).toEqual(mergeHeavyRules());
     expect(reasons).toEqual([expect.stringContaining("limit")]);
 });
+
+test("an owner's edit to the editor's lane keeps its directory, price and nesting through the file", async () => {
+    const path = join(await dir(), "heavy-commands.json");
+    const edit = { id: "editor-typecheck-here", cwd: "(^|/)_site/demo/?$", size: "targeted", nests: false };
+    await writeFile(path, JSON.stringify({ ruleEdits: [edit] }));
+    const loaded = await fileHeavyCommandsStore(path).read();
+    expect(loaded.rules.find((rule) => rule.id === "editor-typecheck-here")).toMatchObject(edit);
+    expect(matchInvocation("pnpm run typecheck", loaded, undefined, { cwd: "/w/_site/demo" })).toMatchObject({ id: "editor-typecheck-here", size: "targeted" });
+    expect(matchInvocation("pnpm run typecheck", loaded, undefined, { cwd: "/w/_editor/web" })?.id).toBe("package-script");
+});

@@ -4,8 +4,11 @@ export type RoomWorkload = "agentRuntime" | "service" | "panel" | "install" | "c
 export const COST_BYTES: Readonly<Record<RoomWorkload, number>>;
 export const PERSON_RESERVE_BYTES: number;
 export const TARGETED_RUN_BYTES: number;
-// A toolchain command aimed at named files, priced at TARGETED_RUN_BYTES instead of its class's cost.
-export type RoomSize = "targeted";
+// A toolchain command priced by its named shape instead of its class's cost (SIZE_BYTES): one aimed at named files,
+// the editor's full typecheck, a changed-files Vue typecheck.
+export type RoomSize = "targeted" | "editor-typecheck" | "scoped-typecheck";
+export const SIZE_BYTES: Readonly<Record<RoomSize, number>>;
+export function isRoomSize(size: string): size is RoomSize;
 export const TEST_PROCESS_BYTES: Readonly<{ fanOutWorker: number; standaloneWorker: number; typecheck: number; ceiling: number }>;
 export const STALL_PERCENT: number;
 export const STALL_SUSTAINED_PERCENT: number;

@@ -112,6 +112,42 @@ describe.skipIf(!kernel.runs)(kernel.title("a node program under the hook"), () 
     });
 });
 
+describe.skipIf(!kernel.runs)(kernel.title("the editor's typecheck under a program that already holds a slot"), () => {
+    const nested = async (held: Record<string, string>, args: readonly string[]): Promise<{ report: Record<string, unknown>; queued: string[] | undefined }> => {
+        const queueRun = await standIn("queue-run");
+        const { INTENTIC_QUEUE_SLOT: _slot, INTENTIC_HEAVY_HELD: _held, ...env } = process.env;
+        const { stdout } = await run(NODE, [await publish("vue-tsc"), ...args], {
+            env: { ...env, ...held, INTENTIC_HEAVY: spec({ queue: true, queueRun }), NODE_OPTIONS: `--require ${HOOK}` },
+        });
+        const queued = await readFile(join(dir, "queue-run.args"), "utf8").then(
+            (text) => text.trim().split("\n"),
+            () => undefined,
+        );
+        // SAFETY: the reporter prints one JSON object as its last line.
+        return { report: JSON.parse(stdout.trim().split("\n").at(-1) ?? "{}") as Record<string, unknown>, queued };
+    };
+
+    test("under a heavy slot it still takes the editor's lane, at the editor's price", async () => {
+        const { report, queued } = await nested({ INTENTIC_HEAVY_HELD: "package-script" }, ["--noEmit", "-p", "tsconfig.app.json"]);
+        expect(report).toMatchObject({ held: "editor-typecheck" });
+        expect(queued?.slice(0, queued.indexOf("--"))).toEqual([
+            "--pool", "vue-typecheck", "--limit", "1", "--wait", "900", "--memory-gate", "120", "--max-hold", "1800",
+            "--on-deadline", "skip", "--label", "editor-typecheck", "--size", "editor-typecheck",
+        ]);
+    });
+
+    test("under the editor's own lane it runs in place, never waiting on the slot its parent holds", async () => {
+        const { report, queued } = await nested({ INTENTIC_HEAVY_HELD: "editor-typecheck" }, ["--noEmit", "-p", "tsconfig.app.json"]);
+        expect(report).toMatchObject({ oom: inherited, held: "editor-typecheck" });
+        expect(queued).toBeUndefined();
+    });
+
+    test("under a slot queue-run took for a script that queued itself, the slot's pool is what is held", async () => {
+        const { queued } = await nested({ INTENTIC_QUEUE_SLOT: join(dir, "vue-typecheck", "slot.1") }, ["--noEmit", "-p", "tsconfig.app.json"]);
+        expect(queued).toBeUndefined();
+    });
+});
+
 describe.skipIf(!kernel.runs)(kernel.title("a native program behind its wrapper"), () => {
     test("is judged by its own name and arguments, then becomes the real program found past the wrappers", async () => {
         const bin = join(dir, "real-bin");

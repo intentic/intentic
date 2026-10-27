@@ -533,7 +533,9 @@ flowchart LR
 - A heavy program (a build, a test run, a typecheck) is recognised by what it is as it starts, not by the words of
   the line that started it: the daemon hands every agent command the table (`workload/heavy-commands.ts`,
   the shared rules in `@intentic/constants/heavy-rules`), and the program queues itself through `bin/queue-run`.
-  Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words.
+  Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words. A rule may
+  name its memory price (`size`, which `queue-run --size` hands the gate by name), and the editor's typecheck has a lane
+  of its own, one at a time at 7 GiB, taken even under a `pnpm -r typecheck` that already holds a heavy slot.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`.
@@ -644,6 +646,13 @@ flowchart LR
   parent is, a forced reap's SIGKILL follows even after a discard forgot the conversation, an armed watch no longer
   shields a finished turn's processes, and a tmux session an agent made by hand goes with its conversation
   (`system/boot/reaper.ts`). `opencode serve` stops after 30 idle minutes, and with the Cursor runtimes on shutdown.
+- A conversation's managed dev preview (its demo server, `preview demo`; 2026-10-27) is started by the demo's dev
+  script from the turn's own shell, so it runs in the turn's mount namespace and serves that conversation's tree, and
+  leaves a record in `/tmp/intentic-previews` (`@intentic/constants/dev-previews`). The reaper is handed each live
+  record's pid as if it were a pane's (`processes/dev-previews.ts`), so the server outlives the turn; the same keeper
+  stops one its own idle stop missed and holds the cap of three. A server in an agent domain lives in the domain's pid
+  namespace and still ends with its turn. The daemon does not start previews itself: between turns it has no way into
+  a conversation's namespace.
 - Idle resource policy (2026-10-25): listed workspace previews rest after fifteen minutes without a visit or an open
   connection, even while editors and agents remain active, and their preview route wakes them with their autostart
   recipe. Unknown socket state preserves the server. Arbitrary shell jobs have no safe replay recipe and retain

@@ -1,6 +1,7 @@
 import {
     EARLIER_SHIPPED_RULES,
     type HeavyCommandOverrides,
+    heldPoolsOf,
     holdWarnSeconds,
     MATCH_LIMIT,
     matchInvocation,
@@ -69,7 +70,9 @@ test.each(["turbo run typecheck --filter=@intentic/demo --only --dry=json", "tur
 });
 
 test(`the run a dry run plans still takes turns`, () => {
-    expect(matched(`turbo run typecheck --filter=@intentic/demo --only`)).toBe(`turbo-fanout`);
+    // The demo's own typecheck compiles the editor's source, so it takes the editor's lane rather than the shared pool.
+    expect(matched(`turbo run typecheck --filter=@intentic/demo --only`)).toBe(`editor-typecheck`);
+    expect(matched(`turbo run typecheck --filter=@intentic/sandbox --only`)).toBe(`turbo-fanout`);
     expect(matched(`turbo run typecheck --filter=@intentic/dry-run-fixture`)).toBe(`turbo-fanout`);
 });
 
@@ -246,4 +249,139 @@ test("a hold is worth a warning at half of what its rule allows, and never for a
     expect(holdWarnSeconds(1800)).toBe(900);
     expect(holdWarnSeconds(7)).toBe(3.5);
     expect(holdWarnSeconds(0)).toBeUndefined();
+});
+
+describe("the editor's typecheck lane", () => {
+    const config = mergeHeavyRules();
+    const at = (invocation: string, where: { cwd?: string; heldPools?: readonly string[] } = {}) => matchInvocation(invocation, config, undefined, where);
+
+    test.each([
+        ["vue-tsc --noEmit -p tsconfig.app.json", "editor-typecheck"],
+        ["pnpm --filter @intentic/web typecheck", "editor-typecheck"],
+        ["pnpm --filter=@intentic/demo run typecheck", "editor-typecheck"],
+        ["turbo run typecheck --filter=@intentic/web", "editor-typecheck"],
+        ["pnpm --filter _editor/web typecheck", "editor-typecheck"],
+        ["vue-tsc --noEmit -p /w/_editor/web/.cache/lsp-changed/tsconfig.lsp-changed.4242.json", "vue-typecheck-changed"],
+        // Another package, or a word joined to the name, is not the editor.
+        ["pnpm --filter @intentic/web-kit typecheck", "package-script"],
+        ["pnpm --filter @intentic/ui typecheck", "package-script"],
+        ["vue-tsc --noEmit -p tsconfig.json", "typechecker"],
+        ["check-vue-tsc -p tsconfig.app.json", undefined],
+        // The editor's tests are not its typecheck.
+        ["pnpm --filter @intentic/web test src/a.test.ts", "package-script"],
+    ] as const)("%s falls under %s", (invocation, id) => {
+        expect(at(invocation)?.id).toBe(id);
+    });
+
+    test("one at a time, priced at its peak, and skipped at the deadline; the changed-files check two at once in a lane of its own", () => {
+        expect(at("pnpm --filter @intentic/web typecheck")).toEqual({
+            id: "editor-typecheck",
+            pool: "vue-typecheck",
+            limit: 1,
+            maxHold: HOLD,
+            onDeadline: "skip",
+            size: "editor-typecheck",
+        });
+        expect(at("vue-tsc --noEmit -p /tmp/tsconfig.lsp-changed.1.json")).toEqual({
+            id: "vue-typecheck-changed",
+            pool: "vue-typecheck-changed",
+            limit: 2,
+            maxHold: HOLD,
+            onDeadline: "run",
+            size: "scoped-typecheck",
+        });
+    });
+
+    test("run from inside either package, its words need not name it: the working directory does", () => {
+        expect(at("vue-tsc --noEmit -p tsconfig.json", { cwd: "/work/intentic/_site/demo" })?.id).toBe("editor-typecheck-here");
+        expect(at("pnpm run --silent typecheck", { cwd: "/history/worktrees/x/_editor/web/" })?.id).toBe("editor-typecheck-here");
+        expect(at("pnpm run --silent typecheck", { cwd: "/work/intentic/_editor/ui" })?.id).toBe("package-script");
+        expect(at("pnpm run --silent typecheck", { cwd: "/work/intentic/_editor/web/src" })?.id).toBe("package-script");
+        // No directory known is no directory matched.
+        expect(at("vue-tsc --noEmit -p tsconfig.json")?.id).toBe("typechecker");
+    });
+
+    test("the sizes queue-run is handed are the rule's own", () => {
+        const sized = (invocation: string): string[] => {
+            const match = at(invocation);
+            return match === undefined ? [] : sizeArgs(match, invocation);
+        };
+        expect(sized("pnpm --filter @intentic/web typecheck")).toEqual(["--size", "editor-typecheck"]);
+        expect(sized("vue-tsc -p /tmp/tsconfig.lsp-changed.1.json")).toEqual(["--size", "scoped-typecheck"]);
+    });
+});
+
+describe("a program under one that already holds a slot", () => {
+    const config = mergeHeavyRules();
+    const under = (invocation: string, heldPools: readonly string[], cwd?: string) => matchInvocation(invocation, config, undefined, { heldPools, cwd })?.id;
+
+    test("takes the editor's lane from under a heavy slot, and nothing else is judged again", () => {
+        expect(under("vue-tsc --noEmit -p tsconfig.app.json", ["heavy"])).toBe("editor-typecheck");
+        expect(under("vue-tsc --noEmit -p tsconfig.json", ["heavy"], "/w/_site/demo")).toBe("editor-typecheck-here");
+        expect(under("vitest run", ["heavy"])).toBeUndefined();
+        expect(under("tsc -b", ["install"])).toBeUndefined();
+    });
+
+    test("is never judged again under a lane a nesting rule queues into: no wait on a pool from inside one", () => {
+        for (const pool of ["vue-typecheck", "vue-typecheck-changed"]) {
+            expect(under("vue-tsc --noEmit -p tsconfig.app.json", [pool])).toBeUndefined();
+            expect(under("vue-tsc -p /tmp/tsconfig.lsp-changed.1.json", [pool])).toBeUndefined();
+            expect(under("vue-tsc -p /tmp/tsconfig.lsp-changed.1.json", ["heavy", pool])).toBeUndefined();
+        }
+    });
+
+    test("an exempt rule still ends the search under a slot", () => {
+        expect(under("vue-tsc --watch -p tsconfig.app.json", ["heavy"])).toBeUndefined();
+    });
+
+    test("every wait that holds a slot goes from a pool no nesting rule names into one that one does, so none can cycle", () => {
+        const nesting = new Set(config.rules.filter((rule) => rule.nests === true).map((rule) => rule.pool ?? config.defaultPool));
+        expect([...nesting].toSorted()).toEqual(["vue-typecheck", "vue-typecheck-changed"]);
+        const programs = ["vue-tsc --noEmit -p tsconfig.app.json", "vue-tsc -p /t/tsconfig.lsp-changed.1.json", "pnpm --filter @intentic/web typecheck", "vitest run", "pnpm verify"];
+        for (const held of [...nesting, "heavy", "install"]) {
+            for (const program of programs) {
+                const pool = matchInvocation(program, config, undefined, { heldPools: [held] })?.pool;
+                if (pool !== undefined) {
+                    expect({ held, nesting: nesting.has(held), pool, into: nesting.has(pool) }).toEqual({ held, nesting: false, pool, into: true });
+                }
+            }
+        }
+    });
+
+    test("an owner's nesting rule makes its own pool a nesting one, so its holders are not judged again either", () => {
+        const owned = mergeHeavyRules({ ruleEdits: [{ id: "package-script", nests: true }] });
+        expect(matchInvocation("vue-tsc --noEmit -p tsconfig.app.json", owned, undefined, { heldPools: ["heavy"] })).toBeUndefined();
+    });
+
+    test("the pools held are read off the rule handed down and the slot queue-run took", () => {
+        expect(heldPoolsOf({}, config)).toEqual([]);
+        expect(heldPoolsOf({ INTENTIC_HEAVY_HELD: "editor-typecheck" }, config)).toEqual(["vue-typecheck"]);
+        expect(heldPoolsOf({ INTENTIC_QUEUE_SLOT: "/tmp/intentic-queue/heavy/slot.2" }, config)).toEqual(["heavy"]);
+        expect(heldPoolsOf({ INTENTIC_HEAVY_HELD: "package-script", INTENTIC_QUEUE_SLOT: "/tmp/q/vue-typecheck/slot.1" }, config)).toEqual(["heavy", "vue-typecheck"]);
+        // A rule the table no longer has is in the default pool.
+        expect(heldPoolsOf({ INTENTIC_HEAVY_HELD: "retired" }, config)).toEqual(["heavy"]);
+    });
+});
+
+describe("the owner's overrides with the lane's keys", () => {
+    test("an edit can change a shipped rule's directory, price and nesting", () => {
+        const merged = mergeHeavyRules({ ruleEdits: [{ id: "editor-typecheck-here", cwd: "/elsewhere$", size: "targeted", nests: false }] });
+        const rule = merged.rules.find((one) => one.id === "editor-typecheck-here");
+        expect(rule).toMatchObject({ cwd: "/elsewhere$", size: "targeted", nests: false, pool: "vue-typecheck" });
+        expect(matchInvocation("pnpm run typecheck", merged, undefined, { cwd: "/w/elsewhere" })).toMatchObject({ id: "editor-typecheck-here", size: "targeted" });
+    });
+
+    test("a stored whole table keeps an owner's change to them, and drops the lane's rules as shipped", () => {
+        const shipped = SHIPPED_HEAVY_COMMANDS.rules;
+        const changed = shipped.map((rule) => (rule.id === "editor-typecheck" ? { ...rule, size: "scoped-typecheck" } : rule));
+        expect(overridesOf({ rules: [...shipped] })).toEqual({});
+        expect(overridesOf({ rules: changed }).ruleEdits).toEqual([{ ...shipped.find((rule) => rule.id === "editor-typecheck"), size: "scoped-typecheck" }]);
+    });
+
+    test("an owner's cwd that does not compile is reported and matches nothing", () => {
+        const problems: string[] = [];
+        const merged = mergeHeavyRules({ ruleEdits: [{ id: "editor-typecheck-here", cwd: "(" }] });
+        expect(matchInvocation("pnpm run typecheck", merged, (detail) => problems.push(detail), { cwd: "/w/_editor/web" })?.id).toBe("package-script");
+        expect(problems).toEqual([expect.stringMatching(/^editor-typecheck-here: cwd /u)]);
+    });
 });

@@ -373,16 +373,22 @@ test("the memory gate runs before the command, and is told the deadline and the 
     expect((await readFile(join(queue, "order"), "utf8")).split("\n").filter(Boolean)).toEqual(["gate", "cmd"]);
 });
 
-test("the gate is told the pid the command runs as, and a targeted run's size; an unknown size is dropped", async () => {
+test("the gate is told the pid the command runs as and the rule's size by name; a size that is not one word is dropped", async () => {
     const queue = await dir();
     const seen = join(queue, "gate-args");
     const bin = await stubGate(`echo "$@" >> ${seen}`);
     const run = await queueRun(queue, ["--pool", "p", "--limit", "1", "--memory-gate", "7", "--size", "targeted"], "echo $$", bin);
     const pid = run.stdout.trim();
-    await queueRun(queue, ["--pool", "p", "--limit", "1", "--memory-gate", "7", "--size", "huge"], "true", bin);
-    const [targeted, unknown] = (await readFile(seen, "utf8")).trim().split("\n");
+    // Every name is passed on, the editor's lane included: memory-room knows the prices and gives any other name the
+    // class's, so this list is never a second copy of SIZE_BYTES.
+    await queueRun(queue, ["--pool", "p", "--limit", "1", "--memory-gate", "7", "--size", "editor-typecheck"], "true", bin);
+    await queueRun(queue, ["--pool", "p", "--limit", "1", "--memory-gate", "7", "--size", "scoped-typecheck"], "true", bin);
+    await queueRun(queue, ["--pool", "p", "--limit", "1", "--memory-gate", "7", "--size", "Huge size;"], "true", bin);
+    const [targeted, editor, scoped, malformed] = (await readFile(seen, "utf8")).trim().split("\n");
     expect(targeted).toBe(`--class toolchain --wait 7 --label command --pid ${pid} --size targeted`);
-    expect(unknown).toMatch(/--pid \d+$/u);
+    expect(editor).toMatch(/--pid \d+ --size editor-typecheck$/u);
+    expect(scoped).toMatch(/--pid \d+ --size scoped-typecheck$/u);
+    expect(malformed).toMatch(/--pid \d+$/u);
 });
 
 test("no memory gate is asked for when the deadline is zero", async () => {

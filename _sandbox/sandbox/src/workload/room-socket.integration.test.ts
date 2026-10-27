@@ -77,3 +77,13 @@ test("a class the budget does not know is refused, and the caller falls back to 
     const asked = await askRoom({ workload: "spaceship", waitSeconds: 0, socketPath, read: () => box(16, 4) });
     expect(asked.source).toBe("formula");
 });
+
+test.each([
+    ["editor-typecheck", 7 * GIB],
+    ["scoped-typecheck", 4 * GIB],
+] as const)("a %s asked over the socket is held at the price the budget gives it", async (size, held) => {
+    const budget = budgetOn(box(16, 4));
+    const socketPath = await serve(budget);
+    expect((await askRoom({ workload: "toolchain", waitSeconds: 0, socketPath, size })).verdict).toBe("run");
+    expect((await budget.snapshot()).reservedBytes).toBe(held);
+});

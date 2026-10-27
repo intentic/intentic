@@ -1,4 +1,4 @@
-import { askRoom, countedBytesOf, freeBytesOf, judge, readingFrom, readReadingSync, swapFullOf } from "../memory-room.mjs";
+import { askRoom, costBytesOf, countedBytesOf, freeBytesOf, isRoomSize, judge, readingFrom, readReadingSync, SIZE_BYTES, swapFullOf } from "../memory-room.mjs";
 
 const GIB = 1024 ** 3;
 const CG = "/sys/fs/cgroup";
@@ -185,6 +185,22 @@ test("a targeted toolchain run needs a worker's cost, not the class's, plus a pe
     expect(judge(reading, { workload: "toolchain", attended: false, size: "targeted" })).toMatchObject({ verdict: "run", needBytes: 1.5 * GIB });
     // A size names a toolchain command only; any other class keeps its own cost.
     expect(judge(reading, { workload: "agentRuntime", attended: false, size: "targeted" })).toMatchObject({ needBytes: 2 * GIB });
+});
+
+test("the editor's full typecheck is priced at its measured peak, and a changed-files one at what it loads", () => {
+    expect(SIZE_BYTES).toEqual({ targeted: GIB / 2, "editor-typecheck": 7 * GIB, "scoped-typecheck": 4 * GIB });
+    const reading = { limitBytes: 16 * GIB, usedBytes: 9 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
+    // 7 GiB free: a toolchain command's 1 GiB or a changed-files check's 4 with a person's turn fit, the editor's 7 does not.
+    expect(judge(reading, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run", needBytes: 2 * GIB });
+    expect(judge(reading, { workload: "toolchain", attended: false, size: "editor-typecheck" })).toMatchObject({ verdict: "wait", needBytes: 8 * GIB });
+    expect(judge(reading, { workload: "toolchain", attended: false, size: "scoped-typecheck" })).toMatchObject({ verdict: "run", needBytes: 5 * GIB });
+});
+
+test("only a name the gate knows is a size; any other is priced as its class", () => {
+    expect(["targeted", "editor-typecheck", "scoped-typecheck"].filter((name) => isRoomSize(name))).toHaveLength(3);
+    expect(isRoomSize("huge")).toBe(false);
+    expect(isRoomSize("toString")).toBe(false);
+    expect(costBytesOf("service", "editor-typecheck")).toBe(costBytesOf("service"));
 });
 
 test("a live reading of this machine parses to numbers or nothing, never throws", () => {

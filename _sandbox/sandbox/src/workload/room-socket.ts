@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { errorMessage } from "@intentic/base/errors";
-import { COST_BYTES, needBytes, ROOM_SOCKET, type RoomSize, type RoomWorkload } from "@intentic/constants/memory-room";
+import { COST_BYTES, isRoomSize, needBytes, ROOM_SOCKET, type RoomSize, type RoomWorkload } from "@intentic/constants/memory-room";
 import type { Logger } from "pino";
 import type { PerfTracker } from "../system/resources/perf.js";
 import type { ResourceBudget } from "./resource-budget.js";
@@ -9,7 +9,8 @@ import type { ResourceBudget } from "./resource-budget.js";
 // The budget's verdict for the scripts that start heavy work outside a turn (bin/queue-run, through `memory-room`;
 // _tools/scripts/verify/test-workers.mjs), on a Unix socket of its own: never the daemon's socket, which netd
 // relays to the internet. `GET /room?class=toolchain&wait=120&label=…` admits one more of that class, holding the
-// answer up to `wait` seconds for room; `size=targeted` prices a command aimed at named files below its class, and
+// answer up to `wait` seconds for room; `size=<name>` prices a toolchain command by a shape SIZE_BYTES names
+// (`targeted`, `editor-typecheck`, `scoped-typecheck`) instead of its class, any other name being the class, and
 // `pid=N` names the process the work runs as, whose exit hands its reservation back; `GET /snapshot` is the reading and what admitted work holds, for a caller that
 // sizes itself to the free memory without asking to start anything.
 
@@ -49,7 +50,8 @@ export const createRoomServer = (budget: ResourceBudget, perf?: Pick<PerfTracker
                 return;
             }
             const waitSeconds = Math.min(MAX_WAIT_SECONDS, Math.max(0, Number(url.searchParams.get("wait")) || 0));
-            const size: RoomSize | undefined = url.searchParams.get("size") === "targeted" ? "targeted" : undefined;
+            const asked = url.searchParams.get("size") ?? "";
+            const size: RoomSize | undefined = isRoomSize(asked) ? asked : undefined;
             const pid = Number(url.searchParams.get("pid"));
             // A caller that hangs up stops holding its place in the wait.
             const gone = new AbortController();

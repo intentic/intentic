@@ -30,6 +30,23 @@ export const COST_BYTES = Object.freeze({
 // the invocation, and queue-run passes it as `--size targeted`.
 export const TARGETED_RUN_BYTES = 512 * MIB;
 
+// What a toolchain command a heavy-command rule prices by name takes, instead of its class's cost (heavy-rules.cjs
+// `size`, which queue-run passes as `--size <name>`). One name per measured shape:
+export const SIZE_BYTES = Object.freeze({
+    targeted: TARGETED_RUN_BYTES,
+    // The editor's full typecheck, `vue-tsc` over `_editor/web`, or `_site/demo`'s, which compiles the same source:
+    // 6.8 GiB at its peak (measured 2026-10-26, cold and warm alike), under the 8 GiB heap its script gives it.
+    "editor-typecheck": 7 * GIB,
+    // `lsp diag` on a Vue package: `vue-tsc` over the files a change touches and their direct importers
+    // (_search/lsp/src/vue-check.ts). Measured 2026-10-27 on `_editor/web`, no build info: 3.9 GiB at its peak for
+    // AgentsView.vue (1 changed file, 8 importers, about 1,800 files loaded), 2.0 GiB for ChatPermissionCard.vue; with
+    // the build info a run leaves, 2.4 and 1.0 GiB.
+    "scoped-typecheck": 4 * GIB,
+});
+
+/** Whether `size` is a price the gate knows; any other word is priced as its class. */
+export const isRoomSize = (size) => Object.hasOwn(SIZE_BYTES, size);
+
 // What one test or typecheck process holds at its peak, for the scripts that size a fan-out to the free memory
 // (_tools/scripts/verify/test-workers.mjs) and the ceiling that stops a runaway one (_tools/scripts/lib/memory-ceiling.mjs).
 export const TEST_PROCESS_BYTES = Object.freeze({
@@ -42,7 +59,7 @@ export const TEST_PROCESS_BYTES = Object.freeze({
     // One typecheck task: most packages' tsgo or vue-tsc settle under 1 GiB, the web package's vue-tsc may take its 8 GiB
     // heap (measured 2026-10-06: 4.8 GiB from no build info, 1 GiB of it vue-i18n's `t` checked against the catalog;
     // 2026-10-20: 6.5 GiB, past the 6 GiB it had, which only a check seeded with build info stayed under), and at most
-    // one of those runs among the others.
+    // one of those runs among the others: the heavy-command table's `vue-typecheck` lane holds them to one.
     typecheck: 2 * GIB,
     // Past this one process is a leak, not a suite: twice the largest worker measured. On 2026-09-25 a single bun process
     // reached 14.7 GiB resident plus 31 GiB of swap, twice in one day, and stalled every conversation on the sandbox.
@@ -174,9 +191,9 @@ export const readReadingSync = () => readingFrom(readSync);
 
 const gib = (bytes) => `${(bytes / GIB).toFixed(1)} GiB`;
 
-/** What one more of `workload` costs: its class's cost, or a targeted run's where `size` says so. */
+/** What one more of `workload` costs: its class's cost, or a named toolchain shape's where `size` names one. */
 export const costBytesOf = (workload, size) =>
-    workload === "toolchain" && size === "targeted" ? TARGETED_RUN_BYTES : (COST_BYTES[workload] ?? COST_BYTES.agentRuntime);
+    workload === "toolchain" && size !== undefined && isRoomSize(size) ? SIZE_BYTES[size] : (COST_BYTES[workload] ?? COST_BYTES.agentRuntime);
 
 /** What starting one more of `workload` needs free: its own cost, plus a person's turn when nobody is waiting on it. */
 export const needBytes = (workload, attended, size) => costBytesOf(workload, size) + (attended ? 0 : PERSON_RESERVE_BYTES);
@@ -338,7 +355,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * The daemon's verdict for one more of `workload`, waiting up to `waitSeconds` for room; where no daemon answers, the
  * same formula over the same files, polled every `intervalMs`. Never throws: every failure is an answer of `run`.
- * `size: "targeted"` prices a toolchain command aimed at named files (TARGETED_RUN_BYTES); `pid` is the process the
+ * `size` prices a toolchain command by its named shape (SIZE_BYTES: `targeted` for one aimed at named files); `pid` is the process the
  * admitted work runs as, whose exit hands its reservation back at once instead of after RESERVATION_MS.
  */
 export const askRoom = async ({
@@ -364,7 +381,7 @@ export const askRoom = async ({
     return { ...verdict, waitedMs: Date.now() - startedAt, source: "formula" };
 };
 
-// `memory-room --class toolchain --wait 120 --label NAME [--size targeted] [--pid PID]` holds a command until there is
+// `memory-room --class toolchain --wait 120 --label NAME [--size targeted|editor-typecheck|…] [--pid PID]` holds a command until there is
 // room, printing why it waited, and always exits 0: a gate that cannot read the sandbox must not be the reason a command
 // did not run. `--json` prints the answer instead; `--free` prints the free memory as the daemon counts it, for a caller
 // that sizes itself to it.
@@ -385,7 +402,7 @@ const main = async (args) => {
         waitSeconds,
         label,
         intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000),
-        size: option("size", undefined) === "targeted" ? "targeted" : undefined,
+        size: isRoomSize(option("size", "")) ? option("size", "") : undefined,
         pid: Number.isInteger(pid) && pid > 1 ? pid : undefined,
     });
     if (args.includes("--json")) {
