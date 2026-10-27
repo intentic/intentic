@@ -1,7 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
-import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolInput, toolLocations } from "./tool-calls.js";
+import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolDescription, toolInput, toolLocations } from "./tool-calls.js";
 
 // A tool_use block that can be correlated to its result; real streams always carry an id and a name.
 export interface ToolUseBlock {
@@ -57,6 +57,7 @@ export class SdkCallFrames {
             ...opt("target", target),
             // An MCP or Agent call has no target; its input is what the record would otherwise lose.
             ...opt("input", toolInput(block.input, target)),
+            ...opt("description", toolDescription(block, target)),
             ...opt("server", mcpServerOf(block.name)),
             ...opt("locations", toolLocations(block.input, this.cwd)),
             ...opt("content", diff === undefined ? undefined : [diff]),

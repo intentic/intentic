@@ -1322,6 +1322,13 @@ describe("TranscriptFold with a clock", () => {
         expect(fold.rows[1]?.tools?.[0]).toMatchObject({ input: '{"prompt":"look"}', startedAt: SENT_AT + 2000 });
     });
 
+    it("carries a command's own description onto its card, through the schema a stored record is read back with", () => {
+        const fold = new TranscriptFold(openingOf("look"), ticking());
+        fold.apply({ kind: "tool_call", id: "b1", name: "Bash", category: "execute", status: "in_progress", target: "git status", description: "Show working tree status" });
+        expect(fold.rows[1]?.tools?.[0]).toMatchObject({ target: "git status", description: "Show working tree status" });
+        expect(fold.rows.map((row) => TranscriptRowSchema.parse(row))).toEqual(fold.rows);
+    });
+
     it("keeps a daemon-written row's own moment, and never stamps a user's row", () => {
         const fold = new TranscriptFold(openingOf("go"), ticking());
         fold.note({ role: "notice", text: "kept", openedAt: 7 });

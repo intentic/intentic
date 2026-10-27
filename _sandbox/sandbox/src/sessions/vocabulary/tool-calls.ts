@@ -1,4 +1,5 @@
 import { isAbsolute, relative } from "node:path";
+import { z } from "zod";
 import type { ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract/events/requests";
 import { SCREENSHOT_VERB, screenshotImage } from "../../browser/cast/browser-artifacts.js";
 import { claudeStatePath } from "../session-store.js";
@@ -164,6 +165,19 @@ export const editDiffContent = (name: string, input: unknown, cwd: string): Tool
 // Ceiling on the input a card keeps, in characters: enough for a delegation's prompt or an MCP call's arguments to say
 // what was asked, without a call that carried a whole file doubling the record's size.
 export const TOOL_INPUT_CHARS = 4_000;
+
+// Ceiling on a call's own description, in characters: a sentence, not a second prompt.
+const TOOL_DESCRIPTION_CHARS = 300;
+
+// The agent's own words for a call that has a target (Bash's `description`: "Show working tree status"), which the
+// card says beside the command. A call with no target keeps its whole input instead (toolInput), words and all.
+const DescribedInputSchema = z.object({ description: z.string().trim().min(1) });
+
+export const toolDescription = (call: { readonly input?: unknown }, target: string | undefined): string | undefined => {
+    const parsed = target === undefined ? undefined : DescribedInputSchema.safeParse(call.input).data;
+    const words = parsed?.description;
+    return words === undefined || words.length <= TOOL_DESCRIPTION_CHARS ? words : `${words.slice(0, TOOL_DESCRIPTION_CHARS)}…`;
+};
 
 // What a call was given, as JSON text cut at TOOL_INPUT_CHARS, for a card with no one-line `target` (an MCP tool, the
 // Agent/Task tool), which otherwise records nothing of what was asked. A call with a target keeps only that, as it

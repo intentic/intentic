@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract/events/requests";
 import { displayNameOf, mcpServerOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
-import { toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
+import { toolDescription, toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
 
 // What every vendor event mapper builds the same way: a phase's held-back capture, its summed usage, a tool call's opening.
@@ -84,6 +84,8 @@ export const toolCallOpened = (call: {
     readonly content?: ToolCallContent[] | undefined;
     // The call's input as bounded JSON text, for a call with no target (sessions/vocabulary/tool-calls.ts `toolInput`).
     readonly input?: string | undefined;
+    // The agent's own words for a call that has a target (sessions/vocabulary/tool-calls.ts `toolDescription`).
+    readonly description?: string | undefined;
     // The MCP server the call went to, which the display name drops (agent-context mcpServerOf).
     readonly server?: string | undefined;
     readonly parentToolUseId?: string | undefined;
@@ -97,6 +99,7 @@ export const toolCallOpened = (call: {
     ...opt("locations", call.locations),
     ...opt("content", call.content),
     ...opt("input", call.input),
+    ...opt("description", call.description),
     ...opt("server", call.server),
     ...opt("parentToolUseId", call.parentToolUseId),
 });
@@ -135,6 +138,7 @@ export const toolCard = (call: {
         locations: call.locations ?? (call.cwd === undefined ? undefined : toolLocations(call.input, call.cwd)),
         content: call.content,
         input: toolInput(call.input, target),
+        description: toolDescription(call, target),
         server: mcpServerOf(call.name),
         parentToolUseId: call.parentToolUseId,
     });

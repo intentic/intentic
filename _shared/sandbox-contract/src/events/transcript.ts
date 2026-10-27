@@ -115,6 +115,10 @@ export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
         ),
         status: ToolCallStatusSchema.describe("How it went."),
         target: z.string().optional().describe("What it acted on, in one line: a file, a command, an address."),
+        description: z
+            .string()
+            .optional()
+            .describe("The agent's own words for what the call does, where its input carried them beside a target (a shell command's description)."),
         locations: z.array(ToolCallLocationSchema).optional().describe("The files it touched."),
         content: z.array(ToolCallContentSchema).optional().describe("What it produced: text, a change to a file, or a picture."),
         children: z
@@ -188,6 +192,7 @@ export interface TranscriptTool {
     category: ToolKind;
     status: ToolCallStatus;
     target?: string | undefined;
+    description?: string | undefined;
     locations?: ToolCallLocation[] | undefined;
     content?: ToolCallContent[] | undefined;
     children?: TranscriptTool[] | undefined;

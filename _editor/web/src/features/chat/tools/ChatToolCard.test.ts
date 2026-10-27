@@ -57,7 +57,7 @@ describe(`ChatToolCard`, () => {
         const names = [...element.querySelectorAll(`span.font-medium`)].map((node) => node.textContent);
         // Named as the subagent it started, not as the tool that started it.
         expect(names).toContain(`Subagent`);
-        expect(names).toContain(`Bash`);
+        // The child's shell call is drawn as the command it ran.
         expect(element.textContent).toContain(`ls -la`);
         // The sub-agent's thinking rides on the card, not the parent turn.
         expect(element.textContent).toContain(thinking);
@@ -323,5 +323,51 @@ describe(`ChatToolCard`, () => {
         const header = element.querySelector(`.group\\/tool`)?.textContent ?? ``;
         expect(header).toContain(`Reading a file`);
         expect(header).toContain(`src/main.ts`);
+    });
+
+    // A developer's command row is the command itself, past the `cd` every call repeats; the tool's name only under the
+    // pointer.
+    it(`draws a command's row as its coloured command line, without the cd prefix or the tool's name`, () => {
+        const element = mount({
+            id: `s1`,
+            name: `Bash`,
+            category: `execute`,
+            status: `completed`,
+            target: `cd /work/intentic && git status --short`,
+            content: [{ type: `text`, text: ` M a.ts` }],
+        });
+        const header = element.querySelector(`.group\\/tool`)!;
+        expect(header.textContent).toContain(`git status --short`);
+        expect(header.textContent).not.toContain(`cd /work`);
+        expect(header.querySelector(`.sh-program`)?.textContent).toBe(`git`);
+        expect(header.querySelector(`span.font-medium`)).toBeNull();
+        expect(header.textContent).toContain(`1 changed`);
+    });
+
+    it(`opens a command onto its description, its command and its output's pieces`, async () => {
+        const element = mount({
+            id: `s2`,
+            name: `Bash`,
+            category: `execute`,
+            status: `completed`,
+            target: `sed -n 125,126p src/a.ts`,
+            description: `Read the grant test`,
+            content: [{ type: `text`, text: `const a = 1;\nconst b = 2;` }],
+            startedAt: 1_000,
+            endedAt: 5_500,
+        });
+        // A settled call states how long it took.
+        expect(element.querySelector(`.group\\/tool`)?.textContent).toContain(`4s`);
+        element.querySelector<HTMLElement>(`[aria-expanded]`)?.click();
+        await nextTick();
+        expect(element.textContent).toContain(`Read the grant test`);
+        expect(element.textContent).toContain(`125–126`);
+        expect(element.querySelector(`.chat-code-gutter`)?.textContent).toBe(`125\n126`);
+    });
+
+    it(`says a described command in its own words for a maker`, () => {
+        useAudience().setAudience(`maker`);
+        const element = mount({ id: `s3`, name: `Bash`, category: `execute`, status: `completed`, target: `git status`, description: `Show what changed` });
+        expect(element.querySelector(`.group\\/tool`)?.textContent).toContain(`Show what changed`);
     });
 });

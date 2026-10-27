@@ -705,18 +705,34 @@
     border-bottom: 0;
 }
 
-/* A Read tool card's highlighted file body (ChatCodeBody.vue): the inset surface, with the gutter reusing its fill so
-   what scrolls under the numbers stays hidden. */
-.chat-code {
-    display: flex;
-    max-height: 12rem;
-    overflow: auto;
-    border-radius: var(--radius-lg);
-    background-color: var(--chat-inset);
-    font-family: var(--font-mono);
-    font-feature-settings: var(--font-mono--font-feature-settings);
+/* A TOOL'S OUTPUT, FOLDED (ChatFoldClamp.vue): its first lines, fading out, with a press under it for the rest. The fold
+   is the horizontal scroller too, so code keeps its indentation; the font is set here so the fold's height, counted in
+   lines, matches the lines inside it. */
+.chat-fold {
+    position: relative;
+    overflow-x: auto;
     font-size: var(--text-2xs);
     line-height: 1.5;
+}
+.chat-fold-shut {
+    max-height: calc(var(--chat-fold-lines) * 1.5em + 0.75rem);
+    overflow-y: hidden;
+    mask-image: linear-gradient(to bottom, black calc(100% - 2.5rem), transparent);
+}
+
+/* Highlighted code a tool showed (ChatCodeBody.vue): a Read's file on an inset of its own, a command's file slice on the
+   command's inset. The gutter reuses the inset's fill so what scrolls under the numbers stays hidden. */
+.chat-code-box {
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background-color: var(--chat-inset);
+}
+.chat-code {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+    font-family: var(--font-mono);
+    font-feature-settings: var(--font-mono--font-feature-settings);
 }
 .chat-code-gutter {
     position: sticky;
@@ -746,6 +762,36 @@
     font-size: inherit;
     line-height: inherit;
     overflow: visible;
+}
+/* A SHELL LINE'S PIECES (shell/ShellTokens.vue), in the code viewer's own colours (light-plus and dark-plus) for strings,
+   variables and comments; the program carries the line, and its flags and operators step back. */
+.sh-program {
+    color: var(--color-content);
+    font-weight: 500;
+}
+.sh-flag,
+.sh-operator,
+.sh-separator {
+    color: var(--color-subtle);
+}
+.sh-string {
+    color: #a31515;
+}
+.sh-variable {
+    color: #001080;
+}
+.sh-comment {
+    color: #008000;
+    font-style: italic;
+}
+[data-mode="dark"] .sh-string {
+    color: #ce9178;
+}
+[data-mode="dark"] .sh-variable {
+    color: #9cdcfe;
+}
+[data-mode="dark"] .sh-comment {
+    color: #6a9955;
 }
 .chat-tab {
     color: var(--color-muted);

@@ -7,19 +7,22 @@ import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcrip
 import { codeLangForPath } from "@intentic/code-read";
 import { t } from "@intentic/ui/i18n";
 import { diffStat } from "./chatToolDiff";
+import { numberedFileBody } from "./numberedText";
+import { type ShellReading, readShell } from "./shell/shellOutput";
+import { commandSummary } from "./shell/shellSummary";
 
 // Per-tool rendering table for the chat's tool cards: a presenter is looked up by the tool's normalized display name
 // (case-insensitive), falling back to its ACP category so an unknown tool still renders sanely. `present()` is a pure
 // function of a TranscriptTool, testable without mounting a component.
 
-// Shape of a tool's textual output: `text` is the generic fallback, `files` renders a path listing, `command` splits a
-// shell invocation from its output.
+// Shape of a tool's textual output: `text` is the generic fallback, `files` renders a path listing, `command` is a
+// shell invocation read into the pieces its output has (shell/shellOutput.ts).
 export type ToolBody =
     | { readonly kind: "text"; readonly text: string }
     // Gutter stripped; firstLine is the row's true starting number; lang undefined renders plain monospace.
     | { readonly kind: "code"; readonly code: string; readonly lang: string | undefined; readonly firstLine: number }
     | { readonly kind: "files"; readonly entries: readonly ToolFileEntry[]; readonly hidden: number }
-    | { readonly kind: "command"; readonly command: string; readonly output: string };
+    | { readonly kind: "command"; readonly command: string; readonly shell: ShellReading };
 
 // A workspace path and, when the source line carried one, the 1-based line it matched at.
 export interface ToolFileEntry {
@@ -116,10 +119,16 @@ interface Presenter {
     readonly body?: (text: string, tool: TranscriptTool) => ToolBody | undefined;
     // Header's result phrase, from the joined text and the call itself; absent means no summary.
     readonly summary?: (text: string, tool: TranscriptTool) => string | undefined;
+    // Reads the whole output rather than the capped one: a shell call cuts its output into pieces, each folded on its own.
+    readonly whole?: true;
 }
 
-// Splits a Bash call's target (the command itself) from its output, rather than repeating the command inside the box.
-const commandBody = (text: string, tool: TranscriptTool): ToolBody => ({ kind: `command`, command: tool.target ?? ``, output: text });
+// A Bash call's target is the command itself; its output is read against it (shell/shellOutput.ts).
+const commandBody = (text: string, tool: TranscriptTool): ToolBody => ({
+    kind: `command`,
+    command: tool.target ?? ``,
+    shell: readShell(tool.target ?? ``, text, { failed: tool.status === `failed`, exitCode: tool.exitCode }),
+});
 
 // Total +/− across the call's diffs; undefined when it carries none, so a diffless Edit-family tool shows no summary
 // instead of "+0 −0".
@@ -138,48 +147,14 @@ const diffSummary = (_text: string, tool: TranscriptTool): string | undefined =>
     return `+${additions} −${deletions}`;
 };
 
-// Strips the SDK's numbered gutter (`<n><arrow-or-tab><content>`) into bare code plus the first line's number;
-// undefined unless the numbers form a strict +1 run over most lines.
-const NUMBERED_LINE = /^ *(\d+)(?:→|\t)(.*)$/;
-export const numberedFileBody = (text: string): { readonly code: string; readonly firstLine: number } | undefined => {
-    const lines = text.split(`\n`);
-    const code: string[] = [];
-    let firstLine: number | undefined;
-    let next = 0;
-    let matched = 0;
-    for (const line of lines) {
-        const parsed = NUMBERED_LINE.exec(line);
-        if (parsed === null) {
-            if (firstLine === undefined) {
-                return undefined; // First line isn't numbered: not a file view.
-            }
-            code.push(line); // Trailing marker or blank line after an established run.
-            continue;
-        }
-        const n = Number(parsed[1]);
-        if (firstLine === undefined) {
-            firstLine = n;
-        } else if (n !== next) {
-            return undefined; // Break in the +1 sequence: arbitrary numeric text, not a file view.
-        }
-        next = n + 1;
-        matched += 1;
-        code.push(parsed[2] ?? ``);
-    }
-    // Numbered run must be a clear majority, so a few coincidentally-numbered prose lines don't count as a file.
-    if (firstLine === undefined || matched * 2 < lines.length) {
-        return undefined;
-    }
-    return { code: code.join(`\n`), firstLine };
-};
-
 // Per-tool presenters keyed by lowercased display name (agent/tool-calls.ts normalizes it across backends).
 const PRESENTERS: Record<string, Presenter> = {
     // The page itself is drawn under the call (ChatPageView); the call's own result is what the agent was told.
     "show page": { icon: `globe` },
     "ask on a page": { icon: `globe` },
-    bash: { body: commandBody, summary: (text) => (text === `` ? t(`chat.toolPresentation.noOutput`) : lineCount(text)) },
-    bashoutput: { body: commandBody },
+    // Worded from what the output turned out to be (shell/shellSummary.ts), in present().
+    bash: { body: commandBody, whole: true },
+    bashoutput: { body: commandBody, whole: true },
     read: {
         // Colors the read via the path's extension; unknown extension or non-file read falls back to plain text.
         body: (text, tool) => {
@@ -279,6 +254,16 @@ const iconOf = (tool: TranscriptTool, presenter: Presenter, document: RequestDoc
     return presenter.icon ?? CATEGORY_ICONS[tool.category];
 };
 
+// The header's result phrase. A failed call says so, by its exit code where one is known; a command is worded from what
+// its output turned out to be; anything else asks its presenter.
+const summaryOf = (tool: TranscriptTool, presenter: Presenter, body: ToolBody | undefined, text: string): string | undefined => {
+    const shell = body?.kind === `command` ? body.shell : undefined;
+    if (tool.status === `failed`) {
+        return shell?.exitCode === undefined ? t(`chat.toolPresentation.failed`) : t(`chat.toolPresentation.exit`, { code: shell.exitCode });
+    }
+    return shell === undefined ? presenter.summary?.(text, tool) : commandSummary(shell);
+};
+
 export const present = (tool: TranscriptTool): ToolPresentation => {
     const presenter = presenterFor(tool.name);
     const content = tool.content ?? [];
@@ -295,8 +280,13 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
     const failed = tool.status === `failed`;
 
     // Bash shows the `$ command` line even with no output; every other tool with nothing to say renders bare.
-    const body = presenter.body !== undefined ? presenter.body(capped, tool) : capped === `` ? undefined : { kind: `text` as const, text: capped };
-    const shown = body !== undefined && (body.kind !== `command` || body.command !== `` || body.output !== ``) ? body : undefined;
+    const body =
+        presenter.body !== undefined
+            ? presenter.body(presenter.whole === true ? text : capped, tool)
+            : capped === ``
+              ? undefined
+              : { kind: `text` as const, text: capped };
+    const shown = body !== undefined && (body.kind !== `command` || body.command !== `` || body.shell.sections.length > 0) ? body : undefined;
 
     return {
         icon: iconOf(tool, presenter, document),
@@ -304,8 +294,7 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
         diffs,
         images,
         body: diffs.length === 0 && images.length === 0 && document === undefined && shown === undefined ? undefined : shown,
-        // A failed call's own message is the summary; a successful one asks its presenter.
-        summary: failed ? t(`chat.toolPresentation.failed`) : presenter.summary?.(text, tool),
+        summary: summaryOf(tool, presenter, body, text),
         // Collapsed once a call settles cleanly; images and documents stay open regardless.
         defaultOpen: running || failed || images.length > 0 || document !== undefined,
         delegates: delegates(tool),

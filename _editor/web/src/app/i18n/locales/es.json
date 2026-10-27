@@ -3736,7 +3736,9 @@
             "toolUses": "{count} herramienta | {count} herramientas",
             "viewLarger": "Ver más grande",
             "watchBrowser": "Ver navegador",
-            "openItThere": "Abrirlo en {sandbox}"
+            "openItThere": "Abrirlo en {sandbox}",
+            "showAll": "Mostrar la {count} línea | Mostrar las {count} líneas",
+            "showLess": "Mostrar menos"
         },
         "chatToolDiff": {
             "truncated": "truncado",
@@ -4438,7 +4440,10 @@
             "matches": "{count} coincidencia | {count} coincidencias",
             "noMatches": "sin coincidencias",
             "noOutput": "sin salida",
-            "truncated": "truncado"
+            "truncated": "truncado",
+            "changed": "{count} cambiado | {count} cambiados",
+            "commits": "{count} commit | {count} commits",
+            "exit": "código {code}"
         },
         "toolWords": {
             "ask": "Te está haciendo una pregunta",

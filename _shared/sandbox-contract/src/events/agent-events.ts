@@ -188,6 +188,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         content: z.array(ToolCallContentSchema).optional(),
         // The call's input as bounded JSON text, for a call with no one-line `target` (TranscriptTool.input).
         input: z.string().optional(),
+        // The agent's own words for the call beside its target (TranscriptTool.description).
+        description: z.string().optional(),
         // The MCP server the call went to (TranscriptTool.server), which its display name does not say.
         server: z.string().optional(),
         parentToolUseId: z.string().optional(),

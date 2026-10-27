@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homedir } from "node:os";
 import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
-import { editDiffContent, mayShowPicture, resultContent, TOOL_INPUT_CHARS, toolInput, toolLocations } from "./tool-calls.js";
+import { editDiffContent, mayShowPicture, resultContent, TOOL_INPUT_CHARS, toolDescription, toolInput, toolLocations } from "./tool-calls.js";
 
 const CWD = WORKSPACE_ROOT;
 const OUTPUT = browserOutputDir(WORKSPACE_ROOT);
@@ -139,4 +139,13 @@ test("toolInput keeps the input of a call with no target, bounded, and nothing f
     expect(long?.endsWith("…")).toBe(true);
     // An input JSON cannot carry is no input, never a thrown turn.
     expect(toolInput({ size: 1n }, undefined)).toBeUndefined();
+});
+
+test("toolDescription keeps a command's own words beside its target, and nothing where the input already carries them", () => {
+    expect(toolDescription({ input: { command: "git status", description: " Show working tree status " } }, "git status")).toBe("Show working tree status");
+    // A call with no target keeps its whole input (toolInput), description and all.
+    expect(toolDescription({ input: { description: "Map reads", prompt: "Find every read." } }, undefined)).toBeUndefined();
+    expect(toolDescription({ input: { command: "ls", description: "  " } }, "ls")).toBeUndefined();
+    expect(toolDescription({ input: { command: "ls" } }, "ls")).toBeUndefined();
+    expect(toolDescription({ input: { command: "ls", description: "x".repeat(400) } }, "ls")).toBe(`${"x".repeat(300)}…`);
 });

@@ -70,6 +70,7 @@ const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>, at: number | 
     category: event.category,
     status: event.status,
     ...(event.target !== undefined ? { target: event.target } : {}),
+    ...(event.description !== undefined ? { description: event.description } : {}),
     ...(event.locations !== undefined ? { locations: event.locations } : {}),
     ...(event.content !== undefined ? { content: event.content } : {}),
     ...(event.input !== undefined ? { input: event.input } : {}),

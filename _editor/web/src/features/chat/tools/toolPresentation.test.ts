@@ -1,6 +1,7 @@
 import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
-import { delegates, numberedFileBody, present, readableToolName, TEXT_CAP } from "./toolPresentation";
+import { delegates, present, readableToolName, TEXT_CAP } from "./toolPresentation";
+import { numberedFileBody } from "./numberedText";
 
 // A completed call with no output, spread over per-case.
 const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "name">): TranscriptTool => ({
@@ -65,14 +66,27 @@ describe(`present: bodies`, () => {
         expect(present(tool({ name: `Read` })).body).toBeUndefined();
     });
 
-    it(`splits a Bash call into its command line and its output`, () => {
-        const result = present(withText(`Bash`, `hello\n`, { target: `echo hello`, category: `execute` }));
-        expect(result.body).toEqual({ kind: `command`, command: `echo hello`, output: `hello\n` });
+    it(`reads a Bash call into its command line and the pieces of its output`, () => {
+        const body = present(withText(`Bash`, `hello\n`, { target: `echo hello`, category: `execute` })).body;
+        expect(body?.kind).toBe(`command`);
+        if (body?.kind !== `command`) {
+            return;
+        }
+        expect(body.command).toBe(`echo hello`);
+        expect(body.shell.sections).toEqual([{ kind: `text`, text: `hello`, lang: undefined }]);
     });
 
     it(`keeps a Bash body even when the command printed nothing: the command line is the point`, () => {
-        const result = present(tool({ name: `Bash`, target: `rm -rf /tmp/x`, category: `execute` }));
-        expect(result.body).toEqual({ kind: `command`, command: `rm -rf /tmp/x`, output: `` });
+        const body = present(tool({ name: `Bash`, target: `rm -rf /tmp/x`, category: `execute` })).body;
+        expect(body?.kind === `command` ? body.shell.rows.length : 0).toBe(1);
+    });
+
+    it(`reads a command's whole output, past the cap a plain text body is cut at`, () => {
+        const file = Array.from({ length: 400 }, (_, i) => `const line${i} = ${`x`.repeat(20)};`).join(`\n`);
+        expect(file.length).toBeGreaterThan(TEXT_CAP);
+        const body = present(withText(`Bash`, file, { target: `sed -n 1,400p a.ts`, category: `execute` })).body;
+        const [section] = body?.kind === `command` ? body.shell.sections : [];
+        expect(section?.kind === `code` ? section.code.split(`\n`).length : 0).toBe(400);
     });
 
     it(`parses a plain path listing into clickable rows`, () => {
@@ -215,6 +229,20 @@ describe(`present: summaries`, () => {
 
     it(`says "failed" for a failed call, whatever its presenter would have said`, () => {
         expect(present(withText(`Grep`, `a/b.ts`, { status: `failed` })).summary).toBe(`failed`);
+    });
+
+    it(`says a failed command's exit code where one is known`, () => {
+        expect(present(withText(`Bash`, `Exit code 2\nboom`, { target: `pnpm test`, category: `execute`, status: `failed` })).summary).toBe(`exit 2`);
+        expect(present(withText(`Bash`, `boom`, { target: `pnpm test`, category: `execute`, status: `failed`, exitCode: 3 })).summary).toBe(`exit 3`);
+    });
+
+    it(`words a command's result from what its output turned out to be`, () => {
+        const shell = (target: string, text: string): string | undefined => present(withText(`Bash`, text, { target, category: `execute` })).summary;
+        expect(shell(`sed -n 1,2p a.ts; echo ----; cat b.ts`, `a\nb\n----\nc\n`)).toBe(`2 files · 3 lines`);
+        expect(shell(`rg -n x src`, `src/a.ts:1:x\nsrc/b.ts:2:x`)).toBe(`2 matches · 2 files`);
+        expect(shell(`git status --short`, ` M a.ts\n?? b.ts`)).toBe(`2 changed`);
+        expect(shell(`git log --oneline`, `abc1234 one`)).toBe(`1 commit`);
+        expect(shell(`pnpm build`, ``)).toBe(`no output`);
     });
 
     it(`summarizes a text body from its uncapped length, not the truncated render`, () => {

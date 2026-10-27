@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { linkedConversationHref, openLinkedSubagent } from "../../../models/fleet/linkedSubagent";
-import type { IconName } from "@intentic/ui";
+import { type IconName, formatElapsed } from "@intentic/ui";
 import { computed, inject, ref, watch } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import { TRANSCRIPT_HOLD } from "../transcript/useStickToBottom";
 import ChatCodeBody from "../transcript/ChatCodeBody.vue";
+import ChatFoldClamp from "../transcript/ChatFoldClamp.vue";
 import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
+import ChatCommandBody from "./shell/ChatCommandBody.vue";
+import ShellTokens from "./shell/ShellTokens.vue";
 import { present, readableToolName } from "./toolPresentation";
 import { subagentView } from "./subagentCard";
 import { useT } from "@intentic/ui/i18n";
@@ -36,7 +39,7 @@ const failed = computed(() => props.tool.status === `failed`);
 const unfinished = computed(() => running.value && !props.live);
 
 // Header glyph: the spinner only while genuinely in flight, a clock once left unfinished, else the registry's
-// icon for the tool.
+// icon for the tool, quiet unless the call failed: the same glyph on every row says nothing worth a colour.
 const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(() => {
     if (running.value && props.live) {
         return { name: `spinner`, spin: true, class: `text-link` };
@@ -44,7 +47,7 @@ const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(()
     if (unfinished.value) {
         return { name: `clock`, spin: false, class: `text-subtle` };
     }
-    return { name: view.value.icon, spin: false, class: failed.value ? `text-danger` : `text-link` };
+    return { name: view.value.icon, spin: false, class: failed.value ? `text-danger` : `text-subtle` };
 });
 
 // What the call itself produced.
@@ -61,6 +64,19 @@ const hasDelegation = computed(
         (props.tool.nested ?? 0) > 0 ||
         props.tool.subagent?.summary !== undefined,
 );
+
+// A shell call read into its pieces (shell/shellOutput.ts). A developer's row IS its command, coloured and past its
+// leading `cd`, in place of the tool's name: the line says it is shell, and the name said nothing else.
+const shell = computed(() => (view.value.body?.kind === `command` ? view.value.body.shell : undefined));
+const commandLine = computed(() =>
+    maker.value || view.value.delegates || shell.value === undefined || shell.value.tokens.length === 0 ? undefined : shell.value.tokens,
+);
+
+// How long a settled call took, once that is long enough to matter.
+const took = computed(() => {
+    const { startedAt, endedAt } = props.tool;
+    return startedAt === undefined || endedAt === undefined || endedAt - startedAt < 1000 ? undefined : formatElapsed((endedAt - startedAt) / 1000);
+});
 
 // Whether there's anything to fold: an output-less call shows just its header.
 const hasContent = computed(() => hasOutput.value || hasDelegation.value);
@@ -142,13 +158,19 @@ const name = computed(() => {
         return maker.value ? t(`chat.toolWords.helperName`) : t(`shared.subagent`);
     }
     // A developer reads the tool, but an MCP wire id (`mcp__subagents__wait`) as words; the id stays the name's title.
+    // A command the agent described is said in its words.
+    if (maker.value && props.tool.category === `execute` && props.tool.description !== undefined) {
+        return props.tool.description;
+    }
     return maker.value
         ? plainToolWords({ name: props.tool.name, target: props.tool.target, category: props.tool.category }, { file: false })
         : (readableToolName(props.tool.name) ?? props.tool.name);
 });
 // The id behind a name said as words, under the pointer: what a developer greps the logs or the server's docs for.
 const rawName = computed(() => (maker.value || name.value === props.tool.name ? undefined : props.tool.name));
-const target = computed(() => (maker.value && props.tool.category === `execute` ? undefined : props.tool.target));
+const target = computed(() =>
+    commandLine.value !== undefined || (maker.value && props.tool.category === `execute`) ? undefined : props.tool.target,
+);
 // The row above the fold, in reading order: what type it runs as, then what it was asked to do.
 const subagentTitle = computed(() => [subagent.value?.agentType, subagent.value?.description].filter(Boolean).join(` · `));
 // The quiet numbers line: tokens are the child's own spend, worth stating since the parent's cost readout
@@ -184,6 +206,7 @@ const trailerTaken = computed(
         (subagentFacts.value.length > 0 && subagentLive.value) ||
         unfinished.value ||
         Boolean(view.value.summary) ||
+        took.value !== undefined ||
         (agentTerminal.value !== undefined && surface.watchTerminal !== undefined) ||
         (agentBrowser.value !== undefined && surface.watchBrowser !== undefined),
 );
@@ -254,16 +277,20 @@ const openSubagent = (event: MouseEvent): void => {
                  icon stand; the call's own glyph and name then start on the hang, where the material it opens starts too. -->
             <!-- The mark box's 2px margin plus the row's 6px gap is the column's mark gap (--chat-mark-gap), kept in one flat
                  group so the name's no-wrap boundary still stands directly beside the elastic target. -->
+            <!-- A command's row is its command line, which then takes the row's elastic width and truncates; the whole of it
+                 is the press, since there is no name left to press. -->
             <button
                 v-if="hasContent"
                 type="button"
-                class="flex shrink-0 items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
+                class="flex items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
+                :class="commandLine ? 'min-w-0 flex-1 text-left' : 'shrink-0'"
                 :aria-expanded="isOpen"
                 @click="toggleOpen"
             >
                 <span class="chat-mark mr-0.5"><Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" /></span>
                 <Icon v-bind="statusIcon" class="text-2xs" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
+                <span v-if="commandLine" class="min-w-0 truncate font-mono" :title="tool.name"><ShellTokens :tokens="commandLine" /></span>
+                <span v-else class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
             </button>
             <template v-else>
                 <!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. An empty mark box
@@ -306,6 +333,12 @@ const openSubagent = (event: MouseEvent): void => {
             <span v-else-if="view.summary" class="ml-auto shrink-0 tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{
                 view.summary
             }}</span>
+            <span
+                v-if="took"
+                class="shrink-0 text-subtle tabular-nums"
+                :class="{ 'ml-auto': !unfinished && !view.summary && !(subagentFacts.length > 0 && subagentLive) }"
+                >{{ view.summary ? `· ${took}` : took }}</span
+            >
             <!-- Attach to the command's shell while it's genuinely in flight ("what's it doing right now"), hover-only once settled so a quiet transcript stays quiet; faint under a thumb, which has no hover to find it with. -->
             <button
                 v-if="agentTerminal && surface.watchTerminal"
@@ -313,7 +346,7 @@ const openSubagent = (event: MouseEvent): void => {
                 class="flex shrink-0 items-center self-stretch transition hover:text-content max-md:min-w-8 max-md:justify-center"
                 :class="[
                     running && live ? '' : 'opacity-0 group-hover/tool:opacity-100 pointer-coarse:opacity-40',
-                    { 'ml-auto': !unfinished && !view.summary },
+                    { 'ml-auto': !unfinished && !view.summary && !took },
                 ]"
                 v-tooltip.top="t(`chat.words.watchTerminal`)"
                 :aria-label="t(`chat.words.watchTerminal`)"
@@ -328,7 +361,7 @@ const openSubagent = (event: MouseEvent): void => {
                 class="flex shrink-0 items-center self-stretch transition hover:text-content max-md:min-w-8 max-md:justify-center"
                 :class="[
                     running && live ? '' : 'opacity-0 group-hover/tool:opacity-100 pointer-coarse:opacity-40',
-                    { 'ml-auto': !unfinished && !view.summary },
+                    { 'ml-auto': !unfinished && !view.summary && !took },
                 ]"
                 v-tooltip.top="t(`chat.chatToolCard.watchBrowser`)"
                 :aria-label="t(`chat.chatToolCard.watchBrowser`)"
@@ -402,42 +435,41 @@ const openSubagent = (event: MouseEvent): void => {
                 @open="openFile?.(diff.path)"
             />
             <!-- Body shape chosen by the registry: `command` shows the invocation above its output like a terminal; `files` turns a path listing into navigable rows. -->
-            <div v-if="view.body?.kind === 'command'" class="chat-inset ml-[var(--chat-hang)] overflow-hidden">
-                <div v-if="view.body.command" class="chat-inset-rule flex gap-1.5 px-2.5 py-1.5 font-mono text-2xs text-muted">
-                    <span class="shrink-0 select-none text-subtle">$</span>
-                    <span class="whitespace-pre-wrap">{{ view.body.command }}</span>
+            <ChatCommandBody
+                v-if="view.body?.kind === 'command'"
+                :shell="view.body.shell"
+                :description="maker ? undefined : tool.description"
+                :open-file="openFile"
+            />
+            <ChatFoldClamp
+                v-else-if="view.body?.kind === 'files'"
+                :lines="view.body.entries.length"
+                class="chat-inset ml-[var(--chat-hang)] overflow-hidden"
+            >
+                <div class="flex flex-col p-1.5">
+                    <component
+                        :is="openFile ? 'button' : 'div'"
+                        v-for="(entry, index) in view.body.entries"
+                        :key="`${entry.path}:${entry.line ?? ''}:${index}`"
+                        :type="openFile ? 'button' : undefined"
+                        class="flex items-baseline gap-1.5 rounded-md px-1.5 py-0.5 text-left font-mono text-2xs text-content transition-colors"
+                        :class="openFile && 'hover:bg-overlay hover:text-content'"
+                        v-tooltip.top="openFile ? t(`chat.words.openFile`) : undefined"
+                        @click="openFile?.(entry.path, entry.line)"
+                    >
+                        <span class="truncate">{{ entry.path }}</span>
+                        <span v-if="entry.line" class="shrink-0 text-subtle">:{{ entry.line }}</span>
+                    </component>
+                    <span v-if="view.body.hidden" class="px-1 py-0.5 text-2xs text-subtle">{{
+                        t(`chat.chatToolCard.more`, { hidden: view.body.hidden })
+                    }}</span>
                 </div>
-                <pre
-                    v-if="view.body.output"
-                    class="max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
-                    :class="failed ? 'text-danger' : 'text-muted'"
-                    >{{ view.body.output }}</pre>
-            </div>
-            <div v-else-if="view.body?.kind === 'files'" class="chat-inset ml-[var(--chat-hang)] flex max-h-40 flex-col overflow-auto p-1.5">
-                <component
-                    :is="openFile ? 'button' : 'div'"
-                    v-for="(entry, index) in view.body.entries"
-                    :key="`${entry.path}:${entry.line ?? ''}:${index}`"
-                    :type="openFile ? 'button' : undefined"
-                    class="flex items-baseline gap-1.5 rounded-md px-1.5 py-0.5 text-left font-mono text-2xs text-muted transition-colors"
-                    :class="openFile && 'hover:bg-overlay hover:text-content'"
-                    v-tooltip.top="openFile ? t(`chat.words.openFile`) : undefined"
-                    @click="openFile?.(entry.path, entry.line)"
-                >
-                    <span class="truncate">{{ entry.path }}</span>
-                    <span v-if="entry.line" class="shrink-0 text-subtle">:{{ entry.line }}</span>
-                </component>
-                <span v-if="view.body.hidden" class="px-1 py-0.5 text-2xs text-subtle">{{
-                    t(`chat.chatToolCard.more`, { hidden: view.body.hidden })
-                }}</span>
-            </div>
+            </ChatFoldClamp>
             <!-- A Read's contents: syntax-highlighted with a line-number gutter, the same highlighter as the workspace viewer. -->
             <ChatCodeBody v-else-if="view.body?.kind === 'code'" :code="view.body.code" :lang="view.body.lang" :first-line="view.body.firstLine" />
-            <pre
-                v-else-if="view.body"
-                class="chat-inset ml-[var(--chat-hang)] max-h-40 overflow-auto px-2.5 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap"
-                :class="failed ? 'text-danger' : 'text-muted'"
-                >{{ view.body.text }}</pre>
+            <ChatFoldClamp v-else-if="view.body" :lines="view.body.text.split('\n').length" class="chat-inset ml-[var(--chat-hang)] overflow-hidden">
+                <pre class="px-2.5 py-1.5 break-words whitespace-pre-wrap" :class="failed ? 'text-danger' : 'text-content'">{{ view.body.text }}</pre>
+            </ChatFoldClamp>
         </template>
     </div>
 </template>

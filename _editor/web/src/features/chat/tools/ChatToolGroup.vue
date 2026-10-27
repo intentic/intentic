@@ -3,6 +3,8 @@ import { computed, inject, ref } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import ChatToolCard from "./ChatToolCard.vue";
+import ShellTokens from "./shell/ShellTokens.vue";
+import { readShell } from "./shell/shellOutput";
 import { TRANSCRIPT_HOLD } from "../transcript/useStickToBottom";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { delegates, present, readableToolName } from "./toolPresentation";
@@ -46,7 +48,18 @@ const name = computed(() => {
         : (readableToolName(props.group.name) ?? props.group.name);
 });
 const rawName = computed(() => (maker.value || name.value === props.group.name ? undefined : props.group.name));
-const target = computed(() => (maker.value && props.group.category === `execute` ? undefined : props.group.target));
+// A run of one command is named by the command, coloured and past its `cd`, as each of its cards is (ChatToolCard).
+const commandLine = computed(() => {
+    const command = props.group.target;
+    if (maker.value || props.group.category !== `execute` || command === undefined) {
+        return undefined;
+    }
+    const { tokens } = readShell(command, ``, { failed: false, exitCode: undefined });
+    return tokens.length === 0 ? undefined : tokens;
+});
+const target = computed(() =>
+    commandLine.value !== undefined || (maker.value && props.group.category === `execute`) ? undefined : props.group.target,
+);
 
 // Whether any tool in the group is still running: shows the spinner instead of the icon.
 const running = computed(() => props.group.tools.some((tool) => tool.status === `pending` || tool.status === `in_progress`));
@@ -71,14 +84,16 @@ const location = computed(() => {
             <!-- Chevron in the mark box, glyph and name on the hang: the same edges as a single call's row (ChatToolCard). -->
             <button
                 type="button"
-                class="flex shrink-0 items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
+                class="flex items-center gap-1.5 self-stretch whitespace-nowrap transition-colors hover:text-content"
+                :class="commandLine ? 'min-w-0 flex-1 text-left' : 'shrink-0'"
                 :aria-expanded="expanded"
                 @click="toggle"
             >
                 <span class="chat-mark mr-0.5"><Icon :name="expanded ? 'chevron-down' : 'chevron-right'" class="text-2xs" /></span>
                 <Icon v-if="running && live" name="spinner" :spin="true" class="text-2xs text-link" />
-                <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
+                <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-subtle'" />
+                <span v-if="commandLine" class="min-w-0 truncate font-mono" :title="group.name"><ShellTokens :tokens="commandLine" /></span>
+                <span v-else class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
             </button>
             <button
                 v-if="location && openFile"
