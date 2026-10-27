@@ -4,7 +4,7 @@ import { flyBuildMachineConfig } from "@intentic/sandbox-run/fly";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { loadConfig } from "./config.js";
 import { createApp, deleteApp, createMachine, destroyMachine, flyBuildRole, FlyError, getMachineDetail } from "./sandbox/hosted/fly/fly.js";
-import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./sandbox/hosted/fly/fly-tokens.js";
+import { mintAppDeployToken } from "./sandbox/hosted/fly/fly-tokens.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson } from "./sandbox/hosted/build/hosted-build-script.js";
 import { hostedInstanceId } from "./sandbox/hosted/hosted.js";
 
@@ -54,11 +54,15 @@ const probe = async (question: string, what: string, run: () => Promise<string>)
     }
 };
 
-// Registry v2 bearer auth `docker login` hides: an unauthenticated read's 401 challenge names a realm that mints a
-// token against Fly's fixed `x:<deploy token>` basic auth, and the retry carries it.
+// Follow the registry's challenge like `docker login`: Fly currently accepts x:<deploy token> as Basic auth;
+// a registry offering Bearer auth instead names the realm that exchanges it for a repository token.
 const registryAuth = async (repo: string, deployToken: string, action: string): Promise<string> => {
     const challenge = await fetch(`https://registry.fly.io/v2/${repo}/tags/list`, { method: `GET` });
     const header = challenge.headers.get(`www-authenticate`) ?? ``;
+    const basic = `Basic ${Buffer.from(`x:${deployToken}`, `utf8`).toString(`base64`)}`;
+    if (/^Basic\s/iu.test(header)) {
+        return basic;
+    }
     const field = (name: string): string => new RegExp(`${name}="([^"]+)"`).exec(header)?.[1] ?? ``;
     const realm = field(`realm`);
     if (realm === ``) {
@@ -66,7 +70,7 @@ const registryAuth = async (repo: string, deployToken: string, action: string): 
     }
     const scope = `repository:${repo}:${action}`;
     const minted = await fetch(`${realm}?service=${encodeURIComponent(field(`service`))}&scope=${encodeURIComponent(scope)}`, {
-        headers: { authorization: `Basic ${Buffer.from(`x:${deployToken}`, `utf8`).toString(`base64`)}` },
+        headers: { authorization: basic },
     });
     if (!minted.ok) {
         throw new Error(`the registry refused the deploy token for ${scope}: HTTP ${minted.status}`);
@@ -76,7 +80,7 @@ const registryAuth = async (repo: string, deployToken: string, action: string): 
     if (bearer === undefined) {
         throw new Error(`the registry's token endpoint answered without a token`);
     }
-    return bearer;
+    return `Bearer ${bearer}`;
 };
 
 const MANIFEST_TYPES = [
@@ -87,10 +91,10 @@ const MANIFEST_TYPES = [
 ].join(`, `);
 
 const manifest = async (repo: string, reference: string, deployToken: string, method = `GET`): Promise<{ status: number; digest: string }> => {
-    const bearer = await registryAuth(repo, deployToken, method === `DELETE` ? `pull,push,delete` : `pull`);
+    const authorization = await registryAuth(repo, deployToken, method === `DELETE` ? `pull,push,delete` : `pull`);
     const response = await fetch(`https://registry.fly.io/v2/${repo}/manifests/${reference}`, {
         method,
-        headers: { authorization: `Bearer ${bearer}`, accept: MANIFEST_TYPES },
+        headers: { authorization, accept: MANIFEST_TYPES },
     });
     return { status: response.status, digest: response.headers.get(`docker-content-digest`) ?? `` };
 };
@@ -116,7 +120,6 @@ const probeOverlay = (marker: string): string =>
 const appName = `${config.hosted.appPrefix}-spike-${Math.random().toString(36).slice(2, 10)}`;
 const repo = appName;
 const madeMachines: string[] = [];
-const mintedTokens: string[] = [];
 
 // Polls until a machine reaches a state that costs nothing more; returns the last detail either way, including one
 // still running at the deadline.
@@ -195,22 +198,18 @@ try {
     await createApp(flyApiToken, flyOrg, appName);
     out(`\nApp created.`);
 
-    await probe(`1`, `the org id lookup and createLimitedAccessToken, and that its token reaches the registry`, async () => {
-        const organizationId = await organizationIdOf(flyApiToken, flyOrg);
-        const minted = await mintAppDeployToken(flyApiToken, organizationId, {
+    await probe(`1`, `the Machines API app deploy token, and that it reaches the registry`, async () => {
+        deployToken = await mintAppDeployToken(flyApiToken, {
             app: appName,
-            name: `intentic spike ${appName}`,
             expiryMinutes: buildTimeoutMinutes + 15,
         });
-        mintedTokens.push(minted.id);
-        deployToken = minted.token;
         // Confirms the token reaches this repo before a build is spent finding out; a 404 through auth is itself the
         // answer.
         const reach = await manifest(repo, `env`, deployToken, `GET`).then(
             (result) => `the registry accepted it (manifest read answered HTTP ${result.status})`,
             (error: unknown) => `MINTED BUT THE REGISTRY REFUSED IT: ${errorMessage(error)}`,
         );
-        return `organizationIdOf answered a node id, profile \`deploy\` + profileParams.app_id minted token ${minted.id}; ${reach}`;
+        return `the Machines API minted an app deploy token expiring in ${buildTimeoutMinutes + 15} minutes; ${reach}`;
     });
 
     if (deployToken === ``) {
@@ -328,10 +327,6 @@ try {
             );
             answers.set(`4 (repository)`, `deleting the app removes its registry repository? ${after}`);
         }
-    }
-    for (const id of mintedTokens) {
-        // a handful at most, and teardown is not hot
-        await revokeDeployToken(flyApiToken, id).catch((error: unknown) => out(`  could not revoke token ${id}: ${errorMessage(error)}`));
     }
 }
 

@@ -1,63 +1,49 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { FlyError } from "./fly.js";
-import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly-tokens.js";
-
-// The one GraphQL endpoint, stubbed: every call records what it sent and answers what the case says.
-const stubGraphql = (answer: (body: { query: string; variables: Record<string, unknown> }) => unknown, status = 200) => {
-    const calls: { query: string; variables: Record<string, unknown>; headers: Headers }[] = [];
-    stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
-        expect(String(url)).toBe(`https://api.fly.io/graphql`);
-        const body = JSON.parse(String(init?.body)) as { query: string; variables: Record<string, unknown> };
-        calls.push({ ...body, headers: new Headers(init?.headers) });
-        return Promise.resolve(new Response(JSON.stringify(answer(body)), { status }));
-    });
-    return calls;
-};
+import { mintAppDeployToken, revokeDeployToken } from "./fly-tokens.js";
 
 afterEach(() => {
     unstubAllGlobals();
 });
 
 describe(`fly deploy tokens`, () => {
-    it(`looks the organization's node id up by its slug`, async () => {
-        const calls = stubGraphql(() => ({ data: { organization: { id: `org-node` } } }));
-        expect(await organizationIdOf(`fly`, `intentic`)).toBe(`org-node`);
-        expect(calls[0]?.variables).toEqual({ slug: `intentic` });
-        expect(calls[0]?.headers.get(`authorization`)).toBe(`Bearer fly`);
-    });
-
-    it(`names a missing organization as the config's fault`, async () => {
-        stubGraphql(() => ({ data: { organization: null } }));
-        await expect(organizationIdOf(`fly`, `nobody`)).rejects.toThrow(/HOSTED_FLY_ORG/);
-    });
-
-    // The token's scope is the whole safety argument: one app, the deploy profile, minutes rather than years.
-    it(`mints a deploy token scoped to exactly one app, expiring in minutes`, async () => {
-        const calls = stubGraphql(() => ({ data: { createLimitedAccessToken: { limitedAccessToken: { id: `lat-1`, token: `fm2_secret` } } } }));
-        const minted = await mintAppDeployToken(`fly`, `org-node`, { app: `intentic-sbx-abc`, name: `intentic overlay build b1`, expiryMinutes: 45 });
-        expect(minted).toEqual({ id: `lat-1`, token: `fm2_secret` });
-        expect(calls[0]?.variables).toEqual({
-            input: {
-                name: `intentic overlay build b1`,
-                organizationId: `org-node`,
-                profile: `deploy`,
-                profileParams: { app_id: `intentic-sbx-abc` },
-                expiry: `45m`,
-            },
+    // Org deploy credentials can create this token through Machines, but GraphQL refuses createLimitedAccessToken.
+    it(`uses the app's Machines endpoint with an explicit short expiry and keeps the returned token intact`, async () => {
+        const fetch = jest.fn().mockImplementation((url: URL | string, init?: RequestInit) => {
+            expect(String(url)).toBe(`https://api.machines.dev/v1/apps/intentic-sbx-abc/deploy_token`);
+            expect(init?.method).toBe(`POST`);
+            expect(new Headers(init?.headers).get(`authorization`)).toBe(`Bearer org-token`);
+            expect(JSON.parse(String(init?.body))).toEqual({ expiry: `45m` });
+            return Promise.resolve(new Response(JSON.stringify({ token: `FlyV1 fm2_app` })));
         });
+        stubGlobal(`fetch`, fetch);
+        expect(await mintAppDeployToken(`org-token`, { app: `intentic-sbx-abc`, expiryMinutes: 45 })).toBe(`FlyV1 fm2_app`);
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it(`revokes by the token's id`, async () => {
-        const calls = stubGraphql(() => ({ data: { deleteLimitedAccessToken: { token: `x` } } }));
+    it.each([401, 403, 503])(`preserves an HTTP %s refusal as a Fly error`, async (status) => {
+        stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ error: `refused` }), { status })));
+        const error = await mintAppDeployToken(`bad`, { app: `app`, expiryMinutes: 45 }).catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(FlyError);
+        expect((error as FlyError).status).toBe(status);
+        if (status !== 503) {
+            expect((error as FlyError).message).toContain(`HOSTED_FLY_API_TOKEN`);
+        }
+    });
+
+    it.each([{}, { token: `` }])(`rejects a successful response without a usable token: %j`, async (body) => {
+        stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify(body))));
+        await expect(mintAppDeployToken(`fly`, { app: `app`, expiryMinutes: 45 })).rejects.toThrow();
+    });
+
+    it(`still revokes legacy GraphQL tokens by id`, async () => {
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+            expect(String(url)).toBe(`https://api.fly.io/graphql`);
+            const body = JSON.parse(String(init?.body)) as { query: string; variables: unknown };
+            expect(body.query).toContain(`deleteLimitedAccessToken`);
+            expect(body.variables).toEqual({ input: { id: `lat-1` } });
+            return Promise.resolve(new Response(JSON.stringify({ data: { deleteLimitedAccessToken: { token: `x` } } })));
+        });
         await revokeDeployToken(`fly`, `lat-1`);
-        expect(calls[0]?.variables).toEqual({ input: { id: `lat-1` } });
-    });
-
-    it(`surfaces Fly's own refusal, and a rejected credential as the config's fault`, async () => {
-        stubGraphql(() => ({ errors: [{ message: `Not authorized to access this app` }] }));
-        await expect(organizationIdOf(`fly`, `intentic`)).rejects.toThrow(`Fly refused: Not authorized to access this app`);
-        unstubAllGlobals();
-        stubGraphql(() => ({}), 401);
-        await expect(organizationIdOf(`bad`, `intentic`)).rejects.toThrow(FlyError);
     });
 });

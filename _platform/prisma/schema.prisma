@@ -570,7 +570,7 @@ model HostedBuild {
     builderMachineId  String
     builderInstanceId String
     secretHash        String
-    // The Fly id of the app-scoped deploy token minted for this build, revoked once the builder has reported.
+    // Legacy GraphQL token id, revoked once the builder reports. Machines API tokens have no id and expire instead.
     tokenId           String?
     // Who asked: the owner's email, or `platform` for a rebuild a base image update triggered.
     requestedBy       String

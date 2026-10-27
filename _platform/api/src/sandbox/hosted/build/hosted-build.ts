@@ -20,7 +20,7 @@ import {
     isFlyGone,
     listMachines,
 } from "../fly/fly.js";
-import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/fly-tokens.js";
+import { mintAppDeployToken, revokeDeployToken } from "../fly/fly-tokens.js";
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
 import { digestIn, resolveHostedImage } from "./hosted-image.js";
@@ -34,7 +34,7 @@ import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 // - only the owner, or the platform on a base image move, may start one; one in flight per sandbox
 // - per-owner and platform-wide ceilings (config.hosted.builds*); builder minutes charge like awake time
 // - timeout enforced twice (the script's own `timeout`, and the reconcile below)
-// - the builder holds only a deploy token scoped to its app, revoked once it reports
+// - the builder holds only a deploy token scoped to its app, expiring after the timeout plus reporting grace
 //
 // WHICH BASE AN OVERLAY IS ON is a digest, never the tag's string: `HOSTED_IMAGE` is the moving `:stable`, which names a
 // new release under the same string. A build pins its FROM to the digest the tag resolves to when it starts and keeps
@@ -231,7 +231,7 @@ const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Lo
 };
 
 // Everything a build's end does, whoever declares it: verdict and minutes, owner's month charged, builder destroyed and
-// token revoked, guard released, and on success the swap. Best-effort on every side effect but the row.
+// legacy token revoked, guard released, and on success the swap. Best-effort on every side effect but the row.
 const finishHostedBuild = async (
     prisma: PrismaClient,
     config: Config,
@@ -309,14 +309,12 @@ const startBuilder = async (
     base: { readonly content: string; readonly digest: string | undefined },
     id: string,
 ): Promise<HostedBuildState> => {
-    const { flyApiToken, flyOrg, buildTimeoutMinutes } = config.hosted;
+    const { flyApiToken, buildTimeoutMinutes } = config.hosted;
     let builderMachineId: string | undefined;
     try {
         const secret = randomBytes(32).toString(`base64url`);
-        const organizationId = await organizationIdOf(flyApiToken, flyOrg);
-        const deploy = await mintAppDeployToken(flyApiToken, organizationId, {
+        const deployToken = await mintAppDeployToken(flyApiToken, {
             app: machine.appName,
-            name: `intentic overlay build ${id}`,
             expiryMinutes: buildTimeoutMinutes + 15,
         });
         const image = overlayImageTag(machine.appName);
@@ -327,7 +325,7 @@ const startBuilder = async (
                 files: [
                     { path: BUILD_PATHS.dockerfile, content: base.content },
                     { path: BUILD_PATHS.script, content: buildScript() },
-                    { path: BUILD_PATHS.dockerConfig, content: dockerConfigJson(REGISTRY, deploy.token) },
+                    { path: BUILD_PATHS.dockerConfig, content: dockerConfigJson(REGISTRY, deployToken) },
                 ],
                 entrypoint: [`/bin/sh`, BUILD_PATHS.script],
                 env: [
@@ -359,7 +357,7 @@ const startBuilder = async (
                 builderMachineId: created.machineId,
                 builderInstanceId: created.instanceId,
                 secretHash: sha256Hex(secret),
-                tokenId: deploy.id,
+                tokenId: null,
                 requestedBy: request.requestedBy,
             },
         });

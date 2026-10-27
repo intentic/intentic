@@ -93,6 +93,29 @@ describe(`sandbox routes`, () => {
         await expectOrpcCode(call(sandboxRoutes.list, undefined, { context: context({ user: null }) }), `UNAUTHORIZED`);
     });
 
+    it(`logs the cause and sandbox when starting a hosted build unexpectedly fails`, async () => {
+        const failure = new Error(`Fly refused to create the deploy token`);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(sandboxRow) },
+            user: { findUnique: jest.fn().mockResolvedValue(null) },
+            hostedMachine: { findUnique: jest.fn().mockRejectedValue(failure) },
+        });
+        const ctx = context({ prisma });
+        const config = {
+            ...ctx.config,
+            hosted: { ...ctx.config.hosted, flyApiToken: `fly`, flyOrg: `org`, buildsPerDay: 5 },
+        };
+        const content = `FROM ghcr.io/intentic/sandbox:stable\nRUN true\n`;
+        await expectOrpcCode(
+            call(sandboxRoutes.hostedRebuild, { sandboxId: `s1`, hash: sha256Hex(content), content }, { context: { ...ctx, config } }),
+            `BAD_GATEWAY`,
+        );
+        expect(ctx.logger.error).toHaveBeenCalledWith(
+            { err: failure, sandboxId: `s1`, ownerId: `u1` },
+            `hosted build: starting the build failed`,
+        );
+    });
+
     it(`404s owner-only routes for sandboxes the caller does not own`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue(null) } });
         await expectOrpcCode(call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);

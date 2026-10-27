@@ -215,28 +215,24 @@ const registryRoute = (digest: string) => ({
     respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": digest } }),
 });
 
-// One route answers org lookup, mint, and revoke, matched by keywords in the query text.
-const graphqlRoute = () => ({
-    match: (_method: string, url: string) => url === `https://api.fly.io/graphql`,
+// New tokens come from Machines; only legacy token revocation uses GraphQL.
+const tokenRoute = () => ({
+    match: (_method: string, url: string) => url.endsWith(`/deploy_token`) || url === `https://api.fly.io/graphql`,
     respond: (body: unknown) => {
-        const { query } = body as { query: string };
-        if (query.includes(`organization(slug`)) {
-            return json({ data: { organization: { id: `org-node` } } });
-        }
-        if (query.includes(`createLimitedAccessToken`)) {
-            return json({ data: { createLimitedAccessToken: { limitedAccessToken: { id: `lat-1`, token: `fm2_deploy` } } } });
+        if (`expiry` in (body as Record<string, unknown>)) {
+            return json({ token: `fm2_deploy` });
         }
         return json({ data: { deleteLimitedAccessToken: { token: `x` } } });
     },
 });
 
 // The stock image the sandbox's machine was provisioned on, and that machine on the shared Fly fake, which models the
-// state gate's probe (exec, stop, start) as the hand-written routes above cannot. GraphQL (the token mint and revoke)
+// state gate's probe (exec, stop, start) as the hand-written routes above cannot. GraphQL (legacy token revocation)
 // is answered beside it.
 const STOCK = `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}`;
 const sandboxFly = (state: `started` | `stopped`) => {
-    const graphql = graphqlRoute();
-    // Every GraphQL body sent, in order: the mint and the revoke are only visible here.
+    const graphql = tokenRoute();
+    // Every legacy token revocation body sent.
     const sent: { query: string; variables?: unknown }[] = [];
     const fly = installFakeFly((name, value) => stubGlobal(name, value), {
         passThrough: (_input, init) => {
@@ -334,7 +330,7 @@ describe(`requesting a build: every refusal spends nothing`, () => {
 describe(`requesting a build: the start`, () => {
     it(`wins the row's guard, mints an app-scoped token, and creates the builder with the pinned recipe`, async () => {
         const calls = stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             {
                 match: (method, url) => method === `POST` && url.endsWith(`/apps/intentic-sbx-abc/machines`),
                 respond: () => json({ id: `mb1`, state: `created`, instance_id: `i1` }),
@@ -348,12 +344,9 @@ describe(`requesting a build: the start`, () => {
             where: { id: `h1`, buildingId: null },
             data: { buildingId: expect.any(String) },
         });
-        const mint = calls.find((call) => (call.body as { query?: string } | undefined)?.query?.includes(`createLimitedAccessToken`));
-        expect((mint!.body as { variables: { input: Record<string, unknown> } }).variables.input).toMatchObject({
-            profile: `deploy`,
-            profileParams: { app_id: `intentic-sbx-abc` },
-            expiry: `45m`,
-        });
+        const mint = calls.find((call) => call.url.endsWith(`/apps/intentic-sbx-abc/deploy_token`));
+        expect(mint).toMatchObject({ method: `POST`, body: { expiry: `45m` } });
+        expect(calls.some((call) => call.url === `https://api.fly.io/graphql`)).toBe(false);
         const create = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines`))!.body as {
             name: string;
             region: string;
@@ -394,7 +387,7 @@ describe(`requesting a build: the start`, () => {
             hash: HASH,
             content: OVERLAY,
             baseImage: `ghcr.io/intentic/sandbox:1.60.0`,
-            tokenId: `lat-1`,
+            tokenId: null,
             builderMachineId: `mb1`,
         });
         expect(created.data[`secretHash`]).toBe(sha256Hex(create.config.env[BUILD_ENV.secret]!));
@@ -403,7 +396,7 @@ describe(`requesting a build: the start`, () => {
 
     it(`releases the guard and destroys the builder when the start fails after the machine was made`, async () => {
         stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb1`, state: `created` }) },
             { match: (method, url) => method === `DELETE` && url.includes(`/machines/mb1`), respond: () => json({ ok: true }) },
         ]);
@@ -413,6 +406,23 @@ describe(`requesting a build: the start`, () => {
             (call) => call[0] as { data: { buildingId: string | null } },
         );
         expect(releases.at(-1)?.data.buildingId).toBeNull();
+    });
+
+    it(`releases the guard without creating a builder or build row when the deploy token is refused`, async () => {
+        const calls = stubFetch([
+            {
+                match: (_method, url) => url.endsWith(`/deploy_token`),
+                respond: () => json({ error: `not authorized` }, 403),
+            },
+        ]);
+        const prisma = fakePrisma();
+        await expect(requestHostedBuild(prisma, config(), logger, request())).rejects.toThrow(`HOSTED_FLY_API_TOKEN`);
+        expect(prisma.hostedBuild.create).not.toHaveBeenCalled();
+        expect(calls.some((call) => call.method === `POST` && call.url.endsWith(`/machines`))).toBe(false);
+        expect(prisma.hostedMachine.updateMany).toHaveBeenLastCalledWith({
+            where: { id: `h1`, buildingId: expect.any(String) },
+            data: { buildingId: null },
+        });
     });
 
     it(`answers the standing build for a recipe the machine already runs on the base the platform's image names now`, async () => {
@@ -436,7 +446,7 @@ describe(`requesting a build: the start`, () => {
     it(`builds the same recipe again when :stable names a new base under the same tag, pinned to that base`, async () => {
         const calls = stubFetch([
             registryRoute(NEW_BASE),
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `POST` && url.endsWith(`/apps/intentic-sbx-abc/machines`), respond: () => json({ id: `mb1`, state: `created` }) },
         ]);
         const prisma = fakePrisma({
@@ -462,7 +472,7 @@ describe(`requesting a build: the start`, () => {
     it(`does not reuse a build on a base the tag no longer names`, async () => {
         stubFetch([
             registryRoute(NEW_BASE),
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `POST` && url.endsWith(`/apps/intentic-sbx-abc/machines`), respond: () => json({ id: `mb1`, state: `created` }) },
         ]);
         const stale = buildRow({ state: `built`, digest: DIGEST, baseDigest: OLD_BASE, finishedAt: new Date() });
@@ -509,7 +519,7 @@ describe(`the builder's report`, () => {
         expect(calls).toHaveLength(0);
     });
 
-    it(`on success: records the verdict once, charges the minutes, destroys the builder, revokes the token, boots the image`, async () => {
+    it(`on success: records the verdict once, charges the minutes, destroys the builder, revokes a legacy token, boots the image`, async () => {
         const fly = sandboxFly(`stopped`);
         const prisma = withBuild(buildRow());
         expect(await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `#1 DONE\n` })).toBe(`done`);
@@ -556,6 +566,16 @@ describe(`the builder's report`, () => {
             },
         });
         expect(fly.machines.get(`m1`)?.state).toBe(`stopped`);
+    });
+
+    it(`finishes a Machines-token build without attempting GraphQL revocation`, async () => {
+        const fly = sandboxFly(`stopped`);
+        const prisma = withBuild(buildRow({ tokenId: null }));
+        expect(await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `` })).toBe(`done`);
+        expect(fly.graphql).toEqual([]);
+        expect(fly.called(`DELETE`, `/machines/mb1`)).toHaveLength(1);
+        expect(configOf(fly).env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
+        expect(prisma.hostedMachine.updateMany).toHaveBeenCalledWith({ where: { id: `h1`, buildingId: `b1` }, data: { buildingId: null } });
     });
 
     it(`on a running machine, starts it again on the new image rather than leaving it stopped`, async () => {
@@ -606,7 +626,7 @@ describe(`the builder's report`, () => {
 
     it(`on failure: records the exit, the log and a reason, charges the minutes, and leaves the machine alone`, async () => {
         const calls = stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `DELETE` && url.includes(`/machines/mb1`), respond: () => json({ ok: true }) },
         ]);
         const prisma = withBuild(buildRow());
@@ -630,7 +650,7 @@ describe(`the builder's report`, () => {
     });
 
     it(`does not boot an image the builder never named`, async () => {
-        stubFetch([graphqlRoute(), { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) }]);
+        stubFetch([tokenRoute(), { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) }]);
         const prisma = withBuild(buildRow());
         await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: undefined, log: `` });
         const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
@@ -648,7 +668,7 @@ describe(`the reconcile`, () => {
 
     it(`fails a build whose builder is gone from Fly`, async () => {
         stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             appMachines([`m1`]),
             { match: (method, url) => method === `GET` && url.endsWith(`/machines/mb1`), respond: () => json({ error: `not found` }, 404) },
             { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) },
@@ -661,7 +681,7 @@ describe(`the reconcile`, () => {
 
     it(`reads the exit off a builder that stopped without reporting, once the report's grace is over`, async () => {
         stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             appMachines([`m1`, `mb1`]),
             {
                 match: (method, url) => method === `GET` && url.endsWith(`/machines/mb1`),
@@ -695,7 +715,7 @@ describe(`the reconcile`, () => {
 
     it(`force-destroys a builder past the timeout and fails the build, capping the minutes it charges`, async () => {
         const calls = stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             appMachines([`m1`, `mb1`]),
             {
                 match: (method, url) => method === `GET` && url.endsWith(`/machines/mb1`),
@@ -723,7 +743,7 @@ describe(`the reconcile`, () => {
     /* AN UNREADABLE BUILDER STILL TIMES OUT: otherwise the row stays `building` and the owner's guard is held forever. */
     it(`fails a build past its timeout even while Fly cannot be asked about the builder`, async () => {
         const calls = stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             appMachines([`m1`, `mb1`]),
             { match: (method, url) => method === `GET` && url.endsWith(`/machines/mb1`), respond: () => json({ error: `boom` }, 500) },
             { match: (method) => method === `DELETE`, respond: () => json({ ok: true }) },
@@ -764,7 +784,7 @@ describe(`the reconcile`, () => {
 describe(`a moved base image`, () => {
     it(`rebuilds the recipe a machine runs when the platform's image has moved past its base`, async () => {
         stubFetch([
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb2`, state: `created` }) },
         ]);
         const prisma = fakePrisma({
@@ -797,7 +817,7 @@ describe(`a moved base image`, () => {
     it(`rebuilds the recipe when :stable names a new base under the same tag`, async () => {
         const calls = stubFetch([
             registryRoute(NEW_BASE),
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb2`, state: `created` }) },
         ]);
         const row = machineRow({ image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, baseDigest: OLD_BASE, environmentHash: HASH });
@@ -817,7 +837,7 @@ describe(`a moved base image`, () => {
     it(`rebuilds an overlay whose base digest was never kept, once the registry names one`, async () => {
         stubFetch([
             registryRoute(NEW_BASE),
-            graphqlRoute(),
+            tokenRoute(),
             { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb2`, state: `created` }) },
         ]);
         const row = machineRow({ image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, baseDigest: null, environmentHash: HASH });

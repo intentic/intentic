@@ -509,6 +509,7 @@ export const sandboxRoutes = {
                 }
                 throw buildRefusal(error.code, error.message);
             }
+            context.logger.error({ err: error, sandboxId: sandbox.id, ownerId: user.id }, `hosted build: starting the build failed`);
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `starting the build failed` });
         }
     }),
