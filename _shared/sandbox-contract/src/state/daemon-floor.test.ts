@@ -56,6 +56,7 @@ const REQUIRED_SINCE_FLOOR = {
     runtimeChanged: [`domains`, `kind`],
     presence: [`kind`, `users`],
     agents: [`agents`, `kind`, `rev`],
+    agentsChanged: [`agents`, `kind`, `rev`, `since`],
     accountUsage: [`account`, `kind`, `provider`],
     providerRefusal: [`kind`, `provider`],
 } satisfies Record<SystemEvent[`kind`], readonly string[]>;

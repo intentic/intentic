@@ -1,5 +1,6 @@
 import type { WorkspaceChildren } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { resetSandboxScope } from "@intentic/extension-api";
+import { effectScope } from "vue";
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -18,7 +19,8 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     }),
 }));
 
-const { lazyChildren, relist } = await import("./lazyListings");
+const { drawsListings, lazyChildren, listingsSeen, relist, relistWhenSeen } = await import("./lazyListings");
+const { receiveDesktopShown } = await import("../../../workbench/window/onScreen");
 
 const listing = (...names: string[]): WorkspaceChildren => ({ entries: names.map((name) => ({ name, path: `src/${name}`, type: `file` })), hidden: 0 });
 // Lets an answered read settle, and the turn it left in end.
@@ -55,4 +57,37 @@ it(`reads once for asks made in the same turn as the read`, async () => {
     reads[0]?.answer(listing(`a.md`));
     await settle();
     expect(reads).toHaveLength(1);
+});
+
+/* Every window composes the tree store and restores the expanded folders every window shares, so a window drawing no
+   tree (the floating chat), or one nobody could see, read every changed folder anyway: the steadiest daemon call in
+   every window. A change is read while a listing is drawn on screen, and one that landed meanwhile once it is. */
+it(`reads a changed folder only while a listing is drawn and on screen, and catches up once one is`, async () => {
+    lazyChildren.value.set(`src`, []);
+    relistWhenSeen(`src`);
+    await settle();
+    expect(reads).toHaveLength(0);
+
+    // A tree mounts in this window: what changed while none was drawn is read now.
+    const tree = effectScope();
+    tree.run(() => drawsListings());
+    await settle();
+    expect(reads.map((read) => read.path)).toEqual([`src`]);
+    reads[0]?.answer(listing(`a.md`));
+    await settle();
+
+    // Out of sight (minimised, or hidden in the tray): nothing is read until it is back.
+    receiveDesktopShown(false);
+    relistWhenSeen(`src`);
+    relistWhenSeen(`src`);
+    await settle();
+    expect(reads).toHaveLength(1);
+    receiveDesktopShown(true);
+    await settle();
+    expect(reads.map((read) => read.path)).toEqual([`src`, `src`]);
+    reads[1]?.answer(listing(`a.md`, `b.md`));
+    await settle();
+
+    tree.stop();
+    expect(listingsSeen.value).toBe(false);
 });

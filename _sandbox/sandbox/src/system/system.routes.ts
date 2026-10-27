@@ -1,6 +1,6 @@
 import { noteAudit } from "../audit/audit-http.js";
 import { type Fence, fenceReaches } from "@intentic/sandbox-contract/policy/fence-paths";
-import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
+import type { Hello, RosterFrames, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { TerminalsList } from "@intentic/sandbox-contract/schemas/terminal";
 import type { UsageAccount } from "@intentic/sandbox-contract/schemas/providers/usage";
 import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
@@ -9,6 +9,7 @@ import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, PANEL_SESSI
 import { errorMessage } from "@intentic/base/errors";
 import { implement, ORPCError } from "@orpc/server";
 import { forkedExec } from "@intentic/base/git";
+import { cachedAsync } from "@intentic/base/held";
 import type { Caller } from "../auth/auth.js";
 import type { Principal } from "../auth/principal.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
@@ -26,7 +27,7 @@ import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { subscribeTreeChanges, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { subscribeDerived } from "../derived/derived-text.js";
-import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { publishRuntimeChange, runtimeGeneration } from "../seams/runtime-feed.js";
 import { subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
 import {
@@ -50,6 +51,7 @@ import { manifestProblems } from "../store/manifest/manifest-problems.js";
 import { repairManifest } from "../store/manifest/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent, framedMetrics, framedSubagents } from "../auth/fleet-scope.js";
+import { draftOwnerOf } from "../conversations/drafts/composer-drafts.js";
 import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
 import { UPLOAD_ENCODINGS } from "../http/request-body.js";
@@ -80,12 +82,12 @@ const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => (
 });
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
-// `member` joins the roster for this connection's lifetime; undefined observes without joining.
+// `clientId` joins the roster for this connection's lifetime, undefined observes without joining; `roster` is how progress arrives.
 async function* systemEvents(
     services: Services,
     signal: AbortSignal | undefined,
     identity: Caller | undefined,
-    clientId: string | undefined,
+    { clientId, roster }: { readonly clientId?: string | undefined; readonly roster?: RosterFrames | undefined },
     principal?: Principal,
 ): AsyncGenerator<SystemEvent> {
     const controller = new AbortController();
@@ -104,6 +106,8 @@ async function* systemEvents(
     // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
     // editing an area revokes the connection, so this can never outlive the grant it was read from.
     const fence = callerFence(await services.areas.list(), identity);
+    // Who this connection reads composer drafts as: a draft's push is for its writer's windows alone.
+    const reader = draftOwnerOf({ identity, principal });
     // Sent before subscribing so it appears before any wait.
     yield await helloFrame(services, fence);
     // Every subscription this connection holds, released together and last-first: at the end of the stream, or at the
@@ -146,12 +150,12 @@ async function* systemEvents(
             enqueue({ kind: "presence", users });
             onWake();
         }),
-        // Fleet roster: snapshot-not-diff, an immediate frame on subscribe then a re-frame on every registry send.
-        services.agents.subscribe((agents, rev) => {
+        // Fleet roster: a snapshot on subscribe, then a frame per registry send; progress as just the moved cards if asked.
+        services.agents.subscribe((agents, rev, whole) => {
+            enqueue(whole ? { kind: "agents", agents, rev } : { kind: "agentsChanged", agents, rev, since: sentRev });
             sentRev = rev;
-            enqueue({ kind: "agents", agents, rev });
             onWake();
-        }),
+        }, roster),
         // Boot transitions re-frame the hello snapshot, so a mid-boot reconnect is consistent from its first frame.
         services.boot.subscribe((progress) => {
             enqueue({ kind: "boot", ...progress });
@@ -189,10 +193,14 @@ async function* systemEvents(
             enqueue({ kind: "refsChanged", repos });
             onWake();
         }),
-        // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler.
-        subscribeRuntimeChanges((domains) => {
-            enqueue({ kind: "runtimeChanged", domains });
-            onWake();
+        // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler. A
+        // domain moved for one person (their drafts) reaches only the connections reading as that person.
+        subscribeRuntimeChanges((domains, audiences) => {
+            const heard = domains.filter((domain) => audiences.get(domain)?.has(reader) ?? true);
+            if (heard.length > 0) {
+                enqueue({ kind: "runtimeChanged", domains: heard });
+                onWake();
+            }
         }, services.logger),
         // Account plan limits or a provider refusal changed, so every open window's usage ring agrees without polling.
         services.headroom.onChange((provider, account, usage) => {
@@ -268,8 +276,90 @@ export const panelState = (
     return run === undefined ? { kind: "panel", running: processes.running(key) } : { kind: "job", running: run.running };
 };
 
+// How long one terminals listing answers the windows asking after it: a push frame reaches every window at once, and
+// their reads arrive spread over the network's jitter, not in the same tick.
+const TERMINALS_WAVE_MS = 1000;
+
+// The terminal sessions a person can open, from one tmux listing plus the supervisor's own services.
+const listTerminals = async (services: Services): Promise<TerminalsList> => {
+    // Supervised services aren't tmux sessions; their rows come from the supervisor, so `running` is exact.
+    const extensionProcesses = await extensionProcessIndex(services);
+    const serviceRows = services.serviceProcesses.list().map((service) => ({
+        name: serviceSession(service.key),
+        label: service.key,
+        kind: "process" as const,
+        running: service.state === "running",
+        activityAt: service.since,
+        ...(service.state === "backoff" && service.lastExitCode !== undefined ? { exitCode: service.lastExitCode } : {}),
+        ...extensionProcesses.get(service.key),
+    }));
+    // No tmux server is no sessions; any other failed listing is the route's error, not an empty panel.
+    const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]).catch((error: unknown) => {
+        if (isNoTmuxServer(error)) {
+            return undefined;
+        }
+        throw error;
+    });
+    if (listed === undefined) {
+        return { sessions: serviceRows };
+    }
+    const states = paneStates(listed.stdout);
+    const liveAgentSessions = new Set(
+        services.conversations.liveSessionIds().flatMap((sessionId) => {
+            const session = agentSessionName(sessionId);
+            return session === undefined ? [] : [session];
+        }),
+    );
+    const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt, liveCommand }]): TerminalsList["sessions"] => {
+        // Every row carries its activity clock, exit status, and a command if busy; `running` differs per
+        // kind.
+        const busy = foreground(liveCommand);
+        const seen = {
+            activityAt,
+            ...(exitCode !== undefined ? { exitCode } : {}),
+            ...(busy !== undefined ? { command: busy } : {}),
+        };
+        if (name.startsWith(WEB_SESSION_PREFIX)) {
+            return [{ name, kind: "shell" as const, running: true, ...seen }];
+        }
+        if (name.startsWith(PANEL_SESSION_PREFIX)) {
+            const key = name.slice(PANEL_SESSION_PREFIX.length);
+            return [{ name, label: key, ...panelState(services.processes, key, command), ...seen }];
+        }
+        if (name.startsWith(AGENT_SESSION_PREFIX)) {
+            // `help` isn't tmux's own state: the agent is parked on a prompt; rides this list since the
+            // panel polls it.
+            const help = terminalHelpFor(name);
+            return [
+                {
+                    name,
+                    label: name.slice(AGENT_SESSION_PREFIX.length),
+                    kind: "agent" as const,
+                    running: live || liveAgentSessions.has(name),
+                    ...seen,
+                    ...(help === undefined ? {} : { help }),
+                },
+            ];
+        }
+        if (name.startsWith(JOB_SESSION_PREFIX)) {
+            return [
+                {
+                    name,
+                    label: jobSessionLabel(name),
+                    kind: "job" as const,
+                    running: services.terminalRun.running(name),
+                    ...seen,
+                },
+            ];
+        }
+        return [];
+    });
+    return { sessions: [...sessions, ...serviceRows] };
+};
+
 export const createSystemRoutes = (services: Services) => {
     const i = implement(systemContract).$context<OrpcContext>();
+    const terminalsWave = cachedAsync<number, TerminalsList>({ ttlMs: TERMINALS_WAVE_MS, maxEntries: 1 });
     return {
         info: i.info.handler(async () => {
             const info = services.info;
@@ -373,7 +463,7 @@ export const createSystemRoutes = (services: Services) => {
             const { token, expiresAt } = await services.auth.mintSession(context.identity);
             return { token, expiresAt, email: context.identity.email };
         }),
-        events: i.events.handler(({ input, context, signal }) => systemEvents(services, signal, context.identity, input.clientId, context.principal)),
+        events: i.events.handler(({ input, context, signal }) => systemEvents(services, signal, context.identity, input, context.principal)),
         // A tab's self-report, accepted only for its own live connection; identity-less callers update nothing.
         presence: i.presence.handler(({ input, context }) => {
             if (context.identity !== undefined) {
@@ -421,81 +511,10 @@ export const createSystemRoutes = (services: Services) => {
         // - agent-*: the agent's own Bash terminals, running while a turn is in flight or any pane is alive
         // - job-*: the terminal runner's user-triggered flows
         // Anything else stays hidden; no tmux server yet reads as an empty list, not an error.
-        terminals: i.terminals.handler(async () => {
-            // Supervised services aren't tmux sessions; their rows come from the supervisor, so `running` is exact.
-            const extensionProcesses = await extensionProcessIndex(services);
-            const serviceRows = services.serviceProcesses.list().map((service) => ({
-                name: serviceSession(service.key),
-                label: service.key,
-                kind: "process" as const,
-                running: service.state === "running",
-                activityAt: service.since,
-                ...(service.state === "backoff" && service.lastExitCode !== undefined ? { exitCode: service.lastExitCode } : {}),
-                ...extensionProcesses.get(service.key),
-            }));
-            // No tmux server is no sessions; any other failed listing is the route's error, not an empty panel.
-            const listed = await forkedExec("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]).catch((error: unknown) => {
-                if (isNoTmuxServer(error)) {
-                    return undefined;
-                }
-                throw error;
-            });
-            if (listed === undefined) {
-                return { sessions: serviceRows };
-            }
-            const states = paneStates(listed.stdout);
-            const liveAgentSessions = new Set(
-                services.conversations.liveSessionIds().flatMap((sessionId) => {
-                    const session = agentSessionName(sessionId);
-                    return session === undefined ? [] : [session];
-                }),
-            );
-            const sessions = [...states].flatMap(([name, { command, live, exitCode, activityAt, liveCommand }]): TerminalsList["sessions"] => {
-                // Every row carries its activity clock, exit status, and a command if busy; `running` differs per
-                // kind.
-                const busy = foreground(liveCommand);
-                const seen = {
-                    activityAt,
-                    ...(exitCode !== undefined ? { exitCode } : {}),
-                    ...(busy !== undefined ? { command: busy } : {}),
-                };
-                if (name.startsWith(WEB_SESSION_PREFIX)) {
-                    return [{ name, kind: "shell" as const, running: true, ...seen }];
-                }
-                if (name.startsWith(PANEL_SESSION_PREFIX)) {
-                    const key = name.slice(PANEL_SESSION_PREFIX.length);
-                    return [{ name, label: key, ...panelState(services.processes, key, command), ...seen }];
-                }
-                if (name.startsWith(AGENT_SESSION_PREFIX)) {
-                    // `help` isn't tmux's own state: the agent is parked on a prompt; rides this list since the
-                    // panel polls it.
-                    const help = terminalHelpFor(name);
-                    return [
-                        {
-                            name,
-                            label: name.slice(AGENT_SESSION_PREFIX.length),
-                            kind: "agent" as const,
-                            running: live || liveAgentSessions.has(name),
-                            ...seen,
-                            ...(help === undefined ? {} : { help }),
-                        },
-                    ];
-                }
-                if (name.startsWith(JOB_SESSION_PREFIX)) {
-                    return [
-                        {
-                            name,
-                            label: jobSessionLabel(name),
-                            kind: "job" as const,
-                            running: services.terminalRun.running(name),
-                            ...seen,
-                        },
-                    ];
-                }
-                return [];
-            });
-            return { sessions: [...sessions, ...serviceRows] };
-        }),
+        // Every open window re-reads this list on the same `terminals` frame, and each read forks tmux: one listing answers
+        // the whole wave. Keyed by the domain's publish count, so a read that follows an announced change never gets a
+        // listing taken before it; a change nobody announced is the sampler's to publish, within its two seconds.
+        terminals: i.terminals.handler(() => terminalsWave.get(runtimeGeneration("terminals"), () => listTerminals(services))),
         // The agent's Chromiums and open pages; records this daemon keeps itself, not shelled out for.
         browsers: i.browsers.handler(() => ({ sessions: listBrowserSessions() })),
         // The person's own window: a tab in it, starting it first when it is closed. A start that fails says why (no

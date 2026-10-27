@@ -93,6 +93,18 @@ describe("framedEvent", () => {
         expect(framed).toEqual({ kind: "agents", agents: [mine], rev: 3 } as never);
     });
 
+    // A change frame is cut the same way, and still sent with nothing left in it: the reader follows its revision line.
+    test("the roster's change frame keeps only the guest's own cards, and goes out even when none are", () => {
+        const changed = { kind: "agentsChanged" as const, rev: 5, since: 3 };
+        // SAFETY: framedEvent reads only a card's provenance, which is all these cards carry.
+        expect(framedEvent(guest, undefined, { ...changed, agents: [mine, theirs] as never }, nowhere)).toEqual({
+            ...changed,
+            agents: [mine],
+        } as never);
+        // SAFETY: as above, provenance is all framedEvent reads of a card.
+        expect(framedEvent(guest, undefined, { ...changed, agents: [theirs] as never }, nowhere)).toEqual({ ...changed, agents: [] });
+    });
+
     // A guest is fenced like anyone else and reads its own area, so its frames are cut to that fence rather than
     // dropped: dropping them would leave the tree it can open stale behind it.
     test("frames naming paths or repositories are cut to the fence, and kept whole for an unfenced tier", () => {

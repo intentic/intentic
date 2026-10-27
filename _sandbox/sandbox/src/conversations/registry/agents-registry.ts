@@ -3,6 +3,8 @@ import { isTurnBreakPolicy, type TurnBreak, type TurnBreakPolicy } from "@intent
 import { planParts } from "@intentic/sandbox-contract/text/title";
 import type { LandingDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
+import type { RosterFrames } from "@intentic/sandbox-contract/events/system-events";
+import { type RosterListener, rosterSends } from "./projection/roster-sends.js";
 import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
@@ -350,8 +352,9 @@ export interface AgentsRegistry {
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
     readonly clearArchived: (ids: readonly string[]) => Promise<void>;
     // Delivers an immediate snapshot on subscribe, tagged with the revision it was taken at, so a fresh connection
-    // paints without waiting.
-    readonly subscribe: (listener: (agents: AgentSummary[], rev: number) => void) => () => void;
+    // paints without waiting. A listener asking for `changes` is handed a send only progress raised as just the cards
+    // that moved since the send before; every other send, and every send to any other listener, is the whole roster.
+    readonly subscribe: (listener: RosterListener, frames?: RosterFrames) => () => void;
     // Bumped on every broadcast, so a browser reconciling this stream against its own GET and optimistic writes can
     // tell which snapshot is newer. Resets to 0 on reboot; a fresh connection adopts the first roster it sees.
     readonly revision: () => number;
@@ -471,12 +474,9 @@ export const createFleet = (
     // Live account of each agent's commit message being drafted: drafting starts after the landing turn has ended, and a
     // finished report stays until the next land replaces it.
     const messageDrafts = new Map<string, LandedMessageDraft>();
-    const listeners = new Set<(agents: AgentSummary[], rev: number) => void>();
-    // Bumped by `broadcast()`, once per published change; see `revision` on the interface.
-    let revision = 0;
-    // When the roster last went out, and the send a burst is waiting on.
-    let sentAt = Number.NEGATIVE_INFINITY;
-    let sending: ReturnType<typeof setTimeout> | undefined;
+    // The roster's listeners and revision line; reads the projection below, built once the actors are.
+    const sends = rosterSends({ list: () => list(), cardsOf: (ids) => cardsOf(ids) }, rosterWindowMs);
+    const { broadcast } = sends;
 
     // Who can clear what is still refusing, from the same live probe the verdict came from. Only while the card is
     // actually refusing: a list left on a landed card would offer a press about nothing.
@@ -718,9 +718,8 @@ export const createFleet = (
         },
         persist,
         reprobe,
-        // Closures, since the roster they publish reads the actors built from these very books.
-        broadcast: () => broadcast(),
-        progress: () => progress(),
+        broadcast,
+        progress: sends.progress,
         // The actors' own half, watch timers included, went first, in dispose. Rows before the directories: a directory
         // left behind by a failed removal is one the boot sweep finds unowned.
         remove: async (ids) => {
@@ -810,40 +809,12 @@ export const createFleet = (
 
     const list = (): AgentSummary[] => entries.filter((entry) => entry.archivedAt === undefined).map(summaryOf);
 
-    const send = (): void => {
-        sending = undefined;
-        sentAt = Date.now();
-        if (listeners.size === 0) {
-            return;
-        }
-        const agents = list();
-        for (const listener of listeners) {
-            listener(agents, revision);
-        }
-    };
-
-    // A change someone made goes out at once, carrying whatever progress was waiting. The revision is bumped at the
-    // change, not the send, so a route reading `revision()` right after gets the one its own change produced.
-    const broadcast = (): void => {
-        revision += 1;
-        clearTimeout(sending);
-        send();
-    };
-
-    // Every running turn's tool calls, usage and todos land here and each send is the whole live roster, so progress goes
-    // out at most once a window: after a quiet spell at once, the rest of a burst together at the window's end.
-    const progress = (): void => {
-        revision += 1;
-        if (sending !== undefined) {
-            return;
-        }
-        const wait = sentAt + rosterWindowMs - Date.now();
-        if (wait <= 0) {
-            send();
-            return;
-        }
-        sending = setTimeout(send, wait);
-    };
+    // The cards these conversations show, for those still on the board.
+    const cardsOf = (ids: readonly string[]): AgentSummary[] =>
+        ids.flatMap((id) => {
+            const entry = entryOf(id);
+            return entry === undefined || entry.archivedAt !== undefined ? [] : [summaryOf(entry)];
+        });
 
     // Applies `change` to the entry and writes it, answering the summary it left; undefined for an unknown id.
     const amend = async (id: string, change: (entry: PersistedAgent) => PersistedAgent): Promise<AgentSummary | undefined> => {
@@ -1146,14 +1117,8 @@ export const createFleet = (
             await persist();
             broadcast();
         },
-        subscribe: (listener) => {
-            listeners.add(listener);
-            // Carries the current revision without bumping it; subscribing is not a change, and a bumped one would look
-            // newer than already-applied rosters.
-            listener(list(), revision);
-            return () => listeners.delete(listener);
-        },
-        revision: () => revision,
+        subscribe: sends.subscribe,
+        revision: sends.revision,
     };
     return { agents, conversations };
 };

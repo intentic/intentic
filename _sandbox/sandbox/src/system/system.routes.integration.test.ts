@@ -1,12 +1,12 @@
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { stubEnv } from "@intentic/testing/bun";
+import { stubEnv, waitFor } from "@intentic/testing/bun";
 
 import { daemonVersionOfBuild } from "@intentic/sandbox-contract/state/daemon-floor";
-import type { Hello } from "@intentic/sandbox-contract/events/system-events";
+import type { Hello, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { projectRemoteDir } from "@intentic/sandbox-contract/ids/project-dir";
 import { RAW_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
@@ -41,6 +41,30 @@ test("system.terminals reports an empty list, not an error, when there is no tmu
     stubEnv("TMUX", undefined);
     const client = clientFor(createApp(services()));
     expect(await client.system.terminals()).toEqual({ sessions: [] });
+});
+
+test("system.terminals: the windows one frame sends to re-read share a tmux listing, and a read after an announced change takes a new one", async () => {
+    // A tmux that counts its listings: every open window refetches on the same `terminals` frame, and each read used
+    // to fork its own.
+    const bin = mkdtempSync(join(tmpdir(), "terminals-tmux-"));
+    const calls = join(bin, "calls");
+    writeFileSync(join(bin, "tmux"), `#!/bin/sh\necho listed >> "${calls}"\nprintf 'web-a\\t0\\t\\t1700000000\\tzsh\\n'\n`, { mode: 0o755 });
+    stubEnv("PATH", `${bin}:${process.env["PATH"] ?? ""}`);
+    const listings = (): number => (existsSync(calls) ? readFileSync(calls, "utf8").split("\n").filter(Boolean).length : 0);
+    const client = clientFor(createApp(services()));
+
+    const wave = await Promise.all(Array.from({ length: 8 }, () => client.system.terminals()));
+    expect(listings()).toBe(1);
+    for (const answer of wave) {
+        expect(answer.sessions.map((session) => session.name)).toEqual(["web-a"]);
+    }
+    await client.system.terminals();
+    expect(listings()).toBe(1);
+
+    // A change announced since the listing was taken: what is read now must postdate it.
+    publishRuntimeChange("terminals");
+    await client.system.terminals();
+    expect(listings()).toBe(2);
 });
 
 test("system.usage folds the LEDGER (all-time, never pruned) per provider+account and skips unattributed turns", async () => {
@@ -635,6 +659,61 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
     controller.abort();
 });
 
+// A window reads back only its own person's drafts (composer-drafts.ts draftsOf), so pushing every draft move to every
+// window made each member's typing cost every member's every window a read.
+test("events: a draft write is pushed to its writer's connections and nobody else's", async () => {
+    const people = new Map([
+        ["ada", proven("ada@example.test", "maintainer")],
+        ["bob", proven("bob@example.test", "maintainer")],
+    ]);
+    const app = createApp(
+        services({
+            auth: {
+                authorize: async (bearer: string) => {
+                    const person = people.get(bearer);
+                    if (person === undefined) {
+                        throw new Error(`no such bearer ${bearer}`);
+                    }
+                    return person;
+                },
+                authorizeOwner: rejectForbidden,
+            },
+        }),
+    );
+    const controller = new AbortController();
+    // Every drafts push each person's connection hears, read in the background for the whole test.
+    const heard = new Map<string, number>();
+    const listen = async (bearer: string): Promise<void> => {
+        const frames = await clientFor(app, { bearer }).system.events({ clientId: `drafts-${bearer}` }, { signal: controller.signal });
+        heard.set(bearer, 0);
+        void (async () => {
+            try {
+                for await (const frame of frames) {
+                    if (frame.kind === "runtimeChanged" && frame.domains.includes("drafts")) {
+                        heard.set(bearer, (heard.get(bearer) ?? 0) + 1);
+                    }
+                }
+            } catch {
+                // allow(silent-catch): the abort at the end of the test ends the stream
+            }
+        })();
+    };
+    await listen("ada");
+    await listen("bob");
+    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 400));
+    try {
+        await clientFor(app, { bearer: "ada" }).agents.writeDraft({ id: "c1", text: "half a thought" });
+        await settle();
+        expect(Object.fromEntries(heard)).toEqual({ ada: 1, bob: 0 });
+
+        await clientFor(app, { bearer: "bob" }).agents.writeDraft({ id: "c1", text: "his own words" });
+        await settle();
+        expect(Object.fromEntries(heard)).toEqual({ ada: 1, bob: 1 });
+    } finally {
+        controller.abort();
+    }
+});
+
 test("events: the beat states the fleet revision it was sent at, so a browser can tell a roster went missing", async () => {
     // The fleet roster is push-only, so a missed snapshot has no other way to surface; the heartbeat carries the roster
     // revision, sent only once the connection's queue is empty, so a mismatch tells the browser to re-read rather than
@@ -675,6 +754,83 @@ test("events: the beat states the fleet revision it was sent at, so a browser ca
     expect(moved.beat).toBe(moved.roster);
 
     controller.abort();
+});
+
+// Every progress tick used to resend every card to every window. A connection that asks for changes is sent only the
+// cards that moved, each frame naming the revision it follows on from; one that does not ask (an older editor, a phone)
+// keeps getting the whole roster, and a change someone made reaches both whole.
+test("events: a connection asking for roster changes is sent only the moved cards, chained by revision; others stay whole", async () => {
+    const svc = services();
+    const opening = (id: string) =>
+        ({ conversationId: id, isolated: false, prompt: `work ${id}`, profile: { agent: "claude", harness: "native" } }) as const;
+    await beginTurn(svc.conversations, opening("c1"), 1_000);
+    await beginTurn(svc.conversations, opening("c2"), 1_000);
+    const client = clientFor(createApp(svc));
+    const controller = new AbortController();
+    // What one connection hears of the roster, in order: each frame's revision, the cards it names, what a change
+    // follows on from, and the beats.
+    type Heard = { readonly kind: string; readonly rev: number; readonly ids?: string[]; readonly since?: number };
+    const heardOf = (frame: SystemEvent): Heard[] => {
+        switch (frame.kind) {
+            case "agents":
+                return [{ kind: frame.kind, rev: frame.rev, ids: frame.agents.map((agent) => agent.id) }];
+            case "agentsChanged":
+                return [{ kind: frame.kind, rev: frame.rev, ids: frame.agents.map((agent) => agent.id), since: frame.since }];
+            case "heartbeat":
+                return [{ kind: frame.kind, rev: frame.rev }];
+            default:
+                return [];
+        }
+    };
+    // Read in the background for the whole test.
+    const follow = async (input: { readonly clientId: string; readonly roster?: "changes" }): Promise<Heard[]> => {
+        const heard: Heard[] = [];
+        const frames = await client.system.events(input, { signal: controller.signal });
+        void (async () => {
+            try {
+                for await (const frame of frames) {
+                    heard.push(...heardOf(frame));
+                }
+            } catch {
+                // allow(silent-catch): the abort at the end of the test ends the stream
+            }
+        })();
+        return heard;
+    };
+    const changes = await follow({ clientId: "roster-changes", roster: "changes" });
+    const whole = await follow({ clientId: "roster-whole" });
+    const lastRoster = (heard: Heard[]): Heard | undefined => heard.findLast((frame) => frame.kind !== "heartbeat");
+    const tick = (id: string, tool: string): void => {
+        svc.conversations.send(id, { kind: "frame", frame: { kind: "tool_call", id: tool, name: tool, category: "edit", status: "in_progress" } });
+    };
+    try {
+        // The first roster is whole either way.
+        const opened = svc.agents.revision();
+        await waitFor(() =>
+            expect(changes.filter((frame) => frame.kind !== "heartbeat")).toEqual([{ kind: "agents", rev: opened, ids: ["c1", "c2"] }]),
+        );
+
+        tick("c2", "Edit");
+        await waitFor(() => expect(lastRoster(changes)).toEqual({ kind: "agentsChanged", rev: svc.agents.revision(), ids: ["c2"], since: opened }));
+        await waitFor(() => expect(lastRoster(whole)).toEqual({ kind: "agents", rev: svc.agents.revision(), ids: ["c1", "c2"] }));
+        const first = svc.agents.revision();
+
+        // The next tick follows on from the last one sent, past the window that holds a burst together.
+        tick("c1", "Read");
+        await waitFor(() => expect(lastRoster(changes)).toEqual({ kind: "agentsChanged", rev: svc.agents.revision(), ids: ["c1"], since: first }));
+        // And the beat vouches for that change frame's revision, as it does for a whole roster's.
+        const moved = svc.agents.revision();
+        await waitFor(() => expect(changes.at(-1)).toEqual({ kind: "heartbeat", rev: moved }), { timeout: 3_000 });
+
+        // A change someone made reaches both whole.
+        await svc.agents.setArchived([], Date.now());
+        const archived = { kind: "agents", rev: svc.agents.revision(), ids: ["c1", "c2"] };
+        await waitFor(() => expect(lastRoster(changes)).toEqual(archived));
+        await waitFor(() => expect(lastRoster(whole)).toEqual(archived));
+        expect(whole.some((frame) => frame.kind === "agentsChanged")).toBe(false);
+    } finally {
+        controller.abort();
+    }
 });
 
 // The route answers the one reading the sampler took (system/resources/live-metrics.ts), told of the conversations

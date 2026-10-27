@@ -136,6 +136,25 @@ export type Presence = z.infer<typeof PresenceSchema>;
 export const AgentsSchema = z.object({ kind: z.literal("agents"), agents: z.array(AgentSummarySchema), rev: z.number() });
 export type Agents = z.infer<typeof AgentsSchema>;
 
+// Only the cards running turns moved since this connection's previous roster frame (`since`, that frame's `rev`): what a
+// connection that asked for changes (`roster: "changes"` on /events) gets in place of the whole roster on each progress
+// tick, since resending every card to every window on every tool call made the roster the daemon's costliest send. Each
+// card is whole, an upsert by id; a card leaving the board is never a change, it goes out as an `agents` snapshot. A
+// browser holding an older roster than `since` missed a frame and reads GET /agents again. Sent even when the reader may
+// see none of the cards, so the revision line it follows has no hole in it.
+export const AgentsChangedSchema = z.object({
+    kind: z.literal("agentsChanged"),
+    agents: z.array(AgentSummarySchema),
+    rev: z.number(),
+    since: z.number(),
+});
+export type AgentsChanged = z.infer<typeof AgentsChangedSchema>;
+
+// How a connection takes the roster as running agents make progress (/events `roster`): whole every time (`snapshots`,
+// the default), or only the cards that moved (`changes`, as `agentsChanged` frames).
+export const RosterFramesSchema = z.enum(["snapshots", "changes"]);
+export type RosterFrames = z.infer<typeof RosterFramesSchema>;
+
 // An account's headroom just moved, keyed as the daemon's store keys it. Snapshot per account, last frame wins; `usage`
 // absent means the account was disconnected.
 export const AccountUsageChangedSchema = z.object({
@@ -168,7 +187,8 @@ export const TreeChangedSchema = WorkspaceTreeDeltaSchema.extend({ kind: z.liter
 export type TreeChanged = z.infer<typeof TreeChangedSchema>;
 
 // The /events stream union: hello, heartbeats, boot progress, workspace/repo/ref/runtime/shadow/tree changes, presence
-// and fleet rosters, account headroom and refusal changes. oRPC validates every frame against this.
+// and fleet rosters (whole, or the cards that moved), account headroom and refusal changes. oRPC validates every frame
+// against this.
 export const SystemEventSchema = z.discriminatedUnion("kind", [
     HelloSchema,
     HeartbeatSchema,
@@ -181,6 +201,7 @@ export const SystemEventSchema = z.discriminatedUnion("kind", [
     RuntimeChangedSchema,
     PresenceSchema,
     AgentsSchema,
+    AgentsChangedSchema,
     AccountUsageChangedSchema,
     ProviderRefusalChangedSchema,
 ]);

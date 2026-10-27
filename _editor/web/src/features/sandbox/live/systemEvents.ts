@@ -9,7 +9,7 @@ import { emitFilesChanged } from "../../../workbench/workspace-events/fileEvents
 import { emitRefsChanged, emitReposChanged } from "../../../workbench/workspace-events/repoEvents";
 import { dropEditBuffers } from "../../../models/workspace/files/useEditBuffers";
 import { desyncAgents } from "../../../models/fleet/useAgents";
-import { auditRoster, refreshAgents, setAgents } from "../../../models/fleet/useAgents-registry";
+import { applyRosterChanges, auditRoster, refreshAgents, setAgents } from "../../../models/fleet/useAgents-registry";
 import { providerRefusals, setAccountUsage } from "../../../models/providers/providerAccounts";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { draftsMoved } from "../../../models/conversations/drafts/composerDrafts";
@@ -63,6 +63,7 @@ const reconnectChannels = {
     accountUsage: undefined,
     providerRefusal: undefined,
     agents: undefined,
+    agentsChanged: undefined,
     runtimeChanged: undefined,
     reposChanged: () => emitReposChanged([]),
     refsChanged: () => emitRefsChanged([]),
@@ -180,6 +181,10 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // archive/restore
             // (see useAgents.ts).
             setAgents(event.agents, event.rev, true);
+            return;
+        case `agentsChanged`:
+            // Only the cards running turns moved, onto the roster this connection was sent at `since`; a gap is read back.
+            applyRosterChanges(event.agents, event.rev, event.since);
             return;
         case `runtimeChanged`:
             // No roster in the frame: invalidation only reaches queries someone is observing, so an idle tab pays

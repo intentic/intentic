@@ -41,13 +41,22 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     // A yes is one click, but a purge forgets a conversation's grants and releases in the same moment.
     grants: 250,
     // A draft is written every few hundred milliseconds while somebody types; each frame makes their windows read it back.
+    // Published to its writer alone (publishRuntimeChangeTo): the list a window reads back is its own person's.
     drafts: 250,
     // A person asking, or the owner answering, is one press; a grant that answers several at once still reads as one.
     "access-requests": 250,
 };
 
+/**
+ * Who a flushed domain's change is for, by the actor a request is authorized as (auth/principal.ts `actorOf`); a domain
+ * absent here is everyone's news.
+ */
+export type RuntimeAudiences = ReadonlyMap<RuntimeDomain, ReadonlySet<string>>;
+
+type RuntimeListener = (domains: RuntimeDomain[], audiences: RuntimeAudiences) => void;
+
 // Each subscriber, with where its own failure is reported: the /events connection's logger, or none.
-const subscribers = new Map<(domains: RuntimeDomain[]) => void, Pick<Logger, "warn"> | undefined>();
+const subscribers = new Map<RuntimeListener, Pick<Logger, "warn"> | undefined>();
 
 // The windows are measured on the monotonic clock the timers themselves run on. Stamped with the wall clock, a step
 // back (an NTP or WSL resync) left every window apparently still open, and the flush re-armed itself until the wall
@@ -56,6 +65,9 @@ const now = (): number => performance.now();
 
 // What has changed and not yet gone out, and the earliest each domain may go out again.
 const pending = new Set<RuntimeDomain>();
+// For a pending domain only some people's windows need: whose. A domain published for everyone in the same window is
+// everyone's, whatever was published to a person in it.
+const pendingAudiences = new Map<RuntimeDomain, Set<string> | "everyone">();
 const nextAllowedAt = new Map<RuntimeDomain, number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let timerDueAt = 0;
@@ -78,6 +90,7 @@ const flush = (): void => {
     timer = undefined;
     const flushedAt = now();
     const ready: RuntimeDomain[] = [];
+    const audiences = new Map<RuntimeDomain, ReadonlySet<string>>();
     let soonest: number | undefined;
     // oxlint-disable-next-line unicorn/no-useless-spread -- The spread snapshots pending before deletion.
     for (const domain of [...pending]) {
@@ -89,6 +102,11 @@ const flush = (): void => {
         pending.delete(domain);
         nextAllowedAt.set(domain, flushedAt + THROTTLE_MS[domain]);
         ready.push(domain);
+        const audience = pendingAudiences.get(domain);
+        pendingAudiences.delete(domain);
+        if (audience !== undefined && audience !== "everyone") {
+            audiences.set(domain, audience);
+        }
     }
     // Re-armed before the listeners run, and each listener isolated, as domain-events isolates its own: one that
     // throws must neither starve the listeners after it nor strand the domains still waiting for their window. A
@@ -99,7 +117,7 @@ const flush = (): void => {
     let unreported: { readonly error: unknown } | undefined;
     for (const [listener, failed] of ready.length > 0 ? subscribers : []) {
         try {
-            listener(ready);
+            listener(ready, audiences);
         } catch (error) {
             if (failed === undefined) {
                 unreported ??= { error };
@@ -113,14 +131,46 @@ const flush = (): void => {
     }
 };
 
+// How many times each domain has been published, counted at the change rather than at the throttled flush, and whether
+// or not anyone listens: a read shared between the windows a frame sends to re-read (the terminals listing) is keyed by
+// it, so it is stale from the moment a change is announced, before any frame goes out.
+const generations = new Map<RuntimeDomain, number>();
+
+/** The number of changes announced for `domain` so far in this process. */
+export const runtimeGeneration = (domain: RuntimeDomain): number => generations.get(domain) ?? 0;
+
 /** Reports a runtime domain moved; coalesced and rate-limited per domain, so a caller can publish on every mutation without weighing the cost. */
 export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void => {
+    for (const domain of domains) {
+        generations.set(domain, runtimeGeneration(domain) + 1);
+    }
     if (subscribers.size === 0) {
         return;
     }
     for (const domain of domains) {
         pending.add(domain);
+        pendingAudiences.set(domain, "everyone");
     }
+    arm(now());
+};
+
+/**
+ * Reports a domain moved for one person's windows only, `actor` as auth/principal.ts names a caller: their composer
+ * drafts, which nobody else's windows read. Throttled in the domain's one window like any change; a burst from several
+ * people goes out as one frame to each of them.
+ */
+export const publishRuntimeChangeTo = (actor: string, domain: RuntimeDomain): void => {
+    generations.set(domain, runtimeGeneration(domain) + 1);
+    if (subscribers.size === 0) {
+        return;
+    }
+    const audience = pendingAudiences.get(domain);
+    if (audience === undefined) {
+        pendingAudiences.set(domain, new Set([actor]));
+    } else if (audience !== "everyone") {
+        audience.add(actor);
+    }
+    pending.add(domain);
     arm(now());
 };
 
@@ -144,7 +194,7 @@ export const publishRuntimeMilestone = (...domains: readonly RuntimeDomain[]): v
 
 // The last unsubscribe drops what was pending and every rate-limit stamp: with nobody listening nothing is stale, and a
 // new connection re-asks every runtime-bound key anyway.
-export const onRuntimeChange = (listener: (domains: RuntimeDomain[]) => void, failed?: Pick<Logger, "warn">): (() => void) => {
+export const onRuntimeChange = (listener: RuntimeListener, failed?: Pick<Logger, "warn">): (() => void) => {
     subscribers.set(listener, failed);
     return () => {
         subscribers.delete(listener);
@@ -152,6 +202,7 @@ export const onRuntimeChange = (listener: (domains: RuntimeDomain[]) => void, fa
             return;
         }
         pending.clear();
+        pendingAudiences.clear();
         nextAllowedAt.clear();
         if (timer !== undefined) {
             clearTimeout(timer);

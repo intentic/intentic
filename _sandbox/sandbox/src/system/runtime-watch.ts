@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { RuntimeDomain } from "@intentic/sandbox-contract/state/runtime-state";
 import { forkedExec } from "@intentic/base/git";
 import type { Logger } from "pino";
-import { onRuntimeChange, publishRuntimeChange } from "../seams/runtime-feed.js";
+import { onRuntimeChange, publishRuntimeChange, type RuntimeAudiences } from "../seams/runtime-feed.js";
 import { foreground, PANE_FORMAT, paneStates } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
@@ -166,7 +166,10 @@ let listeners = 0;
  * Subscribes a /events connection to the runtime feed. `failed` hears a sampler probe that could not read its state (the
  * sampler keeps the one it started with, the first subscriber's) and this connection's own listener throwing.
  */
-export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void, failed?: SampleFailed): (() => void) => {
+export const subscribeRuntimeChanges = (
+    listener: (domains: RuntimeDomain[], audiences: RuntimeAudiences) => void,
+    failed?: SampleFailed,
+): (() => void) => {
     const unsubscribe = onRuntimeChange(listener, failed);
     listeners += 1;
     sampler.start(failed);

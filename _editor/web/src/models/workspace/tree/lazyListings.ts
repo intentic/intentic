@@ -3,11 +3,12 @@ import { sleep } from "@intentic/base/async";
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
-import { watch } from "vue";
+import { computed, getCurrentScope, onScopeDispose, ref, watch } from "vue";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { workspaceAgent } from "../../../app/workspaceScope";
 import { actionError } from "./treeActions";
+import { onScreen as windowOnScreen } from "../../../workbench/window/onScreen";
 
 // The listings of folders the tree's walk left unopened (past its entry budget, or skipped like node_modules), each read
 // on its own when someone looks at it. They sit outside the tree query, so useWorkspaceTree says when to read them again.
@@ -50,6 +51,7 @@ watch(workspaceAgent, () => {
     lazyHidden.value = new Map();
     lazyLoading.value = new Set();
     relistQueued.value.clear();
+    unseenChanges.value.clear();
     // Also clears any load notice: it could still be naming a directory from the scope just dropped.
     clearLoadNotice();
 });
@@ -128,3 +130,51 @@ export const relist = (path: string): void => {
     }
     void fetchChildren(path);
 };
+
+/* WHETHER ANYBODY HERE SEES A LISTING. Every window composes the tree store (the floating chat and the sign-in gate
+   included) and restores its expanded folders from the storage every window shares, so a window drawing no tree at all
+   loaded every expanded folder the walk skipped and read each again on every change in it, and so did a window nobody
+   could see: the steadiest daemon call in every window, hidden ones included (2026-10-27). A listing is read while a
+   surface drawing listings is mounted in a window on screen; a change landing while none is, is read once one is. */
+
+// allow(module-state): how many surfaces this window has mounted that draw a folder's listing; a sandbox switch keeps them
+const listingViews = ref(0);
+
+/** Whether this window draws a folder listing that is on screen now. */
+export const listingsSeen = computed(() => listingViews.value > 0 && windowOnScreen.value);
+
+/** Counts the calling component as drawing listings for as long as its scope lives: a tree, the home's folder, a look. */
+export const drawsListings = (): void => {
+    if (getCurrentScope() === undefined) {
+        return;
+    }
+    listingViews.value += 1;
+    onScopeDispose(() => {
+        listingViews.value -= 1;
+    });
+};
+
+// Loaded folders a change touched while no listing here could be seen.
+const unseenChanges = sandboxValue(() => new Set<string>());
+
+/** `relist` while a listing here can be seen; otherwise the folder is read once one can. */
+export const relistWhenSeen = (path: string): void => {
+    if (listingsSeen.value) {
+        relist(path);
+        return;
+    }
+    unseenChanges.value.add(path);
+};
+
+watch(listingsSeen, (seen) => {
+    if (!seen) {
+        return;
+    }
+    const missed = [...unseenChanges.value];
+    unseenChanges.value.clear();
+    for (const path of missed) {
+        if (lazyChildren.value.has(path)) {
+            relist(path);
+        }
+    }
+});

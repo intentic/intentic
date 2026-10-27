@@ -6,9 +6,10 @@ import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 import { opt } from "../../opt.js";
-import { publishRuntimeChange } from "../../seams/runtime-feed.js";
+import { publishRuntimeChangeTo } from "../../seams/runtime-feed.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
-import { actorOf } from "../../auth/principal.js";
+import { actorOf, type Principal } from "../../auth/principal.js";
+import type { Caller } from "../../auth/auth.js";
 import type { OrpcContext } from "../../app-env.js";
 
 /* EVERY MEMBER'S UNSENT WORDS, at <historyRoot>/composer-drafts.json, one per person and conversation: the one record a
@@ -139,7 +140,9 @@ export const heldSinceIn = (file: DraftsFile, conversationId: string): number | 
 // Whose drafts a request reads and writes: the member authorization verified, or the program a control token names. A
 // daemon with nobody signed in (auth off on a developer's machine) has one person, and its drafts are that person's.
 const NOBODY_SIGNED_IN = "-";
-export const draftOwnerOf = (context: Pick<OrpcContext, "identity" | "principal">): string => actorOf(context.identity, context.principal) ?? NOBODY_SIGNED_IN;
+// Also who an /events connection reads drafts as, so a draft's push reaches exactly the windows that read it back.
+export const draftOwnerOf = (context: { readonly identity?: Caller | undefined; readonly principal?: Principal | undefined }): string =>
+    actorOf(context.identity, context.principal) ?? NOBODY_SIGNED_IN;
 
 /**
  * The answer to a send, once the draft its words were sent from has gone with the message the sandbox just took: only
@@ -171,12 +174,12 @@ export interface ComposerDrafts {
 }
 
 /**
- * The store, telling `moved` each conversation whose drafts changed, after the write is on disk: the card's `unsentAt`
- * and the `drafts` push both follow from that one call.
+ * The store, telling `moved` each conversation whose drafts changed and whose they are, after the write is on disk: the
+ * card's `unsentAt` and the `drafts` push both follow from that one call.
  */
-const fileComposerDrafts = (path: string, moved: (conversationId: string) => void, now: () => number = Date.now): ComposerDrafts => {
+const fileComposerDrafts = (path: string, moved: (conversationId: string, person: string) => void, now: () => number = Date.now): ComposerDrafts => {
     const file = openDocument(composerDraftsDocument, path, { fallback: (): DraftsFile => ({ revision: 0, people: {} }), mode: 0o600 });
-    const apply = async (conversationId: string, step: (current: DraftsFile) => DraftStep): Promise<DraftWritten> => {
+    const apply = async (conversationId: string, person: string, step: (current: DraftsFile) => DraftStep): Promise<DraftWritten> => {
         let change: DraftChange = { answer: {}, changed: false };
         await file.update((current) => {
             const next = step(current);
@@ -184,7 +187,7 @@ const fileComposerDrafts = (path: string, moved: (conversationId: string) => voi
             return next.file;
         });
         if (change.changed) {
-            moved(conversationId);
+            moved(conversationId, person);
         }
         return change.answer;
     };
@@ -193,23 +196,25 @@ const fileComposerDrafts = (path: string, moved: (conversationId: string) => voi
             const current = await file.read();
             return { drafts: draftsOf(current, person), revision: current.revision };
         },
-        write: (person, write) => apply(write.id, (current) => writeIn(current, person, write, now())),
-        clear: (person, conversationId, revision) => apply(conversationId, (current) => clearIn(current, person, conversationId, revision)),
+        write: (person, write) => apply(write.id, person, (current) => writeIn(current, person, write, now())),
+        clear: (person, conversationId, revision) => apply(conversationId, person, (current) => clearIn(current, person, conversationId, revision)),
         heldSince: async (conversationId) => heldSinceIn(await file.read(), conversationId),
     };
 };
 
 /**
- * The store as the daemon runs it: every move is pushed as the `drafts` domain (no words, no names, so every window
- * may hear it) and becomes the conversation's `unsentAt`, so the idle archive never files away words somebody is writing.
+ * The store as the daemon runs it: every move is pushed as the `drafts` domain to its writer's windows (no words, and
+ * nobody else's: the list a window reads back is its own person's, so a push to every window made each member's typing
+ * cost every member's every window a read) and becomes the conversation's `unsentAt`, so the idle archive never files
+ * away words somebody is writing.
  */
 export const registryDrafts = (
     historyRoot: string,
     agents: Pick<AgentsRegistry, "entry" | "setUnsent">,
     warn: (error: Error, conversationId: string) => void,
 ): ComposerDrafts => {
-    const drafts: ComposerDrafts = fileComposerDrafts(join(historyRoot, composerDraftsDocument.path), (conversationId) => {
-        publishRuntimeChange("drafts");
+    const drafts: ComposerDrafts = fileComposerDrafts(join(historyRoot, composerDraftsDocument.path), (conversationId, person) => {
+        publishRuntimeChangeTo(person, "drafts");
         void drafts
             .heldSince(conversationId)
             .then((since) => (agents.entry(conversationId)?.social.unsentAt === since ? undefined : agents.setUnsent(conversationId, since ?? null)))

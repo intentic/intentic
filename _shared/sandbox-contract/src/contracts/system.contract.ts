@@ -1,7 +1,7 @@
 import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
-import { SystemEventSchema } from "../events/system-events.js";
+import { RosterFramesSchema, SystemEventSchema } from "../events/system-events.js";
 import {
     DeviceAgentFlowInputSchema,
     DeviceCommandInputSchema,
@@ -113,10 +113,19 @@ export const systemContract = {
             path: "/events",
             summary: "The live event stream",
             description:
-                "A stream held open for as long as you want it, carrying heartbeats so a caller notices the sandbox dying at once, batches of file changes so a tree or an editor can refresh itself, and the roster of who else is looking. Give it an id for this connection to appear in that roster; leave it out and you watch without being seen.",
+                "A stream held open for as long as you want it, carrying heartbeats so a caller notices the sandbox dying at once, batches of file changes so a tree or an editor can refresh itself, and the roster of who else is looking. Give it an id for this connection to appear in that roster; leave it out and you watch without being seen. It carries the fleet's agents too: ask for their changes and a running agent's progress arrives as only the cards that moved, instead of every card again.",
         })
         .meta({ beforeBoot: true, stream: true, guest: true })
-        .input(z.object({ clientId: z.string().optional() }))
+        .input(
+            z.object({
+                clientId: z.string().optional(),
+                // Opt-in, so every client from before it keeps the whole rosters it was written for; a daemon from before
+                // it drops the unknown key and sends snapshots, which a client asking for changes still reads.
+                roster: RosterFramesSchema.optional().describe(
+                    "How the fleet's agents arrive as running agents make progress: `changes` sends only the cards that moved since the previous roster frame, `snapshots` (the default) every card every time. A change someone made, and the first roster, always arrive whole.",
+                ),
+            }),
+        )
         .output(streamOf(SystemEventSchema)),
     // A tab's activity self-report (view/session/file/idle), fanned back out to every member on /events.
     presence: systemRoute

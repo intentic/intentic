@@ -173,7 +173,10 @@ export const framedEvent = (
         return event;
     }
     switch (event.kind) {
-        case "agents": {
+        // The cards a progress tick moved are cut like the whole roster, and the frame goes out even with none left: its
+        // revision is the next link of the line this reader follows.
+        case "agents":
+        case "agentsChanged": {
             return { ...event, agents: event.agents.filter((agent) => visibleTo(caller, agent)) };
         }
         case "presence": {

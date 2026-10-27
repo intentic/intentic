@@ -19,7 +19,7 @@ import { awaitingListing, dropProvisional, markSettled, noteArriving, noteLeavin
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
 import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./deleteUndo";
 import { changedDirs, refreshWalkedTrees, treeRead } from "../changes/useWorkspaceLive";
-import { clearLoadNotice, failedListing, lazyChildren, lazyHidden, lazyLoading, loadChildren, relist } from "./lazyListings";
+import { clearLoadNotice, drawsListings, failedListing, lazyChildren, lazyHidden, lazyLoading, listingsSeen, loadChildren, relist, relistWhenSeen } from "./lazyListings";
 import { actionError, busy, run } from "./treeActions";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
@@ -376,6 +376,7 @@ export function useWorkspaceTree() {
 
     // Keeps the folder `dir` names listed while it is shown: one the walk skipped is asked for the moment it is looked at.
     const keepListed = (dir: () => string | undefined): void => {
+        drawsListings();
         watch(
             () => [dir(), listingOf(dir() ?? ``) === undefined] as const,
             ([path, unlisted]) => {
@@ -390,9 +391,14 @@ export function useWorkspaceTree() {
     // Loads children for any expanded dir the walk left unlisted, whether opened by a click or restored from the
     // snapshot. An expanded ARCHIVE loads the same way: it is a file, and what is inside it only ever arrives lazily.
     // Runs immediately: the tree can already be cached on mount, so waiting for the next change would leave it empty.
+    // Only where a listing is drawn and on screen (lazyListings.ts listingsSeen); a window that starts drawing one loads
+    // its folders then.
     watch(
-        [expanded, entriesByPath],
+        [expanded, entriesByPath, listingsSeen],
         () => {
+            if (!listingsSeen.value) {
+                return;
+            }
             for (const path of expanded.value) {
                 const node = entriesByPath.value.get(path);
                 if (node !== undefined && node.children === undefined && (node.type === `dir` || opensAsFolder(node))) {
@@ -421,7 +427,7 @@ export function useWorkspaceTree() {
         // Iterating the live keys is safe: a read only writes this map after its first await.
         for (const path of lazyChildren.value.keys()) {
             if (onScreen(path)) {
-                relist(path);
+                relistWhenSeen(path);
             }
         }
     });
@@ -432,7 +438,7 @@ export function useWorkspaceTree() {
     watch(changedDirs, ({ dirs }) => {
         for (const path of lazyChildren.value.keys()) {
             if (dirs.size === 0 || dirs.has(path)) {
-                relist(path);
+                relistWhenSeen(path);
             }
         }
     });

@@ -2396,6 +2396,41 @@ describe("agents registry", () => {
         unsubscribe();
     });
 
+    // A listener taking the whole roster costs every card on every send; one that asked for changes is handed only the
+    // cards progress moved, and anything else still goes whole to everyone.
+    it("hands a listener that asked for changes only the cards progress moved, and every other send whole", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences(), { rosterWindowMs: 60 });
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await beginTurn(conversations, turn({ conversationId: "c2", prompt: "Draw the mark" }), 1_000);
+        type Send = { readonly rev: number; readonly ids: string[]; readonly whole: boolean };
+        const heard = (into: Send[]) => (agents: AgentSummary[], rev: number, whole: boolean) =>
+            into.push({ rev, ids: agents.map((agent) => agent.id), whole });
+        const snapshots: Send[] = [];
+        const changes: Send[] = [];
+        const unsubscribe = [registry.subscribe(heard(snapshots)), registry.subscribe(heard(changes), "changes")];
+        // Subscribing is not progress: the first roster is whole either way.
+        expect(changes).toEqual([{ rev: registry.revision(), ids: ["c1", "c2"], whole: true }]);
+
+        conversations.send("c2", { kind: "frame", frame: { kind: "tool_call", id: "Edit", name: "Edit", category: "edit", status: "in_progress" } });
+        await waitFor(() => expect(changes).toHaveLength(2));
+        expect(changes.at(-1)).toEqual({ rev: registry.revision(), ids: ["c2"], whole: false });
+        expect(snapshots.at(-1)).toEqual({ rev: registry.revision(), ids: ["c1", "c2"], whole: true });
+        expect(registry.get("c2")?.activity?.tool).toBe("Edit");
+
+        // A change someone made could move any card, so it goes whole, and takes the progress waiting with it.
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "Read", name: "Read", category: "read", status: "in_progress" } });
+        await registry.setArchived(["c1"], 2_000);
+        expect(changes.at(-1)).toEqual({ rev: registry.revision(), ids: ["c2"], whole: true });
+        expect(snapshots.at(-1)).toEqual(changes.at(-1));
+        const settled = changes.length;
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        expect(changes).toHaveLength(settled);
+        for (const undo of unsubscribe) {
+            undo();
+        }
+    });
+
     it("subscribe delivers an immediate snapshot and change broadcasts", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

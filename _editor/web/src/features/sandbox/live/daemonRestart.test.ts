@@ -94,6 +94,17 @@ it(`ignores a roster read answering for the daemon it has already left`, async (
     expect(ids()).toEqual([`a1`, `a2`]);
 });
 
+// A rebuilt daemon's change frames count from its own first roster, not from wherever the old line had reached.
+it(`follows a restarted daemon's change frames on from its first roster`, () => {
+    setAgents([summary(`a1`, 1_000)], 800);
+
+    hello();
+    roster([summary(`a1`, 2_000)], 1);
+    applySystemEvent({ kind: `agentsChanged`, agents: [summary(`a2`, 3_000)], rev: 2, since: 1 }, SANDBOX);
+
+    expect(ids().toSorted()).toEqual([`a1`, `a2`]);
+});
+
 // Cached reads are taken as true between frames (staleTime, queryPersistence), which puts the whole weight of freshness
 // on the stream. A reconnect is the seam where that cache stops being evidence: frames sent while this browser was away
 // are gone, and one hydrated from disk can be hours old.

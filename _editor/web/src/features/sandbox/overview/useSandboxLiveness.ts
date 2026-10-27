@@ -135,7 +135,9 @@ const stream = async (sandboxId: string, signal: AbortSignal): Promise<void> => 
         // Per-connection, never reused, so a lingering old connection's teardown can only remove its own presence
         // entry.
         const clientId = uuid();
-        const frames = await sandboxRpc.system.events({ clientId }, { signal: cut });
+        // Progress as only the cards it moved, not every card on every tool call; a daemon from before the option ignores
+        // it and sends whole rosters, which this window reads just the same.
+        const frames = await sandboxRpc.system.events({ clientId, roster: `changes` }, { signal: cut });
         signalConnection({ kind: `opened` });
         armWatchdog();
         // The daemon just registered this connection's blank roster entry; announce this tab's current activity.

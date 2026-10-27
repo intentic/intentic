@@ -92,6 +92,10 @@ export const heldWakes = computed<AutomationApproval[]>(() =>
 // Highest applied revision; -1 until the first snapshot, so a fresh connection accepts revision 0.
 const appliedRev = sandboxValue(() => -1);
 
+// The roster as the daemon last answered it at `appliedRev`, before this browser's own pending moves are laid over it:
+// what a frame carrying only the changed cards is applied onto (applyRosterChanges).
+const served = sandboxValue<AgentSummary[]>(() => []);
+
 // Tags which connection the revision counter belongs to; a reconnect bumps it so a stale late read can't reapply it.
 let epoch = 0;
 
@@ -326,6 +330,7 @@ export const setAgents = (roster: AgentSummary[], rev: number, live = false): vo
         }
     }
     appliedRev.value = rev;
+    served.value = agents;
     // Every conversation this frame restamped is a reading of the sandbox's clock (sandboxClock.ts).
     if (asItHappened) {
         observeRoster(registry.value, agents);
@@ -334,6 +339,25 @@ export const setAgents = (roster: AgentSummary[], rev: number, live = false): vo
     mirrorRosterRead(agents, rev);
     // Attaches a tab opened before its turn existed to the turn now running (workflow step, wake, another device).
     useChat().attachStarted(new Set(agents.filter((agent) => agent.status === `running`).map((agent) => agent.id)));
+};
+
+// The cards running turns moved since the daemon's roster at `since`, sent in place of the whole roster to a connection
+// that asked for changes; each upserts its card by id, and a card leaving the board only ever comes as a whole roster.
+// Applies onto any roster held from `since` on, since the cards are every one that moved after it: a read answering
+// mid-burst (the hello's, a return to the window) moved the held revision past `since` without missing anything. One
+// held from before `since` missed a frame in between, and is read back as a disagreeing beat is.
+export const applyRosterChanges = (changed: readonly AgentSummary[], rev: number, since: number): void => {
+    if (rev <= appliedRev.value) {
+        return;
+    }
+    if (since > appliedRev.value) {
+        auditRoster(rev);
+        return;
+    }
+    const moved = new Map(changed.map((agent) => [agent.id, agent]));
+    const roster = served.value.map((agent) => moved.get(agent.id) ?? agent);
+    const held = new Set(roster.map((agent) => agent.id));
+    setAgents([...roster, ...changed.filter((agent) => !held.has(agent.id))], rev, true);
 };
 
 // Drops per-connection state on a mere disconnect: the revision line and pending moves, keeping the painted roster

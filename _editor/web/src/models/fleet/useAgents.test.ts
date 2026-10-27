@@ -77,7 +77,7 @@ import {
     windowFinished,
     withKeptWords,
 } from "./useAgents-fleet";
-import { auditRoster, setAgents } from "./useAgents-registry";
+import { applyRosterChanges, auditRoster, setAgents } from "./useAgents-registry";
 import { clockOffset, resetSandboxClock } from "../agent-status/sandboxClock";
 import { runningTurn } from "../../testing/runningTurn";
 import { IDLE } from "../conversations/session/runPhase";
@@ -705,6 +705,95 @@ describe("the beat's audit of the roster", () => {
         await waitFor(() => expect(parked(`a1`)).toBe(false));
 
         expect(daemon.list).toHaveBeenCalledTimes(1);
+    });
+});
+
+// A window that asked for changes is sent only the cards running turns moved, each frame naming the revision it follows
+// on from; it is applied onto the roster held from there, and a frame that cannot be is read back, never guessed at.
+describe("a roster frame carrying only the moved cards", () => {
+    const summary = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+        ...extra,
+    });
+    const asking = (id: string): AgentSummary =>
+        summary(id, {
+            status: `awaiting`,
+            attention: { plan: false, question: true, permission: false, capability: false, credential: false, conflict: false },
+        });
+    const parked = (id: string): boolean => useAgents().fleet.value.find((card) => card.id === id)?.attention.question === true;
+    const ids = (): string[] => useAgents().fleet.value.map((card) => card.id);
+
+    beforeEach(() => {
+        resetSandboxScope();
+        resetDaemon();
+    });
+
+    it("puts each moved card in its place and leaves every other card the object it was", async () => {
+        setAgents([asking(`a1`), summary(`a2`)], 7);
+        await nextTick();
+        const a2 = useAgents().fleet.value.find((card) => card.id === `a2`);
+
+        applyRosterChanges([summary(`a1`), summary(`a3`)], 8, 7);
+        await nextTick();
+
+        expect(parked(`a1`)).toBe(false);
+        expect(ids()).toEqual([`a1`, `a2`, `a3`]);
+        expect(useAgents().fleet.value.find((card) => card.id === `a2`)).toBe(a2);
+        expect(reached()).toEqual([]);
+    });
+
+    it("follows on from the frame before it, one after another", async () => {
+        setAgents([summary(`a1`), summary(`a2`)], 7);
+        applyRosterChanges([asking(`a2`)], 8, 7);
+        applyRosterChanges([asking(`a1`)], 9, 8);
+        await nextTick();
+
+        expect([parked(`a1`), parked(`a2`)]).toEqual([true, true]);
+        expect(reached()).toEqual([]);
+    });
+
+    it("takes nothing from a frame the roster it holds already answers for", async () => {
+        setAgents([asking(`a1`)], 9);
+        await nextTick();
+
+        applyRosterChanges([summary(`a1`)], 9, 8);
+        applyRosterChanges([summary(`a1`)], 8, 7);
+        await nextTick();
+
+        expect(parked(`a1`)).toBe(true);
+        expect(reached()).toEqual([]);
+    });
+
+    // The hello's read, or one on returning to the window, can answer between two frames: it holds everything up to
+    // its own revision, and the next frame names every card moved since the one before it, which covers the rest.
+    it("applies onto a read that answered between two frames, without reading again", async () => {
+        setAgents([summary(`a1`), summary(`a2`)], 7);
+        setAgents([summary(`a1`), asking(`a2`)], 8);
+        applyRosterChanges([asking(`a1`)], 9, 7);
+        await nextTick();
+
+        expect([parked(`a1`), parked(`a2`)]).toEqual([true, true]);
+        expect(reached()).toEqual([]);
+    });
+
+    it("reads the roster back when a frame in between never landed", async () => {
+        setAgents([asking(`a1`)], 7);
+        await nextTick();
+        // What the missed frame said: the question is settled and the agent is working again.
+        daemon.list.mockResolvedValue(AgentsListSchema.parse({ agents: [summary(`a1`)], rev: 10 }));
+
+        applyRosterChanges([summary(`a2`)], 10, 9);
+        await waitFor(() => expect(parked(`a1`)).toBe(false));
+
+        expect(daemon.list).toHaveBeenCalledTimes(1);
+        // Read back whole, not patched: the card the frame carried is not taken on its own word.
+        expect(ids()).toEqual([`a1`]);
     });
 });
 

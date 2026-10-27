@@ -33,8 +33,9 @@ export interface ConversationBooks {
     readonly persist: () => Promise<void>;
     readonly reprobe: () => Promise<unknown>;
     readonly broadcast: () => void;
-    // A broadcast a running turn's progress raises: it may ride the next send, a moment later, with the rest of a burst.
-    readonly progress: () => void;
+    // A broadcast a running turn's progress raises, naming the conversation whose card it moved: it may ride the next
+    // send, a moment later, with the rest of a burst, and to a reader that asked for changes carry only the cards moved.
+    readonly progress: (id: string) => void;
     // Forgets the entries and every projection cache kept beside them; the actors' own half goes first, in dispose.
     readonly remove: (ids: readonly string[]) => Promise<void>;
     // The queue onto the conversation's entry, for the next `persist` to write; nothing for one with no entry yet.
@@ -143,7 +144,7 @@ type Performer<K extends ConversationEffect["kind"]> = (id: string, effect: Extr
 // Where each effect lands: the books for the entries and the roster, the transcript index for the prompt.
 const effectsOn = (books: ConversationBooks): { readonly [K in ConversationEffect["kind"]]: Performer<K> } => ({
     broadcast: () => books.broadcast(),
-    progress: () => books.progress(),
+    progress: (id) => books.progress(id),
     persist: () => books.persist(),
     reprobe: () => books.reprobe(),
     "entry-opened": (_id, effect, now) => books.open(effect.turn, now, effect.inFlight),

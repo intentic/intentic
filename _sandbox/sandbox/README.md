@@ -307,8 +307,10 @@ flowchart LR
   `/history/composer-drafts.json` (`conversations/drafts/composer-drafts.ts`). `agents.drafts` lists only the caller's
   own. A write names the revision it was edited from, and is answered with the newer draft instead of overwriting it
   when another window or device wrote since. `agent.run` carrying `draft` clears exactly that revision as it takes the
-  message. Every change pushes the `drafts` domain, which names nobody and carries no words, and sets the card's
-  `unsentAt`, so the idle archive leaves a conversation somebody is still writing to. A draft never goes by itself
+  message. Every change pushes the `drafts` domain to the writer's own `/events` connections only (it carries no
+  words, and nobody else's windows read that person's drafts back), and sets the card's `unsentAt`, so the idle
+  archive leaves a conversation somebody is still writing to. 2026-10-27: until then the push went to every window,
+  so each member's typing made every member's every window re-read drafts that had not moved. A draft never goes by itself
   (`next` never names one), and no model reads it until it is sent, when the privacy shield judges it as the message.
 - Nothing the resume pass sends goes into an allowance the records call spent. Before it fires any hold, it asks the
   allowance wall in front of the account the turn would go on (`allowanceWall` in `usage/serviceability/`, the one
