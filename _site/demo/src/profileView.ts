@@ -3,7 +3,7 @@ import { type ClientFrame, clientFrame, pushDomains } from "./daemon/machine/mac
 import type { DemoSession, DemoSocket } from "./transport";
 import { startVideoCast } from "./videoCast";
 
-// One connected account's own Chromium (the daemon's browser-profile.ts), opened from its card to sign in once or to
+// One connected account's own Chromium (the daemon's browser-profile.routes.ts), opened from its card to sign in once or to
 // look around signed in. The demo draws the site's sign-in page and fills its fields with what the owner types; "I'm
 // done" saves the profile, as the daemon flushes it, and the account's card is told its sign-in moved.
 

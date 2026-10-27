@@ -5,7 +5,7 @@ import { DEMO_HOSTED_PLAN } from "./account";
 import { placeHosted, rowOf } from "./sandboxRegistry";
 
 // THE ACCOUNT'S HOSTED PLAN AS LIVE STATE: whether it subscribes, the slots it holds at each rung and the rung each
-// machine of ours stands on. The Billing page's writes land here (platform/billing.ts), and so does a machine the
+// machine of ours stands on. The Billing page's writes land here (platform/billing.handler.ts), and so does a machine the
 // platform provisions (platform/sandbox.ts). Unlike the rest of the world it outlives a reload of the tab: checkout and
 // the portal are Stripe's pages, which the browser LEAVES for, so the demo's "Stripe" applies the errand here at once
 // and the Billing page it sends the browser back to must still find it. Kept per mode, so switching mode starts afresh.

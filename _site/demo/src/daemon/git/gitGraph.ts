@@ -10,7 +10,7 @@ import { listeners, OWNER, STARTED_AT, TEAMMATE } from "../board/roster";
 // Each repo's commit graph for one page load: the commits, the refs on them, the reflog undo walks, the stash, and what
 // the simulated remote holds. Built from fixture/git/gitSeeds.ts the first time a repo is asked about; every commit, merge,
 // rebase, reset and push made in the page changes it, and the log, branches, stashes and undo all read it, so they agree.
-// Reads live in gitReads.ts, verbs in gitActions.ts and gitPush.ts.
+// Reads live in gitReads.ts, verbs in gitIndex.ts, gitRefs.ts, gitRewrite.ts and gitPush.ts.
 
 /** A file's content in a commit: its text, or the mark of a file git counts nothing for. */
 export type Body = string | Binary;

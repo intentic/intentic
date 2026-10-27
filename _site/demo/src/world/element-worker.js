@@ -49,6 +49,7 @@ const relay = async (request, url) => {
             clearTimeout(timer);
             resolve(said);
         });
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel.postMessage({ kind: `ask`, id, world, url: target, method: request.method, headers: [...request.headers], body });
     });
     if (answer === undefined) {

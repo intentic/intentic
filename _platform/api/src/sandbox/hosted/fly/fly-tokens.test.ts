@@ -23,7 +23,7 @@ describe(`fly deploy tokens`, () => {
 
     it.each([401, 403, 503])(`preserves an HTTP %s refusal as a Fly error`, async (status) => {
         stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ error: `refused` }), { status })));
-        const error = await mintAppDeployToken(`bad`, { app: `app`, expiryMinutes: 45 }).catch((error: unknown) => error);
+        const error = await mintAppDeployToken(`bad`, { app: `app`, expiryMinutes: 45 }).catch((cause: unknown) => cause);
         expect(error).toBeInstanceOf(FlyError);
         expect((error as FlyError).status).toBe(status);
         if (status !== 503) {

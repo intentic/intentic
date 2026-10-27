@@ -98,7 +98,8 @@
             "ignoreDependencies": ["vue-i18n"]
         },
         "_site/demo": {
-            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.mjs"],
+            // Vite serves the worker by path at the service worker scope, outside the import graph.
+            "entry": ["src/main.ts", "src/world/element-worker.js", "index.html", "vite.config.ts", "scripts/*.mjs"],
             "ignore": ["vendor/**"]
         },
         "_editor/desktop-app": {

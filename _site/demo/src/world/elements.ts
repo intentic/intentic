@@ -86,8 +86,10 @@ const answer = async (channel: BroadcastChannel, ask: Ask): Promise<void> => {
     }
     try {
         const response = await fetch(ask.url, init);
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel.postMessage({ kind: `answer`, id: ask.id, status: response.status, headers: [...response.headers], body: await response.arrayBuffer() });
     } catch (error) {
+        // oxlint-disable-next-line unicorn/require-post-message-target-origin -- BroadcastChannel has no targetOrigin.
         channel.postMessage({ kind: `answer`, id: ask.id, status: 502, headers: [[`content-type`, `text/plain; charset=utf-8`]], body: new TextEncoder().encode(String(error)).buffer });
     }
 };

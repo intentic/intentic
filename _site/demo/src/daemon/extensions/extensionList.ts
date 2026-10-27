@@ -5,7 +5,7 @@ import pins from "../../../vendor/extensions.json";
 
 // The extensions acme-shop has installed, as the daemon's inventory reads them: the shipped connectors, everything
 // compiled into this build and the listed ones vendored at their pinned commits. Kept apart from sandbox.ts because the
-// lifecycle around them (daemon/extensionLifecycle.ts) adds to and takes from this list.
+// lifecycle around them (extensionWorkspace.ts) adds to and takes from this list.
 
 // The connector extensions as they ship, read from their own manifests in `_extensions/` the way the vendored ones are
 // read below, so the catalogue the demo draws is the one the product has rather than a hand-kept subset of it. Plain
