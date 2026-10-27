@@ -244,7 +244,7 @@ export const tauriPasswordsPort = (): PasswordsPort => {
         status: () => readStatus(readHere),
         list,
         sandboxes: async () => (await readHere()).links.map((link) => ({ url: link.sandboxUrl, label: sandboxLabel(link.sandboxUrl) })),
-        setUp: async ({ hello }) => ({ recoveryKey: (await keyringSetup(hello)).recoveryKey ?? `` }),
+        setUp: async ({ hello }) => ({ recoveryKey: (await keyringSetup(hello)).recoveryKey }),
         unlock: (minutes) => keyringUnlock(minutes),
         lock: () => keyringLock(),
         reveal: revealValue,

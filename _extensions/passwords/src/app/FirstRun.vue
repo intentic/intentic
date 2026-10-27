@@ -10,7 +10,7 @@ import type { PasswordsPort, SourceStatus, VaultStatus } from "./port.js";
 const { port, status } = defineProps<{ port: PasswordsPort; status: Extract<VaultStatus, { kind: `not-set-up` }> | undefined }>();
 const emit = defineEmits<{ done: [] }>();
 
-type Step = `hero` | `recovery` | `remember` | `import`;
+type Step = `hero` | `recovery` | `existing` | `remember` | `import`;
 const step = ref<Step>(`hero`);
 const error = ref<string | undefined>(undefined);
 const busy = ref(false);
@@ -34,23 +34,33 @@ const sources = shallowRef<readonly SourceStatus[]>([]);
 const turnOn = (): Promise<void> =>
     run(async () => {
         const made = await port.setUp({ hello: status?.hello ?? false });
+        // No key: the vault was there already, and an empty "shown only now" key would read as a new one.
         recoveryKey.value = made.recoveryKey;
-        step.value = `recovery`;
+        step.value = made.recoveryKey === undefined ? `existing` : `recovery`;
     });
 
+// A download says nothing where it lands (the desktop app's webview least of all), so the page says it.
+const fileSaved = ref<string | undefined>(undefined);
 const saveFile = (): void => {
-    const text = t(`app.first.fileText`, { computer: status?.computer ?? ``, key: recoveryKey.value ?? `` });
+    if (recoveryKey.value === undefined) {
+        return;
+    }
+    const text = t(`app.first.fileText`, { computer: status?.computer ?? ``, key: recoveryKey.value });
     const link = document.createElement(`a`);
     link.href = URL.createObjectURL(new Blob([text], { type: `text/plain` }));
     link.download = t(`app.first.fileName`);
     link.click();
-    URL.revokeObjectURL(link.href);
+    // Revoked once the download has read it: revoking at once can cancel it.
+    const href = link.href;
+    setTimeout(() => URL.revokeObjectURL(href), 60_000);
+    fileSaved.value = t(`app.first.fileSaved`, { file: link.download });
 };
 
 const toRemember = (): Promise<void> =>
     run(async () => {
         // Shown once: it leaves the page the moment the person has said they kept it.
         recoveryKey.value = undefined;
+        fileSaved.value = undefined;
         sources.value = await port.sources();
         step.value = `remember`;
     });
@@ -92,7 +102,7 @@ const notNow = (): Promise<void> =>
 
             <section v-else-if="step === `recovery`" class="flex flex-col gap-4">
                 <h2 class="text-lg font-semibold text-content">{{ t(`app.first.recoveryTitle`) }}</h2>
-                <p class="text-sm text-muted">{{ t(`app.first.recoveryHelp`) }}</p>
+                <p class="text-sm text-muted">{{ status?.hello === false ? t(`app.first.recoveryHelpNoHello`) : t(`app.first.recoveryHelp`) }}</p>
                 <code class="block select-all break-all rounded-xl border border-line-subtle bg-card px-4 py-4 text-center font-mono text-base tracking-wide text-content">{{ recoveryKey }}</code>
                 <div class="flex flex-wrap gap-2">
                     <CopyButton :text="recoveryKey ?? ``" :label="t(`app.detail.copy`)" />
@@ -100,11 +110,18 @@ const notNow = (): Promise<void> =>
                         <template #icon><Icon name="download" /></template>
                     </Button>
                 </div>
+                <p v-if="fileSaved" class="text-xs text-success" role="status">{{ fileSaved }}</p>
                 <label class="flex items-center gap-2 text-sm text-content">
                     <Checkbox v-model="keySaved" binary :input-id="`recovery-saved`" />
                     {{ t(`app.first.saved`) }}
                 </label>
                 <Button tier="accent" class="self-end" :label="t(`app.first.continue`)" :disabled="!keySaved" :loading="busy" @click="toRemember()" />
+            </section>
+
+            <section v-else-if="step === `existing`" class="flex flex-col gap-4">
+                <h2 class="text-lg font-semibold text-content">{{ t(`app.first.existingTitle`) }}</h2>
+                <p class="text-sm text-muted">{{ t(`app.first.existingHelp`) }}</p>
+                <Button tier="accent" class="self-end" :label="t(`app.first.continue`)" @click="emit(`done`)" />
             </section>
 
             <section v-else-if="step === `remember`" class="flex flex-col gap-4">

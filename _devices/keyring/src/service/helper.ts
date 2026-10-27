@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
 import { sleep } from "@intentic/base/async";
+import { z } from "zod";
 import { claimPidFile } from "@intentic/local-agent";
 import { keyringPaths } from "../address.js";
 import type { ChoicePrompt, HelloDriver, PassphrasePrompt, ValuePrompt } from "../consent/consent.js";
@@ -13,15 +14,16 @@ import { type AppsWatch, appsWatchFor } from "../watch/apps.js";
 import { type Challenge, ChallengeSchema, type DoorFile, DoorFileSchema, type HelperCall, HelperCallSchema, type HelperReply, type Proof } from "./door.js";
 import { LineSocket } from "./lines.js";
 import { asRecoveryKey } from "./recovery.js";
+import { neededPerson, ProofGate, proofAsked } from "./proof-gate.js";
 import { RECOVERY_HINT } from "./remote.js";
 
 // `intentic-keyring session`: the protected keyring's hands in this user's session, started at sign-in. It does two
 // things. It keeps the user's own pipe answering (intentic-machine, intentic-askpass and the CLI keep asking there) by
 // carrying each request through the door to the service. And it is the service's way to a person and a keyboard: it
-// proves a person is at this session once (Windows Hello, a polkit yes, or the recovery key), then shows the service's
-// prompts and type-once box and does its typing. It holds no vault and no key; what it carries is one prompt's answer
-// or one value being typed at a time. While the person lets Passwords remember what they type in programs, it also
-// runs the focus watcher that offers the "Fill with Intentic" chip (watch/).
+// proves a person is at this session once (Windows Hello, a polkit yes, or the recovery key; after a no, asked again
+// only when something needs a person, proof-gate.ts), then shows the service's prompts and type-once box and does its
+// typing. It holds no vault and no key; what it carries is one prompt's answer or one value being typed at a time.
+// While the person lets Passwords remember what they type in programs, it also runs the focus watcher that offers the "Fill with Intentic" chip (watch/).
 
 const RETRY_MS = 5_000;
 const REQUEST_DEADLINE_MS = 135_000;
@@ -128,27 +130,44 @@ export const proofFor = async (challenge: Challenge, hands: Hands, pid: number =
     }
 };
 
-// The helper's own connection: proven once, then answering the service's calls until it closes.
-const holdTheLine = async (door: DoorFile, hands: Hands, log: (message: string) => void): Promise<void> => {
+// The service's word on a proof (channel.ts welcomeHelper): `ok` lets the helper in.
+const VerdictSchema = z.object({ ok: z.boolean() });
+const VERDICT_DEADLINE_MS = 30_000;
+
+// The helper's own connection: proven once, then answering the service's calls until it closes. Answers `turned-down`
+// when the person declined the proof or the service refused it, which waits for a need before asking again (proof-gate.ts).
+const holdTheLine = async (door: DoorFile, hands: Hands, gate: ProofGate, log: (message: string) => void, asked: (method: Challenge["method"]) => void): Promise<"gone" | "turned-down"> => {
     const lines = new LineSocket(dial(door));
     lines.send({ door: door.token, as: "helper" });
     const challenge = await lines.nextOf(ChallengeSchema, 30_000);
     if (challenge === undefined) {
         lines.end();
-        return;
+        return "gone";
     }
+    asked(challenge.method);
     const proof = await proofFor(challenge, hands);
     lines.send(proof);
+    const verdict = await lines.nextOf(VerdictSchema, VERDICT_DEADLINE_MS);
+    if (verdict?.ok !== true) {
+        lines.end();
+        log(proof.method === "declined" ? "the person did not prove this session" : `the service refused this session's ${proof.method} proof`);
+        return "turned-down";
+    }
+    gate.settle(true);
     log(`proved this session with ${proof.method}`);
-    for (;;) {
-        const call = await lines.nextOf(HelperCallSchema, 24 * 60 * 60_000);
-        if (call === undefined) {
-            if (lines.closed) {
-                return;
+    try {
+        for (;;) {
+            const call = await lines.nextOf(HelperCallSchema, 24 * 60 * 60_000);
+            if (call === undefined) {
+                if (lines.closed) {
+                    return "gone";
+                }
+                continue;
             }
-            continue;
+            lines.send({ id: call.id, reply: await answerCall(hands, call) });
         }
-        lines.send({ id: call.id, reply: await answerCall(hands, call) });
+    } finally {
+        gate.settle(false);
     }
 };
 
@@ -181,11 +200,23 @@ export const runSession = async (platformOf: (runner: Runner) => Promise<Session
         // allow(silent-catch): a service that does not answer is no answer, which the watcher reads as off until next time
         return door === undefined ? undefined : await throughDoor(door, request).catch(() => undefined);
     };
+    const gate = new ProofGate();
+    let method: Challenge["method"] | undefined;
     await serveKeyring(
         {
             handle: async (request) => {
                 const door = await readDoor(platform.doorFile);
-                return door === undefined ? { ok: false, code: "no-keyring", refusal: platform.noService } : await throughDoor(door, request);
+                if (door === undefined) {
+                    return { ok: false, code: "no-keyring", refusal: platform.noService };
+                }
+                const answer = await throughDoor(door, request);
+                if (gate.proven || !neededPerson(answer)) {
+                    return answer;
+                }
+                // Nobody here to ask, because the person turned the sign-in proof down: ask for it again now, and say where.
+                log(`${request.op} needed a person: asking this session to prove itself again`);
+                gate.want();
+                return { ...answer, refusal: proofAsked(method) };
             },
         },
         own.address,
@@ -194,12 +225,20 @@ export const runSession = async (platformOf: (runner: Runner) => Promise<Session
     void keepAppsWatch(ask, appsWatchFor(runner, ask, log));
     for (;;) {
         const door = await readDoor(platform.doorFile);
+        let outcome: "gone" | "turned-down" = "gone";
         if (door !== undefined) {
             try {
-                await holdTheLine(door, platform.hands, log);
+                outcome = await holdTheLine(door, platform.hands, gate, log, (asked) => {
+                    method = asked;
+                });
             } catch (error) {
                 log(`lost the service: ${error instanceof Error ? error.message : "unknown error"}`);
             }
+        }
+        if (outcome === "turned-down") {
+            log("not asking again until something needs a person here");
+            await gate.whenWanted();
+            continue;
         }
         await sleep(RETRY_MS);
     }

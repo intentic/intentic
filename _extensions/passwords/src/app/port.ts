@@ -225,8 +225,11 @@ export interface PasswordsPort {
     readonly list: () => Promise<readonly PasswordItem[]>;
     readonly sandboxes: () => Promise<readonly SandboxRef[]>;
 
-    /** Sets up the protected vault: one administrator prompt, Windows Hello, and a recovery key shown once. */
-    readonly setUp: (options: { readonly hello: boolean }) => Promise<{ readonly recoveryKey: string }>;
+    /**
+     * Sets up the protected vault: one administrator prompt, Windows Hello, and a recovery key shown once. No key when the
+     * vault was there already: its key is the one shown when it was first set up.
+     */
+    readonly setUp: (options: { readonly hello: boolean }) => Promise<{ readonly recoveryKey?: string | undefined }>;
     readonly unlock: (minutes?: number) => Promise<void>;
     readonly lock: () => Promise<void>;
 

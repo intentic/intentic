@@ -60,7 +60,7 @@ export class HelperLink {
     }
 }
 
-const NO_SESSION = "nobody is signed in to ask: Passwords' session helper starts at sign-in";
+export const NO_SESSION = "nobody is signed in to ask: Passwords' session helper starts at sign-in";
 
 export interface HelloPin {
     readonly credential: string;

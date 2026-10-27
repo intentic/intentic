@@ -68,7 +68,7 @@ interface Calls {
     edits: { name: string; patch: PasswordPatch }[];
 }
 
-const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; capabilities?: PasswordsCapabilities }) => {
+const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; requests?: PasswordRequest[]; capabilities?: PasswordsCapabilities; alreadySetUp?: boolean }) => {
     const calls: Calls = { setUp: [], remember: [], sources: [], answers: [], edits: [] };
     let status = options.status;
     let requests = options.requests ?? [];
@@ -81,7 +81,8 @@ const fakePort = (options: { status: VaultStatus; items?: PasswordItem[]; reques
         setUp: async (asked) => {
             calls.setUp.push(asked);
             status = READY;
-            return { recoveryKey: `ABCD-EFGH-IJKL-MNOP` };
+            // A vault that was there already answers no key.
+            return options.alreadySetUp === true ? {} : { recoveryKey: `ABCD-EFGH-IJKL-MNOP` };
         },
         unlock: async () => undefined,
         lock: async () => undefined,
@@ -237,6 +238,21 @@ describe(`PasswordsApp`, () => {
         button(el, `Turn on Passwords`).click();
         await waitFor(() => expect(el.textContent).toContain(`ABCD-EFGH-IJKL-MNOP`));
         expect(calls.setUp).toEqual([{ hello: true }]);
+        // Saving it says where it went: a download alone shows nothing in the desktop app. The test DOM's Blob is not the
+        // runtime's, so the object URL is a stand-in.
+        const made: unknown[] = [];
+        const createObjectURL = URL.createObjectURL;
+        URL.createObjectURL = (blob: Blob) => {
+            made.push(blob);
+            return `blob:recovery-key`;
+        };
+        try {
+            button(el, `Save as file`).click();
+            await waitFor(() => expect(el.querySelector(`[role="status"]`)?.textContent).toBe(`Saved to your Downloads folder as intentic-passwords-recovery-key.txt.`));
+            expect(made).toHaveLength(1);
+        } finally {
+            URL.createObjectURL = createObjectURL;
+        }
         // Continue waits for the reader to say the key is kept.
         expect(button(el, `Continue`).disabled).toBe(true);
         const kept = el.querySelector<HTMLInputElement>(`input[type="checkbox"]`);
@@ -256,6 +272,18 @@ describe(`PasswordsApp`, () => {
 
         button(el, `Done`).click();
         // The app itself: its title, and the list (empty here) where the first run was.
+        await waitFor(() => expect(el.textContent).toContain(`No passwords yet.`));
+    });
+
+    it(`says Passwords was set up already, rather than showing an empty recovery key`, async () => {
+        const { port } = fakePort({ status: { kind: `not-set-up`, canSetUp: true, hello: false, computer: `rog` }, alreadySetUp: true });
+        const el = mount(port);
+        await waitFor(() => expect(el.textContent).toContain(`Your passwords stay on this computer`));
+        button(el, `Turn on Passwords`).click();
+        await waitFor(() => expect(el.textContent).toContain(`Passwords is already on this computer`));
+        expect(el.textContent).not.toContain(`Your recovery key`);
+        expect(el.querySelector(`code`)).toBeNull();
+        button(el, `Continue`).click();
         await waitFor(() => expect(el.textContent).toContain(`No passwords yet.`));
     });
 
