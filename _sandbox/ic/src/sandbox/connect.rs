@@ -312,6 +312,9 @@ fn connect(
             .map(|replacing| at_rest::Old {
                 mounted: replacing.at_rest_key.as_deref(),
                 env: &replacing.env,
+                compose: crate::sandbox::compose::owns(&crate::sandbox::compose::labels_of(
+                    &replacing.container,
+                )),
             })
             .as_ref(),
         auth_source.as_deref(),
@@ -649,6 +652,11 @@ fn connect(
     if let Some(replacing) = &replacing {
         let labels = crate::sandbox::compose::labels_of(&replacing.container);
         stamped_run.extend(crate::sandbox::compose::carry_args(&labels));
+        if crate::sandbox::compose::owns(&labels) {
+            if let Some(line) = crate::sandbox::compose::key_warning(&slug, &key) {
+                ui::warn(&line);
+            }
+        }
     }
     // On Intentic OS the host policy may run the sandbox in a microVM (os/policy.rs); elsewhere the line stays as is.
     let argv = crate::os::policy::sandbox_run(crate::sandbox::labels::into_run(

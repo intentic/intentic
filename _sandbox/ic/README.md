@@ -61,7 +61,10 @@ flowchart LR
   that hold credentials (pasted secrets, the capability and extension vaults, the privacy vault, AI-provider accounts)
   whenever it is given a 32-byte key, and every sandbox ic sets up, replaces or starts as a runner gets one, as does
   any older sandbox on its next recreate (an update, rollback, rebuild or reshape), whose daemon then encrypts the plain
-  files as it boots. The key is mounted read-only at `/run/secrets/intentic-at-rest-key`, and
+  files as it boots. A sandbox Docker Compose runs (Komodo included) is the exception: ic gives it no key of its own,
+  since Compose's next `up` starts it from Compose's file, which mounts no key ic adds, and the daemon could not open
+  what it encrypted (2026-10-27). One that has a key keeps it, and every ic swap of it says that Compose's file must
+  mount the key file at `/run/secrets/intentic-at-rest-key` and set `INTENTIC_AT_REST_KEY_FILE` to that path. The key is mounted read-only at `/run/secrets/intentic-at-rest-key`, and
   `INTENTIC_AT_REST_KEY_FILE` tells the daemon where it is.
   - Unless you bring your own, ic makes the key once, from the operating system's random source, at
     `~/.intentic/keys/at-rest-<slug>.key` (`%USERPROFILE%\.intentic\keys` on Windows). On Linux and macOS only you

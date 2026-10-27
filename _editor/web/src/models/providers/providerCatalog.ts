@@ -144,6 +144,9 @@ export const providerGlyph = (provider: AgentProvider): "gift" | "cpu" | "server
 
 // Whether the capability half (endpoints, trial allowance) has loaded, separately from `accountsLoaded`.
 export const endpointsLoaded = sandboxRef(() => false);
+// Why the last read of which providers can run failed, while it stays failed: a daemon that answers but refuses it (a
+// 5xx) leaves both halves unknown, and a surface that waits on them would otherwise wait in silence.
+export const runnableReadFailure = sandboxRef<string | undefined>(() => undefined);
 
 // The daemon names the free trial's endpoint in English (TRIAL_LABEL); on screen it is said in the reader's language.
 const endpointLabel = (provider: AgentProvider): string | undefined => {

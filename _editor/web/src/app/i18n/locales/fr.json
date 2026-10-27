@@ -6351,6 +6351,7 @@
             "connectedAgo": "connecté {ago}",
             "connectionsUnavailable": "Connexions indisponibles",
             "couldntReachAiAccounts": "Impossible de joindre vos comptes d'IA.",
+            "couldntListProviders": "Ce sandbox n'a pas pu lister les modèles qu'il peut exécuter.",
             "geminiFinishSetup": "{reason}. Déconnectez-le, ouvrez antigravity.google.com avec ce compte pour terminer la configuration de Google, puis reconnectez-le.",
             "googleAccount": "Compte Google",
             "kimiCodeSubscription": "Abonnement Kimi Code",

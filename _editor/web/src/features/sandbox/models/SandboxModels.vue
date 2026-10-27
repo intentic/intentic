@@ -15,7 +15,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { foundToOffer } from "../../../lib/foundOnComputer";
 import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
 import { useOperation } from "../../../workbench/operations/operations";
-import { defaultModelFor, endpointProviders } from "../../../models/providers/providerCatalog";
+import { defaultModelFor, endpointProviders,runnableReadFailure } from "../../../models/providers/providerCatalog";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { rememberPick } from "../../../models/conversations/run/turnDefaults";
@@ -426,6 +426,11 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 title: t(`sandbox.aiAccountSection.connectionsUnavailable`),
                 detail: t(`sandbox.aiAccountSection.sandboxOfflineAccountsCant`),
             }"
+        />
+        <!-- Reachable, but its list of what can run was refused: the panels wait on that list, so say why they are missing. -->
+        <Notice
+            v-else-if="!accessKnown && runnableReadFailure !== undefined"
+            :of="{ tone: `danger`, title: t(`sandbox.aiAccountSection.couldntListProviders`), detail: runnableReadFailure }"
         />
 
         <!-- What this computer already holds: the first thing to do when there is any of it, one press each. -->

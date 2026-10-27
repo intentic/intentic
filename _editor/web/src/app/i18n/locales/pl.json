@@ -5758,6 +5758,7 @@
             "connectedAgo": "połączone {ago}",
             "connectionsUnavailable": "Połączenia niedostępne",
             "couldntReachAiAccounts": "Nie udało się sięgnąć do Twoich kont AI.",
+            "couldntListProviders": "Ten sandbox nie zdołał podać listy modeli, które może uruchomić.",
             "geminiFinishSetup": "{reason}. Odłącz je, otwórz antigravity.google.com na tym koncie, żeby dokończyć konfigurację Google, a potem połącz je ponownie.",
             "googleAccount": "Konto Google",
             "kimiCodeSubscription": "Subskrypcja Kimi Code",

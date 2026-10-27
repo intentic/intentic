@@ -12,6 +12,7 @@ import {
     type ModelOption,
     nativeReady,
     endpointsLoaded,
+    runnableReadFailure,
     providerCommands,
     providerDefaultModel,
     providerModels,
@@ -213,12 +214,17 @@ const readRunnableProviders = async (): Promise<RunnableProviders["endpoints"] |
         // and empty rather than holding a spinner over every gated surface for as long as the tab is open. A 5xx or an
         // unreachable daemon leaves it unknown, and the next reachable seam asks again.
         const settled = (error instanceof SandboxHttpError && error.status === 403) || error instanceof z.core.$ZodError;
+        // A daemon that answered and refused is said where the reader waits on this list (Sandbox ▸ Models).
+        if (!settled && current() && error instanceof SandboxHttpError) {
+            runnableReadFailure.value = error.message;
+        }
         return settled ? [] : undefined;
     }
     // The outgoing sandbox's list: this one's readiness is unknown still, and its own read will say.
     if (!current()) {
         return undefined;
     }
+    runnableReadFailure.value = undefined;
     nativeReady.value = listing.native;
     acpProviders.value = listing.agents;
     // Ids arrive already prefixed `endpoint/`, and `kind` rides along: it's the only way to tell a local model from a

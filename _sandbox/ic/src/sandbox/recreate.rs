@@ -871,6 +871,9 @@ fn recreate(
     gets ic's own, made here on the first recreate that applies, unless its owner opted out. An operator's own file is
     taken only for a sandbox that has no key yet: changing a key is a rotation, which needs the old one beside it. */
     let mounted_key = docker::mount_source(&container, at_rest::KEY_MOUNT);
+    // A container Docker Compose runs stays Compose's: the replacement inherits its labels (compose.rs), and gets no key
+    // its Compose file does not mount (at_rest::choose).
+    let compose_labels = compose::labels_of(&container);
     let given = match &mounted_key {
         None => at_rest::host_file(at_rest::HOST_FILE_ENV)?,
         Some(_) => {
@@ -890,6 +893,7 @@ fn recreate(
         Some(&at_rest::Old {
             mounted: mounted_key.as_deref(),
             env: &env_nul,
+            compose: compose::owns(&compose_labels),
         }),
         auth.as_deref(),
         given.as_deref(),
@@ -952,7 +956,6 @@ fn recreate(
     /* What the record's rollback targets become — `previous` first, older builds behind it — decided by identity above; the build being left is pinned under a protected local tag. */
     let new_base_id = docker::image_id(&base_image);
     // A container Docker Compose runs stays Compose's: the replacement inherits its labels (compose.rs).
-    let compose_labels = compose::labels_of(&container);
     stamped_run.extend(compose::carry_args(&compose_labels));
     if reach == Reach::Applied && compose::owns(&compose_labels) {
         ui::note(&format!(
@@ -961,6 +964,9 @@ fn recreate(
                 .map(|dir| format!(" (from {dir})"))
                 .unwrap_or_default()
         ));
+        if let Some(line) = compose::key_warning(&slug, &key) {
+            ui::warn(&line);
+        }
     }
     let left_version =
         staged::container_version(&container).or_else(|| saved.current_version.clone());

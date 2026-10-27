@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::docker;
+use crate::sandbox::at_rest;
 
 /* A SANDBOX DOCKER COMPOSE RUNS STAYS COMPOSE'S ACROSS AN `ic` SWAP (2026-10-27).
 
@@ -83,6 +84,22 @@ pub fn working_dir(labels: &BTreeMap<String, String>) -> Option<&str> {
         .filter(|dir| !dir.is_empty())
 }
 
+/// What a person is told when ic swaps a container Compose runs that has an at-rest key: Compose's next `up` starts it
+/// from Compose's file, so that file has to mount the key too, or the daemon cannot open the stores encrypted with it
+/// (dyspozytornia under Komodo, 2026-10-27: every capability read answered 500). None when there is no key. Pure.
+pub fn key_warning(slug: &str, key: &at_rest::Source) -> Option<String> {
+    let file = match key {
+        at_rest::Source::Given(path) | at_rest::Source::Own(path) => path.display().to_string(),
+        at_rest::Source::Kept(source) => source.clone(),
+        at_rest::Source::Off => return None,
+    };
+    Some(format!(
+        "{slug}'s stored credentials are encrypted with the at-rest key {file}. Its Compose file must mount that file read-only at {mount} and set {env}={mount}, or the next `docker compose up` starts it without the key and it cannot read its secrets, connections or AI sign-ins.",
+        mount = at_rest::KEY_MOUNT,
+        env = at_rest::KEY_ENV,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,6 +121,26 @@ mod tests {
         args.chunks(2)
             .map(|pair| (pair[0].clone(), pair[1].clone()))
             .collect()
+    }
+
+    #[test]
+    fn a_compose_sandbox_with_a_key_is_told_its_file_must_mount_it() {
+        assert_eq!(key_warning("sandbox-a", &at_rest::Source::Off), None);
+        let line = key_warning(
+            "sandbox-a",
+            &at_rest::Source::Own(std::path::PathBuf::from(
+                "/root/.intentic/keys/at-rest-sandbox-a.key",
+            )),
+        )
+        .unwrap();
+        assert!(
+            line.contains("/root/.intentic/keys/at-rest-sandbox-a.key"),
+            "{line}"
+        );
+        assert!(
+            line.contains(at_rest::KEY_MOUNT) && line.contains(at_rest::KEY_ENV),
+            "{line}"
+        );
     }
 
     #[test]

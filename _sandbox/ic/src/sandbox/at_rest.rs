@@ -146,6 +146,9 @@ pub struct Facts<'a> {
     pub named: bool,
     /// The opt-out, this run's or the one the container carries.
     pub off: bool,
+    /// Whether Docker Compose runs the container being replaced (compose.rs): its next `up` starts it from Compose's file,
+    /// which mounts no key ic adds, so a key made here would leave its stores encrypted with a key the next container lacks.
+    pub compose: bool,
     /// ic's own key for these stores, and whether it exists.
     pub own: &'a Path,
     pub own_made: bool,
@@ -155,7 +158,7 @@ pub struct Facts<'a> {
 /// run asks, since something may be encrypted with it (a sandbox removed and set up again under its name gets its kept
 /// volumes back, and a shared logins volume holds its siblings' stores); for a container that was given a key it no
 /// longer mounts and that is not ic's, a stop, since a new key cannot read what the lost one encrypted and the daemon
-/// would refuse to boot; the opt-out; a new key of ic's. Pure.
+/// would refuse to boot; the opt-out, or a container Docker Compose runs; a new key of ic's. Pure.
 pub fn choose(slug: &str, facts: &Facts) -> Result<Source> {
     if let Some(given) = facts.given {
         return Ok(Source::Given(given.to_path_buf()));
@@ -187,7 +190,7 @@ pub fn choose(slug: &str, facts: &Facts) -> Result<Source> {
             )
         );
     }
-    if facts.off {
+    if facts.off || facts.compose {
         return Ok(Source::Off);
     }
     Ok(Source::Own(facts.own.to_path_buf()))
@@ -199,6 +202,8 @@ pub struct Old<'a> {
     pub mounted: Option<&'a str>,
     /// Its whole env, NUL-framed.
     pub env: &'a [u8],
+    /// Whether Docker Compose runs it (compose.rs `owns`).
+    pub compose: bool,
 }
 
 /// This run's key for a sandbox (`choose`), from what the container it replaces carries (`old`, None for a new one),
@@ -228,6 +233,7 @@ pub fn decide(
                 }),
             named: old.is_some_and(|old| env_value(old.env, KEY_ENV).is_some()),
             off,
+            compose: old.is_some_and(|old| old.compose),
             own: &own,
             own_made,
         },
@@ -576,6 +582,7 @@ mod tests {
             mounted_gone: false,
             named: false,
             off: false,
+            compose: false,
             own,
             own_made: false,
         }
@@ -710,6 +717,53 @@ mod tests {
             ..off
         };
         assert_eq!(choose("a", &made).unwrap(), Source::Own(own.to_path_buf()));
+    }
+
+    #[test]
+    fn a_sandbox_compose_runs_gets_no_key_of_ics_making() {
+        // Compose's next `up` starts it from its own file, which mounts no key ic adds: a key made now would encrypt
+        // stores the next container cannot open (dyspozytornia under Komodo, 2026-10-27).
+        let own = Path::new("/h/keys/at-rest-a.key");
+        let compose = Facts {
+            compose: true,
+            ..facts(own)
+        };
+        assert_eq!(choose("a", &compose).unwrap(), Source::Off);
+        // A key that exists already is still the stores' key: the one Compose's file mounts, ic's own, or an operator's.
+        assert_eq!(
+            choose(
+                "a",
+                &Facts {
+                    mounted: Some("/srv/keys/a.key"),
+                    ..compose
+                }
+            )
+            .unwrap(),
+            Source::Kept("/srv/keys/a.key".to_string())
+        );
+        assert_eq!(
+            choose(
+                "a",
+                &Facts {
+                    own_made: true,
+                    ..compose
+                }
+            )
+            .unwrap(),
+            Source::Own(own.to_path_buf())
+        );
+        let given = Path::new("/srv/keys/b.key");
+        assert_eq!(
+            choose(
+                "a",
+                &Facts {
+                    given: Some(given),
+                    ..compose
+                }
+            )
+            .unwrap(),
+            Source::Given(given.to_path_buf())
+        );
     }
 
     #[test]
