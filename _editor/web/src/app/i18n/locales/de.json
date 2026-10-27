@@ -5744,7 +5744,10 @@
         },
         "agentChangelog": {
             "changelog": "Änderungsprotokoll",
-            "includeReleaseNoteEach": "Zu jedem Commit eine Release-Notiz hinzufügen.",
+            "offEverywhere": "In keinem Repository aktiv. Wähle die, deren Commits eine tragen sollen.",
+            "onEverywhere": "In jedem Repository aktiv.",
+            "onInSome": "In {on} von {total} Repositorys aktiv.",
+            "releaseNoteWithEachCommit": "Release-Notiz zu jedem Commit",
             "workspaceRepository": "Repository des Arbeitsbereichs"
         },
         "agentChecks": {

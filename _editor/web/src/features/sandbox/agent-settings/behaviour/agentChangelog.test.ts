@@ -1,4 +1,4 @@
-// Pins that toggling a repo's changelog switch writes exactly that repo's name to `changelogRepos`, never
+// Pins that pressing a repo's changelog chip writes exactly that repo's name to `changelogRepos`, never
 // another. Mounted (not projected), since what's under test is the click-then-read round trip.
 import "@intentic/testing/dom";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
@@ -18,7 +18,7 @@ jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
 // Two repos, since the per-repo half is what's worth proving: one row must not write the other's name.
 jest.mock(`../../../../models/workspace/tree/useRepos`, () => ({
     useRepos: () => ({
-        options: computed(() => [`root`, `vendor/widget`]),
+        options: computed(() => [`root`, `vendor/widget`, `extensions/a`, `extensions/b`]),
         nested: computed(() => [`vendor/widget`]),
         repoDirs: computed(() => new Set([`vendor/widget`])),
         refresh: () => undefined,
@@ -26,6 +26,7 @@ jest.mock(`../../../../models/workspace/tree/useRepos`, () => ({
 }));
 
 const { default: AgentChangelog } = await import("./AgentChangelog.vue");
+const { changelogLanes } = await import("./agentChangelog");
 
 let app: App | undefined;
 
@@ -49,16 +50,18 @@ afterEach(() => {
 });
 
 const toggleAt = (host: HTMLElement, index: number): HTMLElement => {
-    const switches = [...host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)];
-    const control = switches[index];
-    expect(control, `expected a switch at index ${index}`).toEqual(expect.any(Object));
+    const chips = [...host.querySelectorAll(`button[aria-pressed]`)];
+    const control = chips[index];
+    expect(control, `expected a chip at index ${index}`).toEqual(expect.any(Object));
     return control as HTMLElement;
 };
 
 test(`every repo starts off: nothing changes in anybody's repository until they ask for it`, () => {
     const host = mount(AgentChangelog);
     expect(settings.value.changelogRepos).toEqual([]);
-    expect(host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)).toHaveLength(2);
+    const chips = [...host.querySelectorAll(`button[aria-pressed]`)];
+    expect(chips).toHaveLength(4);
+    expect(chips.every((chip) => chip.getAttribute(`aria-pressed`) === `false`)).toBe(true);
 });
 
 test(`switching a repo on names that repo and only that repo`, async () => {
@@ -88,4 +91,31 @@ test(`switching one off leaves the others alone`, async () => {
     await Promise.resolve();
 
     expect(settings.value.changelogRepos).toEqual([`vendor/widget`]);
+});
+
+test(`the summary counts only repos that are here, so a stale name can't inflate it`, async () => {
+    settings.value = { ...settings.value, changelogRepos: [`root`, `gone/repo`] };
+    const host = mount(AgentChangelog);
+    expect(host.textContent).toContain(`On in 1 of 4 repositories.`);
+});
+
+test(`a folder of several repos is said once over them; a folder of one joins the top lane whole`, () => {
+    const lanes = changelogLanes([`root`, `vendor/widget`, `extensions/a`, `intentic`, `extensions/b`], `Workspace`);
+    expect(lanes).toEqual([
+        {
+            folder: undefined,
+            chips: [
+                { repo: `root`, name: `Workspace` },
+                { repo: `vendor/widget`, name: `vendor/widget` },
+                { repo: `intentic`, name: `intentic` },
+            ],
+        },
+        {
+            folder: `extensions/`,
+            chips: [
+                { repo: `extensions/a`, name: `a` },
+                { repo: `extensions/b`, name: `b` },
+            ],
+        },
+    ]);
 });

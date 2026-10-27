@@ -5143,7 +5143,10 @@
         },
         "agentChangelog": {
             "changelog": "Dziennik zmian",
-            "includeReleaseNoteEach": "Dołączaj notatkę wydania do każdego commita.",
+            "offEverywhere": "Wyłączone we wszystkich repozytoriach. Wybierz te, których commity mają ją zawierać.",
+            "onEverywhere": "Włączone we wszystkich repozytoriach.",
+            "onInSome": "Włączone w {on} z {total} repozytoriów.",
+            "releaseNoteWithEachCommit": "Informacja o wydaniu przy każdym commicie",
             "workspaceRepository": "Repozytorium przestrzeni roboczej"
         },
         "agentChecks": {

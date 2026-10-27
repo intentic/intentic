@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { Notice, Row, RowGroup, RowNote } from "@intentic/ui";
-import ToggleSwitch from "primevue/toggleswitch";
+import { Icon, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { computed } from "vue";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useRepos } from "../../../../models/workspace/tree/useRepos";
 import { useT } from "@intentic/ui/i18n";
+import { changelogLanes } from "./agentChangelog";
 import ChangelogExplainer from "./explainers/ChangelogExplainer.vue";
 
-// Per-repo switch for whether a commit gets a release note; the only place this feature turns on. A commit
+// Per-repo choice of whether a commit gets a release note; the only place this feature turns on. A commit
 // message's style is learned from repo history, but a release note has nothing to learn from, so it needs an
-// explicit per-repo choice. Off by default: no repo changes until switched on here.
+// explicit per-repo choice. Off by default: no repo changes until picked here.
+//
+// One setting, said once, with every repository a chip under it: the only fact per repo is on or off, so a row
+// each (same icon, same sentence, a switch) spent a screen on a single bit of eleven.
 
 const t = useT();
 
@@ -25,20 +28,42 @@ const setRepo = (repo: string, on: boolean): void => {
 };
 
 // `root` names the workspace repository itself, which has no path to show.
-const repoLabel = (repo: string): string => (repo === `root` ? t(`sandbox.agentChangelog.workspaceRepository`) : repo);
+const lanes = computed(() => changelogLanes(repos.value, t(`sandbox.agentChangelog.workspaceRepository`)));
+
+// Only repos that still exist count, so a stale name left in settings can't read as "on in 3 of 2".
+const onCount = computed(() => repos.value.filter((repo) => enabled.value.includes(repo)).length);
+const summary = computed(() => {
+    if (onCount.value === 0) {return t(`sandbox.agentChangelog.offEverywhere`);}
+    if (onCount.value === repos.value.length) {return t(`sandbox.agentChangelog.onEverywhere`);}
+    return t(`sandbox.agentChangelog.onInSome`, { on: onCount.value, total: repos.value.length });
+});
 </script>
 
 <template>
     <RowGroup data-setting="agent-changelog" :label="t(`sandbox.agentChangelog.changelog`)">
         <template #info><ChangelogExplainer /></template>
-        <!-- One row per repo, `root` first (ordered by useRepos). -->
-        <Row v-for="repo in repos" :key="repo" icon="book" :title="repoLabel(repo)" :description="t(`sandbox.agentChangelog.includeReleaseNoteEach`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="enabled.includes(repo)"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => setRepo(repo, value)"
-                />
+        <Row :title="t(`sandbox.agentChangelog.releaseNoteWithEachCommit`)" :description="summary">
+            <template #below>
+                <div class="flex flex-col gap-3 pt-1">
+                    <div v-for="lane in lanes" :key="lane.folder ?? ``" class="flex flex-col gap-1.5">
+                        <span v-if="lane.folder !== undefined" class="font-mono text-2xs text-subtle">{{ lane.folder }}</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button
+                                v-for="chip in lane.chips"
+                                :key="chip.repo"
+                                type="button"
+                                :title="chip.repo === `root` ? undefined : chip.repo"
+                                :aria-pressed="enabled.includes(chip.repo)"
+                                :disabled="settings === undefined"
+                                :class="ui.chip({ on: enabled.includes(chip.repo) }, enabled.includes(chip.repo) && `font-medium`)"
+                                @click="setRepo(chip.repo, !enabled.includes(chip.repo))"
+                            >
+                                <Icon v-if="enabled.includes(chip.repo)" name="check" class="text-2xs" aria-hidden="true" />
+                                {{ chip.name }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </template>
         </Row>
         <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>

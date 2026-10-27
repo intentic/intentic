@@ -5744,7 +5744,10 @@
         },
         "agentChangelog": {
             "changelog": "Journal des changements",
-            "includeReleaseNoteEach": "Inclure une note de version avec chaque commit.",
+            "offEverywhere": "Désactivé dans tous les dépôts. Choisissez ceux dont les commits doivent en porter une.",
+            "onEverywhere": "Activé dans tous les dépôts.",
+            "onInSome": "Activé dans {on} dépôts sur {total}.",
+            "releaseNoteWithEachCommit": "Note de version à chaque commit",
             "workspaceRepository": "Dépôt de l'espace de travail"
         },
         "agentChecks": {

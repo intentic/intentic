@@ -5744,7 +5744,10 @@
         },
         "agentChangelog": {
             "changelog": "Changelog",
-            "includeReleaseNoteEach": "Include a release note with each commit.",
+            "offEverywhere": "Off in every repository. Pick the ones whose commits should carry one.",
+            "onEverywhere": "On in every repository.",
+            "onInSome": "On in {on} of {total} repositories.",
+            "releaseNoteWithEachCommit": "Release note with each commit",
             "workspaceRepository": "Workspace repository"
         },
         "agentChecks": {
