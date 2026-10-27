@@ -1,6 +1,6 @@
 import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
 import type { FreshLink } from "../run/turnRequest";
-import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
 import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agent-status/agentStatus-standing";
 import { clockOffset } from "../../agent-status/sandboxClock";
 import { endingStanding } from "../session/runPhase";
@@ -20,8 +20,9 @@ export interface TabFacts {
     readonly registered: boolean;
     // Where the card stands when no registry entry says otherwise (see standingOf).
     readonly standing: ClientAgentStatus;
-    readonly provider: AgentProvider;
-    readonly harness: AgentHarness;
+    // Who the composer's next message is for, in the very shape its draft keeps it (servingOf): one reading of the pick,
+    // so a card drawn from this tab and one drawn from the draft alone, once the tab is closed, name the same spend.
+    readonly serves: QueuedServing;
     // Which sandbox the conversation runs in, when not the one the browser is pointed at.
     readonly box?: string;
     readonly title?: string;
@@ -30,8 +31,6 @@ export interface TabFacts {
     // Standing on nothing to restore (Conversation.standIn); the fleet board, usually elsewhere, must ignore it.
     readonly standIn: boolean;
     readonly sessionId?: string;
-    // Model the next turn will run on; what a prepared-message card names as its spend.
-    readonly model: string;
     // Words in the composer, or a staged attachment.
     readonly unsent: boolean;
     // When the composer first held something (Conversation.draftAt), for an age readout.
@@ -120,6 +119,15 @@ export const startedHere = (conversation: Pick<Conversation, "turn">): number | 
     return startedAt !== undefined && conversation.turn.turnOnSandboxClock.value ? startedAt + clockOffset.value : startedAt;
 };
 
+/** Who a conversation's next message is for: the composer's pick, as its draft and its tab both carry it. */
+export const servingOf = (conversation: Conversation): QueuedServing => ({
+    agent: conversation.selection.provider.value,
+    harness: conversation.selection.harness.value,
+    model: conversation.selection.model.value,
+    effort: conversation.selection.effortPick.value,
+    account: conversation.selection.account.value,
+});
+
 const turnFacts = (conversation: Conversation): TurnFacts => ({
     effort: conversation.selection.effort.value,
     thinking: conversation.selection.thinking.value,
@@ -138,14 +146,12 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         id: conversation.conversationId,
         registered: conversation.registered.value,
         standing,
-        provider: conversation.selection.provider.value,
-        harness: conversation.selection.harness.value,
+        serves: servingOf(conversation),
         box: conversation.box.value,
         title: conversation.title.value ?? undefined,
         peek: conversation.peek.value,
         standIn: conversation.standIn.value,
         sessionId: conversation.session.value?.id,
-        model: conversation.selection.model.value,
         unsent: conversation.unsent.value,
         draftAt: conversation.draftAt.value,
         leftAt: conversation.leftAt.value,

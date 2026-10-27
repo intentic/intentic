@@ -38,11 +38,9 @@ const tab = (id: string, peek = false): TabFacts => ({
     id,
     registered: true,
     standing: `resumed`,
-    provider: `claude`,
-    harness: `native`,
+    serves: { agent: `claude`, harness: `native`, model: `sonnet` },
     peek,
     standIn: false,
-    model: `sonnet`,
     unsent: false,
 });
 const keys = (over: Partial<Record<`shiftKey` | `altKey` | `ctrlKey` | `metaKey`, boolean>> = {}) => ({

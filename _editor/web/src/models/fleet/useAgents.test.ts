@@ -797,9 +797,7 @@ describe("draft cards", () => {
         peek: false,
         // A user-requested draft; the panel-only blank (`standIn`) is the case below, drawing no card at all.
         standIn: false,
-        provider: `claude`,
-        harness: `native`,
-        model: ``,
+        serves: { agent: `claude`, harness: `native`, model: `` },
         unsent: words !== undefined,
         ...(at === undefined ? {} : { draftAt: at }),
     });
@@ -912,6 +910,24 @@ describe("draft cards", () => {
         expect(useChat().conversations.value.find((conversation) => conversation.conversationId === `set-aside`)?.draft.value).toBe(
             `fix the login redirect`,
         );
+    });
+
+    // A draft's card says the same spend whether a tab holds it or only the draft does: both read the one pick
+    // (tabFacts.servingOf). The open card used to lose the account, so selecting a closed draft dropped its chip.
+    it("names a draft's account alike with its chat open and closed", async () => {
+        const chat = useChat();
+        const conversation = new Conversation(`prepared`);
+        conversation.draft.value = `fix the login redirect`;
+        conversation.selection.apply({ kind: `set`, picks: { account: `acct-radarsu` } });
+        chat.conversations.value = [...chat.conversations.value, conversation];
+        const card = () => useAgents().lanes.value.active.find((entry) => entry.id === `prepared`);
+
+        expect({ open: card()?.open, account: card()?.account }).toEqual({ open: true, account: `acct-radarsu` });
+
+        chat.closeTabs(new Set([`prepared`]));
+        await nextTick();
+
+        expect({ open: card()?.open, account: card()?.account }).toEqual({ open: false, account: `acct-radarsu` });
     });
 
     it("cards a workspace conversation by the same rule", () => {

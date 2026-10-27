@@ -1,6 +1,7 @@
 import { effectScope, watch } from "vue";
 import type { Conversation } from "../session/conversation";
 import { chipOf } from "../session/queueCalls";
+import { servingOf } from "../tabs/tabFacts";
 import type { StoredTab } from "../tabs/tabSnapshot";
 import { draftOf, writeDraft } from "./composerDrafts";
 import { type DraftWords, type HeldDraft, holdsWords, sameWords, type SyncedDraft } from "./heldDraft";
@@ -13,13 +14,7 @@ import { type DraftWords, type HeldDraft, holdsWords, sameWords, type SyncedDraf
 const composerWords = (conversation: Conversation): DraftWords => ({
     text: conversation.draft.value,
     attachments: conversation.attachments.value.filter((file) => file.status === `done`).map((file) => ({ name: file.name, path: file.path })),
-    serves: {
-        agent: conversation.selection.provider.value,
-        harness: conversation.selection.harness.value,
-        model: conversation.selection.model.value,
-        effort: conversation.selection.effortPick.value,
-        account: conversation.selection.account.value,
-    },
+    serves: servingOf(conversation),
     forkOf: conversation.pendingForkOf.value,
     freshOf: conversation.pendingFreshOf.value,
 });

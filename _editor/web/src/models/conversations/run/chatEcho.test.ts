@@ -49,9 +49,7 @@ const draftTab = (id: string, words?: string): TabFacts => ({
     standing: `draft`,
     peek: false,
     standIn: false,
-    provider: `claude`,
-    harness: `native`,
-    model: ``,
+    serves: { agent: `claude`, harness: `native`, model: `` },
     unsent: words !== undefined,
 });
 const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });

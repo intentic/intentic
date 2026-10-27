@@ -1,4 +1,5 @@
 import { sandboxValue } from "@intentic/extension-api";
+import type { QueuedServing } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { useNow } from "@intentic/ui/async";
 import { computed, effectScope, watch } from "vue";
@@ -90,6 +91,15 @@ export const windowFinished = <T>(
 // Built from the draft alone, since no daemon row or open tab exists for it: a chat closed with only its unsent message,
 // in any window or on another device. Carries its sandbox so actions address the right daemon, and who the message is
 // for, so reopening it opens on that pick. `updatedAt` is 0, since a draft isn't activity.
+// The spend a message not sent yet is to go on, as a card names it: one reading for every draft card, whether drawn from
+// an open tab or from the draft alone, so opening a closed draft never changes what its card says. Until 10-27 the two
+// read different projections of the pick and an opened draft lost its account and effort.
+const spendOf = (serves: QueuedServing | undefined): Pick<FleetAgent, "model" | "effort" | "account"> => ({
+    ...(serves?.model === undefined ? {} : { model: serves.model }),
+    ...(serves?.effort === undefined ? {} : { effort: serves.effort }),
+    ...(serves?.account === undefined ? {} : { account: serves.account }),
+});
+
 const closedCard = (id: string, draft: DraftFacts): FleetAgent => {
     const card: FleetAgent = {
         id,
@@ -105,9 +115,7 @@ const closedCard = (id: string, draft: DraftFacts): FleetAgent => {
         unsent: true,
         draftAt: draft.since,
         // The pick the message is to go on: work whose spend is already decided.
-        ...(draft.serves?.model === undefined ? {} : { model: draft.serves.model }),
-        ...(draft.serves?.effort === undefined ? {} : { effort: draft.serves.effort }),
-        ...(draft.serves?.account === undefined ? {} : { account: draft.serves.account }),
+        ...spendOf(draft.serves),
         ...(draft.box === undefined ? {} : { sandboxId: draft.box }),
     };
     // A fresh session not sent yet hangs under the work it opens on, as an open one does (linkedDraft).
@@ -136,8 +144,8 @@ const linkedDraft = (tab: TabFacts, card: FleetAgent): FleetAgent => {
 const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => linkedDraft(tab, {
     id: tab.id,
     status: tab.standing,
-    provider: tab.provider,
-    harness: tab.harness,
+    provider: tab.serves.agent,
+    harness: tab.serves.harness,
     updatedAt: 0,
     attention: NO_ATTENTION,
     open: true,
@@ -148,10 +156,11 @@ const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => li
     ...(tab.title === undefined ? {} : { title: tab.title }),
     ...(tab.sessionId === undefined ? {} : { sessionId: tab.sessionId }),
     // The send's instant is this browser's; the card's clock counts on the sandbox's (sandboxClock.ts).
+    // A sent turn's own effort (the one it resolved to) outranks the pick's.
     ...(tab.turn === undefined
         ? {}
-        : { model: tab.model, ...tab.turn, startedAt: tab.turn.startedAt === undefined ? undefined : sandboxNow(tab.turn.startedAt) }),
-    ...(tab.standing === `draft` && held !== undefined ? { model: tab.model } : {}),
+        : { ...spendOf(tab.serves), ...tab.turn, startedAt: tab.turn.startedAt === undefined ? undefined : sandboxNow(tab.turn.startedAt) }),
+    ...(tab.standing === `draft` && held !== undefined ? spendOf(tab.serves) : {}),
 });
 
 // A turn this browser sent that the roster cannot have answered for yet, returning the instant it went. The board's
