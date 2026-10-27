@@ -11,11 +11,16 @@
        running it, or its command shown again. Never the one Home is making right now, whose run is its tile's: offered
        here, it read as a setup left unfinished and sent its reader to "finish" a sandbox already starting (2026-10-26).
      - Signed out (anonymous Home), Create signs in first and comes back to the same ask (models/sandbox/addSandbox.ts),
-       and a returning person whose session ended is told plainly that signing in brings their sandboxes back. -->
+       and a returning person whose session ended is told plainly that signing in brings their sandboxes back.
+     - In the desktop app, a quiet line at the foot leads to This computer (the app's own files and tools, no sandbox
+       needed): the one way off this page for someone who opened the app for their computer, not for a sandbox. Raw text,
+       never a tile on the rail or a button beside Create, so the page still asks for one press (2026-10-27). With a
+       sandbox, the account menu's row and Alt+0 are the way there. -->
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
+import { desktopApp, openThisComputer } from "../../app/environments/desktop";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useAuth } from "../../client/auth/useAuth";
@@ -39,6 +44,8 @@ const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value).f
 // Finishing it is Home's own tile and page, wherever this is.
 const finish = computed(() => (unfinished.value === undefined ? undefined : finishOnHome(unfinished.value.id)));
 const add = useRequestAddSandbox();
+// Read once: the app says it is there before the page loads.
+const inDesktopApp = desktopApp() !== undefined;
 </script>
 
 <template>
@@ -68,6 +75,12 @@ const add = useRequestAddSandbox();
                 </div>
                 <p v-if="signedOut" class="text-xs text-muted">{{ t(`home.firstRun.signedOut`) }}</p>
             </div>
+            <p v-if="inDesktopApp" class="text-xs text-subtle" data-home-this-computer>
+                {{ t(`home.firstRun.thisComputerLead`) }}
+                <button type="button" class="rounded text-link hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-link" @click="openThisComputer">
+                    {{ t(`home.firstRun.thisComputerLink`) }}
+                </button>
+            </p>
         </div>
     </section>
 </template>

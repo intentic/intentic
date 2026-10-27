@@ -13443,6 +13443,8 @@
             "finish": "Einrichtung von {name} abschließen",
             "signIn": "Anmelden",
             "signedOut": "Du hast schon Sandboxes? Melde dich an, um sie zu sehen.",
+            "thisComputerLead": "Nur deine Dateien?",
+            "thisComputerLink": "„Dieser Computer“ öffnen",
             "steps": {
                 "ask": {
                     "title": "Du sagst, was du möchtest",

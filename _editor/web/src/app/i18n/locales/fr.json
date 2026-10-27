@@ -13443,6 +13443,8 @@
             "finish": "Terminer la configuration de {name}",
             "signIn": "Se connecter",
             "signedOut": "Vous avez déjà des sandboxes ? Connectez-vous pour les voir.",
+            "thisComputerLead": "Juste vos fichiers ?",
+            "thisComputerLink": "Ouvrir Cet ordinateur",
             "steps": {
                 "ask": {
                     "title": "Vous dites ce que vous voulez",

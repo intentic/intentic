@@ -13443,6 +13443,8 @@
             "finish": "Finish setting up {name}",
             "signIn": "Sign in",
             "signedOut": "Already have sandboxes? Sign in to see them.",
+            "thisComputerLead": "Just want your files?",
+            "thisComputerLink": "Open This computer",
             "steps": {
                 "ask": {
                     "title": "You say what you want",

@@ -13443,6 +13443,8 @@
             "finish": "Dokończ konfigurację {name}",
             "signIn": "Zaloguj się",
             "signedOut": "Masz już sandboksy? Zaloguj się, aby je zobaczyć.",
+            "thisComputerLead": "Chcesz tylko swoich plików?",
+            "thisComputerLink": "Otwórz Ten komputer",
             "steps": {
                 "ask": {
                     "title": "Mówisz, czego chcesz",
