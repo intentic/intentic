@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { parseJsonOr, parseJsonWith } from "@intentic/base/json";
+import { DAEMON_PORT } from "@intentic/constants";
 import { CRASH_LOOP_RESTARTS } from "@intentic/sandbox-contract/state/update-probation";
 import { DaemonHealthReadingSchema } from "@intentic/sandbox-contract/schemas/system";
 import { parseVitals, VITALS_FILE, VITALS_PATH } from "@intentic/sandbox-contract/protocol/vitals";
@@ -14,10 +15,10 @@ import { execMachine, type FlyMachineDetail, getMachineDetail } from "../fly/fly
 
 // The same probe ic runs in the container: the daemon's own health route, on the port it always listens on. Named by
 // its path, like the planner's node, so nothing rests on how Fly's exec resolves a bare name.
-export const DAEMON_HEALTH_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787/health`] as const;
+export const DAEMON_HEALTH_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:${DAEMON_PORT}/health`] as const;
 // netd's own vitals (browser-wire's SandboxVitals), which it answers whatever state the daemon is in once the daemon has
 // reached it. A daemon that never did leaves netd listening on nothing, and the file netd keeps them in is read instead.
-export const DAEMON_VITALS_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:8787${VITALS_PATH}`] as const;
+export const DAEMON_VITALS_COMMAND = [`/usr/bin/curl`, `-sf`, `--max-time`, `5`, `http://localhost:${DAEMON_PORT}${VITALS_PATH}`] as const;
 export const DAEMON_VITALS_FILE_COMMAND = [`/bin/cat`, VITALS_FILE] as const;
 const HEALTH_EXEC_SECONDS = 10;
 export const HEALTH_POLL_MS = 2_000;
@@ -140,7 +141,9 @@ export const askHealth = async (config: Config, machine: DaemonMachine): Promise
 // One exec's stdout, or undefined when Fly refused it or the command failed.
 const execOut = async (config: Config, machine: DaemonMachine, command: readonly string[]): Promise<string | undefined> => {
     // allow(silent-catch): an exec Fly refuses says nothing of the daemon; the budget still decides what silence means
-    const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, command, HEALTH_EXEC_SECONDS).catch(() => undefined);
+    const answer = await execMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, command, HEALTH_EXEC_SECONDS).catch(
+        () => undefined,
+    );
     return answer === undefined || answer.exitCode !== 0 ? undefined : answer.stdout;
 };
 
@@ -204,7 +207,13 @@ export const awaitDaemon = async (
     checkedIn: (() => Promise<boolean>) | undefined,
 ): Promise<DaemonVerdict> => {
     const started = Date.now();
-    const seen: Seen = { answered: false, journalSeen: false, converting: false, ready: false, checkedIn: checkedIn === undefined || baseline.running };
+    const seen: Seen = {
+        answered: false,
+        journalSeen: false,
+        converting: false,
+        ready: false,
+        checkedIn: checkedIn === undefined || baseline.running,
+    };
     const budget = (): number => (seen.journalSeen ? JOURNAL_BUDGET_MS : READY_BUDGET_MS);
     for (let attempt = 0; attempt < Math.ceil(budget() / HEALTH_POLL_MS) && Date.now() - started < budget(); attempt += 1) {
         // a poll is sequential by definition

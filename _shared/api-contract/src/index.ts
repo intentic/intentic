@@ -1,4 +1,4 @@
-import { HOSTED_TIER_IDS, PROFILE_IDS } from "@intentic/constants";
+import { HOSTED_TIER_IDS, PROFILE_IDS, SANDBOX_NAME_MAX } from "@intentic/constants";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
@@ -81,12 +81,18 @@ export const sandboxRegistryContract = {
     list: oc.route({ method: "GET", path: "/sandbox/list" }).output(z.object({ sandboxes: z.array(SandboxSummarySchema) })),
     create: oc
         .route({ method: "POST", path: "/sandbox/create" })
-        .input(z.object({ name: z.string().min(1).max(60), requestId: z.uuid().optional() }))
+        .input(z.object({ name: z.string().min(1).max(SANDBOX_NAME_MAX), requestId: z.uuid().optional() }))
         .output(SandboxSummarySchema),
     update: oc
         .route({ method: "POST", path: "/sandbox/update" })
         // `image: null` clears the logo; absent leaves it alone, so the field must be both nullable and optional.
-        .input(z.object({ sandboxId: z.string(), name: z.string().min(1).max(60).optional(), image: ImageDataUrlSchema.nullable().optional() }))
+        .input(
+            z.object({
+                sandboxId: z.string(),
+                name: z.string().min(1).max(SANDBOX_NAME_MAX).optional(),
+                image: ImageDataUrlSchema.nullable().optional(),
+            }),
+        )
         .output(SandboxSummarySchema),
     delete: oc
         .route({ method: "POST", path: "/sandbox/delete" })

@@ -15,6 +15,7 @@ import {
 import type { ResourcesForm } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import type { SandboxSummary } from "@intentic/api-contract";
+import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
@@ -302,7 +303,7 @@ const saveStyledLogo = async (image: string): Promise<void> => {
                                     :action="t(`sandbox.sandboxOverview.renameSandbox`)"
                                     fallback="Sandbox"
                                     :editable="isOwner"
-                                    :maxlength="60"
+                                    :maxlength="SANDBOX_NAME_MAX"
                                     failure="Couldn't save the sandbox's name."
                                 />
                             </h2>

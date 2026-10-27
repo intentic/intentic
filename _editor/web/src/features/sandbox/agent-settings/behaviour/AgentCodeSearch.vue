@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { FIELD_NOTES_FILE } from "@intentic/constants";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { formatCount, Notice, Row, RowGroup, RowNote } from "@intentic/ui";
 import { formatDayMonth, formatPercent } from "@intentic/ui/format";
 import { RouterLink } from "vue-router";
@@ -8,7 +9,7 @@ import { computed } from "vue";
 import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useFieldNotes } from "./useFieldNotes";
-import { commitCount, asPercent } from "../models/numberInputs";
+import { numberSetting, commitCount, asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";
 import ResultChip from "../models/ResultChip.vue";
 import DetailSwitch from "./DetailSwitch.vue";
@@ -49,7 +50,7 @@ const mapTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.
 const notesHoldoutPercent = computed<number>(() => asPercent(settings.value?.fieldNotesHoldout));
 const notesTable = computed<ResultTable | undefined>(() => tableOf(savings.value?.notes));
 const { status: notes } = useFieldNotes();
-const NOTES_BUDGET = { min: 500, max: 20000 } as const;
+const NOTES_BUDGET = numberSetting(SandboxSettingsSchema.shape.fieldNotesBudget);
 // The pair, never the first number alone: "top 5 of 12" separates a tight limit from a short file, and "5" cannot.
 const notesReach = computed<string>(() =>
     notes.value?.ranksTotal === undefined
@@ -193,13 +194,16 @@ const notesSchedule = computed<string>(() => {
                                     :min="NOTES_BUDGET.min"
                                     :max="NOTES_BUDGET.max"
                                     :step="100"
-                                    :value="settings?.fieldNotesBudget ?? 4000"
+                                    :value="settings?.fieldNotesBudget ?? NOTES_BUDGET.default"
                                     :disabled="settings === undefined"
                                     class="field-bare w-14 p-0 text-right text-xs tabular-nums"
                                     @change="
                                         (event: Event) =>
-                                            commitCount(event, settings?.fieldNotesBudget ?? 4000, NOTES_BUDGET, (fieldNotesBudget: number) =>
-                                                patch({ fieldNotesBudget }),
+                                            commitCount(
+                                                event,
+                                                settings?.fieldNotesBudget ?? NOTES_BUDGET.default,
+                                                NOTES_BUDGET,
+                                                (fieldNotesBudget: number) => patch({ fieldNotesBudget }),
                                             )
                                     "
                                 />

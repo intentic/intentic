@@ -1174,7 +1174,7 @@
             "googleFaster": "To adres Google: Kontynuuj z Google będzie szybsze. Kod też zadziała.",
             "continueWithEmail": "Kontynuuj przez e-mail",
             "emailMeCode": "Wyślij mi kod logowania",
-            "sentTo": "Wysłaliśmy 6-cyfrowy kod na adres {email}.",
+            "sentTo": "Wysłaliśmy {digits}-cyfrowy kod na adres {email}.",
             "typeItHereInApp": "Wpisz go tutaj. Link w wiadomości otwiera przeglądarkę, nie tę aplikację.",
             "typeItOrOpenLink": "Wpisz go tutaj albo otwórz link z wiadomości na tym urządzeniu.",
             "codeLabel": "Kod logowania",

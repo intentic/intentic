@@ -4,7 +4,8 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
-import { commitCount } from "../models/numberInputs";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { numberSetting, commitCount } from "../models/numberInputs";
 import { postureOf } from "../../guardrails/spawnPosture";
 import { useT } from "@intentic/ui/i18n";
 import DetailSwitch from "./DetailSwitch.vue";
@@ -27,11 +28,11 @@ const advanced = computed(() => level.value === `advanced`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 
-const AT_ONCE = { min: 1, max: 200 };
-const PER_TURN = { min: 1, max: 2000 };
-const DEPTH = { min: 1, max: 10 };
-const RERUN_HOURS = { min: 0, max: 24 };
-const RESERVE = { min: 0, max: 50 };
+const AT_ONCE = numberSetting(SandboxSettingsSchema.shape.subagentsAtOnce);
+const PER_TURN = numberSetting(SandboxSettingsSchema.shape.subagentsPerTurn);
+const DEPTH = numberSetting(SandboxSettingsSchema.shape.subagentDepth);
+const RERUN_HOURS = numberSetting(SandboxSettingsSchema.shape.childRerunHorizonHours);
+const RESERVE = numberSetting(SandboxSettingsSchema.shape.subagentReservePercent);
 
 // Whether spawning is refused, which leaves the ceilings below bounding only the subagents a runtime starts itself.
 const spawnDenied = computed(() => postureOf(settings.value?.actionRules ?? {}) === `deny`);
@@ -60,13 +61,15 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
                     type="number"
                     :min="AT_ONCE.min"
                     :max="AT_ONCE.max"
-                    :value="settings?.subagentsAtOnce ?? 20"
+                    :value="settings?.subagentsAtOnce ?? AT_ONCE.default"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.subagentsAtOnce`)"
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) =>
-                            commitCount(event, settings?.subagentsAtOnce ?? 20, AT_ONCE, (subagentsAtOnce: number) => patch({ subagentsAtOnce }))
+                            commitCount(event, settings?.subagentsAtOnce ?? AT_ONCE.default, AT_ONCE, (subagentsAtOnce: number) =>
+                                patch({ subagentsAtOnce }),
+                            )
                     "
                 />
             </template>
@@ -84,13 +87,15 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
                     type="number"
                     :min="PER_TURN.min"
                     :max="PER_TURN.max"
-                    :value="settings?.subagentsPerTurn ?? 200"
+                    :value="settings?.subagentsPerTurn ?? PER_TURN.default"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.subagentsPerConversation`)"
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) =>
-                            commitCount(event, settings?.subagentsPerTurn ?? 200, PER_TURN, (subagentsPerTurn: number) => patch({ subagentsPerTurn }))
+                            commitCount(event, settings?.subagentsPerTurn ?? PER_TURN.default, PER_TURN, (subagentsPerTurn: number) =>
+                                patch({ subagentsPerTurn }),
+                            )
                     "
                 />
             </template>
@@ -108,12 +113,13 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
                     type="number"
                     :min="DEPTH.min"
                     :max="DEPTH.max"
-                    :value="settings?.subagentDepth ?? 3"
+                    :value="settings?.subagentDepth ?? DEPTH.default"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.nestingDepth`)"
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
-                        (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
+                        (event: Event) =>
+                            commitCount(event, settings?.subagentDepth ?? DEPTH.default, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
                     "
                 />
             </template>
@@ -130,14 +136,17 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
                     type="number"
                     :min="RERUN_HOURS.min"
                     :max="RERUN_HOURS.max"
-                    :value="settings?.childRerunHorizonHours ?? 6"
+                    :value="settings?.childRerunHorizonHours ?? RERUN_HOURS.default"
                     :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.waitForReset`)"
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) =>
-                            commitCount(event, settings?.childRerunHorizonHours ?? 6, RERUN_HOURS, (childRerunHorizonHours: number) =>
-                                patch({ childRerunHorizonHours }),
+                            commitCount(
+                                event,
+                                settings?.childRerunHorizonHours ?? RERUN_HOURS.default,
+                                RERUN_HOURS,
+                                (childRerunHorizonHours: number) => patch({ childRerunHorizonHours }),
                             )
                     "
                 />
@@ -160,13 +169,13 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
                     type="number"
                     :min="RESERVE.min"
                     :max="RESERVE.max"
-                    :value="settings?.subagentReservePercent ?? 10"
+                    :value="settings?.subagentReservePercent ?? RESERVE.default"
                     :disabled="settings === undefined || settings.subagentBudget === false"
                     :aria-label="t(`sandbox.agentSubagents.keepRoomForYou`)"
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="
                         (event: Event) =>
-                            commitCount(event, settings?.subagentReservePercent ?? 10, RESERVE, (subagentReservePercent: number) =>
+                            commitCount(event, settings?.subagentReservePercent ?? RESERVE.default, RESERVE, (subagentReservePercent: number) =>
                                 patch({ subagentReservePercent }),
                             )
                     "

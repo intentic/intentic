@@ -1,4 +1,5 @@
 import { environment } from "./environment";
+import { PLATFORM_SITE_ORIGIN } from "@intentic/constants";
 
 // Where to get the desktop app, chosen by build (like scriptCommand.ts): deploy serves the intentic.dev vanity URLs
 // (site worker resolves to the newest release or a staged installer); dev serves the site's own dev server, staged
@@ -14,7 +15,7 @@ const DESKTOP_FILES = {
 } as const;
 
 const downloadUrl = ({ vanity, file }: { vanity: string; file: string }): string =>
-    environment.production ? `https://intentic.dev/desktop/${vanity}` : `http://localhost:4321/desktop/${file}`;
+    environment.production ? `${PLATFORM_SITE_ORIGIN}/desktop/${vanity}` : `http://localhost:4321/desktop/${file}`;
 
 export const DESKTOP_DOWNLOADS = {
     windows: downloadUrl(DESKTOP_FILES.windows),

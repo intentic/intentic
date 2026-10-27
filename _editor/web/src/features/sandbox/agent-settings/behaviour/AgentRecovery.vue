@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { HANDOFF_MODES, type LimitHandoff } from "@intentic/sandbox-contract/schemas/providers/handoff";
-import { type KeepWarmSettings, KeepWarmSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { type KeepWarmSettings, KeepWarmSettingsSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { LimitPolicy, RetryPolicy, RoomPolicy, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { Notice, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -9,6 +9,7 @@ import { breakAnswers, breakLabel } from "../../../../models/conversations/endin
 import { handoffLabel } from "../../../../models/conversations/endings/handoffChoice";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
+import { clampCount, numberSetting } from "../models/numberInputs";
 import DetailSwitch from "./DetailSwitch.vue";
 import { useDetailLevel } from "./detailLevel";
 
@@ -86,7 +87,7 @@ const setTokens =
         if (!(input instanceof HTMLInputElement)) {
             return;
         }
-        const value = Math.max(0, Math.round(Number(input.value) || 0));
+        const value = clampCount(Number(input.value) || 0, numberSetting(SandboxSettingsSchema.shape[key]));
         input.value = String(value);
         patch({ [key]: value });
     };
@@ -99,49 +100,52 @@ const patchKeepWarm = (change: Partial<KeepWarmSettings>): void => patchWarm({ k
 
 // One clamp for the three numeric keep-warm rows: an emptied field takes the bound, and the input shows what was kept.
 const setBounded =
-    (key: `hours` | `minTokens` | `reserve`, min: number, max: number) =>
+    (key: `hours` | `minTokens` | `reserve`) =>
     (event: Event): void => {
         const input = event.target;
         if (!(input instanceof HTMLInputElement)) {
             return;
         }
-        const value = Math.min(max, Math.max(min, Math.round(Number(input.value) || 0)));
+        const value = clampCount(Number(input.value) || 0, numberSetting(KeepWarmSettingsSchema.shape[key]));
         input.value = String(value);
         patchKeepWarm({ [key]: value });
     };
-const setKeepWarmHours = setBounded(`hours`, 1, 8);
-const setKeepWarmMinTokens = setBounded(`minTokens`, 0, 10_000_000);
-const setKeepWarmReserve = setBounded(`reserve`, 0, 90);
+const WARM_HOURS = numberSetting(KeepWarmSettingsSchema.shape.hours);
+const WARM_TOKENS = numberSetting(KeepWarmSettingsSchema.shape.minTokens);
+const WARM_RESERVE = numberSetting(KeepWarmSettingsSchema.shape.reserve);
+const setKeepWarmHours = setBounded(`hours`);
+const setKeepWarmMinTokens = setBounded(`minTokens`);
+const setKeepWarmReserve = setBounded(`reserve`);
 
+const FAILURES = numberSetting(SandboxSettingsSchema.shape.automationFailureLimit);
 const setAutomationFailureLimit = (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
         return;
     }
-    const automationFailureLimit = Math.min(20, Math.max(0, Math.round(Number(input.value) || 0)));
+    const automationFailureLimit = clampCount(Number(input.value) || 0, FAILURES);
     input.value = String(automationFailureLimit);
     patch({ automationFailureLimit });
 };
 
-// Minutes; bounds mirror SandboxSettingsSchema.turnCapMinutes.
-const TURN_CAP = { min: 5, max: 24 * 60 };
+const TURN_CAP = numberSetting(SandboxSettingsSchema.shape.turnCapMinutes);
 const setTurnCap = (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
         return;
     }
-    const turnCapMinutes = Math.min(TURN_CAP.max, Math.max(TURN_CAP.min, Math.round(Number(input.value) || 30)));
+    const turnCapMinutes = clampCount(Number(input.value) || TURN_CAP.default, TURN_CAP);
     input.value = String(turnCapMinutes);
     patch({ turnCapMinutes });
 };
 
-// Bounds mirror SandboxSettingsSchema, so the box never keeps a number the save would refuse.
+const THREADS = numberSetting(SandboxSettingsSchema.shape.automationThreadsAtOnce);
 const setAutomationThreadsAtOnce = (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
         return;
     }
-    const automationThreadsAtOnce = Math.min(20, Math.max(1, Math.round(Number(input.value) || 1)));
+    const automationThreadsAtOnce = clampCount(Number(input.value) || 0, THREADS);
     input.value = String(automationThreadsAtOnce);
     patch({ automationThreadsAtOnce });
 };
@@ -193,7 +197,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                             step="10000"
                             :aria-label="t(`sandbox.agentRecovery.carryUnder`)"
                             class="ui-field-box ui-field-sm w-24 text-right"
-                            :value="settings?.limitMoveCarryUnder ?? 150000"
+                            :value="settings?.limitMoveCarryUnder ?? SandboxSettingsSchema.shape.limitMoveCarryUnder.parse(undefined)"
                             :disabled="settings === undefined"
                             @change="setLimitMoveCarryUnder"
                         />
@@ -207,7 +211,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                             step="10000"
                             :aria-label="t(`sandbox.agentRecovery.summaryOver`)"
                             class="ui-field-box ui-field-sm w-24 text-right"
-                            :value="settings?.handoffSummaryOver ?? 700000"
+                            :value="settings?.handoffSummaryOver ?? SandboxSettingsSchema.shape.handoffSummaryOver.parse(undefined)"
                             :disabled="settings === undefined"
                             @change="setHandoffSummaryOver"
                         />
@@ -255,7 +259,7 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                         :max="TURN_CAP.max"
                         :aria-label="t(`sandbox.agentRecovery.turnCapLabel`)"
                         class="ui-field-box ui-field-sm w-20 text-right"
-                        :value="settings?.turnCapMinutes ?? 30"
+                        :value="settings?.turnCapMinutes ?? TURN_CAP.default"
                         :disabled="settings === undefined"
                         @change="setTurnCap"
                     />
@@ -298,11 +302,11 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                 <template #control>
                     <input
                         type="number"
-                        min="0"
-                        max="20"
+                        :min="FAILURES.min"
+                        :max="FAILURES.max"
                         :aria-label="t(`sandbox.agentRecovery.consecutiveFailuresBeforeAutomation`)"
                         class="ui-field-box ui-field-sm w-16 text-right"
-                        :value="settings?.automationFailureLimit ?? 0"
+                        :value="settings?.automationFailureLimit ?? FAILURES.default"
                         :disabled="settings === undefined"
                         @change="setAutomationFailureLimit"
                     />
@@ -321,11 +325,11 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                 <template #control>
                     <input
                         type="number"
-                        min="1"
-                        max="20"
+                        :min="THREADS.min"
+                        :max="THREADS.max"
                         :aria-label="t(`sandbox.agentRecovery.threadsAtOnceLabel`)"
                         class="ui-field-box ui-field-sm w-16 text-right"
-                        :value="settings?.automationThreadsAtOnce ?? 3"
+                        :value="settings?.automationThreadsAtOnce ?? THREADS.default"
                         :disabled="settings === undefined"
                         @change="setAutomationThreadsAtOnce"
                     />
@@ -349,8 +353,8 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                     <template #control>
                         <input
                             type="number"
-                            min="1"
-                            max="8"
+                            :min="WARM_HOURS.min"
+                            :max="WARM_HOURS.max"
                             :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
                             class="ui-field-box ui-field-sm w-16 text-right"
                             :value="keepWarm.hours"
@@ -366,7 +370,8 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                     <template #control>
                         <input
                             type="number"
-                            min="0"
+                            :min="WARM_TOKENS.min"
+                            :max="WARM_TOKENS.max"
                             step="10000"
                             :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
                             class="ui-field-box ui-field-sm w-24 text-right"
@@ -380,8 +385,8 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
                 <template #control>
                     <input
                         type="number"
-                        min="0"
-                        max="90"
+                        :min="WARM_RESERVE.min"
+                        :max="WARM_RESERVE.max"
                         :aria-label="t(`sandbox.agentRecovery.keepWarmReserveLabel`)"
                         class="ui-field-box ui-field-sm w-16 text-right"
                         :value="keepWarm.reserve"

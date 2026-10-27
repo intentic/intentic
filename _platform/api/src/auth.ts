@@ -1,5 +1,5 @@
 import { ImageDataUrlSchema } from "@intentic/api-contract";
-import { LEGAL_VERSION } from "@intentic/constants";
+import { LEGAL_VERSION, SIGN_IN_CODE_LENGTH } from "@intentic/constants";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
@@ -30,7 +30,7 @@ const encryptAccountTokens = (config: Config, account: { accessToken?: string | 
 // codes a minute; sign-in.ts limits each address.
 const emailCodes = (config: Config, prisma: PrismaClient, logger: Logger) =>
     emailOTP({
-        otpLength: 6,
+        otpLength: SIGN_IN_CODE_LENGTH,
         expiresIn: SIGN_IN_CODE_TTL_SECONDS,
         allowedAttempts: SIGN_IN_CODE_ATTEMPTS,
         storeOTP: `hashed`,

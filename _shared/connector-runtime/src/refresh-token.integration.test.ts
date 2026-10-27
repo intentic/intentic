@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DAEMON_PORT } from "@intentic/constants";
 import { type RefreshTokenDaemon, storeRefreshTokenAsAgent, storeRefreshTokenAsExtension } from "./refresh-token.js";
 
 const write = { id: "office-mail", binding: { tenantId: "t" }, previous: "old", refreshToken: "new" };
@@ -22,6 +23,10 @@ test("the agent's CLI stores through the contract's own route with the agent tok
         expect(await storeRefreshTokenAsAgent(write, { env, http: answering(409) })).toBe("superseded");
         await expect(storeRefreshTokenAsAgent({ ...write, login: true }, { env, http: answering(409) })).rejects.toThrow("did not store");
         await expect(storeRefreshTokenAsAgent(write, { env, http: answering(404) })).rejects.toThrow("404");
+        expect(
+            await storeRefreshTokenAsAgent(write, { env: { INTENTIC_AGENT_TOKEN_PATH: env.INTENTIC_AGENT_TOKEN_PATH }, http: answering(200) }),
+        ).toBe("stored");
+        expect(seen.at(-1)?.url).toBe(`http://127.0.0.1:${DAEMON_PORT}/capabilities/office-mail/oauth-token`);
     } finally {
         await rm(dir, { recursive: true, force: true });
     }

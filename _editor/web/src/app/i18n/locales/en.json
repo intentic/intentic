@@ -1174,7 +1174,7 @@
             "googleFaster": "That's a Google address: Continue with Google is faster. A code works too.",
             "continueWithEmail": "Continue with email",
             "emailMeCode": "Email me a sign-in code",
-            "sentTo": "We sent a 6-digit code to {email}.",
+            "sentTo": "We sent a {digits}-digit code to {email}.",
             "typeItHereInApp": "Type it here. The link in the email opens your browser, not this app.",
             "typeItOrOpenLink": "Type it here, or open the link in the email on this device.",
             "codeLabel": "Sign-in code",

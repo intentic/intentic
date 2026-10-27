@@ -1,4 +1,5 @@
 import { OrgPolicySchema } from "@intentic/sandbox-contract/schemas/organisation";
+import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { TrialStatusSchema } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { z } from "zod";
@@ -375,7 +376,7 @@ export const FleetSandboxesSchema = z.object({
 // One sandbox's row, named as the switcher shows it (the browser's own form holds the same bound), seeded from a
 // sandbox.toml when one is sent.
 export const FleetProvisionBodySchema = z.object({
-    name: z.string().trim().min(1).max(60),
+    name: z.string().trim().min(1).max(SANDBOX_NAME_MAX),
     definition: z.string().max(FLEET_DEFINITION_MAX_BYTES).optional(),
 });
 // One sandbox taken off the account, by the id `fleetSandboxes` lists it under. It goes to the trash, as the app's own
@@ -405,7 +406,10 @@ export const ingressRefusalOf = (body: string): string | undefined => {
     }
     try {
         const parsed: unknown = JSON.parse(raw);
-        const said = z.object({ error: z.string() }).or(z.object({ message: z.string() })).safeParse(parsed);
+        const said = z
+            .object({ error: z.string() })
+            .or(z.object({ message: z.string() }))
+            .safeParse(parsed);
         if (said.success) {
             const text = ("error" in said.data ? said.data.error : said.data.message).trim();
             return text === "" ? undefined : text;

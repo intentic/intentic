@@ -2,10 +2,12 @@
 // names the account already holds, not from how many exist, so removing a middle one frees its slot again.
 // Comparison is case-insensitive and trimmed. A project setup counts up from its folder's name the same way.
 
+import { SANDBOX_NAME_MAX } from "@intentic/constants";
+
 const BASE = `workspace`;
 
 // The platform refuses a longer name (`sandbox.create`), and a folder's name can run to any length.
-export const SANDBOX_NAME_MAX = 60;
+export { SANDBOX_NAME_MAX } from "@intentic/constants";
 
 export const autoSandboxName = (existing: readonly string[], base: string = BASE): string => {
     const taken = new Set(existing.map((name) => name.trim().toLowerCase()));

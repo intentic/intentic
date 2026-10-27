@@ -1174,7 +1174,7 @@
             "googleFaster": "Das ist eine Google-Adresse: „Mit Google fortfahren“ geht schneller. Ein Code funktioniert aber auch.",
             "continueWithEmail": "Mit E-Mail fortfahren",
             "emailMeCode": "Anmeldecode per E-Mail senden",
-            "sentTo": "Wir haben einen 6-stelligen Code an {email} gesendet.",
+            "sentTo": "Wir haben einen {digits}-stelligen Code an {email} gesendet.",
             "typeItHereInApp": "Geben Sie ihn hier ein. Der Link in der E-Mail öffnet Ihren Browser, nicht diese App.",
             "typeItOrOpenLink": "Geben Sie ihn hier ein oder öffnen Sie den Link in der E-Mail auf diesem Gerät.",
             "codeLabel": "Anmeldecode",

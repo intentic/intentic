@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { DAEMON_PORT } from "@intentic/constants";
 
 // A delegated OAuth sign-in's refresh token, stored on its card through the daemon's oauth-token route (a card whose
 // manifest declares `refreshToken`), rather than printed for someone to paste. Two callers, one route: the agent's CLI,
@@ -40,7 +41,7 @@ export const storeRefreshTokenAsAgent = async (write: RefreshTokenWrite, options
     if (request === undefined) {
         throw new Error("this sandbox's daemon cannot store a sign-in on a card: update the sandbox");
     }
-    const response = await (options.http ?? fetch)(`http://127.0.0.1:${env["SANDBOX_PORT"] ?? "8787"}${request.path}`, {
+    const response = await (options.http ?? fetch)(`http://127.0.0.1:${env["SANDBOX_PORT"] ?? DAEMON_PORT}${request.path}`, {
         method: request.method,
         redirect: "error",
         signal: AbortSignal.timeout(30_000),

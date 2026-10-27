@@ -145,3 +145,9 @@ export const GOOGLE_CLIENT_ID = "481795963975-cq9msl6higcd91joidrfp8mjlkuq5fk3.a
 
 // localStorage slot for the cached ID token, keyed by client id so a rotation can't reuse it.
 export const GOOGLE_TOKEN_STORAGE_KEY = `intentic.gid.${GOOGLE_CLIENT_ID}`;
+
+// The platform's sign-in plugin and the editor's code fields must accept the same number of digits.
+export const SIGN_IN_CODE_LENGTH = 6;
+
+// Sandbox registry and fleet requests, suggested names, and the editor's name fields share this bound.
+export const SANDBOX_NAME_MAX = 60;

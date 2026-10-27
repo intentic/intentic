@@ -93,6 +93,7 @@ const onCode = (event: Event): void => typeCode(event.target instanceof HTMLInpu
         <!-- CODE: the six digits the platform mailed. -->
         <form v-else class="flex flex-col gap-2" @submit.prevent="verify">
             <i18n-t keypath="auth.emailSignIn.sentTo" tag="p" class="text-sm leading-snug" scope="global">
+                <template #digits>{{ CODE_LENGTH }}</template>
                 <template #email
                     ><span class="break-all font-medium">{{ sentTo }}</span></template
                 >
@@ -110,7 +111,7 @@ const onCode = (event: Event): void => typeCode(event.target instanceof HTMLInpu
                 autocomplete="one-time-code"
                 pattern="[0-9]*"
                 :maxlength="CODE_LENGTH + 2"
-                placeholder="000000"
+                :placeholder="`0`.repeat(CODE_LENGTH)"
                 :disabled="verifying"
                 :class="ui.input(`w-full text-center font-mono tracking-[0.5em]`)"
                 @input="onCode"

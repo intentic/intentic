@@ -5,6 +5,7 @@
      address a sandbox already answers on) under the picks, in the same form: there is no other page to go to for them. -->
 <script setup lang="ts">
 import { Notice, ui } from "@intentic/ui";
+import { SANDBOX_NAME_MAX } from "@intentic/constants";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useId } from "vue";
 import { RouterLink } from "vue-router";
@@ -63,7 +64,7 @@ const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : err
             <input
                 v-model="name"
                 autofocus
-                :maxlength="80"
+                :maxlength="SANDBOX_NAME_MAX"
                 :class="[ui.input(), problem ? `ui-field-error-box` : ``]"
                 data-add-sandbox-name
                 @focus="takeSuggestion"

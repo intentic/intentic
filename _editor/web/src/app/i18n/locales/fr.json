@@ -1174,7 +1174,7 @@
             "googleFaster": "C'est une adresse Google : « Continuer avec Google » est plus rapide. Un code fonctionne aussi.",
             "continueWithEmail": "Continuer avec un e-mail",
             "emailMeCode": "M'envoyer un code de connexion par e-mail",
-            "sentTo": "Nous avons envoyé un code à 6 chiffres à {email}.",
+            "sentTo": "Nous avons envoyé un code à {digits} chiffres à {email}.",
             "typeItHereInApp": "Saisissez-le ici. Le lien de l'e-mail ouvre votre navigateur, pas cette application.",
             "typeItOrOpenLink": "Saisissez-le ici, ou ouvrez le lien de l'e-mail sur cet appareil.",
             "codeLabel": "Code de connexion",

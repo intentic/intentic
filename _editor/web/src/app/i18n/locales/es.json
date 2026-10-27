@@ -1174,7 +1174,7 @@
             "googleFaster": "Es una dirección de Google: Continuar con Google es más rápido. Un código también sirve.",
             "continueWithEmail": "Continuar con correo",
             "emailMeCode": "Envíame un código de inicio de sesión",
-            "sentTo": "Enviamos un código de 6 dígitos a {email}.",
+            "sentTo": "Enviamos un código de {digits} dígitos a {email}.",
             "typeItHereInApp": "Escríbelo aquí. El enlace del correo abre tu navegador, no esta app.",
             "typeItOrOpenLink": "Escríbelo aquí, o abre el enlace del correo en este dispositivo.",
             "codeLabel": "Código de inicio de sesión",

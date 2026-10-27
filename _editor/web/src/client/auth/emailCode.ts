@@ -1,4 +1,5 @@
 import { t } from "@intentic/ui/i18n";
+import { SIGN_IN_CODE_LENGTH } from "@intentic/constants";
 
 // The platform's answers to a mailed sign-in code, as the screens that ask for one say them. Better Auth's email-OTP
 // plugin answers the same whether or not an account holds the address, so nothing here can tell anybody that; what it
@@ -73,8 +74,8 @@ export const emailCodeError = (error: AuthClientError, fallback: string): EmailC
 // first; a mistyped code is still good for another try.
 export const codeSpent = (refusal: EmailCodeRefusal): boolean => refusal === `expired` || refusal === `too-many-attempts`;
 
-// Six digits, as the platform mails them; whatever else was pasted with them (spaces, a dash) is not part of the code.
-export const CODE_LENGTH = 6;
+// As many digits as the platform mails; whatever else was pasted with them is not part of the code.
+export const CODE_LENGTH = SIGN_IN_CODE_LENGTH;
 export const codeDigits = (typed: string): string => typed.replaceAll(/\D/g, ``).slice(0, CODE_LENGTH);
 
 // A plausible address, the same test the invite form uses: the platform is the judge, this only keeps the button honest.

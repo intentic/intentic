@@ -1,6 +1,6 @@
 # constants
 
-The values several packages must agree on (ports, workspace paths, origins, install-script URLs, the sign-in client id, the hosted price ladder), defined once so no copy drifts.
+The values several packages must agree on (ports, workspace paths, origins, install-script URLs, sign-in parameters, name limits, the hosted price ladder), defined once so no copy drifts.
 
 ```mermaid
 flowchart LR

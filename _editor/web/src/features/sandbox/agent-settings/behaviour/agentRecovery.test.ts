@@ -90,6 +90,19 @@ test("the turn cap row opens on the daemon's default, writes its own key, and ke
     expect(box.value).toBe(`5`);
 });
 
+test("the keep-warm token threshold accepts values above ten million, as the daemon does", async () => {
+    const warm = { ...settings.value.keepWarm, auto: true };
+    settings.value = { ...settings.value, keepWarm: warm };
+    const host = mount();
+    const box = host.querySelector<HTMLInputElement>(`input[aria-label="Minimum context, in tokens"]`)!;
+
+    expect(box.max).toBe(String(Number.MAX_SAFE_INTEGER));
+    await change(box, `20000000`);
+
+    expect(patch).toHaveBeenLastCalledWith({ keepWarm: { ...warm, minTokens: 20_000_000 } });
+    expect(box.value).toBe(`20000000`);
+});
+
 // Simple keeps the one answer per ending and the restart switch; Advanced adds the hand-off, the turn cap and the
 // automation ceilings, and the choice is kept for this section alone.
 test("Simple keeps each ending's answer, and Advanced adds the tuning and the automation ceilings", async () => {
