@@ -37,7 +37,9 @@ jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: 
 activeSandboxId.value = `sb1`;
 jest.mock("../../../client/sandbox/useSandbox", () => {
     const reachable = ref(false);
-    return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
+    // No platform row: read as the owner, whose own access answer is never asked for.
+    const active = ref(undefined);
+    return { useSandbox: () => ({ activeSandboxId, reachable, active }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });
 
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {

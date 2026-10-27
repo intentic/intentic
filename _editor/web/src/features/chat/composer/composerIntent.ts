@@ -193,12 +193,17 @@ export const unconnectedPlaceholder = (): string => t(`chat.composerIntent.uncon
 /**
  * The disabled Send's reason, as the one fix: connect a model, or, where something else in the sandbox runs, choose it.
  * Never a press of its own (2026-10-25): Send used to open the model list here, a fourth door to it beside the notice's
- * two and the pill, and a Send that does something other than send.
+ * two and the pill, and a Send that does something other than send. A model `withheld` from the reader (Access ▸
+ * People) is not connected's case: choosing one of theirs, or asking the owner, is the fix, never connecting.
  */
-export const unconnectedHint = (othersReady: boolean): TooltipValue =>
-    othersReady
+export const unconnectedHint = (othersReady: boolean, withheld = false): TooltipValue => {
+    if (withheld) {
+        return { title: t(`chat.composerIntent.notSharedHint`), note: othersReady ? t(`chat.composerIntent.notSharedNote`) : t(`chat.composerIntent.askOwnerNote`) };
+    }
+    return othersReady
         ? { title: t(`chat.composerIntent.otherModelHint`), note: t(`chat.composerIntent.otherModelNote`) }
         : { title: t(`chat.composerIntent.unconnectedHint`), note: t(`chat.composerIntent.unconnectedNote`) };
+};
 
 export const placeholderFor = (intent: SendIntent, words: ComposerWords): string => PLACEHOLDER[intent](words);
 

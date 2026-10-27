@@ -1,7 +1,6 @@
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { accountServesLoop, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { aiAccountAllowed } from "@intentic/sandbox-contract/schemas/members";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
@@ -26,7 +25,7 @@ import {
 } from "../../../models/providers/usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "../../../models/conversations/accounts/useChat-accounts";
 import { useOperation } from "../../../workbench/operations/operations";
-import { selfAiAccounts } from "../../../client/sandbox/useMembers";
+import { mayRunOn } from "../../../models/providers/aiReach";
 import { t } from "@intentic/ui/i18n";
 import { timeAgo } from "@intentic/ui/format";
 
@@ -114,18 +113,14 @@ export const useRemeasure = () => {
     return { measuring: measure.busy, remeasure };
 };
 
-// Whether the signed-in person may run on an account: every one, unless the owner held them to some (Access ▸ People),
-// so a picker never offers a row the daemon would refuse a turn on.
-const mayRunOn = (mine: readonly string[] | undefined, provider: AgentProvider, id: string): boolean => mine === undefined || aiAccountAllowed(mine, provider, id);
-
 // The provider's own accounts that can serve the loop the chip names (a CLI loop's sign-ins, Grok Build's or Kimi CLI's,
-// on that loop alone, the provider's other credential everywhere else), and of those the ones the person may run on.
-const servingAccounts = (provider: AgentProvider, harness: AgentHarness, mine: readonly string[] | undefined): readonly OauthAccount[] =>
-    accountsOf(provider).filter((entry) => accountServesLoop(provider, selectedLoop(offeredLoops(provider), harness), entry) && mayRunOn(mine, provider, entry.id));
+// on that loop alone, the provider's other credential everywhere else), and of those the ones the person may run on
+// (aiReach.ts), so a picker never offers a row the daemon would refuse a turn on.
+const servingAccounts = (provider: AgentProvider, harness: AgentHarness): readonly OauthAccount[] =>
+    accountsOf(provider).filter((entry) => accountServesLoop(provider, selectedLoop(offeredLoops(provider), harness), entry) && mayRunOn(provider, entry.id));
 
 export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<AgentHarness>, model?: Ref<string | undefined>) => {
-    const mine = selfAiAccounts();
-    const accounts = computed(() => servingAccounts(provider.value, harness.value, mine.value));
+    const accounts = computed(() => servingAccounts(provider.value, harness.value));
     // The model the rings measure against; with none given, the ring falls back to the account's tightest pool.
     const modelRef = computed<ModelRef | undefined>(() => (model?.value === undefined || model.value === `` ? undefined : { id: model.value }));
 
@@ -147,7 +142,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     const routedRows = computed(() =>
         routedProvider.value === undefined
             ? []
-            : translatorAccounts.value[routedProvider.value].filter((entry) => mayRunOn(mine.value, provider.value, entry.name)).map((entry) => ({
+            : translatorAccounts.value[routedProvider.value].filter((entry) => mayRunOn(provider.value, entry.name)).map((entry) => ({
                   name: entry.name,
                   label: entry.label,
                   headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage, modelRef.value), modelRef.value),

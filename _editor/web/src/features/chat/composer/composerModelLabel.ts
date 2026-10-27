@@ -3,7 +3,8 @@ import { loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { t } from "@intentic/ui/i18n";
 import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import { offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
-import { accessKnown, providerReadyOn } from "../../../models/providers/access";
+import { accessKnown, anyProviderReady, providerReadyOn } from "../../../models/providers/access";
+import { providerWithheld } from "../../../models/providers/aiReach";
 import { turnDefaults } from "../../../models/conversations/run/turnDefaults";
 
 // What a composer's model control reads as: one rule for the pill's own face and for the accessible name the pane
@@ -24,6 +25,8 @@ export interface ComposerModelReading {
     readonly unset: boolean;
     /** It names a model somebody picked that is not connected here yet: drawn with a lock, as the list draws it. */
     readonly locked?: true;
+    /** The model it names is on a provider the reader may not run (Access ▸ People): locked, and said so. */
+    readonly withheld?: true;
 }
 
 export const composerModelReading = (chat: ComposerModelChoice): ComposerModelReading => {
@@ -32,6 +35,12 @@ export const composerModelReading = (chat: ComposerModelChoice): ComposerModelRe
     // notice's (ChatAccountPanel.vue). A model somebody picked is still named, with a lock, so a pick from the list visibly
     // takes; the app's own floor is not, since nobody chose that vendor. Held until `accessKnown`: a read that hasn't
     // answered cannot claim nothing is connected, and claiming it for one frame is the flicker this exists to avoid.
+    // A model withheld from the reader is named, locked, where somebody chose it or a chat sits on it (somebody else
+    // started it, or the owner narrowed their accounts since: a fresh chat would have been moved onto one of theirs
+    // where they have one). Naming it is what says why Send is greyed; the app's own floor still names no vendor.
+    if (accessKnown.value && !chat.auto && providerWithheld(chat.provider) && (turnDefaults.provider.value === chat.provider || anyProviderReady())) {
+        return { label: modelLabelFor(chat.provider, chat.model), unset: true, locked: true, withheld: true };
+    }
     if (accessKnown.value && !providerReadyOn(chat.provider, chat.harness)) {
         const picked = !chat.auto && turnDefaults.provider.value === chat.provider;
         return picked ? { label: modelLabelFor(chat.provider, chat.model), unset: true, locked: true } : { label: t(`chat.composerModelPill.noModel`), unset: true };
@@ -42,8 +51,12 @@ export const composerModelReading = (chat: ComposerModelChoice): ComposerModelRe
 };
 
 /** The reading as a screen reader is told it: a model named with its lock is said with it, since no glyph reaches one. */
-export const composerModelName = (reading: ComposerModelReading): string =>
-    reading.locked === true ? t(`chat.composerModelPill.lockedAria`, { model: reading.label }) : reading.label;
+export const composerModelName = (reading: ComposerModelReading): string => {
+    if (reading.withheld === true) {
+        return t(`chat.composerModelPill.notSharedAria`, { model: reading.label });
+    }
+    return reading.locked === true ? t(`chat.composerModelPill.lockedAria`, { model: reading.label }) : reading.label;
+};
 
 // The loop, named only where it isn't the provider's default: the same model through another loop is another run.
 const loopWord = (chat: ComposerModelChoice): readonly string[] => {

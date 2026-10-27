@@ -40,7 +40,9 @@ jest.mock("../../../client/sandbox/useSandbox", () => {
     // Already bound when the module graph loads, the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
-    return { useSandbox: () => ({ activeSandboxId, reachable }) };
+    // No platform row: read as the owner, whose own access answer is never asked for.
+    const active = ref(undefined);
+    return { useSandbox: () => ({ activeSandboxId, reachable, active }) };
 });
 
 // Node's test env has neither storage; a refresh reads both (sessionStorage: tabs, localStorage:

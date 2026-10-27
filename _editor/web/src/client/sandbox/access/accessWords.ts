@@ -19,7 +19,7 @@ export interface AccessWords {
 }
 
 // The key each reason reads its words under: a tier by its name, the rest by what they are.
-type ReasonKey = `owner` | `maintainer` | `writer` | `collaborator` | `agentsOff` | `guest` | `area` | `org`;
+type ReasonKey = `owner` | `maintainer` | `writer` | `collaborator` | `agentsOff` | `guest` | `area` | `aiAccounts` | `org`;
 
 const keyOf = (reason: AccessReason): ReasonKey => {
     switch (reason.kind) {
@@ -29,6 +29,8 @@ const keyOf = (reason: AccessReason): ReasonKey => {
             return reason.floor === `owner` || reason.floor === `maintainer` || reason.floor === `writer` ? reason.floor : `collaborator`;
         case `agents-off`:
             return `agentsOff`;
+        case `ai-accounts`:
+            return `aiAccounts`;
         case `guest`:
         case `area`:
         case `org`:
@@ -40,7 +42,7 @@ const shortOf = (key: ReasonKey, reason: AccessReason): string => {
     if (reason.kind === `org`) {
         return t(`common.access.short.org`, { org: reason.org });
     }
-    return key === `guest` || key === `area` ? t(`common.access.short.notShared`) : t(`common.access.short.${key}`);
+    return key === `guest` || key === `area` || key === `aiAccounts` ? t(`common.access.short.notShared`) : t(`common.access.short.${key}`);
 };
 
 /**

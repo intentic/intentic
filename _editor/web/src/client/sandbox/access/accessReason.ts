@@ -5,13 +5,16 @@ import { type RefusalWords, SandboxHttpError } from "../sandboxHttpError";
 
 // WHY THE SIGNED-IN PERSON MAY NOT DO SOMETHING HERE, in the terms the editor acts on rather than the daemon's sentence:
 // a tier the route wants (an owner-only route is the owner tier), running agents off for them, a guest asking for a
-// door not on its list, a folder outside their areas, or an organisation managing that part of the sandbox. One answer
+// door not on its list, a folder outside their areas, no AI account of theirs to run a turn on (Access ▸ People, which
+// the editor foresees from their own access and the daemon refuses at a turn's planning, never as a 403), or an
+// organisation managing that part of the sandbox. One answer
 // whether the editor foresaw the refusal (access/useAccess.ts) or the daemon made it, so a view draws both alike.
 export type AccessReason =
     | { readonly kind: `tier`; readonly floor: MemberRole }
     | { readonly kind: `agents-off` }
     | { readonly kind: `guest` }
     | { readonly kind: `area` }
+    | { readonly kind: `ai-accounts` }
     | { readonly kind: `org`; readonly org: string; readonly section: string };
 
 /** The reason the shared access check (sandbox-contract protocol/member-reach.ts) gives, in the editor's terms. */

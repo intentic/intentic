@@ -397,6 +397,10 @@
     {
       "type": "{ requests: Record<string, { at: number; place: string; want: \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" | \"agents\" | \"areas\" }> }",
       "since": "v1.365.0"
+    },
+    {
+      "type": "{ requests: Record<string, { at: number; place: string; want: \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" | \"agents\" | \"areas\" | \"aiAccounts\" }> }",
+      "since": "unreleased"
     }
   ],
   "history:identity/control-tokens.json": [

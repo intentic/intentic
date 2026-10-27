@@ -2,15 +2,23 @@
 // composer carries the one way on, and the pill must neither be a second door to it nor wear the name of a vendor
 // nobody chose. A model somebody did pick is named, with its lock, so a pick from the list visibly takes.
 import "@intentic/testing/dom";
-import { composerModelName, composerModelReading, stillRunningOn } from "./composerModelLabel";
-import { accountsLoaded, providerAccounts, translatorAccounts } from "../../../models/providers/providerAccounts";
-import { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } from "../../../models/providers/providerCatalog";
-import { advertisedLoops } from "../../../models/providers/offeredLoops";
-import { turnDefaults } from "../../../models/conversations/run/turnDefaults";
+import { computed, ref } from "vue";
+
+// The AI accounts the reader is held to (Access ▸ People); undefined is every one.
+const aiKeys = ref<readonly string[] | undefined>(undefined);
+const realMembers = { ...(await import("../../../client/sandbox/useMembers")) };
+jest.mock("../../../client/sandbox/useMembers", () => ({ ...realMembers, selfAiAccounts: () => computed(() => aiKeys.value) }));
+
+const { composerModelName, composerModelReading, stillRunningOn } = await import("./composerModelLabel");
+const { accountsLoaded, providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
+const { acpProviders, endpointProviders, endpointsLoaded, perProvider, providerModels, trialStatus } = await import("../../../models/providers/providerCatalog");
+const { advertisedLoops } = await import("../../../models/providers/offeredLoops");
+const { turnDefaults } = await import("../../../models/conversations/run/turnDefaults");
 
 const CHAT = { provider: `claude`, harness: `native`, model: `claude-opus-5`, auto: false } as const;
 
 beforeEach(() => {
+    aiKeys.value = undefined;
     providerAccounts.value = perProvider(() => []);
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     acpProviders.value = [];
@@ -48,6 +56,24 @@ it(`names a model somebody picked, locked, until its provider is connected`, () 
 
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `ada@acme.dev`, connectedAt: 0 }] };
     expect(composerModelReading(CHAT)).toEqual({ label: `Claude Opus 5`, unset: false });
+});
+
+// A chat sitting on a connected model the reader may not run is named whoever picked it, locked, and said so: the pill
+// used to read as sendable there, and Send found out.
+it(`names a model on a provider not shared with the reader, locked, and says so`, () => {
+    accountsLoaded.value = true;
+    endpointsLoaded.value = true;
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `ada@acme.dev`, connectedAt: 0 }] };
+    translatorAccounts.value = { ...translatorAccounts.value, codex: [{ name: `chatgpt-ada`, label: `ada@acme.dev` }] };
+    aiKeys.value = [`codex:chatgpt-ada`];
+
+    const reading = composerModelReading(CHAT);
+    expect(reading).toEqual({ label: `Claude Opus 5`, unset: true, locked: true, withheld: true });
+    expect(composerModelName(reading)).toBe(`Claude Opus 5, not shared with you`);
+
+    // With nothing of theirs at all, a chat on the app's own floor names no vendor, as with nothing connected.
+    translatorAccounts.value = { ...translatorAccounts.value, codex: [] };
+    expect(composerModelReading(CHAT)).toEqual({ label: `No model`, unset: true });
 });
 
 it(`names the model again as soon as an account answers for it`, () => {

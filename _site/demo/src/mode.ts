@@ -207,6 +207,30 @@ const resolveTier = (): DemoTier => {
 /** The grant this page load is read with; the platform's sandbox row carries it, as a real one would. */
 export const demoTier = resolveTier();
 
+// WHICH AI ACCOUNTS THE READER IS HELD TO, from `?ai=` (comma-separated keys as Access ▸ People writes them:
+// `codex:chatgpt-ada`, or `gemini` for every account of a provider), sticky per tab like the tier above. `?ai=all` lifts
+// it. Read only below the owner, as the daemon reads a roster row: the owner's own turns run on every account.
+const AI_KEY = `intentic.demo.aiAccounts`;
+
+const resolveAiAccounts = (): readonly string[] | undefined => {
+    const url = new URL(window.location.href);
+    const asked = url.searchParams.get(`ai`);
+    if (asked !== null) {
+        url.searchParams.delete(`ai`);
+        window.history.replaceState(window.history.state, ``, url);
+        if (asked === `all`) {
+            window.sessionStorage.removeItem(AI_KEY);
+        } else {
+            window.sessionStorage.setItem(AI_KEY, asked);
+        }
+    }
+    const held = window.sessionStorage.getItem(AI_KEY);
+    return held === null ? undefined : held.split(`,`).map((key) => key.trim()).filter((key) => key !== ``);
+};
+
+/** The AI accounts the demo's reader may run on; undefined is every one. */
+export const demoAiAccounts = resolveAiAccounts();
+
 /** Whether this page load is the desk recording: the one switch every fixture seam reads. */
 export const deskEdition = demoMode.id === `desk`;
 

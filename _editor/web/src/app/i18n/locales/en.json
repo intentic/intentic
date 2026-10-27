@@ -2881,7 +2881,8 @@
             "noModelYet": "No model is connected in this sandbox yet.",
             "signInWaiting": "Your {provider} sign-in isn't finished yet.",
             "connectProvider": "Connect {providerName}",
-            "chooseAnother": "Choose another model"
+            "chooseAnother": "Choose another model",
+            "notShared": "{provider} isn't shared with you in this sandbox."
         },
         "chatArea": {
             "bringBackHere": "Bring it back here",
@@ -3888,7 +3889,10 @@
             },
             "unconnectedNote": "Your message waits here.",
             "otherModelHint": "Model not connected",
-            "otherModelNote": "Choose a connected one."
+            "otherModelNote": "Choose a connected one.",
+            "notSharedHint": "Model not shared",
+            "notSharedNote": "Choose one of yours.",
+            "askOwnerNote": "Ask the owner for access."
         },
         "composerModelPill": {
             "fromNextMessage": "{model} answers from your next message. This reply keeps running on {running}.",
@@ -3900,7 +3904,8 @@
             "trialNote": "Switch models or connect yours.",
             "trialServed": "Last answer: {model}.",
             "noModel": "No model",
-            "lockedAria": "{model}, not connected"
+            "lockedAria": "{model}, not connected",
+            "notSharedAria": "{model}, not shared with you"
         },
         "composerMore": {
             "howMuchMayDo": "How much it may do before asking.",
@@ -4006,7 +4011,9 @@
             "showOlderModels": "Show {hidden} older {label} models",
             "unavailable": "Unavailable",
             "addAnotherProvider": "Add another provider",
-            "nothingConnected": "Nothing is connected yet. Connect a model to start"
+            "nothingConnected": "Nothing is connected yet. Connect a model to start",
+            "notSharedFold": "Models not shared with you",
+            "nothingShared": "None of this sandbox's AI accounts is shared with you."
         },
         "modelPickerState": {
             "useCustomModelId": "use as custom model id"
@@ -4895,7 +4902,8 @@
                 "agentsOff": "Running agents is off for you here",
                 "guest": "{place} isn't shared with you",
                 "area": "This folder isn't shared with you",
-                "org": "{org} manages {place}"
+                "org": "{org} manages {place}",
+                "aiAccounts": "No AI account is shared with you"
             },
             "note": {
                 "owner": "You can look around. Only the owner can change things here.",
@@ -4905,7 +4913,8 @@
                 "agentsOff": "You can follow along. Running agents is off for you here.",
                 "guest": "This isn't shared with you.",
                 "area": "This folder isn't shared with you.",
-                "org": "{org} manages this. You can look; changes go through your organisation's admin."
+                "org": "{org} manages this. You can look; changes go through your organisation's admin.",
+                "aiAccounts": "You can follow along. Running a model needs an AI account shared with you."
             },
             "line": {
                 "ask": "Ask the owner for access. It opens here as soon as they grant it.",
@@ -10744,7 +10753,8 @@
                 "writer": "Asks to edit files",
                 "maintainer": "Asks to manage the sandbox",
                 "agents": "Asks to run agents",
-                "areas": "Asks for more folders"
+                "areas": "Asks for more folders",
+                "aiAccounts": "Asks for AI accounts"
             },
             "from": "from {place}",
             "review": "Review"

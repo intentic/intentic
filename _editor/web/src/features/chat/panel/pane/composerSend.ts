@@ -36,6 +36,7 @@ import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { formatReset } from "../../../../models/providers/usageStatus";
 import { type SendBlock, sendBlockOf } from "../../../../models/providers/sendAvailability";
 import { anyProviderReady } from "../../../../models/providers/access";
+import { providerWithheld } from "../../../../models/providers/aiReach";
 import { planFeedback } from "../../../../models/conversations/session/cardReplies";
 import { track } from "../../../../app/analytics";
 import { invalidateAgentTranscript } from "../../../../models/conversations/transcript/agentTranscript";
@@ -576,7 +577,7 @@ export const useComposerSend = (host: SendHost) => {
             }
             // Why the press is greyed with nothing to send with, as the one fix; the draft waits.
             if (!connected.value) {
-                return unconnectedHint(anyProviderReady());
+                return unconnectedHint(anyProviderReady(), providerWithheld(view.conversation.value.selection.provider.value));
             }
             // A refusal's sentence is the status line's; the greyed button names it.
             const refused = sendRefusalTitle(situation.value);

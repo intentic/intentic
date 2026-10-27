@@ -10,6 +10,7 @@ import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
 import * as providerCatalogOriginal from "../../../models/providers/providerCatalog";
 import * as providerAccountsOriginal from "../../../models/providers/providerAccounts";
+import * as aiReachOriginal from "../../../models/providers/aiReach";
 
 const connected = ref(false);
 const accountsLoaded = ref(true);
@@ -80,6 +81,12 @@ jest.mock(`../../../models/conversations/panel/useChat-view`, () => ({
         selectAccount: () => {},
     }),
 }));
+// The providers the reader may not run (Access ▸ People, aiReach.ts), named outright rather than built from a roster.
+const withheld = ref<readonly string[]>([]);
+jest.mock(`../../../models/providers/aiReach`, () => ({
+    ...aiReachOriginal,
+    providerWithheld: (target: string) => withheld.value.includes(target),
+}));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     useRouter: () => ({ push: jest.fn() }) as never,
@@ -115,6 +122,7 @@ const linkNamed = (element: HTMLElement, label: string): HTMLAnchorElement | und
 
 beforeEach(() => {
     connected.value = false;
+    withheld.value = [];
     accountsLoaded.value = true;
     endpointsLoaded.value = true;
     provider.value = `claude`;
@@ -339,4 +347,40 @@ it(`goes on its own the moment this chat can send`, async () => {
     connected.value = true;
     await nextTick();
     expect(element.textContent).toBe(``);
+});
+
+// A chat on a model the reader may not run (somebody else started it there, or the owner narrowed their AI accounts
+// since) used to look sendable and be refused at Send. Connected, so "isn't connected" and Connect would both be false:
+// the strip names it as not shared, beside another model of theirs, or with none, asking the owner.
+it(`says a model is not shared with the reader, and leads with another of theirs, never Connect`, () => {
+    withheld.value = [`claude`];
+    endpointProviders.value = [{ id: `openrouter`, label: `OpenRouter`, kind: `endpoint` }];
+    const element = mount();
+
+    expect(element.textContent).toContain(`Claude Code isn't shared with you in this sandbox.`);
+    expect(element.textContent).not.toContain(`isn't connected`);
+    expect(buttonNamed(element, `Choose another model`)).toBeInstanceOf(HTMLButtonElement);
+    expect(linkNamed(element, `Connect`)).toBeUndefined();
+});
+
+it(`offers asking the owner where nothing else is the reader's to run`, () => {
+    withheld.value = [`claude`, `openrouter`];
+    endpointProviders.value = [{ id: `openrouter`, label: `OpenRouter`, kind: `endpoint` }];
+    turnDefaults.provider.value = `claude`;
+    const element = mount();
+
+    expect(element.textContent).toContain(`Claude Code isn't shared with you in this sandbox.`);
+    expect(buttonNamed(element, `Ask for access`)).toBeInstanceOf(HTMLButtonElement);
+    expect(buttonNamed(element, `Choose`)).toBeUndefined();
+    expect(linkNamed(element, `Connect`)).toBeUndefined();
+});
+
+// A first chat sits on the app's own floor, which nobody chose: with nothing of theirs to run, no vendor is named.
+it(`names no vendor on the app's floor where nothing is the reader's, and still offers asking`, () => {
+    withheld.value = [`claude`];
+    const element = mount();
+
+    expect(element.textContent).toContain(`None of this sandbox's AI accounts is shared with you.`);
+    expect(element.textContent).not.toContain(`Claude`);
+    expect(buttonNamed(element, `Ask for access`)).toBeInstanceOf(HTMLButtonElement);
 });

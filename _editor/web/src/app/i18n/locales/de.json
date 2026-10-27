@@ -2881,7 +2881,8 @@
             "noModelYet": "In dieser Sandbox ist noch kein Modell verbunden.",
             "signInWaiting": "Ihre Anmeldung bei {provider} ist noch nicht abgeschlossen.",
             "connectProvider": "{providerName} verbinden",
-            "chooseAnother": "Anderes Modell wählen"
+            "chooseAnother": "Anderes Modell wählen",
+            "notShared": "{provider} ist in dieser Sandbox nicht mit dir geteilt."
         },
         "chatArea": {
             "bringBackHere": "Hierher zurückholen",
@@ -3888,7 +3889,10 @@
             },
             "unconnectedNote": "Ihre Nachricht wartet hier.",
             "otherModelHint": "Modell nicht verbunden",
-            "otherModelNote": "Wählen Sie ein verbundenes."
+            "otherModelNote": "Wählen Sie ein verbundenes.",
+            "notSharedHint": "Modell nicht geteilt",
+            "notSharedNote": "Wähle eines von deinen.",
+            "askOwnerNote": "Bitte den Eigentümer um Zugriff."
         },
         "composerModelPill": {
             "fromNextMessage": "{model} antwortet ab Ihrer nächsten Nachricht. Diese Antwort läuft weiter auf {running}.",
@@ -3900,7 +3904,8 @@
             "trialNote": "Wechseln Sie das Modell oder verbinden Sie Ihr eigenes.",
             "trialServed": "Letzte Antwort: {model}.",
             "noModel": "Kein Modell",
-            "lockedAria": "{model}, nicht verbunden"
+            "lockedAria": "{model}, nicht verbunden",
+            "notSharedAria": "{model}, nicht mit dir geteilt"
         },
         "composerMore": {
             "howMuchMayDo": "Wie viel er tun darf, bevor er fragt.",
@@ -4006,7 +4011,9 @@
             "showOlderModels": "{hidden} ältere {label}-Modelle anzeigen",
             "unavailable": "Nicht verfügbar",
             "addAnotherProvider": "Weiteren Anbieter hinzufügen",
-            "nothingConnected": "Noch nichts verbunden. Verbinden Sie ein Modell, um zu starten"
+            "nothingConnected": "Noch nichts verbunden. Verbinden Sie ein Modell, um zu starten",
+            "notSharedFold": "Nicht mit dir geteilte Modelle",
+            "nothingShared": "Keines der KI-Konten dieser Sandbox ist mit dir geteilt."
         },
         "modelPickerState": {
             "useCustomModelId": "als eigene Modell-ID verwenden"
@@ -4895,7 +4902,8 @@
                 "agentsOff": "Agenten auszuführen ist für dich hier ausgeschaltet",
                 "guest": "{place} ist nicht mit dir geteilt",
                 "area": "Dieser Ordner ist nicht mit dir geteilt",
-                "org": "{org} verwaltet {place}"
+                "org": "{org} verwaltet {place}",
+                "aiAccounts": "Kein KI-Konto ist mit dir geteilt"
             },
             "note": {
                 "owner": "Du kannst dich umsehen. Ändern kann hier nur der Eigentümer.",
@@ -4905,7 +4913,8 @@
                 "agentsOff": "Du kannst mitlesen. Agenten auszuführen ist für dich hier ausgeschaltet.",
                 "guest": "Das ist nicht mit dir geteilt.",
                 "area": "Dieser Ordner ist nicht mit dir geteilt.",
-                "org": "{org} verwaltet das. Du kannst es ansehen, Änderungen nimmt der Admin deiner Organisation vor."
+                "org": "{org} verwaltet das. Du kannst es ansehen, Änderungen nimmt der Admin deiner Organisation vor.",
+                "aiAccounts": "Du kannst mitlesen. Ein Modell auszuführen braucht ein mit dir geteiltes KI-Konto."
             },
             "line": {
                 "ask": "Bitte den Eigentümer um Zugriff. Es öffnet sich hier, sobald er ihn gewährt.",
@@ -10744,7 +10753,8 @@
                 "writer": "Möchte Dateien bearbeiten",
                 "maintainer": "Möchte die Sandbox verwalten",
                 "agents": "Möchte Agenten ausführen",
-                "areas": "Möchte mehr Ordner"
+                "areas": "Möchte mehr Ordner",
+                "aiAccounts": "Möchte KI-Konten"
             },
             "from": "aus {place}",
             "review": "Ansehen"

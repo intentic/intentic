@@ -2881,7 +2881,8 @@
             "noModelYet": "Aucun modèle n'est encore connecté dans ce sandbox.",
             "signInWaiting": "Votre connexion à {provider} n'est pas encore terminée.",
             "connectProvider": "Connecter {providerName}",
-            "chooseAnother": "Choisir un autre modèle"
+            "chooseAnother": "Choisir un autre modèle",
+            "notShared": "{provider} n'est pas partagé avec vous dans ce sandbox."
         },
         "chatArea": {
             "bringBackHere": "Le ramener ici",
@@ -3888,7 +3889,10 @@
             },
             "unconnectedNote": "Votre message attend ici.",
             "otherModelHint": "Modèle non connecté",
-            "otherModelNote": "Choisissez-en un connecté."
+            "otherModelNote": "Choisissez-en un connecté.",
+            "notSharedHint": "Modèle non partagé",
+            "notSharedNote": "Choisissez-en un des vôtres.",
+            "askOwnerNote": "Demandez l'accès au propriétaire."
         },
         "composerModelPill": {
             "fromNextMessage": "{model} répond à partir de votre prochain message. Cette réponse continue sur {running}.",
@@ -3900,7 +3904,8 @@
             "trialNote": "Changez de modèle ou connectez le vôtre.",
             "trialServed": "Dernière réponse : {model}.",
             "noModel": "Aucun modèle",
-            "lockedAria": "{model}, non connecté"
+            "lockedAria": "{model}, non connecté",
+            "notSharedAria": "{model}, non partagé avec vous"
         },
         "composerMore": {
             "howMuchMayDo": "Ce qu'il peut faire avant de demander.",
@@ -4006,7 +4011,9 @@
             "showOlderModels": "Afficher {hidden} modèles {label} plus anciens",
             "unavailable": "Indisponible",
             "addAnotherProvider": "Ajouter un autre fournisseur",
-            "nothingConnected": "Rien n'est encore connecté. Connectez un modèle pour commencer"
+            "nothingConnected": "Rien n'est encore connecté. Connectez un modèle pour commencer",
+            "notSharedFold": "Modèles non partagés avec vous",
+            "nothingShared": "Aucun des comptes d'IA de ce sandbox n'est partagé avec vous."
         },
         "modelPickerState": {
             "useCustomModelId": "utiliser comme identifiant de modèle personnalisé"
@@ -4895,7 +4902,8 @@
                 "agentsOff": "Le lancement d'agents est désactivé pour vous ici",
                 "guest": "{place} n'est pas partagé avec vous",
                 "area": "Ce dossier n'est pas partagé avec vous",
-                "org": "{org} gère {place}"
+                "org": "{org} gère {place}",
+                "aiAccounts": "Aucun compte d'IA n'est partagé avec vous"
             },
             "note": {
                 "owner": "Vous pouvez regarder. Seul le propriétaire peut modifier les choses ici.",
@@ -4905,7 +4913,8 @@
                 "agentsOff": "Vous pouvez suivre la conversation. Le lancement d'agents est désactivé pour vous ici.",
                 "guest": "Ceci n'est pas partagé avec vous.",
                 "area": "Ce dossier n'est pas partagé avec vous.",
-                "org": "{org} gère ceci. Vous pouvez le consulter, mais les modifications passent par l'administrateur de votre organisation."
+                "org": "{org} gère ceci. Vous pouvez le consulter, mais les modifications passent par l'administrateur de votre organisation.",
+                "aiAccounts": "Vous pouvez suivre la conversation. Lancer un modèle demande un compte d'IA partagé avec vous."
             },
             "line": {
                 "ask": "Demandez l'accès au propriétaire. Il s'ouvrira ici dès qu'il l'accordera.",
@@ -10744,7 +10753,8 @@
                 "writer": "Demande à modifier des fichiers",
                 "maintainer": "Demande à gérer le sandbox",
                 "agents": "Demande à lancer des agents",
-                "areas": "Demande plus de dossiers"
+                "areas": "Demande plus de dossiers",
+                "aiAccounts": "Demande des comptes d'IA"
             },
             "from": "depuis {place}",
             "review": "Examiner"

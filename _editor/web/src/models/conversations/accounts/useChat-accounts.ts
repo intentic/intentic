@@ -14,6 +14,7 @@ import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts 
 import { endpointProviders, trialStatus } from "../../providers/providerCatalog";
 import { rememberedProviderFor, turnDefaults } from "../run/turnDefaults";
 import { accessKnown, firstReadyProvider, hasSignIn, providerReadyOn } from "../../providers/access";
+import { myAiAccounts } from "../../providers/aiReach";
 import { conversations } from "../tabs/useChat-tabs";
 import { loadActiveProviderModels, loadRunnableProviders, loadProviderCommands, readOrKeep } from "./useChat-catalog";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -83,8 +84,10 @@ const hasAccount = (target: AgentProvider): boolean => accountsOf(target).length
 export const claudeConnected = computed(() => hasAccount(`claude`));
 
 // Repoints fresh, unstarted conversations to a working provider once accountsLoaded confirms nothing
-// can send.
-watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, trialStatus], () => {
+// can send, and again when the person's own AI accounts land (aiReach.ts): a chat born on one they may not spend moves
+// onto one they may before anything is typed into it. Those are read only once the picture is known, which is when this
+// acts at all, so importing this module asks nothing of the daemon by itself.
+watch([providerAccounts, translatorAccounts, accessKnown, endpointProviders, trialStatus, () => (accessKnown.value ? myAiAccounts() : undefined)], () => {
     if (!accessKnown.value) {
         return;
     }

@@ -501,20 +501,9 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
  * answer the daemon's spawn listing, role ladder and Auto offer read: a picker row is drawn spent exactly when a subagent
  * asking for it would be refused, and a job's button names the rung its run opens on (roleModel.ts).
  */
-export const modelCapacity = (provider: AgentProvider, model: ModelRef | undefined, now: number = Date.now()): FleetCapacity =>
-    fleetCapacity(providerFacts(provider), refusalsOf(provider), model, now);
-
-/** Of some picker rows (a key, the provider, the model), those no account can serve now, each with when one is back. */
-export const spentModels = (
-    rows: readonly { readonly key: string; readonly provider: AgentProvider; readonly value: string; readonly label: string }[],
-    now: number = Date.now(),
-): ReadonlyMap<string, FleetCapacity & { readonly kind: `spent` }> =>
-    new Map(
-        rows.flatMap((row) => {
-            const capacity = modelCapacity(row.provider, { id: row.value, label: row.label }, now);
-            return capacity.kind === `spent` ? [[row.key, capacity] as const] : [];
-        }),
-    );
+// `usable` narrows the accounts asked to the ones a turn may run on (aiReach.ts), as the daemon narrows a person's turn.
+export const modelCapacity = (provider: AgentProvider, model: ModelRef | undefined, now = Date.now(), usable = (_account: string) => true): FleetCapacity =>
+    fleetCapacity(providerFacts(provider).filter((facts) => usable(facts.account)), refusalsOf(provider), model, now);
 
 // Common shape a row is built from: the daemon's facts, its label/identity. Named fields, not positionals — label and
 // identity are both strings and easy to swap by accident.

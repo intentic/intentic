@@ -2881,7 +2881,8 @@
             "noModelYet": "Todavía no hay ningún modelo conectado en este sandbox.",
             "signInWaiting": "Tu inicio de sesión en {provider} aún no ha terminado.",
             "connectProvider": "Conectar {providerName}",
-            "chooseAnother": "Elegir otro modelo"
+            "chooseAnother": "Elegir otro modelo",
+            "notShared": "{provider} no está compartido contigo en este sandbox."
         },
         "chatArea": {
             "bringBackHere": "Tráelo de vuelta aquí",
@@ -3888,7 +3889,10 @@
             },
             "unconnectedNote": "Tu mensaje espera aquí.",
             "otherModelHint": "Modelo sin conectar",
-            "otherModelNote": "Elige uno conectado."
+            "otherModelNote": "Elige uno conectado.",
+            "notSharedHint": "Modelo no compartido",
+            "notSharedNote": "Elige uno de los tuyos.",
+            "askOwnerNote": "Pide acceso al propietario."
         },
         "composerModelPill": {
             "fromNextMessage": "{model} responde desde tu próximo mensaje. Esta respuesta sigue funcionando con {running}.",
@@ -3900,7 +3904,8 @@
             "trialNote": "Cambia de modelo o conecta el tuyo.",
             "trialServed": "Última respuesta: {model}.",
             "noModel": "Sin modelo",
-            "lockedAria": "{model}, sin conectar"
+            "lockedAria": "{model}, sin conectar",
+            "notSharedAria": "{model}, no compartido contigo"
         },
         "composerMore": {
             "howMuchMayDo": "Cuánto puede hacer antes de preguntar.",
@@ -4006,7 +4011,9 @@
             "showOlderModels": "Mostrar {hidden} modelos de {label} más antiguos",
             "unavailable": "No disponible",
             "addAnotherProvider": "Añadir otro proveedor",
-            "nothingConnected": "Aún no hay nada conectado. Conecta un modelo para empezar"
+            "nothingConnected": "Aún no hay nada conectado. Conecta un modelo para empezar",
+            "notSharedFold": "Modelos no compartidos contigo",
+            "nothingShared": "Ninguna de las cuentas de IA de este sandbox está compartida contigo."
         },
         "modelPickerState": {
             "useCustomModelId": "usar como id de modelo personalizado"
@@ -4895,7 +4902,8 @@
                 "agentsOff": "Ejecutar agentes está desactivado para ti aquí",
                 "guest": "{place} no está compartido contigo",
                 "area": "Esta carpeta no está compartida contigo",
-                "org": "{org} gestiona {place}"
+                "org": "{org} gestiona {place}",
+                "aiAccounts": "Ninguna cuenta de IA está compartida contigo"
             },
             "note": {
                 "owner": "Puedes mirar. Solo el propietario puede cambiar cosas aquí.",
@@ -4905,7 +4913,8 @@
                 "agentsOff": "Puedes seguir la conversación. Ejecutar agentes está desactivado para ti aquí.",
                 "guest": "Esto no está compartido contigo.",
                 "area": "Esta carpeta no está compartida contigo.",
-                "org": "{org} gestiona esto. Puedes verlo, pero los cambios los hace el administrador de tu organización."
+                "org": "{org} gestiona esto. Puedes verlo, pero los cambios los hace el administrador de tu organización.",
+                "aiAccounts": "Puedes seguir la conversación. Ejecutar un modelo necesita una cuenta de IA compartida contigo."
             },
             "line": {
                 "ask": "Pide acceso al propietario. Se abrirá aquí en cuanto lo conceda.",
@@ -10744,7 +10753,8 @@
                 "writer": "Pide editar archivos",
                 "maintainer": "Pide gestionar el sandbox",
                 "agents": "Pide ejecutar agentes",
-                "areas": "Pide más carpetas"
+                "areas": "Pide más carpetas",
+                "aiAccounts": "Pide cuentas de IA"
             },
             "from": "desde {place}",
             "review": "Revisar"

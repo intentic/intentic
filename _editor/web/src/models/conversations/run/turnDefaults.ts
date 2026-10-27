@@ -3,7 +3,7 @@ import { type AgentHarness, AgentHarnessSchema, type AgentProvider, type Permiss
 import { isEndpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import { definePreference } from "@intentic/ui/preference";
-import { accessKnown, firstReadyProvider, providerReady } from "../../providers/access";
+import { accessKnown, firstReadyProvider, providerRunnable } from "../../providers/access";
 import { DEFAULT_EFFORT, DEFAULT_THINKING } from "../../providers/pickerRunSettings";
 import { defaultModelFor, newerVersionOf, perProvider, providerModels, providerModelsState } from "../../providers/providerCatalog";
 import { offeredHarness, offeredLoops } from "../../providers/offeredLoops";
@@ -114,14 +114,14 @@ export const rememberPick = (pick: TurnPick): void => {
 // `turnDefaults.provider`, which is undefined here.
 const UNCHOSEN: AgentProvider = `claude`;
 
-// The user's pick when it can actually run, else the first provider that can — resolved at read, never written back
+// The user's pick when it can actually run (connected, and theirs to spend), else the first provider that can — resolved at read, never written back
 // over the pick, so a provider merely slow to load once doesn't cost the choice forever. Before the connection lists
 // are read (accessKnown), the pick rides through untouched: an empty list there means "haven't asked", not "nothing
 // connected". The fallback is `firstReadyProvider`, the same ladder the watcher that repoints open chats falls down,
 // so a chat is never born on a provider it would be moved off a beat later.
 export const rememberedProviderFor = (): AgentProvider => {
     const picked = turnDefaults.provider.value;
-    if (picked !== undefined && (!accessKnown.value || providerReady(picked))) {
+    if (picked !== undefined && (!accessKnown.value || providerRunnable(picked))) {
         return picked;
     }
     return firstReadyProvider() ?? picked ?? UNCHOSEN;

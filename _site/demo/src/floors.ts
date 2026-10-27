@@ -1,7 +1,7 @@
 import type { MemberSelf } from "@intentic/sandbox-contract/schemas/members";
 import { memberAccess } from "@intentic/sandbox-contract/schemas/members";
 import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
-import { demoTier } from "./mode";
+import { demoAiAccounts, demoTier } from "./mode";
 import { accessRequestOf } from "./fixture/access";
 import { DEMO_USER } from "./platform";
 import type { DemoHandler } from "./transport";
@@ -21,6 +21,9 @@ export const demoSelf = (): MemberSelf => {
     const self: MemberSelf = { role: demoTier, agents: access.agents, edit: access.edit === `all` || access.edit === `none` ? access.edit : [...access.edit] };
     if (access.see !== undefined) {
         self.areas = [...access.see];
+    }
+    if (demoAiAccounts !== undefined) {
+        self.aiAccounts = [...demoAiAccounts];
     }
     const asked = accessRequestOf(DEMO_USER.email);
     if (asked !== undefined) {

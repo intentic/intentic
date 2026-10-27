@@ -2881,7 +2881,8 @@
             "noModelYet": "W tym sandboxie nie podłączono jeszcze żadnego modelu.",
             "signInWaiting": "Logowanie do {provider} nie zostało jeszcze dokończone.",
             "connectProvider": "Podłącz {providerName}",
-            "chooseAnother": "Wybierz inny model"
+            "chooseAnother": "Wybierz inny model",
+            "notShared": "{provider} nie jest Ci udostępniony w tym sandboxie."
         },
         "chatArea": {
             "bringBackHere": "Przywróć tutaj",
@@ -3888,7 +3889,10 @@
             },
             "unconnectedNote": "Twoja wiadomość tu poczeka.",
             "otherModelHint": "Model niepodłączony",
-            "otherModelNote": "Wybierz podłączony."
+            "otherModelNote": "Wybierz podłączony.",
+            "notSharedHint": "Model nieudostępniony",
+            "notSharedNote": "Wybierz jeden ze swoich.",
+            "askOwnerNote": "Poproś właściciela o dostęp."
         },
         "composerModelPill": {
             "fromNextMessage": "{model} odpowie od twojej następnej wiadomości. Ta odpowiedź nadal działa na {running}.",
@@ -3900,7 +3904,8 @@
             "trialNote": "Zmień model lub podłącz własny.",
             "trialServed": "Ostatnia odpowiedź: {model}.",
             "noModel": "Brak modelu",
-            "lockedAria": "{model}, niepodłączony"
+            "lockedAria": "{model}, niepodłączony",
+            "notSharedAria": "{model}, nieudostępniony Tobie"
         },
         "composerMore": {
             "howMuchMayDo": "Ile może zrobić, zanim zapyta.",
@@ -4006,7 +4011,9 @@
             "older": "starsza",
             "olderThan": "starsza wersja, {newer} jest nowszy",
             "addAnotherProvider": "Dodaj innego dostawcę",
-            "nothingConnected": "Nic nie jest jeszcze podłączone. Podłącz model, by zacząć"
+            "nothingConnected": "Nic nie jest jeszcze podłączone. Podłącz model, by zacząć",
+            "notSharedFold": "Modele nieudostępnione Tobie",
+            "nothingShared": "Żadne z kont AI tego sandboxa nie jest Ci udostępnione."
         },
         "modelPickerState": {
             "useCustomModelId": "użyj jako własnego id modelu"
@@ -4895,7 +4902,8 @@
                 "agentsOff": "Uruchamianie agentów jest tu dla Ciebie wyłączone",
                 "guest": "{place}: nieudostępnione Tobie",
                 "area": "Ten folder nie jest Ci udostępniony",
-                "org": "{place}: zarządza {org}"
+                "org": "{place}: zarządza {org}",
+                "aiAccounts": "Żadne konto AI nie jest Ci udostępnione"
             },
             "note": {
                 "owner": "Możesz się rozejrzeć. Zmieniać coś tutaj może tylko właściciel.",
@@ -4905,7 +4913,8 @@
                 "agentsOff": "Możesz śledzić rozmowę. Uruchamianie agentów jest tu dla Ciebie wyłączone.",
                 "guest": "To nie jest Ci udostępnione.",
                 "area": "Ten folder nie jest Ci udostępniony.",
-                "org": "Tym zarządza {org}. Możesz to przeglądać, ale zmiany wprowadza administrator Twojej organizacji."
+                "org": "Tym zarządza {org}. Możesz to przeglądać, ale zmiany wprowadza administrator Twojej organizacji.",
+                "aiAccounts": "Możesz śledzić rozmowę. Uruchomienie modelu wymaga udostępnionego Ci konta AI."
             },
             "line": {
                 "ask": "Poproś właściciela o dostęp. Otworzy się tutaj, gdy tylko go przyzna.",
@@ -10147,7 +10156,8 @@
                 "writer": "Prosi o edycję plików",
                 "maintainer": "Prosi o zarządzanie sandboxem",
                 "agents": "Prosi o uruchamianie agentów",
-                "areas": "Prosi o więcej folderów"
+                "areas": "Prosi o więcej folderów",
+                "aiAccounts": "Prosi o konta AI"
             },
             "from": "z: {place}",
             "review": "Przejrzyj"

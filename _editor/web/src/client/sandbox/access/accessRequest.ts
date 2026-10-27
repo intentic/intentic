@@ -28,6 +28,8 @@ export const wantOf = (reason: AccessReason): AccessWant | undefined => {
             return `viewer`;
         case `area`:
             return `areas`;
+        case `ai-accounts`:
+            return `aiAccounts`;
         case `org`:
             // An organisation's lock is lifted by its admin, not by the owner's grant.
             return undefined;

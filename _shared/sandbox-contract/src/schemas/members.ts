@@ -284,7 +284,9 @@ export type MemberSelf = z.infer<typeof MemberSelfSchema>;
 // where granting the person what they asked for answers it. One open request per person: a later ask replaces theirs.
 // `want` is what stood in the way, in the terms a grant answers: a tier (`viewer` is a guest asking to see more),
 // running agents (`agents`), or a folder outside their areas (`areas`).
-export const AccessWantSchema = z.enum(["viewer", "collaborator", "writer", "maintainer", "agents", "areas"]);
+// `aiAccounts`: the AI accounts their turns may run on (`aiAccounts` on their row) leave them nothing to run on that they
+// asked for, asked from a model picker with no model of theirs in it.
+export const AccessWantSchema = z.enum(["viewer", "collaborator", "writer", "maintainer", "agents", "areas", "aiAccounts"]);
 export type AccessWant = z.infer<typeof AccessWantSchema>;
 
 // POST /members/requests: what the person asks for, and where they were when they asked.

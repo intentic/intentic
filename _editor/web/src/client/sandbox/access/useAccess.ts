@@ -55,7 +55,7 @@ const build = (): AccessState => {
     const self = selfMember();
     // The tier the daemon itself reports wins over the platform's record of it, which can lag a change by a reconnect.
     const role = computed<MemberRole | undefined>(() => self.value?.role ?? sandbox.active.value?.role ?? undefined);
-    // The facts the check reads. Before the daemon's own answer lands (it is read for the tiers below maintainer only),
+    // The facts the check reads. Before the daemon's own answer lands (it is read for every tier but the owner's),
     // the tier alone: the floor answers by it, and whether agents run only ever narrows a collaborator-floor route further.
     const caller = computed((): Caller | undefined => {
         const tier = role.value;
@@ -107,7 +107,7 @@ const refreshAccess = (): void => {
     }
     refreshedAt = now;
     void queryClient.invalidateQueries({ queryKey: SANDBOX_SELF_ACCESS.of() });
-    // The platform's record of the tier, which is all there is for a maintainer's, whose own answer is never read.
+    // The platform's record of the tier, which is all there is for the owner's, whose own answer is never read.
     stateOf().refresh();
 };
 

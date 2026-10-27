@@ -54,10 +54,10 @@ export const revokeMember = async (email: string): Promise<MembersList> => adopt
 
 // WHETHER THE SIGNED-IN PERSON RUNS AGENTS, for the two tiers whose name does not say: a writer edits files by hand and
 // may or may not drive agents, and a guest either chats with the assistants in its areas or has only its home
-// conversation (sandbox-contract `memberAccess`); and WHICH AI ACCOUNTS their turns may run on, which any tier below
-// maintainer may have been held to. So the read is made for every tier but the two that manage the sandbox. One query
-// for the whole app, made once in its own scope, since `useRole` is read from plain functions as well as components and
-// a per-call query would need a component to belong to.
+// conversation (sandbox-contract `memberAccess`); and WHICH AI ACCOUNTS their turns may run on, which anyone but the
+// owner may have been held to, a maintainer included (managing the sandbox and spending all of it are separate answers).
+// So the read is made for every tier but the owner's. One query for the whole app, made once in its own scope, since
+// `useRole` is read from plain functions as well as components and a per-call query would need a component to belong to.
 
 let self: ComputedRef<MemberSelf | undefined> | undefined;
 
@@ -71,7 +71,7 @@ const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
                 queryFn: () => sandboxRaw(`GET /members/self`),
                 enabled: computed(() => {
                     const role = active.value?.role;
-                    return role !== undefined && role !== `owner` && role !== `maintainer`;
+                    return role !== undefined && role !== `owner`;
                 }),
             });
             return computed(() => query.data.value);

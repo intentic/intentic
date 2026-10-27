@@ -6,13 +6,14 @@ import { hasSignIn, providerReady } from "../../../models/providers/access";
 import type { CatalogLoadState } from "../../../models/providers/providerCatalog";
 import { modelsPath } from "../../../lib/routes/modelsPath";
 
-defineProps<{ provider: AgentProvider | undefined; rowCount: number; state: CatalogLoadState }>();
+// `withheld`: the reader may not run this provider (Access ▸ People), so connecting it is never the line drawn here.
+defineProps<{ provider: AgentProvider | undefined; withheld?: boolean; rowCount: number; state: CatalogLoadState }>();
 const emit = defineEmits<{ retry: []; navigate: [event: MouseEvent] }>();
 const t = useT();
 </script>
 
 <template>
-    <template v-if="provider !== undefined && hasSignIn(provider) && !providerReady(provider)">
+    <template v-if="provider !== undefined && !withheld && hasSignIn(provider) && !providerReady(provider)">
         <p v-if="rowCount > 0" class="px-3 py-1.5 text-2xs text-subtle">{{ t(`chat.modelPicker.connectToCheckModels`) }}</p>
         <RouterLink v-else :to="modelsPath({ provider })" class="block px-3 py-1.5 text-2xs text-link" @click="emit(`navigate`, $event)">
             {{ t(`chat.modelPicker.connectToDiscoverModels`) }}

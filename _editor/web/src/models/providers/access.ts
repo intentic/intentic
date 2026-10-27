@@ -8,14 +8,18 @@ import { accountsLoaded, providerAccounts, translatorAccounts } from "./provider
 import { requirementWords, runsWords } from "./providerWords";
 import { acpProviders, endpointProviders, endpointsLoaded, nativeReady, trialStatus } from "./providerCatalog";
 import { offeredLoops, selectedLoop } from "./offeredLoops";
+import { providerWithheld } from "./aiReach";
 
 // Whether a provider can actually run, and what unlocks it: one rule, read by every surface that offers a
 // provider (picker, connect gate, account panel). A catalog always has rows (every provider seeds a floor
 // model), so having rows says nothing about readiness.
 
 export interface ProviderAccessState {
-    // Whether a turn on this provider can be sent right now.
+    // Whether this sandbox can run a turn on this provider right now (connected), whoever is asking.
     readonly ready: boolean;
+    // Whether the signed-in person may not run on it at all (aiReach.ts): connected or not, the way on is another model
+    // or the owner's grant, never Connect.
+    readonly withheld: boolean;
     // Undefined for an ACP agent or endpoint: both carry their own credential, nothing left to connect.
     readonly access: ProviderAccess | undefined;
     // Whether any connected account of this provider has a credential that can no longer be refreshed.
@@ -56,7 +60,16 @@ export const subscriptionProviderOn = (provider: AgentProvider, harness: AgentHa
     return keyed.success ? keyed.data : undefined;
 };
 
+// Whether a turn on this provider can be sent by the signed-in person: connected here, and theirs to spend. The question
+// every surface that offers a provider to RUN on asks (the picker's order and fold, a new chat's seed, "anything else to
+// run"); `providerReady` stays the connection's own answer, which Sandbox ▸ Models and the connect gates read.
+export const providerRunnable = (provider: AgentProvider): boolean => providerReady(provider) && !providerWithheld(provider);
+
+// Whether this conversation's selection can send: the loop's credential is connected, and the provider is the person's.
 export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness): boolean => {
+    if (providerWithheld(provider)) {
+        return false;
+    }
     const subscription = subscriptionProviderOn(provider, harness);
     if (subscription !== undefined) {
         return translatorAccounts.value[subscription].length > 0;
@@ -72,20 +85,31 @@ export const providerReadyOn = (provider: AgentProvider, harness: AgentHarness):
 // trial only as the floor under nothing connected, never as a substitute for a subscription. Shared by the seed a
 // new conversation is born on and the watcher that repoints an open one, so a chat is never born on a provider it
 // would be moved off a beat later — that beat was the "connect a model" state flashing over a usable chat.
+// Runnable, not merely connected: a chat born on a provider the person may not spend would only be refused at its send.
 export const firstReadyProvider = (): AgentProvider | undefined =>
-    NATIVE_PROVIDERS.find((provider) => providerReady(provider)) ?? (providerReady(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
+    NATIVE_PROVIDERS.find((provider) => providerRunnable(provider)) ?? (providerRunnable(TRIAL_PROVIDER) ? TRIAL_PROVIDER : undefined);
 
-// Whether this sandbox can run anything at all: a connected account, a ready trial, an endpoint or an installed agent. The
-// question a chat with nothing to send on asks first, since its answer decides whether another model is the way on
-// (something else here can run) or connecting one is (nothing can).
-export const anyProviderReady = (): boolean =>
-    NATIVE_PROVIDERS.some(providerReady) || endpointProviders.value.some((endpoint) => providerReady(endpoint.id)) || acpProviders.value.length > 0;
+const anyProvider = (answers: (provider: AgentProvider) => boolean): boolean =>
+    NATIVE_PROVIDERS.some(answers) || endpointProviders.value.some((endpoint) => answers(endpoint.id)) || acpProviders.value.some((agent) => answers(agent.id));
+
+// Whether the signed-in person can run anything here: a connected account of theirs, a ready trial, an endpoint or an
+// installed agent they may use. The question a chat with nothing to send on asks first, since its answer decides whether
+// another model is the way on (something else can run) or connecting one is (nothing can).
+export const anyProviderReady = (): boolean => anyProvider(providerRunnable);
+
+// Something here is connected, and none of it is the signed-in person's (Access ▸ People): the way on is the owner's
+// grant, not a connection. Held until `accessKnown`, as every "nothing to send with" answer is.
+export const nothingShared = (): boolean => accessKnown.value && !anyProviderReady() && anyProvider(providerReady);
 
 export const accessStateFor = (provider: AgentProvider): ProviderAccessState => ({
     ready: providerReady(provider),
+    withheld: providerWithheld(provider),
     access: accessFor(provider),
     needsReauth: accountsOf(provider).some((account) => account.needsReauth === true),
 });
+
+// The chip a provider withheld from the signed-in person wears, in the words every access refusal uses.
+export const withheldBadge = (provider: AgentProvider): string | undefined => (providerWithheld(provider) ? t(`common.access.short.notShared`) : undefined);
 
 /* WHETHER THERE IS A SIGN-IN HERE AT ALL, which is a different question from whether this provider is ready. */
 export const hasSignIn = (provider: AgentProvider): boolean => accessFor(provider) !== undefined;
@@ -99,10 +123,11 @@ const KIND_BADGE: Record<AccessKind, (access: ProviderAccess) => string> = {
 };
 
 // Chip a provider's section header shows: nothing once ready (a usable provider looks like the plain default),
-// else its access requirement.
+// else its access requirement. A provider withheld from the person has no price to state: connecting it would not make
+// it theirs, so its chip is the access answer (withheldBadge) and never this one.
 export const accessBadge = (provider: AgentProvider): string | undefined => {
     const state = accessStateFor(provider);
-    if (state.ready || state.access === undefined) {
+    if (state.ready || state.withheld || state.access === undefined) {
         return undefined;
     }
     return KIND_BADGE[state.access.kind](state.access);

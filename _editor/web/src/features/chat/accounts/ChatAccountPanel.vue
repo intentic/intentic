@@ -4,6 +4,8 @@ import { computed, inject, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { PROVIDER_VENDOR } from "@intentic/sandbox-contract/models/agent-catalog";
 import { accessKnown, anyProviderReady, hasSignIn, trialExhausted } from "../../../models/providers/access";
+import { providerWithheld } from "../../../models/providers/aiReach";
+import AccessAsk from "../../../components/access/AccessAsk.vue";
 import { providerDisplayLabel } from "../../../models/providers/providerCatalog";
 import { turnDefaults } from "../../../models/conversations/run/turnDefaults";
 import { useChat } from "../../../models/conversations/run/useChat";
@@ -66,6 +68,12 @@ const connectLabel = computed(() =>
     byName.value ? t(`chat.chatAccountPanel.connectProvider`, { providerName: providerName.value }) : t(`chat.words.connectAModel`),
 );
 
+// This chat sits on a provider the reader may not run (Access ▸ People): somebody else started it there, or the owner
+// narrowed their AI accounts since. Connected, so "isn't connected" would be false and Connect no way on; the provider
+// is named as the picker's lane names it, beside the one press that changes it: another model of theirs, or, with none,
+// asking the owner.
+const withheld = computed(() => providerWithheld(provider.value));
+
 // Each press on a composer that cannot send shakes the way on, keyed so a second press shakes it again.
 const nudge = inject(ACCOUNT_NUDGE, ref(0));
 </script>
@@ -113,6 +121,32 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
             <RouterLink :to="retryTo" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
                 {{ t(`ui.action.tryAgain`) }}
             </RouterLink>
+        </span>
+    </div>
+
+    <!-- On a model that isn't the reader's: another of theirs where they have one, else asking the owner for one. -->
+    <div
+        v-else-if="accessKnown && withheld"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
+        data-account-gate
+        data-account-withheld
+    >
+        <Icon name="lock" class="shrink-0 text-subtle" />
+        <!-- Named as the chat's own provider where somebody chose it or a started chat sits on it; a first chat on the app's floor names no vendor. -->
+        <span class="min-w-[12rem] flex-1 text-left">{{
+            named ? t(`chat.chatAccountPanel.notShared`, { provider: providerDisplayLabel(provider) }) : t(`chat.modelPicker.nothingShared`)
+        }}</span>
+        <span class="flex shrink-0 items-center gap-3">
+            <ChatChooseModelButton
+                v-if="others"
+                :key="`choose-${nudge}`"
+                :label="t(`chat.chatAccountPanel.chooseAnother`)"
+                tier="accent"
+                :class="{ 'ui-shake': nudge > 0 }"
+            />
+            <span v-else :key="`ask-${nudge}`" class="inline-flex items-center gap-2" :class="{ 'ui-shake': nudge > 0 }">
+                <AccessAsk :reason="{ kind: `ai-accounts` }" :place="t(`shared.chat`)" tier="accent" small />
+            </span>
         </span>
     </div>
 

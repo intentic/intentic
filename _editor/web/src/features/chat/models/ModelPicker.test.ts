@@ -4,7 +4,7 @@
 // - the door to connecting one lives here, since nothing else in the picker offers it
 import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract/models/agent-catalog";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
@@ -23,6 +23,11 @@ jest.mock(`vue-router`, () => ({
     RouterLink: RouterLinkStub as never,
 }));
 
+// The AI accounts the reader is held to (Access ▸ People); undefined is every one, as for an owner.
+const aiKeys = ref<readonly string[] | undefined>(undefined);
+const realMembers = { ...(await import("../../../client/sandbox/useMembers")) };
+jest.mock(`../../../client/sandbox/useMembers`, () => ({ ...realMembers, selfAiAccounts: () => computed(() => aiKeys.value) }));
+
 const { providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
 const { acpProviders, endpointProviders, perProvider, providerModels, trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ModelPicker } = await import("./ModelPicker.vue");
@@ -30,7 +35,7 @@ const { browsingCatalog } = await import("../../../models/providers/loadBrowsing
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract/models/provider-specs");
 
 let app: App | undefined;
-const mountWith = (props: { readonly helperJobs?: boolean }): HTMLElement => {
+const mountWith = (props: { readonly helperJobs?: boolean; readonly provider?: string; readonly model?: string }): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ModelPicker, { provider: `claude`, model: `claude-opus-4-6`, ...props }) });
@@ -58,6 +63,7 @@ const oneModel = (label: string) => [{ value: label.toLowerCase().replaceAll(` `
 
 beforeEach(() => {
     jest.spyOn(browsingCatalog, `refresh`).mockResolvedValue(undefined);
+    aiKeys.value = undefined;
     // Nothing connected, every provider at its seed floor: the exact state a first-time user sees.
     providerAccounts.value = perProvider(() => []);
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
@@ -254,4 +260,78 @@ it(`advertises the connection without stale model numbers when no current browsi
     expect(element.textContent).not.toContain(`Claude Opus 4 6`);
     expect(element.textContent).not.toContain(`Couldn't load models`);
     expect(element.querySelectorAll(`[role="option"]`)).toHaveLength(0);
+});
+
+// A person held to some AI accounts (Access ▸ People) used to see every connected model lit and ticked, and found out at
+// Send. What they can run leads; what is connected but not theirs waits behind one row that says so, and opened, it is
+// listed and refused, with no Connect beside it, since connecting would not make it theirs.
+describe(`for a person held to some AI accounts`, () => {
+    const options = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`[role="option"]`)];
+    const foldRow = (element: HTMLElement): HTMLButtonElement | undefined =>
+        [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Models not shared with you`));
+
+    beforeEach(async () => {
+        const { accountsLoaded } = await import("../../../models/providers/providerAccounts");
+        const { endpointsLoaded } = await import("../../../models/providers/providerCatalog");
+        accountsLoaded.value = true;
+        endpointsLoaded.value = true;
+        providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude Max`, connectedAt: 0 }] };
+        translatorAccounts.value = { codex: [{ name: `chatgpt-ada`, label: `ada@acme.dev` }], grok: [], kimi: [], gemini: [] };
+    });
+
+    afterEach(async () => {
+        const { accountsLoaded } = await import("../../../models/providers/providerAccounts");
+        const { endpointsLoaded } = await import("../../../models/providers/providerCatalog");
+        accountsLoaded.value = false;
+        endpointsLoaded.value = false;
+    });
+
+    it(`leads with the models they can run and folds the rest behind a row that says they are not shared`, async () => {
+        aiKeys.value = [`codex:chatgpt-ada`];
+        const element = mountWith({ provider: `codex`, model: `gpt-5-6` });
+        await nextTick();
+
+        expect(headings(element)).toEqual([`Codex`]);
+        expect(disclosure(element)).toBeUndefined();
+        foldRow(element)?.click();
+        await nextTick();
+
+        expect(headings(element)[1]).toBe(`Claude Code`);
+        expect(element.textContent).toContain(`Not shared with you`);
+        // No price and no Connect on a lane connecting would not open to them.
+        expect([...element.querySelectorAll(`a`)].some((link) => link.textContent?.trim() === `Connect`)).toBe(false);
+        expect(element.textContent).not.toContain(`Needs ChatGPT subscription`);
+        const claude = options(element).find((row) => row.textContent?.includes(`Claude Opus 4 6`));
+        expect(claude?.disabled).toBe(true);
+        expect(options(element).find((row) => row.textContent?.includes(`GPT 5 6`))?.disabled).toBe(false);
+    });
+
+    it(`says why on a withheld row found by search, where no lane header stands over it`, async () => {
+        aiKeys.value = [`codex:chatgpt-ada`];
+        const element = mountWith({ provider: `codex`, model: `gpt-5-6` });
+        const search = element.querySelector(`input`)!;
+        search.value = `opus`;
+        search.dispatchEvent(new Event(`input`));
+        await nextTick();
+
+        const [row] = options(element);
+        expect(row?.disabled).toBe(true);
+        expect(row?.textContent).toContain(`Not shared with you`);
+    });
+
+    it(`says so when nothing connected is theirs, with asking the owner as the one press, never connecting`, async () => {
+        // An endpoint that is gone: nothing here is theirs, connected or to connect.
+        aiKeys.value = [`endpoint/gone`];
+        const element = mount();
+        await nextTick();
+
+        const line = element.querySelector(`[data-picker-nothing-shared]`);
+        expect(line?.textContent).toContain(`None of this sandbox's AI accounts is shared with you.`);
+        expect(line?.textContent).toContain(`Ask for access`);
+        expect(element.querySelector(`[data-picker-connect-first]`)).toBeNull();
+        expect(element.textContent).not.toContain(`Connect a model, or manage accounts`);
+        // Every lane waits behind the fold, so the list is the line and its way on rather than rows none can pick.
+        expect(headings(element)).toEqual([]);
+        expect(foldRow(element)?.getAttribute(`aria-expanded`)).toBe(`false`);
+    });
 });

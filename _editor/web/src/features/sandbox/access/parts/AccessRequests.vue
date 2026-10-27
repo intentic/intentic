@@ -23,6 +23,7 @@ const WANTS = {
     maintainer: () => t(`sandbox.accessRequests.wants.maintainer`),
     agents: () => t(`sandbox.accessRequests.wants.agents`),
     areas: () => t(`sandbox.accessRequests.wants.areas`),
+    aiAccounts: () => t(`sandbox.accessRequests.wants.aiAccounts`),
 } satisfies Record<AccessWant, () => string>;
 
 const lineOf = (request: AccessRequest): string => `${WANTS[request.want]()} · ${t(`sandbox.accessRequests.from`, { place: request.place })} · ${timeAgo(request.at)}`;
