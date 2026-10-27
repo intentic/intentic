@@ -1,8 +1,8 @@
-<!-- The shared agent: a round head with smiling crescent eyes, seated on two rings that cross beneath it, crowned with a
+<!-- The shared agent: a round head with smiling crescent eyes, seated on two swept loops that meet beneath it, crowned with a
      flame and set with a gem on the brow and a lotus gem where everything meets. Drawn for the headline's cap height.
-     The head, both rings and the short bar that joins them are one path, stroked rim first and ribbon second, so every
-     join merges cleanly. Colours sit on the SVG itself; the style block only sizes it and turns the glow on. -->
-<svg class="shared-agent-emblem" viewBox="9 -4 78 87" fill="none" aria-hidden="true" focusable="false">
+     The head and the short bar under it are one stroked path, the loops are filled shapes; every rim goes down before
+     any ribbon, so every join merges cleanly. Colours sit on the SVG itself; the style block only sizes it and turns the glow on. -->
+<svg class="shared-agent-emblem" viewBox="7 -4 82 88" fill="none" aria-hidden="true" focusable="false">
     <defs>
         <linearGradient id="shared-ribbon" x1="22" y1="4" x2="70" y2="86" gradientUnits="userSpaceOnUse">
             <stop stop-color="var(--color-gold-bright)" />
@@ -14,13 +14,24 @@
         </filter>
         <path
             id="shared-body"
-            d="M48 48L35.85 41.64A21 15.5 0 1 1 60.15 41.64ZM15 62a15 15 0 1 0 30 0a15 15 0 1 0-30 0ZM51 62a15 15 0 1 0 30 0a15 15 0 1 0-30 0ZM48 46L48 57"
+            d="M48 48L35.85 41.64A21 15.5 0 1 1 60.15 41.64ZM48 46L48 57"
+        />
+        <!-- The left loop as a filled shape, so its band can run thin at the top and full along the outside and bottom,
+             with the hole set high and toward the middle. The right loop is this one mirrored. -->
+        <path
+            id="shared-lobe"
+            fill-rule="evenodd"
+            d="M48 50C42 45.5 34 44 26 45.5C16 47.5 9.5 54.5 9.5 63C9.5 74 17.5 82 29 82C37.5 82 43.5 77.5 46.5 70.5C48.2 66 48.5 58 48 50ZM41.8 59.3a12.5 11.5 -10 1 0-24.6 4.4a12.5 11.5 -10 1 0 24.6-4.4Z"
         />
         <!-- A unit almond, scaled into each gem. -->
         <path id="shared-gem" d="M0 -1Q0.95 0 0 1Q-0.95 0 0 -1Z" />
     </defs>
     <g stroke-linejoin="round" stroke-linecap="round">
-        <use href="#shared-body" class="shared-agent-glow" stroke="var(--color-primary-400)" stroke-width="9" filter="url(#shared-blur)" opacity="0" />
+        <g class="shared-agent-glow" filter="url(#shared-blur)" opacity="0">
+            <use href="#shared-body" stroke="var(--color-primary-400)" stroke-width="9" />
+            <use href="#shared-lobe" fill="var(--color-primary-400)" />
+            <use href="#shared-lobe" fill="var(--color-primary-400)" transform="translate(96 0) scale(-1 1)" />
+        </g>
         <path
             d="M48 -2.5C49.6 1 52 3.2 52 6C52 8.3 50.2 9.6 48 9.6C45.8 9.6 44 8.3 44 6C44 3.2 46.4 1 48 -2.5Z"
             fill="url(#shared-ribbon)"
@@ -28,11 +39,15 @@
             stroke-width="0.9"
         />
         <use href="#shared-body" stroke="var(--color-gold)" stroke-width="9" />
+        <use href="#shared-lobe" fill="var(--color-gold)" stroke="var(--color-gold)" stroke-width="2.5" />
+        <use href="#shared-lobe" fill="var(--color-gold)" stroke="var(--color-gold)" stroke-width="2.5" transform="translate(96 0) scale(-1 1)" />
         <use href="#shared-body" stroke="url(#shared-ribbon)" stroke-width="6.5" />
+        <use href="#shared-lobe" fill="url(#shared-ribbon)" />
+        <use href="#shared-lobe" fill="url(#shared-ribbon)" transform="translate(96 0) scale(-1 1)" />
         <g stroke="var(--color-gold-bright)" stroke-width="1" opacity="0.7">
             <path d="M32 22C34 17 39 14.5 44 14" />
-            <path d="M17 54C20 50 24 48.5 28 48.5" />
-            <path d="M68 48.5C72 48.5 76 50 79 54" />
+            <path d="M13.5 57C16.5 51 21 48.3 27 47.4" />
+            <path d="M82.5 57C79.5 51 75 48.3 69 47.4" />
         </g>
         <g transform="translate(48 13.4)">
             <use href="#shared-gem" transform="scale(3.4 2.8)" fill="url(#shared-ribbon)" stroke="var(--color-gold)" stroke-width="0.3" />
@@ -54,8 +69,8 @@
 <style>
     .shared-agent-emblem {
         display: inline-block;
-        width: 0.85em;
-        height: 0.95em;
+        width: 0.9em;
+        height: 0.96em;
         margin-inline: 0.12em 0.04em;
         vertical-align: -0.1em;
         overflow: visible;
