@@ -9923,7 +9923,8 @@
             "noAccountsNote": "Pełna skrzynka narzędzi, ale żadne z Twoich zalogowanych kont: nie opublikuje ani nie przegląda niczego jako Ty.",
             "noAccountsWhen": "Używa jej wszystko, co działa, gdy nikt nie patrzy (automatyzacja, kolejka, subagent takiego uruchomienia), i nie wskazuje persony.",
             "title": "Wbudowane",
-            "reserved": "„{name}” to wbudowana persona. Wybierz inną nazwę."
+            "reserved": "„{name}” to wbudowana persona. Wybierz inną nazwę.",
+            "readOnly": "Wbudowana, więc nie można jej edytować ani usunąć. Aby wybrać konta, narzędzia i foldery, dodaj własną personę."
         },
         "accessProfiles": {
             "title": "Profile",

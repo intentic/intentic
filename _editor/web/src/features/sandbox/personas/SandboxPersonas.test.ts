@@ -298,21 +298,52 @@ it(`says nothing about a persona that holds no accounts`, async () => {
     personas.value = [{ id: `docs`, capabilities: [] }];
     const el = mount();
     await openPersona(el, `docs`);
-    // The open persona's own panel: the built-ins above the list name No accounts, which is theirs to say.
+    // The open persona's own panel: No accounts is the built-in's own name, said on its tile, not this card's panel.
     const panel = el.querySelector<HTMLElement>(`#${tileFor(el, `docs`).getAttribute(`aria-controls`)}`)!;
     const rendered = text(panel);
     expect(rendered).not.toContain(`No accounts`);
     expect(rendered).not.toContain(`can't post`);
 });
 
-// Every turn wears somebody, so the page names the two personas every sandbox has, read-only, above the given ones.
-it(`shows the built-in personas, read-only`, async () => {
+// Every turn wears somebody, so the page's own grid leads with the two personas every sandbox has: tiles like any other,
+// but locked, and opening one shows what it reaches rather than an editor.
+const builtInTile = (el: HTMLElement, label: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll<HTMLButtonElement>(`[role="group"][aria-label="Your personas"] button[aria-pressed]`)].find(
+        (button) => button.getAttribute(`aria-label`) === label,
+    );
+it(`shows the built-in personas as locked tiles in the grid`, async () => {
     personas.value = [];
     const el = mount();
     await nextTick();
-    expect(text(el)).toContain(`Full access`);
-    expect(text(el)).toContain(`No accounts`);
+    expect(builtInTile(el, `Full access`)?.textContent).toContain(`Full access`);
+    expect(builtInTile(el, `No accounts`)?.textContent).toContain(`No accounts`);
     expect(removeControlFor(el, `Full access`)).toBeUndefined();
+    expect(removeControlFor(el, `No accounts`)).toBeUndefined();
+    // With none of its own, the sandbox still says what that means, and adding one is the step asked for.
+    expect(text(el)).toContain(`No personas yet`);
+});
+
+it(`opens a built-in read-only, and writes it to the address`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount();
+    await waitFor(() => expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`true`));
+    builtInTile(el, `No accounts`)!.click();
+    await waitFor(() => expect(builtInTile(el, `No accounts`)!.getAttribute(`aria-pressed`)).toBe(`true`));
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
+    const panel = el.querySelector<HTMLElement>(`#${builtInTile(el, `No accounts`)!.getAttribute(`aria-controls`)}`)!;
+    expect(text(panel)).toContain(`can't post`);
+    expect(text(panel)).toContain(`can't be edited or removed`);
+    // No editor: no rename, no tabs.
+    expect(panel.querySelector(`h3 button`)).toBeNull();
+    expect(panel.querySelector(`[role="tab"]`)).toBeNull();
+    await waitFor(() => expect(router.currentRoute.value.query[`open`]).toBe(`no-accounts`));
+});
+
+it(`lands on a built-in the address names`, async () => {
+    personas.value = [{ id: `work`, capabilities: [] }];
+    const el = mount({ open: `full-access` });
+    await waitFor(() => expect(builtInTile(el, `Full access`)!.getAttribute(`aria-pressed`)).toBe(`true`));
+    expect(tileFor(el, `work`).getAttribute(`aria-pressed`)).toBe(`false`);
 });
 
 it(`does not list account names under a closed persona`, async () => {

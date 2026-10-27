@@ -10524,7 +10524,8 @@
             "noAccountsNote": "La boîte à outils complète, mais aucun de vos comptes connectés : il ne peut ni publier ni naviguer en votre nom.",
             "noAccountsWhen": "Porté par tout ce qui tourne sans que personne ne regarde (une automatisation, une file, un sous-agent d'une telle exécution) et ne nomme aucun persona.",
             "title": "Intégrés",
-            "reserved": "« {name} » est un persona intégré. Choisissez un autre nom."
+            "reserved": "« {name} » est un persona intégré. Choisissez un autre nom.",
+            "readOnly": "Intégré, il ne peut être ni modifié ni supprimé. Pour choisir ses comptes, outils et dossiers, ajoutez votre propre persona."
         },
         "accessProfiles": {
             "title": "Profils",

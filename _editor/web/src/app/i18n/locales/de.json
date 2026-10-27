@@ -10524,7 +10524,8 @@
             "noAccountsNote": "Der volle Werkzeugkasten, aber keines Ihrer angemeldeten Konten: Er kann nicht als Sie posten oder surfen.",
             "noAccountsWhen": "Gilt für alles, was läuft, während niemand zusieht (eine Automatisierung, eine Warteschlange, ein Subagent eines solchen Laufs), und keine Persona nennt.",
             "title": "Eingebaut",
-            "reserved": "„{name}“ ist eine eingebaute Persona. Wählen Sie einen anderen Namen."
+            "reserved": "„{name}“ ist eine eingebaute Persona. Wählen Sie einen anderen Namen.",
+            "readOnly": "Eingebaut, daher nicht bearbeitbar oder entfernbar. Um Konten, Werkzeuge und Ordner selbst zu wählen, fügen Sie eine eigene Persona hinzu."
         },
         "accessProfiles": {
             "title": "Profile",

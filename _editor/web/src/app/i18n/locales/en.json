@@ -10524,7 +10524,8 @@
             "noAccountsNote": "The full toolbox, but none of your signed-in accounts: it can't post or browse as you.",
             "noAccountsWhen": "Worn by anything that runs while nobody watches (an automation, a queue, a subagent of such a run) and names no persona.",
             "title": "Built in",
-            "reserved": "\"{name}\" is a built-in persona. Pick another name."
+            "reserved": "\"{name}\" is a built-in persona. Pick another name.",
+            "readOnly": "Built in, so it can't be edited or removed. To choose its accounts, tools and folders, add a persona of your own."
         },
         "accessProfiles": {
             "title": "Profiles",

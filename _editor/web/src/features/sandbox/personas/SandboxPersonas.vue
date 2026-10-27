@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { isBuiltInPersona, type Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { type BuiltInPersonaId, isBuiltInPersona, type Persona } from "@intentic/sandbox-contract/schemas/personas";
 import {
-    Avatar,
     Await,
     Button,
     ui,
@@ -23,7 +22,8 @@ import { useRoute, useRouter } from "vue-router";
 import PersonaSelector from "./PersonaSelector.vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import PersonasExplainer from "./PersonasExplainer.vue";
-import BuiltInPersonas from "./BuiltInPersonas.vue";
+import BuiltInPersonaPanel from "./BuiltInPersonaPanel.vue";
+import { builtInPersonaView, builtInPersonaViews } from "../../../models/sandbox/personas/builtInPersonas";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
@@ -69,6 +69,13 @@ const grantables = computed<PersonaGrantable[]>(() => [...grantablesFrom(capabil
 // that can reach nothing.
 const ready = (persona: Persona): boolean => persona.capabilities.some((id) => isConnected(id));
 
+// The two personas every sandbox has, first in the grid as tiles like any other, but locked: no remove, and opening one
+// shows what it reaches and when it is worn instead of an editor (schemas/personas.ts says why they are not cards).
+const builtIns = builtInPersonaViews();
+const builtInCard = (id: BuiltInPersonaId): Persona => ({ id, label: builtInPersonaView(id).label, capabilities: [] });
+const openBuiltIn = ref<BuiltInPersonaId | undefined>(undefined);
+const openBuiltInView = computed(() => (openBuiltIn.value === undefined ? undefined : builtInPersonaView(openBuiltIn.value)));
+
 // One selected persona, edited below the grid. Changes save as they are made; selecting a tile is never an edit.
 const draft = ref<PersonaDraft | undefined>(undefined);
 const saveError = ref<NoticeModel | undefined>(undefined);
@@ -109,6 +116,7 @@ const isOpen = (persona: Persona): boolean => draft.value?.original === persona.
 const toggleOpen = (persona: Persona): void => {
     saveError.value = undefined;
     newName.value = undefined;
+    openBuiltIn.value = undefined;
     if (isOpen(persona)) {
         draft.value = undefined;
         return;
@@ -118,12 +126,20 @@ const toggleOpen = (persona: Persona): void => {
     });
 };
 
+// Opening a built-in closes any card, whose queued edit the draft watcher below still writes.
+const toggleBuiltIn = (id: BuiltInPersonaId): void => {
+    saveError.value = undefined;
+    newName.value = undefined;
+    draft.value = undefined;
+    openBuiltIn.value = openBuiltIn.value === id ? undefined : id;
+};
+
 // Opening, closing or renaming one rewrites the address. Replaced, not pushed: picking a tile is not a visit. This watch
 // is registered before the arrival one so a persona the first render selects is written back too.
 const route = useRoute();
 const router = useRouter();
 watch(
-    () => draft.value?.original,
+    () => draft.value?.original ?? openBuiltIn.value,
     (id) => {
         if (id !== props.open) {
             void router.replace({ query: { ...route.query, open: id } });
@@ -145,6 +161,15 @@ watch(
         }
         if (asked !== undefined) {
             arrived = true;
+            if (isBuiltInPersona(asked)) {
+                if (landedOn !== asked) {
+                    landedOn = asked;
+                    if (openBuiltIn.value !== asked) {
+                        toggleBuiltIn(asked);
+                    }
+                }
+                return;
+            }
             const persona = personas.value.find((candidate) => candidate.id === asked);
             if (persona === undefined || landedOn === asked) {
                 return;
@@ -160,7 +185,7 @@ watch(
         }
         arrived = true;
         const first = personas.value[0];
-        if (first !== undefined && draft.value === undefined && newName.value === undefined) {
+        if (first !== undefined && draft.value === undefined && openBuiltIn.value === undefined && newName.value === undefined) {
             toggleOpen(first);
         }
     },
@@ -173,6 +198,7 @@ watch(
 const startAdd = (): void => {
     saveError.value = undefined;
     draft.value = undefined;
+    openBuiltIn.value = undefined;
     newName.value = ``;
 };
 const cancelAdd = (): void => {
@@ -359,12 +385,10 @@ const confirmRemove = async (): Promise<void> => {
             </Row>
         </RowGroup>
 
-        <BuiltInPersonas />
-
         <Notice v-if="listNotice" :of="listNotice" />
-        <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
-        <!-- Drawn as the list (or its empty state) last looked in this sandbox. Until then a <RowGroup> like the list itself,
-             so it lands on the same tier as what it stands in for. -->
+        <!-- The real list must not show before we know whether personas exist; the list's shape stands in while loading. -->
+        <!-- Drawn as the list last looked in this sandbox. Until then a <RowGroup> like the list itself, so it lands on the
+             same tier as what it stands in for. -->
         <Await :of="loaded" imprint="sandbox.personas" :label="t(`sandbox.sandboxPersonas.readingSandboxsPersonas`)">
             <template #fallback>
                 <RowGroup :label="t(`sandbox.sandboxPersonas.personas`)">
@@ -376,32 +400,19 @@ const confirmRemove = async (): Promise<void> => {
             </template>
             <template #failed="{ error }"><Notice :of="unread(error)" /></template>
 
-            <!-- Personas may exist without connected accounts. -->
-
-            <!-- The empty state names the effects of having no personas. -->
-            <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
-                <Avatar :size="40" />
-                <div class="flex flex-col gap-1">
-                    <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxPersonas.noPersonasYet`) }}</span>
-                    <span class="max-w-md text-xs text-muted">
-                        {{ t(`sandbox.sandboxPersonas.untilOneAutomationSchedule`) }}
-                    </span>
-                </div>
-                <!-- Never disabled for having no accounts: a persona with none still bounds where an agent works. -->
-                <Button tier="accent" :label="t(`sandbox.sandboxPersonas.addPersona`)" size="small" @click="startAdd">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
-            </div>
-
-            <Section v-else :label="t(`sandbox.sandboxPersonas.personas`)">
-                <!-- What a persona is, drawn: the empty state above says it in words, but once the list exists nothing does. -->
+            <!-- Never empty: the two built-ins lead the grid, so a sandbox with no cards of its own still shows who its
+                 chats and runs act as. Personas may exist without connected accounts. -->
+            <Section :label="t(`sandbox.sandboxPersonas.personas`)">
+                <!-- What a persona is, drawn: the tiles show which ones exist, nothing else says what one is. -->
                 <template #info><PersonasExplainer /></template>
                 <template #actions>
+                    <!-- Never disabled for having no accounts: a persona with none still bounds where an agent works. With
+                         no card of its own yet, adding one is the step this list is asking for. -->
                     <Button
-                        v-if="personas.length > 0 && newName === undefined"
+                        v-if="newName === undefined"
                         :label="t(`sandbox.sandboxPersonas.addPersona`)"
                         size="small"
-                        tier="boring"
+                        :tier="personas.length === 0 ? `accent` : `boring`"
                         @click="startAdd"
                     >
                         <template #icon><Icon name="plus" /></template>
@@ -409,6 +420,19 @@ const confirmRemove = async (): Promise<void> => {
                 </template>
 
                 <div role="group" :aria-label="t(`sandbox.sandboxPersonas.personas`)" class="flex flex-wrap gap-1">
+                    <PersonaSelector
+                        v-for="builtIn in builtIns"
+                        :key="builtIn.id"
+                        :persona="builtInCard(builtIn.id)"
+                        :built-in="builtIn"
+                        :selected="openBuiltIn === builtIn.id"
+                        :controls="detailsId"
+                        :signed-in="true"
+                        :saving="false"
+                        @select="toggleBuiltIn(builtIn.id)"
+                    />
+                    <!-- Built-ins first, then the sandbox's own, with a hairline between the two kinds. -->
+                    <span v-if="personas.length > 0" class="mx-1 my-3 border-l border-line" aria-hidden="true" />
                     <PersonaSelector
                         v-for="persona in personas"
                         :key="persona.id"
@@ -422,8 +446,15 @@ const confirmRemove = async (): Promise<void> => {
                     />
                 </div>
 
+                <!-- What having no card of its own means, said where the cards would be. -->
+                <p v-if="personas.length === 0 && newName === undefined" class="m-0 mt-3 text-xs text-muted">
+                    <span class="font-medium text-content">{{ t(`sandbox.sandboxPersonas.noPersonasYet`) }}.</span>
+                    {{ t(`sandbox.sandboxPersonas.untilOneAutomationSchedule`) }}
+                </p>
+
                 <div :id="detailsId" class="mt-4">
-                    <div v-if="selected && draft" :key="selected.id" class="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm">
+                    <BuiltInPersonaPanel v-if="openBuiltInView" :key="openBuiltInView.id" :persona="openBuiltInView" />
+                    <div v-else-if="selected && draft" :key="selected.id" class="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm">
                         <!-- The persona's name, renamed in place beside its pencil: the app's one rename, as the sandbox's. -->
                         <h3 class="-ml-1 flex min-w-0 text-base font-semibold">
                             <InlineRename

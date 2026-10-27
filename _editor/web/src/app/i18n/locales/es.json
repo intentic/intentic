@@ -10524,7 +10524,8 @@
             "noAccountsNote": "La caja de herramientas completa, pero ninguna de tus cuentas con sesión iniciada: no puede publicar ni navegar como tú.",
             "noAccountsWhen": "La lleva todo lo que se ejecuta sin que nadie mire (una automatización, una cola, un subagente de una ejecución así) y no nombra ninguna persona.",
             "title": "Integradas",
-            "reserved": "«{name}» es una persona integrada. Elige otro nombre."
+            "reserved": "«{name}» es una persona integrada. Elige otro nombre.",
+            "readOnly": "Integrada, así que no se puede editar ni quitar. Para elegir sus cuentas, herramientas y carpetas, añade una persona propia."
         },
         "accessProfiles": {
             "title": "Perfiles",
