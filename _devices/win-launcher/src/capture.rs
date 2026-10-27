@@ -13,8 +13,10 @@ bottom, blue-green-red-unused: the agent encodes the PNG, which keeps an image l
 was, so a scaled monitor reads in physical pixels. */
 
 use std::ffi::OsString;
+#[cfg(any(windows, test))]
 use std::path::PathBuf;
 
+#[cfg(any(windows, test))]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Region {
     pub x: i32,
@@ -23,12 +25,17 @@ pub struct Region {
     pub height: i32,
 }
 
+#[cfg(any(windows, test))]
 #[derive(Debug, PartialEq, Eq)]
 pub enum Ask {
-    Capture { out: PathBuf, region: Option<Region> },
+    Capture {
+        out: PathBuf,
+        region: Option<Region>,
+    },
     Frame,
 }
 
+#[cfg(any(windows, test))]
 const USAGE: &str = "usage: intentic-launch --capture <out> [--region <x>,<y>,<width>,<height>] | intentic-launch --frame";
 
 /// Whether this command line asks for the screen rather than a launch.
@@ -37,6 +44,7 @@ pub fn asked(argv: &[OsString]) -> bool {
         .is_some_and(|first| first == "--capture" || first == "--frame")
 }
 
+#[cfg(any(windows, test))]
 fn region_of(text: &str) -> Result<Region, String> {
     let parts: Vec<i32> = text
         .split(',')
@@ -57,6 +65,7 @@ fn region_of(text: &str) -> Result<Region, String> {
 }
 
 /* The command line, minus argv[0], when `asked` is true. */
+#[cfg(any(windows, test))]
 pub fn parse(argv: Vec<OsString>) -> Result<Ask, String> {
     let mut rest = argv.into_iter();
     match rest.next() {
@@ -74,7 +83,11 @@ pub fn parse(argv: Vec<OsString>) -> Result<Ask, String> {
                 (Some(flag), Some(value)) if flag == "--region" => {
                     Some(region_of(&value.to_string_lossy())?)
                 }
-                _ => return Err(format!("after the file only --region is understood. {USAGE}")),
+                _ => {
+                    return Err(format!(
+                        "after the file only --region is understood. {USAGE}"
+                    ))
+                }
             };
             match rest.next() {
                 None => Ok(Ask::Capture {
@@ -89,6 +102,7 @@ pub fn parse(argv: Vec<OsString>) -> Result<Ask, String> {
 }
 
 /// The raw image file: magic, width, height, then the BGRX rows as GDI wrote them.
+#[cfg(any(windows, test))]
 pub fn raw_image(width: u32, height: u32, pixels: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(12 + pixels.len());
     out.extend_from_slice(b"IRAW");
@@ -207,7 +221,10 @@ mod gdi {
         unsafe {
             let screen = GetDC(std::ptr::null_mut());
             if screen.is_null() {
-                return Err("could not open the screen (GetDC): is anyone signed in on this PC?".to_string());
+                return Err(
+                    "could not open the screen (GetDC): is anyone signed in on this PC?"
+                        .to_string(),
+                );
             }
             let memory = CreateCompatibleDC(screen);
             let info = Info {
@@ -281,13 +298,15 @@ pub fn main(argv: Vec<OsString>) -> std::process::ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Ask::Capture { out, region }) => match gdi::grab(region) {
-            Ok((width, height, pixels)) => match std::fs::write(&out, raw_image(width, height, &pixels)) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(why) => {
-                    eprintln!("could not write {}: {why}", out.display());
-                    ExitCode::FAILURE
+            Ok((width, height, pixels)) => {
+                match std::fs::write(&out, raw_image(width, height, &pixels)) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(why) => {
+                        eprintln!("could not write {}: {why}", out.display());
+                        ExitCode::FAILURE
+                    }
                 }
-            },
+            }
             Err(why) => {
                 eprintln!("{why}");
                 ExitCode::FAILURE
@@ -310,7 +329,13 @@ mod tests {
     fn only_the_screen_flags_are_screen_asks() {
         assert!(asked(&argv(&["--capture", "C:\\t\\a.raw"])));
         assert!(asked(&argv(&["--frame"])));
-        assert!(!asked(&argv(&["--log", "x.log", "--", "agent", "--capture"])));
+        assert!(!asked(&argv(&[
+            "--log",
+            "x.log",
+            "--",
+            "agent",
+            "--capture"
+        ])));
     }
 
     #[test]

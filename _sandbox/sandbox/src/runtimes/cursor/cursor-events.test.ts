@@ -126,7 +126,7 @@ test("an MCP call keeps its arguments as input and its reply as output", () => {
     const mapper = createCursorEventMapper(CWD);
     const call = { type: "mcp", args: { providerIdentifier: "diagnostics", toolName: "errors", args: { sinceMinutes: 30 } } };
     expect(mapper.map(update({ type: "tool-call-started", callId: "m1", modelCallId: "m1", toolCall: call }))).toEqual([
-        { kind: "tool_call", id: "m1", name: "mcp__diagnostics__errors", category: "other", status: "in_progress", input: '{"sinceMinutes":30}' },
+        { kind: "tool_call", id: "m1", name: "mcp__diagnostics__errors", server: "diagnostics", category: "other", status: "in_progress", input: '{"sinceMinutes":30}' },
     ]);
     expect(
         mapper.map(update({ type: "tool-call-completed", callId: "m1", modelCallId: "m1", toolCall: { ...call, result: { status: "success", value: { content: [{ text: { text: "No lines." } }] } } } })),

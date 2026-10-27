@@ -50,7 +50,7 @@ describe("which files a change is checked over", () => {
     });
 
     test("a file imported at some depth by more than the threshold goes to the full check; at the threshold it does not", () => {
-        // useCard.ts is imported by 4 files at some depth, Card.vue by 3.
+        // In this fixture, useCard is imported by 4 files at some depth, Card by 3.
         expect(planVueCheck(projectOf(files), graph, [at("useCard.ts")], 3)).toEqual({
             kind: "full",
             reason: "src/useCard.ts is imported by more than 3 of the package's files at some depth, past what its direct importers can vouch for",

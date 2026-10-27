@@ -89,10 +89,9 @@ const checked: AgentEvent = {
 const windows: UsageWindow[] = [{ kind: "five_hour", utilization: 42, resetsAt: 1_900_000_000, gates: "all" }];
 
 
-// The arms a conversation draws under the default settings (decide/experiments.ts), so a row names them by the draw
-// rather than by a hash's outcome copied in.
+// The stable-prompt arm a conversation draws under the default settings (decide/experiments.ts). Tool search has no
+// holdout by default, so its experiment is closed and the row carries no tool-search arm.
 const armsOf = (conversationId: string) => ({
-    toolSearchArm: experimentArm("tool-search", conversationId, 0.5),
     stablePromptArm: experimentArm("stable-system-prompt", conversationId, 0.5),
 });
 

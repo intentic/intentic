@@ -166,7 +166,7 @@ describe.skipIf(!vueTsc.runs)(vueTsc.title("a scoped vue-tsc run on a fixture pa
                 include: ["src/**/*.ts", "src/**/*.vue", "env.d.ts"],
             }),
             "env.d.ts": "declare const APP_NAME: string;\n",
-            // count.ts changes; Counter.vue imports it directly, and Page.vue only through Counter.vue.
+            // In this fixture, count changes; Counter imports it directly, and Page only through Counter.
             "src/count.ts": "export const count = (): number => 1;\n",
             "src/Counter.vue": '<script setup lang="ts">\nimport { count } from "./count";\nconst shown: number = count();\nconst name: string = APP_NAME;\n</script>\n<template><span>{{ shown }}{{ name }}</span></template>\n',
             "src/Page.vue": '<script setup lang="ts">\nimport Counter from "./Counter.vue";\nconst broken: number = "not checked";\n</script>\n<template><Counter /></template>\n',
@@ -190,7 +190,7 @@ describe.skipIf(!vueTsc.runs)(vueTsc.title("a scoped vue-tsc run on a fixture pa
                 { file: join(root, "src/Counter.vue"), line: 3, code: 2322, category: "error" },
                 { file: join(root, "src/uses-helper.ts"), line: 3, code: 2322, category: "error" },
             ],
-            // helper.ts's own error, loaded through uses-helper.ts; Page.vue's is never loaded.
+            // The fixture helper's own error, loaded through uses-helper; Page's is never loaded.
             outside: 1,
         });
         // Nothing of the run is left beside the package's own config but its build info and the graph's cache.
