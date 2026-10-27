@@ -274,8 +274,11 @@ const dismissWork = (notice: NoticeModel): void => {
                 :aria-label="t(`sandbox.sandboxNav.extensions`)"
                 @update:model-value="show"
             />
-            <!-- One cluster, so the verbs stay together; put away while an entry's page is open, which has verbs of its own. -->
-            <div v-if="!detailOpen" class="flex shrink-0 items-center gap-1.5 pb-1.5">
+            <!-- One cluster, so the verbs stay together; put away while an entry's page is open, which has verbs of its own.
+                 Its 32px buttons stand taller than a tab, so the negative top margin lets them overhang the strip rather
+                 than grow it: the strip stays a tab's height whether the cluster is up or not, and the tabs sit where
+                 every other page's do instead of dropping when the list (rather than an entry's page) is open. -->
+            <div v-if="!detailOpen" class="-mt-1.5 flex shrink-0 items-center gap-1.5 pb-1">
                 <!-- A labelled button, not an icon: it creates something, unlike the refresh, which only reads again. -->
                 <template v-if="view === `installed`">
                     <Button v-if="manage" :label="t(`sandbox.words.newExtension`)" size="small" tier="boring" @click="creating = true">
