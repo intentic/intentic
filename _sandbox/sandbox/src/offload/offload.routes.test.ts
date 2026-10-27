@@ -131,5 +131,15 @@ describe("an offloaded run", () => {
 
 test("the kinds that can run elsewhere are the rules that queue, never the ones that exempt a line", async () => {
     const { kinds } = await call(world({}).kinds, undefined, { context });
-    expect(kinds.map(({ id }) => id)).toEqual(["repo-verify", "vitest", "typechecker", "turbo-fanout", "package-script", "cargo"]);
+    expect(kinds.map(({ id }) => id)).toEqual([
+        "repo-verify",
+        "vue-typecheck-changed",
+        "editor-typecheck",
+        "editor-typecheck-here",
+        "vitest",
+        "typechecker",
+        "turbo-fanout",
+        "package-script",
+        "cargo",
+    ]);
 });

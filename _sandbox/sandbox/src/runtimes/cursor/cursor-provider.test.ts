@@ -109,7 +109,7 @@ test("a connected machine reaches the turn with the conversation the command gat
     const request = await planned([{ kind: "device", id: "radarsu-rog", config: {} } as Capability], mounts);
     const token = request.tools.remote?.[0]?.token ?? "";
 
-    expect(own(request)).toEqual([{ name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/radarsu-rog`, token }]);
+    expect(own(request)).toEqual([{ name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/radarsu-rog`, token, timeoutMs: 960_000 }]);
     expect(mounts.turnMounts.resolve(token, "radarsu-rog")).toEqual({ target: { kind: "device", id: "radarsu-rog" }, conversationId: "conv-1" });
 });
 

@@ -12,7 +12,7 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # Keep the slim Node base plus explicit packages instead of the full image's unused toolchains.
 # Install Docker CLI/buildx from the same apt source as the sandbox Docker pack, avoiding per-job installation.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd bubblewrap \
+    && apt-get install -y --no-install-recommends ca-certificates curl jq git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd bubblewrap \
         poppler-utils fonts-dejavu-core python3-pil \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
@@ -98,7 +98,7 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.15.0 SHELL=/
 
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \
-    && bun --version && rg --version && tmux -V && python3 --version && make --version | head -1 && g++ --version | head -1 \
+    && bun --version && jq --version && rg --version && tmux -V && python3 --version && make --version | head -1 && g++ --version | head -1 \
     && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip && command -v zstdcat \
     && pdftoppm -v && test -f /opt/privacy-models/pp-ocrv6/rec/inference.onnx \
     && test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf && python3 -c 'import PIL' \

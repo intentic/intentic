@@ -84,6 +84,7 @@ test("a delegating turn with workflow runs lists the workflow tools, and passes 
         "workflow_status",
         "workflow_stop",
         "keep",
+        "stop",
     ]);
     const started = await call("tools/call", {
         name: "workflow",
