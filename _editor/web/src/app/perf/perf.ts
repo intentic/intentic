@@ -88,8 +88,40 @@ export const installPerfReporter = (reporter: SlowReporter): void => {
     reportSlow = reporter;
 };
 
+// THIS WINDOW'S OWN DAEMON TRAFFIC, BY ROUTE. Slow spans say which calls were slow, never how many calls a window makes:
+// two editor windows side by side each ran their own reads, and nothing could say which window asked for what, or how
+// often. Counted per `METHOD /path` with ids folded out, and taken (and zeroed) by the periodic report (requestRate.ts).
+const requestTally = new Map<string, number>();
+
+const isText = (value: PerfFields[string]): value is string => typeof value === `string`;
+
+// A path segment that names one thing rather than a kind of thing: anything with a digit in it (agent ids, uuids,
+// hashes) or too long to be a route word.
+const ID_SEGMENT = /\d/u;
+const LONGEST_ROUTE_WORD = 24;
+
+/** `GET /agents/:id/diff` for `GET /agents/coral-moth-xd28/diff`: one tally row per route, whatever it was asked of. */
+export const requestRoute = (method: string, path: string): string =>
+    `${method} ${path
+        .split(`/`)
+        .map((segment) => (ID_SEGMENT.test(segment) || segment.length > LONGEST_ROUTE_WORD ? `:id` : segment))
+        .join(`/`)}`;
+
+/** The daemon calls this window made since the last take, by route; zeroed by the take. */
+export const takeRequestTally = (): ReadonlyMap<string, number> => {
+    const taken = new Map(requestTally);
+    requestTally.clear();
+    return taken;
+};
+
 /** Files a span. */
 export const recordPerf = (op: string, ms: number, fields: PerfFields = {}): void => {
+    const path = fields[`path`];
+    if (op === `rpc.request` && isText(path)) {
+        const method = fields[`method`];
+        const route = requestRoute(isText(method) ? method : `GET`, path);
+        requestTally.set(route, (requestTally.get(route) ?? 0) + 1);
+    }
     const stat = stats.get(op) ?? { op, count: 0, totalMs: 0, maxMs: 0, slowCount: 0 };
     stat.count += 1;
     stat.totalMs += ms;
@@ -153,7 +185,6 @@ export interface FailedRequest {
 // Only calls that carried an id: an error report names it so a reader can find the daemon's own line for that call,
 // which a timestamp alone matches only by eyeballing.
 let lastFailure: FailedRequest | undefined;
-const isText = (value: PerfFields[string]): value is string => typeof value === `string`;
 const noteFailure = (fields: PerfFields, outcome: string): void => {
     const requestId = fields[`requestId`];
     if (!isText(requestId)) {
@@ -207,6 +238,7 @@ export const perfSpans = (prefix?: string): readonly PerfSpan[] => (prefix === u
 // Zeroes the table and the ring, before reproducing something deliberately.
 export const resetPerf = (): void => {
     lastFailure = undefined;
+    requestTally.clear();
     stats.clear();
     ring.length = 0;
 };

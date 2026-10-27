@@ -3,7 +3,7 @@
 import { useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, useTemplateRef, watch, watchEffect } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { closeOwnWindow } from "../../app/environments/desktop";
 import { useExtensionHost } from "../../extension-host/useExtensionHost";
 import { useKeybindings } from "../../workbench/commands/useKeybindings";
@@ -22,7 +22,6 @@ import { shownSideTabs } from "../../workbench/side/sideViews";
 import SidePanel from "../side/SidePanel.vue";
 
 const route = useRoute();
-const router = useRouter();
 const layout = useLayout();
 
 // The route's regex admits only these three, so this is a read rather than a validation.
@@ -49,10 +48,12 @@ if (panel === `browsers`) {
 }
 
 // The window going away once its claim has let go. A browser ignores `window.close()` for a window the script didn't
-// open (the desktop app closes its own by link instead), so the fallback is to become an ordinary window.
+// open (the desktop app closes its own by link instead), so the fallback is to become an ordinary window: by loading the
+// app again rather than navigating there, since a floating window started only its panel's part of the session runtime
+// (lib/windows/windowRole.ts), and an ordinary window needs all of it.
 const close = (): void => {
     closeOwnWindow();
-    void router.replace(`/`);
+    globalThis.location.replace(import.meta.env.BASE_URL);
 };
 
 const handBack = claimFloating(panel, close);

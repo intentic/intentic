@@ -9,6 +9,7 @@ import { trackPerf } from "../app/perf/perf";
 import { throttleTrailing } from "./throttleTrailing";
 import { whenIdle } from "./whenIdle";
 import { markBoot } from "../app/perf/boot";
+import { windowRole } from "./windows/windowRole";
 
 // Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace instantly, instead of blocking
 // on the daemon tunnel. Hydrated data is distrusted when the stream says so rather than permanently: applyHello
@@ -150,10 +151,40 @@ const takeEarlyRead = (): Promise<PersistedClient | undefined> => {
 // removed or updated, never one that only gained or lost an observer.
 const CACHE_CHANGES = new Set([`added`, `removed`, `updated`]);
 
+// ONE WINDOW WRITES THE MIRROR. It is one record per browser, and every open window snapshotted its whole cache into
+// it on its own changes, each over the last: two windows side by side wrote it twice as often, and the one written last
+// decided what the next load painted. A popped-out panel's window never writes, since its cache holds what its panel
+// reads and a mirror of that would paint the next main window with a fraction of the workspace. Among main windows the
+// first holds a Web Lock for its life and the others queue on it, the next taking over the moment it closes. Without
+// Web Locks (a plain-http origin) every main window writes, as before.
+const MIRROR_LOCK = `intentic.query-mirror`;
+let writesMirror = false;
+const claimMirror = (): void => {
+    if (windowRole !== `main`) {
+        return;
+    }
+    const locks = globalThis.navigator?.locks;
+    if (locks === undefined) {
+        writesMirror = true;
+        return;
+    }
+    locks
+        .request(MIRROR_LOCK, () => {
+            writesMirror = true;
+            // Held for the page's life: the browser lets go of it with the page.
+            return new Promise<void>(() => undefined);
+        })
+        // allow(silent-catch): a refused lock leaves this window writing, as every window did before the lock.
+        .catch(() => {
+            writesMirror = true;
+        });
+};
+
 export const restorePersistedQueries = async (userId: string): Promise<void> => {
     if (uninstall !== undefined) {
         return;
     }
+    claimMirror();
     const options = {
         queryClient,
         persister: {
@@ -181,7 +212,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
     let stopped = false;
     let owed = false;
     const snapshot = (): void => {
-        if (owed || stopped) {
+        if (owed || stopped || !writesMirror) {
             return;
         }
         owed = true;

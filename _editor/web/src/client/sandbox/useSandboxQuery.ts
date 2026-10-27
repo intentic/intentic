@@ -6,6 +6,7 @@ import { reportQueryFreshness } from "./freshness/queryFreshness";
 import { readFailure } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../../app/perf/perf";
+import { fetchShared } from "../../lib/windows/siblingQueries";
 import { type AccessReason, accessReasonOf } from "./access/accessReason";
 
 // Daemon-backed vue-query wrapper: every read gates on the active daemon being reachable, a failure surfaces as the
@@ -29,8 +30,13 @@ export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Err
     const query = useQuery<T, Error, Selected>(
         {
             ...resolved,
+            // Through the editor's other windows (lib/windows/siblingQueries.ts): a read another window showing the same thing
+            // is already fetching is that window's answer, and this one's answers reach the windows showing it.
             ...(typeof fetcher === `function`
-                ? { queryFn: ((context) => trackPerf(`query.fetch`, { key }, async () => fetcher(context))) satisfies QueryFunction<T> }
+                ? {
+                      queryFn: ((context) =>
+                          trackPerf(`query.fetch`, { key }, () => fetchShared(context.queryKey, async () => fetcher(context)))) satisfies QueryFunction<T>,
+                  }
                 : {}),
             // Reachability is an additional gate, not a replacement: a caller's own `enabled` (e.g. missing id) still
             // applies.

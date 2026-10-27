@@ -16,10 +16,20 @@ import { startRestartWatch } from "../features/sandbox/live/restartWatch";
 import { startAutoUpdateWatch } from "../features/sandbox/overview/version/autoUpdateWatch";
 import { startBrowserTab } from "./browser-tab/browserTab";
 import { startBrowserAgents } from "./browserAgents";
+import { windowRole } from "../lib/windows/windowRole";
 
 // The signed-in session's live daemon connection and the panels it feeds, mounted above every route
 // (App.vue) rather than inside the workspace shell, so /setup, an invite link, and the desktop handoff
 // keep it too. Presence and the background loader ride the same lifetime; floating notices live in App.vue.
+
+// A POPPED-OUT PANEL'S WINDOW RUNS ITS PANEL, NOT A SECOND APP. People keep the chat in a window of its own beside the
+// main one, both visible, and this runtime ran in full in each: the background loader warmed the board, the changes,
+// every extension's view (the maintenance report among them, the daemon's slowest read) in a window that draws none of
+// them, and the restart, update and drafting notices were watched twice for one reader. The main window keeps those;
+// a floating one keeps the live connection, presence (its own idle signal), and what its panel draws with (the agents'
+// turns for the browsers). Decided by address at load (lib/windows/windowRole.ts): this runtime starts before the floating
+// route has mounted and claimed its panel.
+const fullWindow = windowRole === `main`;
 
 // THE POPPABLE PANELS ARRIVE ONLY WHERE THEY ARE DRAWN. The chat, terminal and preview panels, xterm with its WebGL
 // addon among them (~0.9 MB of JS), were imported with this runtime, so a phone downloaded, parsed and evaluated them at
@@ -59,30 +69,40 @@ watch(awayFromWindow, (away) => reportAway(away), { immediate: true });
 // The one fact about the owner that only the browser holds: which clock they are on. Offered as soon as a sandbox is
 // attached rather than from the settings screen, because the schedule that gets this wrong is usually created before
 // anybody opens settings. Take-if-empty at the daemon, so a second window or a second member changes nothing.
-onMounted(() => void offerTimezone());
+onMounted(() => {
+    if (fullWindow) {
+        void offerTimezone();
+    }
+});
 
 // One long-lived stream keeps `reachable` live for the session, detecting a killed sandbox from anywhere.
 onMounted(() => liveness.start());
 onUnmounted(() => liveness.stop());
 
-// Same lifetime as liveness: reads ahead for screens not yet open, so it can't be tied to any one of them.
-onMounted(() => startBackgroundLoader());
-onUnmounted(() => stopBackgroundLoader());
+// Same lifetime as liveness: reads ahead for screens not yet open, so it can't be tied to any one of them. Only where
+// those screens can open: a floating window's links all go to the main window.
+if (fullWindow) {
+    onMounted(() => startBackgroundLoader());
+    onUnmounted(() => stopBackgroundLoader());
+}
 
-// Reports a landing's commit message being drafted; the walk-away happens off the Changes panel itself.
-startDraftingReceipts();
+if (fullWindow) {
+    // Reports a landing's commit message being drafted; the walk-away happens off the Changes panel itself.
+    startDraftingReceipts();
 
-// Follows the runs that end in this sandbox being replaced, for the same reason: the restart reaches the reader
-// wherever they are, so what explains it cannot live on the card that started it.
-startRestartWatch();
+    // Follows the runs that end in this sandbox being replaced, for the same reason: the restart reaches the reader
+    // wherever they are, so what explains it cannot live on the card that started it.
+    startRestartWatch();
 
-// A sandbox updating itself at a quiet moment counts down where the reader is, so they can stop it, and the silence of
-// its restart is named as one, like a restart they asked for.
-startAutoUpdateWatch();
+    // A sandbox updating itself at a quiet moment counts down where the reader is, so they can stop it, and the silence
+    // of its restart is named as one, like a restart they asked for.
+    startAutoUpdateWatch();
 
-// The browser tab tells what needs the reader, what finished while they were away and whether work is under way, in
-// its title, its icon and (when they asked for it) a sound. Same lifetime: it is about the session, not a screen.
-startBrowserTab();
+    // The browser tab tells what needs the reader, what finished while they were away and whether work is under way, in
+    // its title, its icon and (when they asked for it) a sound. Same lifetime: it is about the session, not a screen. A
+    // floating window names itself (FloatingSection.vue).
+    startBrowserTab();
+}
 
 // The browser view tells an agent at work in its window from one that is done by the agent's own turn, which the board
 // knows and the view can't import; handed across here.

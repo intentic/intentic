@@ -23,6 +23,10 @@ import { installComposingEnterGuard } from "@intentic/ui/keys";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
 import { markBoot } from "./app/perf/boot";
 import { watchStalledQueries } from "./app/perf/queryStalls";
+import { startRequestRateReports } from "./app/perf/requestRate";
+import { windowLabel } from "./lib/windows/windowRole";
+import { onScreen } from "./workbench/window/onScreen";
+import { shareQueriesAcrossWindows, siblingWindows } from "./lib/windows/siblingQueries";
 import { installRenderTrace } from "./app/perf/renderTrace";
 import { queryClient, readPersistedQueriesEarly } from "./lib/queryPersistence";
 import { installSkeletonPersistence, readImprintsEarly } from "./lib/skeletonPersistence";
@@ -126,6 +130,15 @@ installPerfReporter((op, _ms, fields, requestId) =>
 observeLongFrames((fields) => reportClient(`perf.frame`, `long frame`, { level: `warn`, fields: { ...fields } }));
 // A read that never settles, which no slow span can name since a span is filed only when the call ends (queryStalls.ts).
 watchStalledQueries(queryClient);
+// A read this window and another editor window both show is fetched by one of them (lib/windows/siblingQueries.ts); before
+// mount, so the first reads already go through it.
+shareQueriesAcrossWindows(queryClient, () => activeSandboxId.value);
+// How many daemon calls this window makes and for what, labelled with which window it is (requestRate.ts).
+startRequestRateReports(
+    windowLabel,
+    () => ({ visible: onScreen.value, siblings: siblingWindows() }),
+    (fields) => reportClient(`perf.requests`, `daemon calls per window`, { level: `warn`, fields }),
+);
 
 // Push taps and app launches, routed in the open page; before mount, so a launch tap is never dropped unheard.
 installNotificationTaps(router);
