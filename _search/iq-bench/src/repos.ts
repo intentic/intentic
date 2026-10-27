@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot as findPackageRoot, repoRoot as findRepoRoot } from "@intentic/constants/node";
@@ -58,7 +58,7 @@ export const ensureModels = (): string | undefined => {
     }
     const script = join(monorepoRoot, "_search/iq-engine/scripts/fetch-model.mjs");
     try {
-        execSync(`node ${script} ${dir}`, { stdio: "inherit" });
+        execFileSync(process.execPath, [script, dir], { stdio: "inherit" });
         return dir;
     } catch {
         console.warn("iq-bench: model fetch failed, semantic/rerank configs will be skipped");

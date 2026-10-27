@@ -38,8 +38,8 @@ function decodeAttr(value) {
 function frontMatter(fields) {
     const lines = Object.entries(fields)
         .filter(([, value]) => value)
-        // Quote every value: titles carry colons and em dashes, which bare YAML scalars mangle.
-        .map(([key, value]) => `${key}: "${String(value).replace(/"/g, '\\"')}"`);
+        // JSON strings are YAML double-quoted scalars too, including escapes for backslashes and line breaks.
+        .map(([key, value]) => `${key}: ${JSON.stringify(String(value))}`);
     return `---\n${lines.join("\n")}\n---\n`;
 }
 

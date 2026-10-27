@@ -36,8 +36,8 @@ export const excerptOf = (text: string): string => {
 // tags/style/script and collapses whitespace. Triage quality, not fidelity.
 export const htmlText = (html: string): string =>
     html
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style(?=[\t\n\f\r />])[^>]*>[\s\S]*?<\/style(?=[\t\n\f\r />])[^>]*>/gi, " ")
+        .replace(/<script(?=[\t\n\f\r />])[^>]*>[\s\S]*?<\/script(?=[\t\n\f\r />])[^>]*>/gi, " ")
         .replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/gi, " ")
         .replace(/\s+/g, " ")

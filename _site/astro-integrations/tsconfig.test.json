@@ -11,6 +11,6 @@
         "declarationMap": false,
         "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
     },
-    "include": ["./src/git-lastmod.mjs", "./src/git-lastmod.integration.test.mjs"],
+    "include": ["./src/git-lastmod.mjs", "./src/git-lastmod.integration.test.mjs", "./src/llms-text.integration.test.ts"],
     "exclude": []
 }

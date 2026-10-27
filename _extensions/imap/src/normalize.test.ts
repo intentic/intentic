@@ -59,6 +59,15 @@ test("htmlText strips tags, style and script bodies", () => {
     expect(htmlText("<style>a{color:red}</style><p>Hi&nbsp;<b>there</b></p><script>x()</script>")).toBe("Hi there");
 });
 
+test.each([" ", "\t", "\n", "\r", "\f", " ignored", "/"])("htmlText strips raw-text bodies with %j before the closing bracket", (suffix) => {
+    expect(htmlText(`<style>hidden style</STYLE${suffix}><p>Visible</p><script>hidden script</SCRIPT${suffix}>`)).toBe("Visible");
+});
+
+test("htmlText keeps similarly named elements and does not end scripts at longer tag names", () => {
+    expect(htmlText("<stylesheet>Keep style</stylesheet><scripture>Keep script</scripture>")).toBe("Keep style Keep script");
+    expect(htmlText("<script>hidden</scripture>still hidden</script ><p>Visible</p>")).toBe("Visible");
+});
+
 test("attachmentsOf walks nested multiparts, keeping named and attachment-disposed leaves", () => {
     const structure = {
         type: "multipart/mixed",

@@ -13,7 +13,7 @@ export interface ScriptBlock {
 
 // Both blocks of the two-block form (`<script>` for module-scope exports, `<script setup>` for the component
 // body) are lifted, either can hold the symbols a reader is looking for.
-const SCRIPT_BLOCK = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+const SCRIPT_BLOCK = /<script(?=[\t\n\f\r />])([^>]*)>([\s\S]*?)<\/script(?=[\t\n\f\r />])[^>]*>/gi;
 
 export const scriptBlocksOf = (content: string): ScriptBlock[] => {
     const blocks: ScriptBlock[] = [];
