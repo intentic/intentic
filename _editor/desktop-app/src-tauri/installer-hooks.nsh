@@ -435,46 +435,18 @@ Function un.IntenticLookRead
   StrCpy $IntenticLook "found"
 FunctionEnd
 
-; TerminateProcess starts shutdown without waiting for it. The process can disappear from a name lookup while
-; Restart Manager still reports its executable in use; Tauri's next check then tries to shut that stale owner down,
-; silently aborting the uninstall before registry and PATH cleanup. Wait on the same file ownership Tauri checks,
-; including the sidecar whose file must be removable too. A bounded wait leaves Tauri's normal failure handling intact.
+; Retain each process handle before ending it, and wait for that process to exit. TerminateProcess is asynchronous:
+; neither a name lookup nor a Restart Manager snapshot guarantees its shutdown finished. Tauri's next check can then
+; try shutting down an already-terminating owner and silently abort before registry, PATH and app-data cleanup.
+; Limit the stop to executables in this install, and leave Tauri's normal failure handling intact if it fails.
 !macro INTENTIC_STOP_PROCESSES
   Push $0
-  Push $1
-  Push $2
-  Push $3
-  Push $R0
-  Push $R1
-  nsis_tauri_utils::KillProcessCurrentUser "${MAINBINARYNAME}.exe"
+  System::Call 'kernel32::SetEnvironmentVariable(t "INTENTIC_INSTALL_DIR", t "$INSTDIR")'
+  nsExec::ExecToLog /TIMEOUT=60000 `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; Get-Process -Name '${MAINBINARYNAME}', 'intentic-files' -ErrorAction SilentlyContinue | Where-Object { [IO.Path]::GetDirectoryName($$_.Path) -eq $$env:INTENTIC_INSTALL_DIR } | ForEach-Object { if (-not $$_.HasExited) { $$null = $$_.Handle; $$_.Kill(); if (-not $$_.WaitForExit(15000)) { throw 'Intentic did not finish closing.' } } }"`
   Pop $0
-  nsis_tauri_utils::KillProcessCurrentUser "intentic-files.exe"
-  Pop $0
-  !insertmacro RestartManager_StartSession $R0
-  ${If} $R0 != ""
-    !insertmacro RestartManager_RegisterFile $R0 "$INSTDIR\${MAINBINARYNAME}.exe"
-    !insertmacro RestartManager_RegisterFile $R0 "$INSTDIR\intentic-files.exe"
-    StrCpy $3 0
-    ${Do}
-      ; A zero-sized list asks only whether any owner remains: ERROR_MORE_DATA means there is one.
-      System::Call 'RSTRTMGR::RmGetList(p R0, *i .r1, *i .r2, p 0, *i .R1) i .r0'
-      ${If} $0 <> ${ERROR_MORE_DATA}
-        ${ExitDo}
-      ${EndIf}
-      IntOp $3 $3 + 1
-      ${If} $3 >= 60
-        DetailPrint "Intentic is still closing; checking whether Windows can finish closing it."
-        ${ExitDo}
-      ${EndIf}
-      Sleep 250
-    ${Loop}
-    !insertmacro RestartManager_EndSession $R0
+  ${If} $0 != "0"
+    DetailPrint "Intentic could not finish closing ($0); checking whether Windows can close it."
   ${EndIf}
-  Pop $R1
-  Pop $R0
-  Pop $3
-  Pop $2
-  Pop $1
   Pop $0
 !macroend
 
