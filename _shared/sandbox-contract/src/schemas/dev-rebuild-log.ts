@@ -26,6 +26,13 @@ export const DEV_REBUILD_EXIT_MARK = "@intentic-rebuild-exit";
 export const DEV_REBUILD_QUIET_MARK = "@intentic-rebuild-quiet";
 // `dev-rebuild-log` prints whether the hold file is there right now: `1` held, `0` not. Absent from an older daemon's read.
 export const DEV_REBUILD_HOLD_MARK = "@intentic-rebuild-hold";
+// `dev-rebuild-log` prints whether the build's session is alive right now: `1` when the pid file names a live
+// `rebuild:sandbox` process, `0` otherwise. It is the same test the device's guard runs before starting another
+// rebuild, so the card and the guard cannot disagree about whether one is running. Without it the card guessed from
+// the log's silence, and a build held at its swap gate (silent by design) dropped off the card after two minutes while
+// the guard went on refusing every new rebuild (rog, 2026-10-27: four hours with no card and no way to cancel).
+// Absent from an older daemon's read.
+export const DEV_REBUILD_ALIVE_MARK = "@intentic-rebuild-alive";
 // `dev-rebuild-log` prints how many of turbo's tasks have started in the WHOLE log, not the tail — the tail is 80 lines
 // of a log that runs to thousands, so a count kept from it would miss most of them. Turbo names no total up front (its
 // "Running build in N packages" is the packages in scope, a quarter of the tasks), so the total is `-` until turbo's own
@@ -55,6 +62,8 @@ export interface DevRebuildLog {
     readonly exitCode: number | undefined;
     /** Ended because somebody cancelled it (`dev-rebuild-cancel`), not because it failed. */
     readonly cancelled: boolean;
+    /** Whether the build's process is running right now (DEV_REBUILD_ALIVE_MARK); undefined from a daemon too old to say. */
+    readonly alive: boolean | undefined;
     /** Whether the hold file is there; undefined from a daemon too old to say. */
     readonly hold: boolean | undefined;
     /** The gate is holding right now: the images are built, the container untouched, the restart waiting to be let through. */
@@ -86,6 +95,7 @@ export const readDevRebuildLog = (text: string): DevRebuildLog => {
     let exitCode: number | undefined;
     let cancelled = false;
     let hold: boolean | undefined;
+    let alive: boolean | undefined;
     let tasks: DevRebuildTasks | undefined;
     // The last of the gate's two words: the tail is in order, so whichever came last is where the gate stands.
     let gate: `waiting` | `swap` | undefined;
@@ -95,6 +105,7 @@ export const readDevRebuildLog = (text: string): DevRebuildLog => {
         const quiet = markValue(line, DEV_REBUILD_QUIET_MARK);
         const exit = markValue(line, DEV_REBUILD_EXIT_MARK);
         const held = markValue(line, DEV_REBUILD_HOLD_MARK);
+        const living = markValue(line, DEV_REBUILD_ALIVE_MARK);
         const counted = markValue(line, DEV_REBUILD_TASKS_MARK);
         if (quiet !== undefined) {
             missing = quiet === "-";
@@ -102,6 +113,8 @@ export const readDevRebuildLog = (text: string): DevRebuildLog => {
         } else if (exit !== undefined) {
             // A mark whose status is unreadable still means the build ENDED, and not well.
             exitCode = wholeNumber(exit) ?? 1;
+        } else if (living !== undefined) {
+            alive = living === `1`;
         } else if (held !== undefined) {
             hold = held === `1`;
         } else if (counted !== undefined) {
@@ -122,5 +135,5 @@ export const readDevRebuildLog = (text: string): DevRebuildLog => {
     }
     // A gate still holding has printed nothing since its word, and a build that ended is holding nothing.
     const waiting = gate === `waiting` && exitCode === undefined;
-    return { missing, quietFor, exitCode, cancelled, hold, waiting, swapping, tasks, lines };
+    return { missing, quietFor, exitCode, cancelled, alive, hold, waiting, swapping, tasks, lines };
 };

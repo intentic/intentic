@@ -4,6 +4,7 @@ import type { Device, DeviceCommand, DeviceCommandInput, DeviceCommandResult } f
 import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 
 import {
+    DEV_REBUILD_ALIVE_MARK,
     DEV_REBUILD_CANCEL_MARK,
     DEV_REBUILD_EXIT_MARK,
     DEV_REBUILD_HOLD_MARK,
@@ -228,9 +229,14 @@ const CANCEL_TIMEOUT_MS = 40_000;
 // sat in `docker buildx build` for one to five days each. So a rebuild whose session still runs refuses the next, in
 // words, and the cancel is what clears the way. The pid file alone is not trusted: a session gone since (a slept
 // machine never removes it) may have handed its number to something else, so only a process that IS a rebuild counts.
-const rebuildRunningGuard = (slug: string): string =>
+// The test itself is shared with `dev-rebuild-log`, which prints its answer for the card: whatever this guard would
+// refuse over, the card is following, with its cancel and its restart levers, never a bare refusal with nothing to act on.
+const rebuildAlive = (slug: string): string =>
     `sid=$(cat ${shellDir(devRebuildPidPath(slug))} 2>/dev/null || true); case "$sid" in ''|*[!0-9]*) sid='' ;; esac; ` +
-    `if [ -n "$sid" ] && ps -o args= -p "$sid" 2>/dev/null | grep -q 'rebuild:sandbox'; then ` +
+    `alive=0; if [ -n "$sid" ] && ps -o args= -p "$sid" 2>/dev/null | grep -q 'rebuild:sandbox'; then alive=1; fi;`;
+
+const rebuildRunningGuard = (slug: string): string =>
+    `${rebuildAlive(slug)} if [ "$alive" = 1 ]; then ` +
     `echo "A rebuild of this sandbox is already running on that device. Let it finish, or cancel it before starting another." >&2; exit 3; fi;`;
 
 const cancelLine = (slug: string): string =>
@@ -347,7 +353,8 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
         line: (facts) =>
             facts.ownSlug === undefined
                 ? undefined
-                : `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; ` +
+                : `${rebuildAlive(facts.ownSlug)} echo "${DEV_REBUILD_ALIVE_MARK} $alive"; ` +
+                  `log=${shellDir(devRebuildLogPath(facts.ownSlug))}; if [ -f "$log" ]; then at=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo); if [ -n "$at" ]; then echo "${DEV_REBUILD_QUIET_MARK} $(( $(date +%s) - at ))"; else echo "${DEV_REBUILD_QUIET_MARK} ?"; fi; ` +
                   `if [ -f ${shellDir(devRebuildHoldPath(facts.ownSlug))} ]; then echo "${DEV_REBUILD_HOLD_MARK} 1"; else echo "${DEV_REBUILD_HOLD_MARK} 0"; fi; ` +
                   `started=$(grep -cE '${TURBO_TASK_STARTED}' "$log" 2>/dev/null); total=$(grep -E '${TURBO_TASKS_SUMMARY}' "$log" 2>/dev/null | tail -n 1 | sed -E 's/.*, +([0-9]+) total.*/\\1/'); echo "${DEV_REBUILD_TASKS_MARK} \${started:-0} \${total:--}"; ` +
                   `tail -c 12000 "$log" | tail -n 80; else echo "${DEV_REBUILD_QUIET_MARK} -"; fi`,

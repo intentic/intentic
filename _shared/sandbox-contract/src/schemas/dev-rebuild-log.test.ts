@@ -1,4 +1,5 @@
 import {
+    DEV_REBUILD_ALIVE_MARK,
     DEV_REBUILD_CANCEL_MARK,
     DEV_REBUILD_EXIT_MARK,
     DEV_REBUILD_HOLD_MARK,
@@ -76,7 +77,15 @@ test("reads the hold file's state and turbo's count, which the read prints befor
 
 // An older daemon's read says neither, which is "unknown" rather than "not held": the card then offers no choice.
 test("leaves the hold and the count unknown when the read does not print them", () => {
-    expect(readDevRebuildLog(answer("3", "building"))).toMatchObject({ hold: undefined, tasks: undefined });
+    expect(readDevRebuildLog(answer("3", "building"))).toMatchObject({ hold: undefined, tasks: undefined, alive: undefined });
+});
+
+// The guard's own test, printed for the card: whether the build's process is there is a fact the log's silence is not.
+test("reads whether the build's process is alive, which the read prints before the tail", () => {
+    const held = readDevRebuildLog(answer("14400", `${DEV_REBUILD_ALIVE_MARK} 1`, "#27 DONE 223.2s", DEV_REBUILD_WAITING_MARK));
+    expect(held).toMatchObject({ alive: true, waiting: true, quietFor: 14400 });
+    expect(held.lines).toEqual(["#27 DONE 223.2s"]);
+    expect(readDevRebuildLog(answer("-", `${DEV_REBUILD_ALIVE_MARK} 0`))).toMatchObject({ alive: false, missing: true });
 });
 
 // The gate's two words, in order: holding, then let through. Whichever came last is where it stands.

@@ -41,6 +41,7 @@ export type DeviceSyncSwitch = z.infer<typeof DeviceSyncSwitchSchema>;
 
 // Where a detached rebuild reports itself, and the reader of that report (dev-rebuild-log.ts).
 export {
+    DEV_REBUILD_ALIVE_MARK,
     DEV_REBUILD_CANCEL_MARK,
     DEV_REBUILD_EXIT_MARK,
     DEV_REBUILD_HOLD_MARK,

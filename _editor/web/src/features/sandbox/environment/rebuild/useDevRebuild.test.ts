@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import {
+    DEV_REBUILD_ALIVE_MARK,
     DEV_REBUILD_CANCEL_MARK,
     DEV_REBUILD_EXIT_MARK,
     DEV_REBUILD_HOLD_MARK,
@@ -415,6 +416,67 @@ it(`adopts a rebuild nobody here started only while its log is still growing`, a
     await advanceTimersByTimeAsync(0);
     expect(quiet.run.phase).toBe(`idle`);
     expect(quiet.run.lines).toEqual([]);
+});
+
+// THE CARD SHOWS WHAT THE GUARD REFUSES OVER. On rog, 2026-10-27, a build held at its swap gate for four hours was off
+// the card (its log silent, as a held gate's is) while the guard refused every new rebuild over it: nothing to see,
+// nothing to cancel. The machine now says whether the build's process is alive, and that is what decides.
+it(`adopts a build whose process is alive however long its log has been silent, and not one whose process is gone`, async () => {
+    const held = nextSlug();
+    runDeviceCommand.mockResolvedValue(log(`14400`, `${DEV_REBUILD_ALIVE_MARK} 1`, `#27 DONE 223.2s`, DEV_REBUILD_WAITING_MARK));
+    const parked = useDevRebuild(held);
+    parked.adopt(HOST);
+    await advanceTimersByTimeAsync(0);
+    expect(parked.run).toMatchObject({ phase: `building`, waiting: true, quietFor: 0 });
+
+    const hung = nextSlug();
+    runDeviceCommand.mockResolvedValue(log(`90000`, `${DEV_REBUILD_ALIVE_MARK} 1`, `#12 [stage-0 4/23] RUN apt-get update`));
+    const stuck = useDevRebuild(hung);
+    stuck.adopt(HOST);
+    await advanceTimersByTimeAsync(0);
+    await nextPoll();
+    // Still a build, since it still blocks the next one: the card keeps it, with its cancel, rather than calling it lost.
+    expect(stuck.run.phase).toBe(`building`);
+
+    const gone = nextSlug();
+    runDeviceCommand.mockResolvedValue(log(`6`, `${DEV_REBUILD_ALIVE_MARK} 0`, `#5 [builder 1/9]`));
+    const dead = useDevRebuild(gone);
+    dead.adopt(HOST);
+    await advanceTimersByTimeAsync(0);
+    expect(dead.run.phase).toBe(`idle`);
+});
+
+// An older daemon cannot say whether the process is alive; a gate holding is still a build waiting on somebody.
+it(`adopts a build held at its gate from a daemon that cannot say whether it is alive`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand.mockResolvedValue(log(`14400`, `#27 DONE 223.2s`, DEV_REBUILD_WAITING_MARK));
+    const { run, adopt } = useDevRebuild(slug);
+    adopt(HOST);
+    await advanceTimersByTimeAsync(0);
+    expect(run).toMatchObject({ phase: `building`, waiting: true });
+});
+
+// The guard turning a start away is the machine saying a rebuild is already going: that one is the answer.
+it(`shows the rebuild already running when the guard turns a new one away`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand
+        .mockResolvedValueOnce({ ok: false, refused: false, message: `A rebuild of this sandbox is already running on that device.` })
+        .mockResolvedValue(log(`14400`, `${DEV_REBUILD_ALIVE_MARK} 1`, `#27 DONE 223.2s`, DEV_REBUILD_WAITING_MARK));
+    const { run, start } = useDevRebuild(slug);
+    await start(HOST);
+    expect(run).toMatchObject({ phase: `building`, waiting: true, trouble: undefined, startedAt: undefined });
+    expect(runDeviceCommand).toHaveBeenNthCalledWith(2, HOST, `dev-rebuild-log`);
+    expect(localStorage.getItem(`intentic.devRebuild.${slug}`)).toBeNull();
+});
+
+it(`keeps a start's failure when nothing is running there after all`, async () => {
+    const slug = nextSlug();
+    runDeviceCommand
+        .mockResolvedValueOnce({ ok: false, refused: false, message: `cd: /gone: No such file or directory` })
+        .mockResolvedValue(log(`3600`, `${DEV_REBUILD_ALIVE_MARK} 0`, `done`, `${DEV_REBUILD_EXIT_MARK} 0`));
+    const { run, start } = useDevRebuild(slug);
+    await start(HOST);
+    expect(run).toMatchObject({ phase: `failed`, trouble: `cd: /gone: No such file or directory` });
 });
 
 it(`says nothing about a machine with no rebuild log at all`, async () => {

@@ -1,4 +1,4 @@
-import type { DevRebuildTasks } from "@intentic/sandbox-contract/schemas/devices";
+import type { DevRebuildLog, DevRebuildTasks } from "@intentic/sandbox-contract/schemas/devices";
 import type { DevRebuildLayers, DevRebuildStage } from "./devRebuildStages";
 
 // WHAT IS KNOWN OF ONE REBUILD, as useDevRebuild keeps it per slug: its phase on this page, what the machine's log last
@@ -99,3 +99,18 @@ export const idleRun = (): DevRebuildRun => ({
     waitingSince: undefined,
     waitedMs: 0,
 });
+
+// For an older daemon's read: how recently the log must have grown for a rebuild nobody here started to be adopted.
+const ADOPT_WITHIN_S = 120;
+
+// WHETHER THE MACHINE HAS A REBUILD GOING, by the guard's own test where the daemon reports it: the process is alive. A
+// build held at its swap gate prints nothing for as long as it is held, and a hung docker layer prints nothing for days,
+// yet both still block the next rebuild; going by the log's silence alone dropped such a build off the card while the
+// guard went on refusing every new one (rog, 2026-10-27). Only an older daemon, which cannot say, leaves it to the log:
+// a gate holding, or a log that grew in the last couple of minutes.
+export const liveOnMachine = (log: DevRebuildLog): boolean => {
+    if (log.missing || log.exitCode !== undefined) {
+        return false;
+    }
+    return log.alive ?? (log.waiting || (log.quietFor !== undefined && log.quietFor <= ADOPT_WITHIN_S));
+};

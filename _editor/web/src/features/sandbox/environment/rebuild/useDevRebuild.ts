@@ -3,7 +3,7 @@ import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-c
 import { computed, type ComputedRef, reactive } from "vue";
 import { z } from "zod";
 import { compileFraction, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
-import { type DevRebuildPhase, type DevRebuildRun, idleRun, rebuildRunning } from "./devRebuildRun";
+import { type DevRebuildPhase, type DevRebuildRun, idleRun, liveOnMachine, rebuildRunning } from "./devRebuildRun";
 import { keepRebuild, pastRebuild } from "./rebuildHistory";
 import { runDeviceCommand } from "../../../../models/sandbox/devices/useDevices";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
@@ -59,8 +59,6 @@ const TICK_MS = 1_000;
 const ABANDON_S = 15 * 60;
 // A log that isn't there yet is a redirect that hasn't landed; past this it is a log that never will.
 const GRACE_MS = 20_000;
-// How recently the log must have grown for a rebuild nobody here started to be worth adopting on sight.
-const ADOPT_WITHIN_S = 120;
 // Past this, a marker left by a tab closed mid-build describes a rebuild nobody is waiting for.
 const MARKER_GOOD_FOR_MS = 60 * 60_000;
 const PROBE_AGAIN_MS = 30_000;
@@ -304,7 +302,9 @@ const absorb = (run: DevRebuildRun, slug: string, text: string): void => {
         return;
     }
     const vanished = log.missing && Date.now() - (run.startedAt ?? 0) > GRACE_MS;
-    if (vanished || (!log.waiting && (log.quietFor ?? 0) > ABANDON_S)) {
+    // A process the machine says is alive is still a build, however long it has been quiet: it is what blocks the next
+    // one, so the card keeps it, with its cancel, rather than calling it lost.
+    if (vanished || (log.alive !== true && !log.waiting && (log.quietFor ?? 0) > ABANDON_S)) {
         settle(run, slug, "lost");
         return;
     }
@@ -417,13 +417,19 @@ const probe = async (slug: string, hostId: string): Promise<void> => {
         return;
     }
     const log = readDevRebuildLog(result.message);
-    if (log.missing || log.exitCode !== undefined || log.quietFor === undefined || log.quietFor > ADOPT_WITHIN_S) {
+    if (!liveOnMachine(log)) {
         return;
     }
+    adoptRead(run, slug, hostId, log);
+};
+
+// Puts a rebuild found running out there on the card and follows it from there.
+const adoptRead = (run: DevRebuildRun, slug: string, hostId: string, log: ReturnType<typeof readDevRebuildLog>): void => {
     // No `startedAt`: the log's age says when this build last printed, not when it began, and the card would rather
     // show no clock than one counting from the wrong moment.
-    Object.assign(run, idleRun(), { phase: "building", lines: log.lines, quietFor: log.quietFor, heardAt: Date.now() });
+    Object.assign(run, idleRun(), { phase: "building", lines: log.lines, quietFor: log.waiting ? 0 : log.quietFor, heardAt: Date.now() });
     noteProgress(run, log.lines);
+    noteWait(run, log.waiting);
     mark(slug);
     follow(slug, hostId);
 };
@@ -445,6 +451,29 @@ export interface DevRebuildFollower {
     /** Stops the build, before the swap only. Answers the machine's sentence when it refused (the swap had begun). */
     cancel: (hostId: string) => Promise<string | undefined>;
 }
+
+// One read after a start was turned away: adopts the rebuild still running there, if there is one. A read that fails
+// says nothing either way, and the start's own refusal stands.
+const adoptRunning = async (run: DevRebuildRun, slug: string, hostId: string): Promise<boolean> => {
+    let result: DeviceCommandResult;
+    try {
+        result = await runDeviceCommand(hostId, `dev-rebuild-log`);
+    } catch {
+        // allow(silent-catch): the start's refusal is what the card shows when this read cannot add to it
+        return false;
+    }
+    if (!result.ok) {
+        return false;
+    }
+    const log = readDevRebuildLog(result.message);
+    if (!liveOnMachine(log)) {
+        return false;
+    }
+    // The marker and the clock belong to the start that was turned away, not to the build found running.
+    removeStoredValue(markerKey(slug));
+    adoptRead(run, slug, hostId, log);
+    return true;
+};
 
 // One of the rebuild's levers on the machine: undefined when it took, otherwise the sentence to show beside the lever.
 const pull = async (hostId: string, command: `dev-rebuild-hold` | `dev-rebuild-release` | `dev-rebuild-cancel`): Promise<string | undefined> => {
@@ -493,7 +522,12 @@ export function useDevRebuild(slug: string): DevRebuildFollower {
         try {
             const result = await runDeviceCommand(hostId, `dev-rebuild`);
             if (!result.ok) {
-                settle(run, slug, "failed", result.message);
+                // Turned away because a rebuild is already going there (the guard's exit, not the device's own refusal):
+                // that one is the answer, so the card shows it, with its cancel and restart levers, rather than a
+                // failure with nothing to act on.
+                if (result.refused || !(await adoptRunning(run, slug, hostId))) {
+                    settle(run, slug, "failed", result.message);
+                }
                 return;
             }
             run.phase = "building";

@@ -1,11 +1,13 @@
 import type { DeviceCommandInput } from "@intentic/sandbox-contract/schemas/devices";
 import {
+    DEV_REBUILD_ALIVE_MARK,
     DEV_REBUILD_CANCEL_MARK,
     DEV_REBUILD_EXIT_MARK,
     DEV_REBUILD_HOLD_MARK,
     DEV_REBUILD_QUIET_MARK,
     DEV_REBUILD_SWAP_MARK,
     DEV_REBUILD_TASKS_MARK,
+    DEV_REBUILD_WAITING_MARK,
     DeviceCommandInputSchema,
     DeviceLocalDirSchema,
     devRebuildHoldPath,
@@ -208,7 +210,8 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
             "detach=$(command -v setsid 2>/dev/null || true); " +
             `sid=$(cat "$HOME"/.intentic/logs/dev-rebuild-work-abc.pid 2>/dev/null || true); case "$sid" in ''|*[!0-9]*) sid='' ;; esac; ` +
-            `if [ -n "$sid" ] && ps -o args= -p "$sid" 2>/dev/null | grep -q 'rebuild:sandbox'; then ` +
+            `alive=0; if [ -n "$sid" ] && ps -o args= -p "$sid" 2>/dev/null | grep -q 'rebuild:sandbox'; then alive=1; fi; ` +
+            `if [ "$alive" = 1 ]; then ` +
             `echo "A rebuild of this sandbox is already running on that device. Let it finish, or cancel it before starting another." >&2; exit 3; fi; ` +
             'mkdir -p "$HOME/.intentic/logs" && rm -f "$HOME"/.intentic/logs/dev-rebuild-work-abc.hold && cd /home/ada/intentic && ' +
             'INTENTIC_SWAP_GATE="$HOME"/.intentic/logs/dev-rebuild-work-abc.hold INTENTIC_REBUILD_PID="$HOME"/.intentic/logs/dev-rebuild-work-abc.pid ' +
@@ -354,6 +357,31 @@ test("counts turbo's tasks and takes its summary's total, as the shell computes 
         await writeFile(holdIn(home), "");
         expect(await read()).toMatchObject({ tasks: { started: 3, total: 48 }, hold: true });
     });
+});
+
+// THE CARD AND THE GUARD ASK THE SAME QUESTION. A build held at its swap gate is silent for as long as it is held, and
+// the card used to judge it by that silence: on rog, 2026-10-27, one held for four hours had dropped off the card while
+// the guard refused every new rebuild over it. The read now prints the guard's own answer. Run for real.
+test("prints whether the build's session is alive, by the guard's own test", async () => {
+    await withHome(async (home) => {
+        await writeFile(logIn(home), `#27 DONE 223.2s\n${DEV_REBUILD_WAITING_MARK}\n`);
+        const read = async (): Promise<ReturnType<typeof readDevRebuildLog>> =>
+            readDevRebuildLog(readAnswer(await runSh(DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "", home)));
+        const build = spawn("sh", ["-c", "sleep 30; : pnpm rebuild:sandbox work-abc"], { stdio: "ignore" });
+        try {
+            await writeFile(pidIn(home), `${build.pid}\n`);
+            expect(await read()).toMatchObject({ alive: true, waiting: true });
+            // A number the kernel has since handed to something that is not a rebuild.
+            await writeFile(pidIn(home), `${process.pid}\n`);
+            expect((await read()).alive).toBe(false);
+            await rm(pidIn(home));
+            expect((await read()).alive).toBe(false);
+        } finally {
+            build.kill("SIGKILL");
+        }
+    });
+    // Said even where there is no log at all, ahead of everything else the read prints.
+    expect(DEVICE_COMMANDS["dev-rebuild-log"].line(facts()) ?? "").toMatch(new RegExp(`^sid=.*echo "${DEV_REBUILD_ALIVE_MARK} \\$alive"; log=`));
 });
 
 // The levers need only the slug, like the read: they are files beside the log, wherever the build ran.
