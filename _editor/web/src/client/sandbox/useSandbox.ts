@@ -9,6 +9,7 @@ import { DESKTOP_SANDBOX_WAKES_LINK, desktopApp, openDesktopLink } from "../../a
 import { removeStoredValue, storeValue } from "../../app/storage/browserStorage";
 import { ACTIVE_KEY, activeSandboxId } from "../../app/storage/activeSandbox";
 import { queryClient } from "../../lib/queryPersistence";
+import { SANDBOX_TRASH } from "../../lib/queryKeys";
 import { optimisticUpdate } from "../../lib/optimistic";
 import { apiClient } from "../../lib/useApi";
 import { withConcurrency } from "../../lib/concurrency";
@@ -296,6 +297,8 @@ const remove = async (id: string): Promise<LeaveOutcome | undefined> => {
         async () => {
             if (target.role === `owner`) {
                 await apiClient.sandbox.delete({ sandboxId: id });
+                // It is in the account's trash now: every list pointing there counts it from this moment.
+                void queryClient.invalidateQueries({ queryKey: SANDBOX_TRASH.every });
                 return;
             }
             // Loaded here and not at the top: the leave goes through the session client, which imports this module's

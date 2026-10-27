@@ -97,7 +97,8 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
     },
 };
 
-// One of each lane, so Devices ▸ Recently deleted shows both sentences a restore can promise.
+// Both lanes, a name deleted twice and a row on its last day, so the account's Recently deleted page shows each thing it
+// has to tell apart: what a restore brings back, which of two boxes of one name is which, and what goes tomorrow.
 const DEMO_TRASH: readonly TrashedSandbox[] = [
     {
         id: `trash-staging`,
@@ -106,6 +107,22 @@ const DEMO_TRASH: readonly TrashedSandbox[] = [
         deletedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
         purgeAfter: new Date(Date.now() + 5 * 86_400_000).toISOString(),
         hosted: true,
+    },
+    {
+        id: `trash-scratch-new`,
+        name: `scratch`,
+        image: null,
+        deletedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+        purgeAfter: new Date(Date.now() + 7 * 86_400_000 - 3 * 3_600_000).toISOString(),
+        hosted: false,
+    },
+    {
+        id: `trash-scratch-old`,
+        name: `scratch`,
+        image: null,
+        deletedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+        purgeAfter: new Date(Date.now() + 4 * 86_400_000).toISOString(),
+        hosted: false,
     },
     {
         id: `trash-laptop`,

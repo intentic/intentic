@@ -81,9 +81,12 @@ flowchart LR
   worker web push uses (`workbench/push/webPush.ts`), so it is registered with `updateViaCache: "none"` in both places,
   and nginx serves it `no-cache` so each deploy's list reaches it on the next update check. A build without the list
   (the dev server, the demo) gets a worker that caches nothing and answers no fetch.
-- **Deleted sandboxes.** Removal receipts and the palette open `/deleted-sandboxes`, an account page that remains
-  available after the last sandbox is removed. Devices also embeds the list; older `/devices#deleted` links redirect
-  to the account page. Restoring a sandbox reads only the platform and refreshes the account's registry.
+- **Deleted sandboxes.** The account's trash is its own page, `/deleted-sandboxes` (`features/home/SandboxTrashPage.vue`, `models/home/sandboxTrash.ts`), which
+  stays available after the last sandbox is removed. It is reached from the foot of every list of the account's
+  sandboxes (the switcher, Home's rail and phone list, the phone's Menu) while something can come back, from removal
+  receipts and from the palette. It is never a section of one sandbox's screen: the trash holds every sandbox the
+  account deleted, wherever it ran. Older `/devices#deleted` links redirect to the page. Restoring a sandbox reads
+  only the platform and refreshes the account's registry.
 - **Access profiles and services.** Access ▸ Profiles names reusable access for people and service principals, including tool ceilings and guest assistants. Organisation profiles are read-only; only the owner writes sandbox profiles. Profile saves synchronize changed holder tiers with the platform after the daemon rewrite. Programs manages services, stewards and optional profiles; tokens and inbound links choose the service their work runs as. These controls stay hidden on daemons without the corresponding routes. A link already assigned a service cannot return to Owner through the current terms patch API.
 - **Where access ends.** Every place, press and read asks `useAccess` (`client/sandbox/access/`), the daemon's own check over the contract's route floors and the person's `/members/self`, before it is drawn or sent. The fetch layer answers a refusal it foresees itself, so nothing that would be refused is sent; a read refused that way is `locked`, never an error, and every refusal's message is the app's sentence from `accessWords`, not the daemon's. `components/access/` draws what the person meets: `AccessGate` where a place they cannot open would be, `AccessNote` over a place they can read but not change, and `AccessAsk`, which asks the owner (Access ▸ People lists the requests). `docs/architecture/access.md` has the rules.
 - **AI literacy notice.** When enabled in Sandbox ▸ Access ▸ People, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.

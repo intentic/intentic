@@ -38,7 +38,8 @@ import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
 import { MODELS_PATH } from "../lib/routes/modelsPath";
 import { goInside, homeViewGuard } from "../lib/routes/homeDetour";
-import { DELETED_ANCHOR, DELETED_PATH, DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
+import { DEVICES_PATH } from "../models/sandbox/devices/deviceLinks";
+import { DELETED_PATH } from "../lib/routes/home";
 import { setPageTitle } from "../shell/browser-tab/tabTitle";
 import { coldStartAtRoot, installedApp, lastRoute, rememberRoute } from "./recentRoute";
 import { afterPaint } from "../lib/afterPaint";
@@ -217,7 +218,7 @@ const routes: RouteRecordRaw[] = [
                 path: `deleted-sandboxes`,
                 name: `deleted-sandboxes`,
                 meta: { title: () => t(`sandbox.words.recentlyDeleted`) },
-                component: asyncView(() => import(`../features/sandbox/devices/deleted/SandboxTrashPage.vue`)),
+                component: asyncView(() => import(`../features/home/SandboxTrashPage.vue`)),
             },
             // THE FIRST SCREEN IS HOME (2026-10-25): the master view, every sandbox at once, before and after the first
             // one (lib/routes/firstScreens.ts). Going into a sandbox is a press there, and lands on that sandbox's own first
@@ -311,7 +312,7 @@ const routes: RouteRecordRaw[] = [
                 component: asyncView(() => import(`../features/sandbox/devices/DevicesView.vue`)),
             },
             { path: `sandbox/devices`, redirect: (to) => ({ name: `devices`, query: to.query, hash: to.hash }) },
-            // Recently deleted used to be a hub section; recovery now also has its own account-level page.
+            // Recently deleted was a hub section, then the foot of the Devices board; it is the account's own page now.
             { path: `sandbox/deleted`, redirect: () => DELETED_PATH },
             // The audit log was a hub section until 2026-10-17; its records are a part of Activity now, and how they are
             // kept (its old second part, `?section=keeping`) is Retention's.
@@ -408,8 +409,7 @@ export const router = createRouter({
     routes: localFace() === undefined ? routes : localRoutes(),
     // Makes a hash like `/sandbox/usage#accounts` actually scroll into view; vue-router ignores a fragment on its
     // pushState navigations. `{ el }` finds whichever pane owns the scrollbar; no hash means no opinion.
-    // Only to an anchor already drawn: one inside data still being read (Devices' `#deleted`) scrolls itself once it lands,
-    // and handing the router a selector that matches nothing yet only earns a warning.
+    // Only to an anchor already drawn: handing the router a selector that matches nothing yet only earns a warning.
     scrollBehavior: (to) => (to.hash === `` || document.querySelector(to.hash) === null ? false : { el: to.hash, behavior: `smooth` }),
 });
 
@@ -426,8 +426,9 @@ router.beforeEach((_to, from) => {
 // The installed app's cold start at "/" goes back to the page it was on, if that was recent (recentRoute.ts). Only the
 // first navigation: "/" chosen inside a running app means home.
 router.beforeEach((to, from) => (coldStartAtRoot(to, from === START_LOCATION) && installedApp() ? (lastRoute(Date.now()) ?? true) : true));
-// Older removal receipts must reach recovery even from an account page with no active sandbox.
-router.beforeEach((to) => (to.path === DEVICES_PATH && to.hash === `#${DELETED_ANCHOR}` ? DELETED_PATH : true));
+// Removal receipts and links from before the account page still name the Devices board's old foot (`/devices#deleted`),
+// which needs an active sandbox; they reach recovery from anywhere.
+router.beforeEach((to) => (to.path === DEVICES_PATH && to.hash === `#deleted` ? DELETED_PATH : true));
 // The desktop app asks for a sign-in over the view, never instead of it (signInPlace.ts). Before every guard that might
 // send the reader somewhere for the screen it replaces.
 installSignInPlace(router);

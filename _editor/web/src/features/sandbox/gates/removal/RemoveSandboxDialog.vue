@@ -14,7 +14,7 @@ import { useProgress } from "../../../../components/progress/useProgress";
 import { oneLiner } from "../../../../app/environments/scriptCommand";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { manageDeviceSandbox } from "../../../../models/sandbox/devices/useDevices";
-import { DELETED_PATH } from "../../../../models/sandbox/devices/deviceLinks";
+import { DELETED_PATH } from "../../../../lib/routes/home";
 import { sandboxIdFromToken } from "../../../../models/sandbox/sandboxIdFromToken";
 import { useNotifications } from "../../../../workbench/notifications/notifications";
 import { dismissOperation, useOperation } from "../../../../workbench/operations/operations";

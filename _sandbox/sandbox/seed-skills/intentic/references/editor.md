@@ -56,8 +56,8 @@ is **Home** (`/home`): every sandbox the person has, at once. Going into a sandb
   (Sandbox ▸ Agent ▸ Finishing) is off. Nothing checks a push on its way out: what a push broke is CI's to say, and on
   main the fix agent takes it (`checks-and-ci.md`).
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
-  **Devices** (`/devices`): the machines this sandbox reaches; recently deleted sandboxes are at its foot
-  (`/deleted-sandboxes`).
+  **Devices** (`/devices`): the machines this sandbox reaches. The account's recently deleted sandboxes are a page of
+  the account's (`/deleted-sandboxes`), linked at the foot of the sandbox switcher and Home while one can come back.
 - **Sandbox** (`/sandbox/<tab>`): Overview (version, update, Sandbox URL), Usage, Models (every account, subscription,
   local model and endpoint it can run on), Agent (`?section=` jobs, instructions, tools, finishing), Environment,
   Secrets, Extensions (finding and installing them too), Access (`?section=` people, profiles, areas, sign-in, programs,

@@ -7,7 +7,7 @@ import ContainerHealthCard from "./health/ContainerHealthCard.vue";
 import SharedIdentities from "./health/SharedIdentities.vue";
 import DeviceBoard from "./board/DeviceBoard.vue";
 import DevicePage from "./DevicePage.vue";
-import { boardRoute, DELETED_ANCHOR, deviceRoute, selectedKey } from "../../../models/sandbox/devices/deviceLinks";
+import { boardRoute, deviceRoute, selectedKey } from "../../../models/sandbox/devices/deviceLinks";
 import { machineRows, slugOfDaemonUrl, withSandboxNames } from "../../../models/sandbox/devices/deviceRows";
 import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -61,9 +61,7 @@ watch(
         }
         chosen.value = true;
         const only = known.length === 1 ? known[0] : undefined;
-        // Not for a reader who came for the deleted sandboxes (`#deleted`): those sit at the board's foot, and the
-        // machine's page has no place for boxes that are no longer on it.
-        if (only !== undefined && selectedKey(route.query[`device`]) === undefined && route.hash !== `#${DELETED_ANCHOR}`) {
+        if (only !== undefined && selectedKey(route.query[`device`]) === undefined) {
             void router.replace(deviceRoute(only.key));
         }
     },

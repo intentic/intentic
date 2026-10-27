@@ -27,6 +27,8 @@ import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
 import { removalKey } from "./removal/removalPlan";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
+import { useDeletedCount } from "../../../models/home/sandboxTrash";
+import { DELETED_PATH } from "../../../lib/routes/home";
 import { useT } from "@intentic/ui/i18n";
 
 // Shared workspace/local-window place switcher: a pick retargets sandbox views/probes; the active sandbox hub is opened from here.
@@ -117,6 +119,10 @@ onUnmounted(() => {
     releaseBoxes?.();
     releaseBoxes = undefined;
 });
+
+// The account's deleted sandboxes that can still come back, read with the other counts while the panel is up: the row
+// pointing at them sits under every other row, so its arriving a beat later moves nothing.
+const deletedCount = useDeletedCount(() => !local && (open.value || menu.hovering.value));
 
 // A sandbox that never reported in has no daemon, so switching to it can only paint a connecting gate that never
 // resolves; those rows are unfinished errands on the getting-started ring, not places to switch to.
@@ -497,6 +503,23 @@ useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
                     </span>
                     <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
                 </button>
+
+                <!-- THE ACCOUNT'S DELETED SANDBOXES, at the foot of its list of them, where a box that is gone is looked
+                     for, and only while one can still come back. Their own page, an account's like Settings: never a
+                     section of the sandbox on screen, which most of them never had anything to do with. -->
+                <RouterLink
+                    v-if="deletedCount > 0"
+                    :to="DELETED_PATH"
+                    data-menu-row
+                    class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-xs text-muted transition-colors hover:bg-content/5 hover:text-content"
+                    @click="open = false"
+                >
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center">
+                        <Icon name="trash" class="text-sm" />
+                    </span>
+                    <span class="min-w-0 flex-1">{{ t(`sandbox.words.recentlyDeleted`) }}</span>
+                    <span class="shrink-0 px-1 text-2xs tabular-nums text-subtle">{{ deletedCount }}</span>
+                </RouterLink>
             </template>
         </div>
     </AnchoredOverlay>

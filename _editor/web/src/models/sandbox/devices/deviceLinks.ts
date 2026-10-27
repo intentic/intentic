@@ -32,8 +32,3 @@ export const capabilityRoute = (entry: string, query?: LocationQueryRaw): RouteL
 // here rather than in each surface that draws a concern, since a fix is an address and addresses live in one file.
 export const cardRoute = (fix: DeviceCardFix): RouteLocationRaw =>
     capabilityRoute(fix.card, fix.connection === undefined ? undefined : { edit: fix.connection });
-
-/** The account's Recently deleted section, also embedded in the Devices board. */
-export const DELETED_ANCHOR = `deleted`;
-// Recovery must remain reachable after the account's last sandbox is gone: Devices itself needs a working sandbox.
-export const DELETED_PATH = `/deleted-sandboxes#${DELETED_ANCHOR}`;
