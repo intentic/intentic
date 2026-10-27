@@ -8,7 +8,7 @@
     <string name="auth_email_sign_in_address_label">Correo electrónico</string>
     <string name="auth_email_sign_in_address_placeholder">tu@example.com</string>
     <string name="auth_email_sign_in_email_me_code">Envíame un código de inicio de sesión</string>
-    <string name="auth_email_sign_in_sent_to">Enviamos un código de 6 dígitos a %1$s.</string>
+    <string name="auth_email_sign_in_sent_to">Enviamos un código de %1$s dígitos a %2$s.</string>
     <string name="auth_email_sign_in_type_it_here_in_app">Escríbelo aquí. El enlace del correo abre tu navegador, no esta app.</string>
     <string name="auth_email_sign_in_code_label">Código de inicio de sesión</string>
     <string name="ui_action_sign_in">Iniciar sesión</string>

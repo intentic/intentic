@@ -8,7 +8,7 @@
     <string name="auth_email_sign_in_address_label">Email address</string>
     <string name="auth_email_sign_in_address_placeholder">you@example.com</string>
     <string name="auth_email_sign_in_email_me_code">Email me a sign-in code</string>
-    <string name="auth_email_sign_in_sent_to">We sent a 6-digit code to %1$s.</string>
+    <string name="auth_email_sign_in_sent_to">We sent a %1$s-digit code to %2$s.</string>
     <string name="auth_email_sign_in_type_it_here_in_app">Type it here. The link in the email opens your browser, not this app.</string>
     <string name="auth_email_sign_in_code_label">Sign-in code</string>
     <string name="ui_action_sign_in">Sign in</string>

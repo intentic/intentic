@@ -8,7 +8,7 @@
     <string name="auth_email_sign_in_address_label">E-Mail-Adresse</string>
     <string name="auth_email_sign_in_address_placeholder">sie@example.com</string>
     <string name="auth_email_sign_in_email_me_code">Anmeldecode per E-Mail senden</string>
-    <string name="auth_email_sign_in_sent_to">Wir haben einen 6-stelligen Code an %1$s gesendet.</string>
+    <string name="auth_email_sign_in_sent_to">Wir haben einen %1$s-stelligen Code an %2$s gesendet.</string>
     <string name="auth_email_sign_in_type_it_here_in_app">Geben Sie ihn hier ein. Der Link in der E-Mail öffnet Ihren Browser, nicht diese App.</string>
     <string name="auth_email_sign_in_code_label">Anmeldecode</string>
     <string name="ui_action_sign_in">Anmelden</string>
