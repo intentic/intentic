@@ -12,6 +12,8 @@ import { scratchOf, scratchScopeOf } from "../changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { ignoreFileMode } from "./repo-git-dirs.js";
 import { ensureLines } from "../../store/plain-files/text-file.js";
+import { syncSkillLinkExcludes } from "../../store/git/skill-link-excludes.js";
+import { generatedSkillNames } from "../../store/skill-stamp.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
 // Git dir lives on /history; the in-worktree `.git` is a pointer reconverged if deleted. Idempotent: init runs once;
@@ -25,6 +27,7 @@ export const ROOT_BASELINE_CONFIG = "intentic.baseline";
 // Index mode for a nested repo staged as a gitlink. `ls-files --stage -z` prints `<mode> <sha> <stage>\t<path>`,
 // NUL-terminated, so paths with spaces or newlines parse intact.
 const GITLINK_MODE = "160000 ";
+const SYMLINK_MODE = "120000 ";
 const trackedGitlinks = async (root: string, git: GitRunner): Promise<string[]> =>
     (await git(root, ["ls-files", "--stage", "-z"])).stdout
         .split("\0")
@@ -63,16 +66,15 @@ const strayGitlinks = async (root: string, git: GitRunner): Promise<string[]> =>
     return gitlinks.filter((path) => !declared.has(path));
 };
 
-// A gitlink that reached root's index (add -f, a race) is dropped and the removal committed via a private index built
-// from HEAD, never touching the user's staged index. Re-runs every boot; no-op once root holds no gitlink.
-const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner): Promise<void> => {
-    const gitlinks = await strayGitlinks(root, git);
-    if (gitlinks.length === 0) {
+// Drops `paths` from root's index and commits the removal via a private index built from HEAD, never touching the
+// user's staged index for anything else; the files stay on disk. No-op for an empty list, and an unborn HEAD takes the
+// index removal alone, with nothing to commit yet.
+const untrackCommitted = async (root: string, gitDir: string, paths: readonly string[], message: string, git: GitRunner): Promise<void> => {
+    if (paths.length === 0) {
         return;
     }
-    // `update-index --force-remove`, not `git rm --cached`, which refuses once the nested HEAD no longer matches.
-    const drop = ["update-index", "--force-remove", "--", ...gitlinks];
-    // Unborn HEAD: nothing to commit yet, the index removal is the whole fix.
+    // `update-index --force-remove`, not `git rm --cached`, which refuses once a nested HEAD no longer matches.
+    const drop = ["update-index", "--force-remove", "--", ...paths];
     const head = await git(root, ["rev-parse", "-q", "--verify", "HEAD"])
         .then(({ stdout }) => stdout.trim())
         .catch(() => undefined);
@@ -86,7 +88,7 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
         await git(root, ["read-tree", head], privateIndex);
         await git(root, drop, privateIndex);
         const tree = (await git(root, ["write-tree"], privateIndex)).stdout.trim();
-        // Equal trees: the gitlinks were only staged, never committed; skip an empty housekeeping commit.
+        // Equal trees: the paths were only staged, never committed; skip an empty housekeeping commit.
         if (tree !== (await git(root, ["rev-parse", "HEAD^{tree}"])).stdout.trim()) {
             const commit = (
                 await git(root, [
@@ -99,7 +101,7 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
                     "-p",
                     head,
                     "-m",
-                    "chore: untrack nested repositories",
+                    message,
                 ])
             ).stdout.trim();
             // Old-value guard: if HEAD moved during this run, skip; next boot converges again.
@@ -109,6 +111,44 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
         await rm(index, { force: true });
     }
     await git(root, drop);
+};
+
+// A gitlink that reached root's index (add -f, a race) is dropped and the removal committed. Re-runs every boot;
+// no-op once root holds no gitlink.
+const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner): Promise<void> =>
+    untrackCommitted(root, gitDir, await strayGitlinks(root, git), "chore: untrack nested repositories", git);
+
+// What root tracks of the skills the daemon generates (skill-stamp.ts): every file of a stamped `.agents/skills/<name>`
+// and the Claude link beside it. A link is only taken while it is a link; a real directory at that name is the owner's.
+const trackedGeneratedSkills = async (root: string, git: GitRunner): Promise<string[]> => {
+    const names = new Set(await generatedSkillNames(join(root, ".agents", "skills")));
+    if (names.size === 0) {
+        return [];
+    }
+    const staged = (await git(root, ["ls-files", "--stage", "-z", "--", ".agents/skills", ".claude/skills"])).stdout.split("\0").filter((entry) => entry !== "");
+    return staged.flatMap((entry) => {
+        const path = entry.slice(entry.indexOf("\t") + 1);
+        const [top, , name, ...rest] = path.split("/");
+        if (name === undefined || !names.has(name)) {
+            return [];
+        }
+        if (top === ".agents") {
+            return rest.length > 0 ? [path] : [];
+        }
+        return entry.startsWith(SYMLINK_MODE) && rest.length === 0 ? [path] : [];
+    });
+};
+
+// Generated skills committed before git was told to leave them alone (the 2026-10-27 change, skill-stamp.ts) leave
+// root's index in one housekeeping commit; the excludes, synced before it, keep them from coming back as untracked
+// files. Re-runs every boot, a no-op once none is tracked. Best-effort: a HEAD that moved, or a busy index, waits for the
+// next boot rather than failing this one.
+const untrackGeneratedSkills = async (root: string, gitDir: string, git: GitRunner): Promise<void> => {
+    try {
+        await untrackCommitted(root, gitDir, await trackedGeneratedSkills(root, git), "chore: untrack skills the sandbox generates", git);
+    } catch {
+        // allow(silent-catch): housekeeping only; the tracked copies keep working, and the next boot tries again.
+    }
 };
 
 // `--ignore-errors` exits 1 having staged everything it could: a path it could not stage (an unborn nested repo) was
@@ -161,7 +201,9 @@ export const ensureRootRepo = async (
         await writeFile(join(workspace.root, ".git"), `gitdir: ${gitDir}\n`);
     }
     await ignoreFileMode(workspace.root, git);
-    // Exclude list lives in $GIT_DIR/info/exclude, outside /work, and is re-synced before every baseline commit.
+    // Exclude list lives in $GIT_DIR/info/exclude, outside /work, and is re-synced before every baseline commit. The
+    // generated-skills block first, so the root rewrite carries the current one onto the history scope.
+    await syncSkillLinkExcludes(workspace.root);
     await syncRootExcludes(historyRoot, await discoverRepos(workspace.root));
     if (fresh) {
         // Keeps repeat status scans stat-cheap; nothing is tracked yet, so nothing to untrack.
@@ -172,6 +214,7 @@ export const ensureRootRepo = async (
         return true;
     }
     await untrackNestedRepos(workspace.root, gitDir, git);
+    await untrackGeneratedSkills(workspace.root, gitDir, git);
     return false;
 };
 

@@ -10,6 +10,7 @@ import { followedParent, landTargetOf, type Upstream, upstreamOf, underLeases } 
 import { isIsolated, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
 import { carryStrayWork, type RefSnapshot, snapshotRefs } from "../../../conversations/worktrees/stray-work.js";
+import { carryGeneratedSkills } from "../../../conversations/worktrees/generated-skills.js";
 import type { Services } from "../../../composition.js";
 import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
@@ -151,6 +152,20 @@ export interface WorktreeSteps extends LandingHooks {
     readonly run: (worktree: WorktreeRun) => AsyncIterable<AgentEvent>;
 }
 
+// The sandbox's generated skills, which git does not carry, handed to the checkout (generated-skills.ts). After the
+// rebase, which can take a branch's committed copies away, so the turn opens on the live ones. A fenced checkout is cut
+// to its folders and never held `.agents`, so it is left as it is. Best-effort: a turn without them still runs.
+const carrySkills = async (deps: Pick<LandingDeps, "agentWorktrees" | "logger">, conversationId: string, fence: Fence): Promise<void> => {
+    if (fence !== undefined) {
+        return;
+    }
+    try {
+        await carryGeneratedSkills(deps.agentWorktrees.mainDir("root"), deps.agentWorktrees.worktreeDir(conversationId, "root"));
+    } catch (error) {
+        deps.logger.warn({ err: error, id: conversationId }, "agents: could not hand the checkout the sandbox's generated skills");
+    }
+};
+
 export const worktreePlacement = (
     deps: LandingDeps & Pick<Services, "turnCheckpoints" | "turnIsolation">,
     turn: {
@@ -190,14 +205,13 @@ export const worktreePlacement = (
             // A fork wanting the files as they were starts at the source's own commit, for comparability.
             const worktree = await steps.compose(input.worktreeBase ?? (await forkWorktreeBase(deps.turnCheckpoints, input.forkOf)));
             const onto = new Map<string, string>();
-            if (!pinned) {
-                rebase = rebaser(deps, conversationId, worktree, onto, books);
-            }
+            rebase = pinned ? rebase : rebaser(deps, conversationId, worktree, onto, books);
             // Reported per turn, not once at boot: it depends on how the container launched. A fenced checkout is
             // enforced by its sandbox, and a turn without one is refused before it runs (stream-agent.ts).
             const enforced = worktree.fence !== undefined ? await deps.turnIsolation.sandboxAvailable() : await deps.turnIsolation.available();
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
             const synced = await rebaseLeased();
+            await carrySkills(deps, conversationId, worktree.fence);
             opened = { repos: worktree.repos, refs: await snapshotRefs(deps.agentWorktrees, worktree.repos) };
             void turn.reach?.open();
             books.branch = worktree.branch;

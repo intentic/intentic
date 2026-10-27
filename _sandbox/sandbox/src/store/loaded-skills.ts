@@ -5,6 +5,7 @@ import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
 import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js";
 import { syncSkillLinkExcludes } from "./git/skill-link-excludes.js";
+import { LEGACY_ACCOUNT_SKILL_MARKER, SKILL_STAMP_LINE, skillStampOf } from "./skill-stamp.js";
 
 // `.agents/skills/` is canonical; Codex reads it directly, other runtimes get a generated catalogue. `.claude/skills/`
 // is a derived, per-workspace-serialized symlink projection for Claude Code, never the source of truth. AGENTS.md is
@@ -134,24 +135,13 @@ export const DAEMON_SKILL_WRITERS = ["approvals", "baked-tool", "account", "cli"
 export type DaemonSkillWriter = (typeof DAEMON_SKILL_WRITERS)[number];
 export type SkillWriter = DaemonSkillWriter | "owner";
 
-const markerOf = (writer: string): string => `<!-- intentic:skill-writer=${writer} · written by the sandbox; edits here are overwritten -->`;
-const MARKER_LINE = /^<!-- intentic:skill-writer=([a-z0-9-]+) [^\n]*-->$/m;
-// Account skills were stamped with this before every writer was (until 2026-10-12); still read as the account writer's.
-export const LEGACY_ACCOUNT_SKILL_MARKER = "<!-- managed by the sandbox: derived from the connected accounts; edits are overwritten -->";
+// The stamp and its reader live in skill-stamp.ts, where the git side reads them too; re-exported for the store's callers.
+export { LEGACY_ACCOUNT_SKILL_MARKER, skillWriterOf } from "./skill-stamp.js";
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n/;
-
-// The daemon writer a loaded skill's text names, or undefined for an unstamped (owner-authored) file.
-export const skillWriterOf = (text: string): string | undefined => {
-    const stamped = MARKER_LINE.exec(text)?.[1];
-    if (stamped !== undefined) {
-        return stamped;
-    }
-    return text.includes(LEGACY_ACCOUNT_SKILL_MARKER) ? "account" : undefined;
-};
 
 // The text with any writer stamp taken out, exactly undoing `stampSkill`: the stamp's line, and the blank line it was
 // put under.
-const isStampLine = (line: string): boolean => MARKER_LINE.test(line) || line === LEGACY_ACCOUNT_SKILL_MARKER;
+const isStampLine = (line: string): boolean => SKILL_STAMP_LINE.test(line) || line === LEGACY_ACCOUNT_SKILL_MARKER;
 const unstamped = (text: string): string => {
     const lines = text.split("\n");
     const kept: string[] = [];
@@ -174,7 +164,7 @@ export const stampSkill = (text: string, writer: SkillWriter): string => {
         return text;
     }
     const bare = unstamped(text);
-    const marker = markerOf(writer);
+    const marker = skillStampOf(writer);
     return FRONTMATTER.test(bare) ? bare.replace(FRONTMATTER, (frontmatter) => `${frontmatter}\n${marker}\n`) : `${marker}\n${bare}`;
 };
 

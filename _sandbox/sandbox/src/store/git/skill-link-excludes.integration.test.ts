@@ -111,3 +111,18 @@ test("the common excludes serve linked worktrees without hiding real directories
     expect(await sh(linked, "status", "--porcelain", "-uall")).toBe("?? .claude/skills/quill/SKILL.md");
     expect(await readFile(join(loadedSkillDir(root, "quill"), "SKILL.md"), "utf8")).toBe(SKILL);
 });
+
+test("a skill a daemon writer stamped stays out of the changes with its link, beside an owner skill that does not", async () => {
+    const root = await temp();
+    await sh(root, "init", "-q");
+    await writeLoadedSkill(FILES, root, "quill", SKILL, "baked-tool");
+    await writeLoadedSkill(FILES, root, "mine", SKILL.replace("quill", "mine"), "owner");
+
+    expect(await sh(root, "status", "--porcelain", "-uall")).toBe("?? .agents/skills/mine/SKILL.md");
+    // The owner taking the name back makes it theirs again, and git sees it.
+    await writeLoadedSkill(FILES, root, "quill", SKILL, "owner");
+    expect((await sh(root, "status", "--porcelain", "-uall")).split("\n")).toEqual(["?? .agents/skills/mine/SKILL.md", "?? .agents/skills/quill/SKILL.md"]);
+    await writeLoadedSkill(FILES, root, "quill", SKILL, "baked-tool");
+    await removeLoadedSkill(FILES, root, "quill");
+    expect(await readFile(join(root, ".git", "info", "exclude"), "utf8")).not.toContain(".agents/skills/quill");
+});

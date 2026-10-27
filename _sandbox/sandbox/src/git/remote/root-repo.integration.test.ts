@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
+import { stampSkill } from "../../store/loaded-skills.js";
 import { rootExcludes } from "../../workspace/layout/git-layout.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { changedFiles } from "../changes/changes.js";
@@ -179,6 +180,35 @@ test("untracking a nested repo leaves the user's own staged work staged, and out
 
     expect(await sh(work, "diff", "--cached", "--name-only")).toBe("notes.md");
     expect(await sh(work, "show", "--format=", "--name-status", "HEAD")).toBe("D\tintent");
+});
+
+test("skills the sandbox generated and root committed leave the index in one commit, kept on disk; the owner's stay", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const generated = stampSkill("---\nname: lsp\ndescription: Renames.\n---\nRename.\n", "baked-tool");
+    for (const [name, text] of [["lsp", generated], ["mine", "---\nname: mine\ndescription: Mine.\n---\nMine.\n"]] as const) {
+        await mkdir(join(work, ".agents", "skills", name), { recursive: true });
+        await writeFile(join(work, ".agents", "skills", name, "SKILL.md"), text);
+        await mkdir(join(work, ".claude", "skills"), { recursive: true });
+        await symlink(`../../.agents/skills/${name}`, join(work, ".claude", "skills", name));
+    }
+    await sh(work, "add", "-f", "-A", "--", ".agents", ".claude");
+    await sh(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "fix: skill");
+    await writeFile(join(work, "notes.md"), "staged\n");
+    await sh(work, "add", "notes.md");
+
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
+
+    expect(await sh(work, "ls-files", "--", ".agents", ".claude")).toBe(".agents/skills/mine/SKILL.md\n.claude/skills/mine");
+    expect(await sh(work, "show", "--format=%s", "--name-status", "HEAD")).toBe(
+        "chore: untrack skills the sandbox generates\n\nD\t.agents/skills/lsp/SKILL.md\nD\t.claude/skills/lsp",
+    );
+    expect(await sh(work, "status", "--porcelain", "-uall")).toBe("A  notes.md");
+    expect(await readFile(join(work, ".claude", "skills", "lsp", "SKILL.md"), "utf8")).toBe(generated);
+    // Converged: a second boot finds nothing left to untrack.
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    expect(await sh(work, "log", "-1", "--format=%s")).toBe("chore: untrack skills the sandbox generates");
 });
 
 // A conversation's own checkout of root, same shape as an agent worktree.
