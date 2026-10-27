@@ -21,8 +21,6 @@ import type { ViewBadge } from "@intentic/extension-api";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import NewSandboxTile from "./newSandbox/NewSandboxTile.vue";
 import { newSandbox, newSandboxPageShown, readySandboxes, seenReady } from "./newSandbox/newSandbox";
-import { useDeletedCount } from "../../models/home/sandboxTrash";
-import { DELETED_PATH } from "../../lib/routes/home";
 
 defineOptions({ inheritAttrs: false });
 const { phone = false } = defineProps<{ phone?: boolean }>();
@@ -59,10 +57,6 @@ const selected = (id: string): boolean =>
     !newSandboxPageShown(route, newSandbox.value) &&
     processAskedBy(route) === undefined;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
-// The account's deleted sandboxes that can still come back: a way to them at the foot of this list, the switcher's too,
-// while there is one. Lit while their page is open, which keeps this rail (lib/routes/home.ts).
-const deletedCount = useDeletedCount();
-const onDeleted = computed(() => route.name === `deleted-sandboxes`);
 // The same add action everywhere: signed in opens the dialog here; signed out returns to it after sign-in.
 const add = useRequestAddSandbox();
 let last: { id: string; at: number } | undefined;
@@ -133,15 +127,6 @@ const choose = (id: string, input: `click` | `enter`): void => {
             </button>
             <Beacon v-if="!boxes.length" size="sm" class="absolute left-9 top-1" />
         </span>
-        <RouterLink
-            v-if="deletedCount > 0"
-            :to="DELETED_PATH"
-            class="flex min-h-11 shrink-0 items-center gap-3 rounded-xl p-2 text-muted hover:bg-content/5 hover:text-content"
-        >
-            <span class="flex size-9 shrink-0 items-center justify-center"><Icon name="trash" aria-hidden="true" /></span>
-            <span class="min-w-0 flex-1">{{ t(`sandbox.words.recentlyDeleted`) }}</span>
-            <span class="shrink-0 px-2 text-sm tabular-nums text-subtle">{{ deletedCount }}</span>
-        </RouterLink>
         <HomeNoSandbox v-if="!boxes.length" nested />
     </nav>
     <!-- On a desktop, the tiles of the shell's own rail (ShellDesktop.vue draws the rail around them, account included),
@@ -178,17 +163,5 @@ const choose = (id: string, input: `click` | `enter`): void => {
             </button>
             <Beacon v-if="!boxes.length && !making && !newSandbox" size="sm" class="absolute right-1 top-1" />
         </span>
-        <!-- Under the add tile, a tool tile rather than a box: the account's deleted sandboxes, while one can come back. -->
-        <RouterLink
-            v-if="deletedCount > 0"
-            :to="DELETED_PATH"
-            class="icon-rail-tile ui-row-select ui-row-select-horizontal flex shrink-0 items-center justify-center rounded-lg"
-            :class="onDeleted ? `ui-row-select-on text-link` : `text-muted hover:text-content`"
-            :aria-label="t(`sandbox.recentlyDeleted.toRestore`, { count: deletedCount }, deletedCount)"
-            :aria-current="onDeleted ? `page` : undefined"
-            v-tooltip.right="{ title: t(`sandbox.words.recentlyDeleted`), note: t(`sandbox.recentlyDeleted.toRestore`, { count: deletedCount }, deletedCount) }"
-        >
-            <Icon name="trash" class="icon-rail-glyph" aria-hidden="true" />
-        </RouterLink>
     </div>
 </template>

@@ -13,9 +13,11 @@ import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { leaveAfterSignOut } from "../app/environments/afterSignOut";
 import { desktopApp, openThisComputer } from "../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
+import { DELETED_PATH } from "../lib/routes/home";
+import { useDeletedCount } from "../models/home/sandboxTrash";
 
 // The rail's bottom account control: an avatar opening a popover with account identity (email, name,
-// plan) and actions (Settings, This computer in the desktop app, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
+// plan) and actions (Settings, Recently deleted while a sandbox can come back, This computer in the desktop app, Sign out). It opens as the sandbox logo at the rail's top does (useHoverMenu): resting
 // on it raises the panel, a passing pointer raises nothing, and a press pins it. The rail's two end controls are the
 // same kind of thing, an identity with a short menu under it, so they answer the pointer the same way. The sandbox switcher lives above; theme lives on /settings. The same control at
 // the foot of a desktop window on a folder of this computer (local/LocalShell.vue), drawn and pressed the same: there the
@@ -35,6 +37,9 @@ const { planBadge } = useHostedPlan();
 
 // Settings has no rail tile; this control lights up like one, matching on the route and any sub-path.
 const onSettings = computed(() => route.path === `/settings` || route.path.startsWith(`/settings/`));
+// The account's deleted sandboxes are its page too, so the avatar lights there as well.
+const onDeleted = computed(() => route.name === `deleted-sandboxes`);
+const onAccountPage = computed(() => onSettings.value || onDeleted.value);
 
 // The community invitation (features/community): a quiet dot here while an ask waits unseen in this menu, never more.
 // Said to analytics as the phone's when this is the phone rail's avatar (MobileRail.vue), so the two stay comparable.
@@ -49,6 +54,11 @@ const menu = useHoverMenu(panel);
 const open = menu.open;
 const pressed = menu.pressed;
 const avatarFailed = ref(false);
+
+// The account's deleted sandboxes that can still come back: a row of this menu while there is one, never a row of a
+// list of sandboxes (the switcher, Home's rail), where it sat until 2026-10-27 as the loudest row in the place a reader
+// picks a box to work in. Read from the first rest on the avatar, so the row is there by the time the panel is.
+const deletedCount = useDeletedCount(() => !account.local && (open.value || menu.hovering.value));
 
 // Computer tools are an occasional destination, reached here rather than among Home's sandbox tiles. A local window
 // is already on this computer, so it needs no link back to itself.
@@ -136,14 +146,14 @@ const communityPressed = (): void => {
     <!-- The dot sits outside the avatar's clip circle; the wrapper positions it, the button keeps overflow-hidden. -->
     <!-- The active plate is a sibling so the avatar image remains undecorated. -->
     <div class="account-control relative mt-auto shrink-0">
-        <span v-if="onSettings" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
+        <span v-if="onAccountPage" class="pointer-events-none absolute -inset-1 rounded-lg bg-primary-600/15" aria-hidden="true"></span>
         <button
             ref="trigger"
             type="button"
             class="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border transition-colors hover:border-line-strong hover:bg-content/5 hover:text-content"
-            :class="onSettings ? `border-line text-link` : `border-line text-muted`"
+            :class="onAccountPage ? `border-line text-link` : `border-line text-muted`"
             :aria-label="accountHint"
-            :aria-current="onSettings ? 'page' : undefined"
+            :aria-current="onAccountPage ? 'page' : undefined"
             aria-haspopup="dialog"
             :aria-expanded="open"
             v-on="menu.trigger"
@@ -225,6 +235,19 @@ const communityPressed = (): void => {
             >
                 <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="cog" class="text-base text-muted" /></span>
                 {{ t(`shared.settings`) }}
+            </RouterLink>
+            <RouterLink
+                v-if="deletedCount > 0"
+                :to="DELETED_PATH"
+                data-menu-row
+                :data-current="onDeleted || undefined"
+                class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5 pointer-coarse:py-2.5 pointer-coarse:text-sm"
+                :aria-label="`${t(`sandbox.words.recentlyDeleted`)}, ${t(`sandbox.recentlyDeleted.toRestore`, { count: deletedCount }, deletedCount)}`"
+                @click="dismiss"
+            >
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center"><Icon name="trash" class="text-base text-muted" /></span>
+                <span class="min-w-0 flex-1 truncate">{{ t(`sandbox.words.recentlyDeleted`) }}</span>
+                <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ deletedCount }}</span>
             </RouterLink>
             <button
                 v-if="hasThisComputer"

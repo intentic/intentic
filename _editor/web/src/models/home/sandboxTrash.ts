@@ -39,8 +39,8 @@ function useDeletedSandboxes(enabled: MaybeRefOrGetter<boolean> = true) {
 }
 
 /**
- * How many deleted sandboxes can still come back, for the "Recently deleted" row at the foot of a list of the account's
- * sandboxes; nought draws no row. Asked only where there is an account behind the list, and only while `wanted` (a
+ * How many deleted sandboxes can still come back, for the "Recently deleted" row of the account menu (AccountPanel.vue);
+ * nought draws no row. Asked only where there is an account behind the list, and only while `wanted` (a
  * popover's list reads it while open, as it does its other counts).
  */
 export function useDeletedCount(wanted: () => boolean = () => true) {

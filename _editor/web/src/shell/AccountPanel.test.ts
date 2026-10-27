@@ -21,6 +21,7 @@ jest.mock(`../client/auth/useAccount`, () => ({ useAccount: () => account }));
 jest.mock(`../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge: ref(undefined) }) }));
 jest.mock(`../features/gettingStarted/useGettingStarted`, () => ({ useGettingStarted: () => ({ reopenable: ref(false), show: async () => undefined }) }));
 jest.mock(`../workbench/commands/useCommands`, () => ({ registerCommand: () => ({ dispose: () => undefined }) }));
+jest.mock(`../models/home/sandboxTrash`, () => ({ useDeletedCount: () => ref(0) }));
 // The community invitation's state, held here so a case can say whether an ask is waiting (its rules are
 // features/community/communityInvite.test.ts).
 const invite = {

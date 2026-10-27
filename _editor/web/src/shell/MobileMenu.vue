@@ -21,8 +21,6 @@ import GettingStartedList from "../features/gettingStarted/GettingStartedList.vu
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import { useT } from "@intentic/ui/i18n";
 import { finishOnHome } from "../models/sandbox/finishOnHome";
-import { useDeletedCount } from "../models/home/sandboxTrash";
-import { DELETED_PATH } from "../lib/routes/home";
 
 // The phone's Menu: what the desktop rail's sandbox switcher holds, as one page — what the sandbox needs, sandbox
 // switching, the presence roster. Opened from the sandbox's logo atop the phone's rail (MobileRail.vue), which holds
@@ -55,7 +53,6 @@ const { state: pushState } = usePushNotifications();
 const pushRow = computed(() => pushMenuRow(pushState.value));
 
 // The account's deleted sandboxes that can still come back, a row at the foot of its list while there is one.
-const deletedCount = useDeletedCount();
 
 // Split so an unreachable sandbox isn't offered beside ones that can actually be switched to.
 const switchable = computed(() => switchableSandboxes(sandbox.sandboxes.value));
@@ -143,11 +140,6 @@ const resumeSetup = (id: string) => finishOnHome(id);
                 </MenuRow>
                 <!-- The first and every later sandbox use the same dialog over this place. -->
                 <MenuRow icon="plus" :title="t(`sandbox.words.addSandbox`)" @press="requestAddSandbox" />
-                <MenuRow v-if="deletedCount > 0" :to="DELETED_PATH" icon="trash" :title="t(`sandbox.words.recentlyDeleted`)">
-                    <template #meta>
-                        <span class="text-xs tabular-nums text-subtle">{{ deletedCount }}</span>
-                    </template>
-                </MenuRow>
             </RowGroup>
 
             <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->

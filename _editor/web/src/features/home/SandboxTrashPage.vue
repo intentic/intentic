@@ -11,7 +11,8 @@ import { daysLeft, trashLanes, trashState } from "../../models/home/trashWindow"
 import { useSandboxTrash } from "../../models/home/sandboxTrash";
 
 // THE ACCOUNT'S DELETED SANDBOXES, a page of the account's beside Settings (lib/routes/home.ts `DELETED_PATH`), reached
-// from the foot of every list of the account's sandboxes (the switcher, Home) and from a removal's receipt. Not a
+// from the account menu beside Settings (AccountPanel.vue), the palette and a removal's receipt; no longer from the foot
+// of the lists of sandboxes (the switcher, Home's rail), where it outweighed the boxes until 2026-10-27. Not a
 // section of any one sandbox's screen: it sat at the foot of a sandbox's Devices board until 2026-10-27, where boxes
 // that never ran anywhere near that sandbox read as if they had. Recovery must also work with no sandbox left at all.
 //
