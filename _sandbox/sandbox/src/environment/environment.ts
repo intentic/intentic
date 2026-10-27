@@ -145,6 +145,8 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
             tool: entry.tool,
             kind: entry.kind,
             sessions: entry.sessions.length,
+            sessionIds: entry.sessions,
+            commands: entry.commands,
             lastAt: entry.lastAt,
             live,
             ...(drafted.has(entry.tool) ? { drafted: true } : {}),

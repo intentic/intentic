@@ -1,6 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "node:path";
 import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
+import { flaggedDir, intoOwnFolder } from "./install-folders.js";
 
 // Anything installed outside /work dies with the container. Every image-scoped install is classified here; the command
 // gate records it silently to the runtime-install ledger, and the drift sweep drafts the overlay step. A project
@@ -386,6 +387,12 @@ const unwrapped = (words: string[]): string[] => {
     }
 };
 
+// Undefined for an install into a folder of its own, as for no executable at all: neither reaches this container's PATH.
+const imageExecutable = (words: readonly string[]): string | undefined => {
+    const executable = executableOf(words);
+    return executable === undefined || intoOwnFolder(executable, words) ? undefined : executable;
+};
+
 // Every tool an image-scoped install would put on the container, as (kind, tool) pairs the ledger merges on. Precision
 // over recall: a miss costs one session's memory, a false entry costs the ledger its meaning.
 export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
@@ -418,7 +425,7 @@ export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
 
     for (const segment of segments) {
         const words = unwrapped([...segment.words]);
-        const executable = executableOf(words);
+        const executable = imageExecutable(words);
         if (executable === undefined) {
             continue;
         }
@@ -514,20 +521,6 @@ const NODE_DIR_FLAGS = new Set(["--dir", "-C", "--prefix", "--cwd"]);
 const PYTHON_DIR_FLAGS = new Set(["--directory", "--project", "-C"]);
 const PYTHON_MANAGER = /^(?:poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/;
 const VENV_PIP = /^(?:\S*\/)?pip3?\s+(?:install|uninstall)\b/;
-
-// The value a directory flag carries, spelled either `--dir x` or `--dir=x`.
-const flaggedDir = (words: readonly string[], flags: ReadonlySet<string>): string | undefined => {
-    for (const [index, word] of words.entries()) {
-        if (flags.has(word)) {
-            return words[index + 1];
-        }
-        const joined = [...flags].find((flag) => flag.startsWith("--") && word.startsWith(`${flag}=`));
-        if (joined !== undefined) {
-            return word.slice(joined.length + 1);
-        }
-    }
-    return undefined;
-};
 
 // A `cd` moves the shell for the rest of the line; `~` and `-` are not followed, since neither names a place this can
 // resolve, and neither is anything built by the shell (`$REPO`, `$(git rev-parse --show-toplevel)`, a glob): the install is

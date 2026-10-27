@@ -490,6 +490,8 @@ test("the payload carries recurring runtime installs, and drops the ones the cus
     // ffmpeg is already the owner's approved custom section: recurrence about it is stale news.
     expect(recurring?.map((entry) => entry.tool)).toEqual(["cargo-xwin"]);
     expect(recurring?.[0]).toMatchObject({ kind: "cargo", sessions: 2 });
+    // The evidence travels with the count, so the card can say who installed it and how.
+    expect(recurring?.[0]).toMatchObject({ sessionIds: ["s1", "s2"], commands: ["cargo install --locked cargo-xwin"] });
 });
 
 test("a one-session install that is not live in this container stays off the card", async () => {

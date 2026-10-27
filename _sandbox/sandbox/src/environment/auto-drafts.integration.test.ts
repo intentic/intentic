@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { EnvironmentDrift, RuntimeInstall } from "@intentic/sandbox-contract/schemas/environment";
 import { readWorkspaceFile, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
-import { AUTO_MARKER, autoDraftedTools, draftFileName, stepFor, synthesizeAutoDrafts } from "./auto-drafts.js";
+import { AUTO_MARKER, autoDraftedTools, draftFileName, named, stepFor, synthesizeAutoDrafts } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 
 const workspace = () => {
@@ -27,6 +27,7 @@ const entry = (over: Partial<RuntimeInstall> = {}): RuntimeInstall => ({
 // faking a filesystem; the stat-based kinds are the sweep's own business.
 const DRIFT: EnvironmentDrift = { bornAt: 0, at: 0, apt: ["p7zip-full"], paths: [] };
 
+const customPath = (root: string) => join(root, ".intentic/config/environment.custom.Dockerfile");
 const draftsPath = (root: string, tool: string) => join(root, ".intentic/config/environment.d", `${tool}.Dockerfile`);
 
 test("a recurring, corroborated, templatable install earns a frozen draft", async () => {
@@ -60,10 +61,20 @@ test.each<[string, RuntimeInstall, EnvironmentDrift]>([
 test("a tool the custom section already bakes is not proposed again", async () => {
     const deps = workspace();
     await writeWorkspaceFile(
-        join(deps.workspace.root, ".intentic/config/environment.custom.Dockerfile"),
+        customPath(deps.workspace.root),
         "# ---- p7zip ----\nRUN apt-get update && apt-get install -y p7zip-full\n",
     );
     expect(await synthesizeAutoDrafts(deps, { installs: [entry()] }, DRIFT)).toEqual([]);
+});
+
+test("a pinned spec in the custom section names its package", async () => {
+    const deps = workspace();
+    await writeWorkspaceFile(
+        customPath(deps.workspace.root),
+        "# ---- opencode ----\nRUN npm install -g @opencode/cli@2.1.4\n",
+    );
+    expect(await synthesizeAutoDrafts(deps, { installs: [entry({ kind: "npm", tool: "@opencode/cli" })] }, DRIFT)).toEqual([]);
+    expect(named("RUN npm install -g @opencode/cli-linux-x64@2.1.4", "@opencode/cli")).toBe(false);
 });
 
 test("an agent's own draft under the same name is left exactly as written", async () => {

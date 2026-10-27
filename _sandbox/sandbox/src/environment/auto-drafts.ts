@@ -85,10 +85,10 @@ export const draftContent = (entry: RuntimeInstall, step: string): string => {
     );
 };
 
-// Same word-boundary test missingBinary uses: a tool name inside a longer word does not count as a match. Exported so
-// readEnvironment can apply it too.
+// Same word-boundary test missingBinary uses: a tool name inside a longer word does not count as a match, but a pinned
+// spec (`@scope/pkg@1.2`, `pkg@latest`) names its package. Exported so readEnvironment can apply it too.
 export const named = (content: string, tool: string): boolean =>
-    new RegExp(`(?:^|[^\\w.@+-])${tool.replace(/[.+]/g, "\\$&")}(?:[^\\w.@+-]|$)`).test(content);
+    new RegExp(`(?:^|[^\\w.@+-])${tool.replace(/[.+]/g, "\\$&")}(?:@\\w|[^\\w.@+-]|$)`).test(content);
 
 const draftsDirPath = (root: string): string => statePath(root, ".intentic/config/environment.d/");
 

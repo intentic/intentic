@@ -2,7 +2,7 @@
 // never resolve without one.
 import "@intentic/testing/dom";
 import type { EnvironmentRecurring } from "@intentic/sandbox-contract/schemas/environment";
-import { type App, createApp, h, nextTick } from "vue";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Fetch is stubbed to fail, mirroring an offline sandbox, so every mark paints its glyph tier.
@@ -30,6 +30,15 @@ const TEMPLATABLE = entry({
     step: `RUN --mount=type=cache,target=/root/.npm \\\n    npx --yes playwright install --with-deps chromium-headless-shell`,
 });
 const HUMAN = entry({ tool: `zizmor`, kind: `pip`, sessions: 3 });
+// What a scratch-folder spike left behind: the evidence is what tells the reader it was never a real need.
+const SPIKE = entry({
+    tool: `@opencode/cli`,
+    kind: `npm`,
+    live: false,
+    step: `RUN --mount=type=cache,target=/root/.npm \\\n    npm install -g @opencode/cli`,
+    sessionIds: [`keen-anchor-eq06`, `ci-fix-attempt41`],
+    commands: [`npm install -g --prefix /tmp/oc2spike/gtest @opencode/cli@2.0.26`],
+});
 const DRAFTED = entry({ tool: `p7zip-full`, kind: `apt`, step: `RUN apt-get install -y p7zip-full`, drafted: true });
 
 const decisions: [string, string][] = [];
@@ -48,12 +57,13 @@ const mount = (entries: EnvironmentRecurring[], canOperate = true): HTMLElement 
             }),
     });
     app.component(`Icon`, IconStub);
+    app.component(`RouterLink`, defineComponent({ props: { to: { type: String, default: `` } }, setup: (props, { slots }) => () => h(`a`, { href: props.to }, slots[`default`]?.()) }));
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
 };
 
-// Rows are an accordion: everything but the headline, verbs included, sits behind the row's own chevron.
+// Rows are an accordion: the evidence sits behind the row's own chevron, the verbs stay on its headline.
 const openRow = async (el: HTMLElement, index = 0): Promise<void> => {
     (el.querySelectorAll(`button[aria-expanded]`)[index] as HTMLElement | undefined)?.click();
     await nextTick();
@@ -83,8 +93,24 @@ afterEach(() => {
 it(`heads the list the way the rest of the tab heads a section`, () => {
     const el = mount([TEMPLATABLE, HUMAN]);
     expect(el.textContent).toContain(`Installed at runtime`);
-    expect(el.textContent).toContain(`Not in the image`);
+    expect(el.textContent).toContain(`lost on every rebuild`);
     expect(el.textContent).not.toContain(`playwright install --with-deps`);
+});
+
+it(`answers from the headline, without opening the row`, () => {
+    const el = mount([TEMPLATABLE, HUMAN]);
+    expect(verbs(el)).toEqual([`Add to the image`, `Dismiss`, `Ask an agent`, `Dismiss`]);
+});
+
+it(`opens on who installed it and how, each session a link to its conversation`, async () => {
+    const el = mount([SPIKE]);
+    expect(el.textContent).not.toContain(`--prefix`);
+    await openRow(el);
+    expect([...el.querySelectorAll(`a`)].map((link) => link.getAttribute(`href`))).toEqual([`/agents/keen-anchor-eq06`, `/agents/ci-fix-attempt41`]);
+    expect(el.textContent).toContain(`npm install -g --prefix /tmp/oc2spike/gtest @opencode/cli@2.0.26`);
+    // Not in the container now: said, since beside a scratch-folder command it is the tell.
+    expect(el.textContent).toContain(`does not have it`);
+    expect(el.textContent).toContain(`npm install -g @opencode/cli`);
 });
 
 it(`offers the deterministic fix where a step follows from the package name`, async () => {
@@ -146,7 +172,7 @@ it(`says nothing of a list whose every entry is answered`, async () => {
     ]);
     expect(el.querySelectorAll(`button[aria-expanded]`)).toHaveLength(0);
     expect(el.textContent).not.toContain(`item`);
-    expect(el.textContent).not.toContain(`Not in the image`);
+    expect(el.textContent).not.toContain(`lost on every rebuild`);
     expect(el.textContent).toContain(`2 dismissed`);
     await unfold(el);
     expect(el.querySelectorAll(`button[aria-expanded]`)).toHaveLength(2);

@@ -83,6 +83,11 @@ export const EnvironmentRecurringSchema = z.object({
     tool: z.string(),
     kind: RuntimeInstallKindSchema,
     sessions: z.number(),
+    // The evidence behind the count, so the owner judges the need without opening the ledger: the conversations that
+    // installed it (newest last, capped) and the last few commands that did, secrets already masked. Absent from a daemon
+    // released before they were carried.
+    sessionIds: z.array(z.string()).optional(),
+    commands: z.array(z.string()).optional(),
     lastAt: z.number(),
     live: z.boolean(),
     drafted: z.boolean().optional(),

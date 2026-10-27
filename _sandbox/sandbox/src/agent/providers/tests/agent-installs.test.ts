@@ -36,6 +36,8 @@ test.each<[string, ClassifiedInstall[]]>([
     ["timeout 600 npx playwright install chromium", [{ kind: "playwright", tool: "chromium" }]],
     ["npm install -g typescript", [{ kind: "npm", tool: "typescript" }]],
     ["npm i -g @openai/codex@0.147.0", [{ kind: "npm", tool: "@openai/codex" }]],
+    // A system prefix is where a global install goes anyway.
+    ["npm install -g --prefix /usr/local/ typescript", [{ kind: "npm", tool: "typescript" }]],
     ["pnpm add --global vercel", [{ kind: "npm", tool: "vercel" }]],
     ["go install golang.org/x/tools/gopls@latest", [{ kind: "go", tool: "gopls" }]],
     ["gem install rails", [{ kind: "gem", tool: "rails" }]],
@@ -75,6 +77,11 @@ test.each([
     "echo 'RUN apt-get update && apt-get install -y curl ca-certificates' > /tmp/frag",
     // A heredoc's lines are data to the shell, not commands it runs.
     "python3 - <<'PYEOF'\nsubprocess.run('apt-get install -y tmux')\nprint('pip install requests')\nPYEOF",
+    // Into a folder of its own: never on this container's PATH, so no image step gives it back.
+    "cd /tmp && npm install -g --prefix /tmp/oc2spike/gtest --no-audit @opencode/cli@2.0.26 >/dev/null 2>&1",
+    "npm install --global --prefix=/tmp/intentic-opencode-global @opencode/cli@2.1.4",
+    "cargo install --root out ripgrep",
+    "pip install --target vendor requests",
 ])("what is not an image install of this container classifies as nothing: %s", (command) => {
     expect(classifyImageInstalls(command)).toEqual([]);
 });

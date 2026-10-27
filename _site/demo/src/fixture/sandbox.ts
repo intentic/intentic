@@ -336,7 +336,7 @@ export const removeDemoBlock = (block: string): boolean => {
 
 // `proposal: false` is a quiet recording's environment (mode.ts `demoQuiet`): nothing waiting on the owner, so the
 // sandbox's switcher carries no mark for it.
-export const demoEnvironment = ({ proposal = true }: { proposal?: boolean } = {}): Environment => ({
+export const demoEnvironment = ({ proposal = true }: { proposal?: boolean } = {}): Environment => withRuntimeInstalls(proposal, {
     container: `intentic-sandbox-acme-shop`,
     approved: { content: APPLIED_OVERLAY, hash: `sha256:1f4c9ab2` },
     custom: { content: APPLIED_OVERLAY, hash: [`sha256:1f4c9ab2`, ...[...removedBlocks].sort()].join(`-`) },
@@ -354,6 +354,51 @@ RUN apt-get update && apt-get install -y --no-install-recommends imagemagick \\
           }
         : {}),
 });
+
+// A quiet recording asks nothing of the owner, so its card carries no runtime installs either.
+const withRuntimeInstalls = (shown: boolean, environment: Environment): Environment => {
+    if (shown) {
+        environment.recurring = DEMO_RUNTIME_INSTALLS;
+    }
+    return environment;
+};
+
+// What sessions keep installing that the image lacks, one of each kind of answer: a step that follows from the package
+// name, one that takes judgement, and a scratch-folder spike whose commands are the tell that nothing needed it.
+const DEMO_RUNTIME_INSTALLS: NonNullable<Environment[`recurring`]> = [
+    {
+        tool: `tsx`,
+        kind: `npm`,
+        sessions: 3,
+        sessionIds: [`cnv_triage_am`, `wf-a3f19c22-review-perf`, `cnv_busy_draft_deploy`],
+        commands: [`npm install -g tsx`, `cd web && npm i -g tsx@4.19.2 && tsx scripts/seed.ts`],
+        lastAt: Date.now() - 3 * 60 * 60_000,
+        live: true,
+        step: `RUN --mount=type=cache,target=/root/.npm \\\n    npm install -g tsx`,
+    },
+    {
+        tool: `zizmor`,
+        kind: `pip`,
+        sessions: 2,
+        sessionIds: [`wf-a3f19c22-review-security`, `cnv_uptime_blip`],
+        commands: [`pip install --quiet zizmor 2>&1 | tail -3`],
+        lastAt: Date.now() - 26 * 60 * 60_000,
+        live: true,
+    },
+    {
+        tool: `@opencode/cli`,
+        kind: `npm`,
+        sessions: 2,
+        sessionIds: [`keen-anchor-eq06`, `ci-fix-intentic-37292817794-attempt41`],
+        commands: [
+            `cd /tmp && npm install -g --prefix /tmp/oc2spike/gtest --no-audit --no-fund @opencode/cli@2.0.26 >/dev/null 2>&1`,
+            `npm install --global --prefix /tmp/intentic-opencode-global --foreground-scripts @opencode/cli@2.1.4`,
+        ],
+        lastAt: Date.now() - 2 * 24 * 60 * 60_000,
+        live: false,
+        step: `RUN --mount=type=cache,target=/root/.npm \\\n    npm install -g @opencode/cli`,
+    },
+];
 
 // Same environment as contents (what the sandbox has, not how it was built); every row state is represented. Versions
 // are real tool output, not round numbers. `settled` is a quiet recording's (mode.ts `demoQuiet`): only what is
