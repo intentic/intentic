@@ -55,7 +55,8 @@
     font-family: var(--font-display);
     font-size: clamp(2.55rem, 5.6vw, 4.6rem);
     line-height: 1.24;
-    font-weight: var(--font-weight-semibold);
+    font-weight: 400;
+    font-synthesis: none;
 }
 .home .headline-line {
     display: block;

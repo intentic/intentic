@@ -128,6 +128,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <script is:inline set:html={platePreloadScript()} />
         {/* Preload the reading face used by every page. One variable file covers the whole 100–900 axis. */}
         <link rel="preload" as="font" type="font/woff2" href="/fonts/public-sans-100-900-latin.woff2" crossorigin />
+        <link rel="preload" as="font" type="font/woff2" href="/fonts/lora-400-700-latin.woff2" crossorigin />
         {/* No preconnect to the app: nothing on the page loads from it, so the socket idles until it times out, and
             Lighthouse flags it as unused. A link into the app pays its one round trip on the click. */}
         <noscript>

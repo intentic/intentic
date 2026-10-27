@@ -60,7 +60,7 @@
 
     --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     --font-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
-    --font-display: "Spectral", Georgia, "Times New Roman", serif;
+    --font-display: "Lora", Georgia, "Times New Roman", serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
 
     --text-2xs: 0.6875rem;
@@ -293,12 +293,10 @@ html[data-variant="desk"] {
     /* DISPLAY TYPE CARVED STONE, NOT POLISHED METAL — and the difference is texture, not colour. */
     .display {
         font-family: var(--font-display);
-/* Pinned, not on the UI weight scale: the display face ships exactly one weight, so asking for anything else
-           just resolves back to this file and says something untrue about what is available. */
-        font-weight: 300;
+        /* Lora's regular weight keeps the same letterforms in both skins. */
+        font-weight: 400;
+        font-synthesis: none;
         color: var(--role-display-ink);
-/* Normal, not the positive tracking Playfair needed: Spectral is drawn for screens and already sets open, so
-           tracking it out only loosened the words. */
         letter-spacing: normal;
         line-height: 1.24;
     }
