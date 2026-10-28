@@ -3,9 +3,15 @@ import { CLAIM_BEAT_MS, createSiblingQueries, type SiblingNote, type SiblingQuer
 
 // Two editor windows on one origin: their own caches, one channel between them, delivered a task later as a
 // BroadcastChannel delivers.
-const bus = () => {
+const bus = (holdWants = false) => {
     const sent: SiblingNote[] = [];
+    const held: SiblingNote[] = [];
     const listeners: ((note: SiblingNote) => void)[] = [];
+    const deliver = (note: SiblingNote): void => {
+        for (const listener of listeners) {
+            listener(note);
+        }
+    };
     const window = (id: string, sandbox: () => string | undefined = () => `sbx`): Window => {
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
         const sibling = createSiblingQueries({
@@ -17,18 +23,18 @@ const bus = () => {
                 post: (note) => {
                     sent.push(structuredClone(note));
                     const copy = structuredClone(note);
-                    setTimeout(() => {
-                        for (const listener of listeners) {
-                            listener(copy);
-                        }
-                    }, 0);
+                    if (holdWants && copy.kind === `want`) {
+                        held.push(copy);
+                    } else {
+                        setTimeout(() => deliver(copy), 0);
+                    }
                 },
                 listen: (heard) => listeners.push(heard),
             },
         });
         return { client, sibling };
     };
-    return { sent, window };
+    return { sent, window, deliverWants: () => held.splice(0).forEach(deliver) };
 };
 
 interface Window {
@@ -43,7 +49,7 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
 const show = (window: Window, key: readonly unknown[]): (() => void) =>
     new QueryObserver(window.client, { queryKey: key, queryFn: () => Promise.resolve(`own`), enabled: false }).subscribe(() => undefined);
 
-const deferred = <T,>() => {
+const deferred = <T>() => {
     let resolve!: (value: T) => void;
     let reject!: (error: Error) => void;
     const promise = new Promise<T>((done, fail) => {
@@ -72,6 +78,43 @@ test("a read another window is already fetching is that window's answer, not a s
     expect(await second).toBe(`roster`);
     expect(asked).toBe(0);
     hide();
+});
+
+test("a want delivered after the fetch ends still receives that fetch's answer", async () => {
+    const { window, deliverWants } = bus(true);
+    const main = window(`main`);
+    const chat = window(`chat`);
+    await settle();
+    const hide = show(chat, [`agents`]);
+    const call = deferred<string>();
+    const first = main.sibling.fetchShared([`agents`], () => call.promise);
+    await settle();
+    let asked = 0;
+    const second = chat.sibling.fetchShared([`agents`], () => {
+        asked += 1;
+        return Promise.resolve(`chat's own`);
+    });
+    call.resolve(`roster`);
+    expect(await first).toBe(`roster`);
+    deliverWants();
+    expect(await second).toBe(`roster`);
+    expect(asked).toBe(0);
+    hide();
+});
+
+test("a want delivered after the fetch fails lets the waiting window fetch for itself", async () => {
+    const { window, deliverWants } = bus(true);
+    const main = window(`main`);
+    const chat = window(`chat`);
+    await settle();
+    const call = deferred<string>();
+    const first = main.sibling.fetchShared([`agents`], () => call.promise);
+    await settle();
+    const second = chat.sibling.fetchShared([`agents`], () => Promise.resolve(`chat's own`));
+    call.reject(new Error(`daemon down`));
+    await expect(first).rejects.toThrow(`daemon down`);
+    deliverWants();
+    expect(await second).toBe(`chat's own`);
 });
 
 test("an answer lands in a window showing the read, with the moment it was read", async () => {

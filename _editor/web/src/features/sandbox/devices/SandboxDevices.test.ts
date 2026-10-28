@@ -1813,10 +1813,9 @@ it(`takes the container and the pairing together, and names each before it does`
 it(`ends the pairing alone on a sandbox this machine does not run`, async () => {
     granted();
     const el = mount([holdings()]);
-    await openRowMenu(el, `not running here`);
-    menuRow(`Remove`)?.click();
-    await nextTick();
-    expect(everything()).toContain(`Remove b from radarsu-rog?`);
+    await pressCardVerb(el, `Remove`, `not running here`);
+    // The menu and modal teleport separately; wait for the question, rather than counting render ticks.
+    await waitFor(() => expect(everything()).toContain(`Remove b from radarsu-rog?`));
     expect(everything()).not.toContain(`deleted on radarsu-rog`);
 
     dialogButton(`Remove`)?.click();

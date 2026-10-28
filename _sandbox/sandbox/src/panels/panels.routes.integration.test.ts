@@ -8,25 +8,26 @@ import { tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeProcesses } from "../processes/processes-slice.testing.js";
 import { testConfig } from "../env.config.testing.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
-import { type PanelsRoutesDeps, createPanelsRoutes } from "./panels.routes.js";
+import { type PanelsRoutesDeps, type PanelsRoutesOptions, createPanelsRoutes } from "./panels.routes.js";
 
 // Operator-panel routes, tested over real repos on disk since these routes report exactly what is in the workspace.
 // Panel token auth is the app's middleware, checked there.
 
-const panelsClient = (workspace: WorkspacePaths, overrides: Partial<PanelsRoutesDeps> = {}) =>
+const panelsClient = (workspace: WorkspacePaths, { windows = async () => [], ...overrides }: Partial<PanelsRoutesDeps> & PanelsRoutesOptions = {}) =>
     routesClient(
         panelsContract,
-        createPanelsRoutes({
-            workspace,
-            config: testConfig,
-            panelToken: "panel-secret",
-            processes: fakeProcesses(),
-            // Nothing listening unless a test overrides it: the scan is a seam, not the real machine's sockets.
-            scanPorts: async () => [],
-            // Nor any window open: the desktop is a seam too.
-            windows: async () => [],
-            ...overrides,
-        }),
+        createPanelsRoutes(
+            {
+                workspace,
+                config: testConfig,
+                panelToken: "panel-secret",
+                processes: fakeProcesses(),
+                // Nothing listening unless a test overrides it: the scan is a seam, not the real machine's sockets.
+                scanPorts: async () => [],
+                ...overrides,
+            },
+            { windows },
+        ),
     );
 
 // What Start runs for tempWorkspace's `panel: true` repo, an operator/ with a `dev` script.

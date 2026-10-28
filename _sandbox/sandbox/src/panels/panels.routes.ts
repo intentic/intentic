@@ -28,10 +28,12 @@ const USER_STORIES_DIR = join("docs", "user-stories");
 // Architecture docs directory; same evidence shape as USER_STORIES_DIR, the documents themselves are the fact.
 const ARCHITECTURE_DIR = join("docs", "architecture");
 
-export type PanelsRoutesDeps = Pick<Services, "config" | "panelToken" | "processes" | "scanPorts" | "workspace"> & {
+export type PanelsRoutesDeps = Pick<Services, "config" | "panelToken" | "processes" | "scanPorts" | "workspace">;
+
+export interface PanelsRoutesOptions {
     // The windows open on the sandbox desktop with where each program runs; the real desktop's unless a test says.
     readonly windows?: () => Promise<readonly ProgramWindow[]>;
-};
+}
 
 // Repo's answering dev servers, each probed for its scheme and tagged with its terminal. The assigned port is probed
 // even when the scan missed it, carrying the panel's own session as fact; ordered by port for stability.
@@ -115,10 +117,9 @@ const presentFacts = (facts: {
     return present;
 };
 
-export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
+export const createPanelsRoutes = (services: PanelsRoutesDeps, { windows: readWindows = programWindows }: PanelsRoutesOptions = {}) => {
     const i = implement(panelsContract).$context<OrpcContext>();
     const { zone, sandboxId } = publicAddressOf(services.config);
-    const readWindows = services.windows ?? programWindows;
 
     return {
         list: i.list.handler(async () => {

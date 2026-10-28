@@ -74,6 +74,7 @@ interface SiblingFetch {
 }
 
 type Answer = { readonly data: unknown } | undefined;
+type CompletedAnswer = Extract<SiblingNote, { kind: `answer` }>;
 
 interface Waiter {
     readonly from: string;
@@ -94,6 +95,8 @@ interface Window {
     // This window's own fetches in flight, and which of them another window asked for.
     readonly ours: Set<string>;
     readonly wanted: Set<string>;
+    // A want can arrive just after the fetch ends. Keep its answer for the same short window in which it can be joined.
+    readonly completed: Map<string, CompletedAnswer>;
     readonly waiters: Map<string, Set<Waiter>>;
     // A read started before a change made here may predate it: never joined across one.
     lastMutationAt: number;
@@ -159,6 +162,20 @@ const heardFetching = (here: Window, note: Extract<SiblingNote, { kind: `fetchin
     }
 };
 
+const heardWant = (here: Window, hash: string): void => {
+    if (here.ours.has(hash)) {
+        here.wanted.add(hash);
+        return;
+    }
+    const completed = here.completed.get(hash);
+    if (completed !== undefined && completed.updatedAt >= here.now() - JOIN_WITHIN_MS) {
+        answer(here, completed);
+    } else {
+        // The fetch failed or its answer expired before this request arrived: let the other window fetch now.
+        here.channel.post({ kind: `failed`, from: here.id, hash });
+    }
+};
+
 const receive = (here: Window, note: SiblingNote): void => {
     if (note.from === here.id || (`to` in note && note.to !== here.id)) {
         return;
@@ -170,8 +187,8 @@ const receive = (here: Window, note: SiblingNote): void => {
         heardBye(here, note.from);
     } else if (note.kind === `fetching`) {
         heardFetching(here, note);
-    } else if (note.kind === `want` && here.ours.has(note.hash)) {
-        here.wanted.add(note.hash);
+    } else if (note.kind === `want`) {
+        heardWant(here, note.hash);
     } else if (note.kind === `answer`) {
         heardAnswer(here, note);
     } else if (note.kind === `failed`) {
@@ -202,22 +219,30 @@ const joinable = (here: Window, hash: string, on: string | undefined): SiblingFe
 };
 
 // Hands this window's answer to the windows that asked for it; one no structured clone carries is a failure there.
-const answer = <T>(here: Window, key: QueryKey, hash: string, on: string | undefined, data: T): void => {
+const answer = (here: Window, note: CompletedAnswer): void => {
     try {
-        here.channel.post({ kind: `answer`, from: here.id, hash, sandbox: on, key, data, updatedAt: here.now() });
+        here.channel.post(note);
         // allow(silent-catch): the window that asked fetches for itself on hearing the failure.
     } catch {
-        here.channel.post({ kind: `failed`, from: here.id, hash });
+        here.channel.post({ kind: `failed`, from: here.id, hash: note.hash });
     }
 };
 
 // Asks the daemon itself, and hands the answer (or the failure) to the windows that asked for it.
 const fetchOwn = async <T>(here: Window, key: QueryKey, hash: string, on: string | undefined, fetch: () => Promise<T>): Promise<T> => {
+    for (const [heldHash, completed] of here.completed) {
+        if (completed.updatedAt < here.now() - JOIN_WITHIN_MS) {
+            here.completed.delete(heldHash);
+        }
+    }
+    here.completed.delete(hash);
     here.ours.add(hash);
     try {
         const data = await fetch();
+        const completed: CompletedAnswer = { kind: `answer`, from: here.id, hash, sandbox: on, key, data, updatedAt: here.now() };
+        here.completed.set(hash, completed);
         if (here.wanted.has(hash)) {
-            answer(here, key, hash, on, data);
+            answer(here, completed);
         }
         return data;
     } catch (error) {
@@ -282,6 +307,7 @@ export const createSiblingQueries = (options: {
         theirs: new Map(),
         ours: new Set(),
         wanted: new Set(),
+        completed: new Map(),
         waiters: new Map(),
         lastMutationAt: Number.NEGATIVE_INFINITY,
     };
@@ -328,7 +354,8 @@ export const shareQueriesAcrossWindows = (client: QueryClient, sandbox: () => st
 };
 
 /** A read through the sibling windows when sharing is on, straight to the daemon otherwise. */
-export const fetchShared = <T>(key: QueryKey, fetch: () => Promise<T>): Promise<T> => (shared === undefined ? fetch() : shared.fetchShared(key, fetch));
+export const fetchShared = <T>(key: QueryKey, fetch: () => Promise<T>): Promise<T> =>
+    shared === undefined ? fetch() : shared.fetchShared(key, fetch);
 
 /** How many other editor windows this one knows of. */
 export const siblingWindows = (): number => shared?.siblings() ?? 0;
