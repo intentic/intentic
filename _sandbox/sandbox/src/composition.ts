@@ -31,6 +31,7 @@ import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 import { desktopServersOf } from "./desktop/desktop-tools.js";
+import { desktopEnv } from "./desktop/program-windows.js";
 import { closeBrowserSession, closeBrowserSessionsFor, idleBrowserSessionNames, runningBrowserOwners } from "./browser/sessions/browser-sessions.js";
 import { environmentSourcesOf } from "./environment-composers.js";
 import type { EnvironmentSources } from "./seams/environment-sources.js";
@@ -613,7 +614,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
     });
     const { agents, conversations, cards } = conversationsParts.slice;
     const invariants = createInvariantRegistry(logger);
-    const processesSlice = createProcessesSlice({ config, logger });
+    const processesSlice = createProcessesSlice({ config, logger, desktopEnv });
     // The ACP connection pool implements ACP terminal/* over the processes' terminal runner, so both share one instance.
     const acpConnections = createAcpConnections(logger, processesSlice.terminalRun);
     const depsSlice = createDepsSlice({ workspace, historyRoot: config.historyRoot, processes: processesSlice.processes, logger });

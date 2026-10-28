@@ -28,22 +28,23 @@ export const parseWmctrl = (output: string, focusedId?: string): WindowInfo[] =>
             if (fields === null) {
                 return [];
             }
-            const [, id, , , x, y, width, height, wmClass, , rawTitle] = fields;
+            const [, id, , pidColumn, x, y, width, height, wmClass, , rawTitle] = fields;
             if (id === undefined || wmClass === undefined) {
                 return [];
             }
             const title = (rawTitle ?? "").trim();
             const app = wmClass.includes(".") ? (wmClass.split(".").pop() ?? wmClass) : wmClass;
-            return [
-                {
-                    id,
-                    title,
-                    app,
-                    bounds: { x: Number(x), y: Number(y), width: Number(width), height: Number(height) },
-                    // wmctrl ids are hex, xdotool ids are decimal; compared as numbers so both spellings match.
-                    focused: focusedId !== undefined && Number(id) === Number(focusedId),
-                },
-            ];
+            // The window's own _NET_WM_PID; wmctrl prints 0 for a window that names no process (an old Xt program).
+            const pid = Number(pidColumn);
+            const window: WindowInfo = {
+                id,
+                title,
+                app,
+                bounds: { x: Number(x), y: Number(y), width: Number(width), height: Number(height) },
+                // wmctrl ids are hex, xdotool ids are decimal; compared as numbers so both spellings match.
+                focused: focusedId !== undefined && Number(id) === Number(focusedId),
+            };
+            return [Number.isInteger(pid) && pid > 0 ? { ...window, pid } : window];
         });
 
 interface SwayNode {

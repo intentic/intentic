@@ -545,6 +545,10 @@
     {
       "type": "{ key: string; port?: number; spec: { command: string; cwd: string; portEnv?: string[] } }[]",
       "since": "v1.346.0"
+    },
+    {
+      "type": "{ key: string; port?: number; spec: { command: string; cwd: string; desktop?: true; portEnv?: string[] } }[]",
+      "since": "unreleased"
     }
   ],
   "history:paused-children.json": [

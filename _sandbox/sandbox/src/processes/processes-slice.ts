@@ -26,11 +26,17 @@ export type PortsMembers = "portForwards" | "scanPorts";
 
 // Builds the processes slice but for its ports; what else reads a member of it (the ACP pool, the dependency
 // coordinator, the panel resolver) takes it from here, so there is one instance of each.
-export const createProcessesSlice = ({ config, logger }: { readonly config: Pick<Config, "historyRoot">; readonly logger: Logger }): Omit<
-    ProcessesSlice,
-    PortsMembers
-> => ({
-    processes: createManagedProcesses(undefined, { logger, historyRoot: config.historyRoot }),
+export const createProcessesSlice = ({
+    config,
+    logger,
+    desktopEnv,
+}: {
+    readonly config: Pick<Config, "historyRoot">;
+    readonly logger: Logger;
+    // What puts a run's windows on the sandbox desktop, built by desktop/, which sits above this slice.
+    readonly desktopEnv?: () => Promise<Record<string, string>>;
+}): Omit<ProcessesSlice, PortsMembers> => ({
+    processes: createManagedProcesses(undefined, { logger, historyRoot: config.historyRoot, desktopEnv }),
     serviceProcesses: createServiceProcesses(join(config.historyRoot, "logs", "services"), logger),
     terminalRun: createTerminalRunner(),
 });

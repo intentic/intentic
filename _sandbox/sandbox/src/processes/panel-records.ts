@@ -9,7 +9,8 @@ const PanelSchema = z.object({
     key: z.string(),
     // The port it last ran on, for the record; a restored panel is given a free one again.
     port: z.number().int().positive().optional(),
-    spec: z.object({ command: z.string(), cwd: z.string(), portEnv: z.array(z.string()).optional() }),
+    // `desktop`: its programs open windows on the sandbox desktop, whose DISPLAY is handed to it afresh at restore.
+    spec: z.object({ command: z.string(), cwd: z.string(), portEnv: z.array(z.string()).optional(), desktop: z.literal(true).optional() }),
 });
 type SavedPanel = z.infer<typeof PanelSchema>;
 
@@ -29,10 +30,20 @@ const saveable = (key: string, spec: ProcessSpec, port?: number): SavedPanel => 
     if (spec.portEnv !== undefined) {
         saved.spec.portEnv = [...spec.portEnv];
     }
+    if (spec.desktop === true) {
+        saved.spec.desktop = true;
+    }
     if (port !== undefined) {
         saved.port = port;
     }
     return saved;
+};
+
+// A saved panel as it starts again: what was kept, with the daemon's current credentials as its env.
+const restoredSpec = (saved: SavedPanel["spec"], env: Record<string, string>): ProcessSpec => {
+    const spec: ProcessSpec = { command: saved.command, cwd: saved.cwd, env, durable: true };
+    const ported = saved.portEnv === undefined ? spec : { ...spec, portEnv: saved.portEnv };
+    return saved.desktop === true ? { ...ported, desktop: true } : ported;
 };
 
 /**
@@ -68,8 +79,7 @@ export const withSavedPanels = (options: ManagedProcessesOptions, processes: Omi
         restore: async (env) => {
             for (const { key, spec } of await records.read()) {
                 try {
-                    const launch: ProcessSpec = { command: spec.command, cwd: spec.cwd, env, durable: true };
-                    await processes.start(key, spec.portEnv === undefined ? launch : { ...launch, portEnv: spec.portEnv });
+                    await processes.start(key, restoredSpec(spec, env));
                 } catch (error) {
                     options.logger?.warn({ err: error, key }, "panel: saved panel could not be restarted");
                 }

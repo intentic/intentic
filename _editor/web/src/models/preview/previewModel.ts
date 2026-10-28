@@ -38,6 +38,12 @@ export interface PreviewTarget {
     // What Start costs (installed) and a running target's progress (launch); undefined/true where nothing starts.
     readonly installed: boolean;
     readonly launch: PanelLaunch | undefined;
+    // What Start runs, as a person would type it (`pnpm dev`, `cargo run`); undefined where the daemon does not say.
+    readonly runs: string | undefined;
+    // Whether Start compiles before anything runs (a Cargo build): minutes the first time, not seconds.
+    readonly builds: boolean;
+    // The windows its programs have open on the sandbox desktop: how a game or a desktop app is up, serving no page.
+    readonly windows: readonly { readonly id: string; readonly title: string }[];
     // The background job an agent's turn left serving this port for the person; Stop ends it through its conversation.
     readonly job?: { readonly conversationId: string; readonly jobId: string; readonly port: number };
 }
@@ -48,30 +54,35 @@ export const repoTargetId = (repo: string): string => `repo:${repo}`;
 // already cross-origin; other previews need no sandbox, and adding one there breaks same-origin asset requests.
 export const frameSandbox = (kind: PreviewKind): string | undefined => (kind === `public` ? `allow-scripts allow-forms allow-popups` : undefined);
 
-// Every runnable repository, monorepos included; a monorepo's row lists its servers instead of pretending to one
-// address. mergeTargets drops this row in favor of per-app ones where `_apps/` exist.
+// A Start that compiles first: a Cargo binary, or a Procfile entry that runs cargo.
+const CARGO = /\bcargo\s+(run|build)\b/;
+
+// Every repository, a runnable one with its Start and one with nothing to start yet listed too, since that row is where
+// an agent is asked to make it startable. A monorepo's row lists its servers instead of pretending to one address.
+// mergeTargets drops this row in favor of per-app ones where `_apps/` exist.
 export const repoTargets = (panels: readonly PanelSummary[]): PreviewTarget[] =>
-    panels
-        .filter((panel) => panel.hasPanel || panel.monorepo)
-        .map((panel) => ({
-            id: repoTargetId(panel.repo),
-            kind: `repo`,
-            label: panel.repo,
-            detail: undefined,
-            repo: panel.repo,
-            app: undefined,
-            // Absent-with-servers means ports no hostname covers; absent-while-running means still starting.
-            url: panel.previewUrl,
-            servers: panel.servers.map((server) => ({ port: server.port, url: server.url, dir: server.dir })),
-            running: panel.running,
-            healthy: panel.healthy,
-            // panel-<repo> whenever the daemon runs it; otherwise names whichever server's own session is answering.
-            session: panel.running ? `panel-${panel.repo}` : panel.servers.find((server) => server.session !== undefined)?.session,
-            // True only where a dev server exists; a monorepo with no root `dev` and no panel stays listed, refused.
-            startable: panel.hasPanel,
-            installed: panel.installed,
-            launch: panel.launch,
-        }));
+    panels.map((panel) => ({
+        id: repoTargetId(panel.repo),
+        kind: `repo`,
+        label: panel.repo,
+        detail: undefined,
+        repo: panel.repo,
+        app: undefined,
+        // Absent-with-servers means ports no hostname covers; absent-while-running means still starting.
+        url: panel.previewUrl,
+        servers: panel.servers.map((server) => ({ port: server.port, url: server.url, dir: server.dir })),
+        running: panel.running,
+        healthy: panel.healthy,
+        // panel-<repo> whenever the daemon runs it; otherwise names whichever server's own session is answering.
+        session: panel.running ? `panel-${panel.repo}` : panel.servers.find((server) => server.session !== undefined)?.session,
+        // True only where Start has something to run; a repo with nothing stays listed, refused, with the ask to fix it.
+        startable: panel.hasPanel,
+        installed: panel.installed,
+        launch: panel.launch,
+        runs: panel.start?.command,
+        builds: panel.start?.from === `cargo` || CARGO.test(panel.start?.command ?? ``),
+        windows: panel.windows ?? [],
+    }));
 
 // One app instance's target id; the shell also builds one directly to open a fresh sandbox's starter app.
 export const appTargetId = (repo: string, app: string): string => `app:${repo}/${app}`;
@@ -94,6 +105,9 @@ export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarge
         startable: true,
         installed: app.installed,
         launch: app.launch,
+        runs: undefined,
+        builds: false,
+        windows: [],
     }));
 
 // One forwarded port's target id; the panel also forwards ports itself and needs to name what it made.
@@ -143,6 +157,9 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
             startable: false,
             installed: true,
             launch: undefined,
+            runs: undefined,
+            builds: false,
+            windows: [],
             ...(port.job === undefined ? {} : { job: { conversationId: port.job.conversationId, jobId: port.job.jobId, port: port.port } }),
         }));
 
@@ -168,6 +185,9 @@ export const publicTarget = (files: readonly PublicFile[]): PreviewTarget | unde
               startable: false,
               installed: true,
               launch: undefined,
+              runs: undefined,
+              builds: false,
+              windows: [],
           };
 };
 
@@ -205,7 +225,13 @@ export const pickTarget = (targets: readonly PreviewTarget[], selectedId: string
         }
     }
     const servers = targets.filter((target) => target.kind !== `public`);
-    return servers.find((target) => target.healthy) ?? servers.find((target) => target.running) ?? servers[0] ?? targets[0];
+    return (
+        servers.find((target) => target.healthy) ??
+        servers.find((target) => target.running) ??
+        servers.find((target) => target.startable) ??
+        servers[0] ??
+        targets[0]
+    );
 };
 
 // The status bar's half: same builders as the panel, minus the apps fan-out, so the chip never promises what the panel

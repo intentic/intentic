@@ -1,17 +1,18 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ProgramWindow } from "../desktop/program-windows.js";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
+import { type RunPlan, runPlanOf } from "./run-plan.js";
 
-// Per-repo operator panels: a repo exposes one when `operator/` or the repo root has a runnable `dev` script; discovery
-// is pure. The daemon runs that dev server and the preview proxy fronts it at preview-<panelKey>-<sandboxId>.<zone>.
-
-const OPERATOR_DIR = "operator";
+// Per-repo operator panels: a repo exposes one when run-plan.ts can tell what Start runs for it (a Procfile, an
+// `operator/` or root `dev` script, a root `start`, a Cargo binary); discovery is pure. The daemon runs that command and
+// the preview proxy fronts what it serves at preview-<panelKey>-<sandboxId>.<zone>.
 
 export interface DiscoveredPanel {
     readonly repo: string;
-    readonly hasPanel: boolean;
+    // What Start runs; undefined for a repo with nothing it can tell how to start.
+    readonly plan: RunPlan | undefined;
 }
 
 // DNS-label/tmux-safe key for a repo id: `/` becomes `--`, matching app previews' `<repo>--<app>` grammar. Undefined
@@ -21,34 +22,18 @@ export const panelKey = (id: string): string | undefined => {
     return /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(key) ? key : undefined;
 };
 
-// Does `dir/package.json` declare a `dev` script?
-const hasDevScript = async (dir: string): Promise<boolean> => {
-    try {
-        const pkg = JSON.parse(await readFile(join(dir, "package.json"), "utf8")) as { scripts?: Record<string, unknown> };
-        return typeof pkg.scripts?.["dev"] === "string";
-    } catch {
-        return false;
-    }
-};
-
-// Where the panel's dev server runs: `operator/` when it has a `dev` script, else the repo root when that does;
-// undefined otherwise. `operator/` wins so a repo can carry a dedicated panel beside its code.
-export const panelRunDir = async (workspace: WorkspacePaths, repo: string): Promise<string | undefined> => {
-    const root = join(workspace.root, repo);
-    const operator = join(root, OPERATOR_DIR);
-    if (await hasDevScript(operator)) {
-        return operator;
-    }
-    if (await hasDevScript(root)) {
-        return root;
-    }
-    return undefined;
-};
-
-// Every repo in the workspace, sorted, each annotated with whether it exposes a runnable panel.
+// Every repo in the workspace, sorted, each with what Start would run for it.
 export const discoverPanels = async (workspace: WorkspacePaths): Promise<DiscoveredPanel[]> => {
     const repos = await discoverRepos(workspace.root);
-    return Promise.all(repos.map(async (repo) => ({ repo, hasPanel: (await panelRunDir(workspace, repo)) !== undefined })));
+    return Promise.all(repos.map(async (repo) => ({ repo, plan: await runPlanOf(join(workspace.root, repo)) })));
+};
+
+// The repo a directory belongs to: the most specific one holding it, so a repo nested in another claims its own files.
+// Undefined outside every repo.
+const repoOfDir = (workspaceRoot: string, repos: readonly string[]): ((cwd: string) => string | undefined) => {
+    // Longest dir first, so the first match is the most specific repo rather than whichever came back first.
+    const dirs = repos.map((repo) => ({ repo, dir: join(workspaceRoot, repo) })).toSorted((a, b) => b.dir.length - a.dir.length);
+    return (cwd) => dirs.find(({ dir }) => cwd === dir || cwd.startsWith(`${dir}/`))?.repo;
 };
 
 // Maps each repo to the sockets its own directory serves, using listening sockets as evidence, not the assigned port. A
@@ -58,19 +43,32 @@ export const listenersByRepo = (
     workspaceRoot: string,
     repos: readonly string[],
 ): Map<string, readonly ListeningPort[]> => {
-    // Longest dir first, so the first match is the most specific repo rather than whichever came back first.
-    const dirs = repos.map((repo) => ({ repo, dir: join(workspaceRoot, repo) })).toSorted((a, b) => b.dir.length - a.dir.length);
+    const ownerOf = repoOfDir(workspaceRoot, repos);
     const byRepo = new Map<string, ListeningPort[]>();
     for (const listener of listeners) {
-        const cwd = listener.cwd;
-        if (!listener.forwardable || cwd === undefined) {
-            continue;
+        const owner = listener.forwardable && listener.cwd !== undefined ? ownerOf(listener.cwd) : undefined;
+        if (owner !== undefined) {
+            byRepo.set(owner, [...(byRepo.get(owner) ?? []), listener]);
         }
-        const owner = dirs.find(({ dir }) => cwd === dir || cwd.startsWith(`${dir}/`));
-        if (owner === undefined) {
-            continue;
+    }
+    return byRepo;
+};
+
+// Maps each repo to the windows its programs opened on the sandbox desktop, by the same evidence as its sockets: the
+// directory the program that owns the window runs in. A window whose program says nothing of where it runs belongs to
+// nobody.
+export const windowsByRepo = (
+    windows: readonly ProgramWindow[],
+    workspaceRoot: string,
+    repos: readonly string[],
+): Map<string, readonly ProgramWindow[]> => {
+    const ownerOf = repoOfDir(workspaceRoot, repos);
+    const byRepo = new Map<string, ProgramWindow[]>();
+    for (const window of windows) {
+        const owner = window.cwd === undefined ? undefined : ownerOf(window.cwd);
+        if (owner !== undefined) {
+            byRepo.set(owner, [...(byRepo.get(owner) ?? []), window]);
         }
-        byRepo.set(owner.repo, [...(byRepo.get(owner.repo) ?? []), listener]);
     }
     return byRepo;
 };

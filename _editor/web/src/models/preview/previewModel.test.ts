@@ -52,9 +52,25 @@ const port = (over: Partial<PortSummary>): PortSummary => ({
 });
 
 describe(`repoTargets`, () => {
-    it(`previews every runnable repo, monorepos included, and skips a repo with no dev server`, () => {
+    it(`lists every repo, a repo with nothing to start too, refused, so its row can ask to make it startable`, () => {
         const targets = repoTargets([panel({}), panel({ repo: `mono`, monorepo: true }), panel({ repo: `lib`, hasPanel: false })]);
-        expect(targets.map((target) => target.id)).toEqual([`repo:shop`, `repo:mono`]);
+        expect(targets.map((target) => [target.id, target.startable])).toEqual([
+            [`repo:shop`, true],
+            [`repo:mono`, true],
+            [`repo:lib`, false],
+        ]);
+    });
+
+    it(`carries what Start runs, whether it builds first, and the windows the repo's programs have open`, () => {
+        const game = repoTargets([
+            panel({ repo: `game`, start: { from: `cargo`, command: `cargo run -p game` }, windows: [{ id: `0x400004`, title: `Bevy App` }] }),
+        ])[0];
+        expect(game).toMatchObject({ runs: `cargo run -p game`, builds: true, windows: [{ id: `0x400004`, title: `Bevy App` }] });
+        // A Procfile entry that runs cargo builds first too; a Node run does not.
+        expect(repoTargets([panel({ start: { from: `procfile`, command: `cargo run --release` } })])[0]?.builds).toBe(true);
+        expect(repoTargets([panel({ start: { from: `dev`, command: `pnpm dev` } })])[0]?.builds).toBe(false);
+        // A sandbox older than these fields says nothing of them.
+        expect(repoTargets([panel({})])[0]).toMatchObject({ runs: undefined, builds: false, windows: [] });
     });
 
     it(`names the terminal there IS: the daemon's own pane when running, else the answering server's`, () => {
@@ -183,6 +199,11 @@ describe(`pickTarget`, () => {
         expect(pickTarget([publicTarget([file({})])!], undefined)?.id).toBe(`public`);
         expect(pickTarget([], undefined)).toBeUndefined();
     });
+
+    it(`passes over a repo with nothing to start for one that can be started, even listed first`, () => {
+        const listed = repoTargets([panel({ repo: `docs`, hasPanel: false }), panel({ repo: `shop` })]);
+        expect(pickTarget(listed, undefined)?.id).toBe(`repo:shop`);
+    });
 });
 
 describe(`the status bar's half`, () => {
@@ -196,7 +217,8 @@ describe(`the status bar's half`, () => {
         ).toBe(2);
         expect(previewHealthyCount([], [], [file({})])).toBe(0);
         expect(previewHealthyCount([], [port({})], [])).toBe(1);
-        expect(previewHealthyCount([panel({ repo: `lib`, hasPanel: false, healthy: true })], [], [])).toBe(0);
+        // A server somebody started by hand in a repo Start has nothing for is still that repo answering.
+        expect(previewHealthyCount([panel({ repo: `lib`, hasPanel: false, healthy: true })], [], [])).toBe(1);
     });
 });
 

@@ -42,6 +42,7 @@ const CODE_PANELS: PanelSummary[] = [
     {
         repo: `web`,
         hasPanel: true,
+        start: { from: `dev`, command: `pnpm dev` },
         running: false,
         // Tree already installed; Start would promise seconds, not a fresh install.
         installed: true,

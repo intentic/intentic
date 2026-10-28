@@ -1,6 +1,6 @@
 import { unstubbed } from "@intentic/testing";
 import { createTerminalRunner } from "../terminal/terminal-run.js";
-import type { ManagedProcesses } from "./managed-processes.js";
+import type { ManagedProcesses, ProcessSpec } from "./managed-processes.js";
 import type { ProcessesSlice } from "./processes-slice.js";
 import type { ServiceProcesses, ServiceStatus } from "./service-processes.js";
 
@@ -37,14 +37,17 @@ export const fakeServiceProcesses = (
 // running/healthy from portOf, not running()).
 export const fakeProcesses = (
     ports: Record<string, number> = {},
-): ManagedProcesses & { started: { repo: string; cwd: string }[]; stopped: string[] } => {
+): ManagedProcesses & { started: { repo: string; cwd: string }[]; specs: ProcessSpec[]; stopped: string[] } => {
     const started: { repo: string; cwd: string }[] = [];
+    // Each start's whole spec, in order, for a test asking what was typed and how.
+    const specs: ProcessSpec[] = [];
     const stopped: string[] = [];
     return Object.assign(
         unstubbed<ManagedProcesses>("processes", {
             restore: async () => {},
             start: async (repo, spec) => {
                 started.push({ repo, cwd: spec.cwd });
+                specs.push(spec);
             },
             stop: (repo) => {
                 stopped.push(repo);
@@ -60,7 +63,7 @@ export const fakeProcesses = (
             runOf: () => undefined,
             stopAll: () => {},
         }),
-        { started, stopped },
+        { started, specs, stopped },
     );
 };
 

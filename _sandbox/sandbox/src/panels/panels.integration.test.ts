@@ -4,10 +4,11 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
+import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, windowsByRepo } from "./panels.js";
 
 // A temp workspace: every repo is a dir with a .git (role and clone alike, discovery is .git-based). A repo
-// has a panel when a `dev` script lives at its operator/ (devScript) OR its root (rootDev).
+// has a panel when a `dev` script lives at its operator/ (devScript) OR its root (rootDev); the rest of what Start can
+// run is run-plan.integration.test.ts's.
 const setup = (repos: { name: string; devScript?: boolean; operatorNoDev?: boolean; rootDev?: boolean }[]) => {
     const root = mkdtempSync(join(tmpdir(), "discover-"));
     for (const repo of repos) {
@@ -27,6 +28,10 @@ const setup = (repos: { name: string; devScript?: boolean; operatorNoDev?: boole
     return workspacePaths(root);
 };
 
+// Each repo with whether Start has anything to run, which is all the discovery tests below ask of the plan.
+const runnable = async (workspace: ReturnType<typeof setup>) =>
+    (await discoverPanels(workspace)).map(({ repo, plan }) => ({ repo, hasPanel: plan !== undefined }));
+
 test("discovers role repos + extra clones, sorted, with hasPanel from operator/", async () => {
     const workspace = setup([
         { name: "intent" },
@@ -34,7 +39,7 @@ test("discovers role repos + extra clones, sorted, with hasPanel from operator/"
         { name: "app", operatorNoDev: true },
         { name: "acme", devScript: true },
     ]);
-    expect(await discoverPanels(workspace)).toEqual([
+    expect(await runnable(workspace)).toEqual([
         { repo: "acme", hasPanel: true },
         { repo: "app", hasPanel: false }, // operator/ present but no `dev` script ⇒ not a runnable panel
         { repo: "desired-state", hasPanel: true },
@@ -53,7 +58,7 @@ test("a non-.git directory alongside repos is not a repo, but a nested repo insi
     mkdirSync(join(workspace.root, "scratch"), { recursive: true });
     // …but a repo cloned inside it is discovered under its nested id.
     mkdirSync(join(workspace.root, "scratch", "notes", ".git"), { recursive: true });
-    expect(await discoverPanels(workspace)).toEqual([
+    expect(await runnable(workspace)).toEqual([
         { repo: "app", hasPanel: true },
         { repo: "scratch/notes", hasPanel: false },
     ]);
@@ -64,18 +69,20 @@ test("a repo is a panel when its ROOT has a dev script (a scaffolded app is its 
         { name: "shop", rootDev: true }, // app repo: root dev, no operator/
         { name: "notes" }, // a repo with neither ⇒ no panel
     ]);
-    expect(await discoverPanels(workspace)).toEqual([
+    expect(await runnable(workspace)).toEqual([
         { repo: "notes", hasPanel: false },
         { repo: "shop", hasPanel: true },
     ]);
     // Root is the run dir when there's no operator/.
-    expect(await panelRunDir(workspace, "shop")).toBe(join(workspace.root, "shop"));
-    expect(await panelRunDir(workspace, "notes")).toBeUndefined();
+    const plans = new Map((await discoverPanels(workspace)).map(({ repo, plan }) => [repo, plan]));
+    expect(plans.get("shop")?.cwd).toBe(join(workspace.root, "shop"));
+    expect(plans.get("notes")).toBeUndefined();
 });
 
 test("operator/ is preferred over the repo root when both are runnable", async () => {
     const workspace = setup([{ name: "app", devScript: true, rootDev: true }]);
-    expect(await panelRunDir(workspace, "app")).toBe(join(workspace.root, "app", "operator"));
+    const [found] = await discoverPanels(workspace);
+    expect(found?.plan?.cwd).toBe(join(workspace.root, "app", "operator"));
 });
 
 // A procfs listener as the scan reports it: only the fields the attribution reads.
@@ -122,6 +129,23 @@ test("a repo cloned inside another keeps its own listeners: the longest matching
     ]);
     expect(found.get("intentic")).toBeUndefined();
     expect(found.get("intentic/vendor/widget")?.map((entry) => entry.port)).toEqual([3000]);
+});
+
+test("a repo claims the desktop windows its programs opened, the most specific repo first; a window saying nowhere is nobody's", () => {
+    const found = windowsByRepo(
+        [
+            { id: "0x00400004", title: "Bevy App", cwd: `${WORKSPACE_ROOT}/game` },
+            { id: "0x00600004", title: "Settings", cwd: `${WORKSPACE_ROOT}/intentic/vendor/widget/assets` },
+            { id: "0x00800004", title: "xterm", cwd: "/root" },
+            { id: "0x00a00004", title: "No pid", cwd: undefined },
+        ],
+        WORKSPACE_ROOT,
+        ["game", "intentic", "intentic/vendor/widget"],
+    );
+    expect(found.get("game")?.map((window) => window.title)).toEqual(["Bevy App"]);
+    expect(found.get("intentic/vendor/widget")?.map((window) => window.title)).toEqual(["Settings"]);
+    expect(found.get("intentic")).toBeUndefined();
+    expect(found.size).toBe(2);
 });
 
 test("a listener is named by the package that bound it; one at the repo root has no name to give", () => {

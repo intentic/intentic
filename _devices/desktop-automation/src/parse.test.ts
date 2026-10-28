@@ -46,6 +46,13 @@ test("the focused window is matched across hex and decimal spellings", () => {
     expect(windows.filter((window) => window.focused).map((window) => window.app)).toEqual(["Code"]);
 });
 
+// How a program the sandbox started finds its own windows: wmctrl's pid column is the window's _NET_WM_PID.
+test("each window names the process that owns it, and one wmctrl reports as 0 names none", () => {
+    expect(parseWmctrl(WMCTRL).map((window) => window.pid)).toEqual([4242, 1337, 999]);
+    const [old] = parseWmctrl("0x00a00001  0 0      10   10   200  100  xmessage.Xmessage    box  hello");
+    expect(old).not.toHaveProperty("pid");
+});
+
 test("an untitled window still lists, and junk lines are skipped", () => {
     const windows = parseWmctrl(`${WMCTRL}\ngarbage\n\n`);
     expect(windows).toHaveLength(3);

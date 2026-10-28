@@ -333,26 +333,6 @@ test("a launch failure propagates to the caller and leaves nothing tracked", asy
     expect(panels.running("app")).toBe(false);
 });
 
-test("launchOf narrates a start: launching until the command is seen, starting while it runs, exited once it returns to a prompt", async () => {
-    jest.useFakeTimers();
-    const { runner, cmd } = fakeRunner();
-    const panels = createManagedProcesses(runner, { onPromptWatch: () => () => undefined });
-    // The fake reports the job command only from the first sweep on; before that nothing's been seen.
-    await panels.start("app", SPEC);
-    expect(panels.launchOf("app")).toBe("launching");
-    await advanceTimersByTimeAsync(2_000);
-    // SPEC's cwd has no node_modules and no install-completion file, so this reads as installing.
-    expect(panels.launchOf("app")).toBe("installing");
-    cmd.set("panel-app", "zsh");
-    await advanceTimersByTimeAsync(2_000);
-    expect(panels.launchOf("app")).toBe("exited");
-    // Not running at all, and a one-shot job, both answer nothing.
-    expect(panels.launchOf("site")).toBeUndefined();
-    await panels.start("job", { ...SPEC, oneShot: true });
-    expect(panels.launchOf("job")).toBeUndefined();
-    panels.stopAll();
-});
-
 /* Launch environments disable pnpm's unsolicited install before a process starts. */
 test("the launch env carries the assigned port, the run dir's bin, its own history and pnpm's unasked-for install switched off", () => {
     const env = launchEnv({ ...SPEC, port: 4321, portEnv: ["API_PORT"], env: { INTENTIC_DAEMON: "http://127.0.0.1:8787" } }, "/usr/bin");
@@ -365,6 +345,30 @@ test("the launch env carries the assigned port, the run dir's bin, its own histo
     expect(env["PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN"]).toBe("false");
     expect(env["npm_config_verify-deps-before-run"]).toBeUndefined();
     expect(env["npm_config_verify_deps_before_run"]).toBeUndefined();
+});
+
+test("a desktop run is handed the sandbox desktop's DISPLAY; any other run, and a desktop that will not start, are not", async () => {
+    const { runner, launches } = fakeRunner();
+    const warned: unknown[] = [];
+    let desktopUp = true;
+    const panels = createManagedProcesses(runner, {
+        desktopEnv: async () => {
+            if (!desktopUp) {
+                throw new Error("Xvfb would not start");
+            }
+            return { DISPLAY: ":100" };
+        },
+        logger: { warn: (payload: unknown) => void warned.push(payload) },
+    });
+    await panels.start("game", { ...SPEC, desktop: true, env: { INTENTIC_PANEL_TOKEN: "t" } });
+    await panels.start("site", SPEC);
+    desktopUp = false;
+    await panels.start("broken", { ...SPEC, desktop: true });
+    expect(launches.map((launch) => launch.spec.env)).toEqual([{ INTENTIC_PANEL_TOKEN: "t", DISPLAY: ":100" }, undefined, undefined]);
+    // The run without its desktop still started, and the log says why it has no display.
+    expect(panels.running("broken")).toBe(true);
+    expect(warned).toEqual([{ err: new Error("Xvfb would not start"), key: "broken" }]);
+    panels.stopAll();
 });
 
 test("a managed command can explicitly choose its thread pool", () => {

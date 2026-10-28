@@ -1,27 +1,42 @@
 ---
 name: panels
-description: Give a repository an operator panel: a small web UI (dev server) the user opens from the sidebar to run and preview that repo, by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to open, preview, or operate from the sidebar.
+description: Make a repository startable from its Start button (a Procfile, a dev or start script, a Cargo binary) and give it an operator panel, a small web UI the user opens from the sidebar to run and preview that repo, by adding an `operator/` directory that is a runnable web app. Use whenever you scaffold or work in a repo the user should be able to start, open, preview, or operate from the sidebar.
 ---
 
 # Operator panels (per-repository)
 
 The user's workspace sidebar lists every git repository under `/work`. Clicking one opens that
 repo's **operator panel**: a live web UI served from inside the sandbox and previewed in an iframe at
-`https://preview-<repo>-<sandboxId>.<zone>`, with hot reload. There is **no manifest file** (no apps.json /
-scripts.json): a repo has a panel purely by convention.
+`https://preview-<repo>-<sandboxId>.<zone>`, with hot reload. There is no Intentic manifest (no apps.json /
+scripts.json): what Start runs is read from the repo's own files.
 
-## Convention
+## What Start runs
 
-A repository exposes a panel when it has an **`operator/` directory at its root** that is a runnable web app:
+The first of these the repo has wins (`_sandbox/sandbox/src/panels/run-plan.ts`):
 
-- `<repo>/operator/package.json` with a **`dev` script**.
+1. A **`Procfile`** at the repo root, one `name: command` line per process, as Heroku and foreman read it. The `web`
+   entry (or the only one) gets `PORT`; the others run beside it with `PORT` unset, and stop when it stops.
+2. **`operator/package.json`** with a **`dev` script**: a panel kept beside the repo's code.
+3. The root **`package.json`**'s `dev` script, else its `start` script.
+4. A **`Cargo.toml`** with exactly one binary cargo can pick: `cargo run` (with `-p`/`--bin` for a workspace with one
+   binary member, or the package's own binary out of several). Several binary members and no `default-members` is a
+   choice the repo makes itself, with a Procfile.
+
+Node runs install first when `node_modules` is missing (`pnpm install`); a Cargo run builds as it starts. A repo with
+none of these lists with **Make it startable**, which asks an agent to add whichever fits.
+
+For a web app:
+
 - The dev server MUST honor the **`PORT`** environment variable: the daemon assigns a free port at start and
   injects it. Do not hardcode a port.
 - Bind `0.0.0.0` only if the framework defaults to localhost-only; the proxy connects over 127.0.0.1.
 
-The daemon runs `pnpm dev` in `operator/` when the user starts the panel, and routes
-`preview-<repo>-<sandboxId>.<zone>` to it. The repo name is part of the preview subdomain, so keep repo names
-DNS-safe: lowercase letters, digits and hyphens only, at most 42 characters.
+Every run is also handed the **sandbox desktop's `DISPLAY`**, so a game or a desktop app opens its window there; the
+panel shows that window instead of a preview (it must set `_NET_WM_PID`, as winit, SDL, GTK and Qt do). Nothing
+declares which a run is: a port that answers makes it a preview, a window makes it a desktop app.
+
+The daemon routes `preview-<repo>-<sandboxId>.<zone>` to the assigned port. The repo name is part of the preview
+subdomain, so keep repo names DNS-safe: lowercase letters, digits and hyphens only, at most 42 characters.
 
 ## Rules that make previews work
 

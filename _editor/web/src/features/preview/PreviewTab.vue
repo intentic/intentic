@@ -4,7 +4,7 @@
      verbs (start, stop, its terminal) go into the Browsers toolbar while it is in front; the address bar, reload and the
      phone frame are the toolbar's, steering this tab through what it exposes. -->
 <script setup lang="ts">
-import { Await, Button, EmptyState, Notice, type NoticeModel, probePreview, probePreviewOnce, type PreviewProbe, type Tip, ui } from "@intentic/ui";
+import { Await, Button, EmptyState, Notice, type NoticeModel, probePreview, probePreviewOnce, type PreviewProbe, ui } from "@intentic/ui";
 import { useNow, usePoll } from "@intentic/ui/async";
 import type { Loaded } from "@intentic/extension-api";
 import { computed, onUnmounted, ref, watch } from "vue";
@@ -14,12 +14,15 @@ import { frameSandbox, type PreviewTarget } from "../../models/preview/previewMo
 import { loopbackPreviewUrl } from "./previewLane";
 import type { PhoneModel } from "./phoneModels";
 import PreviewStage from "./PreviewStage.vue";
+import PreviewOnDesktop from "./PreviewOnDesktop.vue";
+import { startHintOf, startTipOf } from "./startWords";
 import { elementAddress } from "../../client/endpoint/elementAddress";
 import { usePreviewPass } from "./usePreviewPass";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { useOperations } from "../../workbench/operations/operations";
 import { onScreen } from "../../workbench/window/onScreen";
+import { composeAgent } from "../../models/fleet/agentActions";
 import { useT } from "@intentic/ui/i18n";
 
 export interface PreviewActions {
@@ -257,44 +260,13 @@ const address = computed<string | undefined>(() => visited.value ?? target?.url)
 
 defineExpose({ reload, navigate, address, framed: computed(() => frameSrc.value !== undefined) });
 
-// Names what Start will run and where its output lands (`panel-<repo>` / `panel-<repo>--<app>`), since a bare "Start"
-// names neither the target nor the command it's about to run.
-const startSession = computed<string | undefined>(() => {
-    if (target?.repo === undefined || !target.startable) {
-        return undefined;
-    }
-    return target.app === undefined ? `panel-${target.repo}` : `panel-${target.repo}--${target.app}`;
-});
-const startHint = computed<string | undefined>(() => {
-    if (target === undefined || !target.startable || startSession.value === undefined) {
-        return undefined;
-    }
-    const what =
-        target.app === undefined
-            ? t(`preview.previewPanel.repoDevServer`, { repo: target.repo ?? `` })
-            : t(`preview.previewPanel.appDevServer`, { app: target.app });
-    // Cost is read off the tree's install state, not assumed.
-    const cost = target.installed ? t(`preview.previewPanel.startCostInstalled`) : t(`preview.previewPanel.startCostInstall`);
-    return t(`preview.previewPanel.startHint`, { what, session: startSession.value, cost });
-});
-// The Start button's hover: what it runs, where its output lands, and whether an install comes first.
-const startTip = computed((): Tip | undefined => {
-    if (target === undefined || !target.startable || startSession.value === undefined) {
-        return undefined;
-    }
-    return {
-        title: t(`preview.previewPanel.devServer`),
-        rows: [
-            { label: t(`preview.previewPanel.repo`), value: target.repo ?? `` },
-            { label: t(`preview.previewPanel.app`), value: target.app ?? `` },
-            { label: t(`shared.terminal`), value: startSession.value },
-            target.installed
-                ? { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installed`) }
-                : { label: t(`preview.previewPanel.deps`), value: t(`preview.previewPanel.installFirst`), tone: `warning` },
-        ],
-        note: target.installed ? t(`preview.previewPanel.upInSeconds`) : t(`preview.previewPanel.takesMinutes`),
-    };
-});
+// What Start runs, where its output lands and what it costs (startWords.ts).
+const startHint = computed(() => (target === undefined ? undefined : startHintOf(target)));
+const startTip = computed(() => (target === undefined ? undefined : startTipOf(target)));
+
+// The ask that makes a repository with nothing to start startable, filled into the composer and never sent: what Start
+// looks for is in the words, so the agent adds the one that fits.
+const makeStartable = (repo: string): void => composeAgent(t(`preview.previewPanel.makeStartablePrompt`, { repo }));
 
 /* The wait duration stays visible while the preview is starting. */
 const waitingSince = ref<number | undefined>(undefined);
@@ -302,9 +274,10 @@ const now = useNow(() => waitingSince.value !== undefined);
 const waitedMs = computed(() => (waitingSince.value === undefined ? 0 : now.value - waitingSince.value));
 // Past this, a start is no longer "starting": something in its terminal is waiting or stuck, and the honest
 // screen says so and offers the way out. A dev server that is going to come up has come up long before this;
-// the starter site takes seconds on an installed tree.
+// the starter site takes seconds on an installed tree. A Cargo build is the exception: a first one takes minutes.
 const STARTING_SLOW_MS = 60_000;
-const waitingLong = computed(() => waitedMs.value > STARTING_SLOW_MS);
+const BUILDING_SLOW_MS = 15 * 60_000;
+const waitingLong = computed(() => waitedMs.value > (target?.builds === true ? BUILDING_SLOW_MS : STARTING_SLOW_MS));
 const waitedFor = computed(() => {
     const minutes = Math.floor(waitedMs.value / 60_000);
     return minutes < 1
@@ -335,6 +308,9 @@ const LAUNCH_HINTS: Record<PanelLaunch, { readonly waiting: () => string; readon
 const launchHint = computed<string | undefined>(() => {
     if (target === undefined) {
         return undefined;
+    }
+    if (target.launch === `starting` && target.builds) {
+        return waitingLong.value ? t(`preview.previewPanel.buildingOverdue`, { waited: waitedFor.value }) : t(`preview.previewPanel.buildingWaiting`);
     }
     if (target.launch !== undefined) {
         const hint = LAUNCH_HINTS[target.launch];
@@ -367,7 +343,8 @@ const startingPoll = usePoll({
     immediate: false,
 });
 watch(
-    () => target?.running === true && previewSrc.value === undefined && reach.value?.outcome !== `unreachable`,
+    // A window on the desktop is the run being up, not a preview still to wait for.
+    () => target?.running === true && target.windows.length === 0 && previewSrc.value === undefined && reach.value?.outcome !== `unreachable`,
     (waiting) => {
         startingPoll.stop();
         waitingSince.value = waiting ? Date.now() : undefined;
@@ -535,6 +512,9 @@ watch(
             </template>
         </EmptyState>
 
+        <!-- UP WITH A WINDOW, NO PAGE: a game or a desktop app, shown on the sandbox desktop rather than framed here. -->
+        <PreviewOnDesktop v-else-if="!target.url && target.windows.length > 0" :label="target.label" :windows="target.windows" />
+
         <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one place that says which. -->
         <!-- The heading identifies the preview's verdict, timeout, or active wait state. -->
         <EmptyState
@@ -584,14 +564,21 @@ watch(
             </template>
             <template #line>
                 <template v-if="startHint">{{ startHint }}</template>
-                <i18n-t v-else keypath="preview.previewPanel.noDevServerToStart" scope="global">
-                    <template #operator><span class="font-mono">operator/</span></template>
+                <i18n-t v-else keypath="preview.previewPanel.nothingToStart" scope="global">
+                    <template #procfile><span class="font-mono">Procfile</span></template>
                     <template #dev><span class="font-mono">dev</span></template>
+                    <template #start><span class="font-mono">start</span></template>
                 </i18n-t>
             </template>
             <template v-if="target.startable" #actions>
                 <Button tier="accent" :label="t(`ui.action.start`)" size="small" :disabled="busy" @click="act(`starting`, start)">
                     <template #icon><Icon name="play" /></template>
+                </Button>
+            </template>
+            <!-- Nothing to start: the ask that makes it startable goes into the composer, for the reader to send. -->
+            <template v-else-if="target.kind === `repo` && target.repo !== undefined" #actions>
+                <Button tier="accent" :label="t(`preview.previewPanel.makeStartable`)" size="small" @click="makeStartable(target.repo)">
+                    <template #icon><Icon name="sparkles" /></template>
                 </Button>
             </template>
         </EmptyState>

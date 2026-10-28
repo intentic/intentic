@@ -59,6 +59,18 @@ describe("user-started panels across a restart", () => {
         second.stopAll();
     });
 
+    test("a desktop panel is restored as one, with the desktop's DISPLAY looked up again rather than kept", async () => {
+        const historyRoot = history();
+        const first = createManagedProcesses(fakeRunner().runner, { historyRoot, desktopEnv: async () => ({ DISPLAY: ":100" }) });
+        await first.start("game", { ...SPEC, durable: true, desktop: true, env: CREDENTIALS });
+        expect(readFileSync(join(historyRoot, "panels.json"), "utf8")).not.toContain(":100");
+        first.stopAll();
+
+        const after = fakeRunner();
+        await createManagedProcesses(after.runner, { historyRoot, desktopEnv: async () => ({ DISPLAY: ":101" }) }).restore(CREDENTIALS);
+        expect(after.launches[0]?.spec).toMatchObject({ desktop: true, env: { ...CREDENTIALS, DISPLAY: ":101" } });
+    });
+
     test("a panel the person stopped stays stopped after the restart", async () => {
         const historyRoot = history();
         const first = createManagedProcesses(fakeRunner().runner, { historyRoot });

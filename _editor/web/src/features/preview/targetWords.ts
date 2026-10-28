@@ -6,14 +6,18 @@ import type { PreviewTarget } from "../../models/preview/previewModel";
 // it has no app to offer.
 
 // The app's state, as its row says it.
-export const stateOf = (target: PreviewTarget): string =>
-    target.kind === `repo` || target.kind === `app`
-        ? target.healthy
-            ? t(`preview.previewPanel.stateRunning`)
-            : target.running
-              ? t(`preview.previewPanel.stateStarting`)
-              : t(`preview.previewPanel.stateStopped`)
-        : t(`preview.previewPanel.stateLive`);
+export const stateOf = (target: PreviewTarget): string => {
+    if (target.kind !== `repo` && target.kind !== `app`) {
+        return t(`preview.previewPanel.stateLive`);
+    }
+    if (target.healthy) {
+        return t(`preview.previewPanel.stateRunning`);
+    }
+    if (target.running) {
+        return t(`preview.previewPanel.stateStarting`);
+    }
+    return target.startable ? t(`preview.previewPanel.stateStopped`) : t(`preview.previewPanel.stateNothingToStart`);
+};
 // The colour an app's glyph wears: answering, on its way, or down. Anything without a process (a port, the outbox page)
 // is answering by being listed.
 export const tintOf = (target: PreviewTarget | undefined): string =>

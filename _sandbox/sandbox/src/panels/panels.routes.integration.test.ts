@@ -23,9 +23,14 @@ const panelsClient = (workspace: WorkspacePaths, overrides: Partial<PanelsRoutes
             processes: fakeProcesses(),
             // Nothing listening unless a test overrides it: the scan is a seam, not the real machine's sockets.
             scanPorts: async () => [],
+            // Nor any window open: the desktop is a seam too.
+            windows: async () => [],
             ...overrides,
         }),
     );
+
+// What Start runs for tempWorkspace's `panel: true` repo, an operator/ with a `dev` script.
+const devStart = { from: "operator", command: "pnpm dev" } as const;
 
 // Listens on an OS-assigned port and returns it; the probe behind `servers` dials it for real.
 const serve = async (server: http.Server): Promise<number> => {
@@ -45,7 +50,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
     const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, tests: false, userStories: false, docs: false };
     expect(await client.list()).toEqual({
         panels: [
-            { repo: "app", hasPanel: true, installed: false, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
+            { repo: "app", hasPanel: true, start: devStart, installed: false, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
             { repo: "desired-state", hasPanel: false, installed: true, running: false, healthy: false, servers: [], role: "desired-state", ...facts },
         ],
     });
@@ -128,6 +133,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback: no
             {
                 repo: "app",
                 hasPanel: true,
+                start: devStart,
                 installed: false,
                 running: false,
                 healthy: false,
@@ -189,10 +195,45 @@ test("panels.start runs the repo's operator dir, rejects unknown repos + repos w
 
     expect(await client.start({ repo: "app" })).toEqual({ ok: true });
     expect(processes.started).toEqual([{ repo: "app", cwd: join(workspace.root, "app", "operator") }]);
+    // What it typed is the run plan's, and any window it opens goes to the sandbox desktop.
+    expect(processes.specs[0]).toMatchObject({ command: "test -d node_modules || pnpm install && pnpm dev", desktop: true, durable: true });
     // No operator/ means BAD_REQUEST; an unknown repo is NOT_FOUND.
     expect(await errorCode(client.start({ repo: "desired-state" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.start({ repo: "ghost" }))).toBe("NOT_FOUND");
     expect(await client.stop({ repo: "app" })).toEqual({ ok: true });
     expect(processes.stopped).toEqual(["app"]);
     expect(await errorCode(client.stop({ repo: "ghost" }))).toBe("NOT_FOUND");
+});
+
+test("panels.start runs what the repo's own files say: a Cargo binary is `cargo run` at the repo root", async () => {
+    const workspace = tempWorkspace([{ name: "game" }]);
+    const dir = join(workspace.root, "game");
+    writeFileSync(join(dir, "Cargo.toml"), `[package]\nname = "game"\nversion = "0.1.0"\n`);
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "main.rs"), "fn main() {}");
+    const processes = fakeProcesses();
+    const client = panelsClient(workspace, { processes });
+
+    const [listed] = (await client.list()).panels;
+    // A Cargo build has no node_modules to wait for; its first compile is what a missing target/ says.
+    expect(listed).toMatchObject({ hasPanel: true, start: { from: "cargo", command: "cargo run" }, installed: false });
+    expect(await client.start({ repo: "game" })).toEqual({ ok: true });
+    expect(processes.specs[0]).toMatchObject({ command: "cargo run", cwd: dir, desktop: true });
+});
+
+test("panels.list counts a window a repo's program opened as the repo answering, and stops narrating its start", async () => {
+    const workspace = tempWorkspace([{ name: "game" }, { name: "notes" }]);
+    const client = panelsClient(workspace, {
+        processes: { ...fakeProcesses({ game: 1 }), launchOf: () => "starting" },
+        windows: async () => [
+            { id: "0x00400004", title: "Bevy App", cwd: join(workspace.root, "game") },
+            { id: "0x00600004", title: "xterm", cwd: "/root" },
+        ],
+    });
+    const panels = new Map((await client.list()).panels.map((panel) => [panel.repo, panel]));
+    expect(panels.get("game")).toMatchObject({ running: true, healthy: true, windows: [{ id: "0x00400004", title: "Bevy App" }] });
+    expect(panels.get("game")?.launch).toBeUndefined();
+    // Nobody's window is listed under a repo that opened none.
+    expect(panels.get("notes")?.windows).toBeUndefined();
+    expect(panels.get("notes")?.healthy).toBe(false);
 });

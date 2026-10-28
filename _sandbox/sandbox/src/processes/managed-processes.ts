@@ -26,6 +26,9 @@ export interface ProcessSpec {
     // What the pane's shell and everything it runs are to the sandbox (workload-class.ts); absent is
     // a panel.
     readonly workload?: Extract<WorkloadClass, "panel" | "install" | "toolchain">;
+    // Its programs may open windows: the run is handed the sandbox desktop's DISPLAY (ManagedProcessesOptions.desktopEnv)
+    // when it starts, and again when a saved panel is restored, since the display can differ after a restart.
+    readonly desktop?: true;
 }
 
 // launching: session exists, shell hasn't run the command yet
@@ -33,6 +36,10 @@ export interface ProcessSpec {
 // starting: command is running, but nothing has bound a port yet
 // exited: command returned to a prompt without the session ending, e.g. crashed at start
 export type PanelLaunch = "launching" | "installing" | "starting" | "exited";
+
+// Whether a run in `cwd` has its dependencies: a directory with no package.json has nothing for pnpm to install (a Cargo
+// build fetches its own as it compiles), so only a Node directory without node_modules reads as an install to wait out.
+const dependenciesThere = (cwd: string): boolean => !existsSync(join(cwd, "package.json")) || existsSync(join(cwd, "node_modules"));
 
 // The file the package manager writes last (pnpm/npm lockfile); node_modules itself appears within the first second, so
 // it says nothing about completion.
@@ -57,7 +64,25 @@ export interface ManagedProcessesOptions {
     // Injectable in tests; production uses the image zsh's /run/intentic/shell watcher.
     readonly onPromptWatch?: (onSignal: () => void) => () => void;
     readonly logger?: Pick<Logger, "warn">;
+    // The env that puts a `desktop` run's windows on the sandbox desktop (desktop/program-windows.ts), injected because
+    // processes/ sits below desktop/. Absent, a `desktop` run starts with the env it was given.
+    readonly desktopEnv?: (() => Promise<Record<string, string>>) | undefined;
 }
+
+// A `desktop` run's spec with the desktop's DISPLAY in its env; any other spec as it is. A desktop that will not start is
+// said in the log and not in the way: the run starts without it, and a program that wanted a window says so in its own
+// terminal.
+const withDesktop = async (key: string, spec: ProcessSpec, options: ManagedProcessesOptions): Promise<ProcessSpec> => {
+    if (spec.desktop !== true || options.desktopEnv === undefined) {
+        return spec;
+    }
+    try {
+        return { ...spec, env: { ...spec.env, ...(await options.desktopEnv()) } };
+    } catch (error) {
+        options.logger?.warn({ err: error, key }, "managed processes: the sandbox desktop could not be started for a run, which starts without it");
+        return spec;
+    }
+};
 
 /* THE ENVIRONMENT A MANAGED COMMAND IS TYPED INTO, as one pure function so the switches below can be asserted. */
 export const launchEnv = (spec: ProcessSpec & { port: number }, path: string): Record<string, string> => ({
@@ -315,11 +340,12 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             // A re-run of the same key is not the old run any more; its completion stops being a fact about now.
             finishedRuns.delete(key);
             const port = await freePort();
-            // A concurrent start of the same key won the race during the port await; leave it be.
+            const launched = await withDesktop(key, spec, options);
+            // A concurrent start of the same key won the race during the awaits; leave it be.
             if (current.has(key)) {
                 return;
             }
-            await runner.launch(panelSession(key), { ...spec, port });
+            await runner.launch(panelSession(key), { ...launched, port });
             current.set(key, {
                 port,
                 oneShot: spec.oneShot,
@@ -327,7 +353,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
                 sawJob: false,
                 promptStreak: 0,
                 cwd: spec.cwd,
-                installed: existsSync(join(spec.cwd, "node_modules")),
+                installed: dependenciesThere(spec.cwd),
                 lastCommand: undefined,
             });
             // The session exists but isn't serving yet; the port sampler's later frame is what turns the row healthy.
