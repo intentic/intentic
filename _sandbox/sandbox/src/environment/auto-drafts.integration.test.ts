@@ -77,6 +77,22 @@ test("a pinned spec in the custom section names its package", async () => {
     expect(named("RUN npm install -g @opencode/cli-linux-x64@2.1.4", "@opencode/cli")).toBe(false);
 });
 
+test.each([String.raw`tool\name`, "tool[", "tool(foo)", "tool|other", "tool.*", "tool+name", "tool$name", "tool^name", "tool{name}", "tool?name"])(
+    "tool names containing regex syntax match literally: %s",
+    (tool) => {
+        expect(named(`RUN install ${tool}`, tool)).toBe(true);
+        expect(named(`RUN install ${tool}@latest`, tool)).toBe(true);
+        expect(named(`RUN install prefix-${tool}-suffix`, tool)).toBe(false);
+        expect(named("RUN install unrelated", tool)).toBe(false);
+    },
+);
+
+test("a tool name cannot impersonate another installed package", () => {
+    expect(named("RUN install toolname", String.raw`tool\name`)).toBe(false);
+    expect(named("RUN install other", "tool|other")).toBe(false);
+    expect(named("RUN install toolZZ", "tool.*")).toBe(false);
+});
+
 test("an agent's own draft under the same name is left exactly as written", async () => {
     const deps = workspace();
     const path = draftsPath(deps.workspace.root, "p7zip-full");

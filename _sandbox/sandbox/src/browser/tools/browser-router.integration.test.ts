@@ -1,8 +1,11 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
+import { z } from "zod";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RoutedScreenshot } from "./browser-router.js";
+import { callWebmcp, WEBMCP_CALL_TOOL, webmcpTargetOf } from "./webmcp-call.js";
 
 // Exercise routing against canary child processes: list without prepare, inject/strip account, prepare once and reject ungranted owners cleanly.
 // Cover sole-owner omission, prepare errors, backend teardown, credential redaction with debug facts intact and live WebMCP tool dispatch.
@@ -494,6 +497,46 @@ test("a WebMCP tool the page never registered says to snapshot, and a malformed 
     expect(missing.isError).toBe(true);
     expect(missing.content[0]?.text).toContain('no WebMCP tool "unregistered"');
     expect(missing.content[0]?.text).toContain("snapshot");
+});
+
+test.each([
+    '"); globalThis.injected = true; //',
+    "'); globalThis.injected = true; //",
+    String.raw`\"); globalThis.injected = true; //`,
+    "line\nreturn\r\t\u2028\u2029",
+    "</script><script>globalThis.injected = true</script>",
+    "${globalThis.injected = true}",
+])("WebMCP evaluates hostile names and nested params only as data: %j", async (payload) => {
+    const input = { [payload]: payload, nested: { values: [payload, "\\", '"'] } };
+    const target = webmcpTargetOf([], { name: WEBMCP_CALL_TOOL }, { name: payload, params: input });
+    if (target === undefined || "refusal" in target) {
+        throw new Error("the WebMCP call must accept JSON input");
+    }
+    const received: { name: string; input: unknown }[] = [];
+    const context = {
+        injected: false,
+        location: { href: "https://example.test/" },
+        navigator: {},
+        window: {},
+        document: {
+            modelContext: {
+                getTools: () => [{ name: payload }],
+                invokeTool: (name: string, receivedInput: unknown) => {
+                    received.push({ name, input: receivedInput });
+                    return { ok: true };
+                },
+            },
+        },
+    };
+    const send = jest.fn(async (params: NonNullable<RpcMessage["params"]>): Promise<RpcMessage> => {
+        const call = z.object({ name: z.literal("browser_evaluate"), arguments: z.object({ function: z.string() }) }).parse(params);
+        const answer: unknown = await runInNewContext(`(${call.arguments.function})()`, context, { timeout: 1_000 });
+        return { jsonrpc: "2.0", id: null, result: { content: [{ type: "text", text: `### Result\n${JSON.stringify(answer)}` }] } };
+    });
+    await callWebmcp(target, {}, send, 0);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(received).toEqual([{ name: payload, input }]);
+    expect(context.injected).toBe(false);
 });
 
 // Upstream sleeps all of `time` before it starts waiting for the text; the router sends the text wait alone, again

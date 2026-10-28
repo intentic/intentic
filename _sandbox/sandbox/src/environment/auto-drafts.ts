@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { escapeRegExp } from "@intentic/base/escape";
 import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract/schemas/environment";
 import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
 import { installLive } from "./drift.js";
@@ -88,7 +89,7 @@ export const draftContent = (entry: RuntimeInstall, step: string): string => {
 // Same word-boundary test missingBinary uses: a tool name inside a longer word does not count as a match, but a pinned
 // spec (`@scope/pkg@1.2`, `pkg@latest`) names its package. Exported so readEnvironment can apply it too.
 export const named = (content: string, tool: string): boolean =>
-    new RegExp(`(?:^|[^\\w.@+-])${tool.replace(/[.+]/g, "\\$&")}(?:@\\w|[^\\w.@+-]|$)`).test(content);
+    new RegExp(`(?:^|[^\\w.@+-])${escapeRegExp(tool)}(?:@\\w|[^\\w.@+-]|$)`).test(content);
 
 const draftsDirPath = (root: string): string => statePath(root, ".intentic/config/environment.d/");
 

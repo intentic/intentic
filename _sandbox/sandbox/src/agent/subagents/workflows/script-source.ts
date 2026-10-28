@@ -25,7 +25,7 @@ export interface ScriptParts {
     readonly body: string;
 }
 
-const OPENING = /^\s*(?:\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*export\s+const\s+meta\s*=\s*/u;
+const OPENING = /^export\s+const\s+meta\s*=\s*/u;
 
 // Where the string opened by the quote at `at` closes, a backslash escaping whatever follows it; undefined if never.
 const stringEnd = (text: string, at: number): number | undefined => {
@@ -58,6 +58,27 @@ const skipped = (text: string, at: number): number | undefined => {
     return at;
 };
 
+// Consume leading comments once, through their first closing delimiter. A repeated lazy comment regex can
+// reconsider those delimiters exponentially when a malformed script has no `export const meta` after them.
+const metaStart = (source: string): number | undefined => {
+    let at = 0;
+    while (at < source.length) {
+        if (/\s/u.test(source.charAt(at))) {
+            at += 1;
+        } else if (source.startsWith("//", at) || source.startsWith("/*", at)) {
+            const end = skipped(source, at);
+            if (end === undefined) {
+                return undefined;
+            }
+            at = end + 1;
+        } else {
+            const opening = OPENING.exec(source.slice(at));
+            return opening === null ? undefined : at + opening[0].length;
+        }
+    }
+    return undefined;
+};
+
 // Where the literal opened at `start` closes: braces counted outside strings, template literals and comments.
 const literalEnd = (text: string, start: number): number | undefined => {
     let depth = 0;
@@ -83,11 +104,10 @@ export const splitScript = (source: string): ScriptParts | { readonly fault: str
     if (source.length > MAX_SCRIPT_CHARS) {
         return { fault: `The script is ${source.length} characters; keep it under ${MAX_SCRIPT_CHARS}.` };
     }
-    const opening = OPENING.exec(source);
-    if (opening === null || source[opening[0].length] !== "{") {
+    const start = metaStart(source);
+    if (start === undefined || source[start] !== "{") {
         return { fault: "A workflow script opens with `export const meta = { name: \"…\", description: \"…\" }`, a plain object literal." };
     }
-    const start = opening[0].length;
     const end = literalEnd(source, start);
     if (end === undefined) {
         return { fault: "The `meta` literal never closes: check its braces and quotes." };

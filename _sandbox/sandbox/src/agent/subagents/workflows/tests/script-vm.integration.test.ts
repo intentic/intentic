@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import type { ResultValue } from "../../child-result.js";
 import { readLiteral, runScript, type ScriptHost } from "../script-vm.js";
 import { splitScript } from "../script-source.js";
@@ -39,6 +40,36 @@ describe("a script's own source", () => {
             fault: 'A workflow script opens with `export const meta = { name: "…", description: "…" }`, a plain object literal.',
         });
         expect(splitScript('export const meta = { name: "x" };\nimport fs from "node:fs";')).toMatchObject({ fault: expect.stringContaining("no imports or exports") });
+    });
+
+    it("skips adjacent comments and whitespace before the metadata", () => {
+        expect(splitScript('\uFEFF \r\n/* first */ /* second */\n// last\r\nexport const meta = { name: "review" }; return 1;')).toEqual({
+            metaLiteral: '{ name: "review" }',
+            body: " return 1;",
+        });
+    });
+
+    it.each(["/* never closed", "// no newline", '/* closed */ invalid /* another */ export const meta = { name: "x" };'])(
+        "refuses malformed leading comments: %s",
+        (source) => {
+            expect(splitScript(source)).toHaveProperty("fault");
+        },
+    );
+
+    it("bounds parsing of adversarial comments and long whitespace", () => {
+        // A child deadline makes a backtracking regression fail without freezing this test worker.
+        const module = new URL("../script-source.ts", import.meta.url).href;
+        const result = execFileSync(
+            process.execPath,
+            [
+                "--eval",
+                `import { splitScript } from ${JSON.stringify(module)};
+                 const sources = ["/*" + "*//*".repeat(40_000), " ".repeat(190_000), "/*" + "*".repeat(190_000)];
+                 console.log(JSON.stringify(sources.map(source => "fault" in splitScript(source))));`,
+            ],
+            { encoding: "utf8", timeout: 5_000 },
+        );
+        expect(JSON.parse(result)).toEqual([true, true, true]);
     });
 
     it("reads its meta as a value, and refuses one that calls anything", async () => {
