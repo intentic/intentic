@@ -3719,14 +3719,6 @@
             "stillDone": "toujours {done} sur {total} faites",
             "stillOpen": "{content} encore ouverts"
         },
-        "chatToolCallsToggle": {
-            "hidden": "{count} appel d'outil masqué | {count} appels d'outils masqués",
-            "hideToolCalls": "Masquer les appels d'outils",
-            "hideTools": "Masquer les outils",
-            "noneYet": "Aucun appel d'outil dans ce chat pour l'instant",
-            "showTools": "Afficher les outils",
-            "showing": "{count} appel d'outil affiché | {count} appels d'outils affichés"
-        },
         "chatToolCard": {
             "background": "arrière-plan",
             "interrupted": "interrompu",
@@ -3753,7 +3745,10 @@
             "retry": "Réessayer"
         },
         "chatTurnAsides": {
+            "alwaysShowSteps": "Toujours afficher les étapes",
             "failed": "Échecs",
+            "foldSteps": "Replier les étapes",
+            "inEveryChat": "Dans chaque chat",
             "kindCommands": "Commandes",
             "kindEdits": "Modifications",
             "kindOther": "Autres",

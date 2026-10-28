@@ -46,6 +46,18 @@ const toggle = (): void => {
         shown.value = !shown.value;
     });
 };
+// How every chat's runs stand, switched from a run itself rather than from a readout under the composer: an opened run
+// offers to stay open everywhere, and a run shown inline folds them all back. The press changes the run it was made on,
+// so it is held in place like the run's own toggle, and says what it did by doing it there.
+const inline = useTemplateRef<HTMLElement>(`inline`);
+const setShowToolCalls = (value: boolean): void => {
+    hold(spine.value ?? inline.value, () => {
+        showToolCalls.value = value;
+        // Either way the run is now what the switch says: folding all of them leaves none of them open.
+        shown.value = false;
+    });
+};
+const foldTip = computed((): TooltipValue => ({ title: t(`chat.chatTurnAsides.foldSteps`), note: t(`chat.chatTurnAsides.inEveryChat`) }));
 const onFound = (): void => {
     found.value = true;
     shown.value = true;
@@ -154,11 +166,31 @@ const tip = computed((): TooltipValue => {
         <Transition name="chat-mark-reveal">
             <div v-if="shown && run" class="chat-spine-material flex flex-col gap-1">
                 <ChatToolRows :tools="tools ?? []" :live="live" />
+                <!-- Where the reader just asked to see a run: the one press that keeps every run open, in every chat. -->
+                <button
+                    v-if="!maker"
+                    type="button"
+                    class="touch-target self-start text-2xs text-subtle transition-colors hover:text-content"
+                    @click="setShowToolCalls(true)"
+                >
+                    {{ t(`chat.chatTurnAsides.alwaysShowSteps`) }}
+                </button>
             </div>
         </Transition>
     </div>
-    <!-- Shown inline, the run is what it always was: one row per call. -->
-    <div v-if="showToolCalls && tools?.length" class="flex w-full flex-col gap-1">
+    <!-- Shown inline, the run is what it always was: one row per call, with the open run's mark in the gutter, which folds
+         every run again. -->
+    <div v-if="showToolCalls && tools?.length" ref="inline" class="chat-spine flex w-full flex-col gap-1">
+        <div v-if="!maker" class="chat-spine-bar">
+            <ChatSpineNode
+                icon="chevron-up"
+                :open="true"
+                :label="t(`chat.chatTurnAsides.foldSteps`)"
+                :tip="foldTip"
+                :live="live"
+                @toggle="setShowToolCalls(false)"
+            />
+        </div>
         <ChatToolRows :tools="tools" :live="live" />
     </div>
 </template>

@@ -3719,14 +3719,6 @@
             "stillDone": "nadal ukończono {done} z {total}",
             "stillOpen": "{content} wciąż otwarte"
         },
-        "chatToolCallsToggle": {
-            "hidden": "Ukryto {count} wywołanie narzędzia | Ukryto {count} wywołania narzędzi | Ukryto {count} wywołań narzędzi",
-            "hideToolCalls": "Ukryj wywołania narzędzi",
-            "hideTools": "Ukryj narzędzia",
-            "noneYet": "W tym czacie nie ma jeszcze wywołań narzędzi",
-            "showTools": "Pokaż narzędzia",
-            "showing": "Pokazano {count} wywołanie narzędzia | Pokazano {count} wywołania narzędzi | Pokazano {count} wywołań narzędzi"
-        },
         "chatToolCard": {
             "background": "w tle",
             "interrupted": "przerwane",
@@ -3753,7 +3745,10 @@
             "retry": "Spróbuj ponownie"
         },
         "chatTurnAsides": {
+            "alwaysShowSteps": "Zawsze pokazuj kroki",
             "failed": "Nieudane",
+            "foldSteps": "Zwiń kroki",
+            "inEveryChat": "W każdym czacie",
             "kindCommands": "Polecenia",
             "kindEdits": "Zmiany",
             "kindOther": "Inne",

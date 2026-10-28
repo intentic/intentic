@@ -43,7 +43,7 @@ const { fileNesting } = useFileNesting();
 // Review-list reading: groupByModule also has a toggle on the Changes panel; largestFirst is set only here.
 const { groupByModule } = useChangeGrouping();
 const { largestFirst } = useChangeWeight();
-// How much of an agent's working shows in transcripts; also flipped from the chat's own readout row.
+// How much of an agent's working shows in transcripts; also flipped from a run in the transcript itself.
 const { showToolCalls } = useToolCalls();
 // showIgnored/hideTests/hideTechnical mirror the toolbar's filter; diffOpen has no other home, deciding where a diff
 // opens.
@@ -361,7 +361,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             </Row>
         </RowGroup>
 
-        <!-- How much of an agent's working-out shows in transcripts; also flipped from the chat's own readout row. -->
+        <!-- How much of an agent's working-out shows in transcripts; also flipped from a run in the transcript itself. -->
         <RowGroup v-if="!maker" data-setting="tool-calls" :label="t(`shared.chat`)">
             <Row as="label" icon="eye" :title="t(`chat.words.showToolCalls`)" :description="t(`settings.appearance.chat.showToolCallsHint`)">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>

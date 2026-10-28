@@ -16,7 +16,6 @@ import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { readsAsContinuing } from "../../../models/conversations/run/turnRequest";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useAudience } from "../../../app/useAudience";
-import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
 import HomeDoor from "./pane/HomeDoor.vue";
 import HomeMemory from "./pane/HomeMemory.vue";
@@ -194,10 +193,8 @@ const usageChip = computed(() => {
         :class="{ 'pb-2': !mobile || block !== undefined || homeDoor }"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
-        <!-- Whether this transcript shows its tool calls; left of the hint so it stays reachable on narrow panes. Not on a
-             phone: there it was the one thing holding this strip a full touch-row tall under the composer, and the same
-             switch lives in Settings → Appearance. -->
-        <ChatToolCallsToggle v-if="!mobile" />
+        <!-- No tool-calls switch here: on a narrow pane it was the one thing holding this strip a full row tall under the
+             composer. It lives on the runs it governs (transcript/asides/ChatTurnAsides.vue) and in Settings → Appearance. -->
         <!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
         <span v-if="block !== undefined" class="flex min-w-0 flex-1 items-center gap-1 text-warning">
             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />

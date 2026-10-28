@@ -3719,14 +3719,6 @@
             "stillDone": "still {done} of {total} done",
             "stillOpen": "{content} still open"
         },
-        "chatToolCallsToggle": {
-            "hidden": "{count} tool call hidden | {count} tool calls hidden",
-            "hideToolCalls": "Hide tool calls",
-            "hideTools": "Hide tools",
-            "noneYet": "No tool calls in this chat yet",
-            "showTools": "Show tools",
-            "showing": "Showing {count} tool call | Showing {count} tool calls"
-        },
         "chatToolCard": {
             "background": "background",
             "interrupted": "interrupted",
@@ -3753,7 +3745,10 @@
             "retry": "Try again"
         },
         "chatTurnAsides": {
+            "alwaysShowSteps": "Always show steps",
             "failed": "Failed",
+            "foldSteps": "Fold steps",
+            "inEveryChat": "In every chat",
             "kindCommands": "Commands",
             "kindEdits": "Edits",
             "kindOther": "Other",

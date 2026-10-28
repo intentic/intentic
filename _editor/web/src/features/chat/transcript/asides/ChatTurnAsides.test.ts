@@ -157,10 +157,35 @@ describe(`ChatTurnAsides run node`, () => {
         showToolCalls.value = true;
         const element = mount({ tools: [read(`a.ts`), edit(`c.ts`)] });
 
-        expect(controls(element)).toHaveLength(0);
+        // The one control left is the open run's mark, which folds every run again.
+        expect(nodes(element).map((node) => node.getAttribute(`aria-label`))).toEqual([`Fold steps`]);
         expect(wash(element)).toBeUndefined();
         expect(element.textContent).toContain(`a.ts`);
         expect(element.textContent).toContain(`c.ts`);
+    });
+
+    // The switch lives on the runs it governs, not under the composer: where the reader just opened a run, and on a run
+    // already shown inline.
+    it(`offers to keep every run open from an opened run, and folds them all from an inline one`, async () => {
+        const element = mount({ tools: [read(`a.ts`)] });
+        const always = (): HTMLButtonElement | undefined =>
+            [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.trim() === `Always show steps`);
+        expect(always()).toBeUndefined();
+
+        wash(element)?.click();
+        await settle();
+        always()?.click();
+        await settle();
+        expect(showToolCalls.value).toBe(true);
+        expect(element.textContent).toContain(`a.ts`);
+
+        nodes(element)
+            .find((node) => node.getAttribute(`aria-label`) === `Fold steps`)
+            ?.click();
+        await settle();
+        expect(showToolCalls.value).toBe(false);
+        expect(wash(element)?.getAttribute(`aria-expanded`)).toBe(`false`);
+        expect(element.textContent).not.toContain(`a.ts`);
     });
 });
 
