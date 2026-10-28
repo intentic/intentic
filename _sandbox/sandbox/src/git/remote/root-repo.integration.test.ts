@@ -234,6 +234,29 @@ test("a conversation's root worktree stages a nested repo but never commits one"
     expect(await readFile(join(worktree, "intent", "app.ts"), "utf8")).toBe("v1\n");
 });
 
+// What brought a removed connection back: its skill, carried into a running turn's worktree, was unlisted from the shared
+// exclude when the owner removed the connection, and the capture committed the carried copy as the agent's work.
+test("a generated skill the main tree dropped mid-turn stays out of the worktree's capture; the owner's own skill commits", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const worktree = await agentWorktree(work, "agent-one");
+    const generated = stampSkill("---\nname: komodo-192\ndescription: Komodo.\n---\nKomodo.\n", "cli");
+    for (const [name, text] of [["komodo-192", generated], ["mine", "---\nname: mine\ndescription: Mine.\n---\nMine.\n"]] as const) {
+        await mkdir(join(worktree, ".agents", "skills", name), { recursive: true });
+        await writeFile(join(worktree, ".agents", "skills", name, "SKILL.md"), text);
+        await mkdir(join(worktree, ".claude", "skills"), { recursive: true });
+        await symlink(`../../.agents/skills/${name}`, join(worktree, ".claude", "skills", name));
+    }
+    await writeFile(join(worktree, "notes.md"), "agent work\n");
+
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one", work)).toBe(true);
+
+    expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\t.agents/skills/mine/SKILL.md\nA\t.claude/skills/mine\nA\tnotes.md");
+    expect(await sh(worktree, "status", "--porcelain")).toBe("?? .agents/skills/komodo-192/\n?? .claude/skills/komodo-192");
+    expect(await readFile(join(worktree, ".agents", "skills", "komodo-192", "SKILL.md"), "utf8")).toBe(generated);
+});
+
 test("an unborn nested repo costs its own gitlink and nothing else: the rest of the remainder still commits", async () => {
     const { work, historyRoot } = await tempBase();
     await ensureRootRepo(workspacePaths(work), historyRoot);

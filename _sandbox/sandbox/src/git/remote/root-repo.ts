@@ -159,8 +159,25 @@ const skippedPaths = (error: unknown): void => {
     }
 };
 
+// Generated skills the capture just staged that the checkout's HEAD does not track. An agent's worktree holds carried
+// copies (conversations/worktrees/generated-skills.ts) that only the shared exclude keeps out of git, and that exclude
+// names the main tree's skills as they are NOW: a connection removed while a turn ran unlisted its skill, the
+// worktree's copy was staged as new work, and the land brought the removed skill back. A copy HEAD already tracks (a
+// branch cut before the skills left git) is the branch's and stays as it is.
+const stagedGeneratedSkills = async (dir: string, git: GitRunner): Promise<string[]> => {
+    const staged = await trackedGeneratedSkills(dir, git);
+    if (staged.length === 0) {
+        return staged;
+    }
+    const head = await git(dir, ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", ".agents/skills", ".claude/skills"])
+        .then(({ stdout }) => new Set(stdout.split("\0")))
+        // allow(silent-catch): an unborn HEAD tracks nothing, so every staged copy is new.
+        .catch(() => new Set<string>());
+    return staged.filter((path) => !head.has(path));
+};
+
 // Every capture of a checkout's remainder, the main tree's included: all but its scratch (scratch.ts), the root's stray
-// gitlinks dropped between staging and commit, no commit hook consulted. `workspaceRoot` is the main tree's root.
+// gitlinks and newly staged generated skills dropped between staging and commit, no commit hook consulted. `workspaceRoot` is the main tree's root.
 // `leave` names paths that stay out of the commit as they are in the tree: a land's, whose own commit is still to come
 // (version-landed.ts), so this one cannot take them under another subject.
 export const commitWorktreeRemainder = async (
@@ -174,7 +191,7 @@ export const commitWorktreeRemainder = async (
     const scratch = await scratchOf(dir, await scratchScopeOf(repo, workspaceRoot), git);
     await stageAll(dir, scratch, git).catch(skippedPaths);
     // Back to HEAD in the index only: the tree keeps them, uncommitted, for the commit that owes them.
-    await unstagePaths(dir, leave, git);
+    await unstagePaths(dir, repo === "root" ? [...leave, ...(await stagedGeneratedSkills(dir, git))] : leave, git);
     if (repo === "root") {
         const gitlinks = await strayGitlinks(dir, git);
         if (gitlinks.length > 0) {
