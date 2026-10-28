@@ -86,6 +86,17 @@ describe(`a time of day, typed`, () => {
         }
     });
 
+    it(`accepts a time at the length limit and rejects the next character before trimming`, () => {
+        expect(parseClock(`9${` `.repeat(31)}`)).toBe(540);
+        expect(parseClock(`9${` `.repeat(32)}`)).toBeUndefined();
+    });
+
+    it(`rejects long whitespace runs with or without a trailing time`, () => {
+        for (const text of [`9${`\t`.repeat(8192)}!`, `9${` `.repeat(8192)}30`, `${` `.repeat(8192)}9`]) {
+            expect(parseClock(text)).toBeUndefined();
+        }
+    });
+
     it(`writes it back on the 24-hour clock, and steps it by quarter hours round the clock`, () => {
         expect(clockText(9 * 60 + 5)).toBe(`09:05`);
         expect(CLOCK_CHIPS.map(clockText)).toEqual([`09:00`, `12:00`, `15:00`, `18:00`]);

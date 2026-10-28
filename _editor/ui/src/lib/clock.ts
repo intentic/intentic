@@ -70,6 +70,10 @@ const CLOCK = /^(\d{1,2})(?:\s*[:.h]?\s*(\d{2}))?\s*h?\s*(am?|pm?)?$/;
 
 /** The minutes past midnight a typed time names, read forgivingly; undefined for anything that is not one. */
 export const parseClock = (text: string): number | undefined => {
+    // Bound the regex's overlapping whitespace matches, including calls that bypass a field's maxlength.
+    if (text.length > 32) {
+        return undefined;
+    }
     const match = CLOCK.exec(text.trim().toLowerCase());
     if (match === null) {
         return undefined;

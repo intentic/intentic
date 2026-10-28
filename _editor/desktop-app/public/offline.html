@@ -652,8 +652,19 @@
 
                 var query = new URLSearchParams(location.search);
                 var to = query.get("to") || "";
-                // Only ever back to a web page: this page is the app's own origin, and a script URL here would run in it.
-                var target = /^https?:\/\//i.test(to) ? to : "";
+                // The native window supplies the configured editor origin; nothing in this address can choose it.
+                var target = "";
+                try {
+                    var destination = new URL(to);
+                    if (
+                        (destination.protocol === "https:" || destination.protocol === "http:") &&
+                        destination.origin === window.__INTENTIC_EDITOR_ORIGIN__ &&
+                        !destination.username &&
+                        !destination.password
+                    ) {
+                        target = destination.href;
+                    }
+                } catch (e) {}
                 var status = query.get("status") || "";
                 // A dead platform's answer (`http-530`) is Intentic reached and failing; WebView2's own name for a network
                 // failure stays as it is, for whoever is asked to read it out.

@@ -13,6 +13,13 @@ pub const PAGE: &str = "http://tauri.localhost/offline.html";
 #[cfg(not(windows))]
 pub const PAGE: &str = "tauri://localhost/offline.html";
 
+/// The recovery destination's trusted origin, supplied by the native window rather than its query string.
+pub fn init_script(app_origin: &url::Url) -> String {
+    let origin = serde_json::to_string(&app_origin.origin().ascii_serialization())
+        .expect("an origin serializes as a JSON string");
+    format!("Object.defineProperty(window, '__INTENTIC_EDITOR_ORIGIN__', {{ value: {origin} }});")
+}
+
 /// Whether `url` is the offline page: the one local page a page window may navigate to besides the sandbox face.
 pub fn is_offline_page(url: &url::Url) -> bool {
     let Ok(page) = url::Url::parse(PAGE) else {
@@ -282,6 +289,22 @@ pub fn watch(_window: &tauri::Webview, _app_origin: &url::Url) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_is_told_the_configured_origin_without_its_path() {
+        for (address, origin) in [
+            (
+                "https://app.intentic.dev/workspace?x=1",
+                "https://app.intentic.dev",
+            ),
+            ("http://localhost:47145/workspace", "http://localhost:47145"),
+        ] {
+            assert_eq!(
+                init_script(&address.parse().unwrap()),
+                format!("Object.defineProperty(window, '__INTENTIC_EDITOR_ORIGIN__', {{ value: \"{origin}\" }});")
+            );
+        }
+    }
 
     #[test]
     fn only_the_offline_page_is_recognised_as_it() {

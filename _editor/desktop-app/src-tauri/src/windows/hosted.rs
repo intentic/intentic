@@ -92,6 +92,7 @@ macro_rules! hosted_page {
             // The look the reader was last seen in, on whichever of the app's pages: this origin's storage is not
             // theirs, and a first sandbox opened in a profile's daylight under a reader the app had just shown sanctum.
             .initialization_script(look_init_script(state.ui_look()))
+            .initialization_script(crate::offline::init_script(&origin))
             .on_navigation({
                 let app = app.clone();
                 let label = label.to_string();
