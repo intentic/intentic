@@ -222,8 +222,8 @@ const restoreHint = computed((): TooltipValue => (takesFamily.value ? { title: t
 const enterKey = formatChord(`enter`, isApplePlatform());
 // Drill-in label, undefined for a draft (nothing to review); desktop only, since a mobile tap navigates there.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
-// A turn a spent allowance stranded, sent again from the card: offered only where that is still the reader's press to
-// make. Not once something carries it on by itself (`next`: the card has left Attention for that reason, and its corner
+// A turn a spent allowance stranded, sent again from the card (or booked for the reset while the window is still shut,
+// cardRequests.ts): offered only where that is still the reader's press to make. Not once something carries it on by itself (`next`: the card has left Attention for that reason, and its corner
 // says when it goes; the chat keeps its own press for going sooner). Not in the archive, where every press waits for a
 // restore (a resend would un-archive it as a side effect), nor on another sandbox's card, whose daemon holds no such turn.
 const resendable = computed(
@@ -317,7 +317,7 @@ const words = useVocabulary();
 const { maker } = useAudience();
 const { rename } = useAgents();
 // Request land and Send again go to the daemon from the card itself (cardRequests.ts).
-const { resending, sendAgain } = useCardRequests(() => props.agent, () => displayTitle.value);
+const { resending, resend, atReset, resendTip } = useCardRequests(() => props.agent, () => displayTitle.value, () => resendable.value);
 // Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
 // `landing` is that press, whichever window made it.
 const relanding = computed(() => props.pending === `reland` || (relandOffered.value && props.agent.status === `landing`));
@@ -936,11 +936,11 @@ const grab = (event: PointerEvent): void => {
                             type="button"
                             :class="ui.textButton({ tone: `quiet` }, 'inline-flex shrink-0 font-medium')"
                             :disabled="resending || busy"
-                            v-tooltip.top="{ title: t(`agents.agentCard.sameTurn`), note: t(`agents.agentCard.notNewMessage`) }"
-                            @click.stop="sendAgain"
+                            v-tooltip.top="resendTip"
+                            @click.stop="resend"
                         >
-                            <Icon :name="resending ? `spinner` : `refresh`" :spin="resending" class="text-2xs" />{{
-                                resending ? t(`ui.status.sending`) : t(`agents.words.sendAgain`)
+                            <Icon :name="resending ? `spinner` : atReset ? `clock` : `refresh`" :spin="resending" class="text-2xs" />{{
+                                resending ? t(`ui.status.sending`) : atReset ? t(`agents.agentCard.sendAtReset`) : t(`agents.words.sendAgain`)
                             }}
                         </button>
                         <button

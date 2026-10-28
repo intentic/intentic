@@ -161,6 +161,7 @@
             "restoreAgent": "Restaurar el agente",
             "runner": "Ejecutor",
             "sameTurn": "Mismo turno",
+            "sendAtReset": "Enviar al reiniciar",
             "steps": "Pasos",
             "temporary": ", temporal",
             "waitingMaintainer": "{landAsk}: esperando a un responsable",

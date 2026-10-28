@@ -161,6 +161,7 @@
             "restoreAgent": "Agent wiederherstellen",
             "runner": "Runner",
             "sameTurn": "Gleicher Zug",
+            "sendAtReset": "Beim Reset senden",
             "steps": "Schritte",
             "temporary": ", vorübergehend",
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer",

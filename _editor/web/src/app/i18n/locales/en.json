@@ -161,6 +161,7 @@
             "restoreAgent": "Restore agent",
             "runner": "Runner",
             "sameTurn": "Same turn",
+            "sendAtReset": "Send at reset",
             "steps": "Steps",
             "temporary": ", temporary",
             "waitingMaintainer": "{landAsk}: waiting for a maintainer",

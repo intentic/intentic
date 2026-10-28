@@ -161,6 +161,7 @@
             "restoreAgent": "Przywróć agenta",
             "runner": "Runner",
             "sameTurn": "Ta sama tura",
+            "sendAtReset": "Wyślij po resecie",
             "steps": "Kroki",
             "temporary": ", tymczasowo",
             "waitingMaintainer": "{landAsk}: czeka na opiekuna",

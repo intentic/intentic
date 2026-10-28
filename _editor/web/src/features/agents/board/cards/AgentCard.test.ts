@@ -814,29 +814,45 @@ const stranded = (over: Partial<FleetAgent> = {}): FleetAgent => ({
     ...over,
 });
 const sendAgainButton = (el: HTMLElement): HTMLButtonElement | undefined => textButton(el, `Send again`);
+const atResetButton = (el: HTMLElement): HTMLButtonElement | undefined => textButton(el, `Send at reset`);
+// Either form of the card's one press, for the cases that withhold it whatever it would say.
+const resendButton = (el: HTMLElement): HTMLButtonElement | undefined => sendAgainButton(el) ?? atResetButton(el);
 // The re-run the sandbox derives for a stranded turn whose answer is to go again at its reset (AgentSummary.next).
 const resends = (agent: FleetAgent): FleetAgent => ({ ...agent, next: { kind: `rerun`, at: (agent.limitResetsAt ?? 0) * 1000 } });
 
 // It takes the drill-in's seat in the summary row: that drill-in is "Open chat", where a click on the card goes anyway.
-it(`offers Send again on a stranded turn nothing is booked for, in the drill-in's seat`, () => {
+// While the reset is still ahead a re-run now is only refused again, so the press books it for the reset instead (the
+// chat's own Send again answer) rather than offering a retry beside "back in 40m".
+it(`offers Send at reset on a stranded turn whose window is still shut, in the drill-in's seat`, () => {
     const card = mount(stranded());
-    expect(sendAgainButton(card)).toEqual(expect.any(Object));
+    expect(atResetButton(card)).toEqual(expect.any(Object));
+    expect(sendAgainButton(card)).toBeUndefined();
     expect(textButton(card, `Open chat`)).toBeUndefined();
     expect(card.textContent).toContain(`back in 40m`);
+});
+
+// Once the allowance is back, or the provider published no reset to book against, sending it now is the press.
+it(`offers Send again once the window is open or no reset is known`, () => {
+    for (const agent of [stranded({ limitResetsAt: Math.floor(Date.now() / 1000) - 60 }), stranded({ limitResetsAt: undefined })]) {
+        const card = mount(agent);
+        expect(sendAgainButton(card)).toEqual(expect.any(Object));
+        expect(atResetButton(card)).toBeUndefined();
+        unmount();
+    }
 });
 
 // witty-maple-9dtg: booked to go again at the reset, the card still offered to send it now, beside a corner saying it
 // would go by itself and a hover saying no press was needed.
 it(`offers no Send again once a resend is booked, and says when it goes`, () => {
     const card = mount(resends(stranded()));
-    expect(sendAgainButton(card)).toBeUndefined();
+    expect(resendButton(card)).toBeUndefined();
     expect(card.textContent).toContain(`resends in 40m`);
 });
 
 // A booked move goes on the resume pass's next beat, so the refused account's reset is not when anything happens.
 it(`names where a booked move is taking the turn, not the refused account's reset`, () => {
     const card = mount(stranded({ next: { kind: `rerun`, at: Date.now(), onto: `Work` } }));
-    expect(sendAgainButton(card)).toBeUndefined();
+    expect(resendButton(card)).toBeUndefined();
     expect(card.textContent).toContain(`moving to Work`);
     expect(card.textContent).not.toContain(`resends in`);
 });
@@ -846,7 +862,7 @@ it(`names where a booked move is taking the turn, not the refused account's rese
 it(`withholds Send again in the archive and on another sandbox's card`, () => {
     for (const agent of [stranded({ archivedAt: 5 }), stranded({ sandboxId: `box-2` })]) {
         const card = mount(agent);
-        expect(sendAgainButton(card)).toBeUndefined();
+        expect(resendButton(card)).toBeUndefined();
         expect(textButton(card, `Open chat`)).toEqual(expect.any(Object));
         unmount();
     }
