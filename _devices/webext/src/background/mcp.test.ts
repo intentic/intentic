@@ -13,6 +13,9 @@ interface FakeTab {
     title?: string;
 }
 
+// The sandbox every call here comes from, over its socket (link.ts).
+const SANDBOX = "https://sandbox-1.example.dev";
+
 // How many times the extension opened its own popup, across the current install.
 let popupsOpened = 0;
 
@@ -36,7 +39,7 @@ const area = (storage: Map<string, unknown>) => ({
 const fakeChrome = (options: { tabs: FakeTab[]; origins: string[] }) => {
     popupsOpened = 0;
     return {
-        storage: { local: area(new Map()), session: area(new Map<string, unknown>([["agentWindow", 1]])) },
+        storage: { local: area(new Map()), session: area(new Map<string, unknown>([["agentWindows", { [SANDBOX]: 1 }]])) },
         tabs: {
             query: async () => options.tabs,
             get: async (id: number) => options.tabs.find((tab) => tab.id === id),
@@ -70,7 +73,7 @@ const install = (options: { tabs: FakeTab[]; origins: string[]; brave?: boolean 
 };
 
 const call = async (name: string, args: Record<string, unknown> = {}): Promise<{ text: string; isError: boolean }> => {
-    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, undefined)) as {
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, SANDBOX)) as {
         result: { content: { text: string }[]; isError: boolean };
     };
     return { text: answer.result.content[0]?.text ?? "", isError: answer.result.isError };
@@ -81,7 +84,7 @@ beforeEach(() => {
 });
 
 test("the tool list is what the model is shown, and every tool describes its own arguments", async () => {
-    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/list" }, undefined)) as {
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/list" }, SANDBOX)) as {
         result: { tools: { name: string; description: string; inputSchema: { type?: string } }[] };
     };
     const names = answer.result.tools.map((tool) => tool.name);
@@ -97,7 +100,7 @@ test("the tool list is what the model is shown, and every tool describes its own
 
 // The runtime reads these hints: a read-only tool may run beside other reads, and every other one runs alone.
 test("the tool list says which tools only read and which can lose something", async () => {
-    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/list" }, undefined)) as {
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/list" }, SANDBOX)) as {
         result: { tools: { name: string; annotations: { readOnlyHint: boolean; destructiveHint: boolean } }[] };
     };
     const { tools } = answer.result;
@@ -149,12 +152,12 @@ test("asking for a site opens the popup once per new request, unless the person 
     expect(popupsOpened).toBe(1);
     await call("ask_access", { origin: "github.com", reason: "Still need it." });
     expect(popupsOpened).toBe(1);
-    expect((await store.pending())?.origin).toBe("https://github.com/*");
+    expect((await store.pending()).map((request) => request.origin)).toEqual(["https://github.com/*"]);
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: [] });
     await store.setSettings({ ...DEFAULT_SETTINGS, openOnAsk: false });
     await call("ask_access", { origin: "gitlab.com", reason: "To read the pipeline." });
     expect(popupsOpened).toBe(0);
-    expect((await store.pending())?.origin).toBe("https://gitlab.com/*");
+    expect((await store.pending()).map((request) => request.origin)).toEqual(["https://gitlab.com/*"]);
 });
 
 test("a site the person declined is refused as a decision, and asking again is refused too", async () => {
@@ -166,7 +169,7 @@ test("a site the person declined is refused as a decision, and asking again is r
     const again = await call("ask_access", { origin: "private.example", reason: "Please." });
     expect(again.isError).toBe(true);
     expect(again.text).toContain("Do not ask again");
-    expect(await store.pending()).toBeUndefined();
+    expect(await store.pending()).toEqual([]);
 });
 
 // The extension holds the sandbox's own origin to reach it, and policy.ts refuses it as a target: listing it as a
@@ -177,7 +180,7 @@ test("the sandbox's own origin is not listed as a site to work on", async () => 
         origins: ["https://github.com/*", "https://sandbox-1.example.dev/*"],
     });
     await store.setMode("https://github.com/*", "read");
-    await store.setSandbox({ url: "https://sandbox-1.example.dev", token: "t" });
+    await store.addSandbox({ url: SANDBOX, token: "t" });
     const result = await call("describe");
     expect(result.text).toContain("github.com — read only");
     expect(result.text).not.toContain("sandbox-1.example.dev");
@@ -213,8 +216,8 @@ test("bad arguments come back readable enough for the model to fix its own call"
 });
 
 test("a notification is not answered, and a malformed message does not throw", async () => {
-    expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, undefined)).toBeUndefined();
-    expect(await handleMcpMessage("not a message", undefined)).toMatchObject({ error: { code: -32600 } });
+    expect(await handleMcpMessage({ jsonrpc: "2.0", method: "notifications/initialized" }, SANDBOX)).toBeUndefined();
+    expect(await handleMcpMessage("not a message", SANDBOX)).toMatchObject({ error: { code: -32600 } });
 });
 
 // Each switch is enforced here, in the browser, naming the control to flip. Screenshot gets its own test since a
@@ -222,7 +225,7 @@ test("a notification is not answered, and a malformed message does not throw", a
 test("a switch that is off refuses by name, even on a site that is allowed", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setMode("https://github.com/*", "act");
-    await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
     const result = await call("screenshot");
     expect(result.isError).toBe(true);
     expect(result.text).toContain("Take screenshots");
@@ -233,8 +236,8 @@ test("a switch that is off refuses by name, even on a site that is allowed", asy
 test("a stored grant that no longer parses refuses every switch rather than falling back to the defaults", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setMode("https://github.com/*", "read");
-    await chrome.storage.local.set({ scopes: { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "sometimes" } });
-    expect(await store.scopes()).toEqual({ read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" });
+    await chrome.storage.local.set({ [`scopes:${SANDBOX}`]: { read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "sometimes" } });
+    expect(await store.scopes(SANDBOX)).toEqual({ read: "off", act: "off", screenshot: "off", cookies: "off", confirm: "always" });
     const result = await call("snapshot");
     expect(result.isError).toBe(true);
     expect(result.text).toContain(`"Read the page" is switched off`);
@@ -254,7 +257,7 @@ test("a stored pause that is not a boolean holds as paused, and nothing stored i
 test("handing a session over is refused outright while its switch is off", async () => {
     install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: ["https://github.com/*"] });
     await store.setMode("https://github.com/*", "act");
-    await store.setScopes({ read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
     const result = await call("connect_site", { account: "gh" });
     expect(result.isError).toBe(true);
     expect(result.text).toContain("Hand sessions to the sandbox");

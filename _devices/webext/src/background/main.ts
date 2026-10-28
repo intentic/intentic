@@ -3,9 +3,9 @@ import { parseWebextPairingCode } from "@intentic/sandbox-contract/webext";
 import { agentWindow, forgetClosedWindow, rememberBounds, showTab } from "./agent-window.js";
 import { answerAsking, clearStaleAsking } from "./asking.js";
 import { redeemPairing } from "./enroll.js";
-import { closeLink, ensureLink, linkState } from "./link.js";
-import type { PopupCommand, PopupState } from "./messages.js";
-import { store } from "./store.js";
+import { closeLink, ensureLinks, linkState } from "./link.js";
+import type { PopupCommand, PopupState, SandboxState } from "./messages.js";
+import { type PairedSandbox, sandboxKey, sandboxName, store } from "./store.js";
 import { currentGrants, fileUnmodedGrants } from "./tools/tab-access.js";
 import { openPanel, refreshBadge } from "./tools/access.js";
 import { notifySandboxGrantsChanged } from "./tools/grants-changed.js";
@@ -32,7 +32,9 @@ const ALARM = "intentic-link";
 
 const wake = (): void => {
     chrome.alarms.create(ALARM, { periodInMinutes: 1 });
-    void ensureLink();
+    // A build from before several sandboxes could be paired kept its one in other keys: moved first, so the first dial
+    // finds it.
+    void store.migrate().then(ensureLinks);
     void refreshBadge();
     void passwordsStartup();
     void clearStaleAsking();
@@ -48,7 +50,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(wake);
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ALARM) {
-        void ensureLink();
+        void ensureLinks();
     }
 });
 
@@ -66,16 +68,22 @@ chrome.windows.onBoundsChanged.addListener((window) => void rememberBounds(windo
 chrome.windows.onRemoved.addListener((windowId) => void forgetClosedWindow(windowId));
 
 // A site Chrome just granted, from its own dialog (the popup that asked is closed by then) or its own site-access menu:
-// filed with the mode the person picked, or as read only when it answers the agent's request (site-grants.ts). Once
-// filed, the paired sandbox is told, so an agent waiting on `ask_access` goes on now (grants-changed.ts, 2026-10-20).
+// filed with the mode the person picked, or as read only when it answers an agent's request (site-grants.ts). Once
+// filed, every paired sandbox is told, so an agent waiting on `ask_access` goes on now (grants-changed.ts, 2026-10-20).
 chrome.permissions.onAdded.addListener((added) => {
     void granted(added.origins ?? []).then(notifySandboxGrantsChanged);
 });
 
+// One paired sandbox as the popup shows it: never its token, which the popup has no use for.
+const sandboxState = async (sandbox: PairedSandbox): Promise<SandboxState> => {
+    const key = sandboxKey(sandbox.url);
+    const [scopes, window] = await Promise.all([store.scopes(key), agentWindow(key)]);
+    return { url: key, name: sandboxName(sandbox), link: linkState(key), scopes, agentWindowOpen: window !== undefined };
+};
+
 const readState = async (): Promise<PopupState> => {
-    const [sandbox, scopes, grants, pending, offered, paused, log, settings, passwords, asking, window] = await Promise.all([
-        store.sandbox(),
-        store.scopes(),
+    const [paired, grants, pending, offered, paused, log, settings, passwords, asking] = await Promise.all([
+        store.sandboxes(),
         currentGrants(),
         store.pending(),
         store.inbox(),
@@ -84,31 +92,32 @@ const readState = async (): Promise<PopupState> => {
         store.settings(),
         passwordsUiStatus(),
         store.asking(),
-        agentWindow(),
     ]);
+    const sandboxes = await Promise.all(paired.map(sandboxState));
     return {
-        sandbox,
-        link: linkState(),
-        scopes,
+        sandboxes,
         grants,
         pending,
-        offered,
+        offered:
+            offered === undefined
+                ? undefined
+                : {
+                      url: sandboxKey(offered.url),
+                      name: sandboxName(offered),
+                      paired: sandboxes.some((sandbox) => sandbox.url === sandboxKey(offered.url)),
+                  },
         paused,
         log,
         settings,
         passwords,
         asking,
-        agentWindowOpen: window !== undefined,
     };
 };
 
-// Redeems a pairing and dials; the popup already obtained the host permission, since only a click-backed page
-// can ask for one.
-const pair = async (code: string): Promise<{ ok: boolean; message: string }> => {
-    const pairing = parseWebextPairingCode(code);
-    if (pairing === undefined) {
-        return { ok: false, message: `That is not a connection code from a sandbox. Copy it again from the browser's capability card.` };
-    }
+// Redeems a pairing and dials it, beside every sandbox already paired; the popup already obtained the host
+// permission, since only a click-backed page can ask for one. A sandbox paired again (its card's Connect pressed once
+// more) keeps its place with the fresh token, and its old socket is dropped for one that says the new one.
+const pairWith = async (pairing: PairedSandbox): Promise<{ ok: boolean; message: string }> => {
     const enrolled = await redeemPairing(pairing);
     switch (enrolled.kind) {
         case "enrolled":
@@ -124,20 +133,68 @@ const pair = async (code: string): Promise<{ ok: boolean; message: string }> => 
         case "unreadable":
             return { ok: false, message: `The sandbox answered something this extension could not read.` };
     }
-    await store.setSandbox({ url: pairing.url, token: enrolled.token });
-    await store.setInbox(undefined);
-    await store.append({ at: Date.now(), tool: "connection", detail: `Connected to ${siteOf(pairing.url)}`, ok: true });
-    await ensureLink();
+    const key = sandboxKey(pairing.url);
+    const again = (await store.sandbox(key)) !== undefined;
+    await store.addSandbox({ ...pairing, token: enrolled.token });
+    const parked = await store.inbox();
+    if (parked !== undefined && sandboxKey(parked.url) === key) {
+        await store.setInbox(undefined);
+    }
+    await store.append({
+        at: Date.now(),
+        tool: "connection",
+        detail: `${again ? "Reconnected to" : "Connected to"} ${sandboxName(pairing)}`,
+        ok: true,
+        sandbox: key,
+    });
+    if (again) {
+        closeLink(key);
+    }
+    await ensureLinks();
     await syncPasswordContentScript().catch((error: unknown) => console.warn("intentic: the Passwords content script could not be brought in step", error));
     await refreshBadge();
     return { ok: true, message: `Connected.` };
 };
 
-const decline = async (): Promise<{ ok: true }> => {
-    const pending = await store.pending();
+const pair = async (code: string): Promise<{ ok: boolean; message: string }> => {
+    const pairing = parseWebextPairingCode(code);
+    if (pairing === undefined) {
+        return { ok: false, message: `That is not a connection code from a sandbox. Copy it again from the browser's capability card.` };
+    }
+    return await pairWith(pairing);
+};
+
+// The pairing a sandbox's page parked (`offer`), accepted with the person's click in the popup.
+const acceptOffer = async (): Promise<{ ok: boolean; message: string }> => {
+    const parked = await store.inbox();
+    if (parked === undefined) {
+        return { ok: false, message: `That request is gone. Click Connect again in your sandbox.` };
+    }
+    return await pairWith(parked);
+};
+
+// Forgets one sandbox and drops its socket; the others stay connected, and sites stay granted, since those are the
+// person's decision about this browser, not about that sandbox.
+const unpair = async (url: string): Promise<{ ok: true }> => {
+    const key = sandboxKey(url);
+    const sandbox = await store.sandbox(key);
+    closeLink(key);
+    await store.forgetSandbox(key);
+    if (sandbox !== undefined) {
+        await owner(`Disconnected ${sandboxName(sandbox)}`);
+    }
+    await syncPasswordContentScript().catch((error: unknown) => console.warn("intentic: the Passwords content script could not be brought in step", error));
+    await refreshBadge();
+    return { ok: true };
+};
+
+// The person said no to the site a sandbox's agent asked for. The no holds for the site, whichever agent asks next:
+// it is their decision about this browser.
+const decline = async (sandbox: string): Promise<{ ok: true }> => {
+    const pending = await store.pendingFor(sandbox);
     if (pending !== undefined) {
         await store.decline(pending.origin, Date.now());
-        await store.setPending(undefined);
+        await store.setPending(sandbox, undefined);
         await owner(`Declined ${siteOf(pending.origin)}`);
     }
     await refreshBadge();
@@ -153,12 +210,46 @@ const enablePasswords = async (): Promise<{ ok: boolean; message?: string }> => 
     return enabled;
 };
 
+// Connecting and disconnecting sandboxes, apart from the commands about this browser itself.
+type PairingCommand = Extract<PopupCommand, { readonly type: "pair" | "offer" | "accept-offer" | "dismiss-offer" | "unpair" }>;
+const PAIRING_COMMANDS: ReadonlySet<PopupCommand["type"]> = new Set(["pair", "offer", "accept-offer", "dismiss-offer", "unpair"]);
+const isPairing = (command: PopupCommand): command is PairingCommand => PAIRING_COMMANDS.has(command.type);
+
+const handlePairing = async (command: PairingCommand): Promise<unknown> => {
+    switch (command.type) {
+        case "pair":
+            return await pair(command.code);
+        case "unpair":
+            return await unpair(command.sandbox);
+        case "accept-offer":
+            return await acceptOffer();
+        case "dismiss-offer":
+            await store.setInbox(undefined);
+            await refreshBadge();
+            return { ok: true };
+        case "offer": {
+            // From a sandbox's own page; parked, not redeemed, since enrolling needs a host permission a page can't
+            // get without a click. Parked beside any sandbox already paired: this is how a second one is added.
+            const pairing = parseWebextPairingCode(command.code);
+            if (pairing === undefined) {
+                return { ok: false };
+            }
+            await store.setInbox(pairing);
+            await refreshBadge();
+            // The person just clicked Connect in their sandbox; the popup is the next step, so it comes to them.
+            await openPanel(true);
+            return { ok: true };
+        }
+    }
+};
+
 const handle = async (command: PopupCommand): Promise<unknown> => {
+    if (isPairing(command)) {
+        return await handlePairing(command);
+    }
     switch (command.type) {
         case "state":
             return await readState();
-        case "pair":
-            return await pair(command.code);
         case "allow":
             await choose(command.origin, command.mode);
             return { ok: true };
@@ -172,7 +263,7 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             await owner(`Removed ${siteOf(command.origin)}`);
             return { ok: true };
         case "decline":
-            return await decline();
+            return await decline(command.sandbox);
         case "settings": {
             const before = await store.settings();
             await store.setSettings(command.settings);
@@ -188,35 +279,12 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
             await owner(command.value ? "Paused the agent" : "Resumed the agent");
             await refreshBadge();
             return { ok: true };
-        case "unpair":
-            closeLink();
-            await store.forgetSandbox();
-            await refreshBadge();
-            return { ok: true };
         case "passwords-enable":
             return await enablePasswords();
         case "answer":
             return { ok: await answerAsking(command.id, command.allow) };
         case "show":
-            return { ok: await showTab(command.tabId) };
-        case "dismiss-offer":
-            await store.setInbox(undefined);
-            await refreshBadge();
-            return { ok: true };
-        case "offer": {
-            // From the sandbox's own page; parked, not redeemed, since enrolling needs a host permission a page can't
-            // get
-            // without a click.
-            const pairing = parseWebextPairingCode(command.code);
-            if (pairing === undefined) {
-                return { ok: false };
-            }
-            await store.setInbox({ url: pairing.url, token: pairing.token });
-            await refreshBadge();
-            // The person just clicked Connect in their sandbox; the popup is the next step, so it comes to them.
-            await openPanel(true);
-            return { ok: true };
-        }
+            return { ok: await showTab(command.tabId === undefined ? { sandbox: command.sandbox } : { tabId: command.tabId }) };
     }
 };
 

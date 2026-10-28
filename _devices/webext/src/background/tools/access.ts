@@ -3,7 +3,7 @@ import type { WebExtFacts } from "@intentic/sandbox-contract/webext";
 import { ownWindow } from "../agent-window.js";
 import { loopbackFeatures } from "../loopback-catch.js";
 import { declinedMessage, originPattern, RefusedError, siteOf } from "../policy.js";
-import { DECLINE_HOLD_MS, store } from "../store.js";
+import { DECLINE_HOLD_MS, type SandboxKey, store } from "../store.js";
 import { currentGrants } from "./tab-access.js";
 
 // Who this browser is, what it may touch, and how the agent asks for more. `chrome.permissions.request` only
@@ -14,7 +14,10 @@ import { currentGrants } from "./tab-access.js";
 // for waiting, because the icon itself is ember and an ember badge disappears into it. Waiting covers a question the
 // agent is asking on a page, which may be in its own window behind theirs (asking.ts).
 export const refreshBadge = async (): Promise<void> => {
-    const [pending, offered, paused, asking] = await Promise.all([store.pending(), store.inbox(), store.paused(), store.asking()]);
+    const [requests, offered, paused, questions] = await Promise.all([store.pending(), store.inbox(), store.paused(), store.asking()]);
+    // The newest of each is the one named; the popup lists them all.
+    const pending = requests.at(-1);
+    const asking = questions.at(-1);
     const waiting = pending !== undefined || offered !== undefined || asking !== undefined;
     await chrome.action.setBadgeText({ text: paused ? `❚❚` : waiting ? `!` : `` });
     await chrome.action.setBadgeBackgroundColor({ color: paused ? `#6f6353` : `#d93a2b` });
@@ -128,7 +131,7 @@ export const describeAccess = async (): Promise<string> => {
 // Leaves a request the person will see; says nothing about whether they'll grant it, since the answer is just a
 // changed grant list on the next call. A site they declined a moment ago is refused outright, so "no" is not
 // answered with the same question again.
-export const askAccess = async (origin: string, reason: string): Promise<string> => {
+export const askAccess = async (from: SandboxKey, origin: string, reason: string): Promise<string> => {
     const pattern = originPattern(origin.includes("://") ? origin : `https://${origin}`);
     if (pattern === undefined) {
         throw new RefusedError(`"${origin}" is not a website this browser can be allowed on.`);
@@ -142,8 +145,8 @@ export const askAccess = async (origin: string, reason: string): Promise<string>
     if (declinedAt !== undefined && Date.now() - declinedAt < DECLINE_HOLD_MS) {
         throw new RefusedError(declinedMessage(siteOf(pattern)));
     }
-    const previous = await store.pending();
-    await store.setPending({ origin: pattern, reason: reason.slice(0, 200), at: Date.now() });
+    const previous = await store.pendingFor(from);
+    await store.setPending(from, { origin: pattern, reason: reason.slice(0, 200), at: Date.now() });
     await refreshBadge();
     // Once per new request: asking again for the same site is a reminder the badge already gives.
     if (previous?.origin !== pattern) {

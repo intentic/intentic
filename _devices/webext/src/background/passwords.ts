@@ -77,11 +77,13 @@ export const syncPasswordContentScript = async (): Promise<void> => {
         await unregisterPasswordScript();
         return;
     }
-    const sandbox = await store.sandbox();
+    // No paired sandbox's own app gets the capture script.
     const excludeMatches = [EXCLUDE_INTENTIC];
-    const own = sandboxOwnOrigin(sandbox?.url);
-    if (own !== undefined) {
-        excludeMatches.push(own);
+    for (const sandbox of await store.sandboxes()) {
+        const own = sandboxOwnOrigin(sandbox.url);
+        if (own !== undefined && !excludeMatches.includes(own)) {
+            excludeMatches.push(own);
+        }
     }
     const existing = await chrome.scripting
         .getRegisteredContentScripts({ ids: [SCRIPT_ID] })

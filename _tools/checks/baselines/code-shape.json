@@ -263,10 +263,6 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/webext/src/popup/popup.ts#wire#lines": {
-        "count": 104,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/desktop-app/local/devDesktop.ts": {
         "count": 759,
         "why": "standing when the check arrived (2026-10-16)"

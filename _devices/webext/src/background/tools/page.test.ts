@@ -7,6 +7,7 @@ import { click } from "./page.js";
 // the page answered. The page side itself is page/driver.test.ts; this is what the background makes of its answers.
 
 const URL_NOW = "https://app.example/settings";
+const SANDBOX = "https://sandbox-1.example.dev";
 
 interface Injected {
     readonly name: string;
@@ -55,7 +56,7 @@ const area = (storage: Map<string, unknown>) => ({
 const install = (tabs: { id: number; url: string }[]): void => {
     const storage = new Map<string, unknown>();
     // Window 1 is the agent's own (agent-window.ts), so a click given no tab lands on its tab in front, tab 7.
-    const session = new Map<string, unknown>([["agentWindow", 1]]);
+    const session = new Map<string, unknown>([["agentWindows", { [SANDBOX]: 1 }]]);
     const fake = {
         storage: {
             local: area(storage),
@@ -103,7 +104,7 @@ beforeEach(async () => {
         { id: 7, url: URL_NOW },
         { id: 8, url: URL_NOW },
     ]);
-    await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
     await store.setMode("https://app.example/*", "act");
 });
 
@@ -115,25 +116,25 @@ const landed: ActionResult = { ok: true, message: `clicked` };
 test("a yes whose menu closed while the person decided is kept for one retry of that same click", async () => {
     answers = [true];
     landings = [gone, landed];
-    const first = click("e4");
+    const first = click(SANDBOX, "e4");
     await expect(first).rejects.toThrow(`Nothing happened`);
     await expect(first).rejects.toThrow(`open the menu again`);
     expect(asked()).toBe(1);
 
     // The agent reopened the menu and snapshotted: a new ref, the same element by name, and no second question.
-    expect(await click("e9")).toContain("Settings");
+    expect(await click(SANDBOX, "e9")).toContain("Settings");
     expect(asked()).toBe(1);
 
     // Spent: the next one asks afresh.
     answers = [false];
-    await expect(click("e9")).rejects.toThrow(`said no`);
+    await expect(click(SANDBOX, "e9")).rejects.toThrow(`said no`);
     expect(asked()).toBe(2);
 });
 
 test("the click after a question goes to the element that was described, by its pin", async () => {
     answers = [true];
     landings = [landed];
-    await click("e4");
+    await click(SANDBOX, "e4");
     const describe = injected.find((call) => call.name === "describe");
     const clicked = injected.find((call) => call.name === "click");
     expect(describe?.args[0]).toBe("e4");
@@ -144,32 +145,32 @@ test("the click after a question goes to the element that was described, by its 
 test("a kept yes answers nothing but the click it was given for", async () => {
     answers = [true];
     landings = [gone];
-    await expect(click("e4")).rejects.toThrow(`Nothing happened`);
+    await expect(click(SANDBOX, "e4")).rejects.toThrow(`Nothing happened`);
 
     // Another element on the same page is its own question.
     described = { ok: true, role: "button", name: "Delete account", sensitive: true };
     answers = [false];
-    await expect(click("e5")).rejects.toThrow(`said no`);
+    await expect(click(SANDBOX, "e5")).rejects.toThrow(`said no`);
 
     // So is the same element in another tab.
     described = { ok: true, role: "li", name: "Remove", sensitive: true };
     answers = [false];
-    await expect(click("e4", 8)).rejects.toThrow(`said no`);
+    await expect(click(SANDBOX, "e4", 8)).rejects.toThrow(`said no`);
     expect(asked()).toBe(3);
 
     // And the yes is still there for the click it was for.
     landings = [landed];
-    expect(await click("e4", 7)).toContain("Settings");
+    expect(await click(SANDBOX, "e4", 7)).toContain("Settings");
     expect(asked()).toBe(3);
 });
 
 test("a no keeps nothing, and a click nobody was asked about says only that its element went", async () => {
     answers = [false];
-    await expect(click("e4")).rejects.toThrow(`said no`);
+    await expect(click(SANDBOX, "e4")).rejects.toThrow(`said no`);
 
     described = { ok: true, role: "button", name: "Open", sensitive: false };
     landings = [gone];
-    const unasked = click("e4");
+    const unasked = click(SANDBOX, "e4");
     await expect(unasked).rejects.toThrow(`gone from the page`);
     await expect(unasked).rejects.not.toThrow(`Nothing happened`);
     expect(asked()).toBe(1);
@@ -177,6 +178,6 @@ test("a no keeps nothing, and a click nobody was asked about says only that its 
     // Neither left a yes behind.
     described = { ok: true, role: "li", name: "Remove", sensitive: true };
     answers = [false];
-    await expect(click("e4")).rejects.toThrow(`said no`);
+    await expect(click(SANDBOX, "e4")).rejects.toThrow(`said no`);
     expect(asked()).toBe(2);
 });

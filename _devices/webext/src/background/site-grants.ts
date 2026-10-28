@@ -28,10 +28,8 @@ const serial = async <T>(work: () => Promise<T>): Promise<T> => {
 const file = async (origin: string, mode: WebExtGrant["mode"]): Promise<void> => {
     await store.setMode(origin, mode);
     await store.forgetDecline(origin);
-    const pending = await store.pending();
-    if (pending === undefined || pending.origin === origin) {
-        await store.setPending(undefined);
-    }
+    // Every agent waiting on this site goes on, whichever sandbox asked.
+    await store.answerPending(origin);
     await owner(`Allowed ${siteOf(origin)} to ${mode === "act" ? "read and act" : "read only"}`);
 };
 
@@ -57,10 +55,10 @@ export const granted = async (origins: readonly string[], now = Date.now()): Pro
     await serial(async () => {
         for (const origin of origins) {
             const choice = await store.takeChoice(origin, now);
-            const pending = await store.pending();
+            const asked = (await store.pending()).some((request) => request.origin === origin);
             if (choice !== undefined) {
                 await file(origin, choice.mode);
-            } else if (pending?.origin === origin) {
+            } else if (asked) {
                 await file(origin, "read");
             } else {
                 await store.forgetDecline(origin);

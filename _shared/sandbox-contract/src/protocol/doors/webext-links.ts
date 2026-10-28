@@ -34,31 +34,55 @@ export const WEBEXT_TICKET_TOOL = "type_ticket";
 // has to be answered inside it, or the ticket it then presents has already lapsed.
 export const WEBEXT_TICKET_TTL_MS = 60_000;
 
-// One pasteable code, not two fields: base64url of {url, token}, since a popup gets one paste, not two boxes. `token`
-// is single-use and expires in ten minutes; the prefix versions the format.
+// One pasteable code, not two fields: base64url of {url, token, name}, since a popup gets one paste, not two boxes.
+// `token` is single-use and expires in ten minutes; the prefix versions the format. `name` (2026-10-28) is what the
+// sandbox is called, so an extension paired with several can tell them apart by more than a hostname; optional both
+// ways, since a code without it is still a whole code and an extension that predates it ignores it.
 const PAIRING_PREFIX = "ixb1_";
 
-const base64url = (value: string): string => btoa(value).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+// Long enough for any sandbox's name; a longer one is cut rather than refused.
+const NAME_LIMIT = 80;
 
-export const webextPairingCode = (pairing: { readonly url: string; readonly token: string }): string =>
-    `${PAIRING_PREFIX}${base64url(JSON.stringify({ url: pairing.url, token: pairing.token }))}`;
+export interface WebextPairing {
+    readonly url: string;
+    readonly token: string;
+    readonly name?: string;
+}
+
+// btoa takes Latin-1 only, so a name in any other script goes through UTF-8 first.
+const base64url = (value: string): string =>
+    btoa(String.fromCodePoint(...new TextEncoder().encode(value)))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replaceAll("=", "");
+
+const fromBase64url = (value: string): string =>
+    new TextDecoder().decode(Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (char) => char.codePointAt(0) ?? 0));
+
+export const webextPairingCode = (pairing: WebextPairing): string => {
+    const name = pairing.name?.trim().slice(0, NAME_LIMIT) ?? "";
+    const carried = name === "" ? { url: pairing.url, token: pairing.token } : { url: pairing.url, token: pairing.token, name };
+    return `${PAIRING_PREFIX}${base64url(JSON.stringify(carried))}`;
+};
 
 // The extension's side; undefined for anything not one of ours, so a bad paste is reported rather than attempted.
-export const parseWebextPairingCode = (code: string): { readonly url: string; readonly token: string } | undefined => {
+export const parseWebextPairingCode = (code: string): WebextPairing | undefined => {
     const trimmed = code.trim();
     if (!trimmed.startsWith(PAIRING_PREFIX)) {
         return undefined;
     }
     try {
-        const decoded = JSON.parse(atob(trimmed.slice(PAIRING_PREFIX.length).replaceAll("-", "+").replaceAll("_", "/"))) as {
+        const decoded = JSON.parse(fromBase64url(trimmed.slice(PAIRING_PREFIX.length))) as {
             url?: unknown;
             token?: unknown;
+            name?: unknown;
         };
         // Checked here (http(s) URL, non-empty token) rather than left to the WebSocket constructor to throw.
         if (typeof decoded.url !== "string" || typeof decoded.token !== "string" || decoded.token === "" || !/^https?:\/\//.test(decoded.url)) {
             return undefined;
         }
-        return { url: decoded.url, token: decoded.token };
+        const name = typeof decoded.name === "string" ? decoded.name.trim().slice(0, NAME_LIMIT) : "";
+        return name === "" ? { url: decoded.url, token: decoded.token } : { url: decoded.url, token: decoded.token, name };
     } catch {
         return undefined;
     }

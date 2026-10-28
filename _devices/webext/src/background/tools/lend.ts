@@ -2,7 +2,7 @@ import { type WebExtCookie, webextLendUrl } from "@intentic/sandbox-contract/web
 import { isAgentWindow, showTab } from "../agent-window.js";
 import { askPerson } from "../asking.js";
 import { assertScope, RefusedError, siteOf } from "../policy.js";
-import { store } from "../store.js";
+import { type SandboxKey, store } from "../store.js";
 import { targetTab } from "./tab-access.js";
 
 // Borrows a sandbox session into this browser (session.ts's hand-over, reversed), for logins impossible to drive
@@ -43,19 +43,20 @@ const writeCookie = async (cookie: WebExtCookie): Promise<boolean> => {
     return written !== undefined && written !== null;
 };
 
-export const lendSite = async (account: string, tabId?: number): Promise<string> => {
-    const scopes = await store.scopes();
+export const lendSite = async (from: SandboxKey, account: string, tabId?: number): Promise<string> => {
+    const scopes = await store.scopes(from);
     assertScope(scopes, "cookies");
     // A read grant is enough to be on the page; borrowing a session is its own decision, taken below by the person,
     // not derived from the site's mode.
-    const tab = await targetTab("read", tabId);
-    const sandbox = await store.sandbox();
+    const tab = await targetTab(from, "read", tabId);
+    const sandbox = await store.sandbox(from);
     if (sandbox === undefined) {
         throw new RefusedError(`This browser is not paired with a sandbox any more.`);
     }
     const domain = cookieDomain(new URL(tab.url).hostname);
 
     const agreed = await askPerson(
+        from,
         tab,
         `Sign this browser in to ${domain} as the sandbox account "${account}"? It will replace your current ${domain} sign-in here until you sign out.`,
         120_000,
@@ -89,7 +90,7 @@ export const lendSite = async (account: string, tabId?: number): Promise<string>
     // strength of the yes they just gave for exactly this.
     // allow(silent-catch): a tab the person closed meanwhile is simply not brought forward
     const reloaded = await chrome.tabs.get(tab.id).catch(() => undefined);
-    const brought = (await isAgentWindow(reloaded?.windowId)) && (await showTab(tab.id));
+    const brought = (await isAgentWindow(reloaded?.windowId, from)) && (await showTab({ tabId: tab.id }));
     const refused = answer.cookies.length - written;
     const partial = refused === 0 ? "" : ` Chrome refused ${refused} of its ${answer.cookies.length} cookies, so if the page does not show the account signed in, that is why.`;
     const where = brought ? ` The page is now in front of them, in your window.` : ``;

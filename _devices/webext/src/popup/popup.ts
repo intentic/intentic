@@ -6,7 +6,8 @@ import { DEFAULT_SETTINGS } from "../background/settings.js";
 import type { ActivityEntry, Asking, PendingAccess } from "../background/store.js";
 import { button, byId, h, icon, type IconName, say, send, show } from "./dom.js";
 import { renderPasswords } from "./passwords-section.js";
-import { renderWorkspace, saveSettings, wireWorkspace } from "./workspace-section.js";
+import { agentOf, listed, pairSandbox, renderSandboxes, sandboxLabel, wirePasteForm, wireSandboxes } from "./sandboxes-section.js";
+import { renderWorkspace, saveSettings } from "./workspace-section.js";
 
 // Answers, in order: is the agent waiting on me, is it connected, what can it touch, what has it done, how do I stop
 // it. Every permission widening happens here, not in the worker: chrome.permissions.request needs a user gesture,
@@ -75,28 +76,15 @@ const allow = async (origin: string, mode: WebExtGrant["mode"], error?: HTMLElem
     await refresh();
 };
 
-const pair = async (code: string, url: string): Promise<string | undefined> => {
-    // Requests the sandbox's own origin while the triggering click is still on the stack.
-    const origin = `${new URL(url).origin}/*`;
-    if (!(await chrome.permissions.request({ origins: [origin] }))) {
-        return `Without access to ${siteOf(origin)} this extension cannot reach that sandbox.`;
-    }
-    const result = await send<{ ok: boolean; message: string }>({ type: "pair", code });
-    if (!result.ok) {
-        return result.message;
-    }
-    await refresh();
-    return undefined;
-};
-
 // What each choice means, from the switches on this browser's card, so "Read & act" never promises more than
 // policy.ts will let through.
-const modeHint = (scopes: WebExtScopes): string => {
+// `card` names whose card: "your sandbox" while one is paired, the asking sandbox's name once there are several.
+const modeHint = (scopes: WebExtScopes, card: string): string => {
     if (scopes.read !== "on") {
-        return `Reading pages is switched off on this browser's card in your sandbox, so neither choice does anything until it is on.`;
+        return `Reading pages is switched off on this browser's card in ${card}, so neither choice does anything until it is on.`;
     }
     if (scopes.act !== "on") {
-        return `Clicking and typing is switched off on this browser's card in your sandbox, so either choice lets it read only.`;
+        return `Clicking and typing is switched off on this browser's card in ${card}, so either choice lets it read only.`;
     }
     const asks =
         scopes.confirm === "always"
@@ -107,38 +95,60 @@ const modeHint = (scopes: WebExtScopes): string => {
     return `Read & act also lets it click and type${asks}.`;
 };
 
+// Every paired sandbox's own origin: none is a site to allow, and the tab in front on one is not offered as one.
+const sandboxOrigins = (state: PopupState): Set<string> =>
+    new Set(
+        state.sandboxes.flatMap((sandbox) => {
+            const origin = sandboxOwnOrigin(sandbox.url);
+            return origin === undefined ? [] : [origin];
+        }),
+    );
+
+// The state across every paired sandbox, in the header's two words: connected when all are, offline when none is,
+// and how many are when it is some.
+const linkSummary = (state: PopupState): readonly [className: string, label: string] => {
+    const open = state.sandboxes.filter((sandbox) => sandbox.link === "open").length;
+    const closed = state.sandboxes.filter((sandbox) => sandbox.link === "closed").length;
+    if (open === state.sandboxes.length) {
+        return ["mark on", "Connected"];
+    }
+    if (closed === state.sandboxes.length) {
+        return ["mark off", "Offline"];
+    }
+    if (closed === 0) {
+        return ["mark wait", "Connecting…"];
+    }
+    return ["mark off", `${open} of ${state.sandboxes.length} connected`];
+};
+
 // The header's first line is the state itself, which is the one thing a glance at the popup is for. Before any
 // sandbox is paired there is no state to report, so it names the product instead.
 const renderHeader = (state: PopupState): void => {
-    const [className, label] =
-        state.sandbox === undefined
-            ? ["mark", "Intentic"]
-            : state.paused
-              ? ["mark held", "Paused"]
-              : state.link === "open"
-                ? ["mark on", "Connected"]
-                : state.link === "connecting"
-                  ? ["mark wait", "Connecting…"]
-                  : ["mark off", "Offline"];
+    const paired = state.sandboxes.length > 0;
+    const [className, label] = !paired ? ["mark", "Intentic"] : state.paused ? ["mark held", "Paused"] : linkSummary(state);
     byId("status").className = className;
     byId("status-text").textContent = label;
     const where = byId("where");
-    where.textContent = state.sandbox === undefined ? "Your agent, in your browser" : siteOf(state.sandbox.url);
-    where.title = state.sandbox?.url ?? "";
+    where.textContent = paired ? listed(state.sandboxes.map((sandbox) => sandbox.name)) : "Your agent, in your browser";
+    where.title = state.sandboxes.map((sandbox) => sandbox.url).join("\n");
     const pause = byId<HTMLButtonElement>("pause");
-    show(pause, state.sandbox !== undefined);
+    show(pause, paired);
     pause.className = state.paused ? "btn primary small" : "btn small";
     pause.replaceChildren(icon(state.paused ? "play" : "pause"), state.paused ? "Resume" : "Pause");
-    pause.title = state.paused ? "Let the agent work in this browser again" : "Stop the agent from doing anything in this browser";
+    pause.title = state.paused
+        ? "Let the agents work in this browser again"
+        : state.sandboxes.length > 1
+          ? "Stop every sandbox's agent from doing anything in this browser"
+          : "Stop the agent from doing anything in this browser";
 };
 
-const askCard = (pending: PendingAccess, scopes: WebExtScopes): HTMLElement => {
+const askCard = (pending: PendingAccess, scopes: WebExtScopes | undefined, who: string, card: string): HTMLElement => {
     const error = h("div", { class: "error" });
     show(error, false);
     return h(
         "div",
         { class: "card ask" },
-        h("div", { class: "eyebrow" }, h("span", { text: "Your agent is asking for" }), when(pending.at, false)),
+        h("div", { class: "eyebrow" }, h("span", { text: `${who} is asking for` }), when(pending.at, false)),
         h("div", { class: "title" }, favicon(pending.origin), h("span", { text: siteOf(pending.origin), title: pending.origin })),
         h("p", {
             class: pending.reason === "" ? "reason muted" : "reason",
@@ -147,23 +157,23 @@ const askCard = (pending: PendingAccess, scopes: WebExtScopes): HTMLElement => {
         h(
             "div",
             { class: "actions" },
-            button("Decline", "quiet", () => void send({ type: "decline" }).then(refresh)),
+            button("Decline", "quiet", () => void send({ type: "decline", sandbox: pending.sandbox }).then(refresh)),
             h("span", { class: "spacer" }),
             button("Read only", "plain", () => void allow(pending.origin, "read", error)),
             button("Read & act", "primary", () => void allow(pending.origin, "act", error)),
         ),
         error,
-        h("p", { class: "hint", text: modeHint(scopes) }),
+        ...(scopes === undefined ? [] : [h("p", { class: "hint", text: modeHint(scopes, card) })]),
     );
 };
 
 // A question the agent is waiting on, asked on a page that may be in its own window behind theirs: answered here, the
 // panel on the page is taken down (background/asking.ts); "Show me" brings that page in front instead.
-const askingCard = (asking: Asking): HTMLElement =>
+const askingCard = (asking: Asking, who: string): HTMLElement =>
     h(
         "div",
         { class: "card ask" },
-        h("div", { class: "eyebrow" }, h("span", { text: "Your agent is asking" }), when(asking.at, false)),
+        h("div", { class: "eyebrow" }, h("span", { text: `${who} is asking` }), when(asking.at, false)),
         h("div", { class: "title" }, favicon(asking.origin), h("span", { text: siteOf(asking.origin), title: asking.origin })),
         h("p", { class: "reason", text: asking.question }),
         h(
@@ -177,31 +187,34 @@ const askingCard = (asking: Asking): HTMLElement =>
         h("p", { class: "hint", text: "It is asked on the page too: answer whichever is nearer." }),
     );
 
-const offerCard = (offered: NonNullable<PopupState["offered"]>): HTMLElement => {
+// What connecting the offered sandbox means, said against what is already here: nothing, a renewal of the same
+// sandbox, or one more beside the others.
+const offerReason = (state: PopupState, offered: NonNullable<PopupState["offered"]>): string => {
+    if (offered.paired) {
+        return "It is connected already. Connecting again gives it a fresh key; nothing else changes.";
+    }
+    const others = state.sandboxes.map((sandbox) => sandbox.name);
+    return others.length === 0
+        ? "Its agent will work in this browser only on the sites you allow here, and you can pause or disconnect it at any time."
+        : `It joins ${listed(others)}: its agent works on the same sites you allow here, under the switches on its own card, in a window of its own.`;
+};
+
+const offerCard = (state: PopupState, offered: NonNullable<PopupState["offered"]>): HTMLElement => {
     const error = h("div", { class: "error" });
     show(error, false);
     return h(
         "div",
         { class: "card ask" },
-        h("div", { class: "eyebrow" }, h("span", { text: "A sandbox wants to connect" })),
-        h("div", { class: "title" }, favicon(`${new URL(offered.url).origin}/*`), h("span", { text: siteOf(offered.url), title: offered.url })),
-        h("p", {
-            class: "reason muted",
-            text: "Its agent will work in this browser only on the sites you allow here, and you can pause or disconnect it at any time.",
-        }),
+        h("div", { class: "eyebrow" }, h("span", { text: offered.paired ? "Your sandbox wants to connect again" : "A sandbox wants to connect" })),
+        h("div", { class: "title" }, favicon(`${new URL(offered.url).origin}/*`), h("span", { text: offered.name, title: offered.url })),
+        h("p", { class: "reason muted", text: offerReason(state, offered) }),
         h(
             "div",
             { class: "actions" },
             button("Not now", "quiet", () => void send({ type: "dismiss-offer" }).then(refresh)),
             h("span", { class: "spacer" }),
-            button("Connect", "primary", () => {
-                // Re-encodes the two parked fields into the format `pair` expects.
-                const code = btoa(JSON.stringify({ url: offered.url, token: offered.token }))
-                    .replaceAll("+", "-")
-                    .replaceAll("/", "_")
-                    .replaceAll("=", "");
-                void pair(code, offered.url).then((message) => say(error, message));
-            }),
+            // The worker redeems what it parked: the popup never holds the code's token.
+            button("Connect", "primary", () => void pairSandbox(offered.url, undefined, refresh).then((message) => say(error, message))),
         ),
         error,
     );
@@ -211,29 +224,54 @@ const offerCard = (offered: NonNullable<PopupState["offered"]>): HTMLElement => 
 const notice = (kind: "paused" | "offline" | "info", glyph: IconName, title: string, body: string): HTMLElement =>
     h("div", { class: `note ${kind}` }, icon(glyph), h("p", {}, h("strong", { text: title }), ` ${body}`));
 
+// A sandbox's switches by its key; none for one no longer paired, whose request is about to go with it.
+const scopesOf = (state: PopupState, sandbox: string): WebExtScopes | undefined => state.sandboxes.find((each) => each.url === sandbox)?.scopes;
+
+// Paused or unreachable, said once for the whole browser. One sandbox of several offline is said on its own row.
+const stateNotice = (state: PopupState): HTMLElement | undefined => {
+    const several = state.sandboxes.length > 1;
+    if (state.paused) {
+        return notice(
+            "paused",
+            "paused",
+            several ? "No agent can do anything here." : "Your agent can't do anything here.",
+            "Everything it asks for is refused until you resume.",
+        );
+    }
+    if (state.sandboxes.length > 0 && state.sandboxes.every((sandbox) => sandbox.link === "closed")) {
+        return notice(
+            "offline",
+            "offline",
+            several ? "Can't reach your sandboxes." : "Can't reach your sandbox.",
+            "It reconnects by itself once the sandbox is running again.",
+        );
+    }
+    return undefined;
+};
+
 const renderAlerts = (state: PopupState): void => {
     const node = byId("alerts");
     const items: HTMLElement[] = [];
-    if (state.sandbox === undefined && state.offered !== undefined) {
-        items.push(offerCard(state.offered));
+    if (state.offered !== undefined) {
+        items.push(offerCard(state, state.offered));
     }
-    if (state.sandbox !== undefined && state.asking !== undefined) {
-        items.push(askingCard(state.asking));
+    for (const asking of state.asking) {
+        items.push(askingCard(asking, agentOf(state, asking.sandbox)));
     }
-    if (state.sandbox !== undefined && state.pending !== undefined) {
-        items.push(askCard(state.pending, state.scopes));
+    for (const pending of state.pending) {
+        const card = state.sandboxes.length > 1 ? sandboxLabel(state, pending.sandbox) : "your sandbox";
+        items.push(askCard(pending, scopesOf(state, pending.sandbox), agentOf(state, pending.sandbox), card));
     }
-    if (state.sandbox !== undefined && state.paused) {
-        items.push(notice("paused", "paused", "Your agent can't do anything here.", "Everything it asks for is refused until you resume."));
-    } else if (state.sandbox !== undefined && state.link === "closed") {
-        items.push(notice("offline", "offline", "Can't reach your sandbox.", "It reconnects by itself once the sandbox is running again."));
+    const said = stateNotice(state);
+    if (said !== undefined) {
+        items.push(said);
     }
     node.replaceChildren(...items);
     show(node, items.length > 0);
 };
 
 const renderWelcome = (state: PopupState): void => {
-    show(byId("welcome"), state.sandbox === undefined && state.offered === undefined);
+    show(byId("welcome"), state.sandboxes.length === 0 && state.offered === undefined);
 };
 
 const segment = (grant: WebExtGrant): HTMLElement => {
@@ -258,15 +296,49 @@ const segment = (grant: WebExtGrant): HTMLElement => {
     return group;
 };
 
+// What a switch on a sandbox's card does to the list, said above it rather than inside it. The sites are the same for
+// every sandbox, the switches are each sandbox's own, so with several the note names the ones it is true of.
+const siteNotes = (state: PopupState): HTMLElement[] => {
+    const readOff = state.sandboxes.filter((sandbox) => sandbox.scopes.read !== "on");
+    const actOff = state.sandboxes.filter((sandbox) => sandbox.scopes.read === "on" && sandbox.scopes.act !== "on");
+    const one = state.sandboxes.length === 1;
+    const notes: HTMLElement[] = [];
+    if (readOff.length > 0) {
+        notes.push(
+            notice(
+                "info",
+                "info",
+                one ? "Reading pages is off." : `Reading pages is off in ${listed(readOff.map((sandbox) => sandbox.name))}.`,
+                one
+                    ? "It is switched off on this browser's card in your sandbox, so these sites do nothing until it is on."
+                    : "It is switched off on this browser's card there, so these sites do nothing for that agent until it is on.",
+            ),
+        );
+    }
+    if (actOff.length > 0 && state.grants.some((grant) => grant.mode === "act")) {
+        notes.push(
+            notice(
+                "info",
+                "info",
+                one ? "Clicking and typing is off." : `Clicking and typing is off in ${listed(actOff.map((sandbox) => sandbox.name))}.`,
+                one
+                    ? "It is switched off on this browser's card in your sandbox, so every site works as read only for now."
+                    : "It is switched off on this browser's card there, so every site works as read only for that agent for now.",
+            ),
+        );
+    }
+    return notes;
+};
+
 const renderSites = (state: PopupState, here: string | undefined): void => {
     const section = byId("sites");
-    show(section, state.sandbox !== undefined || state.grants.length > 0);
+    show(section, state.sandboxes.length > 0 || state.grants.length > 0);
     const grants = state.grants.toSorted((a, b) => siteOf(a.origin).localeCompare(siteOf(b.origin)));
 
     // The tab in front, when it is a site nobody allowed yet: the quickest way to allow one is to be on it.
     const card = byId("here");
     // Left out while a request is waiting: that card is the decision in front of the person, and one is enough.
-    const offerHere = here !== undefined && state.pending === undefined && !grants.some((grant) => grant.origin === here);
+    const offerHere = here !== undefined && state.pending.length === 0 && !grants.some((grant) => grant.origin === here);
     const error = byId("add-error");
     card.replaceChildren();
     if (offerHere) {
@@ -289,28 +361,7 @@ const renderSites = (state: PopupState, here: string | undefined): void => {
     }
     show(card, offerHere);
 
-    // What a switch on the sandbox's card does to the list, said above it rather than inside it.
-    const notes: HTMLElement[] = [];
-    if (state.sandbox !== undefined && state.scopes.read !== "on") {
-        notes.push(
-            notice(
-                "info",
-                "info",
-                "Reading pages is off.",
-                "It is switched off on this browser's card in your sandbox, so these sites do nothing until it is on.",
-            ),
-        );
-    } else if (state.sandbox !== undefined && state.scopes.act !== "on" && grants.some((grant) => grant.mode === "act")) {
-        notes.push(
-            notice(
-                "info",
-                "info",
-                "Clicking and typing is off.",
-                "It is switched off on this browser's card in your sandbox, so every site works as read only for now.",
-            ),
-        );
-    }
-    byId("site-notes").replaceChildren(...notes);
+    byId("site-notes").replaceChildren(...siteNotes(state));
 
     const rows: HTMLElement[] = [];
     for (const grant of grants) {
@@ -371,22 +422,29 @@ const sentence = (entry: ActivityEntry): { text: string; note: string | undefine
     }
 };
 
+// The line's words, led by whose agent it was once several sandboxes share this browser. A connection's line names its
+// sandbox already.
+const entryText = (state: PopupState, entry: ActivityEntry, text: string, raw: boolean): HTMLElement => {
+    const line = h("span", { class: raw ? "text raw" : "text", title: text });
+    if (state.sandboxes.length > 1 && entry.sandbox !== undefined && entry.tool !== "connection") {
+        const from = sandboxLabel(state, entry.sandbox);
+        line.title = `${from}: ${text}`;
+        line.append(h("span", { class: "from", text: from }), " ");
+    }
+    line.append(text);
+    return line;
+};
+
 const renderActivity = (state: PopupState): void => {
     const section = byId("activity");
-    show(section, state.sandbox !== undefined || state.log.length > 0);
+    show(section, state.sandboxes.length > 0 || state.log.length > 0);
     const shown = state.log.slice(0, logExpanded ? LOG_LONG : LOG_SHORT);
     const rows = shown.map((entry) => {
         const { text, note, raw } = sentence(entry);
         const kind = entry.tool === "owner" ? "you" : entry.tool === "connection" ? "sys" : entry.ok ? "ok" : "bad";
         // A tick for a call that worked, a cross for one that did not, and a dot for what you or the link did.
         const sign = kind === "ok" ? icon("done") : kind === "bad" ? icon("failed") : h("span", { class: "pip" });
-        const row = h(
-            "li",
-            { class: kind },
-            h("span", { class: "sign" }, sign),
-            h("span", { class: raw ? "text raw" : "text", text, title: text }),
-            when(entry.at, true),
-        );
+        const row = h("li", { class: kind }, h("span", { class: "sign" }, sign), entryText(state, entry, text, raw), when(entry.at, true));
         if (!entry.ok && note !== undefined && note !== "") {
             // The refusal's first sentence is the fact ("Not allowed on mail.google.com."); the rest is advice written
             // for the agent, kept in the tooltip.
@@ -411,12 +469,9 @@ const renderActivity = (state: PopupState): void => {
     more.textContent = logExpanded ? "Show less" : `Show ${hiddenCount} more`;
 };
 
-let disarm: ReturnType<typeof setTimeout> | undefined;
-
 const renderFooter = (state: PopupState): void => {
-    show(byId("footer"), state.sandbox !== undefined);
+    show(byId("footer"), state.sandboxes.length > 0);
     byId<HTMLInputElement>("open-on-ask").checked = state.settings.openOnAsk;
-    show(byId("unpair"), state.sandbox !== undefined);
 };
 
 let current: PopupState | undefined;
@@ -426,15 +481,15 @@ let again = false;
 
 // The site of the tab in front, when Chrome names it: `activeTab` does once the person clicks the toolbar icon, and
 // a popup that opened by itself (an agent's request) gets nothing, which simply leaves the "this tab" card out.
-const tabInFront = async (own: string | undefined): Promise<string | undefined> => {
+const tabInFront = async (sandboxes: ReadonlySet<string>): Promise<string | undefined> => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const pattern = originPattern(tab?.url);
-    return pattern === own ? undefined : pattern;
+    return pattern === undefined || sandboxes.has(pattern) ? undefined : pattern;
 };
 
 const draw = async (): Promise<void> => {
     const state = await send<PopupState>({ type: "state" });
-    const here = await tabInFront(sandboxOwnOrigin(state.sandbox?.url));
+    const here = await tabInFront(sandboxOrigins(state));
     current = state;
     // Redraws only when something changed: replacing a button under a pointer mid-click loses the click.
     const key = JSON.stringify([state, here, logExpanded]);
@@ -446,6 +501,7 @@ const draw = async (): Promise<void> => {
         renderPasswords(state, refresh);
         renderSites(state, here);
         renderWorkspace(state, refresh);
+        renderSandboxes(state, refresh);
         renderActivity(state);
         renderFooter(state);
     }
@@ -474,29 +530,7 @@ const refresh = async (): Promise<void> => {
 };
 
 const wire = (): void => {
-    byId<HTMLFormElement>("pair-form").addEventListener("submit", (event) => {
-        event.preventDefault();
-        const error = byId("pair-error");
-        const code = byId<HTMLInputElement>("pair-code").value.trim();
-        let url: string;
-        try {
-            const decoded = JSON.parse(
-                atob(
-                    code
-                        .replace(/^ixb1_/, "")
-                        .replaceAll("-", "+")
-                        .replaceAll("_", "/"),
-                ),
-            ) as { url?: unknown };
-            url = new URL(String(decoded.url)).href;
-        } catch {
-            // What was pasted is the whole story here, and the message says what to paste instead.
-            say(error, `That does not look like a connection code. Copy it again from your sandbox.`);
-            return;
-        }
-        say(error, undefined);
-        void pair(code, url).then((message) => say(error, message));
-    });
+    wirePasteForm("pair-form", "pair-code", "pair-error", refresh);
 
     byId<HTMLButtonElement>("pause").addEventListener("click", () => {
         if (current !== undefined) {
@@ -524,8 +558,8 @@ const wire = (): void => {
             say(error, `Type a site like github.com or https://example.com.`);
             return;
         }
-        if (origin === sandboxOwnOrigin(current?.sandbox?.url)) {
-            say(error, `That is your sandbox itself, which the agent never works on.`);
+        if (current !== undefined && sandboxOrigins(current).has(origin)) {
+            say(error, `That is one of your sandboxes itself, which no agent works on.`);
             return;
         }
         say(error, undefined);
@@ -546,24 +580,6 @@ const wire = (): void => {
         void saveSettings(current?.settings ?? DEFAULT_SETTINGS, { openOnAsk: (event.target as HTMLInputElement).checked }, refresh);
     });
 
-    // Two clicks, since disconnecting means pairing again from the sandbox: the first arms, the second does it.
-    const unpair = byId<HTMLButtonElement>("unpair");
-    unpair.addEventListener("click", () => {
-        if (!unpair.classList.contains("armed")) {
-            unpair.classList.add("armed");
-            unpair.textContent = "Really disconnect?";
-            disarm = setTimeout(() => {
-                unpair.classList.remove("armed");
-                unpair.textContent = "Disconnect";
-            }, 3500);
-            return;
-        }
-        clearTimeout(disarm);
-        unpair.classList.remove("armed");
-        unpair.textContent = "Disconnect";
-        void send({ type: "unpair" }).then(refresh);
-    });
-
     // The header only needs an edge once something has scrolled under it.
     const header = byId("header");
     const edge = (): void => {
@@ -578,5 +594,5 @@ const wire = (): void => {
 };
 
 wire();
-wireWorkspace();
+wireSandboxes(refresh);
 void refresh().then(() => byId("root").focus({ preventScroll: true }));

@@ -11,29 +11,29 @@ const dist = join(here, "..", "dist");
 
 // The state a listing screenshot should show: connected, working, and something waiting for the person, all
 // visible at once. The other states are for design work: preview.html#asking, #paused, #offline, #quiet, #front,
-// #offered, #welcome.
+// #offered, #welcome, and with two sandboxes paired #several, #another (a second one offering to connect).
 const now = Date.now();
+const SANDBOX = "https://sandbox-4f2a91c7b8e0.intentic.dev";
+const SECOND = "https://sandbox-9c03d5e1a27b.intentic.dev";
+const scopes = { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" };
 const working = {
-    sandbox: { url: "https://sandbox-4f2a91c7b8e0.intentic.dev", token: "" },
-    link: "open",
-    scopes: { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" },
+    sandboxes: [{ url: SANDBOX, name: "intentic", link: "open", scopes, agentWindowOpen: true }],
     grants: [
         { origin: "https://github.com/*", mode: "act" },
         { origin: "https://acme.atlassian.net/*", mode: "act" },
         { origin: "https://docs.stripe.com/*", mode: "read" },
     ],
-    pending: { origin: "https://mail.google.com/*", reason: "To read the invoice thread you asked me to summarise.", at: now - 24_000 },
+    pending: [{ sandbox: SANDBOX, origin: "https://mail.google.com/*", reason: "To read the invoice thread you asked me to summarise.", at: now - 24_000 }],
     offered: undefined,
     paused: false,
     settings: { openOnAsk: true, workIn: "own-window" },
     passwords: { kind: "on", version: "0.0.0.1" },
-    asking: undefined,
-    agentWindowOpen: true,
+    asking: [],
     log: [
-        { at: now - 8_000, tool: "click", detail: "Clicked e14", ok: true },
-        { at: now - 21_000, tool: "fill", detail: "Typed 86 characters into e9", ok: true },
-        { at: now - 44_000, tool: "snapshot", detail: "Looked over the page", ok: true },
-        { at: now - 51_000, tool: "open", detail: "Opened github.com/intentic/intentic/pulls", ok: true },
+        { at: now - 8_000, tool: "click", detail: "Clicked e14", ok: true, sandbox: SANDBOX },
+        { at: now - 21_000, tool: "fill", detail: "Typed 86 characters into e9", ok: true, sandbox: SANDBOX },
+        { at: now - 44_000, tool: "snapshot", detail: "Looked over the page", ok: true, sandbox: SECOND },
+        { at: now - 51_000, tool: "open", detail: "Opened github.com/intentic/intentic/pulls", ok: true, sandbox: SANDBOX },
         { at: now - 70_000, tool: "owner", detail: "Allowed github.com to read and act", ok: true },
         {
             at: now - 92_000,
@@ -44,36 +44,57 @@ const working = {
         },
         { at: now - 95_000, tool: "tabs", detail: "Listed your tabs", ok: true },
         { at: now - 180_000, tool: "describe", detail: "Checked what it may do here", ok: true },
-        { at: now - 3_600_000, tool: "connection", detail: "Connected to sandbox-4f2a91c7b8e0.intentic.dev", ok: true },
+        { at: now - 3_600_000, tool: "connection", detail: "Connected to intentic", ok: true, sandbox: SANDBOX },
     ],
+};
+const several = {
+    ...working,
+    sandboxes: [
+        { url: SANDBOX, name: "intentic", link: "open", scopes, agentWindowOpen: true },
+        { url: SECOND, name: "marketing", link: "closed", scopes: { ...scopes, act: "off" }, agentWindowOpen: false },
+    ],
+    pending: [{ sandbox: SECOND, origin: "https://x.com/*", reason: "To draft the launch thread you asked for.", at: now - 12_000 }],
 };
 const STATES = {
     working,
-    quiet: { ...working, pending: undefined },
+    several,
+    another: {
+        ...working,
+        pending: [],
+        offered: { url: SECOND, name: "marketing", paired: false },
+    },
+    quiet: { ...working, pending: [] },
     // A question on a page in the agent's own window, behind the person's: answered from here.
     asking: {
         ...working,
-        pending: undefined,
-        asking: {
-            id: "a1",
-            tabId: 31,
-            origin: "https://github.com/*",
-            question: 'Your agent wants to click "Merge pull request". Allow it?',
-            at: now - 6_000,
-        },
+        pending: [],
+        asking: [
+            {
+                id: "a1",
+                sandbox: SANDBOX,
+                tabId: 31,
+                origin: "https://github.com/*",
+                question: 'Your agent wants to click "Merge pull request". Allow it?',
+                at: now - 6_000,
+            },
+        ],
     },
-    front: { ...working, pending: undefined, settings: { openOnAsk: true, workIn: "front-tab" } },
-    paused: { ...working, pending: undefined, paused: true },
-    offline: { ...working, pending: undefined, link: "closed", scopes: { ...working.scopes, act: "off" } },
+    front: { ...working, pending: [], settings: { openOnAsk: true, workIn: "front-tab" } },
+    paused: { ...working, pending: [], paused: true },
+    offline: {
+        ...working,
+        pending: [],
+        sandboxes: [{ url: SANDBOX, name: "intentic", link: "closed", scopes: { ...scopes, act: "off" }, agentWindowOpen: false }],
+    },
     offered: {
         ...working,
-        sandbox: undefined,
-        pending: undefined,
+        sandboxes: [],
+        pending: [],
         grants: [],
         log: [],
-        offered: { url: "https://sandbox-4f2a91c7b8e0.intentic.dev", token: "t" },
+        offered: { url: SANDBOX, name: "intentic", paired: false },
     },
-    welcome: { ...working, sandbox: undefined, pending: undefined, grants: [], log: [] },
+    welcome: { ...working, sandboxes: [], pending: [], grants: [], log: [] },
 };
 
 const stub = `<script>

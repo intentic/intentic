@@ -1,7 +1,7 @@
 import { type WebExtCookie, webextSessionUrl } from "@intentic/sandbox-contract/webext";
 import { askPerson } from "../asking.js";
 import { assertScope, RefusedError, siteOf } from "../policy.js";
-import { store } from "../store.js";
+import { type SandboxKey, store } from "../store.js";
 import { targetTab } from "./tab-access.js";
 
 // Hands a site's session to the sandbox: the only place a credential leaves this browser. Gated by the cookies
@@ -20,12 +20,12 @@ const cookieDomain = (host: string): string => {
     return labels.length <= 2 ? host : labels.slice(-2).join(".");
 };
 
-export const connectSite = async (account: string, tabId?: number): Promise<string> => {
-    const scopes = await store.scopes();
+export const connectSite = async (from: SandboxKey, account: string, tabId?: number): Promise<string> => {
+    const scopes = await store.scopes(from);
     assertScope(scopes, "cookies");
     // Being on the page only needs read access; handing over its session is a separate decision, made below.
-    const tab = await targetTab("read", tabId);
-    const sandbox = await store.sandbox();
+    const tab = await targetTab(from, "read", tabId);
+    const sandbox = await store.sandbox(from);
     if (sandbox === undefined) {
         throw new RefusedError(`This browser is not paired with a sandbox any more.`);
     }
@@ -33,6 +33,7 @@ export const connectSite = async (account: string, tabId?: number): Promise<stri
     const domain = cookieDomain(host);
 
     const agreed = await askPerson(
+        from,
         tab,
         `Hand your ${domain} sign-in to the sandbox account "${account}"? It will then be able to use ${domain} as you, without this browser open.`,
         120_000,

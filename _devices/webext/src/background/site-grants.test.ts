@@ -9,6 +9,8 @@ import { currentGrants } from "./tools/tab-access.js";
 // list without it.
 
 const GITHUB = "https://github.com/*";
+const SANDBOX = "https://sandbox-1.example.dev";
+const OTHER = "https://sandbox-2.example.dev";
 
 // What Chrome holds right now; a test adds to it the way the dialog's Allow does.
 let held: string[] = [];
@@ -62,13 +64,13 @@ beforeEach(() => {
 });
 
 test("a pick made before Chrome's dialog closed the popup is filed when the grant lands", async () => {
-    await store.setPending({ origin: GITHUB, reason: "To read the alert.", at: Date.now() });
+    await store.setPending(SANDBOX, { origin: GITHUB, reason: "To read the alert.", at: Date.now() });
     await choose(GITHUB, "act");
     // Nothing is filed while Chrome is still asking.
     expect(await store.modes()).toEqual({});
     await allowInDialog(GITHUB);
     expect(await currentGrants()).toEqual([{ origin: GITHUB, mode: "act" }]);
-    expect(await store.pending()).toBeUndefined();
+    expect(await store.pending()).toEqual([]);
     expect((await store.log())[0]?.detail).toBe("Allowed github.com to read and act");
 });
 
@@ -81,17 +83,17 @@ test("a pick for a site Chrome already holds is filed at once", async () => {
 });
 
 test("the site the agent asked for, allowed from Chrome's own menu, files as read only", async () => {
-    await store.setPending({ origin: GITHUB, reason: "", at: Date.now() });
+    await store.setPending(SANDBOX, { origin: GITHUB, reason: "", at: Date.now() });
     await allowInDialog(GITHUB);
     expect(await currentGrants()).toEqual([{ origin: GITHUB, mode: "read" }]);
-    expect(await store.pending()).toBeUndefined();
+    expect(await store.pending()).toEqual([]);
 });
 
 test("a grant nobody picked a mode for is not a site given to the agent", async () => {
-    await store.setPending({ origin: GITHUB, reason: "", at: Date.now() });
+    await store.setPending(SANDBOX, { origin: GITHUB, reason: "", at: Date.now() });
     await allowInDialog("https://gitlab.com/*");
     expect(await store.modes()).toEqual({});
-    expect((await store.pending())?.origin).toBe(GITHUB);
+    expect((await store.pending()).map((request) => request.origin)).toEqual([GITHUB]);
 });
 
 test("a pick for one site is not spent by another's grant, and an old pick is not filed", async () => {
@@ -109,8 +111,22 @@ test("ask_access leaves a request for a site Chrome holds but the agent was neve
     // SAFETY: a tools/call is answered with MCP's content list (mcp.ts `textResult`); a wrong shape fails the expect.
     const answer = (await handleMcpMessage(
         { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "ask_access", arguments: { origin: "github.com", reason: "To read it." } } },
-        undefined,
+        SANDBOX,
     )) as { result: { content: { text: string }[] } };
     expect(answer.result.content[0]?.text).toContain("Asked for github.com");
-    expect((await store.pending())?.origin).toBe(GITHUB);
+    expect((await store.pending()).map((request) => request.origin)).toEqual([GITHUB]);
+});
+
+// Two sandboxes' agents waiting on the same site: the person allows it once, and both go on.
+test("allowing a site answers every agent waiting on it, and leaves another sandbox's request for another site", async () => {
+    await store.setPending(SANDBOX, { origin: GITHUB, reason: "To read the alert.", at: Date.now() });
+    await store.setPending(OTHER, { origin: GITHUB, reason: "To file the issue.", at: Date.now() });
+    await choose(GITHUB, "read");
+    await allowInDialog(GITHUB);
+    expect(await store.pending()).toEqual([]);
+
+    await store.setPending(SANDBOX, { origin: "https://gitlab.com/*", reason: "", at: Date.now() });
+    await store.setPending(OTHER, { origin: GITHUB, reason: "", at: Date.now() });
+    await allowInDialog("https://gitlab.com/*");
+    expect((await store.pending()).map((request) => [request.sandbox, request.origin])).toEqual([[OTHER, GITHUB]]);
 });

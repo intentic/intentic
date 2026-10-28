@@ -678,6 +678,41 @@
                 margin: 0 12px 10px;
             }
 
+/* Sandboxes. A row is one connection: its state as a dot in the icon column, its name, and the way to end it. */
+            .dot {
+                flex: none;
+                width: 8px;
+                height: 8px;
+                margin: 0 6px 0 4px;
+                border-radius: 50%;
+                background: var(--subtle);
+            }
+            .dot.on {
+                background: var(--ok);
+            }
+            .dot.wait {
+                background: var(--warn);
+                animation: blink 1.2s ease-in-out infinite;
+            }
+            .dot.held {
+                background: var(--warn);
+            }
+            .dot.off {
+                background: var(--danger);
+            }
+            .row .sub .link {
+                padding: 0;
+                font-size: 11.5px;
+            }
+            #connect-more {
+                border-top: 1px solid var(--line);
+                padding-top: 10px;
+            }
+            .connect-hint {
+                padding: 0 12px 8px;
+                font-size: 12px;
+            }
+
 /* Activity: a sentence per call, newest first, straight on the page. History is read, not handled. */
             .log {
                 margin: 0;
@@ -737,6 +772,10 @@
                 -webkit-box-orient: vertical;
                 color: var(--danger);
                 font-size: 11.5px;
+            }
+            .log .from {
+                color: var(--subtle);
+                font-weight: var(--w-medium);
             }
             .log .raw {
                 font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
@@ -905,7 +944,29 @@
                         <div class="row work-row">
                             <span id="work-in" class="seg" role="radiogroup" aria-label="Where your agent works"></span>
                         </div>
-                        <p class="work-hint muted"><span id="work-hint"></span> <button id="show-agent" class="link" type="button" hidden>Show its window</button></p>
+                        <p class="work-hint muted"><span id="work-hint"></span></p>
+                    </div>
+                </section>
+                <!-- Every sandbox this browser serves, one row each, and the way to add one more. -->
+                <section id="sandboxes" hidden>
+                    <h2 class="label">Sandboxes</h2>
+                    <div class="card">
+                        <div id="sandbox-list"></div>
+                        <button id="connect-open" class="add-row" type="button" aria-expanded="false" aria-controls="connect-more">
+                            <svg viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8 1.5v9M3.5 6h9" /></svg>
+                            Connect another sandbox
+                        </button>
+                        <div id="connect-more" hidden>
+                            <p class="connect-hint muted">
+                                In that sandbox, open <b>Capabilities</b>, choose this browser and press <b>Connect this browser</b>. On intentic.dev this
+                                popup opens with its request; anywhere else, paste the code it shows:
+                            </p>
+                            <form id="connect-form" class="add" autocomplete="off">
+                                <input id="connect-code" type="text" placeholder="ixb1_…" spellcheck="false" aria-label="Connection code" />
+                                <button class="btn small" type="submit">Connect</button>
+                            </form>
+                            <div id="connect-error" class="error" hidden></div>
+                        </div>
                     </div>
                 </section>
                 <section id="activity" hidden>
@@ -919,7 +980,6 @@
                     <input id="open-on-ask" type="checkbox" />
                     <span>Pop up when my agent asks</span>
                 </label>
-                <button id="unpair" class="btn quiet small" type="button" hidden>Disconnect</button>
             </footer>
         </div>
         <script src="popup.js"></script>

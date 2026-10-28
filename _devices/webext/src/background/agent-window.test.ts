@@ -10,16 +10,18 @@ import { screenshot } from "./tools/page.js";
 
 let browser: FakeBrowser;
 
+const SANDBOX = "https://sandbox-1.example.dev";
+
 const call = async (name: string, args: Record<string, string | number | boolean> = {}): Promise<{ text: string; isError: boolean }> => {
     // SAFETY: a tools/call is always answered with a result envelope (peer-mcp-server.ts), a failure as isError.
-    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, undefined)) as {
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, SANDBOX)) as {
         result: { content: { text: string }[]; isError: boolean };
     };
     return { text: answer.result.content[0]?.text ?? "", isError: answer.result.isError };
 };
 
 const agentWindowId = async (): Promise<number> => {
-    const id = await store.agentWindowId();
+    const id = await store.agentWindowId(SANDBOX);
     if (id === undefined) {
         throw new Error(`the agent has no window`);
     }
@@ -46,7 +48,7 @@ const personUndisturbed = (): void => {
 
 beforeEach(async () => {
     browser = installBrowser();
-    await store.setScopes({ read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "on", cookies: "off", confirm: "sensitive" });
     await store.setMode("https://app.example/*", "act");
     await store.setMode("https://mail.example/*", "act");
 });
@@ -169,7 +171,7 @@ test("a screenshot of the agent's minimized window restores it unfocused, and mi
     const id = await agentWindowId();
     await chrome.windows.update(id, { state: "minimized" });
     browser.calls.length = 0;
-    const shot = await screenshot();
+    const shot = await screenshot(SANDBOX);
     expect(shot.mimeType).toBe("image/png");
     expect(browser.calls.filter(([api]) => api === "windows.update" || api === "tabs.captureVisibleTab")).toEqual([
         ["windows.update", id, { state: "normal", focused: false }],
@@ -182,13 +184,13 @@ test("a screenshot of the agent's minimized window restores it unfocused, and mi
 test("a capture that never comes is a refusal, not a hang, and a page not showing in its window is not captured", async () => {
     await call("open", { url: "app.example/chart" });
     browser.captureHangs = true;
-    await expect(screenshot(undefined, 30)).rejects.toThrow("did not hand over a picture");
+    await expect(screenshot(SANDBOX, undefined, 30)).rejects.toThrow("did not hand over a picture");
 
     // Another of its tabs is behind the one in front, and a picture of the window would be of that one instead.
     browser.captureHangs = false;
     const behind = browser.tabs.find((tab) => tab.windowId === PERSON_WINDOW && tab.id === PERSON_TAB);
     await call("open", { url: "app.example/other", tab: "new" });
     const hidden = browser.tabs.find((tab) => tab.url === "https://app.example/chart")?.id ?? 0;
-    await expect(screenshot(hidden)).rejects.toThrow("not the one showing in its window");
+    await expect(screenshot(SANDBOX, hidden)).rejects.toThrow("not the one showing in its window");
     expect(behind?.active).toBe(true);
 });

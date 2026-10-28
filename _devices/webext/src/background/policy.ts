@@ -49,8 +49,11 @@ export const decide = (options: {
     readonly need: "read" | "act";
     readonly scopes: WebExtScopes;
     readonly paused: boolean;
-    // The sandbox's own origin, when paired with one; never a site to work on.
+    // The calling sandbox's own origin; never a site to work on.
     readonly own?: string | undefined;
+    // Every other paired sandbox's origin: another sandbox's app is no site to work on either, and reading it would be
+    // reading that sandbox's conversations.
+    readonly others?: readonly string[];
     // The person declined this site's request recently (store.ts DECLINE_HOLD_MS), which changes what "not allowed"
     // should tell the agent to do next.
     readonly declined?: boolean;
@@ -70,6 +73,12 @@ export const decide = (options: {
         return {
             allowed: false,
             message: `That tab is the sandbox's own app. This connection exists to work on OTHER sites; use your ordinary tools for anything here.`,
+        };
+    }
+    if (options.others?.includes(pattern) === true) {
+        return {
+            allowed: false,
+            message: `That tab is another of the person's sandboxes, which has its own agent. This connection exists to work on OTHER sites; leave that one alone.`,
         };
     }
     if (!options.granted && options.declined === true) {

@@ -17,7 +17,7 @@ import { flashBanner } from "../../page/overlay.js";
 import { isAgentWindow, type Opened, openInAgentWindow, ownWindow } from "../agent-window.js";
 import { askPerson } from "../asking.js";
 import { APPROVAL_HOLD_MS, assertRunning, assertScope, needsConfirm, RefusedError } from "../policy.js";
-import { store } from "../store.js";
+import { type SandboxKey, store } from "../store.js";
 import { type TargetTab, targetTab } from "./tab-access.js";
 import { fitCapture } from "./fit-capture.js";
 import { untilTabLoaded } from "./tab-loaded.js";
@@ -54,13 +54,13 @@ const pageText = async (tabId: number): Promise<string> => {
     return snapshot.loading ? `${rendered}\n(the page is still loading: take another snapshot in a moment if what you need is missing)` : rendered;
 };
 
-export const snapshot = async (tabId?: number): Promise<string> => {
-    const tab = await targetTab("read", tabId);
+export const snapshot = async (from: SandboxKey, tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "read", tabId);
     return await pageText(tab.id);
 };
 
-export const readable = async (tabId?: number): Promise<string> => {
-    const tab = await targetTab("read", tabId);
+export const readable = async (from: SandboxKey, tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "read", tabId);
     const page = await inject(tab.id, readPageText, []);
     return [
         `Page: ${page.title === "" ? "(untitled)" : page.title}`,
@@ -90,19 +90,19 @@ const OPENED_WINDOW = `(This opened in a window of your own, behind the person's
 
 // Navigating needs the acting scope but not a grant on the destination; reading what lands there needs the read
 // grant, since the destination — not the source page — is the subject of this action.
-export const openUrl = async (url: string, where: "current" | "new"): Promise<string> => {
-    const [scopes, paused] = await Promise.all([store.scopes(), store.paused()]);
+export const openUrl = async (from: SandboxKey, url: string, where: "current" | "new"): Promise<string> => {
+    const [scopes, paused] = await Promise.all([store.scopes(from), store.paused()]);
     assertRunning(paused);
     assertScope(scopes, "act");
     const target = /^https?:\/\//.test(url) ? url : `https://${url}`;
-    const { tab, created } = (await ownWindow()) ? await openInAgentWindow(target, where === "new") : await openInFront(target, where);
+    const { tab, created } = (await ownWindow()) ? await openInAgentWindow(from, target, where === "new") : await openInFront(target, where);
     const opened = created ? `Opened ${target}. ${OPENED_WINDOW}` : `Opened ${target}.`;
     if (tab?.id === undefined) {
         return opened;
     }
     await untilTabLoaded(tab.id);
     try {
-        const permitted = await targetTab("read", tab.id);
+        const permitted = await targetTab(from, "read", tab.id);
         announce(permitted.id, `The agent opened this page`);
         const page = await pageText(permitted.id);
         return created ? `${page}\n\n${OPENED_WINDOW}` : page;
@@ -117,15 +117,15 @@ type Consent = "unasked" | "asked" | "kept";
 
 // Asks the person when the switches require it. The question renders in the page, next to what it's about; an
 // unanswered question is a no (page/overlay.ts).
-const confirmed = async (tab: TargetTab, what: string, sensitive: boolean): Promise<Consent> => {
-    const scopes = await store.scopes();
+const confirmed = async (from: SandboxKey, tab: TargetTab, what: string, sensitive: boolean): Promise<Consent> => {
+    const scopes = await store.scopes(from);
     if (!needsConfirm(scopes, sensitive)) {
         return "unasked";
     }
     if (await store.takeApproval({ tabId: tab.id, url: tab.url, what }, Date.now())) {
         return "kept";
     }
-    const ok = await askPerson(tab, `Your agent wants to ${what}. Allow it?`, CONFIRM_TIMEOUT_MS);
+    const ok = await askPerson(from, tab, `Your agent wants to ${what}. Allow it?`, CONFIRM_TIMEOUT_MS);
     if (!ok) {
         throw new RefusedError(
             `The person said no (or did not answer) to: ${what}. Do not try another way round it; ask them what they would prefer.`,
@@ -147,8 +147,8 @@ const failed = async (tab: TargetTab, what: string, consent: Consent, result: Ac
     );
 };
 
-export const click = async (ref: string, tabId?: number): Promise<string> => {
-    const tab = await targetTab("act", tabId);
+export const click = async (from: SandboxKey, ref: string, tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "act", tabId);
     // The click lands on the element described here, not on whatever the ref names after the person decides.
     const pin = crypto.randomUUID();
     const element = await inject(tab.id, describeRef, [ref, pin]);
@@ -156,19 +156,19 @@ export const click = async (ref: string, tabId?: number): Promise<string> => {
         throw new RefusedError(`No element ${ref} on this page: take a fresh snapshot, the page has changed.`);
     }
     const what = `click "${element.name === "" ? ref : element.name}"`;
-    const consent = await confirmed(tab, what, element.sensitive);
+    const consent = await confirmed(from, tab, what, element.sensitive);
     const result = await inject(tab.id, clickRef, [ref, pin]);
     if (!result.ok) {
         throw await failed(tab, what, consent, result);
     }
     announce(tab.id, `The agent clicked "${element.name === "" ? ref : element.name}"`);
     // Re-checks permission after the click: a navigation must not be a way around a grant.
-    const after = await targetTab("read", tab.id).catch(() => undefined);
+    const after = await targetTab(from, "read", tab.id).catch(() => undefined);
     return after === undefined ? `Clicked. The page then navigated somewhere this browser is not allowed to read.` : await pageText(after.id);
 };
 
-export const fill = async (ref: string, text: string, submit: boolean, tabId?: number): Promise<string> => {
-    const tab = await targetTab("act", tabId);
+export const fill = async (from: SandboxKey, ref: string, text: string, submit: boolean, tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "act", tabId);
     const pin = crypto.randomUUID();
     const element = await inject(tab.id, describeRef, [ref, pin]);
     if (!element.ok) {
@@ -178,6 +178,7 @@ export const fill = async (ref: string, text: string, submit: boolean, tabId?: n
     // No yes is kept here when the field is gone: the question names no field ("this form"), so a kept one could
     // not tell this form from the next.
     await confirmed(
+        from,
         tab,
         submit ? `fill in and submit this form` : `type into "${element.name === "" ? ref : element.name}"`,
         element.sensitive && submit,
@@ -187,12 +188,12 @@ export const fill = async (ref: string, text: string, submit: boolean, tabId?: n
         throw new RefusedError(result.message);
     }
     announce(tab.id, submit ? `The agent filled in and submitted a form` : `The agent typed into "${element.name === "" ? ref : element.name}"`);
-    const after = await targetTab("read", tab.id).catch(() => undefined);
+    const after = await targetTab(from, "read", tab.id).catch(() => undefined);
     return after === undefined ? `Typed. The page then navigated somewhere this browser is not allowed to read.` : await pageText(after.id);
 };
 
-export const selectOption = async (ref: string, values: string[], tabId?: number): Promise<string> => {
-    const tab = await targetTab("act", tabId);
+export const selectOption = async (from: SandboxKey, ref: string, values: string[], tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "act", tabId);
     const result = await inject(tab.id, selectRef, [ref, values]);
     if (!result.ok) {
         throw new RefusedError(result.message);
@@ -203,24 +204,24 @@ export const selectOption = async (ref: string, values: string[], tabId?: number
 
 // Sends a key to the page. Always confirmed: a key's effect on an unknown focus target can't be judged for
 // sensitivity, and prompting only sometimes would train people to click through.
-export const pressKey = async (key: string, tabId?: number): Promise<string> => {
-    const tab = await targetTab("act", tabId);
-    await confirmed(tab, `press ${key}`, false);
+export const pressKey = async (from: SandboxKey, key: string, tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "act", tabId);
+    await confirmed(from, tab, `press ${key}`, false);
     await inject(tab.id, pressKeyOnPage, [key]);
     announce(tab.id, `The agent pressed ${key}`);
-    const after = await targetTab("read", tab.id).catch(() => undefined);
+    const after = await targetTab(from, "read", tab.id).catch(() => undefined);
     return after === undefined ? `Pressed ${key}.` : await pageText(after.id);
 };
 
-export const scroll = async (direction: "up" | "down" | "left" | "right", amount: number, tabId?: number): Promise<string> => {
+export const scroll = async (from: SandboxKey, direction: "up" | "down" | "left" | "right", amount: number, tabId?: number): Promise<string> => {
     // Scrolling only needs read access; it changes what's visible, not the page.
-    const tab = await targetTab("read", tabId);
+    const tab = await targetTab(from, "read", tabId);
     await inject(tab.id, scrollPage, [direction, amount]);
     return await pageText(tab.id);
 };
 
-export const waitFor = async (options: { text?: string; textGone?: string; seconds: number }, tabId?: number): Promise<string> => {
-    const tab = await targetTab("read", tabId);
+export const waitFor = async (from: SandboxKey, options: { text?: string; textGone?: string; seconds: number }, tabId?: number): Promise<string> => {
+    const tab = await targetTab(from, "read", tabId);
     const seconds = Math.min(Math.max(options.seconds, 1), MAX_WAIT_SECONDS);
     const needle = options.text ?? options.textGone;
     if (needle === undefined) {
@@ -241,9 +242,9 @@ const RESTORE_SETTLE_MS = 250;
 // front in its own window, or the picture would be of another page, very likely one of the person's. The agent's
 // window behind theirs captures as it is; minimized it draws nothing, so it is restored without focus (Brave keeps it
 // behind their window, measured), read, and minimized again.
-export const screenshot = async (tabId?: number, capMs: number = CAPTURE_CAP_MS): Promise<{ data: string; mimeType: string }> => {
-    assertScope(await store.scopes(), "screenshot");
-    const tab = await targetTab("read", tabId);
+export const screenshot = async (from: SandboxKey, tabId?: number, capMs: number = CAPTURE_CAP_MS): Promise<{ data: string; mimeType: string }> => {
+    assertScope(await store.scopes(from), "screenshot");
+    const tab = await targetTab(from, "read", tabId);
     const target = await chrome.tabs.get(tab.id);
     if (target.windowId === undefined) {
         throw new RefusedError(`That tab is not in a window this browser can capture.`);
@@ -255,7 +256,7 @@ export const screenshot = async (tabId?: number, capMs: number = CAPTURE_CAP_MS)
     }
     const windowId = target.windowId;
     const window = await chrome.windows.get(windowId);
-    const restore = window.state === "minimized" && (await isAgentWindow(windowId));
+    const restore = window.state === "minimized" && (await isAgentWindow(windowId, from));
     if (window.state === "minimized" && !restore) {
         throw new RefusedError(`That tab's window is minimized, so there is nothing on screen to capture. Use snapshot or read for it instead.`);
     }

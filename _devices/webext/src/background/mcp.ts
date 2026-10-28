@@ -6,6 +6,7 @@ import { WEBEXT_TICKET_TOOL } from "@intentic/sandbox-contract/webext";
 import { array, boolean, enum as zEnum, number, object, string } from "zod";
 import { record } from "./audit.js";
 import { RefusedError } from "./policy.js";
+import type { SandboxKey } from "./store.js";
 import { askAccess, describeAccess } from "./tools/access.js";
 import { click, fill, openUrl, pressKey, readable, screenshot, scroll, selectOption, snapshot, waitFor } from "./tools/page.js";
 import { lendSite } from "./tools/lend.js";
@@ -22,7 +23,9 @@ const required = string().min(1);
 // the agent works on a page they already have open, where it is, without bringing it forward.
 const tab = number().int().optional().describe("Which tab, from `tabs`. Omit for your own tab, the one `open` loaded.");
 
-const TOOLS: readonly McpTool<undefined>[] = [
+// Every tool runs for the sandbox whose socket the call came over (`from`, link.ts): with that sandbox's switches, in
+// that sandbox's agent window, and reporting to that sandbox only.
+const TOOLS: readonly McpTool<SandboxKey>[] = [
     tool({
         name: "describe",
         description:
@@ -38,7 +41,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         // Listing reads, but `select` brings a tab to the front.
         effect: "write",
         input: object({ select: number().int().optional().describe("A tab id to switch to. Omit to just list them.") }),
-        run: async ({ select }) => textResult(select === undefined ? await listTabs() : await selectTab(select)),
+        run: async ({ select }, from) => textResult(select === undefined ? await listTabs(from) : await selectTab(select, from)),
     }),
     tool({
         name: "open",
@@ -49,7 +52,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             url: required.describe("The page to open. A bare host like example.com is fine."),
             tab: zEnum(["current", "new"]).default("current").describe("Reuse your tab, or open another beside it."),
         }),
-        run: async ({ url, tab: where }) => textResult(await openUrl(url, where)),
+        run: async ({ url, tab: where }, from) => textResult(await openUrl(from, url, where)),
     }),
     tool({
         name: "snapshot",
@@ -57,7 +60,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             "What the page shows right now: every element you can click or type into, each with a reference like [e12]. Take one before acting. References die with the page — one from an older snapshot is refused rather than clicking whatever now sits in that slot.",
         effect: "read",
         input: object({ tab }),
-        run: async ({ tab: id }) => textResult(await snapshot(id)),
+        run: async ({ tab: id }, from) => textResult(await snapshot(from, id)),
     }),
     tool({
         name: "read",
@@ -65,7 +68,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             "The page as readable text — what a person would get by selecting all of it. Use this to ANSWER questions about a page; use snapshot when you intend to act on it.",
         effect: "read",
         input: object({ tab }),
-        run: async ({ tab: id }) => textResult(await readable(id)),
+        run: async ({ tab: id }, from) => textResult(await readable(from, id)),
     }),
     tool({
         name: "click",
@@ -73,7 +76,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             "Click an element by its [e…] reference. Answers with the page as it stands afterwards. On a page that deals in passwords, money or deletion, the person is asked in their own browser first.",
         effect: "destructive",
         input: object({ ref: required, tab }),
-        run: async ({ ref, tab: id }) => textResult(await click(ref, id)),
+        run: async ({ ref, tab: id }, from) => textResult(await click(from, ref, id)),
     }),
     tool({
         name: "fill",
@@ -87,7 +90,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             submit: boolean().default(false).describe("Submit the form after typing. Default false."),
             tab,
         }),
-        run: async ({ ref, text, submit, tab: id }) => textResult(await fill(ref, text, submit, id)),
+        run: async ({ ref, text, submit, tab: id }, from) => textResult(await fill(from, ref, text, submit, id)),
     }),
     tool({
         name: "select_option",
@@ -95,7 +98,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         // Another choice undoes it; nothing typed is lost, unlike fill.
         effect: "write",
         input: object({ ref: required, values: array(required).min(1), tab }),
-        run: async ({ ref, values, tab: id }) => textResult(await selectOption(ref, values, id)),
+        run: async ({ ref, values, tab: id }, from) => textResult(await selectOption(from, ref, values, id)),
     }),
     tool({
         name: "key",
@@ -103,7 +106,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         // Enter submits and Delete deletes, whatever has focus.
         effect: "destructive",
         input: object({ key: required, tab }),
-        run: async ({ key, tab: id }) => textResult(await pressKey(key, id)),
+        run: async ({ key, tab: id }, from) => textResult(await pressKey(from, key, id)),
     }),
     tool({
         name: "scroll",
@@ -115,7 +118,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             amount: number().int().min(1).max(10).default(1).describe("Roughly this many screens."),
             tab,
         }),
-        run: async ({ direction, amount, tab: id }) => textResult(await scroll(direction, amount, id)),
+        run: async ({ direction, amount, tab: id }, from) => textResult(await scroll(from, direction, amount, id)),
     }),
     tool({
         name: "wait_for",
@@ -131,8 +134,8 @@ const TOOLS: readonly McpTool<undefined>[] = [
             error: `Say what to wait for: "text" for something to appear, "textGone" for something to disappear.`,
             path: ["text"],
         }),
-        run: async ({ text, textGone, seconds, tab: id }) =>
-            textResult(await waitFor({ ...(text === undefined ? {} : { text }), ...(textGone === undefined ? {} : { textGone }), seconds }, id)),
+        run: async ({ text, textGone, seconds, tab: id }, from) =>
+            textResult(await waitFor(from, { ...(text === undefined ? {} : { text }), ...(textGone === undefined ? {} : { textGone }), seconds }, id)),
     }),
     tool({
         name: "screenshot",
@@ -140,8 +143,8 @@ const TOOLS: readonly McpTool<undefined>[] = [
             "The page as an image: your own tab, or `tab` when that tab is the one showing in its window (a screenshot is of what a window shows). For canvas apps, maps and PDF viewers, where the page's own structure says nothing. Needs its own switch on this browser's card, which is off unless the owner turned it on.",
         effect: "read",
         input: object({ tab }),
-        run: async ({ tab: id }) => {
-            const shot = await screenshot(id);
+        run: async ({ tab: id }, from) => {
+            const shot = await screenshot(from, id);
             return { content: [{ type: "image", data: shot.data, mimeType: shot.mimeType }], isError: false };
         },
     }),
@@ -155,7 +158,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             origin: required.describe(`The site, as a host or an origin: "github.com" or "https://github.com".`),
             reason: required.describe("Why you need it, in one plain sentence. They read this."),
         }),
-        run: async ({ origin, reason }) => textResult(await askAccess(origin, reason)),
+        run: async ({ origin, reason }, from) => textResult(await askAccess(from, origin, reason)),
     }),
     tool({
         name: "connect_site",
@@ -166,7 +169,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             account: required.describe("An existing connected-browser account in the sandbox, the one this session should land in."),
             tab,
         }),
-        run: async ({ account, tab: id }) => textResult(await connectSite(account, id)),
+        run: async ({ account, tab: id }, from) => textResult(await connectSite(from, account, id)),
     }),
     tool({
         name: "lend_site",
@@ -177,7 +180,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
             account: required.describe("The connected-browser account in the sandbox whose session should be borrowed."),
             tab,
         }),
-        run: async ({ account, tab: id }) => textResult(await lendSite(account, id)),
+        run: async ({ account, tab: id }, from) => textResult(await lendSite(from, account, id)),
     }),
     tool({
         name: WEBEXT_TICKET_TOOL,
@@ -187,19 +190,35 @@ const TOOLS: readonly McpTool<undefined>[] = [
         effect: "destructive",
         // The ticket and nothing else: the arguments are what the activity list records.
         input: object({ ticket: required }),
-        run: async ({ ticket }) => {
-            const typed = await typeTicket(ticket);
+        run: async ({ ticket }, from) => {
+            const typed = await typeTicket(from, ticket);
             return { ...textResult(`Typed the secret into the focused ${typed.field} field on ${typed.host}.`), structuredContent: { host: typed.host, field: typed.field } };
         },
     }),
 ];
 
-// Handle one JSON-RPC message. Nothing rides beside the arguments: the grant lives in storage, read per call.
-export const handleMcpMessage = createMcpServer<undefined>({
-    serverInfo: () => ({ name: "intentic-webext", version: chrome.runtime.getManifest().version }),
-    tools: TOOLS,
-    noSuchTool: (name) => `This browser has no tool called "${name}".`,
-    refused: (error) => error instanceof RefusedError,
-    errorMessage,
-    audit: ({ tool: name, args, ok, failure }) => record(name, args, ok, failure === undefined ? undefined : `${failure.refused ? "refused" : "failed"}: ${failure.message}`),
-});
+// One MCP server per sandbox, only so the activity list can say whose agent made each call: the audit hook is told the
+// call, not who placed it. Built on a sandbox's first call and kept for the worker's life, which is short.
+type McpHandler = ReturnType<typeof createMcpServer<SandboxKey>>;
+const servers = new Map<SandboxKey, McpHandler>();
+const serverFor = (from: SandboxKey): McpHandler => {
+    const known = servers.get(from);
+    if (known !== undefined) {
+        return known;
+    }
+    const server = createMcpServer<SandboxKey>({
+        serverInfo: () => ({ name: "intentic-webext", version: chrome.runtime.getManifest().version }),
+        tools: TOOLS,
+        noSuchTool: (name) => `This browser has no tool called "${name}".`,
+        refused: (error) => error instanceof RefusedError,
+        errorMessage,
+        audit: ({ tool: name, args, ok, failure }) =>
+            record(from, name, args, ok, failure === undefined ? undefined : `${failure.refused ? "refused" : "failed"}: ${failure.message}`),
+    });
+    servers.set(from, server);
+    return server;
+};
+
+// Handle one JSON-RPC message from sandbox `from`. Nothing else rides beside the arguments: the grant lives in storage,
+// read per call.
+export const handleMcpMessage: McpHandler = async (message, from) => await serverFor(from)(message, from);

@@ -9,9 +9,11 @@ import { DEFAULT_SETTINGS, store } from "./store.js";
 
 let browser: FakeBrowser;
 
+const SANDBOX = "https://sandbox-1.example.dev";
+
 const call = async (name: string, args: Record<string, string | number | boolean> = {}): Promise<{ text: string; isError: boolean }> => {
     // SAFETY: a tools/call is always answered with a result envelope (peer-mcp-server.ts), a failure as isError.
-    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, undefined)) as {
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, SANDBOX)) as {
         result: { content: { text: string }[]; isError: boolean };
     };
     return { text: answer.result.content[0]?.text ?? "", isError: answer.result.isError };
@@ -20,7 +22,7 @@ const call = async (name: string, args: Record<string, string | number | boolean
 // The question the agent is waiting on, once it is being asked.
 const asked = async (): Promise<{ id: string; tabId: number; origin: string; question: string }> => {
     for (let tries = 0; tries < 100; tries += 1) {
-        const asking = await store.asking();
+        const [asking] = await store.asking();
         if (asking !== undefined) {
             return asking;
         }
@@ -33,14 +35,14 @@ const flashes = (): unknown[] => browser.calls.filter(([api, , info]) => api ===
 
 beforeEach(async () => {
     browser = installBrowser();
-    await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "always" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "always" });
     await store.setMode("https://app.example/*", "act");
     await store.setMode("https://mail.example/*", "act");
 });
 
 test("a question on a page behind the person's window is put on the icon and answered from the popup", async () => {
     await call("open", { url: "app.example/invoices" });
-    const agentWindow = await store.agentWindowId();
+    const agentWindow = await store.agentWindowId(SANDBOX);
     browser.pageAnswer = "wait";
     browser.calls.length = 0;
 
@@ -63,7 +65,7 @@ test("a question on a page behind the person's window is put on the icon and ans
         ["windows.update", agentWindow, { drawAttention: true }],
         ["windows.update", agentWindow, { drawAttention: false }],
     ]);
-    expect(await store.asking()).toBeUndefined();
+    expect(await store.asking()).toEqual([]);
     expect(browser.calls.findLast(([api]) => api === "badge")).toEqual(["badge", ""]);
 });
 
@@ -100,8 +102,8 @@ test("a person who turned off the popup opening by itself still gets the badge a
 });
 
 test("a question left stored by a worker that died is cleared when the next one starts", async () => {
-    await store.setAsking({ id: "gone", tabId: 7, origin: "https://app.example/*", question: "Your agent wants to press Enter. Allow it?", at: 1 });
+    await store.addAsking({ id: "gone", sandbox: SANDBOX, tabId: 7, origin: "https://app.example/*", question: "Your agent wants to press Enter. Allow it?", at: 1 });
     await clearStaleAsking();
-    expect(await store.asking()).toBeUndefined();
+    expect(await store.asking()).toEqual([]);
     expect(await answerAsking("gone", true)).toBe(false);
 });

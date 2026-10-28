@@ -10,6 +10,8 @@ import { store } from "../store.js";
 
 const PAGE = "https://app.example/login";
 const SANDBOX = "https://sandbox-1.example.dev";
+// A second paired sandbox; its agent window is the same one here, so only which sandbox is asked differs.
+const OTHER = "https://sandbox-2.example.dev";
 const VALUE = "s3cret-value-never-shown";
 
 interface Injected {
@@ -71,7 +73,7 @@ beforeEach(async () => {
     posted = [];
     const storage = new Map<string, unknown>();
     // Window 1 is the agent's own (agent-window.ts): the field in focus is looked for in its tab in front, tab 7.
-    const session = new Map<string, unknown>([["agentWindow", 1]]);
+    const session = new Map<string, unknown>([["agentWindows", { [SANDBOX]: 1, [OTHER]: 1 }]]);
     Object.assign(globalThis, {
         chrome: {
             storage: {
@@ -114,8 +116,8 @@ beforeEach(async () => {
         },
         { preconnect: realFetch.preconnect },
     );
-    await store.setSandbox({ url: SANDBOX, token: "iwx_token" });
-    await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    await store.addSandbox({ url: SANDBOX, token: "iwx_token" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
     await store.setMode("https://app.example/*", "act");
 });
 
@@ -123,10 +125,10 @@ afterEach(() => {
     globalThis.fetch = realFetch;
 });
 
-const typeTicket = async (args: Record<string, unknown> = { ticket: "tkt_one" }) => {
+const typeTicket = async (args: Record<string, unknown> = { ticket: "tkt_one" }, from = SANDBOX) => {
     const answer = await handleMcpMessage(
         { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "type_ticket", arguments: args } },
-        undefined,
+        from,
     );
     // SAFETY: a tools/call is always answered with a result envelope (peer-mcp-server.ts), a failure as isError.
     const result = (answer as { result: { content: { text: string }[]; isError: boolean; structuredContent?: unknown } }).result;
@@ -159,6 +161,25 @@ test("the ticket is presented with the page, and the value goes into the field h
     expect(log[0]?.detail).toBe("Typed a stored secret into the field in focus");
     expect(log[0]?.ok).toBe(true);
     expect(JSON.stringify(log)).not.toContain(VALUE);
+});
+
+// With two sandboxes paired, a ticket is presented only to the one whose socket the call came over, on that one's own
+// token: another sandbox never learns of it, and could not redeem it anyway.
+test("a ticket is collected from the sandbox that sent it, on its own token, never from another paired one", async () => {
+    await store.addSandbox({ url: OTHER, token: "iwx_other" });
+    await store.setScopes(OTHER, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    expect((await typeTicket({ ticket: "tkt_two" }, OTHER)).isError).toBe(false);
+    expect(posted.map(({ url, headers }) => [url, headers["authorization"]])).toEqual([[`${OTHER}/system/webext/secret`, "Bearer iwx_other"]]);
+    expect((await store.log())[0]?.sandbox).toBe(OTHER);
+});
+
+// A sandbox no longer paired holds no token here, so its socket's late call collects nothing.
+test("a call from a sandbox that is not paired types nothing and asks nobody", async () => {
+    await store.setScopes(OTHER, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "sensitive" });
+    const typed = await typeTicket({ ticket: "tkt_two" }, OTHER);
+    expect(typed.isError).toBe(true);
+    expect(typed.text).toContain("not paired with a sandbox");
+    expect(posted).toEqual([]);
 });
 
 test("nothing in focus is refused before the sandbox is asked for anything", async () => {
@@ -196,7 +217,7 @@ test("an answer from the sandbox this browser cannot read types nothing", async 
 });
 
 test("a person whose switches ask before every action is asked first, and a no reaches nobody", async () => {
-    await store.setScopes({ read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "always" });
+    await store.setScopes(SANDBOX, { read: "on", act: "on", screenshot: "off", cookies: "off", confirm: "always" });
     const typed = await typeTicket();
     expect(typed.isError).toBe(true);
     expect(typed.text).toContain("said no (or did not answer) to typing a secret into this password field");

@@ -25,7 +25,14 @@ flowchart LR
   the taskbar without taking focus. Whichever answers first wins, and the panel on the page is taken down.
 - Pairing: the sandbox page posts a code, `pair-bridge.js` (the only content script, on intentic.dev pages) hands it
   to the worker, and the person finishes it with a click in the popup, which redeems it at `/system/webext/enroll`.
-  The token it gets back is the only secret the extension stores.
+  The token it gets back is the only secret the extension stores. The code carries the sandbox's name, which the popup
+  lists it by.
+- One extension serves several sandboxes (since 2026-10-28; before, pairing a second replaced the first). Each paired
+  sandbox has its own socket ([`link.ts`](src/background/link.ts)), token, switches from its own card, agent window and
+  pending site request, and every tool call acts for the sandbox whose socket it came over: its switches, its window,
+  its token for `type_ticket`, `connect_site` and `lend_site`. What the person decides about the browser is shared: the
+  allowed sites and their modes, pause, declines and settings. No sandbox's own app is a site any agent may work on.
+  The popup's Sandboxes section lists them, disconnects one at a time, and pairs another.
 - `policy.ts` decides every call. Chrome's own permission for the site comes first, and only a click in the popup
   grants one, so the agent can only ask (`ask_access`), which opens the popup with its reason (Chrome 127+, else the
   badge alone); a decline holds for 15 minutes. Then the switches on the sandbox's capability card, then the
@@ -57,6 +64,8 @@ flowchart LR
 ## Key files
 
 - [src/background/main.ts](src/background/main.ts) — the service worker: keepalive alarm, pairing, popup messages.
+- [src/background/store.ts](src/background/store.ts) — everything kept, per sandbox or for the whole browser, and the
+  move from a build that kept one sandbox.
 - [src/background/policy.ts](src/background/policy.ts) — every allow or refuse decision, with its message.
 - [src/background/mcp.ts](src/background/mcp.ts) — the tool surface the sandbox calls.
 - [src/background/agent-window.ts](src/background/agent-window.ts) — the agent's own window: opened, reused, remembered.
@@ -64,6 +73,7 @@ flowchart LR
 - [src/page/driver.ts](src/page/driver.ts) — what runs inside a tab: snapshot, click, fill.
 - [src/page/overlay.ts](src/page/overlay.ts) — what a tab shows the person: the action banner and the in-page Allow/No question.
 - [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted; `preview` renders its states.
+- [src/popup/sandboxes-section.ts](src/popup/sandboxes-section.ts) — the popup's list of paired sandboxes, and pairing another.
 - [src/background/native.ts](src/background/native.ts) — the one native-messaging port to Passwords on this computer, requests correlated by id.
 - [src/background/passwords.ts](src/background/passwords.ts) — registers the passwords content script and routes capture/fill.
 - [src/content/password-capture.ts](src/content/password-capture.ts) — capture, toast, and fill UI injected on sites while Passwords is on.

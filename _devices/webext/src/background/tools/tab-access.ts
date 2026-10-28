@@ -1,17 +1,37 @@
 import type { WebExtGrant } from "@intentic/sandbox-contract/webext";
 import { agentTab, ownWindow } from "../agent-window.js";
 import { decide, originPattern, RefusedError, sandboxOwnOrigin } from "../policy.js";
-import { DECLINE_HOLD_MS, store } from "../store.js";
+import { DECLINE_HOLD_MS, type SandboxKey, sandboxKey, store } from "../store.js";
 
 // Single checkpoint every page tool passes through before touching a tab: which tab, is this extension allowed on
 // it at all (Chrome), and may it do this here (ours). Defaults to the agent's own tab, the one in front in its window
 // (agent-window.ts), or to the tab in front of the person when they chose to have it work there; an explicit id
 // targets any tab, theirs included, without bringing it forward.
 
+// Every paired sandbox's own origin, split into the caller's and the rest: none is a site to work on (policy.ts).
+export const sandboxOrigins = async (from?: SandboxKey): Promise<{ readonly own: string | undefined; readonly others: string[] }> => {
+    const sandboxes = await store.sandboxes();
+    const caller = from === undefined ? undefined : sandboxKey(from);
+    const originOf = (url: string): string[] => {
+        const origin = sandboxOwnOrigin(url);
+        return origin === undefined ? [] : [origin];
+    };
+    return {
+        own: caller === undefined ? undefined : sandboxOwnOrigin(caller),
+        others: sandboxes.filter((sandbox) => sandboxKey(sandbox.url) !== caller).flatMap((sandbox) => originOf(sandbox.url)),
+    };
+};
+
+// Every paired sandbox's origin at once, for lists that leave them all out.
+const allSandboxOrigins = async (): Promise<Set<string>> => {
+    const { others } = await sandboxOrigins();
+    return new Set(others);
+};
+
 // The tab a tool given no id works on, or the sentence why there is none.
-const defaultTab = async (): Promise<chrome.tabs.Tab> => {
+const defaultTab = async (from: SandboxKey): Promise<chrome.tabs.Tab> => {
     if (await ownWindow()) {
-        const tab = await agentTab();
+        const tab = await agentTab(from);
         if (tab === undefined) {
             throw new RefusedError(
                 `You have no page open yet. \`open\` one: it opens in a window of your own, behind the person's, so their tab is never taken over. To work on a page they already have open, find it with \`tabs\` and pass its id as \`tab\`.`,
@@ -34,16 +54,16 @@ export interface TargetTab {
 
 // Resolves and permits a tab, or throws a RefusedError with the message the agent reads. `need` distinguishes a
 // read tool from an acting one.
-export const targetTab = async (need: "read" | "act", tabId?: number): Promise<TargetTab> => {
-    const tab = tabId === undefined ? await defaultTab() : await chrome.tabs.get(tabId).catch(() => undefined);
+export const targetTab = async (from: SandboxKey, need: "read" | "act", tabId?: number): Promise<TargetTab> => {
+    const tab = tabId === undefined ? await defaultTab(from) : await chrome.tabs.get(tabId).catch(() => undefined);
     if (tab?.id === undefined) {
         throw new RefusedError(tabId === undefined ? `This browser has no active tab right now.` : `There is no tab ${tabId} in this browser any more.`);
     }
-    const [scopes, paused, modes, sandbox, declined] = await Promise.all([
-        store.scopes(),
+    const [scopes, paused, modes, origins, declined] = await Promise.all([
+        store.scopes(from),
         store.paused(),
         store.modes(),
-        store.sandbox(),
+        sandboxOrigins(from),
         store.declined(),
     ]);
     const pattern = originPattern(tab.url);
@@ -60,7 +80,8 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
         need,
         scopes,
         paused,
-        own: sandboxOwnOrigin(sandbox?.url),
+        own: origins.own,
+        others: origins.others,
         declined: pattern !== undefined && Date.now() - (declined[pattern] ?? -Infinity) < DECLINE_HOLD_MS,
     });
     if (!verdict.allowed) {
@@ -70,17 +91,17 @@ export const targetTab = async (need: "read" | "act", tabId?: number): Promise<T
 };
 
 // Every site the person allowed, read live from Chrome (not cached) with this extension's read/act mode beside it,
-// so a permission revoked in browser settings is reflected immediately. The paired sandbox's own origin is held for
-// the connection, not as a site to work on (policy.ts refuses it), so it is not listed as one: shown as a site, it
-// invited a "remove" that cut the link.
+// so a permission revoked in browser settings is reflected immediately. Each paired sandbox's own origin is held for
+// its connection, not as a site to work on (policy.ts refuses it), so none is listed as one: shown as a site, it
+// invited a "remove" that cut the link. The list is the same for every sandbox: which sites an agent may work on is the
+// person's decision about their browser, and each sandbox's card then narrows what its own agent may do on them.
 // Passwords' all-sites grant (`<all_urls>`, `*://*/*`) is for capture and fill, never a site the agent was given.
 const wildcard = (origin: string): boolean => origin.includes("://*") || origin === "<all_urls>";
 
 export const currentGrants = async (): Promise<WebExtGrant[]> => {
-    const [permissions, modes, sandbox] = await Promise.all([chrome.permissions.getAll(), store.modes(), store.sandbox()]);
-    const own = sandboxOwnOrigin(sandbox?.url);
+    const [permissions, modes, sandboxes] = await Promise.all([chrome.permissions.getAll(), store.modes(), allSandboxOrigins()]);
     return (permissions.origins ?? [])
-        .filter((origin) => origin.startsWith("http") && origin !== own && origin in modes && !wildcard(origin))
+        .filter((origin) => origin.startsWith("http") && !sandboxes.has(origin) && origin in modes && !wildcard(origin))
         .map((origin) => ({ origin, mode: modes[origin] ?? "read" }));
 };
 
@@ -89,10 +110,9 @@ export const currentGrants = async (): Promise<WebExtGrant[]> => {
 // "read" on the update, so the agent keeps exactly what the person gave it. Wildcards and the sandbox's own origin are
 // skipped, so running it again after Passwords is on changes nothing.
 export const fileUnmodedGrants = async (): Promise<void> => {
-    const [permissions, modes, sandbox] = await Promise.all([chrome.permissions.getAll(), store.modes(), store.sandbox()]);
-    const own = sandboxOwnOrigin(sandbox?.url);
+    const [permissions, modes, sandboxes] = await Promise.all([chrome.permissions.getAll(), store.modes(), allSandboxOrigins()]);
     for (const origin of permissions.origins ?? []) {
-        if (origin.startsWith("http") && origin !== own && !wildcard(origin) && !(origin in modes)) {
+        if (origin.startsWith("http") && !sandboxes.has(origin) && !wildcard(origin) && !(origin in modes)) {
             await store.setMode(origin, "read");
         }
     }

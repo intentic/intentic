@@ -18,13 +18,14 @@ const props = defineProps<{ visible: boolean; id: string; install: string; permi
 const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (event: "connected"): void }>();
 
 const { peerFor, pairToken, minting, error, rosterNotice, connect, refresh, close } = usePeerConnect(WEBEXT_DOOR);
-const { daemonUrl } = useSandbox();
+const { daemonUrl, active } = useSandbox();
 
 const browser = computed(() => peerFor(props.id));
 const online = computed(() => browser.value?.online === true);
 const code = computed(() => {
     const url = daemonUrl.value ?? ``;
-    return url === `` || pairToken.value === undefined ? `` : webextPairingCode({ url, token: pairToken.value });
+    // The sandbox's name rides along, so an extension paired with several lists this one by it rather than by its host.
+    return url === `` || pairToken.value === undefined ? `` : webextPairingCode({ url, token: pairToken.value, name: active.value?.name });
 });
 
 // Whether an installed extension answered; undefined (not yet offered) differs from false (nothing answered).

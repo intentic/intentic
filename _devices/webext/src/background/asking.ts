@@ -1,7 +1,7 @@
 import { within } from "@intentic/base/async";
 import { askConfirm, dismissConfirm } from "../page/overlay.js";
 import { originPattern } from "./policy.js";
-import { store } from "./store.js";
+import { type SandboxKey, store } from "./store.js";
 import { openPanel, refreshBadge } from "./tools/access.js";
 import { inject } from "./tools/page.js";
 
@@ -40,12 +40,18 @@ const flash = (windowId: number, on: boolean): void => {
 
 // Asks the person `question` about `tab`, and resolves to their answer: no when nobody answers within `timeoutMs`.
 // Rejects as `inject` does when the page goes away before it could ask.
-export const askPerson = async (tab: { readonly id: number; readonly url: string }, question: string, timeoutMs: number): Promise<boolean> => {
+// `from` is the sandbox whose agent asks, which the popup names once more than one is paired.
+export const askPerson = async (
+    from: SandboxKey,
+    tab: { readonly id: number; readonly url: string },
+    question: string,
+    timeoutMs: number,
+): Promise<boolean> => {
     const id = crypto.randomUUID();
     const fromPopup = new Promise<boolean>((resolve) => {
         waiting.set(id, resolve);
     });
-    await store.setAsking({ id, tabId: tab.id, origin: originPattern(tab.url) ?? tab.url, question, at: Date.now() });
+    await store.addAsking({ id, sandbox: from, tabId: tab.id, origin: originPattern(tab.url) ?? tab.url, question, at: Date.now() });
     await refreshBadge();
     const hidden = await outOfSight(tab.id);
     if (hidden !== undefined) {
@@ -59,9 +65,7 @@ export const askPerson = async (tab: { readonly id: number; readonly url: string
         return await within(Promise.race([onPage, fromPopup]), timeoutMs + PAGE_GRACE_MS, false);
     } finally {
         waiting.delete(id);
-        if ((await store.asking())?.id === id) {
-            await store.setAsking(undefined);
-        }
+        await store.removeAsking([id]);
         await refreshBadge();
         // allow(silent-catch): a page that navigated has no panel left to take down
         void chrome.scripting.executeScript({ target: { tabId: tab.id }, func: dismissConfirm, args: [id] }).catch(() => undefined);
@@ -85,9 +89,9 @@ export const answerAsking = async (id: string, allow: boolean): Promise<boolean>
 
 // On a worker's start: a question stored by one that died is asked by nobody, and its badge and card would wait forever.
 export const clearStaleAsking = async (): Promise<void> => {
-    const stored = await store.asking();
-    if (stored !== undefined && !waiting.has(stored.id)) {
-        await store.setAsking(undefined);
+    const stale = (await store.asking()).filter((asking) => !waiting.has(asking.id)).map((asking) => asking.id);
+    if (stale.length > 0) {
+        await store.removeAsking(stale);
         await refreshBadge();
     }
 };

@@ -12,8 +12,9 @@ const BUDGETS = {
     "background.js": 260_000,
     // Injected into every intentic.dev page, so it stays two constants and a listener. 374 bytes today.
     "pair-bridge.js": 4_000,
-    // The popup's own script; it holds no schema surface.
-    "popup.js": 20_000,
+    // The popup's own script; it holds no schema surface. 20.6 kB on 2026-10-28, up from 16.9 kB, for the Sandboxes
+    // section that lists every paired sandbox and pairs another (sandboxes-section.ts).
+    "popup.js": 24_000,
     // Injected on all sites while Passwords is on: capture, fill UI, and toast only (no zod).
     "passwords.js": 18_000,
 };
