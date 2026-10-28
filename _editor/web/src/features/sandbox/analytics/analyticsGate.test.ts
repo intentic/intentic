@@ -1,10 +1,11 @@
+import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import { nextTick, ref } from "vue";
 
 // The daemon's reachability, flipped by each case; the gate asks for the settings only while it is true.
 const reachable = ref(false);
 jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ reachable }) }));
 // The settings read, answered or refused per case, so no request leaves the test.
-const fetchSettings = jest.fn<Promise<unknown>, []>();
+const fetchSettings = jest.fn<() => Promise<Pick<SandboxSettings, `productAnalytics`>>>();
 jest.mock("../../../client/sandbox/rpcQuery", () => ({
     rpcQuery: () => ({ queryKey: [`settings.get`, `gate-test`], queryFn: () => fetchSettings() }),
 }));
