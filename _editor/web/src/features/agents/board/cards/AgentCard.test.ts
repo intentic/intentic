@@ -759,19 +759,16 @@ it(`names an untitled draft by the words waiting in its composer, and marks them
 
     expect(el.textContent ?? ``).toContain(UNSENT_WORDS);
     // A never-sent draft wears the same pencil among its stamps as any other card with words waiting, not a word-pill.
-    const mark = el.querySelector(`[data-unsent-mark="stamp"]`);
+    const mark = el.querySelector(`[data-unsent-mark]`);
     expect(mark?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
-    expect(el.querySelector(`[data-unsent-mark="pill"]`)).toBeNull();
-    expect(el.querySelector(`[data-unsent-mark="badge"]`)).toBeNull();
+    expect(mark?.textContent?.trim()).toBe(``);
 });
 
 // Words left in a conversation that has a standing of its own ride the corner's stamp list as a pencil, so the standing
 // keeps its seat and the draft still reads where every other draft does.
 it(`marks words left unsent in a running conversation with a pencil among its corner's stamps`, () => {
     const el = mount({ ...ready(`running`), unsent: true, draftAt: Date.now() });
-    expect(el.querySelector(`[data-unsent-mark="pill"]`)).toBeNull();
-    expect(el.querySelector(`[data-unsent-mark="badge"]`)).toBeNull();
-    expect(el.querySelector(`[data-unsent-mark="stamp"]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
+    expect(el.querySelector(`[data-unsent-mark]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
 });
 
 // On desktop a double-click opens the agent's page, after its two clicks opened the chat.

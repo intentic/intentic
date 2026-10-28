@@ -8,7 +8,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { setAgents } from "../../../../models/fleet/useAgents-registry";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
-import { openAgentConversation } from "../../../../models/conversations/panel/useChat-reveal";
+import { draftConversation, openAgentConversation, reveal } from "../../../../models/conversations/panel/useChat-reveal";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { router } from "../../../../router/index";
 import ChatTabList from "../ChatTabList.vue";
@@ -129,6 +129,26 @@ it(`stamps the agent's own check on a rail row`, async () => {
     const proven = stampsIn(rowOf(el, `proven`))!;
     expect(drawn(proven)).toEqual([`self:passed`]);
     // The standing keeps its glyph beside the stamps: landed is not a verdict on the work.
+    expect(rowOf(el, `proven`).querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
+});
+
+// Words waiting in the composer read as the board card reads them: a bare pencil left of the standing, in the corner,
+// whether or not anything was ever sent. The rail once drew its own "Draft" pill and a badge on the identity tile.
+it(`marks a rail row's unsent words with the board card's pencil, beside its standing`, async () => {
+    const el = await mountRail();
+    const fresh = draftConversation();
+    reveal({ verb: `show`, entries: [fresh], focus: fresh.conversationId, caret: false });
+    fresh.draft.value = `fix the login redirect`;
+    openAgentConversation({ id: SEEDS.proven.id, provider: `claude`, harness: `native` }).draft.value = `and the logout one`;
+    await settle();
+
+    for (const row of [el.querySelector<HTMLElement>(`[data-chat-tab="${fresh.conversationId}"]`)!, rowOf(el, `proven`)]) {
+        const mark = row.querySelector<HTMLElement>(`[data-unsent-mark]`)!;
+        expect(mark.closest(`[data-corner]`)).not.toBeNull();
+        expect(mark.querySelector(`[data-icon="pencil"]`)).not.toBeNull();
+        expect(mark.textContent?.trim()).toBe(``);
+        expect(row.querySelector(`.ui-status-pill`)).toBeNull();
+    }
     expect(rowOf(el, `proven`).querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
 });
 

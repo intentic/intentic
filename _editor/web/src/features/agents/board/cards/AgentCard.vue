@@ -670,7 +670,7 @@ const grab = (event: PointerEvent): void => {
                      the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
                 <!-- Words waiting in the composer: a pencil in the stamp list, whether or not anything was ever sent, so the standing
                      (a never-sent draft's own quiet circle included) keeps its seat. -->
-                <UnsentMark v-if="agent.unsent" stamp :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
+                <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
                 <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-base" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span

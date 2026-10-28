@@ -148,7 +148,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     // Still a first run: filling the composer is not starting anything. The filled draft is a never-sent card standing in
     // the first agent's slot, which is where the slot said its card would appear, its corner carrying the draft pencil.
     expect(board.textContent).toContain(`Nothing needs you right now.`);
-    expect(board.querySelector(`[data-unsent-mark="stamp"]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
+    expect(board.querySelector(`[data-unsent-mark]`)?.getAttribute(`aria-label`)).toMatch(/^Draft/);
 });
 
 // The hosted product can answer a question before anything is connected: the chat lands on the free trial so there's

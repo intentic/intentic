@@ -77,9 +77,6 @@ const chip = computed(() => (props.agent === undefined ? props.view.chip : setti
 // The unsent mark's words, read by the mark itself (UnsentMark): read here, in the #meta slot RailCard invokes, every
 // keystroke redrew the card and all it carries, which is the rail around the draft that chat-typing's budget keeps still.
 const unsentWords = (): string | undefined => draftPreview(props.conversation.draft.value);
-// A never-sent draft says so in the corner, as its board card does; words left in a conversation with a standing of its
-// own ride the identity tile, so the corner keeps what the conversation is doing.
-const draftCorner = computed(() => props.conversation.unsent.value && props.agent?.status === `draft` && chip.value === undefined);
 
 // The × sits inside the card's click target; stop propagation or the press also selects the row.
 const closeRow = (event: Event): void => {
@@ -96,7 +93,7 @@ const closeRow = (event: Event): void => {
         :needle="props.needle"
         :match-case="props.matchCase"
         :provider="props.agent?.provider ?? props.conversation.selection.provider.value"
-        :status="draftCorner ? undefined : props.view.status"
+        :status="props.view.status"
         :chip="chip"
         :rim="props.view.rim"
         :live="props.view.live"
@@ -128,15 +125,13 @@ const closeRow = (event: Event): void => {
                 <Icon name="times" class="text-2xs" />
             </span>
         </template>
-        <template v-if="props.conversation.unsent.value && !draftCorner" #tile>
-            <UnsentMark badge :preview="unsentWords" :at="props.conversation.draftAt.value" />
-        </template>
-        <!-- The board card's stamps, in the board's seat left of the standing; three fit before the rest fold. -->
-        <template v-if="props.view.stamps.length > 0 || draftCorner" #corner>
-            <span v-if="props.view.stamps.length > 0" class="flex h-4 shrink-0 items-center" data-corner>
-                <CardStamps :stamps="props.view.stamps" :agent="props.agent" :max="3" class="text-sm" />
+        <!-- The board card's corner (AgentCard), in its order: words waiting in the composer as a pencil, then the stamps (three
+             fit before the rest fold), both left of the standing, which keeps its seat whether or not anything was sent. -->
+        <template v-if="props.conversation.unsent.value || props.view.stamps.length > 0" #corner>
+            <span class="flex h-4 shrink-0 items-center gap-2 text-sm" data-corner>
+                <UnsentMark v-if="props.conversation.unsent.value" :preview="unsentWords" :at="props.conversation.draftAt.value" />
+                <CardStamps v-if="props.view.stamps.length > 0" :stamps="props.view.stamps" :agent="props.agent" :max="3" />
             </span>
-            <UnsentMark v-if="draftCorner" :preview="unsentWords" :at="props.conversation.draftAt.value" />
         </template>
         <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
         <template v-if="props.view.meta || twinFact !== undefined" #meta>
