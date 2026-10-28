@@ -16,6 +16,11 @@ export interface Framed<T> {
 export interface FrameBacklog<T> {
     // Ignored once cut: nothing is held for a connection that is ending.
     readonly push: (frame: T) => void;
+    // Frames handed over whole as the consumer arrives (a follower's replay of the facts so far), held ahead of
+    // anything pushed. However many, they never count against the frame bound, since they are what the consumer came
+    // for rather than what it fell behind on, and seeding never cuts. The wait bound still reads them: untaken once it
+    // has passed, they cut the consumer at the next push, as a consumer that stopped reading.
+    readonly seed: (frames: readonly T[]) => void;
     readonly shift: () => Framed<T> | undefined;
     readonly depth: () => number;
 }
@@ -25,6 +30,8 @@ export const frameBacklog = <T>(
     { frames = MAX_BACKLOG_FRAMES, waitMs = MAX_BACKLOG_WAIT_MS, now = () => process.hrtime.bigint() } = {},
 ): FrameBacklog<T> => {
     const queued: Framed<T>[] = [];
+    // How many seeded frames are still at the head of the queue, untaken.
+    let seeded = 0;
     let cut = false;
     return {
         push: (frame) => {
@@ -34,15 +41,32 @@ export const frameBacklog = <T>(
             const at = now();
             queued.push({ frame, at });
             const waitedMs = Number(at - (queued[0] as Framed<T>).at) / 1e6;
-            if (queued.length <= frames && waitedMs <= waitMs) {
+            if (queued.length - seeded <= frames && waitedMs <= waitMs) {
                 return;
             }
             cut = true;
             const unsent = queued.length;
             queued.length = 0;
+            seeded = 0;
             onCut(unsent);
         },
-        shift: () => queued.shift(),
+        seed: (replay) => {
+            if (cut) {
+                return;
+            }
+            const at = now();
+            for (const frame of replay) {
+                queued.push({ frame, at });
+            }
+            seeded += replay.length;
+        },
+        shift: () => {
+            const next = queued.shift();
+            if (next !== undefined && seeded > 0) {
+                seeded -= 1;
+            }
+            return next;
+        },
         depth: () => queued.length,
     };
 };
@@ -66,9 +90,10 @@ export class Mailbox<T> {
             },
             bounded === undefined ? { frames: Infinity, waitMs: Infinity } : {},
         );
-        for (const item of replay) {
-            this.queue.push(item);
-        }
+        // Seeded, never pushed: a run's facts so far, replayed to every attach, run to hundreds on a long Codex or Gemini
+        // turn (a context reading after each model step). Pushed, they passed the bound before the follower existed, and
+        // nothing could follow that turn again.
+        this.queue.seed(replay);
     }
 
     push(item: T): void {

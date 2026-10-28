@@ -51,6 +51,40 @@ describe("the /events backlog", () => {
         expect(onCut).not.toHaveBeenCalled();
     });
 
+    it("holds a replay handed over whole ahead of what is pushed, bounding only what lands after it", () => {
+        const onCut = jest.fn((_unsent: number) => undefined);
+        const backlog = frameBacklog<number>(onCut, { frames: 3 });
+        backlog.seed([1, 2, 3, 4, 5, 6]);
+        backlog.push(7);
+        expect(onCut).not.toHaveBeenCalled();
+        expect(backlog.shift()?.frame).toBe(1);
+
+        // Taking a replayed frame frees no room for what lands: the bound is on pushed frames alone.
+        for (const frame of [8, 9]) {
+            backlog.push(frame);
+        }
+        expect(onCut).not.toHaveBeenCalled();
+        backlog.push(10);
+        expect(onCut.mock.calls).toEqual([[9]]);
+        expect(backlog.shift()).toBe(undefined);
+    });
+
+    it("lets a pushed frame in once a reader has taken the replay, and reads the replay for the wait bound", () => {
+        const time = clock();
+        const onCut = jest.fn((_unsent: number) => undefined);
+        const backlog = frameBacklog<string>(onCut, { frames: 1, waitMs: 1_000, now: time.now });
+        backlog.seed(["session", "usage"]);
+        expect(backlog.shift()?.frame).toBe("session");
+        expect(backlog.shift()?.frame).toBe("usage");
+        backlog.push("delta");
+        expect(backlog.shift()?.frame).toBe("delta");
+
+        backlog.seed(["usage"]);
+        time.advanceMs(1_001);
+        backlog.push("delta");
+        expect(onCut.mock.calls).toEqual([[2]]);
+    });
+
     it("stamps each frame with the clock it was produced at", () => {
         const time = clock();
         const backlog = frameBacklog<string>(() => undefined, { now: time.now });

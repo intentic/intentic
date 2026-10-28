@@ -162,6 +162,56 @@ describe(`turn runs`, () => {
         await expect(stalled.entries.next()).rejects.toThrow(`fell behind`);
     });
 
+    /* A long Codex or Gemini turn reports its context fill (and Codex its headroom) after every model step, so it gathers
+       facts by the hundred, and every attach replays them all. Counted against the follower's bound, the replay alone
+       cut it before its first frame, and the cut read the follower it was building: nothing could follow that turn again.
+       The chat sat idle under a card saying it ran, a message sent there was said into it and drawn nowhere, and the
+       person sent it again (PostHog session 01a18343, 2026-10-28). */
+    it(`lets a window follow a run that has gathered more facts than a follower's bound, and still bounds what lands after`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(deps, turnFn, turn(`c-long`), { opening });
+        const steps = MAX_BACKLOG_FRAMES * 2;
+        for (let step = 0; step < steps; step += 1) {
+            push({ kind: `context_usage`, tokens: step, contextWindow: 400_000 });
+        }
+        // Folded in order, so once this is drawn every fact before it is the run's.
+        push({ kind: `delta`, text: `a` });
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-long`)!.rows[1]?.text).toBe(`a`));
+
+        const run = turnRunOf(deps.conversations, `c-long`)!;
+        const late = run.attach(() => new Error(`fell behind`));
+        expect(late.head.rows.map((row) => row.text)).toEqual([`do the thing`, `a`]);
+        const replayed: AttachEntry[] = [];
+        for (let index = 0; index < steps; index += 1) {
+            const next = await late.entries.next();
+            if (next.done === true) {
+                break;
+            }
+            replayed.push(next.value);
+        }
+        expect(replayed.map((entry) => (entry.kind === `fact` ? entry.fact.kind : entry.patch.op))).toEqual(
+            Array.from({ length: steps }, () => `context_usage`),
+        );
+
+        // One that attaches and then reads nothing is still let go once what lands after its replay passes the bound,
+        // while the one reading goes on.
+        const stalled = run.attach(() => new Error(`fell behind`));
+        const following = (async (): Promise<AttachEntry[]> => {
+            const drained: AttachEntry[] = [];
+            for await (const entry of late.entries) {
+                drained.push(entry);
+            }
+            return drained;
+        })();
+        for (let index = 0; index <= MAX_BACKLOG_FRAMES; index += 1) {
+            push({ kind: `delta`, text: `x` });
+        }
+        await waitFor(() => expect(run.rows[1]?.text).toHaveLength(MAX_BACKLOG_FRAMES + 2));
+        close();
+        expect((await following).filter((entry) => entry.kind === `patch`)).toHaveLength(MAX_BACKLOG_FRAMES + 1);
+        await expect(stalled.entries.next()).rejects.toThrow(`fell behind`);
+    });
+
     it(`ends a follower when it is cut from outside, whatever it had queued`, async () => {
         const { turnFn, push, close } = crankedTurn();
         startTurnRun(deps, turnFn, turn(`c-cut`), { opening });
