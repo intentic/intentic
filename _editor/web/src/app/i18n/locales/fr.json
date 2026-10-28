@@ -148,6 +148,7 @@
             "closeKeepsRunning": "Le tour continue",
             "closeNothingKept": "Rien à conserver",
             "context": "Contexte",
+            "cost": "Coût",
             "exactId": "Id exact",
             "focusAgent": "Mettre l'agent au premier plan : {displayTitle}",
             "lastOpened": "Dernière ouverture",

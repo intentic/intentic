@@ -35,7 +35,6 @@ import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
-import { showLiveMetrics } from "../../../../models/sandbox/liveMetrics";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
@@ -328,10 +327,9 @@ const relanding = computed(() => props.pending === `reland` || (relandOffered.va
 // Context is deliberately absent: it is a row of the identity tile's hover (see `tileHint`), so a card whose only stat
 // was its context opens no summary row at all.
 // A maker's card drops cost, diff, model and login, which crowd a narrow card and mean nothing to a non-coder. A coder's
-// cost waits on the geek metrics (a total with no denominator, asking no press); its diff rides the branch's line.
-const costShown = computed(() => !maker.value && showLiveMetrics.value && props.agent.costUsd !== undefined);
+// cost is a row of the tile's hover (a total with no denominator, asking no press): in the summary row it was a stat,
+// and a stat takes a row of its own, so it cost every finished card a line. Its diff rides the branch's line.
 const diffShown = computed(() => !maker.value && props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0));
-const stats = computed(() => costShown.value);
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The tile's glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
 // a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
@@ -342,7 +340,7 @@ const stats = computed(() => costShown.value);
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
 // One hover for the tile, since two nested tooltips would raise two boxes over the same 28 pixels: the kind it draws
 // in words, the package it is tinted by, its working children, and its readings. Context fullness is said here and
-// nowhere else on the card. A reading not taken leaves its row empty and the card drops it.
+// nowhere else on the card, and so is what it has cost. A reading not taken leaves its row empty and the card drops it.
 const tileHint = computed((): TooltipValue => {
     const list = props.agent.checklist;
     const percent = contextPct(props.agent.contextTokens, props.agent.contextWindow);
@@ -354,6 +352,7 @@ const tileHint = computed((): TooltipValue => {
             { label: t(`agents.sessionKind.subagents`), value: running === 0 ? `` : t(`agents.sessionKind.working`, { count: running }, running) },
             { label: t(`agents.agentCard.steps`), value: list === undefined ? `` : `${Math.min(list.done, list.total)}/${list.total}` },
             { label: t(`agents.agentCard.context`), value: percent === undefined ? `` : `${percent}%` },
+            { label: t(`agents.agentCard.cost`), value: maker.value || props.agent.costUsd === undefined ? `` : formatMoney(props.agent.costUsd) },
         ],
     };
 });
@@ -374,7 +373,7 @@ const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // No "Completed" here: the word was the drill-in's stand-in from when this row carried the drill-in on every lane, so
 // once that moved to the header it said itself only where the drill-in was missing (any phone, a card with no branch),
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
-const summary = computed(() => stats.value || rowDrill.value || resendable.value || dated.value || working.value || reactable.value);
+const summary = computed(() => rowDrill.value || resendable.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // What vouches for its work, as stamps in its corner (useCardStamps.ts): its own last check, then each kind of check a
 // fresh session ran on it.
@@ -915,9 +914,7 @@ const grab = (event: PointerEvent): void => {
                 >
                     <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
-                    <!-- Lifetime cost total, read-only, with the geek metrics (see `costShown`). -->
-                    <span v-if="costShown && agent.costUsd !== undefined" data-stat>{{ formatMoney(agent.costUsd) }}</span>
-                    <!-- Opt-in geek metrics, beside what it cost: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
+                    <!-- Opt-in geek metrics: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                     <SessionMetrics v-if="localOnly" data-stat :card="agent.id" />
                     <!-- The agents it started, counted, live-of-total while any work: the list itself opens under the card only while it is the one being looked at (ChildRows). -->
                     <ChildCount data-stat :agent="agent" />

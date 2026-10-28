@@ -243,16 +243,16 @@ it(`opens the diff from the change count, a named press that does not also open 
     expect([changes.mock.calls.length, opened.mock.calls.length]).toEqual([1, 0]);
 });
 
-// Cost is a geek metric: a total with no denominator that asks for no press, so it shows only with the metrics on,
-// while the diff, the press into the review, shows either way.
-it(`keeps what a card cost for the geek metrics, and its change count always`, async () => {
+// Cost is said in the identity tile's hover, never on the card's face: as a stat it took a row of its own, so it cost
+// every finished card a line, even with the geek metrics on. The diff, the press into the review, shows either way.
+it(`keeps what a card cost off its face, and its change count always`, async () => {
     const spent: FleetAgent = { ...written(), costUsd: 3.26 };
     const plain = mount(spent);
     expect([plain.textContent?.includes(`3.26`), buttonLabelled(plain, `Review changes: 20 lines added, 2 removed`) !== undefined]).toEqual([false, true]);
     showLiveMetrics.value = true;
     try {
         await nextTick();
-        expect(plain.textContent).toContain(`3.26`);
+        expect(plain.textContent).not.toContain(`3.26`);
     } finally {
         showLiveMetrics.value = false;
     }

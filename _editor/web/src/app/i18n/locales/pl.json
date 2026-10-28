@@ -148,6 +148,7 @@
             "closeKeepsRunning": "Tura trwa dalej",
             "closeNothingKept": "Nic do zachowania",
             "context": "Kontekst",
+            "cost": "Koszt",
             "exactId": "Dokładne id",
             "focusAgent": "Skup się na agencie: {displayTitle}",
             "lastOpened": "Ostatnio otwarte",

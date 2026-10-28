@@ -148,6 +148,7 @@
             "closeKeepsRunning": "Zug läuft weiter",
             "closeNothingKept": "Nichts zu behalten",
             "context": "Kontext",
+            "cost": "Kosten",
             "exactId": "Exakte ID",
             "focusAgent": "Agent fokussieren: {displayTitle}",
             "lastOpened": "Zuletzt geöffnet",

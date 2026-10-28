@@ -148,6 +148,7 @@
             "closeKeepsRunning": "Turn keeps running",
             "closeNothingKept": "Nothing to keep",
             "context": "Context",
+            "cost": "Cost",
             "exactId": "Exact id",
             "focusAgent": "Focus agent: {displayTitle}",
             "lastOpened": "Last opened",

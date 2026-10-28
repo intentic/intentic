@@ -148,6 +148,7 @@
             "closeKeepsRunning": "El turno sigue",
             "closeNothingKept": "Nada que conservar",
             "context": "Contexto",
+            "cost": "Coste",
             "exactId": "Id exacto",
             "focusAgent": "Enfocar el agente: {displayTitle}",
             "lastOpened": "Última apertura",
