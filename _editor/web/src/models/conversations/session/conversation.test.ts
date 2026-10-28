@@ -690,6 +690,32 @@ describe(`Conversation`, () => {
         }
     });
 
+    // 2026-10-28 (clear-spruce-vrbd): a turn stopped at once on Claude, the pick moved to Codex, then Continue. The
+    // Continue froze the divider and waited on the daemon with the Claude session still on the chat, so the divider was
+    // drawn again under it, and again once the Codex turn was stopped before naming its own session.
+    it(`draws a switch once when a Continue carries it, however soon the turn after it stops`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }], { stayOpen: true }));
+        const first = conversation.turn.send(`ship the parser`, settings);
+        await waitFor(() => expect(conversation.session.value).toMatchObject({ id: `s-1`, provider: `claude` }));
+        conversation.turn.stop();
+        await first;
+
+        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `carrying on` }], { stayOpen: true }));
+        const carried = conversation.turn.continueTurn();
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        const switches = (): string[] =>
+            conversation.transcript.messages.value.filter((message) => message.role === `notice` && message.text.startsWith(`Switched to`)).map((message) => message.text);
+        expect(switches()).toEqual([expect.stringMatching(/^Switched to Codex/)]);
+
+        conversation.turn.stop();
+        await carried;
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(false));
+        expect(switches()).toEqual([expect.stringMatching(/^Switched to Codex/)]);
+        expect(conversation.transcript.messages.value.some((message) => message.upcoming === true)).toBe(false);
+    });
+
     it(`turnsOf opens a group at each prompt and keeps pre-prompt frames in one ahead of it`, () => {
         const messages: ChatMessage[] = [
             { id: 1, role: `notice`, text: `Resumed.` },

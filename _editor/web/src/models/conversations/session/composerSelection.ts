@@ -238,6 +238,12 @@ export class ComposerSelection {
     // The one unsent "switched" divider notice, upserted/removed as settings toggle, frozen by the next send.
     private pendingSwitchNoticeId: number | undefined;
 
+    // Where the last send from this window went, and the session it left on the chat. Until the daemon names the session
+    // that send opened (its session frame replaces the ref), the send is what the chat last did, not that older session:
+    // a Continue onto Codex off a Claude session still held the Claude ref while it waited on the daemon, and the divider
+    // the send had just frozen was drawn again under it (2026-10-28, clear-spruce-vrbd).
+    private lastSend: { readonly over: SessionRef | undefined; readonly on: Omit<SessionRef, "id"> } | undefined;
+
     // What an untouched chat starts on: the last deliberate pick, resolved against what this sandbox can run.
     constructor(private readonly host: SelectionHost) {
         this.apply({ kind: `seed` });
@@ -248,6 +254,9 @@ export class ComposerSelection {
         // What the send going out now actually does, read before `sent` moves the swap baseline onto it: the divider it
         // freezes must say this, however the picks got where they are.
         const sending = action.kind === `sent` ? { text: switchNoticeText(this.switchPoint()) } : undefined;
+        if (action.kind === `sent` || action.kind === `rerun`) {
+            this.lastSend = { over: this.host.session.value, on: { provider: this.provider.value, account: this.account.value, harness: this.harness.value } };
+        }
         const previous = this.state.value;
         const { selection, effects } = reduceSelection(previous, action, this.world());
         this.state.value = selection;
@@ -399,11 +408,15 @@ export class ComposerSelection {
         const session = this.host.session.value;
         const provider = this.provider.value;
         const account = this.account.value;
+        const next = { agent: provider, account, harness: this.harness.value };
+        // The last send, while no session the daemon named since has replaced the one it left.
+        const sent = this.lastSend !== undefined && this.lastSend.over === session ? { id: session?.id ?? ``, ...this.lastSend.on } : undefined;
         const model = { id: this.model.value, label: modelLabelFor(provider, this.model.value) };
         return {
             started: this.host.transcript.messages.value.length > 0 || session !== undefined,
-            resumes: readsAsContinuing(session, { agent: provider, account, harness: this.harness.value }),
-            segment: segmentOf(session, { provider, account }),
+            // Back on the held session (a send the daemon turned away), or still where the last send went: no switch.
+            resumes: readsAsContinuing(session, next) || readsAsContinuing(sent, next),
+            segment: segmentOf(sent?.provider === provider ? sent : session, { provider, account }),
             // The picker's own heading for the provider, which is also what the composer's placeholder says ("Ask Codex…"):
             // the account-tab name ("ChatGPT") here made one switch read as three different products.
             providerLabel: providerLabel(provider),
