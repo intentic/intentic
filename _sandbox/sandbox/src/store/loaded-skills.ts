@@ -1,15 +1,16 @@
-import { cp, lstat, mkdir, readdir, readFile, readlink, rename, rm, symlink } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { cp, lstat, mkdir, readFile, rename, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { keyedLock } from "@intentic/base/async";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import type { Services } from "../composition.js";
-import { scanSkillFolders, SKILL_FILE, skillFolderNames } from "../skill-file.js";
+import { scanSkillFolders, SKILL_FILE } from "../skill-file.js";
+import { convergeClaudeSkills } from "./skills/claude-skills.js";
 import { syncSkillLinkExcludes } from "./git/skill-link-excludes.js";
-import { LEGACY_ACCOUNT_SKILL_MARKER, SKILL_STAMP_LINE, skillStampOf } from "./skill-stamp.js";
+import { LEGACY_ACCOUNT_SKILL_MARKER, SKILL_STAMP_LINE, skillStampOf } from "./skills/skill-stamp.js";
 
-// `.agents/skills/` is canonical; Codex reads it directly, other runtimes get a generated catalogue. `.claude/skills/`
-// is a derived, per-workspace-serialized symlink projection for Claude Code, never the source of truth. AGENTS.md is
-// user-owned and untouched; skill content goes through the files seam, the links and scan touch disk directly.
+// `.agents/skills/` is canonical; Codex reads it directly, other runtimes get a generated catalogue. `.claude/skills`
+// is one derived link to it for Claude Code (skills/claude-skills.ts), never the source of truth. AGENTS.md is
+// user-owned and untouched; skill content goes through the files seam, the link and scan touch disk directly.
 
 // The two writes this store needs; a structural subset of `Services["files"]`, so no caller can pass something that
 // writes elsewhere.
@@ -24,41 +25,6 @@ export const loadedSkillFile = (root: string, name: string): string => join(load
 
 export const SKILL_CATALOG_NOTE_HEADER = "## Skills available in this workspace";
 export const SKILL_CATALOG_NOTE_TITLE = "Skills available in this workspace";
-
-// Claude Code's tree: a projection holding one symlink per canonical skill.
-const claudeSkillsRoot = (root: string): string => join(root, ".claude", "skills");
-const claudeSkillLink = (root: string, name: string): string => join(claudeSkillsRoot(root), name);
-
-// Relative on purpose: an isolated turn's worktree is bind-mounted over the workspace root; an absolute link would
-// reach across the mount.
-const linkTarget = (root: string, name: string): string => relative(claudeSkillsRoot(root), loadedSkillDir(root, name));
-
-// Converges one skill's Claude link; a real (non-symlink) entry is left alone since it's user-owned. EEXIST on create
-// just means a concurrent writer got there first.
-const ensureClaudeLink = async (root: string, name: string): Promise<void> => {
-    const link = claudeSkillLink(root, name);
-    const target = linkTarget(root, name);
-    const existing = await lstat(link).catch(() => undefined);
-    if (existing !== undefined) {
-        if (!existing.isSymbolicLink()) {
-            return;
-        }
-        if ((await readlink(link).catch(() => undefined)) === target) {
-            return;
-        }
-        await rm(link, { force: true });
-    }
-    await mkdir(dirname(link), { recursive: true });
-    await symlink(target, link).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-            throw error;
-        }
-    });
-};
-
-// Whether this `.claude/skills` entry is one of ours: matched on the target pointing into `.agents`, not on name, so a
-// renamed link still sweeps.
-const isManagedLink = (target: string | undefined): boolean => target !== undefined && target.split(/[\\/]/).includes(".agents");
 
 // One entry of the catalogue: what a runtime without a skill loader is told a skill is, and where its file is, as the
 // agent sees the path.
@@ -101,22 +67,10 @@ export const skillCatalogNoteOf = (skills: readonly CatalogSkill[], omit: Readon
 export const loadedSkillCatalogNote = async (localRoot: string, agentRoot: string): Promise<string | undefined> =>
     skillCatalogNoteOf(await loadedSkillCatalog(localRoot, agentRoot));
 
-// One pass: a Claude link per canonical skill, and no Claude link without one. Only sweeps symlinks that point at the
-// canonical folder; a real directory or a link to somewhere else is untouched.
+// One pass: Claude's view of the canonical tree converged (the main tree's own, so the owner's entries move in), then
+// the excludes that keep what the daemon generates out of git.
 const converge = async (root: string): Promise<void> => {
-    // Only a missing folder lists empty: converge sweeps every link this list does not name.
-    const names = await skillFolderNames(loadedSkillsRoot(root), "throw");
-    for (const name of names) {
-        await ensureClaudeLink(root, name);
-    }
-    const canonical = new Set(names);
-    const entries = await readdir(claudeSkillsRoot(root), { withFileTypes: true }).catch(() => []);
-    for (const entry of entries.filter((candidate) => candidate.isSymbolicLink() && !canonical.has(candidate.name))) {
-        const link = join(claudeSkillsRoot(root), entry.name);
-        if (isManagedLink(await readlink(link).catch(() => undefined))) {
-            await rm(link, { force: true });
-        }
-    }
+    await convergeClaudeSkills(root, { adopt: true });
     await syncSkillLinkExcludes(root);
 };
 
@@ -135,8 +89,8 @@ export const DAEMON_SKILL_WRITERS = ["approvals", "baked-tool", "account", "cli"
 export type DaemonSkillWriter = (typeof DAEMON_SKILL_WRITERS)[number];
 export type SkillWriter = DaemonSkillWriter | "owner";
 
-// The stamp and its reader live in skill-stamp.ts, where the git side reads them too; re-exported for the store's callers.
-export { LEGACY_ACCOUNT_SKILL_MARKER, skillWriterOf } from "./skill-stamp.js";
+// The stamp and its reader live in skills/skill-stamp.ts, where the git side reads them too; re-exported for the store's callers.
+export { LEGACY_ACCOUNT_SKILL_MARKER, skillWriterOf } from "./skills/skill-stamp.js";
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n/;
 
 // The text with any writer stamp taken out, exactly undoing `stampSkill`: the stamp's line, and the blank line it was
@@ -175,18 +129,10 @@ export const writeLoadedSkill = async (files: SkillFiles, root: string, name: st
     await queueConverge(root);
 };
 
-// Removes one loaded skill everywhere it's projected; the link is removed here rather than left to the sweep, so "no
-// runtime offers this skill" holds as soon as the promise resolves.
+// Removes one loaded skill everywhere it's projected: Claude reads the canonical tree through its link, so "no runtime
+// offers this skill" holds as soon as the folder goes, and the converge only sweeps a fallback per-skill link.
 export const removeLoadedSkill = async (files: SkillFiles, root: string, name: string): Promise<void> => {
     await files.remove(loadedSkillDir(root, name));
-    await dropClaudeLink(root, name);
-};
-
-const dropClaudeLink = async (root: string, name: string): Promise<void> => {
-    const link = claudeSkillLink(root, name);
-    if ((await lstat(link).catch(() => undefined))?.isSymbolicLink() === true && isManagedLink(await readlink(link).catch(() => undefined))) {
-        await rm(link, { force: true });
-    }
     await queueConverge(root);
 };
 
@@ -205,7 +151,7 @@ const relocate = async (from: string, to: string): Promise<void> => {
 
 // Sets one loaded skill aside in the history volume's trash instead of erasing it (convergence rule 5), named
 // `skill-<name>-<ms>` like every entry set aside there, so the trash sweep empties it after its while; answers where
-// it went, or undefined when nothing was there. Its Claude link goes with it, as with `removeLoadedSkill`.
+// it went, or undefined when nothing was there. Claude stops offering it with the folder, as with `removeLoadedSkill`.
 export const trashLoadedSkill = async (root: string, historyRoot: string, name: string, now: number = Date.now()): Promise<string | undefined> => {
     const dir = loadedSkillDir(root, name);
     if ((await lstat(dir).catch(undefinedIfMissing)) === undefined) {
@@ -214,6 +160,6 @@ export const trashLoadedSkill = async (root: string, historyRoot: string, name: 
     const target = join(historyRoot, "trash", `skill-${name}-${String(now)}`);
     await mkdir(dirname(target), { recursive: true });
     await relocate(dir, target);
-    await dropClaudeLink(root, name);
+    await queueConverge(root);
     return target;
 };

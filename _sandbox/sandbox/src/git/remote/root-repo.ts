@@ -13,7 +13,7 @@ import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { ignoreFileMode } from "./repo-git-dirs.js";
 import { ensureLines } from "../../store/plain-files/text-file.js";
 import { syncSkillLinkExcludes } from "../../store/git/skill-link-excludes.js";
-import { generatedSkillNames } from "../../store/skill-stamp.js";
+import { generatedSkillNames } from "../../store/skills/skill-stamp.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
 // Git dir lives on /history; the in-worktree `.git` is a pointer reconverged if deleted. Idempotent: init runs once;
@@ -119,7 +119,8 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
     untrackCommitted(root, gitDir, await strayGitlinks(root, git), "chore: untrack nested repositories", git);
 
 // What root tracks of the skills the daemon generates (skill-stamp.ts): every file of a stamped `.agents/skills/<name>`
-// and the Claude link beside it. A link is only taken while it is a link; a real directory at that name is the owner's.
+// and the per-skill Claude link a tree from before the single link (store/skills/claude-skills.ts) committed beside it.
+// A link is only taken while it is a link; a real directory at that name is the owner's.
 const trackedGeneratedSkills = async (root: string, git: GitRunner): Promise<string[]> => {
     const names = new Set(await generatedSkillNames(join(root, ".agents", "skills")));
     if (names.size === 0) {

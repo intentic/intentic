@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { SKILL_FILE, skillFolderNames } from "../skill-file.js";
+import { SKILL_FILE, skillFolderNames } from "../../skill-file.js";
 
 // The stamp a daemon writer puts into every skill it writes (store/loaded-skills.ts stampSkill), and what reads it back.
 // Apart from the store so the git side (store/git/skill-link-excludes.ts, conversations/worktrees/generated-skills.ts)

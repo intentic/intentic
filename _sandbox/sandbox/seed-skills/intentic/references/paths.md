@@ -22,7 +22,7 @@
 /work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
 /work/.intentic/local/extensions/    installed extensions: clones at their pinned commit, run live. Not source: never
                                      edit them (their source is under /work/extensions/, see `extension list`)
-/work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)
+/work/.agents/skills/                the loaded skills every runtime reads (Claude via the .claude/skills link)
 /root/.claude/skills/                the image-baked skills: the intentic skill and the task skills it routes to
 /root/.claude/skills/intentic/references/  the intentic skill's longer answers, each named in its routing table
 /opt/sandbox/package.json            the daemon's own version ("0.0.0": an unreleased build, e.g. from a checkout)

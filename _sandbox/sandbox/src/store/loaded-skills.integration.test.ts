@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { lstat, mkdir, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rename, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
@@ -22,20 +22,19 @@ import {
 // The production write/remove seam, not a fake, since these tests assert what actually lands on disk.
 const FILES: SkillFiles = { write: writeWorkspaceFile, remove: removeWorkspacePath };
 
-// Pins the filesystem contract of one loaded skill: a canonical file under `.agents/skills/`, a `.claude/skills/`
-// symlink for Claude Code, and a generated catalogue for runtimes with neither loader, never a third copy in the user's
-// AGENTS.md.
+// Pins the filesystem contract of one loaded skill: a canonical file under `.agents/skills/`, read by Claude Code
+// through the one `.claude/skills` link to that tree, and a generated catalogue for runtimes with neither loader, never
+// a third copy in the user's AGENTS.md.
 
 const SKILL = "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n";
 
-test("writing a skill lands the canonical file and Claude symlink without creating AGENTS.md", async () => {
+test("writing a skill lands the canonical file and Claude's one link to the tree without creating AGENTS.md", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeLoadedSkill(FILES, root, "quill", SKILL, "owner");
 
     expect(await readFile(loadedSkillFile(root, "quill"), "utf8")).toBe(SKILL);
-    const link = join(root, ".claude", "skills", "quill");
-    expect((await lstat(link)).isSymbolicLink()).toBe(true);
-    expect(await readFile(join(link, "SKILL.md"), "utf8")).toBe(SKILL);
+    expect(await readlink(join(root, ".claude", "skills"))).toBe("../.agents/skills");
+    expect(await readFile(join(root, ".claude", "skills", "quill", "SKILL.md"), "utf8")).toBe(SKILL);
     await expect(stat(join(root, "AGENTS.md"))).rejects.toThrow();
 });
 
@@ -93,32 +92,56 @@ test("the prompt catalogue leaves out the skills the turn may not use, and says 
     expect(skillCatalogNoteOf(skills, new Set(["chrome", "x"]))).toBeUndefined();
 });
 
-test("a real directory in .claude/skills is never replaced by the projection", async () => {
+// The layout before the single link: a `.claude/skills` directory of per-skill links, and the owner's own folders.
+const oldClaudeTree = async (root: string, entries: Readonly<Record<string, string>>): Promise<string> => {
+    const dir = join(root, ".claude", "skills");
+    await mkdir(dir, { recursive: true });
+    for (const [name, spec] of Object.entries(entries)) {
+        if (spec.startsWith("->")) {
+            await symlink(spec.slice(2), join(dir, name));
+        } else {
+            await mkdir(join(dir, name));
+            await writeFile(join(dir, name, "SKILL.md"), spec);
+        }
+    }
+    return dir;
+};
+
+test("the main tree's old .claude/skills directory hands the owner's folders to .agents/skills and becomes the link", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
-    const theirs = join(root, ".claude", "skills", "quill");
-    await mkdir(theirs, { recursive: true });
-    await writeFile(join(theirs, "SKILL.md"), "theirs\n");
+    await oldClaudeTree(root, { mine: "mine\n", alias: "->mine", gone: "->../../.agents/skills/gone" });
 
     await writeLoadedSkill(FILES, root, "quill", SKILL, "owner");
-    expect((await lstat(theirs)).isDirectory()).toBe(true);
-    expect(await readFile(join(theirs, "SKILL.md"), "utf8")).toBe("theirs\n");
-    expect(await readFile(loadedSkillFile(root, "quill"), "utf8")).toBe(SKILL);
+    expect(await readlink(join(root, ".claude", "skills"))).toBe("../.agents/skills");
+    expect(await readFile(loadedSkillFile(root, "mine"), "utf8")).toBe("mine\n");
+    // Moved at the same depth, the owner's relative link still names their folder.
+    expect(await readFile(join(loadedSkillDir(root, "alias"), "SKILL.md"), "utf8")).toBe("mine\n");
+    await expect(lstat(loadedSkillDir(root, "gone"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(root, ".claude", "skills", "quill", "SKILL.md"), "utf8")).toBe(SKILL);
 });
 
-test("a stale managed link is swept by the next write", async () => {
+// Moving it would overwrite the canonical copy, so the directory stays, and Claude is given a link per skill instead.
+test("an owner's folder at a name .agents/skills already holds is never replaced; the rest is linked one by one", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
-    await writeLoadedSkill(FILES, root, "gone", SKILL, "owner");
-    await rm(loadedSkillDir(root, "gone"), { recursive: true, force: true });
+    const dir = await oldClaudeTree(root, { quill: "theirs\n", gone: "->../../.agents/skills/gone" });
 
+    await writeLoadedSkill(FILES, root, "quill", SKILL, "owner");
     await writeLoadedSkill(FILES, root, "kept", SKILL, "owner");
-    await expect(lstat(join(root, ".claude", "skills", "gone"))).rejects.toThrow();
-    expect((await lstat(join(root, ".claude", "skills", "kept"))).isSymbolicLink()).toBe(true);
+    expect((await lstat(dir)).isDirectory()).toBe(true);
+    expect(await readFile(join(dir, "quill", "SKILL.md"), "utf8")).toBe("theirs\n");
+    expect(await readFile(loadedSkillFile(root, "quill"), "utf8")).toBe(SKILL);
+    expect(await readlink(join(dir, "kept"))).toBe("../../.agents/skills/kept");
+    await expect(lstat(join(dir, "gone"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    await removeLoadedSkill(FILES, root, "kept");
+    await expect(lstat(join(dir, "kept"))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-// The sweep removes every managed link the canonical listing does not name, so a listing that failed must not read as
-// "no skills".
+// The per-skill fallback sweeps every link the canonical listing does not name, so a listing that failed must not read
+// as "no skills".
 test("a canonical folder that cannot be listed fails the converge instead of sweeping every link", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
+    const dir = await oldClaudeTree(root, { quill: "theirs\n" });
     await writeLoadedSkill(FILES, root, "quill", SKILL, "owner");
     await writeLoadedSkill(FILES, root, "apple", SKILL, "owner");
     const canonical = join(root, ".agents", "skills");
@@ -127,7 +150,7 @@ test("a canonical folder that cannot be listed fails the converge instead of swe
     await symlink(canonical, canonical);
 
     await expect(removeLoadedSkill({ ...FILES, remove: async () => undefined }, root, "quill")).rejects.toMatchObject({ code: "ELOOP" });
-    expect((await lstat(join(root, ".claude", "skills", "apple"))).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(dir, "apple"))).toBe("../../.agents/skills/apple");
 });
 
 // Every daemon writer stamps its id, so a later release can tell its own leftovers from the owner's files
@@ -161,7 +184,7 @@ test("stamping is idempotent, a re-stamp replaces the writer, and the account sk
     );
 });
 
-test("trashing a skill moves its folder into the history trash and takes its Claude link with it", async () => {
+test("trashing a skill moves its folder into the history trash, and Claude stops offering it", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     const history = mkdtempSync(join(tmpdir(), "loaded-skills-history-"));
     await writeLoadedSkill(FILES, root, "quill", SKILL, "approvals");

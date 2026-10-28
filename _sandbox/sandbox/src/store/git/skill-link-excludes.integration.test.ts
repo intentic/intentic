@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -17,6 +17,16 @@ const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const FILES = { write: writeWorkspaceFile, remove: removeWorkspacePath };
 const SKILL = "---\nname: quill\ndescription: Draws quills.\n---\nDraw a quill.\n";
+// The block with no generated skill in it: Claude's single link, and the per-skill links of an old-shaped tree.
+const CLAUDE_VIEW_BLOCK = [
+    "# intentic: generated Claude skill links",
+    "/.claude/skills",
+    "!/.claude/skills/",
+    "/.claude/skills/*",
+    "!/.claude/skills/*/",
+    "# intentic: end generated Claude skill links",
+    "",
+].join("\n");
 const roots: string[] = [];
 const temp = async (): Promise<string> => {
     const root = await mkdtemp(join(tmpdir(), "skill-link-excludes-"));
@@ -50,7 +60,7 @@ test("generated links stay out of workspace changes, agent deltas, stage-all and
     expect(await readFile(join(scopeGit, "info", "exclude"), "utf8")).toBe(
         await readFile(join(repoGitDir(history, "root"), "info", "exclude"), "utf8"),
     );
-    expect((await lstat(join(work, ".claude", "skills", "quill"))).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(work, ".claude", "skills"))).toBe("../.agents/skills");
     expect(await readFile(join(work, ".claude", "skills", "quill", "SKILL.md"), "utf8")).toBe(SKILL);
 });
 
@@ -67,9 +77,10 @@ test("convergence clears an existing phantom addition whose canonical skill was 
     await writeLoadedSkill(FILES, root, "quill", SKILL, "owner");
     expect((await changedFiles(root)).unstaged).toEqual([]);
     expect(await sh(root, "status", "--porcelain", "-uall")).toBe("");
+    expect(await readlink(join(root, ".claude", "skills"))).toBe("../.agents/skills");
 });
 
-test("a local repo keeps owner skills, unrelated links and excludes, and releases a projection's path when removed", async () => {
+test("a local repo keeps the owner's excludes, and the owner's entries in an old .claude/skills become work under .agents", async () => {
     const root = await temp();
     await sh(root, "init", "-q");
     const exclude = join(root, ".git", "info", "exclude");
@@ -82,16 +93,14 @@ test("a local repo keeps owner skills, unrelated links and excludes, and release
     const first = await readFile(exclude, "utf8");
     await syncSkillLinkExcludes(root);
     expect(await readFile(exclude, "utf8")).toBe(first);
-    expect(first.startsWith("# owner rules\n*.private\n")).toBe(true);
+    expect(first).toBe(`# owner rules\n*.private\n${CLAUDE_VIEW_BLOCK}`);
     expect((await sh(root, "ls-files", "--others", "--exclude-standard")).split("\n")).toEqual([
+        ".agents/skills/mine/SKILL.md",
+        ".agents/skills/my-link",
         ".agents/skills/quill/SKILL.md",
-        ".claude/skills/mine/SKILL.md",
-        ".claude/skills/my-link",
     ]);
     await removeLoadedSkill(FILES, root, "quill");
-    expect(await readFile(exclude, "utf8")).toBe("# owner rules\n*.private\n");
-    await writeFile(join(skills, "quill"), "owner file\n");
-    expect((await sh(root, "ls-files", "--others", "--exclude-standard")).split("\n")).toContain(".claude/skills/quill");
+    expect(await readFile(exclude, "utf8")).toBe(`# owner rules\n*.private\n${CLAUDE_VIEW_BLOCK}`);
 });
 
 test("the common excludes serve linked worktrees without hiding real directories at a projected name", async () => {
@@ -105,7 +114,11 @@ test("the common excludes serve linked worktrees without hiding real directories
     await symlink("../../.agents/skills/quill", join(linked, ".claude", "skills", "quill"));
     await syncSkillLinkExcludes(linked);
     expect(await sh(linked, "status", "--porcelain", "-uall")).toBe("");
-    await rm(join(linked, ".claude", "skills", "quill"));
+    await rm(join(linked, ".claude", "skills"), { recursive: true });
+    await symlink("../.agents/skills", join(linked, ".claude", "skills"));
+    expect(await sh(linked, "status", "--porcelain", "-uall")).toBe("");
+    await rm(join(linked, ".claude", "skills"));
+    await mkdir(join(linked, ".claude", "skills"));
     await mkdir(join(linked, ".claude", "skills", "quill"));
     await writeFile(join(linked, ".claude", "skills", "quill", "SKILL.md"), "owner skill\n");
     expect(await sh(linked, "status", "--porcelain", "-uall")).toBe("?? .claude/skills/quill/SKILL.md");

@@ -31,9 +31,9 @@ exactly as a custom sandbox prompt does; empty or missing falls back to the sand
 `/root/.claude/skills/intentic/references/personas-and-models.md`.
 
 **Skills.** The owner's own are stored in `.intentic/config/skills/` and switched on as copies in
-`/work/.agents/skills/` (Claude links them from `/work/.claude/skills/`), managed on Sandbox ▸ Agent ▸
-Instructions, **Skills**. A persona's own are in its kit, `personas/<id>/skills/`. The image-baked ones, this
-skill among them, are in `/root/.claude/skills/`, which only the Claude Code loop loads.
+`/work/.agents/skills/` (Claude reads them through `/work/.claude/skills`, one link to that folder), managed on
+Sandbox ▸ Agent ▸ Instructions, **Skills**. A persona's own are in its kit, `personas/<id>/skills/`. The
+image-baked ones, this skill among them, are in `/root/.claude/skills/`, which only the Claude Code loop loads.
 
 **Field notes**: `.intentic/config/field-notes.toon`, a brief on how work goes in this sandbox, rewritten monthly by
 an automation from past sessions. Sent only with the **Field notes** switch on (Sandbox ▸ Agent ▸ Tools;

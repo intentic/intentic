@@ -35,14 +35,16 @@ const setup = async (): Promise<{ main: string; worktree: string }> => {
     return { main, worktree };
 };
 
-test("a worktree gets the main tree's live generated skills and their links, and git sees none of it", async () => {
+test("a worktree gets the main tree's live generated skills and Claude's link to them, and git sees none of it", async () => {
     const { main, worktree } = await setup();
     expect(await lstat(join(worktree, ".agents", "skills", "lsp")).catch(() => undefined)).toBeUndefined();
 
     await carryGeneratedSkills(main, worktree);
 
     expect(await readFile(join(worktree, ".claude", "skills", "lsp", "SKILL.md"), "utf8")).toBe(stampSkill(skill("lsp"), "baked-tool"));
-    expect(await readlink(join(worktree, ".claude", "skills", "lsp"))).toBe("../../.agents/skills/lsp");
+    expect(await readlink(join(worktree, ".claude", "skills"))).toBe("../.agents/skills");
+    // The owner's committed skill too, whose own link git never carried (2026-10-28: no Claude turn saw such a skill).
+    expect(await readFile(join(worktree, ".claude", "skills", "mine", "SKILL.md"), "utf8")).toBe(skill("mine"));
     expect(await sh(worktree, "status", "--porcelain", "-uall")).toBe("");
     expect(await sh(main, "status", "--porcelain", "-uall")).toBe("");
 });
@@ -55,7 +57,7 @@ test("a rewrite in the main tree reaches the worktree next turn, and a skill the
 
     await carryGeneratedSkills(main, worktree);
     expect(await readFile(join(worktree, ".agents", "skills", "lsp", "SKILL.md"), "utf8")).toContain("Use it differently.");
-    expect(await readlink(join(worktree, ".claude", "skills", "fileq"))).toBe("../../.agents/skills/fileq");
+    expect(await readFile(join(worktree, ".claude", "skills", "fileq", "SKILL.md"), "utf8")).toBe(stampSkill(skill("fileq"), "baked-tool"));
 
     await removeLoadedSkill(FILES, main, "lsp");
     await carryGeneratedSkills(main, worktree);
@@ -77,9 +79,24 @@ test("what the branch itself tracks at a generated skill's path is left exactly 
 
     await carryGeneratedSkills(main, worktree);
     expect(await readFile(join(worktree, ".agents", "skills", "lsp", "SKILL.md"), "utf8")).toBe(committed);
+    // Its `.claude/skills` is a directory it tracks, so Claude gets a link per skill there instead of the one link.
+    expect(await readlink(join(worktree, ".claude", "skills", "lsp"))).toBe("../../.agents/skills/lsp");
+    expect(await readlink(join(worktree, ".claude", "skills", "mine"))).toBe("../../.agents/skills/mine");
     expect(await sh(worktree, "status", "--porcelain", "-uall")).toBe("");
 
     await removeLoadedSkill(FILES, main, "lsp");
     await carryGeneratedSkills(main, worktree);
     expect(await readFile(join(worktree, ".agents", "skills", "lsp", "SKILL.md"), "utf8")).toBe(committed);
+});
+
+test("a checkout holding only the per-skill links an older carry made, untracked, gets the one link instead", async () => {
+    const { main, worktree } = await setup();
+    await mkdir(join(worktree, ".claude", "skills"), { recursive: true });
+    await symlink("../../.agents/skills/mine", join(worktree, ".claude", "skills", "mine"));
+    await symlink("../../.agents/skills/gone", join(worktree, ".claude", "skills", "gone"));
+
+    await carryGeneratedSkills(main, worktree);
+    expect(await readlink(join(worktree, ".claude", "skills"))).toBe("../.agents/skills");
+    expect(await readFile(join(worktree, ".claude", "skills", "lsp", "SKILL.md"), "utf8")).toBe(stampSkill(skill("lsp"), "baked-tool"));
+    expect(await sh(worktree, "status", "--porcelain", "-uall")).toBe("");
 });

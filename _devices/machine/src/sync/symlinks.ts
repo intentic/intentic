@@ -5,8 +5,9 @@ import { baseDir } from "../config.js";
 
 // What a sync session does with the symbolic links it finds on either side. Mutagen fixes this at `sync create`, like
 // the rest of a session's rules. `portable` is Mutagen's own default: it carries every relative link that stays inside
-// the folder, and the sandbox writes those itself (every loaded skill is a `.claude/skills/<name>` link to
-// `../../.agents/skills/<name>`). `ignore` carries no links, in either direction.
+// the folder, and the sandbox writes those itself (`.claude/skills` is one link to `../.agents/skills`, and a tree
+// from before that holds a `.claude/skills/<name>` link per loaded skill). `ignore` carries no links, in either
+// direction.
 export type SymlinkMode = "portable" | "ignore";
 
 export interface DeviceSymlinks {
