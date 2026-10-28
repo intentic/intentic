@@ -42,9 +42,10 @@ const fresh = (): Pending => ({ raw: ``, name: undefined, data: undefined, retry
 // Every block is dispatched, a comment-only one too, so a reader forwarding the stream loses nothing; a reader of
 // messages skips the ones whose `data` is undefined.
 export const createSseParser = (dispatch: (event: SseEvent) => void): SseParser => {
-    let buffer = ``;
-    // How far into `buffer` is known to hold no terminator, so a long line arriving in small chunks is scanned once.
-    let scanned = 0;
+    // Keep an incomplete line in pieces: concatenating it on each feed makes the next regexp flatten and copy all
+    // earlier chunks again. Only scan new text, and join a line once its terminator arrives.
+    const fragments: string[] = [];
+    let pendingCr = false;
     let started = false;
     let lastId: string | undefined;
     let pending = fresh();
@@ -58,7 +59,8 @@ export const createSseParser = (dispatch: (event: SseEvent) => void): SseParser 
         if (name === `event`) {
             pending.name = value;
         } else if (name === `data`) {
-            pending.data = [...(pending.data ?? []), value];
+            pending.data ??= [];
+            pending.data.push(value);
         } else if (name === `id` && !value.includes(`\0`)) {
             lastId = value;
         } else if (name === `retry` && /^\d+$/.test(value)) {
@@ -79,20 +81,31 @@ export const createSseParser = (dispatch: (event: SseEvent) => void): SseParser 
         field(colon < 0 ? text : text.slice(0, colon), colon < 0 ? `` : text.slice(colon + (text.charAt(colon + 1) === ` ` ? 2 : 1)));
     };
 
-    const lines = (final: boolean): void => {
+    const finishLine = (text: string, terminator: string): void => {
+        let whole = text;
+        if (fragments.length > 0) {
+            whole = fragments.join(``) + text;
+            fragments.length = 0;
+        }
+        line(whole, terminator);
+    };
+
+    const lines = (text: string): void => {
         const terminators = /\r\n|\r|\n/gu;
-        terminators.lastIndex = scanned;
         let start = 0;
-        for (let found = terminators.exec(buffer); found !== null; found = terminators.exec(buffer)) {
-            // A `\r` that ends the buffer may be the first half of a `\r\n` still in flight.
-            if (found[0] === `\r` && found.index === buffer.length - 1 && !final) {
-                break;
+        for (let found = terminators.exec(text); found !== null; found = terminators.exec(text)) {
+            // A trailing `\r` may be the first half of a `\r\n` still in flight.
+            if (found[0] === `\r` && found.index === text.length - 1) {
+                fragments.push(text.slice(start, found.index));
+                pendingCr = true;
+                return;
             }
-            line(buffer.slice(start, found.index), found[0]);
+            finishLine(text.slice(start, found.index), found[0]);
             start = found.index + found[0].length;
         }
-        buffer = buffer.slice(start);
-        scanned = Math.max(0, buffer.length - 1);
+        if (start < text.length) {
+            fragments.push(text.slice(start));
+        }
     };
 
     return {
@@ -106,14 +119,20 @@ export const createSseParser = (dispatch: (event: SseEvent) => void): SseParser 
                     next = next.slice(1);
                 }
             }
-            buffer += next;
-            lines(false);
+            if (pendingCr && next !== ``) {
+                pendingCr = false;
+                const lf = next.startsWith(`\n`);
+                finishLine(``, lf ? `\r\n` : `\r`);
+                next = lf ? next.slice(1) : next;
+            }
+            lines(next);
         },
         end: () => {
-            lines(true);
-            if (buffer !== ``) {
-                line(buffer, ``);
-                buffer = ``;
+            if (pendingCr) {
+                pendingCr = false;
+                finishLine(``, `\r`);
+            } else if (fragments.length > 0) {
+                finishLine(``, ``);
             }
             if (pending.raw !== ``) {
                 emit();

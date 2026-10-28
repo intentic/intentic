@@ -1,4 +1,4 @@
-import { parseSseText, type SseEvent, sseData, sseEvents, sseFrames, sseJson } from "./sse.js";
+import { createSseParser, parseSseText, type SseEvent, sseData, sseEvents, sseFrames, sseJson } from "./sse.js";
 
 const encoder = new TextEncoder();
 
@@ -95,4 +95,48 @@ it("ends an event stream that goes silent past the idle window", async () => {
 
 it("sseJson reads a parsed event's data", () => {
     expect([sseJson(parseSseText(`data: [1]\n\n`)[0]!), sseJson(parseSseText(`: c\n\n`)[0]!)]).toEqual([[1], undefined]);
+});
+
+it("preserves events and raw text at every chunk boundary, including a pending CR at EOF", () => {
+    for (const text of [
+        `\uFEFF: hello\r\nid: 7\revent: turn\ndata: first\r\ndata: second\r\n\r\ndata: last`,
+        `data: first\r\rdata: second\r`,
+        `data: first\r\n\r\n`,
+        `\r\r\n\n`,
+    ]) {
+        const expected = parseSseText(text);
+        for (let cut = 0; cut <= text.length; cut += 1) {
+            const events: SseEvent[] = [];
+            const parser = createSseParser((event) => events.push(event));
+            parser.feed(text.slice(0, cut));
+            parser.feed(``);
+            parser.feed(text.slice(cut));
+            parser.end();
+            expect(events).toEqual(expected);
+        }
+        expect(expected.map((event) => event.raw).join(``)).toBe(text);
+    }
+});
+
+it("collects a long data line from many fragments, then resets for the next event", () => {
+    const value = `a𐐀b`.repeat(20_000);
+    const text = `data: ${value}\r\n\r\ndata: next\n\n`;
+    const events: SseEvent[] = [];
+    const parser = createSseParser((event) => events.push(event));
+    for (let at = 0; at < text.length; at += 13) {
+        parser.feed(text.slice(at, at + 13));
+    }
+    parser.end();
+
+    expect(events.map((event) => event.data)).toEqual([value, `next`]);
+    expect(events.map((event) => event.raw).join(``)).toBe(text);
+});
+
+it("keeps every data line of a large multiline event and starts the next event cleanly", () => {
+    const values = Array.from({ length: 16_000 }, (_, index) => `value ${index}`);
+    const raw = `${values.map((value) => `data: ${value}\n`).join(``)}\n`;
+    const events = parseSseText(`${raw}data: next\n\n`);
+
+    expect(events.map((event) => event.data)).toEqual([values.join(`\n`), `next`]);
+    expect(events[0]?.raw).toBe(raw);
 });

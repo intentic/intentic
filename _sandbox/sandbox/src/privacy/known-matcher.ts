@@ -56,8 +56,15 @@ const spelled = (value: string, spelling: Spelling): Spelled | undefined => {
     if (first === null) {
         return undefined;
     }
-    const units = Array.from(value.slice(first.index)).filter((char) => spelling !== "folded" || !FOLD.test(char)).map((char) => unitOf(char, spelling));
-    return { lead: Array.from(value.slice(0, first.index)).map((char) => unitOf(char, spelling)).join(""), units };
+    const units = Array.from(value.slice(first.index))
+        .filter((char) => spelling !== "folded" || !FOLD.test(char))
+        .map((char) => unitOf(char, spelling));
+    return {
+        lead: Array.from(value.slice(0, first.index))
+            .map((char) => unitOf(char, spelling))
+            .join(""),
+        units,
+    };
 };
 
 // The one key every spelling of a value shares: two values with the same key are the same value.
@@ -69,6 +76,34 @@ export const spellingKey = (value: string, spelling: Spelling): string => {
 interface Candidate<C> extends Spelled {
     readonly spelling: Spelling;
     readonly payload: C;
+}
+
+const lengthOf = <C>(candidate: Candidate<C>): number => candidate.lead.length + candidate.units.length;
+
+// Each prefix bucket is sorted once when the vocabulary is built. Merge only as far as the first accepted match,
+// rather than copying and sorting every candidate at every word. Ties keep spelling, prefix and insertion order.
+function* longestFirst<C>(groups: readonly (readonly Candidate<C>[])[]): Generator<Candidate<C>> {
+    if (groups.length === 1) {
+        yield* groups[0]!;
+        return;
+    }
+    const positions = groups.map(() => 0);
+    for (;;) {
+        let next: Candidate<C> | undefined;
+        let group = -1;
+        for (let index = 0; index < groups.length; index += 1) {
+            const candidate = groups[index]![positions[index]!];
+            if (candidate !== undefined && (next === undefined || lengthOf(candidate) > lengthOf(next))) {
+                next = candidate;
+                group = index;
+            }
+        }
+        if (next === undefined) {
+            return;
+        }
+        positions[group]! += 1;
+        yield next;
+    }
 }
 
 // Where `candidate` ends if it is written at `at` (its first word's first character), else undefined.
@@ -100,7 +135,9 @@ const boundedAt = <C>(text: string, start: number, end: number, candidate: Candi
 
 // The places a value can start in a text: each word's first character, and the character after an escape's letter.
 const wordStarts = (text: string): number[] =>
-    [...text.matchAll(WORD)].flatMap((word) => (word[0].length > 1 && afterEscape(text, word.index + 1) ? [word.index, word.index + 1] : [word.index]));
+    [...text.matchAll(WORD)].flatMap((word) =>
+        word[0].length > 1 && afterEscape(text, word.index + 1) ? [word.index, word.index + 1] : [word.index],
+    );
 
 // The first characters of the text at `at` as each spelling compares them, as far as an index key reaches.
 const prefixesAt = (text: string, at: number, spelling: Spelling): string[] => {
@@ -131,7 +168,10 @@ export const createKnownMatcher = <C>(values: readonly KnownValue<C>[]): KnownMa
         list.push({ ...parts, spelling, payload });
         byPrefix.set(key, list);
     }
-    const length = (candidate: Candidate<C>): number => candidate.lead.length + candidate.units.length;
+    for (const list of byPrefix.values()) {
+        list.sort((left, right) => lengthOf(right) - lengthOf(left));
+    }
+    const spellings = SPELLINGS.filter((spelling) => values.some((value) => (value.spelling ?? "exact") === spelling));
     return {
         size: values.length,
         find: (text, accept = () => true) => {
@@ -141,13 +181,24 @@ export const createKnownMatcher = <C>(values: readonly KnownValue<C>[]): KnownMa
             const found: KnownMatch<C>[] = [];
             let covered = 0;
             for (const at of wordStarts(text)) {
+                if (at < covered) {
+                    continue;
+                }
                 // Longest first, so a full name wins over the first name it starts with.
-                const candidates = SPELLINGS.flatMap((spelling) => prefixesAt(text, at, spelling).flatMap((key) => byPrefix.get(key) ?? [])).toSorted(
-                    (left, right) => length(right) - length(left),
+                const groups = spellings.flatMap((spelling) =>
+                    prefixesAt(text, at, spelling).flatMap((key) => {
+                        const list = byPrefix.get(key);
+                        return list === undefined ? [] : [list];
+                    }),
                 );
-                for (const candidate of candidates) {
+                for (const candidate of longestFirst(groups)) {
                     const start = at - candidate.lead.length;
-                    if (start < covered || Array.from(text.slice(start, at)).map((char) => unitOf(char, candidate.spelling)).join("") !== candidate.lead) {
+                    if (
+                        start < covered ||
+                        Array.from(text.slice(start, at))
+                            .map((char) => unitOf(char, candidate.spelling))
+                            .join("") !== candidate.lead
+                    ) {
                         continue;
                     }
                     const end = endAt(text, at, candidate);
