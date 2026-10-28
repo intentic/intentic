@@ -48,7 +48,9 @@ const props = defineProps<{
     dashed?: boolean;
     // For a destination rather than an open session (e.g. off-list search hits): drops the ink a step.
     quiet?: boolean;
-    // True while a card is only being previewed (Conversation.peek); said to a screen reader, the keep press says it on screen.
+    // True while a card is only being previewed (Conversation.peek), swept once focus leaves it: a dashed edge on screen, words
+    // for a screen reader. The dashes are the 1px border every card already has, so the look grows nothing; they take their
+    // ink from --card-border, since .session-card rests every border at transparent (as WorkflowRunCard's do).
     peek?: boolean;
     // Why this row matched the filter: the hit line and its speaker (rendered by MatchLine).
     snippet?: MatchSnippet;
@@ -83,7 +85,8 @@ const chipHint = computed((): Tip | undefined =>
         :to="to"
         class="session-card group flex w-full min-w-0 shrink-0 scroll-mt-8 rounded-2xl border p-3 text-left text-2xs"
         :class="[
-            { 'session-card-on': selected, 'session-card-attention': attention, 'border-dashed': dashed },
+            { 'session-card-on': selected, 'session-card-attention': attention, 'border-dashed': dashed || peek },
+            { '[--card-border:var(--color-line-strong)]': peek },
             $slots[`aside`] ? `items-stretch gap-2.5` : `flex-col gap-1.5`,
         ]"
         :style="blade"
@@ -121,7 +124,7 @@ const chipHint = computed((): Tip | undefined =>
                     <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
                         run.text
                     }}</span>
-                    <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
+                    <!-- The dashed edge is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
                     <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
                 </span>
                 <slot name="trailing" />
