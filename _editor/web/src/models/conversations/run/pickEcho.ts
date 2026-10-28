@@ -14,7 +14,9 @@ import { onChatNote, postChatNote } from "./chatChannel";
 
 // The wire's picks: JSON drops an undefined key, and a key left out would keep the receiver's own value (an account of
 // the provider the sender just left), so an unset pick travels as null.
-export type WirePicks = { readonly [K in keyof SharedPicks]-?: Exclude<SharedPicks[K], undefined> | null };
+export type WirePicks = {
+    readonly [K in keyof SharedPicks]-?: undefined extends SharedPicks[K] ? Exclude<SharedPicks[K], undefined> | null : SharedPicks[K];
+};
 
 export const wirePicks = (picks: SharedPicks): WirePicks => ({
     provider: picks.provider,

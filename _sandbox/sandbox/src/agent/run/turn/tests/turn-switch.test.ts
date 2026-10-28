@@ -1,10 +1,10 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
-import type { Services } from "../../../composition.js";
-import { createHoldingsIndex, type LiveRun, RUNS, type Share } from "../../../conversations/actor/conversation-holdings.js";
-import type { PersistedAgent,StoredProfile } from "../../../conversations/registry/agents-store.js";
-import { conversationAfter, conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
-import { switchedFrame, switchFrames, type TurnSwitch, turnSwitchOf, withSwitchTold } from "./turn-switch.js";
+import type { Services } from "../../../../composition.js";
+import { createHoldingsIndex, type LiveRun, RUNS, type Share } from "../../../../conversations/actor/conversation-holdings.js";
+import type { PersistedAgent,StoredProfile } from "../../../../conversations/registry/agents-store.js";
+import { conversationAfter, conversationEntry } from "../../../../conversations/registry/agents-store.testing.js";
+import { switchedFrame, switchFrames, type TurnSwitch, turnSwitchOf, withSwitchTold } from "../turn-switch.js";
 
 // A turn says it switched only where the conversation's own record, before and after its begin, proves it did: never on
 // a first turn, never for effort or thinking, and never for an account or model only one side names.

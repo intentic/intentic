@@ -129,7 +129,7 @@ export async function* switchFrames(
 // already rewrote the record: what the record stood at before it is what the next turn is measured against, held here
 // until a run that is written; `record` undefined where nothing was on it yet. Kept in memory only, so a restart measures
 // from the record as it is.
-export const SWITCH_BASELINES: Holding<{ readonly record: PersistedAgent | undefined }> = { name: "switch baselines" };
+const SWITCH_BASELINES: Holding<{ readonly record: PersistedAgent | undefined }> = { name: "switch baselines" };
 
 /**
  * The placed turn, told first what it switched to since the last turn on the record: `previous` is the conversation's

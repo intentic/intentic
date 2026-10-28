@@ -1,6 +1,6 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
-import { TURN_CHECKS_SOURCE } from "../turn-checks.js";
-import { closingOf } from "./turn-closing.js";
+import { TURN_CHECKS_SOURCE } from "../../turn-checks.js";
+import { closingOf } from "../turn-closing.js";
 
 /* What a child's report carries. 2026-10-17: six children answered the end-of-turn checks (findings that were their
    siblings' work), and the answer reached their parent as the whole report. */
