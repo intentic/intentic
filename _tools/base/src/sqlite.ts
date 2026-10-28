@@ -1,7 +1,7 @@
 // node:sqlite is experimental, so a cache store holds the `SqliteDb` seam; openSqlite and immediateTransaction serve one holding it raw.
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 
 export type SqliteValue = string | number | bigint | Uint8Array | null;
 export type Row = Record<string, SqliteValue>;
@@ -14,31 +14,60 @@ export interface SqliteDb {
     close(): void;
 }
 
+// Dynamic scope/IN queries vary with each search, so a connection must not retain every SQL string it sees.
+const STATEMENT_CACHE_LIMIT = 128;
+const CACHEABLE_SQL_MAX_LENGTH = 16_384;
+const CACHEABLE_SQL = /^\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|WITH)\b/i;
+
 /**
  * The seam over a driver handle. `transaction` is an explicit BEGIN/COMMIT/ROLLBACK because node:sqlite has no
  * helper of its own, and a throw inside it must roll back rather than leave the connection inside a transaction.
  */
-export const wrapDb = (db: DatabaseSync): SqliteDb => ({
-    all: (sql, ...params) => db.prepare(sql).all(...params) as Row[],
-    get: (sql, ...params) => db.prepare(sql).get(...params) as Row | undefined,
-    run: (sql, ...params) => {
-        db.prepare(sql).run(...params);
-    },
-    transaction: (fn) => {
-        db.exec("BEGIN");
-        try {
-            fn();
-            db.exec("COMMIT");
-        } catch (error) {
-            // SQLite ends the transaction itself on a full disk or an I/O error; a ROLLBACK then would replace that error.
-            if (db.isTransaction) {
-                db.exec("ROLLBACK");
-            }
-            throw error;
+export const wrapDb = (db: DatabaseSync): SqliteDb => {
+    const statements = new Map<string, StatementSync>();
+    const prepare = (sql: string): StatementSync => {
+        const held = statements.get(sql);
+        if (held !== undefined) {
+            // Refresh its insertion order: recurring index writes survive a stream of distinct search queries.
+            statements.delete(sql);
+            statements.set(sql, held);
+            return held;
         }
-    },
-    close: () => db.close(),
-});
+        const statement = db.prepare(sql);
+        // PRAGMAs can take effect during preparation; schema and transaction commands also stay uncached.
+        if (sql.length <= CACHEABLE_SQL_MAX_LENGTH && CACHEABLE_SQL.test(sql)) {
+            if (statements.size === STATEMENT_CACHE_LIMIT) {
+                statements.delete(statements.keys().next().value!);
+            }
+            statements.set(sql, statement);
+        }
+        return statement;
+    };
+    return {
+        all: (sql, ...params) => prepare(sql).all(...params) as Row[],
+        get: (sql, ...params) => prepare(sql).get(...params) as Row | undefined,
+        run: (sql, ...params) => {
+            prepare(sql).run(...params);
+        },
+        transaction: (fn) => {
+            db.exec("BEGIN");
+            try {
+                fn();
+                db.exec("COMMIT");
+            } catch (error) {
+                // SQLite ends the transaction itself on a full disk or an I/O error; a ROLLBACK then would replace that error.
+                if (db.isTransaction) {
+                    db.exec("ROLLBACK");
+                }
+                throw error;
+            }
+        },
+        close: () => {
+            db.close();
+            statements.clear();
+        },
+    };
+};
 
 /**
  * Stamps the version into a fresh database's `meta` table, and refuses one written by a different version.

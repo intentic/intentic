@@ -63,6 +63,107 @@ test("get answers undefined for no row, and all answers an empty list", () => {
     db.close();
 });
 
+test("all, get and run share a prepared statement and reset its rows and bindings", () => {
+    const raw = openTemp();
+    const prepared = jest.spyOn(raw, "prepare");
+    const db = wrapDb(raw);
+    const sql = "SELECT ? AS a, ? AS b UNION ALL SELECT 9, 10";
+    try {
+        expect(db.get(sql, 1, 2)).toEqual({ a: 1, b: 2 });
+        expect(db.all(sql, 3)).toEqual([
+            { a: 3, b: null },
+            { a: 9, b: 10 },
+        ]);
+        db.run(sql, 4, 5);
+        expect(db.get(sql)).toEqual({ a: null, b: null });
+        expect(prepared.mock.calls).toEqual([[sql]]);
+    } finally {
+        db.close();
+        prepared.mockRestore();
+    }
+});
+
+test("a cached write remains usable after a constraint failure and rollback", () => {
+    const db = wrapDb(openTemp());
+    db.run("CREATE TABLE unique_values (n INTEGER PRIMARY KEY)");
+    const sql = "INSERT INTO unique_values (n) VALUES (?)";
+    try {
+        db.run(sql, 1);
+        expect(() =>
+            db.transaction(() => {
+                db.run(sql, 2);
+                db.run(sql, 1);
+            }),
+        ).toThrow("UNIQUE constraint failed: unique_values.n");
+        db.run(sql, 3);
+        expect(db.all("SELECT n FROM unique_values ORDER BY n")).toEqual([{ n: 1 }, { n: 3 }]);
+    } finally {
+        db.close();
+    }
+});
+
+test("cached reads see schema changes and writes from another connection", () => {
+    const dir = tempDir();
+    const path = join(dir, "shared.db");
+    const db = wrapDb(openSqlite(path));
+    const other = openSqlite(path);
+    try {
+        db.run("CREATE TABLE values_now (n INTEGER)");
+        db.run("INSERT INTO values_now VALUES (?)", 1);
+        expect(db.all("SELECT * FROM values_now")).toEqual([{ n: 1 }]);
+        other.exec("ALTER TABLE values_now ADD COLUMN label TEXT; UPDATE values_now SET n = 2, label = 'new'");
+        expect(db.all("SELECT * FROM values_now")).toEqual([{ n: 2, label: "new" }]);
+    } finally {
+        other.close();
+        db.close();
+    }
+});
+
+test("distinct queries evict cold statements while recurring queries stay prepared", () => {
+    const raw = openTemp();
+    const prepared = jest.spyOn(raw, "prepare");
+    const db = wrapDb(raw);
+    const hot = "SELECT ? AS hot";
+    const cold = "SELECT 0 AS cold";
+    try {
+        db.get(hot, 0);
+        db.get(cold);
+        for (let value = 1; value <= 256; value++) {
+            expect(db.get(`SELECT ${value} AS value`)).toEqual({ value });
+            expect(db.get(hot, value)).toEqual({ hot: value });
+        }
+        expect(db.get(cold)).toEqual({ cold: 0 });
+        expect([prepared.mock.calls.filter(([sql]) => sql === hot).length, prepared.mock.calls.filter(([sql]) => sql === cold).length]).toEqual([
+            1, 2,
+        ]);
+    } finally {
+        db.close();
+        prepared.mockRestore();
+    }
+});
+
+test("large dynamic queries and PRAGMA commands are prepared on every call", () => {
+    const raw = openTemp();
+    const prepared = jest.spyOn(raw, "prepare");
+    const db = wrapDb(raw);
+    const large = `SELECT ? AS n /* ${"x".repeat(17_000)} */`;
+    const enable = "PRAGMA foreign_keys = ON";
+    try {
+        expect(db.get(large, 1)).toEqual({ n: 1 });
+        expect(db.get(large, 2)).toEqual({ n: 2 });
+        db.run(enable);
+        db.run("PRAGMA foreign_keys = OFF");
+        db.run(enable);
+        expect(db.get("PRAGMA foreign_keys")).toEqual({ foreign_keys: 1 });
+        expect([prepared.mock.calls.filter(([sql]) => sql === large).length, prepared.mock.calls.filter(([sql]) => sql === enable).length]).toEqual([
+            2, 2,
+        ]);
+    } finally {
+        db.close();
+        prepared.mockRestore();
+    }
+});
+
 const tempDir = (): string => {
     const dir = mkdtempSync(join(tmpdir(), "base-sqlite-"));
     dirs.push(dir);
