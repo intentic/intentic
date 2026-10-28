@@ -873,7 +873,7 @@ const confirmDiscard = async (): Promise<void> => {
 };
 
 // The sync press's whole reading of the repos (commit/syncPress.ts): which verb, how many each way, and its words.
-const { syncRepos, aheadTotal, behindTotal, syncVerb, SYNC_VERB, syncMeta, syncSummary, outgoingWords, syncTip } = useSyncPress(scannable);
+const { syncRepos, aheadTotal, behindTotal, syncVerb, SYNC_VERB, syncMeta, syncSummary, syncTip } = useSyncPress(scannable);
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
 // question, which is also why useChanges exports no one-repo push.
 
@@ -955,7 +955,6 @@ const bar = computed(() =>
         outgoing: outgoing.value,
         chipNotice: boxIsYours.value ? chipNotice.value : undefined,
         noUpstream: outgoing.value === `offer` && behindTotal.value === 0 && aheadTotal.value === 0,
-        outgoingWords: outgoingWords.value,
     }),
 );
 // Commit and the sync share one bar under the message field, so the box stands whenever either has something to say.
@@ -1100,10 +1099,6 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         <!-- Context, not a reason, so it gives way to the buttons rather than wrapping them. -->
                         <span v-else-if="bar.kind === `no-upstream`" class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-subtle">
                             <span class="truncate whitespace-nowrap">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
-                        </span>
-                        <!-- Nothing to commit: what the sync press would move, in words, so it isn't a lone press on an empty row. -->
-                        <span v-else-if="bar.kind === `outgoing`" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted" v-tooltip.right.overflow="bar.words">
-                            {{ bar.words }}
                         </span>
                         <span v-else class="flex-1"></span>
                         <div class="ml-auto flex shrink-0 items-center gap-1">

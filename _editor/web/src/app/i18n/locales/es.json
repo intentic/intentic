@@ -12936,8 +12936,6 @@
             "notPushed": "Sin enviar",
             "noUncommittedChanges": "No hay cambios sin commit.",
             "noUpstreamYet": "todavía sin upstream",
-            "commitsToPull": "{count} commit por traer | {count} commits por traer",
-            "pullAndPush": "{pull} por traer · {push} por subir",
             "landingTitle": "Integrando {title}…",
             "nothingLeftInTree": "No queda nada de {filterLabel} en el árbol.",
             "onePerRepo": "Uno por repo",

@@ -13,7 +13,6 @@ const rest: BarFacts = {
     outgoing: undefined,
     chipNotice: undefined,
     noUpstream: false,
-    outgoingWords: undefined,
 };
 
 const run: RunLine = { words: `Committing in root…`, others: 0, tip: undefined, lostContact: false, slow: true, stuck: false, stop: () => undefined };
@@ -52,11 +51,9 @@ describe(`barLine`, () => {
         expect(barLine({ ...rest, changes: 0, conflicts: true, chipNotice: `note` })).toEqual({ kind: `rest` });
     });
 
-    // The bar left with only its sync press used to be a lone "↑ 1" on an empty row; with changes listed, Commit and the
-    // press's own counts already say it, so the words would only crowd the box.
-    it(`says what the sync would move only when there is nothing to commit`, () => {
-        const offer: BarFacts = { ...rest, outgoing: `offer`, outgoingWords: `1 commit to push` };
-        expect(barLine({ ...offer, changes: 0 })).toEqual({ kind: `outgoing`, words: `1 commit to push` });
+    it(`leaves the count to the sync button when there is nothing to commit`, () => {
+        const offer: BarFacts = { ...rest, outgoing: `offer` };
+        expect(barLine({ ...offer, changes: 0 })).toEqual({ kind: `rest` });
         expect(barLine(offer)).toEqual({ kind: `rest` });
         expect(barLine({ ...offer, changes: 0, noUpstream: true })).toEqual({ kind: `no-upstream` });
     });

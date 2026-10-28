@@ -12936,8 +12936,6 @@
             "notPushed": "Non poussés",
             "noUncommittedChanges": "Aucun changement non committé.",
             "noUpstreamYet": "pas encore d'amont",
-            "commitsToPull": "{count} commit à récupérer | {count} commits à récupérer",
-            "pullAndPush": "{pull} à récupérer · {push} à pousser",
             "landingTitle": "Intégration de {title}…",
             "nothingLeftInTree": "Il ne reste rien de {filterLabel} dans l'arbre.",
             "onePerRepo": "Un par dépôt",

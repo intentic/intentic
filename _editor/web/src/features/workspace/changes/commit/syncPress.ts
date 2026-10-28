@@ -6,8 +6,7 @@ import { ahead, behind, syncable, unpublished } from "../../../../models/workspa
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 
 // THE SYNC PRESS on the Changes panel's bar (ReviewPanel.vue), read off the listed repos: which verb it offers, how many
-// commits go each way, what its face, hover and spoken name say, and the same counts as words for the bar's line when
-// Commit is not there beside it.
+// commits go each way, what its face, hover and spoken name say.
 
 export const useSyncPress = (scannable: Readonly<Ref<readonly RepoChanges[]>>) => {
     const words = useVocabulary();
@@ -57,25 +56,6 @@ export const useSyncPress = (scannable: Readonly<Ref<readonly RepoChanges[]>>) =
         const spread = syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repos`, { count: syncRepos.value.length }, syncRepos.value.length) : ``;
         return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
     });
-    // The same counts in words, for the bar's line when Commit isn't there to sit beside the press: incoming first, as the
-    // press's own arrows read. Both ways at once drop the word "commits", which the sidebar has no room to say twice. A
-    // pure publish counts branches, since there is no commit to count.
-    const outgoingWords = computed<string | undefined>(() => {
-        const [pull, push] = [behindTotal.value, aheadTotal.value];
-        if (pull > 0 && push > 0) {
-            return t(`workspace.reviewPanel.pullAndPush`, { pull, push });
-        }
-        const branches = syncRepos.value.filter((repo) => unpublished(repo)).length;
-        const parts = [
-            ...(pull > 0 ? [t(`workspace.reviewPanel.commitsToPull`, { count: pull }, pull)] : []),
-            ...(push > 0
-                ? [t(`workspace.outgoingWork.toPush`, { count: push }, push)]
-                : branches > 0
-                  ? [t(`workspace.outgoingWork.unpushedBranch`, { count: branches }, branches)]
-                  : []),
-        ];
-        return parts.length === 0 ? undefined : parts.join(` · `);
-    });
     // The button carries the bare count, as Commit does; its hover says which way each number goes and which repos it
     // spans. The replay caveat rides here too — the one thing about this verb a user can be surprised by.
     const syncTip = computed((): Tip => ({
@@ -90,5 +70,5 @@ export const useSyncPress = (scannable: Readonly<Ref<readonly RepoChanges[]>>) =
         ],
         note: behindTotal.value > 0 ? t(`workspace.reviewPanel.rebasesNeverMerges`) : undefined,
     }));
-    return { syncRepos, aheadTotal, behindTotal, syncVerb, SYNC_VERB, syncMeta, syncSummary, outgoingWords, syncTip };
+    return { syncRepos, aheadTotal, behindTotal, syncVerb, SYNC_VERB, syncMeta, syncSummary, syncTip };
 };

@@ -3,7 +3,7 @@ import { phaseWords, type RunLine } from "./runLine";
 // WHAT THE PRESS BAR'S ONE READING LINE SAYS, decided here and nowhere else. The bar under a Changes panel's message
 // box has room for one line beside its presses, and every source of news wants it: a stage or commit run, a conflict
 // that stops Commit, a commit under way, why a press was refused, a push in flight or just done, why a lit chip left the
-// box alone, a branch with no upstream, and, with nothing to commit, what the sync press would move. It was a hand-ordered `v-else-if` chain fed by sources that did not know about
+// box alone, a branch with no upstream. It was a hand-ordered `v-else-if` chain fed by sources that did not know about
 // each other, so a new one (a run's own row) drew beside an old one ("Committing…" twice) or was silenced by a flag
 // emitted back up and an empty template. Here each state is one case of one union, picked by one function, most
 // pressing first, and the template draws the case it is handed.
@@ -24,8 +24,6 @@ export type BarLine =
     | { readonly kind: `chip`; readonly notice: string }
     /** The branch has no upstream to count against. */
     | { readonly kind: `no-upstream` }
-    /** Nothing to commit, so the line says what the sync press beside it would move ("1 commit to push"). */
-    | { readonly kind: `outgoing`; readonly words: string }
     | { readonly kind: `rest` };
 
 export interface BarFacts {
@@ -42,8 +40,6 @@ export interface BarFacts {
     readonly chipNotice: string | undefined;
     /** An offer to sync with nothing to count: no upstream yet. */
     readonly noUpstream: boolean;
-    /** What the offered sync would move, in words; undefined when there is no offer. */
-    readonly outgoingWords: string | undefined;
 }
 
 export const barLine = (facts: BarFacts): BarLine => {
@@ -67,10 +63,6 @@ export const barLine = (facts: BarFacts): BarLine => {
     }
     if (facts.noUpstream) {
         return { kind: `no-upstream` };
-    }
-    // With changes listed the presses already carry the counts beside Commit; alone, a bare "↑ 1" reads as a stray press.
-    if (facts.changes === 0 && facts.outgoing === `offer` && facts.outgoingWords !== undefined) {
-        return { kind: `outgoing`, words: facts.outgoingWords };
     }
     return { kind: `rest` };
 };
