@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import { pollFor, within } from "@intentic/base/async";
@@ -117,11 +117,16 @@ const cliEnv = (dir: string): NodeJS.ProcessEnv => ({
 });
 
 // What the CLI runs to open its page: a script that only writes the address down, since the browser that opens it is the
-// person's, elsewhere. The CLI takes a zero exit as a browser opened and goes on to wait for the landing.
-const OPENER = "open-browser";
+// person's, elsewhere. The CLI takes a zero exit as a browser opened and goes on to wait for the landing, printing no
+// address. It opens pages with `xdg-open` and never reads BROWSER itself, so the script goes first on its PATH under that
+// name: published images carry no xdg-open, and there the CLI found no opener and waited silently with nothing to show.
+// BROWSER names it too, for a CLI version that reads it.
+const OPENER = "xdg-open";
+const openerDir = (dir: string): string => join(dir, "bin");
 const openedFile = (dir: string): string => join(dir, "browser-url");
 const writeOpener = async (dir: string): Promise<string> => {
-    const path = join(dir, OPENER);
+    await mkdir(openerDir(dir));
+    const path = join(openerDir(dir), OPENER);
     await writeFile(path, `#!/bin/sh\nprintf '%s' "$1" > ${quoted(openedFile(dir))}\n`, { mode: 0o700 });
     return path;
 };
@@ -183,7 +188,12 @@ export const startDevinLogin = async (binary: string, mode: DevinLoginMode): Pro
         ["-qfec", `stty cols 120 rows 40; exec ${quoted(binary)} ${command}`, "/dev/null"],
         {
             cwd: dir,
-            env: { ...cliEnv(dir), BROWSER: opener, ...detachedStamp("login-browser", expiresAt) },
+            env: {
+                ...cliEnv(dir),
+                PATH: [openerDir(dir), process.env["PATH"]].filter((part) => part !== undefined && part !== "").join(delimiter),
+                BROWSER: opener,
+                ...detachedStamp("login-browser", expiresAt),
+            },
             detached: true,
             stdio: ["pipe", "pipe", "pipe"],
         },
