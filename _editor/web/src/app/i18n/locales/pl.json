@@ -3988,7 +3988,6 @@
         },
         "modelPicker": {
             "access": "Dostęp",
-            "allAiAccounts": "Wszystkie konta AI",
             "backAt": "Wraca o {at}",
             "couldntLoadModels": "Nie udało się wczytać modeli.",
             "filterByProvider": "Filtruj po dostawcy",

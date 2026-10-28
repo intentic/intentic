@@ -178,25 +178,9 @@ it(`still finds a folded provider's models by search`, async () => {
     expect(disclosure(element)).toBeUndefined();
 });
 
-// The door to everything this list can only badge: connecting a first model, a second account, dropping one. A list
-// of locked rows has to end somewhere a reader can act, and this is it.
-it(`carries the way out to the connect view, and drops it while searching`, async () => {
-    const element = mount();
-
-    const door = [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`Connect a model`));
-    expect(door?.getAttribute(`href`)).toBe(`/sandbox/models`);
-
-    // Searching turns the panel into one flat result set, where a standing footer reads as a result.
-    const search = element.querySelector(`input`)!;
-    search.value = `opus`;
-    search.dispatchEvent(new Event(`input`));
-    await nextTick();
-    expect(element.textContent).not.toContain(`Connect a model`);
-});
-
-// With nothing connected every row is locked, so the way to unlock them leads the list instead of ending it; once
-// anything runs it goes back to the foot, as the door to a second account. Only once both reads have answered.
-it(`leads with connecting a model while nothing here can run, and keeps the door at the foot once something can`, async () => {
+// With nothing connected every row is locked, so the way to unlock them leads the list; once anything runs it goes,
+// since the connect view is reachable from many other places. Only once both reads have answered.
+it(`leads with connecting a model while nothing here can run, and drops it once something can`, async () => {
     const { accountsLoaded } = await import("../../../models/providers/providerAccounts");
     const { endpointsLoaded } = await import("../../../models/providers/providerCatalog");
     accountsLoaded.value = true;
@@ -206,14 +190,12 @@ it(`leads with connecting a model while nothing here can run, and keeps the door
     const first = element.querySelector(`[data-picker-connect-first]`);
     expect(first?.textContent).toContain(`Nothing is connected yet. Connect a model to start`);
     expect(first?.getAttribute(`href`)).toBe(`/sandbox/models`);
-    expect(element.textContent).not.toContain(`Connect a model, or manage accounts`);
     app?.unmount();
     document.body.innerHTML = ``;
 
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
     element = mount();
     expect(element.querySelector(`[data-picker-connect-first]`)).toBeNull();
-    expect(element.textContent).toContain(`Connect a model, or manage accounts`);
     accountsLoaded.value = false;
     endpointsLoaded.value = false;
 });
@@ -329,7 +311,6 @@ describe(`for a person held to some AI accounts`, () => {
         expect(line?.textContent).toContain(`None of this sandbox's AI accounts is shared with you.`);
         expect(line?.textContent).toContain(`Ask for access`);
         expect(element.querySelector(`[data-picker-connect-first]`)).toBeNull();
-        expect(element.textContent).not.toContain(`Connect a model, or manage accounts`);
         // Every lane waits behind the fold, so the list is the line and its way on rather than rows none can pick.
         expect(headings(element)).toEqual([]);
         expect(foldRow(element)?.getAttribute(`aria-expanded`)).toBe(`false`);

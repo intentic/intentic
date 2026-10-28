@@ -3988,7 +3988,6 @@
         },
         "modelPicker": {
             "access": "Accès",
-            "allAiAccounts": "Tous les comptes d'IA",
             "backAt": "De retour à {at}",
             "couldntLoadModels": "Impossible de charger les modèles.",
             "currentModel": "modèle actuel",

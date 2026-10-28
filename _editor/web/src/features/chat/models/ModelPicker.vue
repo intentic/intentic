@@ -43,7 +43,7 @@ import PickerNothingShared from "./PickerNothingShared.vue";
 import PickerRail from "./PickerRail.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
+import { modelsPath } from "../../../lib/routes/modelsPath";
 import { browsingCatalog } from "../../../models/providers/loadBrowsingCatalog";
 import PickerCatalogStatus from "./PickerCatalogStatus.vue";
 
@@ -534,16 +534,6 @@ onMounted(() => {
                         {{ t(`chat.modelPicker.searchAllProviders`) }}
                     </button>
                 </div>
-                <!-- The door to everything this list can only badge: connecting a first model, a second account, dropping one. -->
-                <RouterLink
-                    v-if="!searching && !nothingConnected && !nothingYours"
-                    :to="MODELS_PATH"
-                    class="ui-row-select flex w-full items-center gap-2 border-t border-line px-3 py-2 text-2xs text-subtle hover:text-content max-md:min-h-11"
-                    @click="closeOnPlainClick"
-                >
-                    <Icon name="key" class="shrink-0 text-2xs" aria-hidden="true" />
-                    <span>{{ t(`chat.modelPicker.allAiAccounts`) }}</span>
-                </RouterLink>
             </div>
         </div>
 
