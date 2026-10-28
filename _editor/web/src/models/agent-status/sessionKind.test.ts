@@ -1,5 +1,4 @@
-import { moduleHue } from "../../lib/identityHue";
-import { sessionKind, sessionModule } from "./sessionKind";
+import { contextPressure, sessionKind, sessionModule } from "./sessionKind";
 
 describe(`sessionKind`, () => {
     it(`draws the everyday single agent as a dot, and a child too, since it stands under its parent`, () => {
@@ -32,21 +31,24 @@ describe(`sessionKind`, () => {
 });
 
 describe(`sessionModule`, () => {
-    it(`colours by the most-changed package`, () => {
-        expect(sessionModule({ id: `c1`, modules: [`@intentic/web`, `@intentic/ui`] })).toEqual({ name: `@intentic/web`, hue: moduleHue(`@intentic/web`) });
+    it(`names the most-changed package`, () => {
+        expect(sessionModule({ id: `c1`, modules: [`@intentic/web`, `@intentic/ui`] })).toEqual({ name: `@intentic/web` });
     });
 
     it(`is nothing for a session that has changed nothing`, () => {
         expect(sessionModule({ id: `c1` })).toBeUndefined();
         expect(sessionModule(undefined)).toBeUndefined();
     });
+});
 
-    it(`keeps one package's colour, and off the hues a card's standing speaks in`, () => {
-        expect(moduleHue(`@intentic/web`)).toBe(moduleHue(`@intentic/web`));
-        for (const name of [`web`, `sandbox`, `ui`, `desktop-app`, `automations`, `webext`, `site`, `docs`]) {
-            const hue = moduleHue(name);
-            // Red, the brand's orange, amber and green: what the rim and the corner's pill say a verdict in.
-            expect(hue < 15 || (hue > 60 && hue < 110) || (hue > 170 && hue < 320)).toBe(true);
-        }
+describe(`contextPressure`, () => {
+    const at = (contextTokens: number) => contextPressure({ id: `c1`, contextTokens, contextWindow: 100 });
+
+    it(`says nothing while the window has room, or when nobody measured it`, () => {
+        expect([at(0), at(69), contextPressure({ id: `c1` }), contextPressure(undefined)]).toEqual([undefined, undefined, undefined, undefined]);
+    });
+
+    it(`fills from 70% and is full from 90%`, () => {
+        expect([at(70), at(89), at(90), at(100)]).toEqual([`filling`, `filling`, `full`, `full`]);
     });
 });

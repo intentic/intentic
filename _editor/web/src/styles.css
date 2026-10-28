@@ -107,16 +107,6 @@
         min-height: var(--bar-height);
     }
 
-/* A session card's identity tile, tinted by the PACKAGE the session works in (sessionKind.ts moduleHue): the wash and the glyph both take its hue. */
-    .module-tile {
-        background: hsl(var(--tile-hue) 60% 45% / 0.16);
-        color: hsl(var(--tile-hue) 55% 34%);
-    }
-    [data-mode="dark"] .module-tile {
-        background: hsl(var(--tile-hue) 55% 55% / 0.22);
-        color: hsl(var(--tile-hue) 70% 72%);
-    }
-
 /* WHICH SURFACE A REGION'S CARDS LIE ON, declared by whoever paints it rather than guessed at by the card. Nothing in a rail paints anything else: a lane is a header over cards, and a skin's own texture belongs to the panel, so any fill of ours would sit on it as a flat patch. */
     .ground-card {
 /* A CARD CANNOT REST AT THE COLOUR IT LIES ON: with no slab under it, this step up is the only thing separating a card from its ground. Stays below `--color-overlay`, which hover and selection still have to move to. */

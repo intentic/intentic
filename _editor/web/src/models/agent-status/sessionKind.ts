@@ -2,26 +2,27 @@ import type { IconName } from "@intentic/ui";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { CI_FIX_PREFIX, LAND_FIX_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { t } from "@intentic/ui/i18n";
-import { moduleHue } from "../../lib/identityHue";
-import { originMeta } from "./agentStatus-meta";
+import { contextPct, originMeta } from "./agentStatus-meta";
 
-// WHAT A SESSION CARD'S TILE SAYS: what kind of session it is, in the glyph, and which package it works in, in the
-// colour. It replaced a kind-of-work glyph (fix, feat, refactor) read off the title's first verb, which only ever
+// WHAT A SESSION CARD'S TILE SAYS: what kind of session it is, in the glyph, and how full its context window is, in the
+// colour (contextPressure). It replaced a kind-of-work glyph (fix, feat, refactor) read off the title's first verb, which only ever
 // repeated the word beside it and told two cards apart by nothing a reader was scanning for.
 //
-// MARK THE EXCEPTION, NOT THE RULE. Most sessions are one person's single agent, so that kind draws a plain dot: a glyph
+// MARK THE EXCEPTION, NOT THE RULE. Most sessions are one person's single agent, so that kind draws an empty disc: a glyph
 // on nearly every card would be the same noise again. Every other kind is rare on a board and earns a glyph of its own.
-// The colour does the everyday work: two cards in one package read as kin before either title is read.
+// THE COLOUR IS RARE TOO. It used to be the package a session worked in, but a hue per package is a mapping nobody
+// learns, so it told cards apart by nothing a reader could decode. It is now the one reading that is ordered and asks a
+// question at a glance, whether this session can take more work: no colour while there is room, amber as it fills.
 
 // The facts the tile reads, all of them on a summary already; a row with no agent behind it passes none.
 export type SessionFacts = Pick<AgentSummary, "id"> &
-    Partial<Pick<AgentSummary, "home" | "origin" | "startedBy" | "fresh" | "forkedFrom" | "subagents" | "modules">>;
+    Partial<Pick<AgentSummary, "home" | "origin" | "startedBy" | "fresh" | "forkedFrom" | "subagents" | "modules" | "contextTokens" | "contextWindow">>;
 
 export type SessionKindName = `home` | `automation` | `fixer` | `review` | `test` | `ask` | `fork` | `orchestrator` | `child` | `solo`;
 
 export interface SessionKind {
     readonly name: SessionKindName;
-    // Undefined for the kinds a dot stands for: the everyday single agent, and a child, which already stands under the
+    // Undefined for the kinds an empty disc stands for: the everyday single agent, and a child, which already stands under the
     // parent that started it.
     readonly icon: IconName | undefined;
     // Said in the tile's hover, the one place the kind is put in words.
@@ -65,13 +66,28 @@ export const sessionKind = (session: SessionFacts | undefined): SessionKind => {
     return { name: `solo`, icon: undefined, label: t(`agents.sessionKind.solo`) };
 };
 
-// The package a session's tile is coloured by, its most-changed one, named whole in the tile's hover.
+// The package a session works in, its most-changed one, named in the tile's hover. Words only: as a colour it was
+// a key nobody could read.
 export interface SessionModule {
     readonly name: string;
-    readonly hue: number;
 }
 
 export const sessionModule = (session: SessionFacts | undefined): SessionModule | undefined => {
     const name = session?.modules?.[0];
-    return name === undefined ? undefined : { name, hue: moduleHue(name) };
+    return name === undefined ? undefined : { name };
+};
+
+// How close a session is to its context window's end, as the tile's colour: nothing below 70%, `filling` from 70%
+// (the next long turn may be compacted), `full` from 90% (start a fresh session rather than resume this one). Amber,
+// never red, since red on a card is a failure (the corner, the stamps). The exact figure is in the tile's hover.
+export type ContextPressure = `filling` | `full`;
+const FILLING_PCT = 70;
+const FULL_PCT = 90;
+
+export const contextPressure = (session: SessionFacts | undefined): ContextPressure | undefined => {
+    const percent = contextPct(session?.contextTokens, session?.contextWindow);
+    if (percent === undefined || percent < FILLING_PCT) {
+        return undefined;
+    }
+    return percent >= FULL_PCT ? `full` : `filling`;
 };

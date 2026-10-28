@@ -339,7 +339,7 @@ const diffShown = computed(() => !maker.value && props.agent.diff !== undefined 
 // Plain ink on a receipt, where the reading is history rather than a live gauge.
 const rim = computed(() => tileRim(props.agent, { quiet: receipt.value }));
 // One hover for the tile, since two nested tooltips would raise two boxes over the same 28 pixels: the kind it draws
-// in words, the package it is tinted by, its working children, and its readings. Context fullness is said here and
+// in words, the package it works in, its working children, and its readings. Context fullness is put in figures here and
 // nowhere else on the card, and so is what it has cost. A reading not taken leaves its row empty and the card drops it.
 const tileHint = computed((): TooltipValue => {
     const list = props.agent.checklist;
@@ -604,7 +604,7 @@ const grab = (event: PointerEvent): void => {
              wraps onto a line of its own when a narrow column has no room for both, rather than squeezing the name to a
              letter or two beside a long chip and the press seats. -->
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <!-- The session's kind as a glyph, tinted by the package it works in (sessionKind.ts); a dot for the everyday single agent. -->
+            <!-- The session's kind as a glyph, an empty disc for the everyday single agent; tinted amber as its context fills (sessionKind.ts contextPressure). -->
             <!-- At the scale of the corner's badges (22px), not above it: the tile is a mark beside the title, not a heading. -->
             <!-- An 18px disc and a 12px glyph: whole-pixel insets (2px, 3px), so the glyph centres crisply instead of rounding half a pixel off-centre, and the disc meets the ring with no dead band. -->
             <span v-tooltip.top="tileHint" class="relative flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full">
