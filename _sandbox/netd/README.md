@@ -53,11 +53,15 @@ flowchart LR
   logged "the ingress tunnel dropped" with no reason, once a minute for four hours).
 - Terminals are netd's own: `GET /system/terminal` never reaches Node's HTTP. Node answers once what a socket may
   open, and netd serves it with one `tmux -C` client per session shared by every viewer; one that falls behind
-  gets a snapshot instead of a backlog. The shared grid is the minimum columns and rows across connected viewers,
-  recomputed on join, resize and leave, and applied to tmux only when it changes. A `grid` message tells every editor
-  what to render; viewport requests stay separate from that grid. (2026-10-01: smallest-fits-all was chosen over
-  largest-with-scaling to keep the editor's current font size and avoid a new scaling UI. Older editors ignore `grid`
-  and still attach, though their local grid can differ; newer editors fall back to local fitting with older netd versions.)
+  gets a snapshot instead of a backlog. The shared grid is the minimum columns and rows across the viewers showing
+  the pane, recomputed on join, resize, `away` and leave, and applied to tmux only when it changes. A viewer out of
+  sight (a parked tab, a hidden panel, a background browser tab) says `away`, or `away=1` in its query, and bounds
+  nothing until its next resize. With none in sight the grid stays, and only a pane with no grid yet takes a hidden
+  viewer's size. A `grid` message tells every editor what to render; viewport requests stay separate from that grid.
+  (2026-10-01: smallest-fits-all was chosen over largest-with-scaling to keep the editor's current font size and avoid
+  a new scaling UI. Older editors ignore `grid` and still attach, though their local grid can differ; newer editors
+  fall back to local fitting with older netd versions. 2026-10-28: a panel left docked at its default 13 rows in a
+  background tab held the pane at 13 rows in every other window, so only viewers in sight count.)
   A terminal is a WebSocket however it arrives: a browser's over TCP, or one the
   editor speaks on a WebTransport stream, which the edge relays as the same HTTP/1.1 upgrade.
 - In the editor's own sessions (`web-…`, never an agent's) netd also notices a password typed at a hidden prompt (2026-10-19,

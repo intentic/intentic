@@ -1,5 +1,5 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
-import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
+import { computed, type ComputedRef, ref, type Ref, watch, type WatchSource } from "vue";
 import { z } from "zod";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { storedJson, storedValue, storeJson, storeValue } from "../../app/storage/browserStorage";
@@ -12,6 +12,7 @@ import {
     parkTerminalSession,
     retintTerminalSession,
     retypeTerminalSession,
+    tellTerminalPresence,
     type TerminalSession,
 } from "./terminalSession";
 import { usePoll } from "@intentic/ui/async";
@@ -66,19 +67,16 @@ export const terminalSessionOf = (name: string): TerminalSession | undefined => 
 // Minted per sandbox scope, after the cache above is dropped; mounted surfaces watch it to reset and relist.
 const epoch = sandboxRef(() => ({}));
 
-// Terminal glyphs are drawn at a size CSS can't rescale; every cached session re-types on a size change.
-watch(useTextSize().scale, () => {
-    for (const session of cache.value.values()) {
-        retypeTerminalSession(session);
-    }
-});
-
-// Scheme, skin and a Mac's Option-as-Meta switch are values xterm holds, not CSS: each re-hands every cached session.
-watch([useTheme().scheme, useSkin().skin, optionIsMeta], () => {
-    for (const session of cache.value.values()) {
-        retintTerminalSession(session);
-    }
-});
+// What a cached session holds as values rather than CSS, re-handed to every one when it changes: the text size re-types
+// it (xterm draws glyphs at a size CSS can't rescale); the scheme, skin and a Mac's Option-as-Meta re-tint it; and the
+// desktop app's word on this window, which the document's visibility misses for one in the tray, re-tells the daemon
+// whether it is in sight (terminalPresence.ts).
+const everySession = (source: WatchSource | WatchSource[], act: (session: TerminalSession) => void): void => {
+    watch(source, () => cache.value.forEach(act));
+};
+everySession(useTextSize().scale, retypeTerminalSession);
+everySession([useTheme().scheme, useSkin().skin, optionIsMeta], retintTerminalSession);
+everySession(onScreen, tellTerminalPresence);
 
 export interface TerminalTabs {
     readonly order: Ref<TerminalTab[]>;

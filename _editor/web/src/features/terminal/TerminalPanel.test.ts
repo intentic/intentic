@@ -28,6 +28,7 @@ jest.mock(`./terminalSession`, () => ({
     disposeTerminalSession: jest.fn(),
     retypeTerminalSession: jest.fn(),
     retintTerminalSession: jest.fn(),
+    tellTerminalPresence: jest.fn(),
     copySelection: jest.fn(),
     pasteIntoTerminal: jest.fn(),
 }));

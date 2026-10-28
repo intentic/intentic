@@ -220,11 +220,13 @@ impl Outbox {
 }
 
 enum Command {
+    /// `shown` false for a socket opened out of sight (`away=1`): its size bounds nothing until its first resize.
     Join {
         viewer: u64,
         outbox: Arc<Outbox>,
         cols: u16,
         rows: u16,
+        shown: bool,
     },
     Leave {
         viewer: u64,
@@ -234,6 +236,9 @@ enum Command {
         viewer: u64,
         cols: u16,
         rows: u16,
+    },
+    Away {
+        viewer: u64,
     },
     Resync {
         viewer: u64,
@@ -284,6 +289,12 @@ impl Controls {
         });
     }
 
+    pub fn away(&self) {
+        let _ = self.commands.send(Command::Away {
+            viewer: self.viewer,
+        });
+    }
+
     /// Controls on no hub, for a socket's tests: what they forward is read back from the other half.
     #[cfg(test)]
     pub fn unhubbed() -> (Self, Forwarded) {
@@ -298,7 +309,7 @@ impl Controls {
     }
 }
 
-/// What a socket's reader forwarded to its hub, as `input <data>` or `resize <cols>x<rows>`.
+/// What a socket's reader forwarded to its hub, as `input <data>`, `resize <cols>x<rows>` or `away`.
 #[cfg(test)]
 pub struct Forwarded(mpsc::UnboundedReceiver<Command>);
 
@@ -308,6 +319,7 @@ impl Forwarded {
         match command {
             Command::Input(bytes) => format!("input {}", String::from_utf8_lossy(&bytes)),
             Command::Resize { cols, rows, .. } => format!("resize {cols}x{rows}"),
+            Command::Away { .. } => "away".into(),
             _ => "other".into(),
         }
     }
@@ -360,8 +372,16 @@ impl Hubs {
         })
     }
 
-    /// Seats a viewer on `session`'s hub, starting one with `argv` when none is running.
-    pub fn join(self: &Arc<Self>, session: &str, argv: &[String], cols: u16, rows: u16) -> Viewer {
+    /// Seats a viewer on `session`'s hub, starting one with `argv` when none is running; `shown` says whether it shows
+    /// the pane yet.
+    pub fn join(
+        self: &Arc<Self>,
+        session: &str,
+        argv: &[String],
+        cols: u16,
+        rows: u16,
+        shown: bool,
+    ) -> Viewer {
         let outbox = Arc::new(Outbox::new(Delivery::Waiting(u64::MAX)));
         let viewer = self.next.fetch_add(1, Ordering::Relaxed);
         let mut hubs = self.hubs.lock().expect("hubs poisoned");
@@ -379,6 +399,7 @@ impl Hubs {
             outbox: outbox.clone(),
             cols,
             rows,
+            shown,
         });
         Viewer {
             id: viewer,
@@ -578,11 +599,19 @@ fn first_line(lines: Option<&Vec<Vec<u8>>>) -> String {
         .unwrap_or_default()
 }
 
+/// How much of the pane fits one viewer, and whether it shows the pane right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Viewport {
+    cols: u16,
+    rows: u16,
+    shown: bool,
+}
+
 /// One control client's state: what it has asked and not yet heard, where its session stands, who watches.
 #[derive(Default)]
 struct Hub {
     viewers: HashMap<u64, Arc<Outbox>>,
-    sizes: HashMap<u64, (u16, u16)>,
+    sizes: HashMap<u64, Viewport>,
     grid: Option<(u16, u16)>,
     expected: VecDeque<Expect>,
     batch: u64,
@@ -654,13 +683,23 @@ impl Hub {
         }
     }
 
-    // Per-axis minima fit every viewer at the editor's existing font size, without scaling or clipping.
+    // Per-axis minima fit every viewer showing the pane at the editor's existing font size, without scaling or
+    // clipping. A viewer out of sight bounds nothing: a panel left docked at a few rows in a window behind this one
+    // held the pane at those rows here. With none in sight the grid stays where it is, and only a pane with no grid yet
+    // takes the smallest viewer out of sight, so a session opened in a hidden tab is still born at that tab's size.
     fn reconcile_grid(&mut self) {
-        let grid = self
-            .sizes
-            .values()
-            .copied()
-            .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1)));
+        let smallest = |shown_only: bool| {
+            self.sizes
+                .values()
+                .filter(|viewport| viewport.shown || !shown_only)
+                .map(|viewport| (viewport.cols, viewport.rows))
+                .reduce(|a, b| (a.0.min(b.0), a.1.min(b.1)))
+        };
+        let grid = match smallest(true) {
+            Some(grid) => Some(grid),
+            None if self.grid.is_none() => smallest(false),
+            None => return,
+        };
         let Some((cols, rows)) = grid else {
             return;
         };
@@ -681,10 +720,11 @@ impl Hub {
                 outbox,
                 cols,
                 rows,
+                shown,
             } => {
                 self.viewers.insert(viewer, outbox.clone());
                 if cols > 0 && rows > 0 {
-                    self.sizes.insert(viewer, (cols, rows));
+                    self.sizes.insert(viewer, Viewport { cols, rows, shown });
                 }
                 self.reconcile_grid();
                 if let Some((cols, rows)) = self.grid {
@@ -708,7 +748,18 @@ impl Hub {
             },
             Command::Resize { viewer, cols, rows } => {
                 if self.viewers.contains_key(&viewer) && cols > 0 && rows > 0 {
-                    self.sizes.insert(viewer, (cols, rows));
+                    let viewport = Viewport {
+                        cols,
+                        rows,
+                        shown: true,
+                    };
+                    self.sizes.insert(viewer, viewport);
+                    self.reconcile_grid();
+                }
+            }
+            Command::Away { viewer } => {
+                if let Some(viewport) = self.sizes.get_mut(&viewer) {
+                    viewport.shown = false;
                     self.reconcile_grid();
                 }
             }
@@ -854,8 +905,31 @@ mod tests {
             outbox: outbox.clone(),
             cols: 80,
             rows: 24,
+            shown: true,
         });
         outbox
+    }
+
+    // A viewer seated at its own size, in sight or not.
+    fn seated(hub: &mut Hub, viewer: u64, (cols, rows): (u16, u16), shown: bool) -> Arc<Outbox> {
+        let outbox = Arc::new(Outbox::live());
+        hub.command(Command::Join {
+            viewer,
+            outbox: outbox.clone(),
+            cols,
+            rows,
+            shown,
+        });
+        outbox
+    }
+
+    fn refreshed(hub: &mut Hub) -> Vec<String> {
+        String::from_utf8(std::mem::take(&mut hub.out))
+            .unwrap()
+            .lines()
+            .filter(|line| line.starts_with("refresh-client"))
+            .map(str::to_owned)
+            .collect()
     }
 
     fn taken(outbox: &Outbox) -> Vec<u8> {
@@ -883,6 +957,7 @@ mod tests {
             outbox: Arc::new(Outbox::live()),
             cols: 120,
             rows: 40,
+            shown: true,
         });
         let sent = String::from_utf8(std::mem::take(&mut hub.out)).unwrap();
         assert_eq!(
@@ -907,6 +982,7 @@ mod tests {
             outbox: large.clone(),
             cols: 120,
             rows: 40,
+            shown: true,
         });
         assert_eq!(large.take(usize::MAX), Taken::Grid(120, 40));
         hub.out.clear();
@@ -969,6 +1045,45 @@ mod tests {
         );
         assert_eq!(large.take(usize::MAX), Taken::Grid(100, 30));
         hub.command(Command::Leave { viewer: 1 });
+        assert_eq!(hub.out, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn a_viewer_out_of_sight_bounds_the_grid_only_while_nothing_else_has_set_one() {
+        let mut hub = Hub::default();
+        // The first viewer of a pane sizes it even out of sight: a session opened in a hidden tab is born at its size.
+        let hidden = seated(&mut hub, 1, (120, 13), false);
+        assert_eq!(refreshed(&mut hub), ["refresh-client -C 120x13"]);
+        assert_eq!(hidden.take(usize::MAX), Taken::Grid(120, 13));
+        // A viewer in sight takes the pane whole, however small the one out of sight is.
+        let reader = seated(&mut hub, 2, (160, 33), true);
+        assert_eq!(refreshed(&mut hub), ["refresh-client -C 160x33"]);
+        assert_eq!(reader.take(usize::MAX), Taken::Grid(160, 33));
+        assert_eq!(hidden.take(usize::MAX), Taken::Grid(160, 33));
+        // A third out of sight changes nothing.
+        let _parked = seated(&mut hub, 3, (80, 10), false);
+        assert_eq!(refreshed(&mut hub), Vec::<String>::new());
+        assert_eq!(reader.take(usize::MAX), Taken::Nothing);
+
+        // Shown again, the hidden one bounds it like any other; away again, it lets go.
+        hub.command(Command::Resize {
+            viewer: 1,
+            cols: 120,
+            rows: 13,
+        });
+        assert_eq!(refreshed(&mut hub), ["refresh-client -C 120x13"]);
+        hub.command(Command::Away { viewer: 1 });
+        assert_eq!(refreshed(&mut hub), ["refresh-client -C 160x33"]);
+        assert_eq!(reader.take(usize::MAX), Taken::Grid(160, 33));
+
+        // With nobody in sight the pane stays as it was rather than shrinking to a viewer nobody is looking at.
+        hub.command(Command::Away { viewer: 2 });
+        assert_eq!(refreshed(&mut hub), Vec::<String>::new());
+        hub.command(Command::Leave { viewer: 2 });
+        assert_eq!(refreshed(&mut hub), Vec::<String>::new());
+        assert_eq!(hub.grid, Some((160, 33)));
+        // An unknown viewer's away is nobody's.
+        hub.command(Command::Away { viewer: 99 });
         assert_eq!(hub.out, Vec::<u8>::new());
     }
 

@@ -31,6 +31,7 @@ jest.mock("./terminalSession", () => ({
     disposeTerminalSession: jest.fn(),
     retypeTerminalSession: jest.fn(),
     retintTerminalSession: jest.fn(),
+    tellTerminalPresence: jest.fn(),
 }));
 
 const { createTerminalTabs } = await import("./useTerminal");

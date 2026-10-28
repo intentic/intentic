@@ -45,6 +45,7 @@
           "type": "object"
         },
         {
+          "description": "The viewer shows the pane, and this much of it fits. Every viewer showing the pane bounds the grid they share.",
           "properties": {
             "cols": {
               "format": "uint16",
@@ -67,6 +68,19 @@
             "type",
             "cols",
             "rows"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The viewer no longer shows the pane (a parked tab, a hidden panel, a background browser tab), so it stops bounding\nthe shared grid until its next `resize`. A socket opened out of sight says so with `away=1` in its query. An older\nnetd ignores both and counts the viewer at its last size.",
+          "properties": {
+            "type": {
+              "const": "away",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         },

@@ -115,6 +115,12 @@ impl Handshake {
     }
 }
 
+/// Whether the browser opened the socket out of sight (`away=1`): its grid then bounds the shared one only once it
+/// shows the pane, or while nothing else has sized it.
+pub fn away(query: &str) -> bool {
+    query.split('&').any(|pair| pair == "away=1")
+}
+
 /// The browser's grid from `?cols=&rows=`, 80x24 where either is missing or unreadable.
 pub fn size_of(query: &str) -> (u16, u16) {
     let mut size = (80, 24);
@@ -269,7 +275,7 @@ impl Terminals {
         match feed {
             Feed::Session { session, argv } => {
                 let (cols, rows) = size_of(query);
-                let viewer = self.hubs.join(&session, &argv, cols, rows);
+                let viewer = self.hubs.join(&session, &argv, cols, rows, !away(query));
                 let controls = viewer.controls();
                 pump(
                     socket,
@@ -520,6 +526,11 @@ async fn read<R, E>(
                     controls.resize(cols, rows);
                 }
             }
+            Ok(TerminalClientMessage::Away) => {
+                if let Some(controls) = &controls {
+                    controls.away();
+                }
+            }
             Ok(TerminalClientMessage::Ping) => {
                 let _ = replies.send(text(&TerminalServerMessage::Pong));
             }
@@ -682,6 +693,11 @@ mod tests {
         browser.send(Ok(typed("before"))).unwrap();
         let first = timeout(PATIENCE, forwarded.next()).await.unwrap();
         assert_eq!(first.as_deref(), Some("input before"));
+        browser
+            .send(Ok(said(&TerminalClientMessage::Away)))
+            .unwrap();
+        let away = timeout(PATIENCE, forwarded.next()).await.unwrap();
+        assert_eq!(away.as_deref(), Some("away"));
         revocation.revoke();
         browser.send(Ok(typed("after"))).unwrap();
         browser
@@ -817,6 +833,9 @@ mod tests {
         assert_eq!(size_of("ticket=t&cols=120&rows=40"), (120, 40));
         assert_eq!(size_of("cols=0&rows=x"), (80, 24));
         assert_eq!(size_of(""), (80, 24));
+        assert!(away("ticket=t&away=1&cols=120"));
+        assert!(!away("ticket=t&cols=120&rows=40"));
+        assert!(!away("away=0"));
     }
 
     #[test]

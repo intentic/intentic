@@ -20,6 +20,7 @@ import { editKeyBytes, optionIsMeta } from "./terminalEditKeys";
 import { registerFilePathLinks } from "./links/terminalFileLinks";
 import { registerUrlLinks } from "./links/terminalUrlLinks";
 import { applyTerminalGrid, requestTerminalGrid, resetTerminalGrid, type TerminalSizing } from "./terminalSizing";
+import { presenceChange, presenceReport, showsPane } from "./terminalPresence";
 import { terminalPaint } from "./terminalTheme";
 import { openLoopbackPreview } from "../../models/terminal/portPreview";
 import "@xterm/xterm/css/xterm.css";
@@ -62,6 +63,8 @@ export type TerminalSession = TerminalSizing & {
     closing: boolean;
     // True while the connection is known down; gates the disconnect banner to once per outage.
     down: boolean;
+    // Whether the daemon was last told this viewport is out of sight (terminalPresence.ts); unset until first told.
+    away?: boolean;
 };
 
 // Ctrl/Cmd+click (or any tap on a coarse pointer) opens a link, from the linkifier's trusted mouseup. A sandbox
@@ -104,13 +107,17 @@ const attachRenderer = (s: TerminalSession): void => {
     }
 };
 
-// What the daemon plans the attach from: the session, its grid and its directory; and, where this browser can read
-// them, deflated pane bytes (channel/terminalChannel.ts), which an older netd ignores the ask for and sends raw.
-type TerminalParams = { session: string; cols: string; rows: string; cwd?: string; deflate?: `1` };
+// What the daemon plans the attach from: the session, its grid and its directory; whether the viewport is out of sight,
+// so a hidden tab's attach never shrinks the pane under the window being read (terminalPresence.ts); and, where this
+// browser can read them, deflated pane bytes (channel/terminalChannel.ts). An older netd ignores both asks.
+type TerminalParams = { session: string; cols: string; rows: string; cwd?: string; away?: `1`; deflate?: `1` };
 const terminalParams = (s: Omit<TerminalSession, "live">): TerminalParams => {
     const params: TerminalParams = { session: s.name, cols: String(s.requestedGrid.cols), rows: String(s.requestedGrid.rows) };
     if (s.cwd !== undefined) {
         params.cwd = s.cwd;
+    }
+    if (!showsPane(s.host)) {
+        params.away = `1`;
     }
     if (readsDeflate()) {
         params.deflate = `1`;
@@ -183,8 +190,8 @@ const sessionSocket = (s: Omit<TerminalSession, "live">): LiveSocket<TerminalCli
         onOpen: () => {
             resetTerminalGrid(s);
             s.down = false;
-            // Messages are dropped until open; report the viewport now so a mid-handshake resize is not lost.
-            live.send({ type: `resize`, ...s.requestedGrid });
+            // Messages are dropped until open; report the viewport now so a mid-handshake resize or hide is not lost.
+            live.send(presenceReport(s));
         },
         onDrop: (code, reason) => {
             if (!s.down) {
@@ -225,12 +232,22 @@ const scheduleResizeFrame = (s: TerminalSession): void => {
     window.clearTimeout(s.resizeSettle);
     s.resizeSettle = window.setTimeout(() => {
         s.resizeSettle = undefined;
-        send(s, { type: `resize`, ...s.requestedGrid });
+        send(s, presenceReport(s));
     }, RESIZE_SETTLE_MS);
+};
+
+// Tells the daemon at once when the viewport has come into or gone out of sight. Called for a park, a collapse to
+// nothing, the window hiding or showing, and the desktop app's word on its window (useTerminal.ts).
+export const tellTerminalPresence = (s: TerminalSession): void => {
+    const change = presenceChange(s);
+    if (change !== undefined) {
+        send(s, change);
+    }
 };
 
 // (Re)builds fit triggers against the host's current window: a ResizeObserver plus a window resize listener, since both
 // stop tracking an element moved to another document. The listener also catches OS-level resizes the observer may miss.
+// The window's visibility is watched too, since only a viewport in sight bounds the grid every viewer shares.
 const observeHost = (s: TerminalSession): void => {
     s.unobserve?.();
     const view = s.host.ownerDocument.defaultView ?? window;
@@ -238,19 +255,26 @@ const observeHost = (s: TerminalSession): void => {
     const schedule = (): void => {
         view.cancelAnimationFrame(raf);
         raf = view.requestAnimationFrame(() => {
-            // Skips while detached or mid-drag at zero size; a disposed session's removed host also measures zero.
-            if (s.host.clientWidth === 0 || s.host.clientHeight === 0) {
-                return;
+            // Detached, or collapsed to nothing mid-drag: no fit, only away. A disposed session's host also measures zero.
+            if (s.host.clientWidth !== 0 && s.host.clientHeight !== 0) {
+                fitSession(s);
             }
-            fitSession(s);
+            tellTerminalPresence(s);
         });
+    };
+    // Said at once: a hidden window runs no animation frames, so a scheduled fit would wait until it shows again.
+    const seen = (): void => {
+        tellTerminalPresence(s);
+        schedule();
     };
     const observer = new view.ResizeObserver(schedule);
     observer.observe(s.host);
     view.addEventListener(`resize`, schedule);
+    view.document.addEventListener(`visibilitychange`, seen);
     s.unobserve = () => {
         observer.disconnect();
         view.removeEventListener(`resize`, schedule);
+        view.document.removeEventListener(`visibilitychange`, seen);
     };
 };
 
@@ -455,12 +479,12 @@ export const mountTerminalSession = (s: TerminalSession, container: HTMLElement,
         s.host.ownerDocument.defaultView?.requestAnimationFrame(() => {
             if (s.host.clientWidth !== 0 && s.host.clientHeight !== 0) {
                 fitSession(s);
-                send(s, { type: `resize`, ...s.requestedGrid });
+                send(s, presenceReport(s));
             }
         });
     }
     // A remounted viewport reports its capacity even if its measured size has not changed.
-    send(s, { type: `resize`, ...s.requestedGrid });
+    send(s, presenceReport(s));
     if (focus) {
         s.term.focus();
     }
@@ -472,6 +496,8 @@ export const parkTerminalSession = (s: TerminalSession): void => {
     // GPU context returns to the browser once the session leaves the screen; the next mount builds a fresh one.
     detachRenderer(s);
     s.host.remove();
+    // Out of sight now: a parked tab must not hold the pane at its size for whoever is still looking at it.
+    tellTerminalPresence(s);
     if (s.host.ownerDocument === document) {
         return;
     }

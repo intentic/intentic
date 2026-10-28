@@ -167,13 +167,13 @@ pub struct Pressure {
 #[ts(export, export_to = "browser-wire.ts")]
 pub enum TerminalClientMessage {
     /// Keystrokes, a paste or a mouse report, written into the pane as their UTF-8 bytes.
-    Input {
-        data: String,
-    },
-    Resize {
-        cols: u16,
-        rows: u16,
-    },
+    Input { data: String },
+    /// The viewer shows the pane, and this much of it fits. Every viewer showing the pane bounds the grid they share.
+    Resize { cols: u16, rows: u16 },
+    /// The viewer no longer shows the pane (a parked tab, a hidden panel, a background browser tab), so it stops bounding
+    /// the shared grid until its next `resize`. A socket opened out of sight says so with `away=1` in its query. An older
+    /// netd ignores both and counts the viewer at its last size.
+    Away,
     /// The client's liveness, the socket's only one: the editor sends one every 30 s and calls the socket stale after
     /// 90 s without a frame. netd answers `pong`, sends a WebSocket ping only to a client silent for 45 s, and closes
     /// one silent for 90.
@@ -332,6 +332,8 @@ mod tests {
         );
         let ping: TerminalClientMessage = serde_json::from_str(r#"{"type":"ping"}"#).unwrap();
         assert_eq!(ping, TerminalClientMessage::Ping);
+        let away: TerminalClientMessage = serde_json::from_str(r#"{"type":"away"}"#).unwrap();
+        assert_eq!(away, TerminalClientMessage::Away);
         assert_eq!(
             serde_json::to_string(&TerminalServerMessage::Exit {
                 code: 0,

@@ -445,6 +445,91 @@ async fn a_shared_grid_is_announced_to_every_viewer_and_expands_when_the_smalles
     );
 }
 
+// An editor window whose panel sits docked at its default height (13 rows), hidden behind the window the person reads
+// in, must not hold the pane at 13 rows there: it says it is away, at the attach and later, and only a viewer that
+// shows the pane bounds it.
+#[tokio::test]
+async fn a_viewer_out_of_sight_never_bounds_the_grid_until_it_shows_the_pane_again() {
+    let server = Server::start("away-grid").await;
+    server.session("away-grid", 120, 33).await;
+    let (_harness, daemon) = started("term-away-grid", &server).await;
+    let size = || {
+        server.tmux(&[
+            "display-message",
+            "-p",
+            "-t",
+            "=away-grid:",
+            "#{pane_width}x#{pane_height}",
+        ])
+    };
+    let settles_at = async |expected: &str| {
+        for _ in 0..200 {
+            if size().await == expected {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert_eq!(size().await, expected);
+    };
+    let has_grid = |seen: &Seen, cols, rows| {
+        seen.texts.iter().any(|text| {
+            serde_json::from_str::<serde_json::Value>(text).unwrap()
+                == serde_json::json!({"type": "grid", "cols": cols, "rows": rows})
+        })
+    };
+    let mut shown = open(daemon, "plan=tmux&session=away-grid&cols=120&rows=33").await;
+    read_until(&mut shown, |seen| {
+        has_grid(seen, 120, 33) && seen.text().contains("\x1bc")
+    })
+    .await;
+    let mut hidden = open(
+        daemon,
+        "plan=tmux&session=away-grid&cols=120&rows=13&away=1",
+    )
+    .await;
+    read_until(&mut hidden, |seen| {
+        has_grid(seen, 120, 33) && seen.text().contains("\x1bc")
+    })
+    .await;
+    // Nothing is announced to the reader: its grid never moved.
+    assert!(
+        !heard_texts(&mut shown, Duration::from_millis(300))
+            .await
+            .iter()
+            .any(|text| text.contains("grid"))
+    );
+    settles_at("120x33").await;
+
+    // Shown, the hidden window bounds the pane like any other; away again, it lets go.
+    let say = |message: serde_json::Value| Message::text(message.to_string());
+    hidden
+        .send(say(
+            serde_json::json!({ "type": "resize", "cols": 120, "rows": 13 }),
+        ))
+        .await
+        .unwrap();
+    read_until(&mut shown, |seen| has_grid(seen, 120, 13)).await;
+    settles_at("120x13").await;
+    hidden
+        .send(say(serde_json::json!({ "type": "away" })))
+        .await
+        .unwrap();
+    read_until(&mut shown, |seen| has_grid(seen, 120, 33)).await;
+    settles_at("120x33").await;
+}
+
+// Every text frame the socket sends for `window`, however few.
+async fn heard_texts(socket: &mut Socket, window: Duration) -> Vec<String> {
+    let mut texts = Vec::new();
+    let deadline = tokio::time::Instant::now() + window;
+    while let Ok(Some(Ok(message))) = tokio::time::timeout_at(deadline, socket.next()).await {
+        if let Message::Text(text) = message {
+            texts.push(text.to_string());
+        }
+    }
+    texts
+}
+
 #[tokio::test]
 async fn a_resize_reaches_the_pane() {
     let server = Server::start("resize").await;
