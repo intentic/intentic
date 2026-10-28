@@ -11,10 +11,10 @@ import {
     ContextMenu,
     formatElapsed,
     Notice,
+    type NoticeModel,
     SectionHeader,
     timeAgo,
     type Tip,
-    toneWash,
     type TooltipValue,
     ui,
     useDevice,
@@ -30,6 +30,7 @@ import CommitField from "./commit/CommitField.vue";
 import IndexRunLine from "./commit/IndexRunLine.vue";
 import IndexRunPrompt from "./commit/IndexRunPrompt.vue";
 import { barLine } from "./commit/commitBar";
+import { useSyncPress } from "./commit/syncPress";
 import { useRunLine } from "./commit/runLine";
 import { useSettlingMove } from "./commit/settlingMove";
 import { sideViews, type SideView } from "./reviewSides";
@@ -58,6 +59,7 @@ import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
 import { repoOfPath, turnWrites } from "../../../models/workspace/files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../../models/workspace/push/outgoingWork";
 import { COMMIT_SCOPE, type PressFace, useChanges } from "../../../models/changes/useChanges";
+import { landingAgents } from "../../../models/changes/landing";
 import { usePushFlow } from "../push/usePushFlow";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
@@ -150,8 +152,15 @@ watch(
 
 // The chip row earns its place once an agent has files to tell apart from the owner's, and stays while "You" is lit
 // with files left, so the chip that lit it is there to clear it (and take back its staging) after the last agent's
-// work leaves the tree; an agent's lit chip retires above as its files do.
-const chipRowShown = computed(() => legend.value.agents.length > 0 || (originFilter.value === YOURS && legend.value.yours > 0));
+// work leaves the tree; an agent's lit chip retires above as its files do. A land under way earns it too: the work
+// arriving is shown on the chip it will wear, where the reader looks for whose work is here.
+const chipRowShown = computed(
+    () => legend.value.agents.length > 0 || landingAgents.value.length > 0 || (originFilter.value === YOURS && legend.value.yours > 0),
+);
+// A session already holding a chip spins on it while more of its work lands; one with nothing here yet gets a chip of
+// its own, dashed, since none of its files can be staged or filtered until they arrive.
+const landingIds = computed(() => new Set(landingAgents.value.map((agent) => agent.id)));
+const arriving = computed(() => landingAgents.value.filter((agent) => !legend.value.agents.some((entry) => entry.id === agent.id)));
 
 // Resolves an id via the live fleet card first (repaints on a rename instantly), then the review's own
 // `originAgents`, which survives archiving. An id-shaped fallback still draws a chip rather than reattributing the file
@@ -863,52 +872,8 @@ const confirmDiscard = async (): Promise<void> => {
     }
 };
 
-// Shown only for a repo with a remote. `syncable`/`ahead`/`behind`/`unpublished` come from useChanges, so the
-// rail tile and this panel read a repo the same way. No verb reaches a row anymore — see the outgoing block above the
-// list.
-
-// VSCode's post-commit move: the slot just used to Commit becomes the sync the repos need, once the commit
-// box has nothing left to show. Per-row pills remain the granular control for a set whose repos need different things.
-const syncRepos = computed(() => scannable.value.filter((repo) => syncable(repo) && (ahead(repo) > 0 || behind(repo) > 0 || unpublished(repo))));
-const aheadTotal = computed(() => syncRepos.value.reduce((total, repo) => total + ahead(repo), 0));
-const behindTotal = computed(() => syncRepos.value.reduce((total, repo) => total + behind(repo), 0));
-const toPublish = computed(() => syncRepos.value.some((repo) => unpublished(repo)));
-// Mirrors the row pills so the bar can't contradict them: Pull for incoming-only, Push for outgoing-only,
-// Publish for an unpublished branch alone, Sync when a repo carries both. Mixed publish+outgoing reads Push.
-const syncVerb = computed<"push" | "pull" | "sync" | "publish" | undefined>(() => {
-    if (syncRepos.value.length === 0) {
-        return undefined;
-    }
-    if (behindTotal.value > 0) {
-        return aheadTotal.value > 0 || toPublish.value ? `sync` : `pull`;
-    }
-    if (toPublish.value && aheadTotal.value === 0) {
-        return `publish`;
-    }
-    return `push`;
-});
-// Icons match the arrows on the counts the button carries (↑ push, ↓ pull), so the two read as one language. Straight arrows, since the
-// diagonal one means "open elsewhere" across the app.
-// The button's hover (`syncTip`) adds what the label can't: which repos, and the replay caveat when pulling.
-// `running` is the word the status line says while the verb is in flight.
-const SYNC_VERB = computed<
-    Record<
-        "push" | "pull" | "sync" | "publish",
-        { readonly label: string; readonly running: string; readonly icon: "arrow-up" | "arrow-down" | "sync" | "cloud-upload" }
-    >
->(() => ({
-    push: { label: words.value.push, running: words.value.pushing, icon: `arrow-up` },
-    pull: { label: t(`workspace.reviewPanel.pull`), running: t(`workspace.reviewPanel.pulling`), icon: `arrow-down` },
-    sync: { label: words.value.sync, running: words.value.syncing, icon: `sync` },
-    publish: { label: words.value.publish, running: words.value.publishing, icon: `cloud-upload` },
-}));
-const syncMeta = computed(() => (syncVerb.value === undefined ? undefined : SYNC_VERB.value[syncVerb.value]));
-// Counts plus the repo spread when more than one is in play; a pure publish has nothing to count.
-const syncSummary = computed<string>(() => {
-    const counts = [...(behindTotal.value > 0 ? [`↓${behindTotal.value}`] : []), ...(aheadTotal.value > 0 ? [`↑${aheadTotal.value}`] : [])];
-    const spread = syncRepos.value.length > 1 ? t(`workspace.reviewPanel.repos`, { count: syncRepos.value.length }, syncRepos.value.length) : ``;
-    return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
-});
+// The sync press's whole reading of the repos (commit/syncPress.ts): which verb, how many each way, and its words.
+const { syncRepos, aheadTotal, behindTotal, syncVerb, SYNC_VERB, syncMeta, syncSummary, outgoingWords, syncTip } = useSyncPress(scannable);
 // Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
 // question, which is also why useChanges exports no one-repo push.
 
@@ -964,6 +929,20 @@ const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
     stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
 );
 const pushPress = computed(() => syncMeta.value !== undefined && (outgoing.value === `offer` || outgoing.value === `held` || pushFlow.running.value));
+// A held verdict as the panel's other notices are drawn: the card's question, how long ago, and Open to bring it back.
+const heldNotice = computed<NoticeModel | undefined>(() => {
+    const held = pushFlow.held.value;
+    if (outgoing.value !== `held` || held === undefined) {
+        return undefined;
+    }
+    const ago = timeAgo(held.at, { now: now.value });
+    return {
+        tone: `warning`,
+        title: held.question.title,
+        detail: pushFlow.heldStale.value ? `${ago} · ${t(`workspace.reviewPanel.filesChangedSince`)}` : ago,
+        action: { label: t(`ui.action.open`), run: pushFlow.reopen },
+    };
+});
 // The bar's one reading line, picked by commitBar.ts from every source that wants it.
 const runLine = useRunLine();
 const bar = computed(() =>
@@ -976,26 +955,13 @@ const bar = computed(() =>
         outgoing: outgoing.value,
         chipNotice: boxIsYours.value ? chipNotice.value : undefined,
         noUpstream: outgoing.value === `offer` && behindTotal.value === 0 && aheadTotal.value === 0,
+        outgoingWords: outgoingWords.value,
     }),
 );
 // Commit and the sync share one bar under the message field, so the box stands whenever either has something to say.
 const actionBar = computed(() => changes.count.value > 0 || outgoing.value !== undefined);
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
 const syncTier = computed<ButtonTier>(() => (changes.count.value > 0 ? `boring` : `accent`));
-// The button carries the bare count, as Commit does; its hover says which way each number goes and which repos it
-// spans. The replay caveat rides here too — the one thing about this verb a user can be surprised by.
-const syncTip = computed((): Tip => ({
-    title: syncMeta.value?.label ?? words.value.sync,
-    rows: [
-        ...(aheadTotal.value > 0 ? [{ label: t(`workspace.reviewPanel.notPushed`), value: aheadTotal.value }] : []),
-        ...(behindTotal.value > 0 ? [{ label: t(`workspace.reviewPanel.toPull`), value: behindTotal.value }] : []),
-        {
-            label: t(`workspace.reviewPanel.repoLabel`, {}, syncRepos.value.length),
-            value: syncRepos.value.map((repo) => repo.repo).join(`, `),
-        },
-    ],
-    note: behindTotal.value > 0 ? t(`workspace.reviewPanel.rebasesNeverMerges`) : undefined,
-}));
 // Every repo with a remote — the honest scope for a verb whose whole job is proving a stale zero wrong.
 const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));
 const fetchTip = computed((): Tip => ({
@@ -1079,152 +1045,146 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
         </Notice>
 
         <!-- Commit box first (VSCode's placement). It records the index — staging is the selection. Commit and the sync
-             share one bar under the field, so the box costs the field and a single row of presses. A container, so the
-             bar thins against its own width (sidebar, phone or pop-out) rather than the window's. -->
-        <div v-if="actionBar" class="@container flex shrink-0 flex-col gap-1.5" :class="changes.count.value > 0 ? `p-2` : `px-2 py-1.5`">
-            <!-- The lit chip's message being written, or why none was, reports inside the field it is filling. -->
+             share one bar inside the field's frame (CommitField), so the box costs the field and a single row of presses,
+             and every line the bar says starts on the message's own column. A container, so the bar thins against its
+             own width (sidebar, phone or pop-out) rather than the window's. Every block down to the list stands 8px
+             under the one above it and on the panel's 8px edge, the header's tabs included. -->
+        <div v-if="actionBar" class="@container flex shrink-0 flex-col gap-2 px-2 pt-2">
+            <!-- The lit chip's message being written, or why none was, reports inside the field it is filling. With
+                 nothing to commit there is no field, and the bar stands alone on the panel's edge. -->
             <CommitField
-                v-if="changes.count.value > 0"
                 v-model="commitMessage"
+                :bare="changes.count.value === 0"
                 :placeholder="chipNotice ?? commitPlaceholder"
                 :draft="filterDraft"
                 :draft-title="filterLabel"
                 @submit="doCommit"
-            />
-            <!-- The bar's own width says the one thing its buttons can't (commitBar.ts picks which). A line that matters
-                 keeps a floor (basis), so a narrow box wraps the buttons under it rather than cutting it to nothing; at
-                 rest there is no line, and it is never shorter than a press. -->
-            <div class="flex min-h-6.5 flex-wrap items-center justify-end gap-x-1 gap-y-1.5 max-md:min-h-8">
-                <IndexRunPrompt />
-                <!-- A commit from this box spins its own press, so the line says only the words; a stage run keeps a spinner. -->
-                <IndexRunLine v-if="bar.kind === `run`" :line="bar.line" :pressed="commitRunning" />
-                <span v-else-if="bar.kind === `conflicts`" :class="BAR_LINE" class="text-danger">
-                    {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
-                </span>
-                <span v-else-if="bar.kind === `committing`" :class="BAR_LINE" class="text-muted">{{ bar.words }}</span>
-                <span v-else-if="bar.kind === `refused`" :class="BAR_LINE" class="text-warning" v-tooltip.right.overflow="bar.reason">
-                    {{ bar.reason }}
-                </span>
-                <!-- The push in flight, in the place its button left: the run's clock, or what just went out. -->
-                <span
-                    v-else-if="bar.kind === `push`"
-                    class="flex min-w-0 flex-1 basis-28 items-center gap-1.5 text-2xs text-muted"
-                    v-tooltip.right="mobile ? undefined : stageTip"
-                >
-                    <!-- Flex centres the glyph on the line box, whose descender room the label's capitals never use, so it
-                         read ~1.5px low beside "Pushed": lift it onto the cap-height centre. Empty while Push spins. -->
-                    <span :class="LEAD" class="translate-y-[-0.12em]">
-                        <Icon v-if="!pushFlow.running.value" name="check-circle" class="text-success" />
-                        <Icon v-else-if="!pushPress" name="spinner" spin class="text-link" />
-                    </span>
-                    <span v-if="mobile && stageHint" class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate whitespace-nowrap">{{ stageLine }}</span>
-                        <span class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
-                    </span>
-                    <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap">{{ stageLine }}</span>
-                </span>
-                <span v-else-if="bar.kind === `chip`" :class="BAR_LINE" class="text-muted" v-tooltip.right.overflow="bar.notice">
-                    {{ bar.notice }}
-                </span>
-                <!-- Context, not a reason, so it gives way to the buttons rather than wrapping them. -->
-                <span v-else-if="bar.kind === `no-upstream`" class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-subtle">
-                    <span class="truncate whitespace-nowrap">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
-                </span>
-                <span v-else class="flex-1"></span>
-                <div class="ml-auto flex shrink-0 items-center gap-1">
-                    <!-- Show terminal controls only when a terminal exists. -->
-                    <button
-                        v-if="outgoing === `flow` && pushFlow.running.value && pushFlow.terminal.value !== undefined"
-                        type="button"
-                        :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
-                        @click="pushFlow.showTerminal"
-                        v-tooltip.top="t(`workspace.reviewPanel.watchRun`)"
-                        :aria-label="t(`workspace.reviewPanel.watchRun`)"
-                    >
-                        <Icon name="terminal" class="text-2xs" />
-                    </button>
-                    <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a
-                         remote. A cloud, not ↻, which the view header already spends on rescanning the tree. Gone while a
-                         stage or commit has the line: it couldn't be pressed then, and a dead press beside the running one
-                         was clutter. -->
-                    <button
-                        v-if="outgoing === `offer` && bar.kind !== `run` && bar.kind !== `committing`"
-                        type="button"
-                        :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.fetchRepos(fetchable)"
-                        v-tooltip.top="fetchTip"
-                        :aria-label="t(`workspace.reviewPanel.fetchEveryRepo`)"
-                    >
-                        <Icon name="cloud-download" class="text-2xs" />
-                    </button>
-                    <!-- Commit reports progress while stages, hooks, and reads run. A code review belongs to the session whose work it is,
-                         before it lands (its card's menu, freshSession.ts), not to the shared tree's mix of everyone's changes. -->
-                    <Button
-                        v-if="changes.count.value > 0"
-                        size="small"
-                        tone="success"
-                        thumb tier="accent"
-                        class="min-w-24 shrink-0 whitespace-nowrap"
-                        :disabled="!commitReady"
-                        :loading="commitRunning"
-                        @click="doCommit"
-                        v-tooltip.right="commitTip"
-                    >
-                        <Icon name="check" />{{ commitFace.label }}
-                        <!-- What a plain Commit records, said on the press itself rather than in a readout beside it. -->
-                        <span v-if="commitFace.count > 0" class="tabular-nums opacity-70">{{ commitFace.count }}</span>
-                    </Button>
-                    <!-- After Commit, in order. It spins in place through its run, the line beside it keeping the clock. Its
-                         word gives way first in a narrow box: the arrow and count carry it, the hover and spoken name the rest. -->
-                    <Button
-                        v-if="pushPress && syncMeta"
-                        size="small"
-                        :tier="syncTier"
-                        class="shrink-0 whitespace-nowrap"
-                        :disabled="changes.actionBusy.value || pushFlow.running.value"
-                        :loading="pushFlow.running.value"
-                        v-tooltip.bottom="syncTip"
-                        :aria-label="`${syncMeta.label} ${syncSummary}`"
-                        @click="doSync"
-                    >
-                        <Icon :name="syncMeta.icon" /><span class="hidden @2xs:inline">{{ syncMeta.label }}</span>
-                        <!-- How much the press moves, on the press itself. One direction needs only the number, since the
-                             verb and its arrow already say which way; Sync moves both, so each number keeps its arrow. -->
-                        <span v-if="syncVerb === `sync`" class="inline-flex items-center gap-1 tabular-nums opacity-70" aria-hidden="true">
-                            <span class="inline-flex items-center"><Icon name="arrow-down" class="text-3xs" />{{ behindTotal }}</span>
-                            <span v-if="aheadTotal > 0" class="inline-flex items-center"
-                                ><Icon name="arrow-up" class="text-3xs" />{{ aheadTotal }}</span
-                            >
-                        </span>
-                        <span v-else-if="syncVerb === `push` && aheadTotal > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
-                            aheadTotal
-                        }}</span>
-                        <span v-else-if="syncVerb === `pull`" class="tabular-nums opacity-70" aria-hidden="true">{{ behindTotal }}</span>
-                    </Button>
-                </div>
-            </div>
-            <!-- A closed push card's verdict, kept under the press that raised it, which retries it from the bar above.
-                 The one state that takes a row, since the card needs the width. -->
-            <button
-                v-if="outgoing === `held`"
-                type="button"
-                :class="ui.textButton({ tone: `quiet`, flush: true }, `w-full min-w-0 rounded-md p-1 hover:bg-overlay`)"
-                :aria-label="heldLine"
-                v-tooltip.right="heldTip"
-                @click="pushFlow.reopen"
             >
-                <span class="flex size-7 shrink-0 items-center justify-center rounded-md" :class="toneWash(`warning`)" aria-hidden="true">
-                    <Icon name="exclamation-circle" class="text-base" />
-                </span>
-                <span class="flex min-w-0 flex-1 flex-col gap-1">
-                    <span class="text-xs leading-snug font-medium text-content">{{ pushFlow.held.value?.question.title }}</span>
-                    <span class="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-2xs leading-snug text-muted">
-                        <span v-if="pushFlow.held.value" class="whitespace-nowrap">{{ timeAgo(pushFlow.held.value.at, { now }) }}</span>
-                        <span v-if="pushFlow.heldStale.value">{{ t(`workspace.reviewPanel.filesChangedSince`) }}</span>
-                    </span>
-                </span>
-            </button>
+                <template #bar>
+                    <!-- The bar's own width says the one thing its buttons can't (commitBar.ts picks which). A line that matters
+                         keeps a floor (basis), so a narrow box wraps the buttons under it rather than cutting it to nothing; at
+                         rest there is no line, and it is never shorter than a press. -->
+                    <div class="flex min-h-6.5 flex-wrap items-center justify-end gap-x-1 gap-y-1 max-md:min-h-8">
+                        <IndexRunPrompt />
+                        <!-- A commit from this box spins its own press, so the line says only the words; a stage run keeps a spinner. -->
+                        <IndexRunLine v-if="bar.kind === `run`" :line="bar.line" :pressed="commitRunning" />
+                        <span v-else-if="bar.kind === `conflicts`" :class="BAR_LINE" class="text-danger">
+                            {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
+                        </span>
+                        <span v-else-if="bar.kind === `committing`" :class="BAR_LINE" class="text-muted">{{ bar.words }}</span>
+                        <span v-else-if="bar.kind === `refused`" :class="BAR_LINE" class="text-warning" v-tooltip.right.overflow="bar.reason">
+                            {{ bar.reason }}
+                        </span>
+                        <!-- The push in flight, in the place its button left: the run's clock, or what just went out. -->
+                        <span
+                            v-else-if="bar.kind === `push`"
+                            class="flex min-w-0 flex-1 basis-28 items-center gap-1.5 text-2xs text-muted"
+                            v-tooltip.right="mobile ? undefined : stageTip"
+                        >
+                            <!-- Flex centres the glyph on the line box, whose descender room the label's capitals never use, so it
+                                 read ~1.5px low beside "Pushed": lift it onto the cap-height centre. Not drawn while Push spins,
+                                 so the words start on the message's column rather than after an empty slot. -->
+                            <span v-if="!pushFlow.running.value || !pushPress" :class="LEAD" class="translate-y-[-0.12em]">
+                                <Icon v-if="!pushFlow.running.value" name="check-circle" class="text-success" />
+                                <Icon v-else name="spinner" spin class="text-link" />
+                            </span>
+                            <span v-if="mobile && stageHint" class="flex min-w-0 flex-1 flex-col">
+                                <span class="truncate whitespace-nowrap">{{ stageLine }}</span>
+                                <span class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
+                            </span>
+                            <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap">{{ stageLine }}</span>
+                        </span>
+                        <span v-else-if="bar.kind === `chip`" :class="BAR_LINE" class="text-muted" v-tooltip.right.overflow="bar.notice">
+                            {{ bar.notice }}
+                        </span>
+                        <!-- Context, not a reason, so it gives way to the buttons rather than wrapping them. -->
+                        <span v-else-if="bar.kind === `no-upstream`" class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-subtle">
+                            <span class="truncate whitespace-nowrap">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
+                        </span>
+                        <!-- Nothing to commit: what the sync press would move, in words, so it isn't a lone press on an empty row. -->
+                        <span v-else-if="bar.kind === `outgoing`" class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted" v-tooltip.right.overflow="bar.words">
+                            {{ bar.words }}
+                        </span>
+                        <span v-else class="flex-1"></span>
+                        <div class="ml-auto flex shrink-0 items-center gap-1">
+                            <!-- Show terminal controls only when a terminal exists. -->
+                            <button
+                                v-if="outgoing === `flow` && pushFlow.running.value && pushFlow.terminal.value !== undefined"
+                                type="button"
+                                :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                                @click="pushFlow.showTerminal"
+                                v-tooltip.top="t(`workspace.reviewPanel.watchRun`)"
+                                :aria-label="t(`workspace.reviewPanel.watchRun`)"
+                            >
+                                <Icon name="terminal" class="text-2xs" />
+                            </button>
+                            <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a
+                                 remote. A cloud, not ↻, which the view header already spends on rescanning the tree. Gone while a
+                                 stage or commit has the line: it couldn't be pressed then, and a dead press beside the running one
+                                 was clutter. -->
+                            <button
+                                v-if="outgoing === `offer` && bar.kind !== `run` && bar.kind !== `committing`"
+                                type="button"
+                                :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                                :disabled="changes.actionBusy.value"
+                                @click="changes.fetchRepos(fetchable)"
+                                v-tooltip.top="fetchTip"
+                                :aria-label="t(`workspace.reviewPanel.fetchEveryRepo`)"
+                            >
+                                <Icon name="cloud-download" class="text-2xs" />
+                            </button>
+                            <!-- Commit reports progress while stages, hooks, and reads run. A code review belongs to the session whose work it is,
+                                 before it lands (its card's menu, freshSession.ts), not to the shared tree's mix of everyone's changes. -->
+                            <Button
+                                v-if="changes.count.value > 0"
+                                size="small"
+                                tone="success"
+                                thumb tier="accent"
+                                class="min-w-24 shrink-0 whitespace-nowrap"
+                                :disabled="!commitReady"
+                                :loading="commitRunning"
+                                @click="doCommit"
+                                v-tooltip.right="commitTip"
+                            >
+                                <Icon name="check" />{{ commitFace.label }}
+                                <!-- What a plain Commit records, said on the press itself rather than in a readout beside it. -->
+                                <span v-if="commitFace.count > 0" class="tabular-nums opacity-70">{{ commitFace.count }}</span>
+                            </Button>
+                            <!-- After Commit, in order. It spins in place through its run, the line beside it keeping the clock. Its
+                                 word gives way first in a narrow box: the arrow and count carry it, the hover and spoken name the rest. -->
+                            <Button
+                                v-if="pushPress && syncMeta"
+                                size="small"
+                                :tier="syncTier"
+                                class="shrink-0 whitespace-nowrap"
+                                :disabled="changes.actionBusy.value || pushFlow.running.value"
+                                :loading="pushFlow.running.value"
+                                v-tooltip.bottom="syncTip"
+                                :aria-label="`${syncMeta.label} ${syncSummary}`"
+                                @click="doSync"
+                            >
+                                <Icon :name="syncMeta.icon" /><span class="hidden @2xs:inline">{{ syncMeta.label }}</span>
+                                <!-- How much the press moves, on the press itself. One direction needs only the number, since the
+                                     verb and its arrow already say which way; Sync moves both, so each number keeps its arrow. -->
+                                <span v-if="syncVerb === `sync`" class="inline-flex items-center gap-1 tabular-nums opacity-70" aria-hidden="true">
+                                    <span class="inline-flex items-center"><Icon name="arrow-down" class="text-3xs" />{{ behindTotal }}</span>
+                                    <span v-if="aheadTotal > 0" class="inline-flex items-center"
+                                        ><Icon name="arrow-up" class="text-3xs" />{{ aheadTotal }}</span
+                                    >
+                                </span>
+                                <span v-else-if="syncVerb === `push` && aheadTotal > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
+                                    aheadTotal
+                                }}</span>
+                                <span v-else-if="syncVerb === `pull`" class="tabular-nums opacity-70" aria-hidden="true">{{ behindTotal }}</span>
+                            </Button>
+                        </div>
+                    </div>
+                </template>
+            </CommitField>
+            <!-- A closed push card's verdict, kept under the press that raised it, which retries it from the bar above.
+                 The one state that takes a row, since the card needs the width: a tinted strip, as every other notice
+                 here, with Open bringing the card back. -->
+            <Notice v-if="heldNotice" :of="heldNotice" size="sm" v-tooltip.right="heldTip" />
             <template v-if="changes.count.value > 0">
                 <!-- A warning, not a gate — the commit is the user's to make, and `reset --soft` undoes it. -->
                 <Notice v-if="atRisk.length > 0" tone="warning" size="sm">
@@ -1286,7 +1246,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             :key="failure.repo"
             tone="danger"
             size="sm"
-            class="mx-2 mt-1 shrink-0"
+            class="mx-2 mt-2 shrink-0"
             :dismiss-label="t(`workspace.reviewPanel.dismissError`, { repo: failure.repo })"
             @dismiss="changes.dismissFailure(failure.repo)"
         >
@@ -1297,7 +1257,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
         <!-- Whose work is in the tree, one line, only when an agent landed something. Each chip stages that work and
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
              one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
-        <div v-if="chipRowShown" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pb-1 pt-2">
+        <div v-if="chipRowShown" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pt-2">
             <span class="shrink-0 text-2xs text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
                  wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,
@@ -1320,7 +1280,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :aria-pressed="originFilter === entry.id"
             >
                 <span class="relative flex shrink-0" :class="originHue(entry.id).text">
-                    <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="text-2xs" />
+                    <Icon v-if="landingIds.has(entry.id)" name="spinner" spin class="text-2xs" />
+                    <ProviderLogo v-else-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="text-2xs" />
                     <Icon v-else name="sparkles" class="text-2xs" />
                     <!-- A dot on the logo's corner means the session hasn't finished — its count is an instalment, not a
                          total. Worn by the logo rather than beside it, so the chip leads with one mark, not a row. -->
@@ -1346,6 +1307,16 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->
                 <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
+            <span
+                v-for="agent in arriving"
+                :key="agent.id"
+                role="status"
+                :class="ui.chip({}, `min-w-0 max-w-full shrink cursor-default border-dashed border-line bg-transparent hover:bg-transparent`)"
+                :aria-label="t(`workspace.reviewPanel.landingTitle`, { title: agent.title })"
+            >
+                <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
+                <span class="min-w-0 max-w-24 truncate" v-tooltip.right.overflow="agent.title">{{ agent.title }}</span>
+            </span>
             <button
                 v-if="legend.yours > 0"
                 type="button"
@@ -1365,22 +1336,14 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             </button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-auto py-1">
-            <!-- Loading appears only before the first answer. -->
-            <!-- Where the incoming rows will appear, so it reads as "on their way here" rather than as a notice about
-                 somewhere else. Above the list, not only in its place: a second land arrives while the first's rows are
-                 already listed. -->
-            <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-2 py-2 text-2xs text-link">
-                <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>
-                <!-- A title long enough to truncate is the common case in a 270px sidebar, so the whole line is owed
-                     on hover; the verb leads so what survives the cut is the part that answers "where is my work". -->
-                <span class="min-w-0 truncate" v-tooltip.right.overflow="`${changes.landing.value}…`">{{ changes.landing.value }}…</span>
-            </p>
+        <!-- 8px under the block above, as every block over it stands; the first row's wash starts there. -->
+        <div class="min-h-0 flex-1 overflow-auto pt-2 pb-1">
+            <!-- Loading appears only before the first answer. A land under way is said on its FROM chip above. -->
             <p v-if="!changes.loaded.value && !changes.error.value" class="px-2 py-2 text-2xs text-subtle">
                 {{ t(`workspace.words.loadingChanges`) }}
             </p>
             <!-- An explicitly clean tree distinguishes empty results from missing data — but only once it is a claim
-                 anyone can make: mid-land the tree is being written, and the line above already says so. -->
+                 anyone can make: mid-land the tree is being written, and the arriving chip above already says so. -->
             <p v-else-if="changes.loaded.value && changes.count.value === 0 && !changes.landing.value" class="px-2 py-2 text-2xs text-subtle">
                 {{ t(`workspace.reviewPanel.noUncommittedChanges`) }}
             </p>

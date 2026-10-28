@@ -229,65 +229,69 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 
         <AccessNote v-if="!canShip" :reason="{ kind: `tier`, floor: `maintainer` }" :place="words.changes" class="shrink-0 px-2 py-1.5" />
 
-        <!-- The developer's commit box, in a maker's words: the version's name, then one bar of presses. A container, so
-             the bar thins against its own width (sidebar, phone or pop-out) rather than the window's. -->
-        <div v-if="actionBar" class="@container flex shrink-0 flex-col gap-1.5" :class="pending > 0 ? `p-2` : `px-2 py-1.5`">
+        <!-- The developer's commit box, in a maker's words: the version's name, and one bar of presses inside its frame
+             (CommitField). A container, so the bar thins against its own width (sidebar, phone or pop-out) rather than
+             the window's. Every block down to the list stands 8px under the one above it, on the panel's 8px edge. -->
+        <div v-if="actionBar" class="@container flex shrink-0 flex-col gap-2 px-2 pt-2">
             <CommitField
-                v-if="pending > 0"
                 v-model="actions.versionName.value"
+                :bare="pending === 0"
                 :placeholder="namePlaceholder"
                 :label="t(`workspace.savePanel.versionName`)"
                 :draft="soleDraft"
                 :draft-title="soleId === undefined ? undefined : titleOf(soleId)"
                 @submit="doSave"
-            />
-            <div class="flex items-center justify-end gap-1">
-                <!-- A stage or commit run, with its Stop, in the same room, so it never adds a row under the box. -->
-                <IndexRunPrompt />
-                <IndexRunLine v-if="runLine !== undefined" :line="runLine" :pressed="savingNow" />
-                <!-- What a press under way is doing, in the room beside the presses, so the presses never reword themselves:
-                     each keeps its face and width under its spinner from click to answer. -->
-                <span v-else-if="savingNow || actions.backingUp.value" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
-                    savingNow ? t(`workspace.savePanel.saving`) : t(`workspace.savePanel.backingUp`)
-                }}</span>
-                <Button
-                    tier="accent"
-                    v-if="pending > 0"
-                    size="small"
-                    tone="success"
-                    thumb
-                    class="shrink-0 whitespace-nowrap"
-                    :disabled="!saveReady"
-                    :loading="savingNow"
-                    @click="doSave"
-                    v-tooltip.right="saveTip"
-                    :aria-label="t(`workspace.savePanel.saveChanges`, { count: saveCount }, saveCount)"
-                >
-                    <Icon name="save" />{{ t(`ui.action.save`) }}
-                    <!-- Everything, said on the press itself, as Commit says what it records. -->
-                    <span class="tabular-nums opacity-70" aria-hidden="true">{{ saveCount }}</span>
-                </Button>
-                <!-- After Save, in the order the two happen; the push flow's own card asks before anything leaves. Its word
-                     gives way first in a narrow box: the arrow and the count carry it, the hover keeps the whole of it. -->
-                <Button
-                    v-if="actions.backupRepos.value.length > 0"
-                    size="small"
-                    :tier="pending > 0 ? `boring` : `accent`"
-                    thumb
-                    class="shrink-0 whitespace-nowrap"
-                    :disabled="actions.backingUp.value || changes.actionBusy.value"
-                    :loading="actions.backingUp.value"
-                    @click="actions.doBackUp()"
-                    v-tooltip.bottom="actions.backupTip.value"
-                    :aria-label="words.push"
-                >
-                    <Icon name="cloud-upload" />
-                    <span class="hidden @2xs:inline">{{ words.push }}</span>
-                    <span v-if="actions.backupCommits.value > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
-                        actions.backupCommits.value
-                    }}</span>
-                </Button>
-            </div>
+            >
+                <template #bar>
+                    <div class="flex min-h-6.5 items-center justify-end gap-1 max-md:min-h-8">
+                        <!-- A stage or commit run, with its Stop, in the same room, so it never adds a row under the box. -->
+                        <IndexRunPrompt />
+                        <IndexRunLine v-if="runLine !== undefined" :line="runLine" :pressed="savingNow" />
+                        <!-- What a press under way is doing, in the room beside the presses, so the presses never reword themselves:
+                             each keeps its face and width under its spinner from click to answer. -->
+                        <span v-else-if="savingNow || actions.backingUp.value" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
+                            savingNow ? t(`workspace.savePanel.saving`) : t(`workspace.savePanel.backingUp`)
+                        }}</span>
+                        <Button
+                            tier="accent"
+                            v-if="pending > 0"
+                            size="small"
+                            tone="success"
+                            thumb
+                            class="shrink-0 whitespace-nowrap"
+                            :disabled="!saveReady"
+                            :loading="savingNow"
+                            @click="doSave"
+                            v-tooltip.right="saveTip"
+                            :aria-label="t(`workspace.savePanel.saveChanges`, { count: saveCount }, saveCount)"
+                        >
+                            <Icon name="save" />{{ t(`ui.action.save`) }}
+                            <!-- Everything, said on the press itself, as Commit says what it records. -->
+                            <span class="tabular-nums opacity-70" aria-hidden="true">{{ saveCount }}</span>
+                        </Button>
+                        <!-- After Save, in the order the two happen; the push flow's own card asks before anything leaves. Its word
+                             gives way first in a narrow box: the arrow and the count carry it, the hover keeps the whole of it. -->
+                        <Button
+                            v-if="actions.backupRepos.value.length > 0"
+                            size="small"
+                            :tier="pending > 0 ? `boring` : `accent`"
+                            thumb
+                            class="shrink-0 whitespace-nowrap"
+                            :disabled="actions.backingUp.value || changes.actionBusy.value"
+                            :loading="actions.backingUp.value"
+                            @click="actions.doBackUp()"
+                            v-tooltip.bottom="actions.backupTip.value"
+                            :aria-label="words.push"
+                        >
+                            <Icon name="cloud-upload" />
+                            <span class="hidden @2xs:inline">{{ words.push }}</span>
+                            <span v-if="actions.backupCommits.value > 0" class="tabular-nums opacity-70" aria-hidden="true">{{
+                                actions.backupCommits.value
+                            }}</span>
+                        </Button>
+                    </div>
+                </template>
+            </CommitField>
             <!-- What stops Save, in full: the one line here a maker has to act on, so it wraps rather than truncates. -->
             <p v-if="pending > 0 && blockedByConflicts" class="text-2xs text-danger">
                 {{ t(`workspace.savePanel.twoEditsToSame`, { agent: words.agent }) }}
@@ -299,7 +303,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
         </div>
 
         <!-- Every failure that isn't the save's own, named by the project it happened in. -->
-        <div v-if="strayFailures.length > 0" class="flex shrink-0 flex-col gap-1.5 px-2 pb-2">
+        <div v-if="strayFailures.length > 0" class="flex shrink-0 flex-col gap-1.5 px-2 pt-2">
             <Notice
                 v-for="failure in strayFailures"
                 :key="failure.repo"
@@ -311,7 +315,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             </Notice>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-auto pb-2">
+        <div class="min-h-0 flex-1 overflow-auto pt-2 pb-2">
             <!-- Where the incoming rows will appear, so it reads as "on their way here". -->
             <p v-if="changes.landing.value" class="flex items-center gap-1.5 px-2 py-2 text-2xs text-link">
                 <span :class="LEAD"><Icon name="spinner" spin class="text-2xs" /></span>

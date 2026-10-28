@@ -10,10 +10,15 @@ import { t } from "@intentic/ui/i18n";
 import { overdue, progressShare } from "../../../../components/progress/progress";
 import { draftProgress, paceSamples } from "./draftPace";
 
-// The field at the top of the Changes sidebar, shared by both halves of it: the developer's commit message
+// The box at the top of the Changes sidebar, shared by both halves of it: the developer's commit message
 // (ReviewPanel.vue) and the maker's version name (save/SavePanel.vue). The two used to grow apart, one a field with
 // its draft report on a line under it, the other a button with a sentence under it; one component is what keeps them
 // one design.
+//
+// It is a composer, as the chat's is: one frame around the message and the caller's bar of presses (`#bar`), so the
+// line that reports a commit, a push or a refusal starts on the message's own column instead of 9px left of it, under
+// the frame's edge. With nothing to write (`bare`) there is no frame to sit in, and the bar stands alone on the panel's
+// edge.
 //
 // The field reports a message being drafted for it inside itself: the newest step's glyph and clock sit at its right
 // edge, the whole report rides that mark's hover, and the placeholder (the caller's words) names who is writing. While
@@ -31,6 +36,8 @@ const props = defineProps<{
     draftTitle?: string | undefined;
     // The field's name for a screen reader, where the placeholder says something else (a suggestion, a wait).
     label?: string | undefined;
+    // Nothing to write: no field and no frame, only the bar.
+    bare?: boolean;
 }>();
 const message = defineModel<string>({ required: true });
 const emit = defineEmits<{ submit: [] }>();
@@ -101,7 +108,6 @@ const box = ref<HTMLTextAreaElement | null>(null);
 // A change of more than this is text arriving or leaving whole (a chip's message filling the box, a commit clearing it),
 // not typing, which moves the box a line at a time and has to keep up with the caret. 1.5 lines at 16.5px.
 const SLIDE_PX = 25;
-// This box has its own border (the composer's doesn't), so growTextarea reads it off the element rather than a constant.
 // A fill or a clear eases the box between its two heights instead of snapping, so the bar and the list under it slide
 // rather than jump five lines in one frame. `height`, not a FLIP: the box is the one thing that resizes, and what it
 // pushes is the rest of a sidebar, cheap to lay out for the few frames it takes. The slide is cancelled before measuring,
@@ -127,60 +133,69 @@ defineExpose({ focus: (): void => box.value?.focus() });
 </script>
 
 <template>
-    <div class="relative">
-        <!-- allow(tailwind): eight rows exactly: 8 x 16.5px (text-xs at leading-snug) + 8px of py-1 + the 2px border.
-             max-h-36 (144px) would add a 2px sliver of a ninth row under the eighth, which is the visual bug this
-             number was picked to avoid. -->
-        <textarea
-            ref="box"
-            v-model="message"
-            rows="1"
-            :placeholder="placeholder"
-            :aria-label="label"
-            class="ui-field-box ui-field-sm block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto leading-snug"
-            :class="line ? `pr-18` : undefined"
-            @keydown.ctrl.enter="emit(`submit`)"
-            @keydown.meta.enter="emit(`submit`)"
-        ></textarea>
-        <span
-            v-if="line"
-            class="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap text-2xs"
-            v-tooltip.right="tip"
-            @click="box?.focus()"
-        >
-            <svg v-if="pace" viewBox="0 0 16 16" class="size-[1.1em] -rotate-90 text-2xs" :class="STEP_MARKS[line.status].tone" aria-hidden="true">
-                <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" class="opacity-25" />
-                <!-- Past the usual time a quarter arc turns instead: still working, no longer a promise. -->
-                <circle
-                    v-if="pace.overdue"
-                    cx="8"
-                    cy="8"
-                    r="6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    :stroke-dasharray="`${RING / 4} ${RING}`"
-                    class="origin-center motion-safe:animate-spin"
-                />
-                <!-- Eased over the clock's one-second tick, so the fill moves continuously rather than in steps. -->
-                <circle
-                    v-else
-                    cx="8"
-                    cy="8"
-                    r="6"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    :stroke-dasharray="RING"
-                    :stroke-dashoffset="RING * (1 - pace.share)"
-                    class="transition-[stroke-dashoffset] duration-1000 ease-linear"
-                />
-            </svg>
-            <Icon v-else :name="STEP_MARKS[line.status].icon" :spin="STEP_MARKS[line.status].spin" class="text-2xs" :class="STEP_MARKS[line.status].tone" />
-            <span v-if="line.elapsed !== undefined" class="tabular-nums text-subtle" aria-hidden="true">{{ line.elapsed }}</span>
-            <span class="sr-only">{{ spoken }}</span>
-        </span>
+    <slot v-if="bare" name="bar" />
+    <!-- A press on the frame's own padding puts the caret in the message, as a click inside a field would. -->
+    <div v-else class="ui-field-shell flex min-w-0 flex-col" @mousedown.self.prevent="box?.focus()">
+        <div class="relative">
+            <!-- allow(tailwind): eight rows exactly: 8 x 16.5px (text-xs at leading-snug) + 10px of pt-1.5/pb-1. max-h-36
+                 (144px) would add a 2px sliver of a ninth row under the eighth, which is the visual bug this number was
+                 picked to avoid. The frame owns the edge, so the field has none, and px-2 is the column the bar's line
+                 starts on too. -->
+            <textarea
+                ref="box"
+                v-model="message"
+                rows="1"
+                :placeholder="placeholder"
+                :aria-label="label"
+                class="field-bare block max-h-[142px] w-full min-w-0 resize-none overflow-y-auto px-2 pt-1.5 pb-1 leading-snug md:text-xs"
+                :class="line ? `pr-18` : undefined"
+                @keydown.ctrl.enter="emit(`submit`)"
+                @keydown.meta.enter="emit(`submit`)"
+            ></textarea>
+            <span
+                v-if="line"
+                class="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1 whitespace-nowrap text-2xs"
+                v-tooltip.right="tip"
+                @click="box?.focus()"
+            >
+                <svg v-if="pace" viewBox="0 0 16 16" class="size-[1.1em] -rotate-90 text-2xs" :class="STEP_MARKS[line.status].tone" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2" class="opacity-25" />
+                    <!-- Past the usual time a quarter arc turns instead: still working, no longer a promise. -->
+                    <circle
+                        v-if="pace.overdue"
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        :stroke-dasharray="`${RING / 4} ${RING}`"
+                        class="origin-center motion-safe:animate-spin"
+                    />
+                    <!-- Eased over the clock's one-second tick, so the fill moves continuously rather than in steps. -->
+                    <circle
+                        v-else
+                        cx="8"
+                        cy="8"
+                        r="6"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        :stroke-dasharray="RING"
+                        :stroke-dashoffset="RING * (1 - pace.share)"
+                        class="transition-[stroke-dashoffset] duration-1000 ease-linear"
+                    />
+                </svg>
+                <Icon v-else :name="STEP_MARKS[line.status].icon" :spin="STEP_MARKS[line.status].spin" class="text-2xs" :class="STEP_MARKS[line.status].tone" />
+                <span v-if="line.elapsed !== undefined" class="tabular-nums text-subtle" aria-hidden="true">{{ line.elapsed }}</span>
+                <span class="sr-only">{{ spoken }}</span>
+            </span>
+        </div>
+        <!-- The bar, inside the frame: its line on the message's column (pl-2), its presses a step in from the edge. -->
+        <div class="pb-1 pl-2 pr-1" @mousedown.self.prevent="box?.focus()">
+            <slot name="bar" />
+        </div>
     </div>
 </template>

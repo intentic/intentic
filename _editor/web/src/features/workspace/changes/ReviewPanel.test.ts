@@ -177,9 +177,13 @@ it(`waits only for the first answer, then keeps it while the daemon is asked aga
     expect(el.textContent).toContain(`No uncommitted changes.`);
 });
 
+// The FROM chip a land under way is shown on, named for a screen reader as the line it replaced was worded.
+const arriving = (el: HTMLElement, title: string): Element | null => el.querySelector(`[role="status"][aria-label="Landing ${title}…"]`);
+
 // The complaint this answers: press Land on the board, switch here, and read a flat denial that anything is happening
 // for as long as the patch takes. The list is deliberately the tree from before the land — the review doesn't rescan
-// mid-land — so the one thing it may not do is keep claiming the tree is clean.
+// mid-land — so the one thing it may not do is keep claiming the tree is clean. The land is said on the FROM chip its
+// work will wear, so it heads the list from where whose work is here is read.
 it(`says what is being carried in instead of denying there is anything`, async () => {
     const el = await mount();
     await answer({ repos: [] });
@@ -187,13 +191,15 @@ it(`says what is being carried in instead of denying there is anything`, async (
 
     registry.value = [landing(`Rewrite the parser`)];
     await nextTick();
-    expect(el.textContent).toContain(`Landing Rewrite the parser…`);
+    expect(arriving(el, `Rewrite the parser`)?.textContent).toContain(`Rewrite the parser`);
+    expect(el.textContent).toContain(`From`);
     expect(el.textContent).not.toContain(`No uncommitted changes.`);
 
     // And gets out of the way the moment the tree can speak for itself.
     registry.value = [];
     await nextTick();
-    expect(el.textContent).not.toContain(`Landing Rewrite the parser…`);
+    expect(arriving(el, `Rewrite the parser`)).toBeNull();
+    expect(el.textContent).not.toContain(`From`);
     expect(el.textContent).toContain(`No uncommitted changes.`);
 });
 
@@ -206,7 +212,7 @@ it(`asks the daemon nothing while a land is applying, and asks once it settles`,
     await settle();
 
     expect(held).toHaveLength(0);
-    expect(el.textContent).toContain(`Landing Rewrite the parser…`);
+    expect(arriving(el, `Rewrite the parser`)).not.toBeNull();
 
     registry.value = [];
     await settle();
