@@ -37,13 +37,19 @@ test("a log that keeps being written (the new agent) is cut off at the drain cap
     try {
         const log = join(dir, "agent.log");
         await writeFile(log, "");
+        // Isolate the cap from the quiet exit: under load, even this writer can pause for FAST.drainQuietMs.
+        // A quiet threshold at the asserted upper bound makes only the cap able to end the follow in time.
+        const timing = { ...FAST, drainQuietMs: FAST.drainMaxMs + 500 };
         const writer = setInterval(() => void appendFile(log, "tick\n"), 15);
-        const started = performance.now();
-        await followLog({ path: log, from: 0, isAlive: () => false, onLine: () => undefined, timing: FAST });
-        clearInterval(writer);
-        const took = performance.now() - started;
-        expect(took).toBeGreaterThanOrEqual(FAST.drainMaxMs);
-        expect(took).toBeLessThan(FAST.drainMaxMs + 500);
+        try {
+            const started = performance.now();
+            await followLog({ path: log, from: 0, isAlive: () => false, onLine: () => undefined, timing });
+            const took = performance.now() - started;
+            expect(took).toBeGreaterThanOrEqual(FAST.drainMaxMs);
+            expect(took).toBeLessThan(FAST.drainMaxMs + 500);
+        } finally {
+            clearInterval(writer);
+        }
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
