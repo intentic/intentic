@@ -10845,7 +10845,7 @@
             "statusBar": {
                 "group": "Barre d'état",
                 "liveMetrics": "Métriques pour geeks",
-                "liveMetricsHint": "CPU, mémoire et disque au bout de la barre d'état, et la part de chaque agent sur sa carte. Rien n'est mesuré tant que l'option est désactivée."
+                "liveMetricsHint": "CPU, mémoire et disque au bout de la barre d'état, et sur la carte de chaque agent sa part et ce qu'il a coûté. Rien n'est mesuré tant que l'option est désactivée."
             },
             "explorer": {
                 "colorful": "Coloré",
@@ -11254,7 +11254,7 @@
             "iconRail": "barre latérale, barre d'activité, taille de la barre",
             "changesList": "diff, relecture, fichiers modifiés",
             "toolCalls": "transcription, étapes de l'agent, détails, outils",
-            "statusBar": "CPU, mémoire, RAM, métriques, jauges, pied de page",
+            "statusBar": "CPU, mémoire, RAM, métriques, jauges, pied de page, coût, dépenses",
             "pushNotifications": "téléphone, mobile, notifier, alertes, push web",
             "statusBadge": "badge, zone de notification, barre des tâches, favicon, titre de l'onglet, icône",
             "sounds": "signal sonore, audio, son, bip",

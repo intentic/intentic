@@ -31,6 +31,7 @@ const { providerAccounts } = await import("../../../../models/providers/provider
 const { queryClient } = await import("../../../../lib/queryPersistence");
 const { setAgentViewed } = await import("../../../../models/fleet/board/reviewMarks");
 const { rpcKey } = await import("../../../../lib/queryKeys");
+const { showLiveMetrics } = await import("../../../../models/sandbox/liveMetrics");
 const NO_ACCOUNTS = providerAccounts.value;
 
 const NO_ATTENTION: AgentSummary[`attention`] = {
@@ -240,6 +241,21 @@ it(`opens the diff from the change count, a named press that does not also open 
     expect(count.textContent?.replace(/\s+/g, ` `).trim()).toBe(`+20 −2`);
     count.click();
     expect([changes.mock.calls.length, opened.mock.calls.length]).toEqual([1, 0]);
+});
+
+// Cost is a geek metric: a total with no denominator that asks for no press, so it shows only with the metrics on,
+// while the diff, the press into the review, shows either way.
+it(`keeps what a card cost for the geek metrics, and its change count always`, async () => {
+    const spent: FleetAgent = { ...written(), costUsd: 3.26 };
+    const plain = mount(spent);
+    expect([plain.textContent?.includes(`3.26`), buttonLabelled(plain, `Review changes: 20 lines added, 2 removed`) !== undefined]).toEqual([false, true]);
+    showLiveMetrics.value = true;
+    try {
+        await nextTick();
+        expect(plain.textContent).toContain(`3.26`);
+    } finally {
+        showLiveMetrics.value = false;
+    }
 });
 
 it(`draws no separate review press beside a stranded card's chat-bound drill-in`, () => {

@@ -35,6 +35,7 @@ import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
+import { showLiveMetrics } from "../../../../models/sandbox/liveMetrics";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
@@ -326,9 +327,9 @@ const relanding = computed(() => props.pending === `reland` || (relandOffered.va
 // The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
 // Context is deliberately absent: it is a row of the identity tile's hover (see `tileHint`), so a card whose only stat
 // was its context opens no summary row at all.
-// A maker's card says what the work is and where it stands, not what it cost, how many lines it moved, or which model
-// and login ran it: the three facts that crowded the title off a narrow card and that a non-coder has no use for.
-const costShown = computed(() => !maker.value && props.agent.costUsd !== undefined);
+// A maker's card drops cost, diff, model and login, which crowd a narrow card and mean nothing to a non-coder. A coder's
+// cost waits on the geek metrics (a total with no denominator, asking no press); its diff is what Land brings in.
+const costShown = computed(() => !maker.value && showLiveMetrics.value && props.agent.costUsd !== undefined);
 const diffShown = computed(() => !maker.value && props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0));
 const stats = computed(() => costShown.value || diffShown.value);
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The tile's glyph was doing one job, telling cards apart, and it
@@ -914,7 +915,7 @@ const grab = (event: PointerEvent): void => {
                         <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                         <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                     </button>
-                    <!-- Lifetime cost total, read-only here. -->
+                    <!-- Lifetime cost total, read-only, with the geek metrics (see `costShown`). -->
                     <span v-if="costShown && agent.costUsd !== undefined" data-stat>{{ formatMoney(agent.costUsd) }}</span>
                     <!-- Opt-in geek metrics, beside what it cost: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                     <SessionMetrics v-if="localOnly" data-stat :card="agent.id" />

@@ -10845,7 +10845,7 @@
             "statusBar": {
                 "group": "Statusleiste",
                 "liveMetrics": "Geek-Metriken",
-                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte am Ende der Statusleiste, dazu der Anteil jedes Agenten auf seiner Karte. Solange dies aus ist, wird nichts gemessen."
+                "liveMetricsHint": "CPU, Arbeitsspeicher und Festplatte am Ende der Statusleiste, dazu auf der Karte jedes Agenten sein Anteil und was er gekostet hat. Solange dies aus ist, wird nichts gemessen."
             },
             "explorer": {
                 "colorful": "Farbig",
@@ -11254,7 +11254,7 @@
             "iconRail": "Seitenleiste, Aktivitätsleiste, Leistengröße",
             "changesList": "Diff, Review, geänderte Dateien",
             "toolCalls": "Verlauf, Agentenschritte, Details, Werkzeuge",
-            "statusBar": "CPU, Speicher, RAM, Messwerte, Anzeigen, Fußzeile",
+            "statusBar": "CPU, Speicher, RAM, Messwerte, Anzeigen, Fußzeile, Kosten, Ausgaben",
             "pushNotifications": "Handy, Smartphone, mobil, benachrichtigen, Hinweise, Web-Push",
             "statusBadge": "Badge, Symbol, Taskleiste, Infobereich, Favicon, Tab-Titel",
             "sounds": "Signalton, Audio, Ton, Klang, Piepton",

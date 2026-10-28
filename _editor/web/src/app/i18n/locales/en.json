@@ -10845,7 +10845,7 @@
             "statusBar": {
                 "group": "Status bar",
                 "liveMetrics": "Geek metrics",
-                "liveMetricsHint": "CPU, memory and disk at the end of the status bar, and each agent's share on its card. Nothing is measured while this is off."
+                "liveMetricsHint": "CPU, memory and disk at the end of the status bar, and on each agent's card its share and what it has cost. Nothing is measured while this is off."
             },
             "explorer": {
                 "colorful": "Colorful",
@@ -11254,7 +11254,7 @@
             "iconRail": "sidebar, side bar, activity bar, rail size",
             "changesList": "diff, review, changed files",
             "toolCalls": "transcript, agent steps, details, tools",
-            "statusBar": "cpu, memory, ram, metrics, gauges, footer",
+            "statusBar": "cpu, memory, ram, metrics, gauges, footer, cost, spend, dollars",
             "pushNotifications": "phone, mobile, notify, alerts, web push",
             "statusBadge": "badge, tray, taskbar, favicon, tab title, icon",
             "sounds": "chime, audio, sound, beep, ding",

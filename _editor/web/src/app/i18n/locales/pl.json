@@ -10232,7 +10232,7 @@
             "statusBar": {
                 "group": "Pasek stanu",
                 "liveMetrics": "Metryki dla geeków",
-                "liveMetricsHint": "CPU, pamięć i dysk na końcu paska stanu oraz udział każdego agenta na jego karcie. Gdy ta opcja jest wyłączona, nic nie jest mierzone."
+                "liveMetricsHint": "CPU, pamięć i dysk na końcu paska stanu, a na karcie każdego agenta jego udział i koszt. Gdy ta opcja jest wyłączona, nic nie jest mierzone."
             },
             "changes": {
                 "diffOpen": "Gdzie otwiera się diff",
@@ -10657,7 +10657,7 @@
             "iconRail": "pasek boczny, pasek aktywności, rozmiar paska",
             "changesList": "diff, przegląd, zmienione pliki",
             "toolCalls": "transkrypt, kroki agenta, szczegóły, narzędzia",
-            "statusBar": "CPU, pamięć, RAM, metryki, wskaźniki, stopka",
+            "statusBar": "CPU, pamięć, RAM, metryki, wskaźniki, stopka, koszt, wydatki",
             "pushNotifications": "telefon, komórka, powiadom, alerty, web push",
             "statusBadge": "plakietka, zasobnik, pasek zadań, favicon, tytuł karty, ikona",
             "sounds": "sygnał, dźwięk, audio, piknięcie",
