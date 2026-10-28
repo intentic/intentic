@@ -3,7 +3,7 @@ import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-sear
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { type StandingChip, standingChip } from "../../../models/agent-status/agentStatus-chips";
 import { type TileRim, tileRim } from "../../../models/agent-status/agentStatus-lanes";
-import { activityIcon, activityLine, agentStatusMeta, cornerInk } from "../../../models/agent-status/agentStatus-meta";
+import { activityIcon, activityLine, agentStatusMeta, cornerInk, cornerStandingShown } from "../../../models/agent-status/agentStatus-meta";
 import { endingByHand, turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import type { Stamp } from "../../../models/fleet/board/stamps";
 import { cardStampsOf } from "../../../models/fleet/board/useCardStamps";
@@ -28,7 +28,8 @@ export interface OpenChat {
 }
 
 export interface CardView {
-    readonly status: { name: IconName; spin?: boolean; class: string; "aria-label": string };
+    // Undefined for a card that never started (cornerStandingShown), whose corner draws no standing.
+    readonly status: { name: IconName; spin?: boolean; class: string; "aria-label": string } | undefined;
     readonly chip: StandingChip | undefined;
     readonly rim: TileRim | undefined;
     readonly live: { icon: IconName; text: string; since: number | undefined } | undefined;
@@ -50,6 +51,9 @@ export interface CardView {
 // pre-bound as one object so the row computes it once, not per-field.
 const statusOf = (entry: OpenChat): CardView[`status`] => {
     if (entry.agent !== undefined) {
+        if (!cornerStandingShown(entry.agent.status)) {
+            return undefined;
+        }
         const meta = agentStatusMeta(entry.agent.status);
         return { name: meta.icon, spin: meta.spin, class: `text-xs ${cornerInk(meta.class)}`, "aria-label": meta.label };
     }

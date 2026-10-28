@@ -133,7 +133,8 @@ it(`stamps the agent's own check on a rail row`, async () => {
 });
 
 // Words waiting in the composer read as the board card reads them: a bare pencil left of the standing, in the corner,
-// whether or not anything was ever sent. The rail once drew its own "Draft" pill and a badge on the identity tile.
+// whether or not anything was ever sent, and alone in the corner of one that never started. The rail once drew its own
+// "Draft" pill and a badge on the identity tile.
 it(`marks a rail row's unsent words with the board card's pencil, beside its standing`, async () => {
     const el = await mountRail();
     const fresh = draftConversation();
@@ -149,7 +150,10 @@ it(`marks a rail row's unsent words with the board card's pencil, beside its sta
         expect(mark.textContent?.trim()).toBe(``);
         expect(row.querySelector(`.ui-status-pill`)).toBeNull();
     }
+    // The standing keeps its glyph beside the pencil once there is one; a chat that never started has none to draw.
     expect(rowOf(el, `proven`).querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
+    const freshRow = el.querySelector<HTMLElement>(`[data-chat-tab="${fresh.conversationId}"]`)!;
+    expect(freshRow.querySelector(`[data-icon="circle"], [data-icon="circle-fill"]`)).toBeNull();
 });
 
 const mountCard = async (agent: FleetAgent): Promise<HTMLElement> => {

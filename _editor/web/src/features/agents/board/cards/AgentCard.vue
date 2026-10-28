@@ -36,7 +36,7 @@ import type { IdMatch } from "../idMatch";
 import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
-import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
+import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, cornerStandingShown, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
@@ -668,8 +668,8 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <!-- What vouches for its work, one badge per check that ran (CardStamps), left of the standing so the standing keeps
                      the card's right edge on every card. At the standing's own size: a badge's cut-out symbol needs the room. -->
-                <!-- Words waiting in the composer: a pencil in the stamp list, whether or not anything was ever sent, so the standing
-                     (a never-sent draft's own quiet circle included) keeps its seat. -->
+                <!-- Words waiting in the composer: a pencil in the stamp list, whether or not anything was ever sent. A card that never
+                     started draws no standing (cornerStandingShown), so there the pencil is the corner's only mark. -->
                 <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" class="text-sm" />
                 <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-base" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
@@ -683,7 +683,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
                 <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
                 <Icon
-                    v-else
+                    v-else-if="cornerStandingShown(agent.status)"
                     :name="statusMeta.icon"
                     :spin="statusMeta.spin"
                     v-tooltip.top="statusMeta.label"

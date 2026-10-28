@@ -758,10 +758,13 @@ it(`names an untitled draft by the words waiting in its composer, and marks them
     });
 
     expect(el.textContent ?? ``).toContain(UNSENT_WORDS);
-    // A never-sent draft wears the same pencil among its stamps as any other card with words waiting, not a word-pill.
+    // A never-sent draft wears the same pencil among its stamps as any other card with words waiting, not a word-pill,
+    // and it is the corner's only mark: a card that never started draws no standing glyph beside it.
     const mark = el.querySelector(`[data-unsent-mark]`);
     expect(mark?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
     expect(mark?.textContent?.trim()).toBe(``);
+    expect(mark?.parentElement?.lastElementChild).toBe(mark);
+    expect(el.querySelector(`[data-icon="circle"]`)).toBeNull();
 });
 
 // Words left in a conversation that has a standing of its own ride the corner's stamp list as a pencil, so the standing

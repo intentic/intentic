@@ -13,7 +13,8 @@ import { type AgentStanding, type ClientAgentStatus, memoryHeld } from "./agentS
 // unhandled status a build error instead of silently drawing it as idle.
 const statusMeta = () =>
     ({
-        // Not `pencil`, that's the card's rename affordance; the draft glyph is a not-yet-started marker.
+        // Not `pencil`, that's the unsent mark's (UnsentMark). Drawn in lists and pickers; a session card's corner leaves a
+        // never-started card blank (cornerStandingShown).
         draft: { icon: `circle`, label: t(`agents.agentStatus.draft`), class: `text-subtle` },
         // Says where it came from, not how it ended (that's unknowable, the registry entry that would say is gone). Glyph
         // matches the search footer's "In earlier chats".
@@ -57,6 +58,11 @@ const statusMeta = () =>
 // send a status this build has never heard of.
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
     statusMeta()[status] ?? statusMeta().idle;
+
+// Whether a session card's corner draws its standing glyph at all, on the board's card and the rail's row alike. A card
+// that never started has no standing to report: its hollow circle read as idle's dot at corner size, and beside the
+// unsent pencil (UnsentMark) it said "draft" a second time. Its corner stays empty until there is something to say.
+export const cornerStandingShown = (status: AgentStatus | ClientAgentStatus): boolean => status !== `draft`;
 
 // A card's glyph, read off its standing rather than its status alone: the one `error` that is not one (a message held for
 // memory) wears a hold's glyph and says why, in the reader's language, where the daemon's sentence is English.
