@@ -36,6 +36,36 @@ describe("jsonLinesOf", () => {
         expect(await collect(jsonLinesOf(chunks("{\"a\":1}\r\n\r\n  \n{\"b\"", ":2}")))).toEqual(['{"a":1}', '{"b":2}']);
     });
 
+    it("reads a large fragmented record followed by batched records and an unterminated tail", async () => {
+        const large = JSON.stringify({ output: "x".repeat(256 * 1024) });
+        const text = `${large}\r\n{"next":true}\n{"last":true}`;
+        const encoder = new TextEncoder();
+        const parts = Array.from({ length: Math.ceil(text.length / 97) }, (_, index) => {
+            const part = text.slice(index * 97, (index + 1) * 97);
+            return index % 2 === 0 ? encoder.encode(part) : part;
+        });
+
+        expect(await collect(jsonLinesOf(chunks(...parts)))).toEqual([large, '{"next":true}', '{"last":true}']);
+    });
+
+    it("preserves records at every byte boundary, including CRLF and multibyte characters", async () => {
+        const records = ['{"text":"zł😀\u2028\u2029"}', ' {"b":2} ', '{"c":3}'];
+        const bytes = new TextEncoder().encode(`${records[0]}\r\n \t\r\n${records[1]}\n${records[2]}`);
+
+        for (let at = 0; at <= bytes.length; at++) {
+            const parts = chunks(bytes.subarray(0, at), new Uint8Array(), bytes.subarray(at, at + 1), bytes.subarray(at + 1));
+            expect(await collect(jsonLinesOf(parts))).toEqual(records);
+        }
+    });
+
+    it("flushes incomplete UTF-8 at the end of an unterminated record", async () => {
+        expect(await collect(jsonLinesOf(chunks("prefix", new Uint8Array([0xf0]), new Uint8Array([0x9f]))))).toEqual(["prefix\ufffd"]);
+    });
+
+    it("skips empty chunks and an unterminated whitespace-only record", async () => {
+        expect(await collect(jsonLinesOf(chunks("", new Uint8Array(), "\r", " ", new Uint8Array([0x09]))))).toEqual([]);
+    });
+
     it("reads a Node stream and a web stream the same way", async () => {
         const text = "{\"a\":1}\n{\"b\":2}";
 

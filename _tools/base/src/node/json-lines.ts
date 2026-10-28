@@ -14,21 +14,30 @@ export async function* jsonLinesOf(chunks: AsyncIterable<Uint8Array | string>): 
     // TextDecoder in streaming mode keeps a partial character for the next chunk, as StringDecoder does, and runs where
     // there is no Node.
     const decoder = new TextDecoder();
-    let buffer = "";
+    // Keep unfinished records in fragments: appending to a growing buffer and searching it again on every chunk
+    // repeatedly copies and scans the same prefix, making large fragmented records quadratic.
+    const fragments: string[] = [];
     for await (const chunk of chunks) {
-        buffer += chunk instanceof Uint8Array ? decoder.decode(chunk, { stream: true }) : chunk;
+        const text = chunk instanceof Uint8Array ? decoder.decode(chunk, { stream: true }) : chunk;
         let start = 0;
-        for (let newline = buffer.indexOf("\n"); newline !== -1; newline = buffer.indexOf("\n", start)) {
-            const line = record(buffer.slice(start, newline));
+        for (let newline = text.indexOf("\n"); newline !== -1; newline = text.indexOf("\n", start)) {
+            let lineText = text.slice(start, newline);
+            if (fragments.length > 0) {
+                fragments.push(lineText);
+                lineText = fragments.join("");
+                fragments.length = 0;
+            }
+            const line = record(lineText);
             start = newline + 1;
             if (line !== undefined) {
                 yield line;
             }
         }
-        // Sliced once per chunk rather than once per line, so a chunk of many short records is not copied once each.
-        buffer = buffer.slice(start);
+        if (start < text.length) {
+            fragments.push(text.slice(start));
+        }
     }
-    const last = record(buffer + decoder.decode());
+    const last = record(fragments.join("") + decoder.decode());
     if (last !== undefined) {
         yield last;
     }
