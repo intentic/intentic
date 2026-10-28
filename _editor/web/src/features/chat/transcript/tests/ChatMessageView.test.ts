@@ -13,6 +13,9 @@ import { watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract/events
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
 import { errandOf, errands, errandPrompt } from "../../../../models/conversations/run/errands";
 import { changedNothing, type ChatMessage } from "../../../../models/conversations/transcript/transcript";
+import type { ChatIncident } from "../../../../models/conversations/transcript/chatIncidents";
+import { accountMovedRow } from "@intentic/sandbox-contract/text/notice-rows";
+import { formatClock } from "@intentic/ui/format";
 import { clockOffset, resetSandboxClock } from "../../../../models/agent-status/sandboxClock";
 import { IconStub } from "@intentic/ui/testing";
 import { scrollersUnderShut } from "../../../../testing/scrollersUnderShut";
@@ -303,7 +306,7 @@ const { default: ChatTurnStatus } = await import("../ChatTurnStatus.vue");
 const message: ChatMessage = { id: 1, role: `assistant`, text: `` };
 let app: App | undefined;
 
-const mount = (subject: ChatMessage = message, extra: { doomed?: boolean } = {}): HTMLElement => {
+const mount = (subject: ChatMessage = message, extra: { doomed?: boolean; incident?: ChatIncident } = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({ render: () => h(ChatMessageView, { message: subject, streaming: true, ...extra }) });
@@ -2029,5 +2032,61 @@ describe(`a runtime extension's notice`, () => {
         toggle.click();
         await nextTick();
         expect(element.querySelector(`pre`)?.textContent).toBe(sent);
+    });
+});
+
+// The pile one disabled organization left on 2026-10-28, drawn as one row: the latest word on the incident as its line,
+// every refused attempt one press away (chatIncidents.ts takes the rest out of the pane).
+describe(`a row standing for a refusal incident`, () => {
+    const ORG_OFF = `Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access`;
+    const moved: ChatMessage = { id: 40, ...accountMovedRow({ why: `refused`, from: `Work`, to: `radarsu@gmail.com`, said: ORG_OFF }) };
+    const FIRST = 1_000_000 - 120_000;
+    const SECOND = 1_000_000 - 60_000;
+    const twice: ChatIncident = {
+        attempts: [
+            { at: FIRST, said: ORG_OFF },
+            { at: SECOND, said: ORG_OFF },
+        ],
+        resolved: true,
+    };
+    const iconsOf = (element: HTMLElement): (string | null)[] => [...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
+    const toggleOf = (element: HTMLElement): HTMLButtonElement => element.querySelector<HTMLButtonElement>(`button[aria-expanded]`)!;
+
+    it(`says where the turn ran and why, naming both accounts, under the move's own glyph and no warning`, () => {
+        const element = mount(moved, { incident: twice });
+        expect(element.textContent).toContain(`Ran on radarsu@gmail.com: the Work account's plan or organization does not allow it.`);
+        expect(element.textContent).not.toContain(`Nothing has run yet`);
+        expect(iconsOf(element)).toEqual([`arrow-right`]);
+        expect(element.querySelector(`.text-warning`)).toBeNull();
+    });
+
+    it(`counts the refused attempts on its press, and lists each with its moment, a repeated sentence said once`, async () => {
+        const element = mount(moved, { incident: twice });
+        expect(toggleOf(element).textContent?.trim()).toBe(`2 refused attempts`);
+        toggleOf(element).click();
+        await nextTick();
+        const rows = [...element.querySelectorAll(`[data-incident-attempts] li`)].map((item) => [...item.querySelectorAll(`span`)].map((part) => part.textContent));
+        expect(rows).toEqual([
+            [formatClock(FIRST), ORG_OFF],
+            [formatClock(SECOND), `Refused the same way.`],
+        ]);
+        expect(toggleOf(element).textContent?.trim()).toBe(`Hide attempts`);
+    });
+
+    // A move made on a conversation's first turn has no attempts to list: what it was made for is its details.
+    it(`keeps a lone move's reason a press away, as a failure keeps its words`, async () => {
+        const element = mount(moved);
+        expect(toggleOf(element).textContent?.trim()).toBe(`Details`);
+        toggleOf(element).click();
+        await nextTick();
+        expect(element.querySelector(`[data-failure-details]`)?.textContent).toContain(`Your organization has disabled Claude subscription access`);
+    });
+
+    it(`draws an incident still standing as its latest refusal, the attempts behind the same press`, () => {
+        const kept: ChatMessage = { id: 41, ...foldTurn([], [{ kind: `error`, code: `claude-not-entitled`, message: ORG_OFF, held: { ran: false } }]).at(-1)! };
+        const element = mount(kept, { incident: { ...twice, resolved: false } });
+        expect(element.textContent).toContain(`The provider refused this account: its plan or organization does not allow it.`);
+        expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
+        expect(element.querySelector(`button[aria-expanded="false"]`)?.textContent?.trim()).toBe(`2 refused attempts`);
     });
 });

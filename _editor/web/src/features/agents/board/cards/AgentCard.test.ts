@@ -432,6 +432,29 @@ it(`names a classified failure in the corner and keeps one line of it on the car
     expect(line.querySelector(`[data-icon="exclamation-triangle"]`)?.classList.contains(`text-warning`)).toBe(true);
 });
 
+// A refusal the conversation has moved past (the sandbox moved it to another account, or a person picked one) no longer
+// stands: the card says where it went in its place and asks nothing in the corner, rather than "No access" over a fix
+// already made (2026-10-28). The refused account still being the one it runs on keeps the refusal, corner and all.
+it(`says where a refused conversation went once it runs on an account that can serve, instead of the refusal`, () => {
+    const failure = `Your organization has disabled Claude subscription access for Claude Code`;
+    const seatOff = { id: `acct-work`, label: `Work`, connectedAt: 1, seatRefusal: failure };
+    providerAccounts.value = { ...NO_ACCOUNTS, claude: [seatOff, { id: `acct-home`, label: `radarsu@gmail.com`, connectedAt: 2 }] };
+    const noAccess = { ...ready(`error`), failureCode: `claude-not-entitled`, failure };
+
+    const moved = mount({ ...noAccess, account: `acct-home` });
+    const line = moved.querySelector<HTMLElement>(`[data-failure]`)!;
+    expect([line.textContent?.trim(), line.hasAttribute(`data-moved`)]).toEqual([`Moved to radarsu@gmail.com`, true]);
+    expect(line.querySelector(`[data-icon="arrow-right"]`)?.classList.contains(`text-subtle`)).toBe(true);
+    expect(moved.querySelector(`.ui-status-pill`)?.textContent?.trim()).not.toBe(`No access`);
+    // The corner rests as an idle card's does, rather than wearing the error glyph the line contradicts.
+    expect(moved.querySelector(`[role="img"][aria-label="Error"]`)).toBeNull();
+
+    const standing = mount({ ...noAccess, account: `acct-work` });
+    expect(standing.querySelector(`[data-failure]`)?.textContent?.trim()).toBe(`The provider refused this account: its plan or organization does not allow it`);
+    expect(standing.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`No access`);
+    providerAccounts.value = NO_ACCOUNTS;
+});
+
 // `failure` is present only while the card reads as failed; a healthy card must not render an empty line from the same
 // markup.
 it(`keeps the line off a card with nothing to explain`, () => {

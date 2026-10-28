@@ -207,6 +207,18 @@ const failureLine = (notice: FailureNotice): string => {
     }
 };
 
+// The notices that carry no facts: one fixed sentence each.
+type PlainNotice = Coded<`compacted` | `stopped` | `questionDismissed` | `planApproved` | `keptPlanning` | `restartInterrupted`>;
+const PLAIN = {
+    compacted: () => t(`chat.sandboxNotice.compacted`),
+    stopped: () => t(`chat.sandboxNotice.stopped`),
+    questionDismissed: () => t(`chat.sandboxNotice.questionDismissed`),
+    planApproved: () => t(`chat.sandboxNotice.planApproved`),
+    keptPlanning: () => t(`chat.sandboxNotice.keptPlanning`),
+    restartInterrupted: () => t(`chat.sandboxNotice.restartInterrupted`),
+} as const satisfies Readonly<Record<PlainNotice[`code`], () => string>>;
+const isPlain = (notice: SandboxNotice): notice is PlainNotice => Object.hasOwn(PLAIN, notice.code);
+
 const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace): string => {
     if (isLand(notice)) {
         return landLine(notice, LAND_WORDS[audience], place);
@@ -217,21 +229,12 @@ const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace
     if (isStarting(notice)) {
         return startingLine(notice, audience);
     }
+    if (isPlain(notice)) {
+        return PLAIN[notice.code]();
+    }
     switch (notice.code) {
-        case `compacted`:
-            return t(`chat.sandboxNotice.compacted`);
-        case `stopped`:
-            return t(`chat.sandboxNotice.stopped`);
-        case `questionDismissed`:
-            return t(`chat.sandboxNotice.questionDismissed`);
-        case `planApproved`:
-            return t(`chat.sandboxNotice.planApproved`);
-        case `keptPlanning`:
-            return t(`chat.sandboxNotice.keptPlanning`);
         case `watching`:
             return t(`chat.sandboxNotice.watching`, { note: notice.params.note, every: notice.params.every });
-        case `restartInterrupted`:
-            return t(`chat.sandboxNotice.restartInterrupted`);
         case `resumed`:
             return RESUMED[notice.params.reason]();
         case `keptWarm`:
@@ -240,6 +243,8 @@ const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace
             return t(`chat.sandboxNotice.keptCold`, notice.params, notice.params.refreshes);
         case `installing`:
             return installingLine(notice);
+        case `accountMoved`:
+            return ACCOUNT_MOVED[notice.params.why](notice.params);
     }
 };
 
@@ -261,6 +266,14 @@ const startingLine = (notice: StartingNotice, audience: Audience): string => {
         }
     }
 };
+
+// Where a turn ran instead of the conversation's account, and why, both accounts by name (notice-rows.ts accountMovedRow).
+type AccountMoved = Coded<`accountMoved`>[`params`];
+const ACCOUNT_MOVED = {
+    refused: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.refused`, { from, to }),
+    reach: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.reach`, { from, to }),
+    cold: ({ from, to }) => t(`chat.sandboxNotice.accountMoved.cold`, { from, to }),
+} as const satisfies Readonly<Record<AccountMoved[`why`], (move: AccountMoved) => string>>;
 
 // How a held turn continued after a spent allowance: the whole session, a trimmed copy, or a summary (handoff.ts).
 const handedOffLine = (params: Extract<SandboxNotice, { code: "handedOff" }>["params"]): string => {

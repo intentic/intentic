@@ -574,7 +574,7 @@ export function startTurnRun(
                 "turn ended",
             );
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
-            deps.events.publish("run.settled", settledOf(input, run.rows, { failure, stopped, rerun }));
+            deps.events.publish("run.settled", settledOf(input, run.rows, { run: run.id, failure, stopped, rerun }));
         }
     })();
     return run;

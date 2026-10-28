@@ -174,6 +174,25 @@ test("a refused read answers no windows, never an empty measurement, and says wh
     expect(await bare!.read()).toEqual({ windows: [], failure: "HTTP 403" });
 });
 
+// 2026-10-28: the read refused Claude account d8561075… in these words at 06:58, two hours before a turn on it was refused
+// for its seat. Not proof (at 10-27 19:54 the same words came, and turns served from 21:17): only the seat check's probe is.
+test("a read refused in the organisation's words hands the account to the seat check, and no other refusal does", async () => {
+    const hinted: string[] = [];
+    const hint = (id: string): void => void hinted.push(id);
+    const said = "OAuth authentication is currently not allowed for this organization.";
+    const [org] = await claudeHeadroomSource(memoryStore([account("a")]), endpoint({ type: "error", error: { message: said } }, false), undefined, undefined, hint).targets();
+    expect(await org!.read()).toEqual({ windows: [], failure: said });
+
+    const seat = endpoint({ type: "error", error: { message: "Your organization has disabled Claude subscription access for Claude Code." } }, false);
+    const [seatless] = await claudeHeadroomSource(memoryStore([account("b")]), seat, undefined, undefined, hint).targets();
+    await seatless!.read();
+
+    const scope = endpoint({ type: "error", error: { message: "OAuth token does not meet scope requirement" } }, false);
+    const [other] = await claudeHeadroomSource(memoryStore([account("c")]), scope, undefined, undefined, hint).targets();
+    await other!.read();
+    expect(hinted).toEqual(["a", "b"]);
+});
+
 // What claude-usage.testing.ts promises every test that builds a Claude account with it: the reading comes out as this
 // reader files one, every pool rounded, so a full pool reads at the line and only a refusal on file proves it spent.
 test("a test's Claude reading is filed as the reader files one: at the line until a refusal proves it spent", () => {

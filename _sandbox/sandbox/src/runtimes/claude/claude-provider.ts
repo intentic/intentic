@@ -10,6 +10,9 @@ import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "../../agent/providers/claude/claude-seats.js";
 import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "../../agent/providers/claude/claude-seat-check.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
+import { claudeHeadroomSource } from "../../agent/providers/claude/claude-usage.js";
+import type { HeadroomSource } from "../../usage/headroom.js";
+import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { claudeWarm, type ClaudeWarmDeps } from "./claude-warm.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
@@ -45,6 +48,13 @@ export const createClaudeSlice = (input: {
         claudeModels: createClaudeCatalog(claudeStore, input.config, input.workspaceRoot, join(input.authRoot, "claude", "models.json"), undefined, undefined, input.logger),
     };
 };
+
+// Claude's half of the headroom service: every account's usage read, checked against what the catalog says it serves. A
+// read refused in its organisation's words is only a hint the seat is off, which the seat check's own probe decides.
+export const claudeHeadroom = (claude: ClaudeSlice, watch: AnswerWatch): HeadroomSource =>
+    claudeHeadroomSource(claude.claudeStore, fetch, async (id) => (await claude.claudeModels.models(id)).models, watch, (id) => {
+        void claude.claudeSeatCheck.recheck(id, { hinted: true });
+    });
 
 // What the Claude Code loop's adapter reads: the harness arm's own deps, and the stores its probes ask.
 export type ClaudeCodeDeps = HarnessPlanDeps & Pick<Services, "claudeStore" | "config" | "sessions">;

@@ -106,6 +106,13 @@ export const routeWithinReach = async (deps: ServiceabilityDeps, reach: AccountR
         return { kind: "refused", message: notAllowed(reach, label, `any ${label} account`, []), account: routed };
     }
     // The move starts from where the conversation was, whichever account the blocked route had meant to send it to.
-    const from = route.kind === "move" ? route.from : routed;
-    return { kind: "move", from, to: pick.id, reason: `"${name}" is not among the AI accounts ${reachWho(reach.who)} may use`, reach: true };
+    const from = route.kind === "move" ? { id: route.from, label: route.labels.from } : { id: routed, label: name };
+    return {
+        kind: "move",
+        from: from.id,
+        to: pick.id,
+        labels: { from: from.label, to: pick.label },
+        reason: `"${name}" is not among the AI accounts ${reachWho(reach.who)} may use`,
+        reach: true,
+    };
 };

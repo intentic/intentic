@@ -1,4 +1,5 @@
-import type { Tip } from "@intentic/ui";
+import type { IconName, Tip } from "@intentic/ui";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { formatWhen } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { toneWash } from "@intentic/ui/tone";
@@ -190,4 +191,54 @@ export const cardFailure = (agent: AgentStanding): CardFailure | undefined => {
     const tone = failureTone(kind);
     const gist = failureView({ message: words, error: agent.failureCode, own: agent.failureOwn }).line.replace(/\.$/u, ``);
     return { title, gist, tone, tip: { title, tone, quote: words } };
+};
+
+/** The line a card's body spends on how its last turn ended: a failure in its tone, or the move that answered one. */
+export interface CardLine {
+    readonly gist: string;
+    readonly tip: Tip;
+    readonly icon: IconName;
+    // The glyph's ink; the line itself stays in the card's own.
+    readonly ink: string;
+    // The refusal it stood for no longer stands: the corner asks nothing for it (cardMoved).
+    readonly moved?: true;
+}
+
+// What the card's body line needs of the card beyond its standing: which provider and account it runs on now.
+type CardAgent = AgentStanding & { readonly provider: AgentProvider; readonly account?: string | undefined };
+
+/** The account the card runs on now, as the caller judged it: its name, and whether it can serve a turn. */
+export interface ServingAccount {
+    readonly label: string;
+    readonly serves: boolean;
+}
+
+// A REFUSAL A MOVE ALREADY ANSWERED. The provider refused an account for access, and the conversation now runs on another
+// account of the same provider that can serve: the sandbox moved it there, or a person picked it. Until its next turn
+// clears the failure, the card says where it went in the refusal's place, rather than "No access" over a fix already made
+// (2026-10-28). The refused account's own access coming back is found only by a turn that then runs, which clears the
+// failure first, so an account that can serve here is one the conversation moved to. Whether it serves is the caller's
+// to judge (features/agents/board/cards/cardServingAccount.ts), since this layer may not read the account verdicts.
+const cardMoved = (agent: CardAgent, serving: ServingAccount | undefined): CardLine | undefined => {
+    const words = agent.failure?.trim();
+    if (failureKind(agent) !== `access` || agent.account === undefined || words === undefined || serving?.serves !== true) {
+        return undefined;
+    }
+    // The hover says what it moved past: the refusal's kind, over the provider's own words.
+    const tip = { title: failureWord(`access`), quote: words };
+    return { gist: t(`agents.agentStatus.movedTo`, { account: serving.label }), tip, icon: `arrow-right`, ink: `text-subtle`, moved: true };
+};
+
+/** The card's line: the move that answered a refusal (cardMoved), else the failure it ended on (cardFailure). */
+export const cardLine = (agent: CardAgent, serving: ServingAccount | undefined): CardLine | undefined => {
+    const moved = cardMoved(agent, serving);
+    if (moved !== undefined) {
+        return moved;
+    }
+    const failure = cardFailure(agent);
+    if (failure === undefined) {
+        return undefined;
+    }
+    const danger = failure.tone === `danger`;
+    return { gist: failure.gist, tip: failure.tip, icon: danger ? `exclamation-circle` : `exclamation-triangle`, ink: danger ? `text-danger` : `text-warning` };
 };

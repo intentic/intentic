@@ -11,6 +11,8 @@ import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.
 import { sendBlockLine, sendBlockOf, sendBlockTitle } from "../../../models/providers/sendAvailability";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { modelLabelFor, modelOptionsFor } from "../../../models/providers/providerCatalog";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
 import { atReopenPhrase, type ContinueOptions, handoffPicked, pickUpNext, pickUpStatus, pickUpWhen, pressCost } from "../../../models/conversations/endings/pickUp";
@@ -23,6 +25,11 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
+import { RouterLink } from "vue-router";
+import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
+import { useAccessWall } from "../../../models/conversations/endings/accessWall";
+import { modelsHref } from "../../../lib/routes/modelsPath";
+import { useRole } from "../../../client/sandbox/useRole";
 
 // One card for every ending that leaves work behind a live session (a dead turn, an outage, a spent allowance), and it
 // asks exactly one question: what happens next. Three lines, in the order a reader needs them — what happened, what
@@ -53,7 +60,7 @@ const props = defineProps<{
 // Enter do the same.
 const emit = defineEmits<{ (event: "continue", options?: ContinueOptions): void; (event: "continueAtReopen"): void }>();
 
-const { conversation, connected, servingState, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff } = usePaneView();
+const { conversation, connected, servingState, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff, waiting } = usePaneView();
 const continuing = computed(() => conversation.value.turn.continuing.value);
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
@@ -72,7 +79,44 @@ const now = useNow(() => counting.value);
 
 const ending = computed(() => pickUp.value?.reason);
 const accountBlock = computed(() => sendBlockOf(servingState.value, now.value));
-const status = computed(() => accountBlock.value !== undefined ? sendBlockLine(accountBlock.value) : (pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, now.value, props.spentUntil)));
+
+// No account of this conversation's provider can serve it (accessWall.ts), whatever else ended the turn: the card then
+// stands for that, with or without a pick-up. Its fix is the one bright press (connect another account, or a model of
+// another provider where one is connected), and trying the account again is a quiet one: the daemon only re-tests its
+// access with one tiny request and holds the message again if it is still off. A bright Continue there sent the message
+// back into the same refusal (2026-10-28).
+const accessWall = useAccessWall();
+const shown = computed(() => props.visible || accessWall.value !== undefined);
+// The provider as its accounts are named ("Claude", not the loop's "Claude Code"): it is an account of it that is missing.
+const wallProvider = computed(() => {
+    const refusedBy = accessWall.value?.provider;
+    return refusedBy === undefined ? `` : (providerSpec(refusedBy)?.accountLabel ?? providerLabel(refusedBy));
+});
+const wallStatus = computed(() => {
+    const standing = accessWall.value;
+    if (standing === undefined) {
+        return undefined;
+    }
+    return standing.account === undefined
+        ? t(`chat.accessWall.statusUnnamed`, { provider: wallProvider.value })
+        : t(`chat.accessWall.status`, { account: standing.account, provider: wallProvider.value });
+});
+// Connecting is a maintainer's (the daemon refuses anyone else's sign-in): below that tier the card says who can.
+const { canShip } = useRole();
+const connectTo = computed(() => modelsHref({ open: accessWall.value?.provider }));
+const retestHint = computed((): Tip => ({ title: t(`chat.accessWall.retestTitle`), note: t(`chat.accessWall.retestNote`) }));
+// Straight to the conversation, not through the pane's Continue, which holds back a press on an account that reads blocked:
+// here the person asks for exactly that attempt, and the daemon answers it with the re-test rather than a whole turn.
+const retest = (): void => {
+    if (!continuing.value && reachable.value) {
+        void conversation.value.turn.continueTurn();
+    }
+};
+const status = computed(
+    () =>
+        wallStatus.value ??
+        (accountBlock.value !== undefined ? sendBlockLine(accountBlock.value) : pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, now.value, props.spentUntil)),
+);
 
 // The account this would run on is spent until a named reopen: whatever stopped the turn, that is the wall now. A press
 // before it is refused before anything runs, so the card's solid press continues at the reopen and the press that tries
@@ -385,10 +429,10 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
 </script>
 
 <template>
-    <div v-if="visible" class="flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted">
+    <div v-if="shown" class="flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted" :data-access-wall="accessWall !== undefined || undefined">
         <!-- What happened, and the press that skips whatever is booked below. -->
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Icon :name="ready && !spent ? `pause` : `clock`" class="shrink-0" />
+            <Icon :name="accessWall !== undefined ? `lock` : ready && !spent ? `pause` : `clock`" class="shrink-0" />
             <!-- Status text has a minimum width beside shrinkable controls. -->
             <span class="min-w-[11rem] flex-1">{{ status }}</span>
             <div ref="waysAnchor" class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
@@ -406,8 +450,20 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                         resetting ? t(`chat.chatContinueStrip.resetting`) : t(`chat.chatContinueStrip.resetLimitNow`)
                     }}
                 </Button>
+                <!-- A person is needed (accessWall.ts): the fix is bright, the re-test quiet, and nothing here sends into the same refusal.
+                     Words waiting in the queue carry their own quiet press beside them (ChatHeldMessages), so it is not drawn twice. -->
+                <template v-if="accessWall !== undefined">
+                    <Button v-if="waiting.length === 0" size="small" thumb tier="quiet" :disabled="!reachable || continuing" :loading="continuing" v-tooltip.top="retestHint" @click="retest">
+                        {{ accessWall.account === undefined ? t(`chat.accessWall.tryAgain`) : t(`chat.accessWall.tryAccountAgain`, { account: accessWall.account }) }}
+                    </Button>
+                    <Button v-if="canShip" :as="RouterLink" :to="connectTo" size="small" thumb :tier="accessWall.elsewhere ? `boring` : `accent`">
+                        {{ t(`chat.accessWall.connect`, { provider: wallProvider }) }}
+                    </Button>
+                    <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.maintainerConnects`) }}</span>
+                    <ChatChooseModelButton v-if="accessWall.elsewhere" tier="accent" :label="t(`chat.accessWall.chooseAnother`)" />
+                </template>
                 <!-- A flagged turn's two ways on, both a press: the same model again, or another one picked here. -->
-                <template v-if="flagged">
+                <template v-else-if="flagged">
                     <span ref="modelsAnchor" class="flex">
                         <Button
                             v-if="otherModels.length > 0"
@@ -463,7 +519,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
         </div>
         <!-- The one question. Exactly one answer is selected, so nothing on this card can promise two automations. -->
         <TurnBreakQuestion
-            v-if="breakWall !== undefined"
+            v-if="breakWall !== undefined && accessWall === undefined"
             :ending="breakWall"
             :conversation-id="conversation.conversationId"
             :account="fallbackName"
@@ -473,7 +529,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
         />
         <!-- The second question a spent allowance asks: how the held turn continues once its cache is cold. The sandbox
              suggests a way and preselects it; the pick is the person's, and every way on above uses it. -->
-        <HandoffQuestion v-if="handoffOffer !== undefined" :offer="handoffOffer" :disabled="!connected || !reachable" @choose="pickHandoff" />
+        <HandoffQuestion v-if="handoffOffer !== undefined && accessWall === undefined" :offer="handoffOffer" :disabled="!connected || !reachable" @choose="pickHandoff" />
         <!-- What came back when the reset changed nothing: these are full sentences, so they get their own line. -->
         <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
         <!-- A sandbox too old to move a conversation: no other account is offered, and this says why and how to update. -->

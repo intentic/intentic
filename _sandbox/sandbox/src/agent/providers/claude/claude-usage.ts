@@ -1,6 +1,7 @@
 import { retryAfterMs } from "@intentic/base/async";
 import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import type { UsageWindow, WindowGates } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { isOrgDisabledText } from "../../../engines/failure-sentences.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { HeadroomSource } from "../../../usage/headroom.js";
 import type { AnswerWatch } from "../../../usage/drift/answer-vocabulary.js";
@@ -169,11 +170,14 @@ const READ_TIMEOUT_MS = 8_000;
 const BACKGROUND_FLOOR_MS = 5 * 60_000;
 
 // `models` is what an account serves, where the catalog can say: a reading is checked against it (headroom.ts `served`).
+// `seatHint` hears each account whose read was refused in words that may mean its organisation switched Claude Code off
+// (isOrgDisabledText), on every such read: the seat check rations its own probe (claude-seat-check.ts `hinted`).
 export const claudeHeadroomSource = (
     store: ClaudeStore,
     fetchFn: typeof fetch = fetch,
     models?: (accountId: string) => Promise<readonly ModelRef[]>,
     watch?: AnswerWatch,
+    seatHint?: (accountId: string) => void,
 ): HeadroomSource => ({
     targets: async () =>
         (await store.list())
@@ -188,9 +192,14 @@ export const claudeHeadroomSource = (
                 served: async () => (models === undefined ? [] : models(account.id)),
                 read: async () => {
                     const token = await ensureFreshToken(store, account.id);
-                    return token === undefined
-                        ? { windows: [], failure: "the sign-in could not be refreshed" }
-                        : readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS, watch);
+                    if (token === undefined) {
+                        return { windows: [], failure: "the sign-in could not be refreshed" };
+                    }
+                    const reading = await readClaudeUsage(token, fetchFn, READ_TIMEOUT_MS, watch);
+                    if (reading.failure !== undefined && isOrgDisabledText(reading.failure)) {
+                        seatHint?.(account.id);
+                    }
+                    return reading;
                 },
             })),
 });

@@ -561,20 +561,40 @@ const preference = (state: AccountState): number => {
     }
 };
 
-/** The account an unnamed turn runs on: ready by most room, then unmeasured, then at the line, then spent, blocked only when that is all there is. Ties keep the caller's order. */
-export const preferredAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
-    entries.reduce<T | undefined>((best, next) => {
-        if (best === undefined) {
-            return next;
-        }
-        const tier = preference(next.state) - preference(best.state);
-        return tier < 0 || (tier === 0 && next.state.kind === "ready" && best.state.kind === "ready" && next.state.room > best.state.room) ? next : best;
-    }, undefined);
+/** What a pick reads of an account: its verdict, and whether its organisation keeps switching it off. */
+interface RankedAccount {
+    readonly state: AccountState;
+    // Refused its entitlement twice or more in the last week (the daemon's usage/entitlement-history.ts). Absent: steady.
+    readonly flapping?: boolean | undefined;
+}
+
+/* A FLAPPING ACCOUNT RANKS BEHIND EVERY STEADY ONE OF ITS TIER, whatever its room, for the week after it serves again.
+   Claude account d8561075…'s organisation switched Claude Code off at 2026-10-27 08:44, let it serve from 21:17 to
+   00:39, and switched it off again at 10-28 08:48. Each time it served, the answered turn settled its refusal, its
+   reading showed the most room, and the pick put the next turns back on it until it was refused again. The tier still
+   comes first: a flapping account with proven room beats an unmeasured, spent or blocked one. */
+const ranksAbove = (next: RankedAccount, best: RankedAccount): boolean => {
+    const tier = preference(next.state) - preference(best.state);
+    if (tier !== 0) {
+        return tier < 0;
+    }
+    if ((next.flapping === true) !== (best.flapping === true)) {
+        return best.flapping === true;
+    }
+    return next.state.kind === "ready" && best.state.kind === "ready" && next.state.room > best.state.room;
+};
+
+/**
+ * The account an unnamed turn runs on: ready by most room, then unmeasured, then at the line, then spent, blocked only
+ * when that is all there is; within each, a flapping account after the steady ones. Ties keep the caller's order.
+ */
+export const preferredAccount = <T extends RankedAccount>(entries: readonly T[]): T | undefined =>
+    entries.reduce<T | undefined>((best, next) => (best === undefined || ranksAbove(next, best) ? next : best), undefined);
 
 /**
  * The roomiest account with proven room, or none: what a move off a refused account may land on. Ties keep the caller's
  * order. An account at the line is left out: a move there could be refused in turn, and two such accounts would hand the
  * turn back and forth.
  */
-export const roomiestAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
+export const roomiestAccount = <T extends RankedAccount>(entries: readonly T[]): T | undefined =>
     preferredAccount(entries.filter((entry) => entry.state.kind === "ready" && entry.state.room > 0));

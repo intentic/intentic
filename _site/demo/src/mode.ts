@@ -270,6 +270,31 @@ const resolveModels = (): boolean => {
 /** Whether this page load's sandbox has nothing a chat can run on, resolved once before boot. */
 export const noModels = resolveModels();
 
+// WHETHER AN ORGANIZATION HAS TURNED OFF CLAUDE CODE for every Claude account here, from `?seats=`, sticky per tab like
+// the models above: `?seats=off` is the wall no account of the provider gets past, which only a person can fix (the
+// chat's access card, `@intentic/web` models/conversations/endings/accessWall.ts, and the account rows' "Off" line).
+// No mode shows it, since every Claude chat on the page then stops. `?seats=on` ends it.
+
+const SEATS_KEY = `intentic.demo.seats`;
+
+const resolveSeats = (): boolean => {
+    const url = new URL(window.location.href);
+    const asked = url.searchParams.get(`seats`);
+    if (asked !== null) {
+        url.searchParams.delete(`seats`);
+        window.history.replaceState(window.history.state, ``, url);
+        if (asked === `off`) {
+            window.sessionStorage.setItem(SEATS_KEY, `off`);
+        } else {
+            window.sessionStorage.removeItem(SEATS_KEY);
+        }
+    }
+    return window.sessionStorage.getItem(SEATS_KEY) === `off`;
+};
+
+/** Whether every Claude account on this page load is turned off by its organization, resolved once before boot. */
+export const seatsOff = resolveSeats();
+
 // The look and the audience the desk recording is read in, the same three keys the desk PROFILE seeds (@intentic/constants
 // profile.ts): light, unskinned, a maker. index.html's pre-paint script writes them for the first frame; this writes
 // them on a switch, and takes them back on the way out so the code recording opens in the reader's own light again.

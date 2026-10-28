@@ -115,6 +115,7 @@ import { skippedUpdateDocument } from "../system/updates/update-skip.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
 import { providerAnswersDocument } from "../usage/drift/answer-vocabulary.js";
+import { entitlementRefusalsDocument } from "../usage/entitlement-history.js";
 import { modelRefusalsDocument } from "../usage/model-refusals.js";
 import { providerRefusalsDocument } from "../usage/provider-refusals.js";
 import { refusalLedgerStep } from "../usage/refusal-ledger-step.js";
@@ -174,10 +175,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     ciDocument,
     composerDraftsDocument,
     projectDeliveriesDocument,
+    conversationRecordDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
@@ -222,11 +223,11 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
+    credentialReleasesDocument,
+    sandboxKeyringKeysDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    credentialReleasesDocument,
-    sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,
     keyringDevicesDocument,
@@ -258,6 +259,7 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     workspaceIdentityDocument,
     accountUsageDocument,
     providerAnswersDocument,
+    entitlementRefusalsDocument,
     modelRefusalsDocument,
     providerRefusalsDocument,
     runOutsDocument,

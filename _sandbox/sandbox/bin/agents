@@ -68,11 +68,18 @@ LOOK UP — reach for these instead of searching /history by hand
                                        name and target), asked (a question card), notice, run
 
 SAY SOMETHING TO ANOTHER CONVERSATION, OR PRESS ITS CONTINUE
-  agents message <handle> '<text>'     what a person does by typing into that conversation's chat: the words
-                                       are steered into its live turn, or open one on its own routing if it
-                                       is idle. Any conversation, not just a subagent of this one — which is
-                                       what \`send\` below is limited to. The message is attributed to this
-                                       conversation and read as a peer's words, not as its owner's
+  agents message <handle> '<text>' [--wait] [--timeout <seconds>]
+                                       what a person does by typing into that conversation's chat: the words
+                                       are steered into its live turn, open one on its own routing if it is
+                                       idle, or wait in its queue behind a turn that takes no words. The
+                                       answer says which, and an opened turn is only opened: the provider can
+                                       still refuse it. If that turn fails or is held, this conversation is
+                                       told why, once. --wait blocks until the turn the message reached ends
+                                       (--timeout, default 600, at most 1800) and prints how it ended and the
+                                       head of its last reply. Any conversation, not just a subagent of this
+                                       one — which is what \`send\` below is limited to. The message is
+                                       attributed to this conversation and read as a peer's words, not as
+                                       its owner's
   agents resume <handle> [--provider <id> --model <id>] [--effort <tier>] [--account <id>] [--harness <loop>]
                                        press another conversation's Continue, as the editor's "Send again"
                                        does: a turn a spent allowance or a stop held runs again whole, with
@@ -929,21 +936,66 @@ const answerChild = async (argv) => {
     process.stdout.write(`${note ?? "answered"}\n`);
 };
 
+// The ceiling the daemon holds a wait to (fleet.routes.ts), said here so a longer one is refused in these words.
+const MESSAGE_WAIT_MAX_S = 1800;
+
+// How the turn a message reached ended, as `--wait` prints it (fleet-message-wait.ts MessageTurnEnding). A failed turn
+// exits 1, so a script reads the failure without parsing the words.
+const writeEnding = (to, ending) => {
+    const how = {
+        finished: "the turn finished",
+        stopped: "the turn was stopped before it finished",
+        failed: `the turn failed: ${ending.failure ?? "the daemon did not say why"}`,
+    }[ending.ended];
+    process.stdout.write(`ended (run ${ending.run}): ${how}\n`);
+    if (ending.holding !== undefined) {
+        process.stdout.write(`${ending.holding}\n`);
+    }
+    if (ending.reply === "") {
+        process.stdout.write("It said nothing.\n");
+    } else {
+        const more = ending.replyCut === undefined ? "" : `\n(${ending.replyCut} more characters: agents show ${to} --transcript --last 1)`;
+        process.stdout.write(`its last reply:\n${ending.reply}${more}\n`);
+    }
+    if (ending.ended === "failed") {
+        process.exit(1);
+    }
+};
+
+// What a wait that gave up before the turn ended says instead.
+const WAIT_GAVE_UP = {
+    timeout: (to, seconds) => `Still not ended after ${seconds}s. \`agents show ${to}\` follows it; if it fails or is held, this conversation is told why.`,
+    message: (to) => `Something was said into your turn while you waited: read it. \`agents show ${to}\` says how the turn is going.`,
+    aborted: (to) => `The wait was cut off. \`agents show ${to}\` says how the turn is going.`,
+};
+
 // Says something to ANY conversation in this workspace, which `send` cannot: that one reaches only this
-// conversation's own children. Steered into a live turn, or opening one on the target's own routing.
+// conversation's own children. Steered into a live turn, opening one on the target's own routing, or queued behind one;
+// `--wait` (or a `--timeout`, which implies it) answers once that turn has ended.
 const message = async (argv) => {
-    const { positional } = parseFlags(argv, []);
+    const { flags, positional } = parseFlags(argv, ["wait", "timeout"], ["wait"], undefined, usageOf("message"));
     const [handle, ...rest] = positional;
     const words = rest.join(" ").trim();
     if (handle === undefined || words === "") {
-        return die(`agents: message needs a handle and something to say\n\n${USAGE}`);
+        return die(`agents: message needs a handle and something to say\n\n${usageOf("message")}`);
     }
-    const { status, text } = await call("POST", "/fleet/message", JSON.stringify({ to: handle, message: words }));
+    const seconds = flags.timeout === undefined ? undefined : Number(flags.timeout);
+    if (seconds !== undefined && !(seconds > 0 && seconds <= MESSAGE_WAIT_MAX_S)) {
+        return die(`agents: --timeout takes seconds, more than 0 and at most ${MESSAGE_WAIT_MAX_S}`);
+    }
+    const wait = flags.wait === true || seconds !== undefined;
+    const body = { to: handle, message: words, ...(wait ? { wait: true } : {}), ...(seconds === undefined ? {} : { timeoutSeconds: seconds }) };
+    const { status, text } = await call("POST", "/fleet/message", JSON.stringify(body));
     if (status !== 200) {
         return dieWithCandidates(text);
     }
-    const { to, note } = JSON.parse(text);
+    const { to, note, waited } = JSON.parse(text);
     process.stdout.write(`${to}: ${note ?? "delivered"}\n`);
+    if (waited?.outcome === "ended") {
+        writeEnding(to, waited.ending);
+    } else if (waited !== undefined) {
+        process.stdout.write(`${(WAIT_GAVE_UP[waited.outcome] ?? WAIT_GAVE_UP.aborted)(to, seconds ?? 600)}\n`);
+    }
 };
 
 // A refusal that names candidates (an ambiguous handle) lists them rather than making the caller search again.
@@ -1023,7 +1075,7 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     // Before any verb runs, so `agents list --help` is the usage and not the list.
     if (rest.includes("--help") || rest.includes("-h")) {
-        process.stdout.write(`${command === "find" ? usageOf("find") : USAGE}\n`);
+        process.stdout.write(`${command === "find" || command === "message" ? usageOf(command) : USAGE}\n`);
         return;
     }
     if (command === "show") return show(rest);

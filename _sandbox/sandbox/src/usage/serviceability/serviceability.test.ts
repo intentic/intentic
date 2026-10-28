@@ -23,11 +23,16 @@ const deps = (params: {
     readonly routed?: Partial<TranslatorAccounts>;
     // The accounts a provider's own door lists (Cursor, Devin, the minted providers).
     readonly doors?: Record<string, readonly OauthAccount[]>;
+    // The accounts the ledger's history calls flapping (entitlement-history.ts).
+    readonly flapping?: readonly string[];
 }): ServiceabilityDeps => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...(params.accounts ?? [])] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => params.refusals ?? {} }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
+        onFile: async () => params.refusals ?? {},
+        flapping: async () => new Set(params.flapping),
+    }),
     providerAccounts: async (provider) => [...(params.doors?.[provider] ?? [])],
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
         accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [], ...params.routed }),
@@ -80,6 +85,23 @@ test("a revoked sign-in, a lost seat and a standing entitlement refusal each tak
     expect(await serviceability(services, "claude", "seatless")).toEqual({ kind: "blocked", fix: "admin", reason: "Your organization has disabled Claude Code." });
     expect(await serviceability(services, "claude", "refused")).toEqual({ kind: "blocked", fix: "admin", reason: "Not entitled." });
     expect(await serviceability(services, "claude", "missing")).toEqual({ kind: "unknown" });
+});
+
+// 2026-10-27/28: an account its organisation switched off, on again for an evening, and off again, read the most room
+// each time it served, and took the next turns until it was refused again.
+test("an account its organisation keeps switching off is marked on its row, and picked only after its steady equals", async () => {
+    const usage = { flapping: reading(window({ utilization: 5 })), steady: reading(window({ utilization: 80 })) };
+    const services = deps({ accounts: [account("flapping"), account("steady")], usage, flapping: ["flapping"] });
+    expect(await serviceabilities(services, "claude")).toEqual([
+        { id: "flapping", state: { kind: "ready", room: 95 }, flapping: true },
+        { id: "steady", state: { kind: "ready", room: 20 } },
+    ]);
+    expect(await pick(services)).toBe("steady");
+    // Still ahead of an account nothing has measured, and still the pick where it is the only one with room.
+    expect(await pick(deps({ accounts: [account("unmeasured"), account("flapping")], usage, flapping: ["flapping"] }))).toBe("flapping");
+    // A history that cannot be read costs the ranking, never the pick.
+    const unreadable = { ...services, providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }) };
+    expect(await pick(unreadable)).toBe("flapping");
 });
 
 test("a standing limit refusal reads its account as spent, until a reading with room lands after it", async () => {

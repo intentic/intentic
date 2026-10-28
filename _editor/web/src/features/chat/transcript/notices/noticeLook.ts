@@ -24,7 +24,7 @@ export const isFreshStart = (message: ChatMessage): boolean => message.role === 
 export const isTurnChecks = (message: ChatMessage): boolean => message.agentNotice?.source === TURN_CHECKS_SOURCE;
 
 /** The row's glyph: the end-of-turn checks', a runtime notice's level, a failure, the board's own watch glyph, an
- *  answered need, another conversation, or a child reporting back. */
+ *  answered need, another conversation, a child reporting back, or a move to another account. */
 export const noticeIconOf = (message: ChatMessage, failed: boolean): IconName => {
     if (isTurnChecks(message)) {
         return `list-check`;
@@ -45,6 +45,10 @@ export const noticeIconOf = (message: ChatMessage, failed: boolean): IconName =>
     }
     if (message.agentWords !== undefined) {
         return message.agentWords.kind === `peer` ? `comments` : `users`;
+    }
+    // The conversation went on elsewhere: the sandbox moved it to another account, or a person switched it in the composer.
+    if (message.noticeCode?.code === `accountMoved` || message.switched === true) {
+        return `arrow-right`;
     }
     return `info-circle`;
 };

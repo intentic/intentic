@@ -69,17 +69,23 @@ test("refuses what a press cannot reach: an unknown handle, the presser itself, 
     expect(started).toEqual([]);
 });
 
-test("a move to another provider drops the old one's account, loop and tier; a model swap drops only the tier", () => {
+// The conversation's own account is never named by a press: naming it would pin the re-run to it, and a named account
+// is never moved off where it cannot serve. Planning fills it in (routing.ts routingFor) and moves it where it must.
+test("a move to another provider drops the old one's loop and tier; a model swap drops only the tier; only an asked account is named", () => {
     const entry = conversationEntry({
         id: "c",
         profile: { provider: "cursor", harness: "native", model: "claude-opus-4-8", account: "cursor-acct", effort: "high" },
     });
-    expect(pressRouting(entry, {})).toMatchObject({ agent: "cursor", model: "claude-opus-4-8", account: "cursor-acct", effort: "high" });
+    const own = pressRouting(entry, {});
+    expect(own).toMatchObject({ agent: "cursor", model: "claude-opus-4-8", effort: "high" });
+    expect(own.account).toBeUndefined();
+    expect(pressRouting(entry, { account: "other-acct" })).toMatchObject({ agent: "cursor", account: "other-acct" });
     const moved = pressRouting(entry, { provider: "claude", model: "claude-opus-5-5" });
     expect(moved).toMatchObject({ agent: "claude", model: "claude-opus-5-5" });
     expect(moved.account).toBeUndefined();
     expect(moved.effort).toBeUndefined();
     const swapped = pressRouting(entry, { model: "claude-opus-5-5" });
-    expect(swapped).toMatchObject({ agent: "cursor", model: "claude-opus-5-5", account: "cursor-acct" });
+    expect(swapped).toMatchObject({ agent: "cursor", model: "claude-opus-5-5" });
+    expect(swapped.account).toBeUndefined();
     expect(swapped.effort).toBeUndefined();
 });

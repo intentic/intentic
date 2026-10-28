@@ -198,6 +198,20 @@ const NOT_ENTITLED_PHRASES = [ORG_DISABLED, "claude code is not available"].map(
 
 export const isEntitlementRefusalText = (text: string): boolean => NOT_ENTITLED_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));
 
+/* Anthropic's API refusing a sign-in its organisation no longer lets through. Answering a Messages request, it is the
+   seat refused: the CLI reads exactly these words on a 401 or 403 and prints ORG_DISABLED for them, so the raw body the
+   seat probe reads (claude-seat-check.ts) never holds the CLI's sentence. Answering the usage endpoint it is only a hint:
+   account d8561075… read it there at 2026-10-27 19:54 and served turns from 21:17. It came back at 10-28 06:58, two
+   hours before a turn was refused (08:48), so the headroom poll hands the account to the probe, whose request decides
+   (claude-usage.ts); the read itself never files a refusal.
+   allow(dependency-text): Anthropic's API, as the Claude CLI matches it; an unseen wording loses the probe's verdict and
+   the early hint, while a refused turn still files the mark through the CLI's category. */
+const ORG_OAUTH_DISALLOWED = "oauth authentication is currently not allowed for this organization";
+
+// Words that say the organisation switched the seat off, in the CLI's or the API's own; how far to believe them depends
+// on which request they answered (above).
+export const isOrgDisabledText = (text: string): boolean => isEntitlementRefusalText(text) || text.toLowerCase().includes(ORG_OAUTH_DISALLOWED);
+
 // A parameter nothing in this sandbox ever sends, refused as if the turn had asked for it: the provider's own default,
 // rejected by the provider itself. Coded as an outage, unlike other 4xx (which stay uncoded, since re-sending a
 // malformed request is a loop) — there's no request here to fix. Requires both a listed parameter and the shape of a

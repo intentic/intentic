@@ -79,7 +79,8 @@ const waitingNote = (point: SwitchPoint, moved: boolean): string => {
     return ` ${note}`;
 };
 
-// The words for what retired the session. An account the picker has no row for is said as its provider, as before.
+// The words for what the switch did to the session: a provider or loop switch retires it, an account switch carries it
+// (the daemon's switchAccount). An account the picker has no row for is said as its provider, as before.
 const segmentWords = (point: SwitchPoint): string => {
     if (point.segment === `account` && point.accountLabel !== undefined) {
         return `${t(`chat.composerSelection.switchedAccount`, { account: point.accountLabel })}${waitingNote(point, true)}`;
@@ -90,9 +91,9 @@ const segmentWords = (point: SwitchPoint): string => {
     return `${t(`chat.composerSelection.switchedProvider`, { provider: point.providerLabel })}${waitingNote(point, point.follows)}`;
 };
 
-// A provider, account or harness switch retires the session; unconditional about what carries over, since that is the
-// daemon's own record, not what this window happens to have painted. It names the part that changed: an account switch
-// said as "Switched to Claude" named the provider the chat was already on.
+// A provider or harness switch retires the session, and an account switch carries it to the other account; unconditional
+// about what carries over, since that is the daemon's own record, not what this window happens to have painted. It names
+// the part that changed: an account switch said as "Switched to Claude" named the provider the chat was already on.
 export const segmentSwitchText = (point: SwitchPoint): string | undefined => (!point.started || point.resumes ? undefined : segmentWords(point));
 
 // A model swap keeps the session and still costs something: it re-reads the whole conversation on a cold cache.
@@ -464,16 +465,22 @@ export class ComposerSelection {
         if (this.host.turn.streaming.value) {
             return;
         }
-        const text = switchNoticeText(this.switchPoint());
+        const point = this.switchPoint();
+        const text = switchNoticeText(point);
         if (text === undefined) {
             this.dropSwitchNotice();
             return;
         }
+        // A divider for a move to another account, provider or loop is marked as one, since it ends the refusals above it
+        // (chatIncidents.ts); one whose mark would change is drawn again rather than reworded under the wrong mark.
+        const moves = segmentSwitchText(point) !== undefined;
         const noticeId = this.pendingSwitchNoticeId;
-        if (noticeId !== undefined) {
+        const standing = noticeId === undefined ? undefined : this.host.transcript.messages.value.find((message) => message.id === noticeId);
+        if (noticeId !== undefined && (standing?.switched === true) === moves) {
             this.host.transcript.rewordNotice(noticeId, text);
             return;
         }
-        this.pendingSwitchNoticeId = this.host.transcript.notice(text, `upcoming`);
+        this.dropSwitchNotice();
+        this.pendingSwitchNoticeId = this.host.transcript.notice(text, `upcoming`, moves ? { switched: true } : undefined);
     }
 }

@@ -909,7 +909,7 @@ export class TurnClient {
     }
 
     // Continues a held turn on another account: one command, the daemon moving the conversation and re-running the turn
-    // there (switchAccount with `run`). `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the record.
+    // there (switchAccount with `run`). `carry` (always sent: unsent reads as true) keeps the session; false reseeds fresh.
     // `handoff`, where the held turn offers a choice, says which of the three ways it continues and wins over `carry`.
     // False, having done nothing, where no held turn is this sandbox's to move (nothing held, or another box): the caller
     // then picks the account and presses, which names it on the turn. Never offered by a sandbox too old for the command
@@ -933,7 +933,7 @@ export class TurnClient {
         try {
             const moved = await orRefusal(
                 sandboxRpc.agent.switchAccount(
-                    { conversationId: host.conversationId, account, run: true, ...(carry ? { carry } : {}), ...(handoff === undefined ? {} : { handoff }) },
+                    { conversationId: host.conversationId, account, run: true, carry, ...(handoff === undefined ? {} : { handoff }) },
                     { context: { at: host.box.value } },
                 ),
             );

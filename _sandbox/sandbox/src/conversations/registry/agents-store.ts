@@ -118,11 +118,27 @@ const ProfileSchema = z.object({
     thinking: z.boolean().optional(),
     fast: z.boolean().optional(),
     account: z.string().optional(),
+    // The account a person picked for this conversation (switch-account.ts), and when: it stands only while `account` is
+    // still that one (pinnedAccount), so any move elsewhere lifts it without every writer having to. A pinned account is
+    // kept while the cache is cold, where an unpinned one is re-placed on the account with the most room; either one is
+    // moved off when it can no longer serve (account-placement.ts). Added 2026-10-28, optional: no row before it was pinned.
+    accountPin: z.object({ account: z.string(), at: z.number() }).optional(),
     // The persona the last turn ran as: the turn's own, never carried from the one before, since the daemon runs each turn
     // under the persona it names (turn-premise.ts). Absent for an ordinary chat, and in rows written before it existed.
     actsAs: z.string().optional(),
 });
 export type StoredProfile = z.infer<typeof ProfileSchema>;
+
+/** The account a person pinned this conversation to, while it still runs there; undefined for one the sandbox placed. */
+export const pinnedAccount = (profile: Pick<StoredProfile, "account" | "accountPin">): string | undefined =>
+    profile.accountPin !== undefined && profile.accountPin.account === profile.account ? profile.account : undefined;
+
+/** The profile moved to `account`: a pin given with the move is the new one, and a pin naming another account lapses. */
+export const profileOn = (profile: StoredProfile, account: string, pin?: { readonly at: number }): StoredProfile => {
+    const { accountPin, ...rest } = profile;
+    const kept = pin === undefined ? (accountPin?.account === account ? accountPin : undefined) : { account, at: pin.at };
+    return { ...rest, account, ...opt("accountPin", kept) };
+};
 
 // How the last turn ended, not a live state (rebuilt from frames) or a land verdict (git answers that live).
 // `interrupted` is what a daemon killed mid-turn leaves. A spent allowance is its own kind, the only one with limit facts.
@@ -324,7 +340,15 @@ export const compactedSinceLastTurn = (entry: { readonly compactedTurn?: number 
     entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1;
 
 // What the conversation runs as now, as its last turn left it: the profile a turn the daemon starts on it (a wake, a
-// child's report, a peer's message) carries. Only the fields the entry keeps; placement and job are the turn's own.
+// child's report, a peer's message, a resume press) carries. Only the fields the entry keeps; placement and job are the
+// turn's own.
+//
+// Never the account. A turn's `account` means somebody named it for that turn, and a named account is never moved off
+// (blocked-account.ts), so copying the remembered one here pinned every sandbox-started turn to it: on 2026-10-28 a peer's
+// message to deft-reef-zwn8 went to an account the refusal ledger had called blocked since 08:48, was refused, and its
+// re-run was refused again, while fleet-vale-y4zj had been moved off the same account at 08:49 without a word. Left
+// unnamed, the planner fills in the remembered account (routing.ts routingFor) and moves the turn where it cannot serve,
+// carrying the session (turn-facts.ts accountRouteOf). Whoever needs the remembered account reads `entry.profile.account`.
 export const conversationProfile = (entry: PersistedAgent): TurnProfile =>
     profileOf({
         agent: entry.profile.provider,
@@ -333,7 +357,6 @@ export const conversationProfile = (entry: PersistedAgent): TurnProfile =>
         effort: entry.profile.effort,
         thinking: entry.profile.thinking,
         fast: entry.profile.fast,
-        account: entry.profile.account,
         actsAs: entry.identity.actsAs,
     });
 

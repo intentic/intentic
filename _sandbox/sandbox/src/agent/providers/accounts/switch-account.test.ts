@@ -26,24 +26,26 @@ const ranOnce = async (deps: Services): Promise<void> => {
     await deps.conversations.send(ID, { kind: "settle" }, T0).settled;
 };
 
-test("re-points the conversation and retires the session another account minted", async () => {
+// The session is the conversation's, not the account's: the model keeps everything and re-reads it once on the other
+// account. THE FAILURE THIS PREVENTS: a pick off a refused account opened a fresh session from the record, which keeps
+// far less, after the cache had long gone cold anyway (2026-10-28).
+test("re-points the conversation and carries its session to the other account", async () => {
     const deps = services();
     await ranOnce(deps);
     expect(deps.agents.entry(ID)?.sessionId).toBe("s-1");
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" })).toEqual({ kind: "moved" });
-    expect(deps.agents.entry(ID)?.profile.account).toBe("acct-b");
-    expect(deps.agents.entry(ID)?.sessionId).toBeUndefined();
+    expect([deps.agents.entry(ID)?.profile.account, deps.agents.entry(ID)?.sessionId]).toEqual(["acct-b", "s-1"]);
     expect(deps.agents.get(ID)?.account).toBe("acct-b");
 });
 
-test("keeps the session when asked to carry it, and when the account does not change", async () => {
-    const carried = services();
-    await ranOnce(carried);
-    await switchAccount(carried, { conversationId: ID, account: "acct-b", carry: true });
-    expect([carried.agents.entry(ID)?.profile.account, carried.agents.entry(ID)?.sessionId]).toEqual(["acct-b", "s-1"]);
+test("retires the session only when asked not to carry it, and never when the account does not change", async () => {
+    const fresh = services();
+    await ranOnce(fresh);
+    await switchAccount(fresh, { conversationId: ID, account: "acct-b", carry: false });
+    expect([fresh.agents.entry(ID)?.profile.account, fresh.agents.entry(ID)?.sessionId]).toEqual(["acct-b", undefined]);
     const same = services();
     await ranOnce(same);
-    await switchAccount(same, { conversationId: ID, account: "acct-a" });
+    await switchAccount(same, { conversationId: ID, account: "acct-a", carry: false });
     expect(same.agents.entry(ID)?.sessionId).toBe("s-1");
 });
 
@@ -72,10 +74,15 @@ test("asked to run, a held turn runs again at once on the account named, carried
     const pressed: unknown[] = [];
     const reopened: string[] = [];
     const sent: unknown[] = [];
+    const pinned: unknown[] = [];
     const deps = {
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => conversationEntry({ id: ID }),
             clearArchived: async (ids) => void reopened.push(...ids),
+            switchAccount: async (id, account, limit, pin) => {
+                pinned.push({ id, account, limit, pin });
+                return undefined;
+            },
         }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
             state: () => ({ resume: { held: { input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a" }, reason: "limit", ran: true } } }) as never,
@@ -101,6 +108,27 @@ test("asked to run, a held turn runs again at once on the account named, carried
     expect(reopened).toEqual([ID]);
     // What their words wait with goes on the account the press named, too.
     expect(sent).toEqual([{ kind: "queue-rerouted", routing: { agent: "claude", harness: "native", account: "acct-b" } }]);
+    // And the conversation is pinned there: a person chose it.
+    expect(pinned).toEqual([{ id: ID, account: "acct-b", limit: undefined, pin: { at: expect.any(Number) } }]);
+});
+
+// A person's pick is kept while the cache is cold, where an account the sandbox chose is re-placed on the roomiest one
+// (account-placement.ts). The pin names its account, so any later move elsewhere, the sandbox's included, lifts it.
+test("a person's pick pins the conversation to the account, and a move elsewhere lifts the pin", async () => {
+    const deps = services();
+    await ranOnce(deps);
+    expect(deps.agents.entry(ID)?.profile.accountPin).toBeUndefined();
+    await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0 + 1);
+    expect(deps.agents.entry(ID)?.profile.accountPin).toEqual({ account: "acct-b", at: T0 + 1 });
+    // A turn that binds its session on the pinned account keeps it.
+    await beginTurn(deps.conversations, { conversationId: ID, prompt: "on", isolated: false, profile: { agent: "claude", harness: "native" } }, T0 + 2);
+    deps.conversations.send(ID, { kind: "frame", frame: { kind: "session", sessionId: "s-2", account: "acct-b" } }, T0 + 2);
+    await deps.conversations.send(ID, { kind: "settle" }, T0 + 2).settled;
+    expect(deps.agents.entry(ID)?.profile).toMatchObject({ account: "acct-b", accountPin: { account: "acct-b", at: T0 + 1 } });
+    // The sandbox moving it off an account that cannot serve lifts it.
+    await deps.agents.switchAccount(ID, "acct-a");
+    expect(deps.agents.entry(ID)?.profile).toMatchObject({ account: "acct-a" });
+    expect(deps.agents.entry(ID)?.profile.accountPin).toBeUndefined();
 });
 
 // Everything a person's words wait with follows the pick: a message the door refused (an expired account), and one booked
@@ -207,7 +235,7 @@ test("without run, a held turn stays held, and its booking moves to the picked a
     const { deps, pressed, moved, sent } = heldOnPick({ "acct-b": FULL_B }, [REFUSED_B]);
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0)).toEqual({ kind: "moved" });
     expect(pressed).toEqual([]);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: REOPEN_B });
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: true, reopensAt: REOPEN_B });
     // The card is re-stated in the same write: the picked account's reset; the re-run its `next` derives is the hold's.
     expect(moved).toEqual([["acct-b", { resetsAt: REOPEN_B }]]);
     expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: sendableAt(REOPEN_B) });
@@ -218,7 +246,7 @@ test("without run, a held turn stays held, and its booking moves to the picked a
 test("a pick onto an account with room clears the wait rather than keeping the refused account's", async () => {
     const { deps, moved, sent } = heldOnPick({ "acct-b": claudeReading({ five_hour: { utilization: 40, resetsAt: REOPEN_B } }, T0) });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
-    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: reopenedBy(T0) });
+    expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: true, reopensAt: reopenedBy(T0) });
     // No clock on the card, and the re-run booked for now, not the grace after a provider's reset: the next pass sends it.
     expect(moved).toEqual([["acct-b", {}]]);
     expectDueNow(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")?.at);

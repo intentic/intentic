@@ -22,6 +22,7 @@ import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomService } from "../../usage/headroom.js";
 import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } from "../../usage/model-refusals.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
+import { entitlementRefusalsDocument, fileEntitlementHistory } from "../../usage/entitlement-history.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { fileRunOutStore, runOutsDocument, type RunOutStore } from "../../usage/run-outs.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
@@ -142,6 +143,7 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
         usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
         providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), {
             log,
+            history: fileEntitlementHistory(join(historyRoot, entitlementRefusalsDocument.path)),
             accountsOf: async (provider) => {
                 const known = AgentProviderSchema.safeParse(provider);
                 return known.success ? accountFactsOf(whole(), known.data) : [];

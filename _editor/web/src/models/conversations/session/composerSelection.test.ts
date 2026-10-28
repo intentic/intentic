@@ -20,6 +20,8 @@ import { type TranscriptHost, TranscriptView } from "./transcriptView";
 // The provider as the picker heads it and the placeholder says it ("Ask Codex…"), never the account tab's "ChatGPT".
 const providerName = providerLabel;
 const CARRIED = `your next message starts a fresh session with the conversation so far carried over.`;
+// An account switch keeps the session (the daemon's switchAccount carries it): only a loop or provider switch starts over.
+const SESSION_COMES = `the session comes along, and its next reply re-reads the conversation once without the cache.`;
 const FRESH = (name: string | undefined): string => `Switched to ${name}: ${CARRIED}`;
 const WAITING_ONE = `The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick.`;
 const FOLLOW_ONE = `The message already waiting goes there too.`;
@@ -107,7 +109,7 @@ describe(`the words a switch owes`, () => {
 
     // The reported bug: an account switch on Claude read "Switched to Claude", the provider the chat was already on.
     it(`names the part that retired the session: the account by its row's name, the loop, else the provider`, () => {
-        expect(segmentSwitchText({ ...MOVED, segment: `account`, accountLabel: `Claude Pro` })).toBe(`Switched to the Claude Pro account: ${CARRIED}`);
+        expect(segmentSwitchText({ ...MOVED, segment: `account`, accountLabel: `Claude Pro` })).toBe(`Switched to the Claude Pro account: ${SESSION_COMES}`);
         // An account the picker has no row for is said as its provider, rather than as an opaque id.
         expect(segmentSwitchText({ ...MOVED, segment: `account` })).toBe(FRESH(`Codex`));
         expect(segmentSwitchText({ ...MOVED, segment: `loop`, loopLabel: `OpenCode` })).toBe(`Switched to running through OpenCode: ${CARRIED}`);
@@ -122,7 +124,7 @@ describe(`the words a switch owes`, () => {
         expect(modelSwitchText({ ...MOVED, waiting: 2, follows: true })).toBe(`Switched to Haiku ${FOLLOW_TWO}`);
         // An account move always takes them along: the daemon moves the conversation's waiting words with it.
         expect(segmentSwitchText({ ...MOVED, waiting: 2, segment: `account`, accountLabel: `Claude Pro` })).toBe(
-            `Switched to the Claude Pro account: ${CARRIED} ${FOLLOW_TWO}`,
+            `Switched to the Claude Pro account: ${SESSION_COMES} ${FOLLOW_TWO}`,
         );
     });
 

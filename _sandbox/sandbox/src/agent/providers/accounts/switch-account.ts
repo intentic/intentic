@@ -6,7 +6,8 @@ import { opt } from "../../../opt.js";
 import { reopenedBy } from "../../../conversations/actor/limit-booking.js";
 
 // Repoint a conversation's account; run resumes a held turn immediately, while a plain picker change starts nothing.
-// Retire the previous account's session unless carry is set, and reroute usage holds plus held/queued/booked messages to the chosen account.
+// Carry the session to the chosen account unless `carry: false` or a summary hand-off says otherwise, and reroute usage
+// holds plus held/queued/booked messages to it.
 // Recompute the hold's reopen time; a person's pick also triggers a seat-marked Claude account's async recheck.
 
 // When the picked account lets the held turn through, in epoch seconds: its reset while it reads spent (absent when it
@@ -34,6 +35,25 @@ const reopeningOf = async (
     return wall.reopensAt === undefined ? {} : { reopensAt: wall.reopensAt, shown: wall.reopensAt };
 };
 
+/**
+ * Whether the session goes with the switch, unless the switch says otherwise. The move stays inside the provider's own
+ * runtime, and the session is the conversation's, not the account's, so the model keeps everything and re-reads it once
+ * on the other account. Only the cache is lost, and a cold cache is lost already. A fresh session opened from the record
+ * keeps far less: on the hand-off bench the record alone answered 50% of probe questions, against 93% for the carried
+ * session (limit-handoff.ts). On 2026-10-28 a pick away from a refused account opened that fresh session, after fifteen
+ * idle hours in which the cache had long expired. A trimmed copy is cut from the session as well, so it is kept whenever
+ * the hand-off carries or trims it. A spent allowance's held turn that offers a choice of ways on is the exception: left
+ * unasked, the way its offer suggests for the session's size decides (handoff-way.ts handoffFor), so a session too large
+ * to re-read whole is trimmed or summarised rather than carried by default.
+ */
+const carriesSession = (input: Pick<SwitchAccount, "carry" | "handoff">, state: ReturnType<Services["conversations"]["state"]>): boolean => {
+    if (input.handoff !== undefined) {
+        return input.handoff === "carry" || input.handoff === "trim";
+    }
+    const offered = state?.resume.held?.reason === "limit" && state.resume.held.handoff !== undefined;
+    return input.carry ?? !offered;
+};
+
 export type AccountSwitch =
     | { readonly kind: "moved"; readonly run?: string }
     // No such conversation.
@@ -48,16 +68,15 @@ export const switchAccount = async (
     now: number = Date.now(),
 ): Promise<AccountSwitch> => {
     const { conversationId, account, run: rerun, handoff } = input;
-    // A trimmed copy is cut from the session as well, so it is kept whenever the hand-off carries or trims it.
-    const carry = handoff === undefined ? input.carry === true : handoff === "carry" || handoff === "trim";
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
         return { kind: "unknown" };
     }
+    const state = services.conversations.state(conversationId);
+    const carry = carriesSession(input, state);
     if (entry.profile.provider === "claude") {
         void services.claudeSeatCheck.recheck(account, { force: true });
     }
-    const state = services.conversations.state(conversationId);
     const held = rerun === true ? state?.resume.held : undefined;
     if (held !== undefined) {
         const { agent, harness } = withRuntimeDefaults(held.input);
@@ -67,6 +86,9 @@ export const switchAccount = async (
         const run = await services.turns.resume(conversationId, routing);
         if (run !== undefined) {
             followPick(services, conversationId, routing);
+            // The pick is the person's, so it holds while the cache is cold (account-placement.ts); the session frame
+            // that binds the account keeps a pin on the account it binds.
+            await services.agents.switchAccount(conversationId, account, undefined, { at: now });
             return { kind: "moved", run: run.id };
         }
         // A hold a press does not answer (an outage, a credential being re-minted) still takes the new account.
@@ -75,8 +97,10 @@ export const switchAccount = async (
         return { kind: "busy" };
     }
     const limitHold = state?.resume.held?.reason === "limit" && !state.resume.held.fired ? state.resume.held : undefined;
+    // Every switch through here is a person's pick: it pins the conversation to the account (agents-store.ts accountPin).
+    const pin = { at: now };
     if (limitHold === undefined) {
-        await services.agents.switchAccount(conversationId, account);
+        await services.agents.switchAccount(conversationId, account, undefined, pin);
     } else {
         const reopening = await reopeningOf(services, { provider: withRuntimeDefaults(limitHold.input).agent, account, model: limitHold.input.model }, now);
         services.conversations.send(conversationId, {
@@ -90,7 +114,7 @@ export const switchAccount = async (
             services.conversations.send(conversationId, { kind: "handoff-chosen", handoff });
         }
         // The card's `next` reads the re-pointed hold, so the switch's own broadcast already says when the turn now goes.
-        await services.agents.switchAccount(conversationId, account, opt("resetsAt", reopening.shown));
+        await services.agents.switchAccount(conversationId, account, opt("resetsAt", reopening.shown), pin);
     }
     followPick(services, conversationId, { ...withRuntimeDefaults({ agent: entry.profile.provider, harness: entry.profile.harness }), account });
     if (entry.profile.account !== account && !carry) {

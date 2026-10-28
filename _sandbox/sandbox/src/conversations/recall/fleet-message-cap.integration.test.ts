@@ -6,6 +6,7 @@ import type { Services } from "../../composition.js";
 import { beginTurn } from "../actor/conversation-actors.testing.js";
 import { memoryFleet } from "../registry/agents-registry.testing.js";
 import { messageConversation } from "./fleet-message.js";
+import { messageDaemon } from "./fleet-message.testing.js";
 
 // The hourly ceiling on turns one conversation's `agents message` may start elsewhere, across a restart: a second daemon
 // on the same history volume, with nothing of the first one's memory, still counts the turns the first one started.
@@ -16,21 +17,8 @@ const daemon = async (historyRoot: string) => {
     await fleet.agents.init();
     await beginTurn(fleet.conversations, { conversationId: "target", isolated: false, prompt: "earlier", profile: { agent: "claude", harness: "native" } }, 1);
     await fleet.conversations.send("target", { kind: "settle" }, 2).settled;
-    let started = 0;
-    const services = unstubbed<Services>("services", {
-        agents: fleet.agents,
-        conversations: fleet.conversations,
-        config: unstubbed<Services["config"]>("config", { historyRoot }),
-        turns: unstubbed<Services["turns"]>("turns", {
-            steer: async () => false,
-            start: async () => {
-                started += 1;
-                return { id: `run-${started}`, async *frames() {} };
-            },
-        }),
-        logger: unstubbed<Services["logger"]>("logger", { info: () => {} }),
-    });
-    return { services, started: () => started };
+    const { services, started } = messageDaemon(fleet, { config: unstubbed<Services["config"]>("config", { historyRoot }) });
+    return { services, started: () => started.length };
 };
 
 test("a sender's hourly budget still counts the turns it started before the daemon restarted", async () => {

@@ -165,7 +165,7 @@ test("a task handed over runs there, its report comes back as the parent's wake,
     ]);
 
     // The turn over there ends; the follower's long poll hears it and the parent is woken with the report.
-    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms." });
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, run: "run-1", actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms." });
     await until("the child settles", () => dev?.roster()[0]?.status === "completed");
     expect(dev.linked.report(handed.id)).toBe("p99 is 210ms.");
     await until("the parent is woken", () => (dev?.wakes.length ?? 0) > 0);
@@ -199,7 +199,7 @@ test("a follower backing off from a far side that stopped answering asks again t
     }
     await until("the follower misses", () => dev?.roster()[0]?.summary?.includes("did not answer") === true);
     const remote = ops.said[0]?.turn.conversationId ?? "";
-    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, actor: undefined, speaker: undefined, failure: undefined, closing: "Seven." });
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, run: "run-2", actor: undefined, speaker: undefined, failure: undefined, closing: "Seven." });
     down = false;
     // The agent listing its links is an answered call on this one: the follower's five-second backoff ends there.
     const started = Date.now();
@@ -291,7 +291,7 @@ test("a task the far side took before the daemon stopped, unfiled here, is not a
     // The same task over there, followed here: one turn, never a second.
     expect(ops.said).toHaveLength(1);
     expect(dev.roster()[0]?.linked?.conversationId).toBe(ops.said[0]?.turn.conversationId);
-    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: ops.said[0]?.turn.conversationId ?? "", actor: undefined, speaker: undefined, failure: undefined, closing: "Three." });
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: ops.said[0]?.turn.conversationId ?? "", run: "run-3", actor: undefined, speaker: undefined, failure: undefined, closing: "Three." });
     await until("the child settles", () => dev?.roster()[0]?.status === "completed");
 });
 
@@ -303,7 +303,7 @@ test("a task that settled before the daemon stopped still hands its report after
     if (!handed.ok) {
         throw new Error(handed.message);
     }
-    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: ops.said[0]?.turn.conversationId ?? "", actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms." });
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: ops.said[0]?.turn.conversationId ?? "", run: "run-4", actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms." });
     await until("the child settles", () => before.roster()[0]?.status === "completed");
     before.linked.close();
 

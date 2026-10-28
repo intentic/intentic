@@ -59,7 +59,9 @@ const continuationItem = (services: Services, ask: ContinueAsk, id: string): Omi
     const turn = {
         ...profile,
         ...profileOf({ agent: routing?.agent ?? profile.agent, harness: routing?.harness ?? profile.harness }),
-        ...opt("account", routing?.account ?? profile.account),
+        // Only a press that names an account names one: the conversation's own is filled in at planning, and moved off
+        // there where it cannot serve (agents-store.ts conversationProfile).
+        ...opt("account", routing?.account),
         ...opt("model", routing?.model ?? profile.model),
         conversationId: ask.conversationId,
         prompt: "",

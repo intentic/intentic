@@ -317,6 +317,7 @@ export const recordingTurnStores = (
                 settle: async (provider, { account, model, askedAt }) =>
                     void writes.refusalsCleared.push({ provider, account, ...opt("model", model), ...opt("askedAt", askedAt) }),
                 drop: async () => false,
+                flapping: async () => new Set(),
                 onChange: () => () => {},
             },
             // Every other member answers as the inert headroom above does.

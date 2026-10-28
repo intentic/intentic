@@ -15,6 +15,9 @@ export interface DomainEventMap {
     // (_sandbox/sandbox/docs/subsystems.md).
     readonly "run.settled": {
         readonly conversationId: string;
+        // Which run it was: what tells the turn a message opened from the ones before and after it on the same
+        // conversation (conversations/recall/fleet-message-outcome.ts).
+        readonly run: string;
         // Who asked for the turn (seams/turn-starter.ts); undefined for one the daemon started itself.
         readonly actor: string | undefined;
         // The same, typed: what tells a person at the keyboard from a program holding a token they minted.

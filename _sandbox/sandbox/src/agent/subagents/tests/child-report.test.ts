@@ -51,6 +51,7 @@ const doorsOf = (
 
 const settledOf = (over: Partial<DomainEventMap["run.settled"]> = {}): DomainEventMap["run.settled"] => ({
     conversationId: "sub-1",
+    run: "run-1",
     actor: childActor("parent-1"),
     speaker: { kind: "agent", conversationId: "parent-1" },
     failure: undefined,

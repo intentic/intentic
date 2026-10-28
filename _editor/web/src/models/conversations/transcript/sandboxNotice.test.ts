@@ -6,6 +6,7 @@ import { RESUME_NOTES, type ResumeReason, resumeDisclosure, resumeNoticeRow, wit
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { watchWakePrompt } from "@intentic/sandbox-contract/events/watch-wake";
 import { foldTurn, userRow } from "@intentic/sandbox-contract/transcript-fold";
+import { accountMovedRow } from "@intentic/sandbox-contract/text/notice-rows";
 import { setLocale } from "@intentic/ui/i18n";
 import { noticeFailure, noticeLine, refusalWords } from "./sandboxNotice";
 
@@ -104,6 +105,10 @@ const DAEMON: readonly TranscriptRow[] = [
         text: `The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.`,
         noticeCode: noticeCode({ code: `restartInterrupted` }),
     },
+    // A turn moved onto another account before it ran (turn-plan.ts), for each reason a move has.
+    accountMovedRow({ why: `refused`, from: `Work`, to: `radarsu@gmail.com`, said: `Your organization has disabled Claude Code.` }),
+    accountMovedRow({ why: `reach`, from: `Owner's`, to: `Team` }),
+    accountMovedRow({ why: `cold`, from: `Work`, to: `Home` }),
 ];
 
 // A re-run's row for every reason that has one, read off the prompt the re-run was sent with.

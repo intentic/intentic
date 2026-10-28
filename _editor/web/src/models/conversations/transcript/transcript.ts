@@ -13,6 +13,9 @@ export interface ChatMessage extends TranscriptRow {
     readonly id: number;
     // True for a row this window drew, not the daemon's record; recordedRows excludes it, replay never restores it.
     readonly local?: true;
+    // A row this window drew for a pick in the composer that moves the conversation (another account, provider or loop):
+    // it ends the refusals above it as the sandbox's own move does, so they fold into it (chatIncidents.ts).
+    readonly switched?: true;
     // Where this row sits in the daemon's record, for a row read from it: the last such row is where this window's next
     // read of the record carries on from (recordCursor), and the first is where paging back starts. Absent on a live
     // run's rows until the record holds them, and on rows this window drew.

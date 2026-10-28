@@ -498,7 +498,8 @@
             "watchingConditions": "Obserwuje {count} warunek | Obserwuje {count} warunki | Obserwuje {count} warunków",
             "unknownCommand": "Nieznane polecenie",
             "warned": "Ostrzeżenie",
-            "yourDeletion": "Twoje usunięcie"
+            "yourDeletion": "Twoje usunięcie",
+            "movedTo": "Przeniesiono na {account}"
         },
         "agentsView": {
             "agentResolveConflict": "Niech agent rozwiąże konflikt?",
@@ -3214,6 +3215,11 @@
                 "anotherModel": "Przełączono na inny model",
                 "fresh": ": ta wiadomość rozpoczęła nową sesję, do której przeszła dotychczasowa rozmowa.",
                 "same": ": ta sama sesja, więc model raz czyta rozmowę od nowa."
+            },
+            "accountMoved": {
+                "refused": "Uruchomiono na {to}: plan lub organizacja konta {from} na to nie pozwala.",
+                "reach": "Uruchomiono na {to}: osoby, dla których pracuje ta rozmowa, nie mogą używać konta {from}.",
+                "cold": "Przeniesiono z {from} na {to}, które ma więcej zapasu: pamięć podręczna wygasła, więc przeniesienie nic nie kosztowało."
             }
         },
         "failure": {
@@ -4413,7 +4419,7 @@
         },
         "composerSelection": {
             "resets": "odnowienie {when}",
-            "switchedAccount": "Przełączono na konto {account}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
+            "switchedAccount": "Przełączono na konto {account}: sesja przechodzi razem z nim, a jej następna odpowiedź raz odczyta rozmowę od nowa, bez pamięci podręcznej.",
             "switchedLoop": "Przełączono na działanie przez {loop}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
             "switchedModel": "Przełączono na {model}",
             "switchedProvider": "Przełączono na {provider}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
@@ -4790,6 +4796,21 @@
             "plain": {
                 "confirmBody": "Każda wiadomość tutaj zostanie usunięta, razem z punktami, do których można wrócić. Nic, co już jest w Twoich plikach, się nie zmieni, a jego pomocnicy zachowują swoją pracę. Tego nie da się cofnąć."
             }
+        },
+        "incident": {
+            "attempts": "{count} odrzucona próba | {count} odrzucone próby | {count} odrzuconych prób",
+            "hideAttempts": "Ukryj próby",
+            "same": "Odrzucona w ten sam sposób."
+        },
+        "accessWall": {
+            "status": "{account} nie może prowadzić tej rozmowy: jego plan lub organizacja nie pozwala na {provider}, a żadne inne konto {provider} tutaj jej nie przejmie.",
+            "statusUnnamed": "To konto nie może prowadzić tej rozmowy: jego plan lub organizacja nie pozwala na {provider}, a żadne inne konto {provider} tutaj jej nie przejmie.",
+            "tryAccountAgain": "Spróbuj ponownie z {account}",
+            "tryAgain": "Spróbuj ponownie",
+            "retestTitle": "Sprawdź dostęp ponownie",
+            "retestNote": "Wstrzymane, jeśli nadal wyłączone",
+            "connect": "Połącz inne konto {provider}",
+            "chooseAnother": "Wybierz inny model"
         }
     },
     "common": {
@@ -5954,7 +5975,9 @@
             "viaClaudeCode": "przez Claude Code",
             "viaLoop": "przez {loop}",
             "loopSignIn": "logowanie do {loop}",
-            "accountViaLoop": "konto {managedLabel} przez {loop}"
+            "accountViaLoop": "konto {managedLabel} przez {loop}",
+            "offByAdmin": "Wyłączone: organizacja lub plan wyłączyły {provider}",
+            "offByAdminSince": "Wyłączone: organizacja lub plan wyłączyły {provider} · od {when}"
         },
         "arrivalPanel": {
             "alreadyHere": "już tutaj",

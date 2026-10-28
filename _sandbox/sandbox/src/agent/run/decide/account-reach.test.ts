@@ -60,7 +60,7 @@ test("a named account inside the reach runs there", async () => {
 test("a remembered account outside the reach moves the conversation onto the pick among the allowed ones", async () => {
     const route = await routeWithinReach(services, reachOf([bob(["claude:work", "claude:team"])]), turn({ remembered: "home" }), KEEP);
     // Team has more room than Work, so the provider's own rule picks it.
-    expect(route).toMatchObject({ kind: "move", from: "home", to: "team", reach: true });
+    expect(route).toMatchObject({ kind: "move", from: "home", to: "team", labels: { from: "Home", to: "Team" }, reach: true });
 });
 
 test("a turn left to the pick is pinned inside the reach, and left alone when every account is inside it", async () => {
@@ -92,11 +92,13 @@ test("a conversation runs only where every person in it may: a provider key and 
 });
 
 test("a blocked-account move onto an account outside the reach is re-aimed from where the conversation was", async () => {
-    const blocked = { kind: "move", from: "home", to: "work", reason: "seat off" } as const;
+    const blocked = { kind: "move", from: "home", to: "work", labels: { from: "Home", to: "Work" }, reason: "seat off" } as const;
+    // Named as the chat names both: the account it left by the blocked route's own reading, the one it went to by its row.
     expect(await routeWithinReach(services, reachOf([bob(["claude:team"])]), turn({ remembered: "home" }), blocked)).toMatchObject({
         kind: "move",
         from: "home",
         to: "team",
+        labels: { from: "Home", to: "Team" },
     });
     expect(await routeWithinReach(services, reachOf([bob(["claude:work"])]), turn({ remembered: "home" }), blocked)).toEqual(blocked);
 });

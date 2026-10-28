@@ -23,6 +23,7 @@ import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { type FreshFacts, freshFactsIfAny } from "../../context/fresh-session.js";
 import { homeNoteIfDue } from "../../../conversations/home/home-policy.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
+import { cacheCold, placeCold } from "../../providers/accounts/account-placement.js";
 import { type ReachedRoute, routeWithinReach } from "./account-reach.js";
 import { endpointIdOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { routingFor } from "../../../conversations/registry/routing.js";
@@ -32,7 +33,7 @@ import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import { fieldNotesPinsAt } from "../../prompt/field-notes-pins.js";
-import { compactedSinceLastTurn } from "../../../conversations/registry/agents-store.js";
+import { compactedSinceLastTurn, pinnedAccount } from "../../../conversations/registry/agents-store.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -247,17 +248,48 @@ const treeReads = (context: TurnContext, premise: TurnPremise): Pick<AdmittedTur
     };
 };
 
-// Asked only for a turn that names no account on a conversation remembering one, so every other turn pays no read. An
-// unreadable verdict routes as before: the credential then refuses on its own read if the account cannot serve.
+// Whether the cache the conversation's next turn would read has expired (account-placement.ts cacheCold), as its actor
+// last heard: undefined state (a conversation this daemon has not run since it started) counts as cold.
+const conversationCold = (services: Pick<TurnFactsDeps, "conversations">, conversationId: string | undefined): boolean => {
+    const turn = conversationId === undefined ? undefined : services.conversations.state(conversationId)?.turn;
+    return cacheCold(turn?.promptCache, turn?.lastAt, Date.now());
+};
+
+// Asked only for a turn on a conversation remembering an account, naming none or that one, so every other turn pays no
+// read. An unreadable verdict routes as before: the credential then refuses on its own read if the account cannot serve.
+// First off an account that cannot serve (blocked-account.ts), pinned or not; then, where the cache is cold and nobody
+// pinned the account, onto one with clearly more room (account-placement.ts).
+//
+// A turn naming the account its conversation already runs on names nothing new (a re-run of a held turn, a Continue, a
+// composer still holding the pick it made), so it is moved off that account where another can serve, as the remembered
+// one is. Treated as a fresh attempt, a Continue after a refusal went back to the refused account and was refused again
+// (2026-10-28). With nowhere else to go it is still the attempt it was, made with the one-token re-test rather than a
+// whole turn (claude-seat-check.ts, forced): an answer lifts the mark and the turn runs there; the refusal again holds it
+// before anything spawns, in the provider's own words. Only a turn naming ANOTHER account skips this.
 const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry: ConversationEntry | undefined): Promise<AccountRoute> => {
-    const remembered = routingFor(entry?.profile, input).account;
-    if (input.account !== undefined || remembered === undefined) {
+    const remembered = routingFor(entry?.profile, { agent: input.agent, harness: input.harness }).account;
+    if ((input.account !== undefined && input.account !== remembered) || remembered === undefined) {
         return { kind: "keep" };
     }
     try {
-        return await services.perf.track("turn.plan.account", { provider: input.agent }, () =>
-            offBlockedAccount(services, { provider: input.agent, named: input.account, remembered, model: input.model }),
-        );
+        return await services.perf.track("turn.plan.account", { provider: input.agent }, async () => {
+            const blocked = await offBlockedAccount(services, { provider: input.agent, named: undefined, remembered, model: input.model });
+            if (blocked.kind === "held" && input.account === remembered && (await services.claudeSeatCheck.recheck(remembered, { force: true }))) {
+                return { kind: "keep" };
+            }
+            if (blocked.kind !== "keep") {
+                return blocked;
+            }
+            const pinned = entry !== undefined && pinnedAccount(entry.profile) === remembered;
+            return placeCold(services, {
+                provider: input.agent,
+                named: undefined,
+                remembered,
+                pinned,
+                cold: pinned ? false : conversationCold(services, input.conversationId),
+                model: input.model,
+            });
+        });
     } catch (error) {
         services.logger.warn({ err: error, account: remembered }, "account route: the account's state could not be read, the turn runs where it was routed");
         return { kind: "keep" };
@@ -314,6 +346,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "credentialGrants"
     | "credentialReach"
     | "accountReach"
+    | "conversations"
     | "toolCeiling"
     | "cursorStore"
     | "dependencies"

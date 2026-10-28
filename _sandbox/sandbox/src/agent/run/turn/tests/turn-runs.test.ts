@@ -998,11 +998,11 @@ describe(`the record`, () => {
 });
 
 describe(`the settle notice`, () => {
-    it(`carries the turn's actor, its failure and its last words`, async () => {
+    it(`carries the turn's run, its actor, its failure and its last words`, async () => {
         const heard: DomainEventMap["run.settled"][] = [];
         const stop = deps.events.subscribe("run.settled", (settled) => heard.push(settled));
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(
+        const run = startTurnRun(
             deps,
             turnFn,
             { ...turn(`c-settle`), actor: `agent:parent-1`, speaker: { kind: `agent`, conversationId: `parent-1` } },
@@ -1017,6 +1017,7 @@ describe(`the settle notice`, () => {
         stop();
         expect(heard[0]).toEqual({
             conversationId: `c-settle`,
+            run: started(run).id,
             actor: `agent:parent-1`,
             speaker: { kind: `agent`, conversationId: `parent-1` },
             failure: `usage limit reached`,

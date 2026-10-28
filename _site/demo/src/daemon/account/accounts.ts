@@ -1,14 +1,19 @@
 import type { LoginStart, Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { ProviderRefusals, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { homeRecording } from "../../mode";
+import { homeRecording, seatsOff } from "../../mode";
 import { STARTED_AT } from "../board/roster";
+import { SEAT_OFF } from "./seatOff";
 
 // The connected accounts and model catalogs the Agent tab reads: two Claude subscriptions, the translator's rows in
 // every state it can show, and one catalog per provider the picker lists.
 
+// Every Claude account turned off by its organization under `?seats=off` (mode.ts seatsOff), and when it was done.
+const seatOff = (account: OauthAccount): OauthAccount => (seatsOff ? { ...account, seatRefusal: SEAT_OFF } : account);
+const SEAT_OFF_AGO_MS = 52 * 60_000;
+
 // Built on first read rather than at load: they read the roster's clock, and the roster's own imports reach this module
 // (through platform.ts's catalogs) before that clock is set.
-export const demoClaudeAccount = (): OauthAccount => ({
+export const demoClaudeAccount = (): OauthAccount => seatOff({
     id: `acc_claude_demo`,
     label: `Claude Max`,
     email: `ada@acme.dev`,
@@ -25,7 +30,7 @@ export const demoClaudeAccount = (): OauthAccount => ({
     },
 });
 
-export const demoClaudeAccountSecond = (): OauthAccount => ({
+export const demoClaudeAccountSecond = (): OauthAccount => seatOff({
     id: `acc_claude_demo_2`,
     label: `Claude Pro`,
     email: `work@acme.dev`,
@@ -128,6 +133,10 @@ export const demoRefusals = (): ProviderRefusals => ({
                 resetsAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600,
             },
         ],
+        // The organization's refusal on file under `?seats=off`, which dates the account rows' "Off" line.
+        claude: seatsOff
+            ? [`acc_claude_demo`, `acc_claude_demo_2`].map((account) => ({ at: STARTED_AT - SEAT_OFF_AGO_MS, kind: `entitlement` as const, message: SEAT_OFF, account }))
+            : [],
         codex: [
             {
                 at: Date.now() - 5 * 60_000,

@@ -60,6 +60,7 @@ const {
     turns,
     turnShots,
     repeatedChecklists,
+    incidents,
     isStreaming,
     showTurnStatus,
     statusBelow,
@@ -190,6 +191,8 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             doomed.has(message.id),
                             cutsAbove.get(message.id),
                             repeatedChecklists.has(message.id),
+                            incidents.drawn.get(message.id),
+                            incidents.folded.has(message.id),
                             checklistViews.get(message.id),
                             heldRow === message.id,
                             opening?.id === message.id,
@@ -199,9 +202,11 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
                         <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined && !props.subagent" :cut="cutsAbove.get(message.id)!" />
+                        <!-- A row folded into the incident drawn after it is not drawn (chatIncidents.ts). -->
                         <ChatMessageView
-                            v-if="(!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id"
+                            v-if="(!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id && !incidents.folded.has(message.id)"
                             :message="message"
+                            :incident="incidents.drawn.get(message.id)"
                             :streaming="isStreaming(message)"
                             :status-below="statusBelow"
                             :folded="message.id === turn.id ? turn.folded : undefined"

@@ -449,6 +449,19 @@ test("an account at the line is tried after an unmeasured one and before a spent
     expect(roomiestAccount([entry("line", atLine), entry("low", { kind: "ready", room: 2 })])?.id).toBe("low");
 });
 
+// The 2026-10-27/28 account: switched off, served for an evening (most room on its reading), switched off again.
+test("an account its organisation keeps switching off goes behind every steady one of its tier, never behind a worse tier", () => {
+    const entry = (id: string, state: AccountState, flapping?: boolean) => ({ id, state, flapping });
+    const flapping = entry("flapping", { kind: "ready", room: 90 }, true);
+    expect(preferredAccount([flapping, entry("steady", { kind: "ready", room: 5 })])?.id).toBe("steady");
+    expect(roomiestAccount([flapping, entry("steady", { kind: "ready", room: 5 }, false)])?.id).toBe("steady");
+    expect(preferredAccount([flapping, entry("unread", { kind: "unknown" }), entry("line", { kind: "ready", room: 0 })])?.id).toBe("flapping");
+    expect(roomiestAccount([flapping, entry("line", { kind: "ready", room: 0 })])?.id).toBe("flapping");
+    // Among flapping accounts, room decides again.
+    expect(preferredAccount([flapping, entry("roomier", { kind: "ready", room: 95 }, true)])?.id).toBe("roomier");
+    expect(preferredAccount([entry("off", { kind: "unknown" }, true), entry("on", { kind: "unknown" })])?.id).toBe("on");
+});
+
 // A reading covers what its pools gate, and nothing more: a model no pool names is unknown, never covered by the rest.
 test("names the served models no pool covers, and none when a pool gates every model", () => {
     const sliced = usage(window({ kind: "google:3p-weekly", utilization: 100, gates: { models: ["claude", "gpt"] } }));

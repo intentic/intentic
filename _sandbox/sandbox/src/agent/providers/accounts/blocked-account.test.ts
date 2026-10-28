@@ -51,6 +51,7 @@ test("an account whose seat was taken away moves to the roomiest ready account",
         kind: "move",
         from: "home",
         to: "spare",
+        labels: { from: "home", to: "spare" },
         reason: "Your organization has disabled Claude Code.",
     });
 });
@@ -128,6 +129,7 @@ describe("a Cursor account the server refused outright", () => {
             kind: "move",
             from: "admin",
             to: "billable",
+            labels: { from: "admin", to: "billable" },
             reason: "[role_forbidden] not available",
         });
     });

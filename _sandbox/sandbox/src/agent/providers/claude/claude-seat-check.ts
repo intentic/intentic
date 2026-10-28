@@ -2,7 +2,7 @@ import { SingleFlight } from "@intentic/base/async";
 import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { isEntitlementRefusalText } from "../../../engines/failure-sentences.js";
+import { isOrgDisabledText } from "../../../engines/failure-sentences.js";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
@@ -10,8 +10,9 @@ import type { ClaudeSeatStore } from "./claude-seats.js";
 
 // Recheck seat marks with a minimal Messages request on the smallest seed model (one token); usage/profile reads do not test entitlement.
 // Trigger on planning a conversation that remembers the account, listing accounts, or a person's pick/re-measure; never on a timer.
+// A usage read refused in the organisation's words is only a hint (`hinted`), but it probes an account not marked yet too.
 // Ration automatic probes from FIRST_RECHECK_MS with exponential backoff to LONGEST_RECHECK_MS; explicit picks probe immediately.
-// Share in-flight probes and clear the mark on an answer so blocked accounts can recover after access is restored.
+// Share in-flight probes; an answer clears the mark so blocked accounts can recover, and a refusal files one in the ledger.
 
 /** What one probe learned: served, refused for the seat again, or nothing either way (offline, spent, a new wording). */
 export type SeatProbe =
@@ -72,7 +73,8 @@ export const claudeSeatProbe =
             }
             const body = await response.text();
             // Read on the raw body: the phrase is the test (failure-sentences.ts), and the sentence alone may be cut short.
-            return isEntitlementRefusalText(body) ? { kind: "refused", reason: refusalSentence(response.status, body) } : { kind: "unknown", why: refusalSentence(response.status, body) };
+            // The API's own words count: the CLI's sentence for this refusal is never in an API body.
+            return isOrgDisabledText(body) ? { kind: "refused", reason: refusalSentence(response.status, body) } : { kind: "unknown", why: refusalSentence(response.status, body) };
         } catch (error) {
             return { kind: "unknown", why: error instanceof Error && error.name === "TimeoutError" ? "the provider did not answer in time" : "the request failed" };
         }
@@ -86,8 +88,12 @@ export interface ClaudeSeatCheck {
      * Whether the account can serve again: true when it carries no seat mark or entitlement refusal, or when a probe
      * got an answer and cleared both. False while the probe is not due (unless `force`), or it saw the refusal again,
      * or it learned nothing, or the marks could not be read or written. Never throws.
+     *
+     * `hinted`: something other than a turn says the seat may be off (the account's usage read refused in its
+     * organisation's words, claude-usage.ts). An account carrying no mark is then probed too, on a schedule of its own,
+     * and a refusal files the mark; false only where the probe found the seat refused. A marked one keeps its schedule.
      */
-    readonly recheck: (id: string, options?: { readonly force?: boolean }) => Promise<boolean>;
+    readonly recheck: (id: string, options?: { readonly force?: boolean; readonly hinted?: boolean }) => Promise<boolean>;
 }
 
 export interface ClaudeSeatCheckDeps {
@@ -107,7 +113,7 @@ const seenAs = (seen: SeatProbe): string => {
         case "unknown":
             return seen.why;
         case "entitled":
-            return "an answer, but the mark could not be lifted";
+            return "an answer";
     }
 };
 
@@ -116,39 +122,95 @@ interface Planned {
     readonly gap: number;
 }
 
+// The next probe of a schedule after one at `at`: the gap doubled, up to LONGEST_RECHECK_MS; FIRST_RECHECK_MS for the first.
+const after = (at: number, plan: Planned | undefined): Planned => {
+    const gap = plan === undefined ? FIRST_RECHECK_MS : Math.min(plan.gap * 2, LONGEST_RECHECK_MS);
+    return { due: at + gap, gap };
+};
+
+// A seat refusal on file for the account: one naming it, or one naming no account, which covers every account.
+const entitlement =
+    (id: string) =>
+    (refusal: ProviderRefusal): boolean =>
+        refusal.kind === "entitlement" && (refusal.account ?? id) === id;
+
+// Clears what a turn answering on the account clears (providerAnswered), but only a refusal of the seat's kind: a
+// one-token answer on the smallest model says nothing about a spent pool.
+const restore = async (deps: ClaudeSeatCheckDeps, id: string): Promise<void> => {
+    await Promise.all([deps.seats.clear(id), deps.refusals().drop("claude", entitlement(id))]);
+};
+
+// A refusal the probe saw, filed as a turn's would be, so every verdict blocks the account (serviceState) and the ledger
+// believes it for another day while it keeps being refused. Named for no model: the seat is off for every one.
+const refuse = (deps: ClaudeSeatCheckDeps, at: number, id: string, reason: string): Promise<void> =>
+    deps
+        .refusals()
+        .record("claude", { at, kind: "entitlement", message: reason, account: id })
+        .catch((error) => deps.logger.warn({ err: error, account: id }, "claude account: the probe's refusal could not be filed"));
+
+// One probe, with what it learned filed. An answer whose marks could not be lifted reads as nothing learned, so the
+// schedule tries again.
+const ask = async (deps: ClaudeSeatCheckDeps, now: () => number, id: string): Promise<SeatProbe> => {
+    const seen = await deps.probe(id).catch((): SeatProbe => ({ kind: "unknown", why: "the probe failed" }));
+    if (seen.kind === "entitled") {
+        return (await restore(deps, id).then(() => true, () => false)) ? seen : { kind: "unknown", why: "an answer, but the mark could not be lifted" };
+    }
+    if (seen.kind === "refused") {
+        await refuse(deps, now(), id, seen.reason);
+    }
+    return seen;
+};
+
 export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatCheck => {
     const now = deps.now ?? Date.now;
     // In memory: a restart may probe once early, which costs one token, and no store has to hold a schedule.
     const planned = new Map<string, Planned>();
+    // The same for an account no mark is on yet, probed on a hint (`hinted`): at once the first time, then backing off
+    // while the hints keep coming. The usage read refused d8561075… in its organisation's words at 2026-10-27 19:54 and
+    // turns served on it from 21:17, so a hint answered with access is a false alarm that may well recur.
+    const hinted = new Map<string, Planned>();
     const asking = new SingleFlight<string, boolean>();
 
-    // When the account was first refused: its seat mark, or an entitlement refusal that covers it (a refusal naming no
-    // account covers every account, and serviceState blocks on either one).
-    const entitlement = (id: string) => (refusal: ProviderRefusal): boolean => refusal.kind === "entitlement" && (refusal.account ?? id) === id;
+    // When the account was first refused: its seat mark, or an entitlement refusal that covers it (serviceState blocks
+    // on either one).
     const markedAt = async (id: string): Promise<number | undefined> => {
         const [seats, refusals] = await Promise.all([deps.seats.read(), deps.refusals().onFile()]);
         const standing = (refusals["claude"] ?? []).filter(entitlement(id)).map((refusal) => refusal.at);
         return seats[id]?.at ?? (standing.length === 0 ? undefined : Math.min(...standing));
     };
 
-    // Clears what a turn answering on the account clears (providerAnswered), but only a refusal of the seat's kind: a
-    // one-token answer on the smallest model says nothing about a spent pool.
-    const restore = async (id: string): Promise<void> => {
-        await Promise.all([deps.seats.clear(id), deps.refusals().drop("claude", entitlement(id))]);
-    };
-
     const attempt = async (id: string, plan: Planned): Promise<boolean> => {
-        const seen = await deps.probe(id).catch((): SeatProbe => ({ kind: "unknown", why: "the probe failed" }));
-        // A mark that could not be lifted is tried again on the schedule, as if nothing were learned.
-        if (seen.kind === "entitled" && (await restore(id).then(() => true, () => false))) {
+        const seen = await ask(deps, now, id);
+        if (seen.kind === "entitled") {
             planned.delete(id);
             deps.logger.info({ account: id }, "claude account: access is back, the seat mark is lifted");
             return true;
         }
-        const gap = Math.min(plan.gap * 2, LONGEST_RECHECK_MS);
-        planned.set(id, { due: now() + gap, gap });
-        deps.logger.debug({ account: id, seen: seenAs(seen), nextInMs: gap }, "claude account: the seat is still off");
+        const next = after(now(), plan);
+        planned.set(id, next);
+        deps.logger.debug({ account: id, seen: seenAs(seen), nextInMs: next.gap }, "claude account: the seat is still off");
         return false;
+    };
+
+    // An unmarked account a hint names, probed when its own schedule says so. A refusal files the mark, and from then
+    // on the marks' schedule re-tests it.
+    const onHint = (id: string): Promise<boolean> => {
+        const last = hinted.get(id);
+        const pending = asking.joined(id);
+        if (pending !== undefined || (last !== undefined && now() < last.due)) {
+            return pending ?? Promise.resolve(true);
+        }
+        hinted.set(id, after(now(), last));
+        return asking.run(id, async () => {
+            const seen = await ask(deps, now, id);
+            const refused = seen.kind === "refused";
+            if (refused) {
+                deps.logger.info({ account: id, seen: seenAs(seen) }, "claude account: a probe found its organisation switched Claude Code off, taking it out of the rotation");
+            } else {
+                deps.logger.debug({ account: id, seen: seenAs(seen), nextInMs: hinted.get(id)?.gap }, "claude account: probed on a hint that the seat is off, and not refused");
+            }
+            return !refused;
+        });
     };
 
     return {
@@ -163,7 +225,7 @@ export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatChec
             }
             if (since === undefined) {
                 planned.delete(id);
-                return true;
+                return options.hinted === true ? onHint(id) : true;
             }
             // Read after the await, so two callers arriving together share one probe.
             const pending = asking.joined(id);

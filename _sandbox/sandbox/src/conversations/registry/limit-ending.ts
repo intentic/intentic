@@ -1,7 +1,7 @@
 import type { AgentStatus, AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { opt } from "../../opt.js";
 import type { ConversationState, HeldRecord } from "../actor/conversation-state.js";
-import type { Ending, PersistedAgent } from "./agents-store.js";
+import { type Ending, type PersistedAgent, profileOn } from "./agents-store.js";
 
 // A spent allowance's ending as the card states it: its failure fields and the hold the actor keeps. Whether and when
 // the hold goes again is not stated here: the card's `next` derives it from the hold (conversation-next.ts). Read by the
@@ -43,8 +43,13 @@ export const reportedFailure = (
 // The entry moved to `account` (the registry's `switchAccount`). A spent allowance's ending is re-stated for the pick:
 // the reset the card states for the picked account (none where it has room), in the same write, so the card never shows
 // the refused account's clock in between.
-export const switchedEntry = (entry: PersistedAgent, account: string, limit: { readonly resetsAt?: number } | undefined): PersistedAgent => {
-    const moved = { ...entry, profile: { ...entry.profile, account } };
+export const switchedEntry = (
+    entry: PersistedAgent,
+    account: string,
+    limit: { readonly resetsAt?: number } | undefined,
+    pin?: { readonly at: number },
+): PersistedAgent => {
+    const moved = { ...entry, profile: profileOn(entry.profile, account, pin) };
     if (limit === undefined || entry.ending.kind !== "limited") {
         return moved;
     }

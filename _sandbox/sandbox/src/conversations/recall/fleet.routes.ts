@@ -28,9 +28,17 @@ const MAX_LIMIT = 100;
 // Ceiling on one message: a peer needs a paragraph or two, not a file. Anything longer is a file to point at.
 const MAX_MESSAGE_CHARS = 8_000;
 
+// A wait's default and ceiling, the children's own (children.routes.ts): long enough for a real turn, short enough that a
+// forgotten wait still returns.
+const WAIT_DEFAULT_S = 600;
+const WAIT_MAX_S = 1800;
+
 const MessageBodySchema = z.object({
     to: z.string().min(1),
     message: z.string().min(1).max(MAX_MESSAGE_CHARS),
+    // `agents message --wait`: answer once the turn the message reached settles, with how it ended (fleet-message-wait.ts).
+    wait: z.boolean().optional(),
+    timeoutSeconds: z.number().positive().max(WAIT_MAX_S).optional(),
 });
 
 // Where a resumed turn goes; every field left out keeps the conversation's own.
@@ -198,13 +206,15 @@ const createFleetRoutes = (services: Services) => ({
         const transcript = flagQuery(c, "raw") === true ? await fleetRows(services, resolved.entry, window) : await fleetMessages(services, resolved.entry, window);
         return c.json({ ...answer, transcript });
     },
-    /** POST /fleet/message: say something to another conversation — steered into its live turn, or opening one. */
+    /** POST /fleet/message: say something to another conversation — steered into its live turn, opening one, or queued
+     *  behind one; with `wait`, answered once the turn it reached settles. */
     message: async (c: Context<AppEnv>): Promise<Response> => {
         const body = await bodyOf(c, MessageBodySchema);
         if (body === undefined) {
-            return c.json({ ok: false, message: 'Pass JSON like {"to": "<handle>", "message": "…"}.' }, 400);
+            return c.json({ ok: false, message: `Pass JSON like {"to": "<handle>", "message": "…"}, with "wait": true and "timeoutSeconds" up to ${WAIT_MAX_S} to wait for the turn it reaches.` }, 400);
         }
-        const outcome = await messageConversation(services, callerOf(services, c), body.to, body.message);
+        const wait = body.wait === true ? { timeoutMs: Math.round((body.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000), signal: c.req.raw.signal } : undefined;
+        const outcome = await messageConversation(services, callerOf(services, c), body.to, body.message, undefined, wait);
         return outcome.ok ? c.json(outcome) : c.json(refusalBody(outcome.message, outcome.candidates), outcome.status);
     },
 });

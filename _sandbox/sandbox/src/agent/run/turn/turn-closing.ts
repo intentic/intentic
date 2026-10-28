@@ -31,9 +31,10 @@ export const closingOf = (rows: readonly TranscriptRow[]): string => {
 export const settledOf = (
     input: Pick<TurnInput, "actor" | "speaker"> & { readonly conversationId: string },
     rows: readonly TranscriptRow[],
-    ended: { readonly failure: string | undefined; readonly stopped: boolean; readonly rerun: { readonly at?: number } | undefined },
+    ended: { readonly run: string; readonly failure: string | undefined; readonly stopped: boolean; readonly rerun: { readonly at?: number } | undefined },
 ): DomainEventMap["run.settled"] => ({
     conversationId: input.conversationId,
+    run: ended.run,
     actor: input.actor,
     speaker: input.speaker,
     failure: ended.failure,

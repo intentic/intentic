@@ -34,9 +34,9 @@ import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
 import { attentionReason, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
-import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
+import { cardLine, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
-import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, cornerStandingShown, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
+import { activityLine, agentDisplayTitle, agentStandingMeta, agentStatusMeta, contextPct, cornerInk, cornerStandingShown, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
@@ -61,6 +61,7 @@ import { sessionLogin } from "../session/accountChip";
 import { previewOf } from "../../../../models/conversations/panel/useChat-strip";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
 import { providerAccounts } from "../../../../models/providers/providerAccounts";
+import { cardServingAccount } from "./cardServingAccount";
 import { markSegments } from "../../../../lib/markSegments";
 import { settingsChip, useOwnerHold, useWorkspaceRefusal } from "../../../../models/conversations/review/settingsRefusal";
 import type { OwnerHold } from "../../../../models/conversations/review/ownerHold";
@@ -147,7 +148,9 @@ const provenance = computed(() => sessionMark(props.agent, user.value?.email, pr
 const parent = computed(() => parentOf(props.agent.startedBy));
 // Whether this card's archive or restore moves its children with it, as a run's takes its steps.
 const takesFamily = computed(() => (props.family ?? 0) > 0);
-const meta = computed(() => agentStandingMeta(props.agent));
+// A refusal the conversation has moved past rests as an idle card does: the red error glyph beside "Moved to …" said the
+// opposite of the line under it (cardLine).
+const meta = computed(() => (failure.value?.moved === true ? agentStatusMeta(`idle`) : agentStandingMeta(props.agent)));
 // What the identity tile draws, read here too since the tooltip over it is this card's.
 const kind = computed(() => sessionKind(props.agent));
 const lane = computed(() => props.placed ?? laneOf(props.agent));
@@ -168,7 +171,9 @@ const titleOfAgent = (conversationId: string): string | undefined => {
 };
 const chip = computed<(StandingChip & { readonly hint?: Tip; readonly family?: true }) | undefined>(() => {
     const own =
-        props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true as const } : standingChip(props.agent, titleOfAgent);
+        props.call !== undefined && (attentionReason(props.agent) === undefined || failure.value?.moved === true)
+            ? { ...props.call, family: true as const }
+            : failure.value?.moved === true ? undefined : standingChip(props.agent, titleOfAgent);
     // Files a Sandbox page wrote are not "Your edits": named as the review names them (settingsPages, below), as the
     // rail's row names them too (settingsChip).
     return settingsChip(own, props.agent, settingsPages.value, ownerHold.value?.kind === `deleted`);
@@ -379,8 +384,9 @@ const loopLine = computed(() => (props.agent.loop === undefined ? undefined : lo
 // fresh session ran on it.
 const stamps = useCardStamps(() => props.agent);
 // What the card says of the failure it ended on: one line at rest, the words whole in its hover (cardFailure). A land
-// that broke keeps the line after the next turn cleared the turn's failure, since its work is still stuck.
-const failure = computed(() => cardFailure(props.agent));
+// that broke keeps the line after the next turn cleared the turn's failure, since its work is still stuck. A refusal for
+// access the conversation has since moved past says where it went instead, and asks nothing in the corner (cardLine).
+const failure = computed(() => cardLine(props.agent, cardServingAccount(props.agent.provider, props.agent.account, providerAccounts.value[props.agent.provider] ?? [])));
 // Where its last turn put its work besides its branch (reachLine.ts): live files, a clone of its own, a push. Kept
 // while a new turn runs, unlike the stamps: the work it names stays where it went until a turn puts it back.
 const reach = computed(() => reachLine(props.agent.reach));
@@ -732,12 +738,9 @@ const grab = (event: PointerEvent): void => {
                 class="flex min-w-0 max-w-full items-center gap-1.5 text-2xs leading-4 text-muted"
                 :class="dense ? 'w-full' : ''"
                 data-failure
+                :data-moved="failure.moved"
             >
-                <Icon
-                    :name="failure.tone === `danger` ? `exclamation-circle` : `exclamation-triangle`"
-                    class="shrink-0 text-2xs"
-                    :class="failure.tone === `danger` ? `text-danger` : `text-warning`"
-                />
+                <Icon :name="failure.icon" class="shrink-0 text-2xs" :class="failure.ink" />
                 <span class="min-w-0 flex-1 truncate">{{ failure.gist }}</span>
             </p>
 

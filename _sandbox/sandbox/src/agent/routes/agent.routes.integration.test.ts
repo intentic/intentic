@@ -1029,26 +1029,35 @@ describe("a conversation on an account its organisation turned off", () => {
         expect(daemon.agents.entry("conv-seat")?.profile.account).toBe("acct-c");
     });
 
-    it("runs the account a person names for the turn, refused or not", async () => {
-        const { tokens, client } = fleet({ "acct-a": SEAT_OFF }, ["acct-c"]);
+    // The owner's rule (2026-10-28): an account its organisation switched off gives way even when a person named it, as
+    // long as another account can serve; the conversation goes with it and the chat says so. Naming it is a pin, and a
+    // pin is a preference, not an instruction to be refused.
+    it("moves a turn off an account a person named once its organisation refused it, when another can serve", async () => {
+        const { daemon, tokens, client } = fleet({ "acct-a": SEAT_OFF }, ["acct-c"]);
 
         await runAgentTurn(client, { prompt: "on this one, please", conversationId: "conv-named", account: "acct-a" });
 
-        expect(tokens).toEqual(["tok-acct-a"]);
+        expect(tokens).toEqual(["tok-acct-c"]);
+        expect(daemon.agents.entry("conv-named")?.profile.account).toBe("acct-c");
     });
 
-    // An explicit pick is an attempt, not a hold: the editor names the account for the turn (turnRequest.ts
-    // accountIntent), and the answer lifts the mark.
-    it("runs a turn that names a marked account, and its answer lifts the mark", async () => {
+    // An explicit pick with nowhere else to go is an attempt, not a hold: the editor names the account for the turn
+    // (turnRequest.ts accountIntent). The attempt is the one-token re-test rather than a whole turn: still refused, the
+    // turn is held before anything spawns; answered, the mark is lifted and the turn runs there.
+    it("re-tests a marked account a turn names when no other can serve: held while refused, run once it answers", async () => {
         const seats: Record<string, { at: number; reason: string }> = {};
-        const { tokens, client } = fleet(seats, []);
+        const probe = { answer: STILL_OFF, now: Date.now() };
+        const { tokens, client } = fleet(seats, [], probe);
         await runAgentTurn(client, { prompt: "start", conversationId: "conv-pick", account: "acct-a" });
         seats["acct-a"] = SEAT_OFF;
 
         await runAgentTurn(client, { prompt: "try it again", conversationId: "conv-pick", account: "acct-a" });
+        expect(tokens).toEqual(["tok-acct-a"]);
 
+        probe.answer = BACK_ON;
+        await runAgentTurn(client, { prompt: "and again", conversationId: "conv-pick", account: "acct-a" });
         expect(tokens).toEqual(["tok-acct-a", "tok-acct-a"]);
-        await waitFor(() => expect(seats).toEqual({}), SETTLES);
+        expect(seats).toEqual({});
     });
 
     // THE FAILURE THIS PREVENTS: turns were kept off the marked account, so none ran there to lift the mark, and a user
@@ -1193,6 +1202,7 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
                     record: async (_provider, refusal) => void filed.push({ kind: refusal.kind, message: refusal.message }),
                     settle: async () => {},
                     drop: async () => false,
+                    flapping: async () => new Set(),
                     onChange: () => () => {},
                 },
             }),
@@ -1297,6 +1307,7 @@ test("a spent allowance on a natively-picked provider is filed against the accou
                     record: async (_provider, refusal) => void filed.push({ account: refusal.account, model: refusal.model }),
                     settle: async () => {},
                     drop: async () => false,
+                    flapping: async () => new Set(),
                     onChange: () => () => {},
                 },
                 async *agent() {

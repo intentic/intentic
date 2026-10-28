@@ -9,7 +9,9 @@ import type { TurnTrimState } from "../../prompt/window/context-trim.js";
 import { armSupervisor } from "../../subagents/children.js";
 import { dependencyDirForCommand } from "../../tools/notices/agent-deps.js";
 import type { TurnBase } from "../../providers/agent-request.js";
-import { decideTurn, type TurnDecision } from "../decide/turn-decision.js";
+import { type AccountMove, decideTurn, type TurnDecision } from "../decide/turn-decision.js";
+import { type AccountMoved, accountMovedRow } from "@intentic/sandbox-contract/text/notice-rows";
+import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
 import { gatherTurnFacts } from "../decide/turn-facts.js";
 import { withTurnSafety } from "./turn-safety.js";
@@ -65,6 +67,15 @@ export type TurnPlan =
           readonly door?: true;
       });
 
+// The move as its row says it. A refusal carries the provider's own sentence for the row's details; the other two reasons
+// are the sandbox's own words, which the row's line already says.
+const movedNotice = (move: AccountMove): AccountMoved => {
+    if (move.reach === true || move.cold === true) {
+        return { why: move.reach === true ? "reach" : "cold", from: move.labels.from, to: move.labels.to };
+    }
+    return { why: "refused", from: move.labels.from, to: move.labels.to, said: move.reason };
+};
+
 // Who the turn acts as, named for whoever reads its standing: its card, or the built-in it wears (a child inherits this).
 // Absent only for a name no card carries, and for a turn planned with no persona at all.
 const standingPersona = (persona: TurnDecision["context"]["persona"]): TurnStanding["persona"] => {
@@ -118,9 +129,12 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
     }
     // The move off a blocked account is the conversation's, not only this turn's: switchAccount's profile write, so every
     // later turn and every window reads where it runs now. Its session carries across (already chosen before planning),
-    // and the session frame binds it to the new account.
-    if (decision.accountMove !== undefined && input.conversationId !== undefined) {
-        await services.agents.switchAccount(input.conversationId, decision.accountMove);
+    // and the session frame binds it to the new account. Said in the chat as well as the log, on the turn's own run: the
+    // reader learns where the turn ran and why, rather than finding the chat on another account with nothing said.
+    const move = decision.accountMove;
+    if (move !== undefined && input.conversationId !== undefined) {
+        await services.agents.switchAccount(input.conversationId, move.to);
+        turnRunOf(services.conversations, input.conversationId)?.note(accountMovedRow(movedNotice(move)));
     }
     // Nothing is planned for the turn's end: no check runs there and nothing sends the model back. CI checks what the
     // owner pushes, off everyone's clock.

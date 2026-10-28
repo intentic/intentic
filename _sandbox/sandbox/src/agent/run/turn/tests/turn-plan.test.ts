@@ -20,6 +20,9 @@ import { experimentArm } from "@intentic/agent-context/experiments";
 import { ruleCommandIn } from "../../harness/harness-hooks.js";
 import { RECORD_READ_ROOTS } from "../../../../execution/js-runtime.js";
 import { planTurn } from "../turn-plan.js";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { accountMovedRow } from "@intentic/sandbox-contract/text/notice-rows";
+import { type LiveRun, RUNS } from "../../../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../../../opt.js";
 import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "../turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../../providers/harness-credentials.js";
@@ -643,6 +646,21 @@ describe("a conversation whose account can no longer serve it", () => {
         expect(moves).toEqual([["conv-seat", "spare"]]);
     });
 
+    // THE FAILURE THIS PREVENTS: the move was only logged, so the chat found itself on another account with nothing said,
+    // while the refusal above still told the reader the turn had not run (2026-10-28).
+    test("says the move on the turn's own run, naming both accounts and the provider's reason", async () => {
+        const services = fleet(true);
+        const notes: TranscriptRow[] = [];
+        const run = unstubbed<LiveRun>("run", { done: false, expired: () => false, note: (row: TranscriptRow) => void notes.push(row) });
+        services.conversations.holdings(RUNS).hold("conv-seat", "conv-seat", run);
+
+        await planTurn(services, turn({ conversationId: "conv-seat" }), context);
+
+        expect(notes).toEqual([
+            accountMovedRow({ why: "refused", from: "seatless", to: "spare", said: "Your organization has disabled Claude Code." }),
+        ]);
+    });
+
     test("holds the turn with the account's own reason when no account can serve it, before anything spawns", async () => {
         const plan = await planTurn(fleet(false), turn({ conversationId: "conv-seat" }), context);
 
@@ -652,14 +670,32 @@ describe("a conversation whose account can no longer serve it", () => {
         expect(moves).toEqual([]);
     });
 
-    // The composer naming the account for this very turn is a person's choice, made with the account's state in view.
-    test("runs a turn that names the account itself, and lets the refusal say why", async () => {
+    // Naming the account the conversation already runs on names nothing new: a Continue, a held turn's re-run, a composer
+    // still holding its pick. THE FAILURE THIS PREVENTS: judged as a fresh attempt, a re-run after a refusal went back to
+    // the refused account and was refused again, while another account had room (2026-10-28).
+    test("moves a turn naming the conversation's own account off it, when another account can serve", async () => {
         const services = fleet(true);
 
         await planTurn(services, turn({ conversationId: "conv-seat", account: "seatless" }), context);
 
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(moves).toEqual([["conv-seat", "spare"]]);
+    });
+
+    // With nowhere else to go, a person asking for the account gets the provider's own answer at once: the one-token
+    // re-test, not a whole turn spawned to be refused. An answer lifts the mark and the turn runs there.
+    test("re-tests the account a turn names when no other can serve: held if still refused, run if access is back", async () => {
+        const seat = marked();
+        const services = fleet(false, seat);
+
+        const refused = await planTurn(services, turn({ conversationId: "conv-seat", account: "seatless" }), context);
+        expect(refused).toMatchObject({ ok: false, code: "claude-not-entitled", account: "seatless" });
+        expect(credentials).not.toHaveBeenCalled();
+
+        seat.probe.answer = BACK_ON;
+        await planTurn(services, turn({ conversationId: "conv-seat", account: "seatless" }), context);
         expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
-        expect(moves).toEqual([]);
+        expect([Object.keys(seat.marks), moves]).toEqual([[], []]);
     });
 
     // THE FAILURE THIS PREVENTS: turns kept off the marked account meant none ran there to lift the mark, so a user

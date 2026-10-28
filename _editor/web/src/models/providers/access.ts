@@ -97,6 +97,10 @@ const anyProvider = (answers: (provider: AgentProvider) => boolean): boolean =>
 // another model is the way on (something else can run) or connecting one is (nothing can).
 export const anyProviderReady = (): boolean => anyProvider(providerRunnable);
 
+// Whether something other than `provider` can run for the signed-in person: where every account of one provider is
+// refused, picking a model elsewhere is the way on that needs nobody else (accessWall.ts).
+export const anotherProviderReady = (provider: AgentProvider): boolean => anyProvider((other) => other !== provider && providerRunnable(other));
+
 // Something here is connected, and none of it is the signed-in person's (Access ▸ People): the way on is the owner's
 // grant, not a connection. Held until `accessKnown`, as every "nothing to send with" answer is.
 export const nothingShared = (): boolean => accessKnown.value && !anyProviderReady() && anyProvider(providerReady);

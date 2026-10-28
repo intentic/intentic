@@ -37,7 +37,6 @@ import type { EnvironmentSources } from "./seams/environment-sources.js";
 
 import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usage.js";
 import { fileAnswerWatch, providerAnswersDocument } from "./usage/drift/answer-vocabulary.js";
-import { claudeHeadroomSource } from "./agent/providers/claude/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
 import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
@@ -49,7 +48,7 @@ import { keepCodeCounts } from "./git/changes/code-counts.js";
 import { createOpenCodeService } from "./runtimes/opencode/opencode.js";
 import { openCodeRouteEntries } from "./runtimes/opencode/hosted/opencode-routes.js";
 import { createOpenCodeAgent, createOpenCodeRunner } from "./runtimes/opencode/opencode-agent.js";
-import { type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-provider.js";
+import { claudeHeadroom, type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-provider.js";
 import { type CodexSlice, createCodexSlice } from "./runtimes/codex/codex-provider.js";
 import { createCursorSlice, type CursorSlice } from "./runtimes/cursor/cursor-provider.js";
 import { createDevinSlice, type DevinSlice } from "./runtimes/devin/devin-provider.js";
@@ -320,7 +319,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         store: accountUsage,
         parks: fileUsageParkStore(join(config.historyRoot, usageParksDocument.path)),
         sources: [
-            claudeHeadroomSource(claude.claudeStore, fetch, async (id) => (await claude.claudeModels.models(id)).models, answers),
+            claudeHeadroom(claude, answers),
             cliProxy.headroom,
         ],
         logger,

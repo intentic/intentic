@@ -13,7 +13,7 @@ import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
 // accountUsage is real state, not a stub: list folds it into every row, and disconnect clears it with the credential.
 // Empty by default, matching a sandbox before any turn runs.
 // What forgetting an account also clears, empty here: this suite is about the credential and the seat.
-const NO_REFUSALS: ClaudeAccountDeps["providerRefusals"] = { onFile: async () => ({}), record: async () => {}, settle: async () => {}, drop: async () => false, onChange: () => () => {} };
+const NO_REFUSALS: ClaudeAccountDeps["providerRefusals"] = { onFile: async () => ({}), record: async () => {}, settle: async () => {}, drop: async () => false, flapping: async () => new Set(), onChange: () => () => {} };
 
 const door = (
     claudeStore: ClaudeAccountDeps["claudeStore"],

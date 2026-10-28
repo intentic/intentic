@@ -498,7 +498,8 @@
             "watchingConditions": "Vigilando {count} condición | Vigilando {count} condiciones",
             "unknownCommand": "Comando desconocido",
             "warned": "Advertencia",
-            "yourDeletion": "Tu eliminación"
+            "yourDeletion": "Tu eliminación",
+            "movedTo": "Movido a {account}"
         },
         "agentsView": {
             "agentResolveConflict": "¿Que el agente resuelva el conflicto?",
@@ -3214,6 +3215,11 @@
                 "anotherModel": "Cambiado a otro modelo",
                 "fresh": ": este mensaje inició una sesión nueva con la conversación hasta ahora incluida.",
                 "same": ": la misma sesión, así que el modelo vuelve a leer la conversación una vez."
+            },
+            "accountMoved": {
+                "refused": "Se ejecutó en {to}: el plan o la organización de la cuenta {from} no lo permite.",
+                "reach": "Se ejecutó en {to}: las personas para las que trabaja esta conversación no pueden usar la cuenta {from}.",
+                "cold": "Se movió de {from} a {to}, que tiene más margen: la caché había caducado, así que el cambio no costó nada."
             }
         },
         "failure": {
@@ -4413,7 +4419,7 @@
         },
         "composerSelection": {
             "resets": "se restablece {when}",
-            "switchedAccount": "Cambiado a la cuenta {account}: tu próximo mensaje inicia una sesión nueva con la conversación hasta ahora incluida.",
+            "switchedAccount": "Cambiado a la cuenta {account}: la sesión se mantiene, y su próxima respuesta vuelve a leer la conversación una vez sin caché.",
             "switchedLoop": "Ahora se ejecuta a través de {loop}: tu próximo mensaje inicia una sesión nueva con la conversación hasta ahora incluida.",
             "switchedModel": "Cambiado a {model}",
             "switchedProvider": "Cambiado a {provider}: tu próximo mensaje inicia una sesión nueva con la conversación hasta ahora incluida.",
@@ -4790,6 +4796,21 @@
             "plain": {
                 "confirmBody": "Se borran todos los mensajes de aquí y los puntos a los que volver. Nada de lo que ya está en tus archivos cambia, y sus ayudantes conservan su trabajo. No se puede deshacer."
             }
+        },
+        "incident": {
+            "attempts": "{count} intento rechazado | {count} intentos rechazados",
+            "hideAttempts": "Ocultar intentos",
+            "same": "Rechazado de la misma forma."
+        },
+        "accessWall": {
+            "status": "{account} no puede ejecutar esta conversación: su plan u organización no permite {provider}, y ninguna otra cuenta de {provider} de aquí puede encargarse.",
+            "statusUnnamed": "Esta cuenta no puede ejecutar esta conversación: su plan u organización no permite {provider}, y ninguna otra cuenta de {provider} de aquí puede encargarse.",
+            "tryAccountAgain": "Volver a probar {account}",
+            "tryAgain": "Volver a intentarlo",
+            "retestTitle": "Volver a comprobar acceso",
+            "retestNote": "Vuelve a esperar si sigue bloqueado",
+            "connect": "Conectar otra cuenta de {provider}",
+            "chooseAnother": "Elegir otro modelo"
         }
     },
     "common": {
@@ -6551,7 +6572,9 @@
             "viaClaudeCode": "vía Claude Code",
             "viaLoop": "vía {loop}",
             "loopSignIn": "inicio de sesión de {loop}",
-            "accountViaLoop": "cuenta de {managedLabel} vía {loop}"
+            "accountViaLoop": "cuenta de {managedLabel} vía {loop}",
+            "offByAdmin": "Desactivada: su organización o plan desactivó {provider}",
+            "offByAdminSince": "Desactivada: su organización o plan desactivó {provider} · desde {when}"
         },
         "arrivalPanel": {
             "alreadyHere": "ya aquí",

@@ -16,6 +16,7 @@ import {
     turnsOf,
 } from "../../../../models/conversations/transcript/transcript";
 import { noticeFailure } from "../../../../models/conversations/transcript/sandboxNotice";
+import { type ChatIncidents, incidentsOf } from "../../../../models/conversations/transcript/chatIncidents";
 
 // The transcript as one pane draws it: turns, the live bubble, each turn's pictures and documents, fork cuts, day marks,
 // the skeleton.
@@ -66,6 +67,9 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     // The turn still being written, if any; a card it parked on is the reader's move, so that turn's pictures show.
     const writingTurn = computed(() => (streaming.value && ending.value === undefined && !awaitingDecision.value ? turns.value.at(-1)?.id : undefined));
     const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
+    // One row per refusal however often it was tried (chatIncidents.ts): the rows it folds are not drawn, and the row
+    // drawn for it carries every attempt.
+    const incidents = computed<ChatIncidents>((previous) => incidentsOf(messages.value, previous));
     // Loading as the pane draws it: a read in flight over nothing painted, or rows the agents list says this chat owes that
     // no failed read has given up on (a read that failed says so, with a press to ask again). Never the invitation to
     // start a conversation: running chats opened on that after a phone woke, until the app was relaunched.
@@ -79,6 +83,7 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         turns,
         turnShots,
         repeatedChecklists,
+        incidents,
         // True for the assistant bubble currently being streamed into.
         isStreaming: (message: ChatMessage): boolean => streaming.value && liveBubble.value?.id === message.id,
         // Rows follow the live bubble, so its status line is drawn at the column's foot instead (statusBelow).

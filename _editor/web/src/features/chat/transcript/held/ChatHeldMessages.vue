@@ -16,6 +16,7 @@ import { useReopenPress } from "./heldPresses";
 import { useLimitResend } from "../../panel/pane/scheduledSend";
 import { sendAnywayTip } from "../../../../models/agent-status/memoryTip";
 import { track } from "../../../../app/analytics";
+import { useAccessWall } from "../../../../models/conversations/endings/accessWall";
 
 /* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
 
@@ -56,6 +57,9 @@ const spentHint = reopen.sendNowHint;
 const sendAtLabel = reopen.label;
 const sendAtHint = reopen.hint;
 const sendAtReopen = (): void => reopen.bookWords(heldIds.value);
+// No account of the provider can serve these (accessWall.ts): sent again they are only re-tested and held once more, so
+// the press steps back to a quiet one and the card above the composer carries the fix (ChatContinueStrip).
+const accessWall = useAccessWall();
 // The bubbles are the words that wait; a continuation (a Continue booked for later, let go and then held) has none.
 const bubbles = computed(() => waiting.value.filter((message) => message.continues !== true));
 const press = computed((): HeldPress => {
@@ -86,7 +90,7 @@ const press = computed((): HeldPress => {
                     <Button
                         size="small"
                         thumb
-                        :tier="reopenAt === undefined ? `accent` : `quiet`"
+                        :tier="reopenAt === undefined && accessWall === undefined ? `accent` : `quiet`"
                         :disabled="reopen.blockedLine.value !== undefined"
                         v-tooltip.top="reopen.blockedHint.value ?? press.hint"
                         @click="resumeQueue(heldIds)"

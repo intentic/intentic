@@ -21,6 +21,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "conversations.db#conversation.record", portability: "carry" },
     { path: "dependency-requests.json", portability: "carry" },
     { path: "engines/<engine>/state.json", portability: "derived" },
+    { path: "entitlement-refusals.json", portability: "carry" },
     { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
     { path: "hook-approvals.json", portability: "identity", note: "Approve the workspace's Claude Code hooks again from Approvals." },
     { path: "hook-requests.json", portability: "derived" },

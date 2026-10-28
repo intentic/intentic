@@ -191,7 +191,7 @@ test("a parked question reads as blocked with the question, which the asking sid
 test("a linked turn's ending is its report; a task its asker stopped stays stopped", async () => {
     const { deps, link, stops } = await setup();
     const status = ok(await askTask(deps, link, asked("r1")));
-    await noteLinkTurnSettled(deps, { conversationId: status.conversationId, actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms" });
+    await noteLinkTurnSettled(deps, { conversationId: status.conversationId, run: "run-1", actor: undefined, speaker: undefined, failure: undefined, closing: "p99 is 210ms" });
     expect(await deps.links.task(link.id, { requestId: "r1" })).toMatchObject({ state: "finished", report: "p99 is 210ms" });
 
     const other = ok(await askTask(deps, link, asked("r2")));
@@ -201,10 +201,10 @@ test("a linked turn's ending is its report; a task its asker stopped stays stopp
     }
     expect(await stopTask(deps, link, running)).toMatchObject({ state: "stopped" });
     expect(stops).toEqual([{ conversationId: other.conversationId, live: true }]);
-    await noteLinkTurnSettled(deps, { conversationId: other.conversationId, actor: undefined, speaker: undefined, failure: undefined, closing: "half done" });
+    await noteLinkTurnSettled(deps, { conversationId: other.conversationId, run: "run-2", actor: undefined, speaker: undefined, failure: undefined, closing: "half done" });
     expect(await deps.links.task(link.id, { requestId: "r2" })).toMatchObject({ state: "stopped", report: "half done" });
     // A conversation no link opened is none of this module's business.
-    await noteLinkTurnSettled(deps, { conversationId: "brave-otter-1", actor: undefined, speaker: undefined, failure: undefined, closing: "x" });
+    await noteLinkTurnSettled(deps, { conversationId: "brave-otter-1", run: "run-3", actor: undefined, speaker: undefined, failure: undefined, closing: "x" });
 });
 
 test("a held status read answers the moment the task moves, not on its next timed look", async () => {
@@ -212,7 +212,7 @@ test("a held status read answers the moment the task moves, not on its next time
     const status = ok(await askTask(deps, link, asked("r1")));
     const started = Date.now();
     const held = statusAfter(deps, link, status.conversationId, status.version, 20, new AbortController().signal);
-    await noteLinkTurnSettled(deps, { conversationId: status.conversationId, actor: undefined, speaker: undefined, failure: undefined, closing: "done" });
+    await noteLinkTurnSettled(deps, { conversationId: status.conversationId, run: "run-4", actor: undefined, speaker: undefined, failure: undefined, closing: "done" });
     expect(await held).toMatchObject({ state: "finished", report: "done" });
     // The fallback look is five seconds away; only the move's own nudge answers this soon.
     expect(Date.now() - started).toBeLessThan(2_000);

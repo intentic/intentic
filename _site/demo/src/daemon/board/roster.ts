@@ -8,7 +8,7 @@ import { automationApprovals } from "../../fixture/automations";
 import { DESK_AWAITING_ID, DESK_FEATURED_ID, deskRoster } from "../../fixture/desk";
 import { AWAITING_AGENT_ID, busyFleet, FEATURED_AGENT_ID, fleetRoster, quietCard } from "../../fixture/fleet";
 import { demoNeeds } from "../../fixture/needs";
-import { specimenCard } from "../../fixture/specimen";
+import { accessWallCard, specimenCard } from "../../fixture/specimen";
 import { homeAgent } from "../../fixture/home/recording";
 import type { HomeSandbox } from "../../fixture/home/sandboxes";
 import { homeCardOf } from "./homeCards";
@@ -31,9 +31,9 @@ const servedRoster = (): AgentSummary[] => {
     }
     const fleet = demoMode.id === `busy` ? [...fleetRoster(STARTED_AT), ...busyFleet(STARTED_AT)] : fleetRoster(STARTED_AT);
     const agents = deskEdition ? deskRoster(STARTED_AT) : fleet.filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
-    // The transcript specimen (fixture/specimen.ts) rides along in a dev build only, whatever the mode, and never into
-    // a screenshot: a shot taken off a dev server must match one taken off the build.
-    const served = import.meta.env.DEV && !photographed ? [...agents, specimenCard(STARTED_AT)] : agents;
+    // The transcript specimen and the conversation no account can serve (fixture/specimen.ts) ride along in a dev build
+    // only, whatever the mode, and never into a screenshot: a shot taken off a dev server must match one taken off the build.
+    const served = import.meta.env.DEV && !photographed ? [...agents, specimenCard(STARTED_AT), accessWallCard(STARTED_AT)] : agents;
     return [...home, ...(demoQuiet() ? served.map(quietCard) : served)];
 };
 export const roster = { agents: servedRoster(), rev: 1 };

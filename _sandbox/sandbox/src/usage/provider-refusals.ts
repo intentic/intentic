@@ -4,6 +4,7 @@ import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catal
 import { refusedPoolReset, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
+import { type EntitlementHistory, memoryEntitlementHistory } from "./entitlement-history.js";
 
 /* EVERY TIME A PROVIDER SAID NO, IN ONE LEDGER, at <historyRoot>/provider-refusals.json, outside the agent's reach.
    account-usage.ts holds polled headroom; this holds the moments a plan actually refused, which polling can't produce: a
@@ -51,6 +52,9 @@ export interface ProviderRefusalStore {
     // Drops what `which` picks of a provider's refusals, whatever answered them: an account disconnected, a mark a
     // person took back, a seat a probe found restored. Answers whether anything was on file.
     readonly drop: (provider: string, which: (refusal: ProviderRefusal) => boolean) => Promise<boolean>;
+    // The provider's accounts switched off for their entitlement twice or more this week (entitlement-history.ts), still
+    // counted once a turn on them has settled the refusal: what a pick ranks behind every steady account.
+    readonly flapping: (provider: string) => Promise<ReadonlySet<string>>;
     // Fires on every change, with the provider's refusals as they now stand; what /events forwards, so open windows
     // judge by exactly what the daemon does within the same beat.
     readonly onChange: (listener: (provider: string, refusals: readonly ProviderRefusal[]) => void) => () => void;
@@ -126,6 +130,8 @@ export interface ProviderRefusalStoreOptions {
     // reset of the pool it was refused in (refusedPoolReset). Without it nothing is stamped, and such a refusal stands
     // until a reading answers it.
     readonly accountsOf?: (provider: string) => Promise<readonly ServiceFacts[]>;
+    // Where each account's switch-offs are kept; in memory where none is given.
+    readonly history?: EntitlementHistory;
 }
 
 const described = (refusal: ProviderRefusal): Record<string, unknown> => ({
@@ -195,6 +201,43 @@ const filedIn = (scopes: Map<string, ProviderRefusal>, provider: string, refusal
     const held = scopes.get(scope);
     const answered = heard.some((said) => said.provider === provider && refusal.at < said.at && settledBy(refusal, said.answer));
     return (held !== undefined && held.at > refusal.at) || answered ? undefined : { ...Object.fromEntries(scopes), [scope]: refusal };
+};
+
+// The account a refusal switches off (entitlement-history.ts): an entitlement refusal naming an account no entitlement
+// refusal of the provider's stood over when it was filed, whatever model either named. One filed while another stands
+// (the next turn refused, a probe re-testing the seat) is the same switch-off; one naming no account switches off none.
+const switchedOff = (scopes: Map<string, ProviderRefusal>, provider: string, refusal: ProviderRefusal): string | undefined => {
+    const { account } = refusal;
+    if (refusal.kind !== "entitlement" || account === undefined) {
+        return undefined;
+    }
+    const now = Date.now();
+    const standing = [...scopes].some(
+        ([scope, held]) => providerOf(scope) === provider && held.kind === "entitlement" && held.account === account && held.at > now - horizon(provider, held),
+    );
+    return standing ? undefined : account;
+};
+
+// What filing one refusal did: whether it went on file, and the account it switched off where it did.
+interface Filing {
+    readonly filed: boolean;
+    readonly off: string | undefined;
+}
+
+// Files a stamped refusal onto the ledger, judging the switch-off against the very ledger it lands in.
+const filedOnto = async (
+    file: LedgerBacking,
+    openedAt: number,
+    { provider, refusal, heard }: { readonly provider: string; readonly refusal: ProviderRefusal; readonly heard: readonly HeardSettle[] },
+): Promise<Filing> => {
+    let outcome: Filing = { filed: false, off: undefined };
+    await file.update((current) => {
+        const scopes = scoped(current, openedAt);
+        const next = filedIn(scopes, provider, refusal, heard);
+        outcome = { filed: next !== undefined, off: next === undefined ? undefined : switchedOff(scopes, provider, refusal) };
+        return next ?? current;
+    });
+    return outcome;
 };
 
 // When each refusal on file passes its horizon, by its provider.
@@ -279,6 +322,10 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
     };
     // The settles heard while each refusal is being stamped.
     const filing = new Set<HeardSettle[]>();
+    const history = options.history ?? memoryEntitlementHistory();
+    // allow(silent-catch): a switch-off that cannot be noted costs only the ranking it would feed, and the line says so.
+    const noteSwitchOff = (provider: string, account: string, at: number): Promise<void> =>
+        history.switchedOff(provider, account, at).catch((error) => log({ err: error, provider, account }, "provider refusal: the switch-off could not be noted"));
 
     return {
         onFile,
@@ -286,20 +333,19 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
             const heard: HeardSettle[] = [];
             filing.add(heard);
             let refusal = asFiled;
-            let filed = false;
+            let outcome: Filing = { filed: false, off: undefined };
             try {
                 refusal = await stamped(options.accountsOf, provider, asFiled);
-                await file.update((current) => {
-                    const next = filedIn(scoped(current, openedAt), provider, refusal, heard);
-                    filed = next !== undefined;
-                    return next ?? current;
-                });
+                outcome = await filedOnto(file, openedAt, { provider, refusal, heard });
             } finally {
                 filing.delete(heard);
             }
             const what = `${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}`;
-            log({ provider, ...described(refusal), said: refusal.message }, filed ? `provider refusal: recorded ${what}` : `provider refusal: not filed ${what}, newer on file or answered since`);
-            if (filed) {
+            log({ provider, ...described(refusal), said: refusal.message }, outcome.filed ? `provider refusal: recorded ${what}` : `provider refusal: not filed ${what}, newer on file or answered since`);
+            if (outcome.off !== undefined) {
+                await noteSwitchOff(provider, outcome.off, refusal.at);
+            }
+            if (outcome.filed) {
                 await announce(provider);
                 await rearm();
             }
@@ -322,6 +368,7 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
             }
             return dropped.length > 0;
         },
+        flapping: (provider) => history.flapping(provider),
         onChange: (listener) => {
             listeners.add(listener);
             void rearm();

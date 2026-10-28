@@ -4,9 +4,11 @@ import { type TranscriptPatch, type TranscriptRow, TranscriptRowSchema, type Tra
 import { sandboxNoticeOf } from "../events/sandbox-notice.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
 import { LAND_CONFLICT_OPENING } from "../events/land-conflict.js";
-import { RESUME_NOTES } from "../events/resume.js";
+import { RESUME_NOTES,resumeDisclosure,resumeNoticeRow } from "../events/resume.js";
 import { childReportPrompt, peerMessagePrompt } from "../events/agent-words.js";
 import { applyTranscriptPatch, foldTurn, mapTool, TranscriptFold, userRow } from "./transcript-fold.js";
+import { transcriptIncidents } from "../events/refusal-incidents.js";
+import { accountMovedRow } from "./notice-rows.js";
 
 // Epoch ms stamped on the opening user row's sentAt.
 const SENT_AT = 1_767_225_600_000;
@@ -1352,5 +1354,102 @@ describe("TranscriptFold with a clock", () => {
             { role: "notice", text: "kept", openedAt: 7 },
             { role: "user", text: "and this", sentAt: SENT_AT + 5 },
         ]);
+    });
+});
+
+// The pile one disabled organization left on 2026-10-28: the peer's message, a rebase, then a refusal, its re-send, the
+// same refusal again and the move that got it through, each a row of its own. One problem is one row: the run is found
+// over the rows as stored, the last of it drawn and every attempt behind its details.
+describe("transcriptIncidents", () => {
+    const ORG_OFF = "Your organization has disabled Claude subscription access for Claude Code";
+    const refusal = { kind: "error", code: "claude-not-entitled", message: ORG_OFF, held: { ran: false } } as const satisfies AgentEvent;
+    // A turn refused at the door, folded as the daemon folds it, on its clock.
+    const refusedAt = (at: number): TranscriptRow => {
+        const fold = new TranscriptFold([], () => at);
+        fold.apply(refusal);
+        return fold.rows.at(-1)!;
+    };
+    const resent = (): TranscriptRow => {
+        const disclosure = resumeDisclosure(RESUME_NOTES.door);
+        if (disclosure?.kind !== "notice") {
+            throw new Error("the door re-run is disclosed as a notice");
+        }
+        return resumeNoticeRow(disclosure);
+    };
+    const moved = accountMovedRow({ why: "refused", from: "Work", to: "radarsu@gmail.com", said: ORG_OFF });
+    const peer: TranscriptRow = { role: "notice", text: "Message from another conversation", agentWords: { kind: "peer", from: "stout-raven-owob", sent: "look" } };
+    const rebased: TranscriptRow = { role: "notice", text: "rebased", noticeCode: { code: "synced", params: { commits: 53 } } };
+
+    it("folds a refusal, its re-sends, the same refusal again and the move that ended it into one row", () => {
+        const rows = [peer, rebased, refusedAt(1_000), resent(), refusedAt(2_000), resent(), moved];
+        expect(transcriptIncidents(rows)).toEqual([
+            {
+                from: 2,
+                to: 6,
+                attempts: [
+                    { at: 1_000, said: ORG_OFF },
+                    { at: 2_000, said: ORG_OFF },
+                ],
+                resolved: true,
+            },
+        ]);
+    });
+
+    // THE FAILURE THIS PREVENTS: the same sentence twice, a row apart, read as two problems.
+    it("never leaves two identical refusals side by side as two rows", () => {
+        expect(transcriptIncidents([refusedAt(1), refusedAt(2)])).toEqual([{ from: 0, to: 1, attempts: [{ at: 1, said: ORG_OFF }, { at: 2, said: ORG_OFF }], resolved: false }]);
+    });
+
+    // A re-send still in flight is the latest word: the turn is being tried again, which the refusal under it no longer says.
+    it("draws a re-send in flight as the run's last row, unresolved", () => {
+        expect(transcriptIncidents([refusedAt(1), resent()])).toEqual([{ from: 0, to: 1, attempts: [{ at: 1, said: ORG_OFF }], resolved: false }]);
+    });
+
+    it("leaves a lone refusal, a lone move and the rows around a run as they are", () => {
+        expect(transcriptIncidents([peer, refusedAt(1)])).toEqual([]);
+        expect(transcriptIncidents([moved])).toEqual([]);
+        // The person's own words between two refusals are part of the story: neither run reaches across them.
+        expect(transcriptIncidents([refusedAt(1), userRow("again", SENT_AT, []), refusedAt(2)])).toEqual([]);
+    });
+
+    // A different refusal is a different problem, and a memory hold has a row of its own that asks its own question.
+    it("starts again at a different refusal, and never folds a memory hold", () => {
+        const rowOf = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
+            const fold = new TranscriptFold([]);
+            fold.apply(event);
+            return fold.rows.at(-1)!;
+        };
+        const spent = rowOf({ kind: "error", code: "trial-exhausted", message: "The free trial is spent.", held: { ran: false } });
+        const memory = rowOf({ kind: "error", code: "sandbox-memory-low", message: "Sandbox memory is low.", held: { ran: false } });
+        const rows = [refusedAt(1), spent, spent, memory, memory];
+        expect(transcriptIncidents(rows).map(({ from, to }) => [from, to])).toEqual([[1, 2]]);
+    });
+
+    // A provider refusing an account it no longer serves answers as a failure of its own, with nothing run between two.
+    it("folds the same coded failure twice running, and leaves an uncoded one be", () => {
+        const failed = (code: AgentErrorCode | undefined): TranscriptRow => ({
+            role: "notice",
+            text: "refused",
+            noticeCode: code === undefined ? { code: "failed", params: { message: "refused" } } : { code: "failed", params: { message: "refused", error: code } },
+        });
+        expect(transcriptIncidents([failed("account-not-entitled"), failed("account-not-entitled")])).toMatchObject([{ from: 0, to: 1 }]);
+        expect(transcriptIncidents([failed(undefined), failed(undefined)])).toEqual([]);
+    });
+
+    // A person's pick in the composer is the editor's own line, which the sandbox cannot code: the reader names it.
+    it("ends a run on a row the reader says resolved it", () => {
+        const switched: TranscriptRow = { role: "notice", text: "Switched to the radarsu@gmail.com account" };
+        expect(transcriptIncidents([refusedAt(1), resent(), refusedAt(2), switched], (row) => row === switched)).toMatchObject([{ from: 0, to: 3, resolved: true }]);
+        expect(transcriptIncidents([refusedAt(1), switched])).toEqual([]);
+    });
+
+    // The move's own row names both accounts by name, and says it in a code the reader words in its own language.
+    it("words the move with both accounts' names, and codes it", () => {
+        expect(moved).toEqual({
+            role: "notice",
+            text: "Ran on radarsu@gmail.com: the Work account's plan or organization does not allow it.",
+            noticeCode: { code: "accountMoved", params: { why: "refused", from: "Work", to: "radarsu@gmail.com", said: ORG_OFF } },
+        });
+        expect(sandboxNoticeOf(accountMovedRow({ why: "cold", from: "Work", to: "Home" }))).toEqual({ code: "accountMoved", params: { why: "cold", from: "Work", to: "Home" } });
     });
 });

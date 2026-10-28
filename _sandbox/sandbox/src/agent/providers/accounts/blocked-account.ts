@@ -4,7 +4,7 @@ import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../claude/claude-seat-check.js";
-import { serviceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
+import { namedServiceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 
 // Before moving/holding an implicitly remembered unserviceable account, ration a Claude seat recheck; an answer clears the mark.
 // Explicit account intent still attempts it (picker, automation, named press or booked move), allowing the real refusal or recovery to speak.
@@ -19,10 +19,26 @@ export type AccountRoute =
     | { readonly kind: "keep" }
     // Moved to a ready account of the same provider; the conversation follows (switchAccount's profile write). `reach`
     // marks a move off an account the people it works for may not use (agent/run/decide/account-reach.ts) rather than
-    // one that cannot serve.
-    | { readonly kind: "move"; readonly from: string; readonly to: string; readonly reason: string; readonly reach?: true }
+    // one that cannot serve; `cold` a move off one that can serve, onto one with clearly more room, made because the
+    // cache had expired (account-placement.ts). `labels` are both accounts' own names, read with their verdicts, for the
+    // row the move leaves in the chat (turn-plan.ts), which names accounts, never ids.
+    | {
+          readonly kind: "move";
+          readonly from: string;
+          readonly to: string;
+          readonly labels: AccountLabels;
+          readonly reason: string;
+          readonly reach?: true;
+          readonly cold?: true;
+      }
     // Nothing of the provider's can serve: refused before anything spawns, the words held for a press.
     | { readonly kind: "held"; readonly account: string; readonly reason: string };
+
+/** The two accounts of a move by their own names. */
+export interface AccountLabels {
+    readonly from: string;
+    readonly to: string;
+}
 
 const KEEP: AccountRoute = { kind: "keep" };
 
@@ -46,8 +62,9 @@ export const offBlockedAccount = async (
         return KEEP;
     }
     // One reading for both questions, judged for the model the turn spends, as the limit move's destination is.
-    const accounts = await serviceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
-    const state = accounts.find((account) => account.id === remembered)?.state;
+    const accounts = await namedServiceabilities(deps, provider, model === undefined || model === "" ? undefined : { id: model });
+    const current = accounts.find((account) => account.id === remembered);
+    const state = current?.state;
     if (state?.kind !== "blocked" || state.fix !== "admin") {
         return KEEP;
     }
@@ -59,9 +76,9 @@ export const offBlockedAccount = async (
     // Proven room; where the plan publishes no reading to prove any (Cursor's), an account nothing has refused.
     const others = accounts.filter((account) => account.id !== remembered);
     const unread = reportsPlanLimits(provider) ? undefined : others.find((account) => account.state.kind === "unknown");
-    const to = (roomiestAccount(others) ?? unread)?.id;
+    const to = roomiestAccount(others) ?? unread;
     if (to !== undefined) {
-        return { kind: "move", from: remembered, to, reason: state.reason };
+        return { kind: "move", from: remembered, to: to.id, labels: { from: current?.label ?? remembered, to: to.label }, reason: state.reason };
     }
     // With nowhere to go, only an account a probe re-tests is held for it; any other runs where it was routed and is
     // refused in a second, which tells whoever asked, since a hold nothing re-tests would wait out a day.

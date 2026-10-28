@@ -6,6 +6,7 @@ import { linkTaskDepsOf, noteLinkTurnAwaiting, noteLinkTurnSettled, noteLinkTurn
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
+import { reportPeerMessageOutcome } from "../conversations/recall/fleet-message-outcome.js";
 import { onAccountReopened } from "../usage/serviceability/state-log.js";
 import { watchCapacity } from "../usage/serviceability/capacity-watch.js";
 import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents/children.js";
@@ -186,6 +187,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
     const childReports = childReportDeps(services, logger);
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
+    // So is a turn a peer's `agents message` opened that failed or is held, to the peer that sent it, once.
+    shutdown.push(services.events.subscribe("run.settled", (settled) => reportPeerMessageOutcome(services, settled)));
     // An account coming back is news to a parent waiting with children failed or paused on it (capacity-reopened.ts).
     shutdown.push(
         onAccountReopened(

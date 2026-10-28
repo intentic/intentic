@@ -27,7 +27,7 @@ import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation, servicesOfConversation } from "../actor/identity-latch.js";
 import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
-import { type AgentsStore, type AgentTitleSource, type Composition, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
+import { type AgentsStore, type AgentTitleSource, type Composition, endingStatus, isIsolated, type Landing, type PersistedAgent, type Postures, profileOn, type Remover, type RepoRecord, type Social, type StoredProfile } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
 import { countsOf, rankedModules } from "../land/change-modules.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
@@ -295,7 +295,14 @@ export interface AgentsRegistry {
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
     // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
     // the reset of the account it now waits on.
-    readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number }) => Promise<AgentSummary | undefined>;
+    // `pin` is a person's pick (switch-account.ts): the conversation stays there while its cache is cold. A move without
+    // one lifts any pin on another account (agents-store.ts profileOn).
+    readonly switchAccount: (
+        id: string,
+        account: string,
+        limit?: { readonly resetsAt?: number },
+        pin?: { readonly at: number },
+    ) => Promise<AgentSummary | undefined>;
     // Moves every conversation running on account `from` to `to`, the survivor a superseded account merged into
     // (account-identity.ts). One write; answers how many moved. Leaves `updatedAt` and every session alone: it is the same
     // person's seat.
@@ -664,7 +671,7 @@ export const createFleet = (
             const entry = entryOf(id);
             const binding = sessionBinding(entry, { sessionId, ...opt("account", account) });
             if (entry !== undefined && binding !== undefined) {
-                replace({ ...entry, sessionId: binding.sessionId, profile: { ...entry.profile, ...opt("account", binding.account) } });
+                replace({ ...entry, sessionId: binding.sessionId, profile: binding.account === undefined ? entry.profile : profileOn(entry.profile, binding.account) });
                 void persist();
             }
         },
@@ -993,11 +1000,11 @@ export const createFleet = (
                 return { ...entry, postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures };
             });
         },
-        switchAccount: (id, account, limit) => amend(id, (entry) => switchedEntry(entry, account, limit)),
+        switchAccount: (id, account, limit, pin) => amend(id, (entry) => switchedEntry(entry, account, limit, pin)),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);
             for (const entry of moving) {
-                replace({ ...entry, profile: { ...entry.profile, account: to } });
+                replace({ ...entry, profile: profileOn(entry.profile, to) });
             }
             if (moving.length > 0) {
                 await persist();

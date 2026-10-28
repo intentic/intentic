@@ -6,8 +6,7 @@ import { MENTION_LIMIT } from "@intentic/sandbox-contract/text/mentions";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { type Booking, holdOf, type QueuedItem, together, waitingOf } from "../../../conversations/actor/conversation-queue.js";
-import { windowShut } from "../../../conversations/actor/conversation-state.js";
-import { sendableAt } from "../../../conversations/actor/limit-booking.js";
+import { AFTER_RUNNING_TURN, goesFirst, heldBehindLimit, releaseHeldBy } from "../../../conversations/queue-waits.js";
 import { cardsParkedOn } from "../../../conversations/actor/parked-cards.js";
 import { forgetConversations } from "../../../conversations/registry/archive.js";
 import { conversationProfile, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
@@ -105,50 +104,6 @@ const onCurrentRouting = (services: Services, turn: Turn): Turn => {
     const routed = { ...own, ...profileOf({ agent, harness, model, effort, thinking, fast }) };
     // The session is the conversation's own, decided on the routing it now has (sessionFor); the sender's is no say in it.
     return { ...routed, ...opt("sessionId", sessionFor(services, { ...routed, sessionId: asked })) };
-};
-
-// What goes before anything waiting: a recovery the daemon runs by itself, or a rewind restoring files.
-const goesFirst = (services: Services, conversationId: string): boolean => {
-    const state = services.conversations.state(conversationId);
-    return state?.turn.resuming === true || state?.phase.kind === "rewinding";
-};
-
-// Whether words nobody at the composer typed must wait rather than open a turn: the conversation is stranded behind a
-// spent allowance whose window is known to be shut. A turn opened there is refused at the door within seconds, and the
-// refusal takes the held turn's place, so the press or the booked resend would then re-run a wake instead of the work,
-// on a fresh session. They wait in the queue and go with the conversation's next turn, or once the window reopens
-// (turn-resume.ts drains them then). A live turn still takes them, and a person's words are never held here: sending is
-// the person's own call.
-const heldBehindLimit = (services: Services, conversationId: string, voices: readonly QueuedItem["voice"][]): boolean =>
-    voices.every((voice) => voice !== "person") && windowShut(services.conversations.state(conversationId)?.resume.held, Date.now());
-
-// The one reason that is not a hold: the words go out after the running turn, which the answer's missing `run` says.
-const AFTER_RUNNING_TURN = "a turn is running and takes no words now: they go after it";
-
-// Why a release let nothing out though words still wait, in the words its line says it with; undefined when nothing
-// holds them back that the queue can name. A "Send now" that did nothing used to leave no line at all (2026-10-11).
-const releaseHeldBy = (services: Services, conversationId: string): string | undefined => {
-    const queue = services.conversations.queued(conversationId);
-    const waiting = waitingOf(queue);
-    if (waiting.length === 0) {
-        return undefined;
-    }
-    const held = services.conversations.state(conversationId)?.resume.held;
-    if (heldBehindLimit(services, conversationId, waiting.map((item) => item.voice)) && held?.reopensAt !== undefined) {
-        const provider = withRuntimeDefaults(held.input).agent;
-        return `behind the ${provider} limit until ${new Date(sendableAt(held.reopensAt)).toISOString()}: words nobody at the composer typed wait for it to reopen`;
-    }
-    if (goesFirst(services, conversationId)) {
-        return "a recovery or a rewind the sandbox runs by itself goes first";
-    }
-    const paused = holdOf(queue);
-    if (paused !== undefined) {
-        return `the queue is still paused (${paused})`;
-    }
-    if (liveRunOf(services.conversations, conversationId) !== undefined || services.conversations.state(conversationId)?.phase.kind === "running") {
-        return AFTER_RUNNING_TURN;
-    }
-    return undefined;
 };
 
 /**
@@ -294,7 +249,7 @@ export const createAdmission = (
     const held = (conversationId: string): boolean => {
         const daemon = services();
         const queue = daemon.conversations.queued(conversationId);
-        return waitingOf(queue).length === 0 || holdOf(queue) !== undefined || goesFirst(daemon, conversationId);
+        return waitingOf(queue).length === 0 || holdOf(queue) !== undefined || goesFirst(daemon.conversations, conversationId);
     };
 
     // The next of the queue out: its head said into the live turn where that turn takes words, else one turn of what rides
@@ -319,7 +274,7 @@ export const createAdmission = (
             daemon.conversations.send(conversationId, { kind: "queue-taken", ids: [head.id] });
             return new Map([[head.id, { delivered: "steered", ...opt("run", live?.id) }]]);
         }
-        if (heldBehindLimit(daemon, conversationId, items.map((item) => item.voice))) {
+        if (heldBehindLimit(daemon.conversations, conversationId, items.map((item) => item.voice))) {
             return undefined;
         }
         const batch = together(items);
@@ -380,14 +335,14 @@ export const createAdmission = (
     const deliverNow = async (item: Omit<QueuedItem, "revision">): Promise<MessageReceipt | Unsaid | undefined> => {
         const daemon = services();
         const { conversationId } = item.turn;
-        if (goesFirst(daemon, conversationId)) {
+        if (goesFirst(daemon.conversations, conversationId)) {
             return undefined;
         }
         const live = liveRunOf(daemon.conversations, conversationId);
         if (live !== undefined || daemon.conversations.state(conversationId)?.phase.kind === "running") {
             return intoLive(item, live);
         }
-        if (heldBehindLimit(daemon, conversationId, [item.voice])) {
+        if (heldBehindLimit(daemon.conversations, conversationId, [item.voice])) {
             return undefined;
         }
         // Its own turn, as its sender asked for it, on the session the daemon says it continues; a wake on the routing
@@ -536,7 +491,7 @@ export const createAdmission = (
                 const delivered = await deliver(conversationId);
                 kept(conversationId, delivered);
                 const run = [...delivered.values()].find((receipt) => receipt.delivered === "started")?.run;
-                const why = run === undefined ? releaseHeldBy(daemon, conversationId) : undefined;
+                const why = run === undefined ? releaseHeldBy(daemon.conversations, conversationId) : undefined;
                 if (why !== undefined) {
                     const waiting = waitingOf(daemon.conversations.queued(conversationId)).length;
                     daemon.logger.info({ conversationId, waiting, delivered: delivered.size, why }, `resume held: ${why}`);

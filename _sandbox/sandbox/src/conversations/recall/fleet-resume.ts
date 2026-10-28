@@ -81,7 +81,9 @@ export const pressRouting = (entry: PersistedAgent, ask: ResumeAsk) => {
         agent: ask.provider ?? own.agent,
         harness: ask.harness ?? (moving ? undefined : own.harness),
         model: ask.model ?? (moving ? undefined : own.model),
-        account: ask.account ?? (moving ? undefined : own.account),
+        // Only what the ask names: the conversation's own account is filled in at planning, where a blocked one is moved
+        // off (agents-store.ts conversationProfile).
+        account: ask.account,
         // The old model's tier settings may not exist on the new one.
         effort: ask.effort ?? (moving || ask.model !== undefined ? undefined : own.effort),
         thinking: moving || ask.model !== undefined ? undefined : own.thinking,

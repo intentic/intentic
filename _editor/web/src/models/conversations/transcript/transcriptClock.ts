@@ -177,7 +177,9 @@ export class TranscriptClock {
 
     // Muted line written on the user's clock; local, since a fork must exclude only rows this window drew. Every caller
     // says what it is (NoticeStanding): a line about this window's next send must never read, anywhere else, as history.
-    notice(text: string, standing: NoticeStanding, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): number {
+    // `switched` marks a composer's switch to another account, provider or loop, which ends the refusals above it
+    // (chatIncidents.ts).
+    notice(text: string, standing: NoticeStanding, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait" | "switched">): number {
         const row = { role: `notice`, text, local: true, ...extra } as const;
         return this.append(standing === `upcoming` ? { ...row, upcoming: true } : row);
     }

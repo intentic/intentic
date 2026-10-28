@@ -498,7 +498,8 @@
             "watchingConditions": "Beobachtet {count} Bedingung | Beobachtet {count} Bedingungen",
             "unknownCommand": "Unbekannter Befehl",
             "warned": "Warnung",
-            "yourDeletion": "Deine Löschung"
+            "yourDeletion": "Deine Löschung",
+            "movedTo": "Zu {account} gewechselt"
         },
         "agentsView": {
             "agentResolveConflict": "Den Agenten den Konflikt lösen lassen?",
@@ -3214,6 +3215,11 @@
                 "anotherModel": "Zu einem anderen Modell gewechselt",
                 "fresh": ": Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.",
                 "same": ": Dieselbe Sitzung, daher liest das Modell die Unterhaltung einmal neu."
+            },
+            "accountMoved": {
+                "refused": "Lief auf {to}: Tarif oder Organisation des Kontos {from} lassen es nicht zu.",
+                "reach": "Lief auf {to}: Die Personen, für die diese Unterhaltung arbeitet, dürfen das Konto {from} nicht nutzen.",
+                "cold": "Von {from} zu {to} gewechselt, das mehr Spielraum hat: Der Cache war abgelaufen, der Wechsel hat also nichts gekostet."
             }
         },
         "failure": {
@@ -4413,7 +4419,7 @@
         },
         "composerSelection": {
             "resets": "wird {when} zurückgesetzt",
-            "switchedAccount": "Zum Konto {account} gewechselt: Ihre nächste Nachricht startet eine neue Sitzung, in die die bisherige Unterhaltung übernommen wird.",
+            "switchedAccount": "Zum Konto {account} gewechselt: Die Sitzung kommt mit, und ihre nächste Antwort liest die Unterhaltung einmal ohne Cache neu.",
             "switchedLoop": "Zur Ausführung über {loop} gewechselt: Ihre nächste Nachricht startet eine neue Sitzung, in die die bisherige Unterhaltung übernommen wird.",
             "switchedModel": "Zu {model} gewechselt",
             "switchedProvider": "Zu {provider} gewechselt: Ihre nächste Nachricht startet eine neue Sitzung, in die die bisherige Unterhaltung übernommen wird.",
@@ -4790,6 +4796,21 @@
             "plain": {
                 "confirmBody": "Jede Nachricht hier wird gelöscht, ebenso die Punkte, zu denen Sie zurückgehen können. Was schon in Ihren Dateien ist, ändert sich nicht, und seine Helfer behalten ihre Arbeit. Das lässt sich nicht rückgängig machen."
             }
+        },
+        "incident": {
+            "attempts": "{count} abgelehnter Versuch | {count} abgelehnte Versuche",
+            "hideAttempts": "Versuche ausblenden",
+            "same": "Auf dieselbe Weise abgelehnt."
+        },
+        "accessWall": {
+            "status": "{account} kann diese Unterhaltung nicht ausführen: Tarif oder Organisation lassen {provider} nicht zu, und kein anderes {provider}-Konto hier kann sie übernehmen.",
+            "statusUnnamed": "Dieses Konto kann diese Unterhaltung nicht ausführen: Tarif oder Organisation lassen {provider} nicht zu, und kein anderes {provider}-Konto hier kann sie übernehmen.",
+            "tryAccountAgain": "{account} erneut versuchen",
+            "tryAgain": "Erneut versuchen",
+            "retestTitle": "Zugriff erneut prüfen",
+            "retestNote": "Wartet weiter, falls gesperrt",
+            "connect": "Weiteres {provider}-Konto verbinden",
+            "chooseAnother": "Anderes Modell wählen"
         }
     },
     "common": {
@@ -6551,7 +6572,9 @@
             "viaClaudeCode": "über Claude Code",
             "viaLoop": "über {loop}",
             "loopSignIn": "{loop}-Anmeldung",
-            "accountViaLoop": "{managedLabel}-Konto über {loop}"
+            "accountViaLoop": "{managedLabel}-Konto über {loop}",
+            "offByAdmin": "Aus: Organisation oder Tarif haben {provider} abgeschaltet",
+            "offByAdminSince": "Aus: Organisation oder Tarif haben {provider} abgeschaltet · seit {when}"
         },
         "arrivalPanel": {
             "alreadyHere": "schon hier",

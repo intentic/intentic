@@ -2,7 +2,7 @@
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type KeyedProvider, KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
-import { loopDoors, loopLabel, loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { loopDoors, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { mintedVariants, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { Button, formatMoney, formatTokens, Icon, Notice, type NoticeModel, RowGroup, RowNote, timeAgo, ui } from "@intentic/ui";
@@ -28,6 +28,7 @@ import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import EstatePicker from "../secrets/EstatePicker.vue";
 import ConnectAttempt from "./ConnectAttempt.vue";
+import { accountOffLine } from "./accountOff";
 
 // ONE PROVIDER, opened from its tile in Sandbox ▸ Models' grid: everything about it in one card. Its accounts (who each
 // one signs in as, what it is spending, what it needs, drop one), the one button that adds one, and the sign-in itself
@@ -219,13 +220,17 @@ const waitingLine = (state: AccountState): string | undefined => {
 };
 
 // The status line under the name, one judgement for both mechanisms: what waiting will fix, or what a person has to do
-// before it serves again. A Google account with no project needs Google's own onboarding, so that one names the door.
-const stateLine = (state: AccountState, label: string, signedOut: boolean): string | undefined => {
+// before it serves again. A Google account with no project needs Google's own onboarding, so that one names the door. An
+// account its organization or plan turned off says so first, and since when (accountOff.ts).
+const stateLine = (state: AccountState, account: { readonly id: string; readonly label: string }, signedOut: boolean): string | undefined => {
     if (state.kind !== `blocked` || state.fix === `wait`) {
         return waitingLine(state);
     }
     if (state.fix === `verify`) {
-        return t(`sandbox.aiAccountSection.verifyThisAccount`, { label });
+        return t(`sandbox.aiAccountSection.verifyThisAccount`, { label: account.label });
+    }
+    if (state.fix === `admin`) {
+        return accountOffLine(provider, providerLabel(provider), account.id, state.reason);
     }
     if (signedOut) {
         return t(`sandbox.aiAccountSection.signedOutReconnectTo`);
@@ -272,7 +277,7 @@ const nativeViews = computed<readonly AccountView[]>(() =>
         key: account.id,
         title: account.label,
         note: [loopNote(account), identityNote(account)].filter((part) => part !== undefined).join(` · `) || undefined,
-        description: stateLine(state, account.label, account.needsReauth === true && account.detail === undefined),
+        description: stateLine(state, account, account.needsReauth === true && account.detail === undefined),
         state,
         headroom,
         exhausted,
@@ -293,7 +298,7 @@ const routedViews = computed<readonly AccountView[]>(() =>
         key: `${provider}:${account.name}`,
         title: account.label,
         note: hasNative.value ? t(`sandbox.aiAccountSection.viaClaudeCode`) : undefined,
-        description: stateLine(state, account.label, false),
+        description: stateLine(state, { id: account.name, label: account.label }, false),
         state,
         headroom,
         exhausted,

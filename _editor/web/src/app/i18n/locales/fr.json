@@ -498,7 +498,8 @@
             "watchingConditions": "Surveille {count} condition | Surveille {count} conditions",
             "unknownCommand": "Commande inconnue",
             "warned": "Avertissement",
-            "yourDeletion": "Votre suppression"
+            "yourDeletion": "Votre suppression",
+            "movedTo": "Déplacé vers {account}"
         },
         "agentsView": {
             "agentResolveConflict": "Laisser l'agent résoudre le conflit ?",
@@ -3214,6 +3215,11 @@
                 "anotherModel": "Passage à un autre modèle",
                 "fresh": " : ce message a ouvert une nouvelle session avec la conversation jusqu'ici.",
                 "same": " : même session, donc le modèle relit la conversation une fois."
+            },
+            "accountMoved": {
+                "refused": "Exécuté sur {to} : le forfait ou l’organisation du compte {from} ne le permet pas.",
+                "reach": "Exécuté sur {to} : les personnes pour qui travaille cette conversation ne peuvent pas utiliser le compte {from}.",
+                "cold": "Déplacé de {from} vers {to}, qui a plus de marge : le cache avait expiré, le déplacement n’a donc rien coûté."
             }
         },
         "failure": {
@@ -4413,7 +4419,7 @@
         },
         "composerSelection": {
             "resets": "se réinitialise {when}",
-            "switchedAccount": "Passage au compte {account} : votre prochain message ouvre une nouvelle session avec la conversation jusqu'ici.",
+            "switchedAccount": "Passage au compte {account} : la session suit, et sa prochaine réponse relit la conversation une fois sans cache.",
             "switchedLoop": "Passage à une exécution via {loop} : votre prochain message ouvre une nouvelle session avec la conversation jusqu'ici.",
             "switchedModel": "Passage à {model}",
             "switchedProvider": "Passage à {provider} : votre prochain message ouvre une nouvelle session avec la conversation jusqu'ici.",
@@ -4790,6 +4796,21 @@
             "plain": {
                 "confirmBody": "Tous les messages d'ici sont supprimés, ainsi que les points où revenir. Rien de ce qui est déjà dans vos fichiers ne change, et ses assistants gardent leur travail. Impossible d'annuler."
             }
+        },
+        "incident": {
+            "attempts": "{count} tentative refusée | {count} tentatives refusées",
+            "hideAttempts": "Masquer les tentatives",
+            "same": "Refusé de la même manière."
+        },
+        "accessWall": {
+            "status": "{account} ne peut pas exécuter cette conversation : son forfait ou son organisation n’autorise pas {provider}, et aucun autre compte {provider} ici ne peut la prendre.",
+            "statusUnnamed": "Ce compte ne peut pas exécuter cette conversation : son forfait ou son organisation n’autorise pas {provider}, et aucun autre compte {provider} ici ne peut la prendre.",
+            "tryAccountAgain": "Réessayer {account}",
+            "tryAgain": "Réessayer",
+            "retestTitle": "Retester l’accès",
+            "retestNote": "Retenu si toujours coupé",
+            "connect": "Connecter un autre compte {provider}",
+            "chooseAnother": "Choisir un autre modèle"
         }
     },
     "common": {
@@ -6551,7 +6572,9 @@
             "viaClaudeCode": "via Claude Code",
             "viaLoop": "via {loop}",
             "loopSignIn": "connexion {loop}",
-            "accountViaLoop": "compte {managedLabel} via {loop}"
+            "accountViaLoop": "compte {managedLabel} via {loop}",
+            "offByAdmin": "Désactivé : son organisation ou son forfait a coupé {provider}",
+            "offByAdminSince": "Désactivé : son organisation ou son forfait a coupé {provider} · depuis {when}"
         },
         "arrivalPanel": {
             "alreadyHere": "déjà là",

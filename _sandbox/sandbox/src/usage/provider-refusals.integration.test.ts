@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import { fileProviderRefusalStore, memoryProviderRefusalStore } from "./provider-refusals.js";
+import { entitlementRefusalsDocument, fileEntitlementHistory } from "./entitlement-history.js";
+import { opt } from "../opt.js";
 
 // Path's parent directory doesn't exist yet; the store must create it on write.
 const tempStore = () => {
@@ -285,4 +287,34 @@ test("reads a refusal filed in the future as filed before the ledger opened, so 
     expect((await store.onFile())[`kimi`]?.[0]?.at).toBeLessThanOrEqual(Date.now());
     await store.settle("kimi", { account: undefined, model: "kimi-k3-256k", askedAt: Date.now() });
     expect(await store.onFile()).toEqual({});
+});
+
+// 2026-10-27/28: Claude account d8561075… was switched off at 08:44, served from 21:17 (which settled the refusal), and
+// was switched off again at 08:48 the next day. The ledger forgot the first the moment the account served; the history
+// beside it remembers both, across a restart, and a pick ranks the account behind its steady equals for the week.
+test("an account switched off twice in a week is flapping even once it serves again, and one switch-off is counted once", async () => {
+    const root = mkdtempSync(join(tmpdir(), "provider-refusals-"));
+    const history = join(root, entitlementRefusalsDocument.path);
+    const store = fileProviderRefusalStore(join(root, "provider-refusals.json"), { history: fileEntitlementHistory(history) });
+    const offAt = Date.now() - DAY / 2;
+    const said = "Your organization has disabled Claude subscription access for Claude Code.";
+    const off = (at: number, model?: string): ProviderRefusal => refusal({ at, kind: "entitlement", message: said, account: "d8561075", ...opt("model", model) });
+
+    await store.record("claude", off(offAt, "claude-opus-5-5"));
+    // The next turn refused, and a probe re-testing the seat, while the first still stands: the same switch-off.
+    await store.record("claude", off(offAt + 60_000, "claude-sonnet-5"));
+    await store.record("claude", off(offAt + 120_000));
+    // A refusal naming no account, or of another kind, switches no account off.
+    await store.record("claude", refusal({ kind: "entitlement", at: offAt + 180_000 }));
+    await store.record("claude", refusal({ at: offAt + 240_000, account: "other" }));
+    expect(await store.flapping("claude")).toEqual(new Set());
+
+    await store.settle("claude", { account: "d8561075", model: "claude-opus-5-5", askedAt: offAt + DAY / 4 });
+    await store.record("claude", off(Date.now() - 60_000, "claude-opus-5-5"));
+    await store.settle("claude", { account: "d8561075", model: "claude-opus-5-5", askedAt: Date.now() });
+    expect(await store.onFile()).toEqual({ claude: [expect.objectContaining({ account: "other" })] });
+    expect(await fileEntitlementHistory(history).flapping("claude")).toEqual(new Set(["d8561075"]));
+    expect(await store.flapping("cursor")).toEqual(new Set());
+    // A week after the first switch-off, one is left: steady again.
+    expect(await fileEntitlementHistory(history).flapping("claude", offAt + 7 * DAY + 1)).toEqual(new Set());
 });

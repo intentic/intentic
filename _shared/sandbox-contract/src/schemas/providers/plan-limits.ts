@@ -528,7 +528,7 @@ export const SwitchAccountSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "Keep the provider session across the move (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record.",
+            "Whether the provider session goes with the move: the model keeps everything, and re-reads all of it once on the other account. Left out, it goes, as `true`. `false` opens a fresh session seeded from the record instead.",
         ),
     handoff: HandoffModeSchema.optional().describe(
         "How the held turn continues the conversation on the new account: `carry`, `trim` or `summary` (see `limitHandoff`). Wins over `carry`. Leave it out for the held turn's own pick, else the sandbox's setting.",

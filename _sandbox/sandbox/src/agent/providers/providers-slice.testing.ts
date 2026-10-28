@@ -91,6 +91,7 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
             record: async () => {},
             settle: async () => {},
             drop: async () => false,
+            flapping: async () => new Set(),
             onChange: () => () => {},
         },
         // Nothing ran out yet; written beside every spent allowance's refusal, so any refused turn touches this store.

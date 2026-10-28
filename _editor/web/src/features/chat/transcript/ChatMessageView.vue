@@ -40,7 +40,7 @@ import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
 import { agentNoticeLookOf, isFreshStart, isTurnChecks, noticeIconOf } from "./notices/noticeLook";
-import NoticeFailureDetails from "./notices/NoticeFailureDetails.vue";
+import NoticeDetails from "./notices/NoticeDetails.vue";
 import NoticeSwitchModel from "./notices/NoticeSwitchModel.vue";
 import NoticeHeld from "./notices/NoticeHeld.vue";
 import NoticeFreshStart from "./notices/NoticeFreshStart.vue";
@@ -52,6 +52,8 @@ import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
 import { isMemoryHold } from "./held/heldQueue";
 import { noticeFailure, noticeLine } from "../../../models/conversations/transcript/sandboxNotice";
+import type { ChatIncident } from "../../../models/conversations/transcript/chatIncidents";
+import { sandboxNoticeOf } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { useAudience } from "../../../app/useAudience";
 import ChatPromptAuthor from "./ChatPromptAuthor.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -75,6 +77,8 @@ const props = defineProps<{
     // The context this message went out with is read from the chip at the top of the column (ChatSystemPrompt), so it
     // draws no paperclip of its own: set on a conversation's first message.
     notesAbove?: boolean;
+    // The refusal incident this row stands for, the rows before it folded away (chatIncidents.ts).
+    incident?: ChatIncident | undefined;
 }>();
 
 // A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
@@ -227,7 +231,9 @@ const homeLand = computed(() => home.value && landOfRow(props.message) !== undef
 const noticeText = computed(() => noticeLine(props.message, audience.value, { home: home.value }) ?? props.message.text);
 // A failure row: its own glyph and line, and the provider's or the harness's own words, where it carries any, a press away.
 const failure = computed(() => (props.message.role === `notice` ? noticeFailure(props.message) : undefined));
-const failureOpen = ref(false);
+// What a move to another account was made for, in the provider's words: the line names both accounts, the press the why.
+const movedFor = computed(() => (props.message.noticeCode?.code === `accountMoved` ? sandboxNoticeOf(props.message) : undefined));
+const said = computed(() => failure.value?.said ?? (movedFor.value?.code === `accountMoved` ? movedFor.value.params.said : undefined));
 const agentNoticeLook = computed(() => agentNoticeLookOf(props.message));
 const noticeIcon = computed(() => noticeIconOf(props.message, failure.value !== undefined));
 
@@ -582,17 +588,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 }}</template>
                 <template v-else>{{ watchEvidence ? t(`chat.chatMessageView.hideMessage`) : t(`chat.chatMessageView.showMessage`) }}</template>
             </button>
-            <!-- What the provider or the harness said, behind the line above: opened by a press, since it holds links and ids to copy. -->
-            <button
-                v-if="failure?.said !== undefined"
-                type="button"
-                class="touch-target shrink-0 font-medium text-link hover:underline"
-                :aria-expanded="failureOpen"
-                @click="failureOpen = !failureOpen"
-            >
-                {{ failureOpen ? t(`chat.failure.hideDetails`) : t(`chat.failure.details`) }}
-            </button>
-            <NoticeFailureDetails v-if="failureOpen && failure?.said !== undefined" :said="failure.said" />
+            <!-- What the provider or the harness said, behind the line above, or every attempt of the incident this row stands
+                 for: opened by a press, since it holds links and ids to copy (NoticeDetails). -->
+            <NoticeDetails :said="said" :incident="incident" />
             <pre
                 v-if="watchEvidence && unspokenSent !== undefined"
                 class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"

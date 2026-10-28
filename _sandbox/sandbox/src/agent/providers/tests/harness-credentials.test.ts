@@ -183,6 +183,7 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
             record: async () => {},
             settle: async () => {},
             drop: async () => false,
+            flapping: async () => new Set(),
             onChange: () => () => {},
         },
     });

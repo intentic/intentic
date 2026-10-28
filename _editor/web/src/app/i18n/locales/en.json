@@ -498,7 +498,8 @@
             "watchingConditions": "Watching {count} condition | Watching {count} conditions",
             "unknownCommand": "Unknown command",
             "warned": "Warning",
-            "yourDeletion": "Your deletion"
+            "yourDeletion": "Your deletion",
+            "movedTo": "Moved to {account}"
         },
         "agentsView": {
             "agentResolveConflict": "Have the agent resolve the conflict?",
@@ -3214,6 +3215,11 @@
                 "anotherModel": "Switched to another model",
                 "fresh": ": this message started a fresh session, with the conversation so far carried over.",
                 "same": ": same session, so the model re-reads the conversation once."
+            },
+            "accountMoved": {
+                "refused": "Ran on {to}: the {from} account's plan or organization does not allow it.",
+                "reach": "Ran on {to}: the people this conversation works for may not use the {from} account.",
+                "cold": "Moved from {from} to {to}, which has more room left: the cache had expired, so moving cost nothing."
             }
         },
         "failure": {
@@ -4413,7 +4419,7 @@
         },
         "composerSelection": {
             "resets": "resets {when}",
-            "switchedAccount": "Switched to the {account} account: your next message starts a fresh session with the conversation so far carried over.",
+            "switchedAccount": "Switched to the {account} account: the session comes along, and its next reply re-reads the conversation once without the cache.",
             "switchedLoop": "Switched to running through {loop}: your next message starts a fresh session with the conversation so far carried over.",
             "switchedModel": "Switched to {model}",
             "switchedProvider": "Switched to {provider}: your next message starts a fresh session with the conversation so far carried over.",
@@ -4790,6 +4796,21 @@
             "plain": {
                 "confirmBody": "Every message here is deleted, and so are the points to go back to. Nothing already in your files changes, and its helpers keep their work. This can't be undone."
             }
+        },
+        "incident": {
+            "attempts": "{count} refused attempt | {count} refused attempts",
+            "hideAttempts": "Hide attempts",
+            "same": "Refused the same way."
+        },
+        "accessWall": {
+            "status": "{account} can't run this conversation: its plan or organization does not allow {provider}, and no other {provider} account here can take it.",
+            "statusUnnamed": "This account can't run this conversation: its plan or organization does not allow {provider}, and no other {provider} account here can take it.",
+            "tryAccountAgain": "Try {account} again",
+            "tryAgain": "Try again",
+            "retestTitle": "Re-test access",
+            "retestNote": "Held again if still off",
+            "connect": "Connect another {provider} account",
+            "chooseAnother": "Choose another model"
         }
     },
     "common": {
@@ -6551,7 +6572,9 @@
             "viaClaudeCode": "via Claude Code",
             "viaLoop": "via {loop}",
             "loopSignIn": "{loop} sign-in",
-            "accountViaLoop": "{managedLabel} account via {loop}"
+            "accountViaLoop": "{managedLabel} account via {loop}",
+            "offByAdmin": "Off: its organization or plan turned off {provider}",
+            "offByAdminSince": "Off: its organization or plan turned off {provider} · since {when}"
         },
         "arrivalPanel": {
             "alreadyHere": "already here",

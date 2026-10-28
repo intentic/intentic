@@ -1,5 +1,5 @@
 import { compactedSinceLastTurn } from "../../../conversations/registry/agents-store.js";
-import { heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
+import { type AccountRoute, heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
 import type { ReachedRoute } from "./account-reach.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
@@ -31,6 +31,9 @@ import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, 
 // Decides a turn from its facts with no I/O: who it acts as, what it may reach and is told, which arms it drew, and
 // whether its window can hold what it would send. A refusal is a value; what the log owes rides beside either answer.
 
+/** A move of the conversation onto another account of its provider, with both accounts' names. */
+export type AccountMove = Extract<AccountRoute, { readonly kind: "move" }>;
+
 // A line the daemon's log owes the decision; the planner writes it, since deciding performs no I/O.
 export interface TurnWarning {
     readonly fields: Readonly<Record<string, unknown>>;
@@ -54,8 +57,9 @@ export interface TurnDecision extends DecidedEffects {
     readonly harness: AgentHarness;
     // As its arm is called with it: the conversation's latched account filled in where the turn named none.
     readonly input: RoutedAgentTurn;
-    // The account the conversation is moved to because the one it ran on cannot serve; the planner records the move.
-    readonly accountMove?: string;
+    // Where the conversation is moved before this turn, and why (blocked-account.ts, account-placement.ts,
+    // account-reach.ts); the planner records the move and says it in the chat.
+    readonly accountMove?: AccountMove;
     // What every arm builds on, the composed request as its base.
     readonly context: TurnContext;
     // The manifest after the persona's shelves and the owner's gates: the only list an arm may mount from.
@@ -104,7 +108,9 @@ const routeWarnings = (route: ReachedRoute | undefined, input: AgentTurn): TurnW
             message:
                 route.reach === true
                     ? "account: the people this conversation works for may not use its account, moving the conversation to one they may"
-                    : "account: the conversation's account cannot serve, moving the conversation to one that can",
+                    : route.cold === true
+                      ? "account: the conversation's cache is cold, moving it to the account with clearly more room"
+                      : "account: the conversation's account cannot serve, moving the conversation to one that can",
         },
     ];
 };
@@ -288,7 +294,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         provider: runtime.provider,
         harness: runtime.harness,
         input: routedInput(input, facts.entry, facts.accountRoute),
-        ...opt("accountMove", facts.accountRoute?.kind === "move" ? facts.accountRoute.to : undefined),
+        ...opt("accountMove", facts.accountRoute?.kind === "move" ? facts.accountRoute : undefined),
         context: planned,
         granted: mounts.capabilities,
         withheldByPersona: facts.installed.filter((capability) => !reachable.includes(capability)).map((capability) => capability.id),

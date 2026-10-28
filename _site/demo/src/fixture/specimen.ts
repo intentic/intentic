@@ -1,5 +1,11 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
+import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
+import { accountMovedRow } from "@intentic/sandbox-contract/text/notice-rows";
+import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
+import { SEAT_OFF } from "../daemon/account/seatOff";
+import { seatsOff } from "../mode";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { KEY_EXPIRE_PROGRAM, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { PAYOUTS_PAGE } from "./pages";
@@ -14,6 +20,20 @@ export const SPECIMEN_SESSION = `ses_01j9specimen`;
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
+
+// THE PILE ONE DISABLED ORGANIZATION LEFT (2026-10-28), as the sandbox writes it: a refusal per attempt, the re-send each
+// attempt opened with, and in the specimen the move that got it through. The chat draws each run as one row
+// (`@intentic/web` chatIncidents.ts), so these rows show that fold, not a pile.
+const refusedAt = (at: number): TranscriptRow => {
+    const fold = new TranscriptFold([], () => at);
+    fold.apply({ kind: `error`, code: `claude-not-entitled`, message: SEAT_OFF, held: { ran: false } });
+    return fold.rows.at(-1)!;
+};
+const resentRow = (): TranscriptRow => {
+    const disclosure = resumeDisclosure(RESUME_NOTES.door);
+    return disclosure?.kind === `notice` ? resumeNoticeRow(disclosure) : { role: `notice`, text: `Sent again.` };
+};
+const refusalIncident = (at: number): TranscriptRow[] => [refusedAt(at - 7 * 60_000), resentRow(), refusedAt(at - 4 * 60_000), resentRow()];
 
 // The Claude CLI's safeguard flag as a sandbox in use wrote it into a transcript, paragraphs and all.
 const SAFEGUARD_FLAG = [
@@ -270,6 +290,9 @@ const messages: TranscriptRow[] = [
             params: { message: `Claude Code process exited with code 143. stderr: Ignoring 13 permissions.allow entries from .claude/settings.json` },
         },
     },
+    // Refused twice, then run on another account: one row, where it ran and why, both attempts behind its press.
+    ...refusalIncident(Date.now() - 2 * HOUR),
+    { ...accountMovedRow({ why: `refused`, from: `Claude Pro`, to: `Claude Max`, said: SEAT_OFF }), openedAt: Date.now() - 2 * HOUR },
     { role: `notice`, text: `Switched to Claude: your next message starts a fresh session with the conversation so far carried over.` },
     { role: `notice`, text: `Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it.` },
     { role: `notice`, text: `Continued in the same session, re-reading all of it.` },
@@ -604,4 +627,53 @@ export const specimenCard = (now: number): AgentSummary => ({
     turns: 4,
     toolUses: 31,
     jobs: SOFT_DELETES_JOBS(now).map(({ command: _command, ...job }) => job),
+});
+
+// A CONVERSATION AN ORGANIZATION REFUSED: a peer's message refused twice by an organization that turned Claude Code off on
+// the Claude Pro account. Under `?seats=off` (mode.ts) no Claude account can take it: the chat draws the refusals as one
+// row and its card asks a person for the fix (`@intentic/web` ChatContinueStrip, accessWall.ts) instead of offering
+// Continue. Otherwise the sandbox moved it to Claude Max: the chat's row says where it ran and why, and the board's card
+// says where it went instead of "No access" (agentStatus-chips.ts cardLine).
+export const ACCESS_WALL_CHAT_ID = `cnv_access_wall_specimen`;
+const REFUSED_ACCOUNT = `acc_claude_demo_2`;
+const MOVED_TO = `acc_claude_demo`;
+
+const accessWallMessages = (): TranscriptRow[] => [
+    ...[unspokenPromptRow(peerMessagePrompt({ from: `stout-raven-owob`, title: `Investigate chat 502 errors`, message: `Can you check the 502s on /chat?` }))].flatMap((row) => row ?? []),
+    { role: `notice`, text: `Your workspace moved on while this agent waited, its branch was rebased onto your latest 53 commits.`, noticeCode: { code: `synced`, params: { commits: 53 } } },
+    ...(seatsOff
+        ? refusalIncident(Date.now()).slice(0, 3)
+        : [...refusalIncident(Date.now()), accountMovedRow({ why: `refused`, from: `Claude Pro`, to: `Claude Max`, said: SEAT_OFF })]),
+];
+
+export const accessWallTranscript = () => ({
+    sessionId: `ses_01j9accesswall`,
+    provider: `claude` as const,
+    harness: `claude-code` as const,
+    account: seatsOff ? REFUSED_ACCOUNT : MOVED_TO,
+    messages: accessWallMessages(),
+});
+
+export const accessWallCard = (now: number): AgentSummary => ({
+    id: ACCESS_WALL_CHAT_ID,
+    startIn: `intentic`,
+    title: `Investigate chat 502 errors`,
+    status: `error`,
+    failureCode: `claude-not-entitled`,
+    failure: SEAT_OFF,
+    provider: `claude`,
+    harness: `claude-code`,
+    model: `claude-opus-5-5`,
+    account: seatsOff ? REFUSED_ACCOUNT : MOVED_TO,
+    branch: `agent/chat-502s`,
+    base: `4f1c8ab`,
+    autoLand: false,
+    costUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    updatedAt: now - 4 * 60_000,
+    seenAt: now - 60_000,
+    attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    turns: 2,
+    toolUses: 0,
 });

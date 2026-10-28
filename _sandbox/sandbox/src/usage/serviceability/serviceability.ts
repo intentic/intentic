@@ -6,6 +6,7 @@ import { type FleetCapacity, fleetOf, type ModelRef, reopensAtOf, type ServiceFa
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { Services } from "../../composition.js";
 import { accountStateLogFor } from "./state-log.js";
+import { opt } from "../../opt.js";
 
 // "Can this account serve a turn, and what can this provider's accounts serve together?", answered in one place. The rule
 // itself is the contract's (`serviceStates`, `fleetOf` in models/plan-pools.ts), which the editor runs too; this module
@@ -68,25 +69,49 @@ const judged = async (
     return { facts, states };
 };
 
-/** Every account of a provider with its verdict, in the provider's own order. `model` scopes the plan-limit half to the pools it spends. */
-export const serviceabilities = async (
-    deps: ServiceabilityDeps,
-    provider: AgentProvider,
-    model?: ModelRef,
-): Promise<readonly { readonly id: string; readonly state: AccountState }[]> => {
-    const { facts, states } = await judged(deps, provider, model);
-    return facts.map((entry) => ({ id: entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
+// The provider's accounts its organisation keeps switching off (entitlement-history.ts), which every pick ranks behind
+// the steady ones of their tier (preferredAccount). Beside the verdict, not in it: an account that serves is ready
+// however often it was refused. A history that cannot be read costs the pick that ranking, never the pick.
+const flappingOf = async (deps: ServiceabilityDeps, provider: AgentProvider): Promise<ReadonlySet<string>> => {
+    try {
+        return await deps.providerRefusals.flapping(provider);
+    } catch (error) {
+        deps.logger?.warn({ err: error, provider }, "serviceability: the entitlement history could not be read, picking without it");
+        return new Set();
+    }
 };
+
+/** One account as a pick reads it: its verdict, and `flapping` where its organisation keeps switching it off. */
+interface Serviceability {
+    readonly id: string;
+    readonly state: AccountState;
+    readonly flapping?: true;
+}
+
+// Every account's facts with its verdict and its flapping mark, in the provider's own order.
+const rows = async (deps: ServiceabilityDeps, provider: AgentProvider, model: ModelRef | undefined) => {
+    const [{ facts, states }, flapping] = await Promise.all([judged(deps, provider, model), flappingOf(deps, provider)]);
+    return facts.map((entry) => {
+        const row: Serviceability = {
+            id: entry.account,
+            state: states.get(entry.account) ?? { kind: "unknown" },
+            ...opt("flapping", flapping.has(entry.account) ? true : undefined),
+        };
+        return { entry, row };
+    });
+};
+
+/** Every account of a provider with its verdict, in the provider's own order. `model` scopes the plan-limit half to the pools it spends. */
+export const serviceabilities = async (deps: ServiceabilityDeps, provider: AgentProvider, model?: ModelRef): Promise<readonly Serviceability[]> =>
+    (await rows(deps, provider, model)).map(({ row }) => row);
 
 /** As `serviceabilities`, with each account's own name beside it, for a sentence that has to name them. */
 export const namedServiceabilities = async (
     deps: ServiceabilityDeps,
     provider: AgentProvider,
     model?: ModelRef,
-): Promise<readonly { readonly id: string; readonly label: string; readonly state: AccountState }[]> => {
-    const { facts, states } = await judged(deps, provider, model);
-    return facts.map((entry) => ({ id: entry.account, label: entry.label ?? entry.account, state: states.get(entry.account) ?? { kind: "unknown" } }));
-};
+): Promise<readonly (Serviceability & { readonly label: string })[]> =>
+    (await rows(deps, provider, model)).map(({ entry, row }) => ({ ...row, label: entry.label ?? entry.account }));
 
 /** One account's verdict; `unknown` for an account the provider does not hold. */
 export const serviceability = async (deps: ServiceabilityDeps, provider: AgentProvider, account: string, model?: ModelRef): Promise<AccountState> =>

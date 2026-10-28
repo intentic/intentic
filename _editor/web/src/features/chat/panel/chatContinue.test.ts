@@ -5,6 +5,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../../../models/conversations/session/conversation";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { providerAccounts, providerRefusals, setAccountUsage } from "../../../models/providers/providerAccounts";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
@@ -827,4 +828,63 @@ it(`reports a booked move by name instead of a countdown`, async () => {
 
     expect(composerText()).toContain(`Moving to second now`);
     expect(composerText()).not.toContain(`Goes by itself`);
+});
+
+// A person is truly needed (accessWall.ts): the provider refused the conversation's account outright and no other account
+// of it can serve. The fix is the card's one bright press, and trying the account again is a quiet one, since the daemon
+// only re-tests its access and holds the message again. THE FAILURE THIS PREVENTS: a bright Continue sent the message
+// back into the same refusal (2026-10-28).
+describe(`a conversation no account of its provider can serve`, () => {
+    const SEAT_OFF = `Your organization has disabled Claude subscription access for Claude Code`;
+    const refusedChat = (accounts: readonly OauthAccount[]): Conversation => {
+        providerAccounts.value = { ...providerAccounts.value, claude: accounts };
+        agentEntry.value = rosterEntry({ failureCode: `claude-not-entitled`, failure: SEAT_OFF });
+        const conversation = useChat().active.value;
+        conversation.transcript.restoreMessages([{ role: `user`, text: `investigate the 502s` }]);
+        conversation.selection.apply({ kind: `set`, picks: { account: `acc-1` } });
+        return conversation;
+    };
+    const work: OauthAccount = { id: `acc-1`, email: `ada@work.example`, label: `Work`, seatRefusal: SEAT_OFF, connectedAt: 1 };
+    const link = (label: string): HTMLAnchorElement | undefined =>
+        [...document.querySelectorAll<HTMLAnchorElement>(`a`)].find((element) => element.textContent?.trim().startsWith(label));
+
+    it(`makes connecting another account the bright press, and the re-test of this one a quiet press`, async () => {
+        const conversation = refusedChat([work]);
+        const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
+        await mountPanel();
+
+        const card = document.querySelector(`[data-access-wall]`);
+        expect(card?.textContent).toContain(`Work can't run this conversation: its plan or organization does not allow Claude, and no other Claude account here can take it.`);
+        expect(continueButton()).toBeUndefined();
+        const connect = link(`Connect another Claude account`);
+        expect(connect?.getAttribute(`href`)).toContain(`/sandbox/models?open=claude`);
+        expect(connect?.classList.contains(`p-button-secondary`)).toBe(false);
+        const retry = button(`Try Work again`)!;
+        expect(retry.classList.contains(`p-button-text`)).toBe(true);
+
+        retry.click();
+        await settle();
+        expect(carry).toHaveBeenCalledTimes(1);
+    });
+
+    // Where another account can serve, the sandbox moves the conversation by itself on the next press: nothing to fix.
+    it(`stands down where another account of the provider can serve`, async () => {
+        refusedChat([work, { id: `acc-2`, email: `radarsu@gmail.com`, label: `radarsu@gmail.com`, connectedAt: 2 }]);
+        await mountPanel();
+
+        expect(document.querySelector(`[data-access-wall]`)).toBeNull();
+        expect(button(`Try Work again`)).toBeUndefined();
+    });
+
+    // A person who picked another account in the composer has found the way on already.
+    it(`stands down once the conversation is pointed at an account that can serve`, async () => {
+        const conversation = refusedChat([work, { id: `acc-2`, email: `x@y.z`, label: `Home`, seatRefusal: SEAT_OFF, connectedAt: 2 }]);
+        await mountPanel();
+        expect(document.querySelector(`[data-access-wall]`)).not.toBeNull();
+
+        providerAccounts.value = { ...providerAccounts.value, claude: [work, { id: `acc-2`, email: `x@y.z`, label: `Home`, connectedAt: 2 }] };
+        conversation.selection.apply({ kind: `set`, picks: { account: `acc-2` } });
+        await settle();
+        expect(document.querySelector(`[data-access-wall]`)).toBeNull();
+    });
 });

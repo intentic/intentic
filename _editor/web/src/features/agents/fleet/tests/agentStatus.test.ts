@@ -2,7 +2,8 @@ import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contra
 import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
 import { attentionReason, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
-import { cardFailure, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
+import { cardFailure, cardLine, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
+import { cardServingAccount } from "../../board/cards/cardServingAccount";
 import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from "../../../../models/agent-status/agentStatus-meta";
 import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, goesBySelf, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
@@ -1068,6 +1069,28 @@ describe("a failure the daemon classified", () => {
     it("keeps a chip that names something else from opening the failure", () => {
         const asked = { ...failed(`provider-outage`), attention: { ...none, question: true }, unread: false };
         expect(standingChip(asked)?.hint).toBeUndefined();
+    });
+
+    // A refusal for access the conversation has moved past is answered: the line says where it went, the hover what it
+    // moved past (2026-10-28). Still on the refused account, or on one that cannot serve either, the refusal stands.
+    it("says where a refused conversation moved once it runs on an account that can serve", () => {
+        const work = { id: `work`, label: `Work`, connectedAt: 1, seatRefusal: REFUSAL };
+        const home = { id: `home`, label: `radarsu@gmail.com`, connectedAt: 2 };
+        const refused = { ...failed(`claude-not-entitled`, REFUSAL), provider: `claude` as const };
+        const line = (agent: Parameters<typeof cardLine>[0] & { account: string }, accounts: Parameters<typeof cardServingAccount>[2]) =>
+            cardLine(agent, cardServingAccount(agent.provider, agent.account, accounts));
+        expect(line({ ...refused, account: `home` }, [work, home])).toEqual({
+            gist: `Moved to radarsu@gmail.com`,
+            tip: { title: `No access`, quote: REFUSAL },
+            icon: `arrow-right`,
+            ink: `text-subtle`,
+            moved: true,
+        });
+        expect(line({ ...refused, account: `work` }, [work, home])).toMatchObject({ gist: cardFailure(refused)?.gist, icon: `exclamation-triangle`, ink: `text-warning` });
+        expect(line({ ...refused, account: `home` }, [work, { ...home, seatRefusal: REFUSAL }])?.moved).toBeUndefined();
+        // Only a refusal for access is answered by a move: a crash on another account is still a crash.
+        const crashed = { ...failed(undefined, `Claude Code process exited with code 143`), provider: `claude` as const, account: `home` };
+        expect(line(crashed, [work, home])).toMatchObject({ icon: `exclamation-circle`, ink: `text-danger` });
     });
 });
 

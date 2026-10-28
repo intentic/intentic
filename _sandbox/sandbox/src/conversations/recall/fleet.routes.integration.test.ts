@@ -1,4 +1,6 @@
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { deriveTitle } from "@intentic/sandbox-contract/text/title";
+import { waitFor } from "@intentic/testing/bun";
 import type { Hono } from "hono";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
@@ -10,6 +12,17 @@ import { transcriptFile } from "../../sessions/transcript-record.js";
 import { conversationUnit } from "../../store/conversation-units.js";
 import type { FleetRecall, FleetRow } from "./fleet-recall.js";
 import type { FleetMessage, FleetMessageDetail } from "./fleet-transcript.js";
+import { reportPeerMessageOutcome } from "./fleet-message-outcome.js";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { turnStartsDocument } from "../../store/start-window.js";
+
+// The hourly ceiling on the starts one sender may make elsewhere is kept on the history volume, which every run of this
+// suite shares (testConfig.historyRoot is one fixed directory): a few runs inside an hour spent the ceiling, and the
+// suite's own messages came back 429. Each test starts with none spent.
+beforeEach(() => {
+    rmSync(join(testConfig.historyRoot, turnStartsDocument.path), { force: true });
+});
 
 // Pins the fleet routes over HTTP with the agent token: two GETs that cannot change anything, any handle spelling
 // resolving in one call, ambiguous ones named not picked — and the one write, `message`, which puts an attributed
@@ -32,7 +45,9 @@ interface FleetAnswer {
     readonly candidates?: readonly { readonly id: string }[];
     readonly to?: string;
     readonly delivery?: string;
+    readonly run?: string;
     readonly note?: string;
+    readonly waited?: { readonly outcome: string; readonly ending?: { readonly ended: string; readonly failure?: string; readonly reply: string } };
 }
 
 // Auth enabled: the grants middleware only exists on the exposed daemon and is half of what this tests. Two
@@ -308,7 +323,10 @@ test("a message to an idle conversation opens a turn on it, carrying whose words
         message: "the lockfile is mine this hour, leave it alone",
     });
     expect(status).toBe(200);
+    const run = body.run;
     expect(body).toMatchObject({ ok: true, to: "clear-marsh-8c46", delivery: "turn" });
+    // Said as opened, which is all the door knows when it answers: the provider has not seen it yet.
+    expect(body.note).toStartWith(`Opened a turn on it (run ${run ?? "none"}), which has not answered yet`);
     // The route answers the moment the run is registered, like every other detached start; attaching to it is the
     // settle barrier here as it is for a turn a person sends.
     await collect(await client.agent.attach({ conversationId: "clear-marsh-8c46" }));
@@ -320,6 +338,49 @@ test("a message to an idle conversation opens a turn on it, carrying whose words
     // Read as a peer's words, and told how to answer back.
     expect(delivered).toContain("not your user's");
     expect(delivered).toContain("agents message fair-sage-ey2r");
+});
+
+// An app whose runtime answers the turn a message opens on `clear-marsh-8c46` with `answer`, and every other turn quietly,
+// with every prompt it was handed; the sender hears of a failed turn as the daemon's boot wires it (boot-schedulers.ts).
+const answeringApp = (answer: readonly AgentEvent[]) => {
+    const prompts: string[] = [];
+    const daemon = services({
+        auth: { authorize: async () => proven("owner@example.com", "owner") },
+        turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
+        async *agent(request) {
+            prompts.push(request.spec.prompt);
+            yield { kind: "session", sessionId: "sess-any" };
+            if (request.spec.prompt.includes("lockfile")) {
+                yield* answer;
+            }
+            yield { kind: "done" };
+        },
+        sessions: { list: async () => [], read: async () => [], readTail: async () => [], search: async () => [], exists: async () => true },
+    });
+    daemon.events.subscribe("run.settled", (settled) => reportPeerMessageOutcome(daemon, settled));
+    return { app: createApp(daemon), prompts };
+};
+
+const LOCKFILE = { to: "clear-marsh", message: "the lockfile is mine this hour, leave it alone" };
+
+test("a message that waits is answered once the turn it opened ended, with how and the head of its reply", async () => {
+    const { app } = answeringApp([{ kind: "delta", text: "Leaving the lockfile alone." }, { kind: "text_end" }]);
+    await twoConversations(app);
+    const { status, body } = await sendMessage(app, "fair-sage-ey2r", { ...LOCKFILE, wait: true, timeoutSeconds: 30 });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, delivery: "turn", waited: { outcome: "ended", ending: { ended: "finished", reply: "Leaving the lockfile alone." } } });
+});
+
+test("the sender of a message whose turn failed is told, once, by the sandbox, in a turn of its own", async () => {
+    const { app, prompts } = answeringApp([{ kind: "error", message: "Your organization has disabled Claude subscription access for Claude Code" }]);
+    await twoConversations(app);
+    prompts.length = 0;
+    expect((await sendMessage(app, "fair-sage-ey2r", LOCKFILE)).body).toMatchObject({ ok: true, delivery: "turn" });
+    await waitFor(() => expect(prompts).toHaveLength(2));
+    expect(prompts[1]).toContain("`clear-marsh-8c46`");
+    expect(prompts[1]).toContain("Your organization has disabled Claude subscription access for Claude Code");
+    await collect(await clientFor(app).agent.attach({ conversationId: "fair-sage-ey2r" }));
+    expect(prompts).toHaveLength(2);
 });
 
 test("a message names an unresolvable target instead of guessing, and refuses the sender's own conversation", async () => {
