@@ -12,6 +12,8 @@ export const OBJECT_GLYPHS = {
     "cloud-download": { outline: `M5 18a4 4 0 0 1 0-8 7 7 0 0 1 12-2 5 5 0 0 1 0 10 M12 12v10 M8 18l4 4 4-4` },
     "cloud-upload": { outline: `M5 18a4 4 0 0 1 0-8 7 7 0 0 1 12-2 5 5 0 0 1 0 10 M12 22V12 M8 16l4-4 4 4` },
     code: { outline: `m7 6-5 6 5 6 M17 6l5 6-5 6 M14 3l-4 18` },
+    // A git branch: two commits on the trunk and one forked off it, for a session's branch name.
+    "git-branch": { outline: `M6 8v8 M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M20 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M18 8a6 6 0 0 1-6 6H6` },
     cog: { outline: `M12 2l3 4h4v4l3 2-3 2v4h-4l-3 4-3-4H5v-4l-3-2 3-2V6h4Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z` },
     cpu: { outline: `M6 6h12v12H6Z M10 10h4v4h-4Z M9 2v4 M15 2v4 M9 18v4 M15 18v4 M2 9h4 M2 15h4 M18 9h4 M18 15h4` },
     "credit-card": { outline: `M3 4h18v16H3Z M3 9h18 M7 15h4` },

@@ -791,7 +791,7 @@ const grab = (event: PointerEvent): void => {
                     <span v-if="model !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
                         <!-- Pulled back into the line's wider gap, so the dot sits as close to whose it is as to the model. -->
                         <span v-if="provenance !== undefined" class="-ml-1.5">·</span>
-                        <span class="truncate">{{ model }}</span>
+                        <span class="truncate text-muted">{{ model }}</span>
                     </span>
                     <!-- Where it's running, shown only when that's somewhere other than here: the fleet spreads work across machines without a per-agent choice. -->
                     <span
@@ -802,14 +802,19 @@ const grab = (event: PointerEvent): void => {
                         <Icon name="desktop" class="text-2xs" />
                         {{ agent.runner }}
                     </span>
+                    <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
+                    <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
+                        <Icon name="user" class="shrink-0 text-2xs" />
+                        <span class="truncate">{{ account.label }}</span>
+                    </span>
                     <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                     <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                     <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
-                    <!-- What the branch changed, beside it, so it costs no row of its own (wrapping here when the line is full). A press: the count is what the work IS, so it opens the review rather than the chat. Red and green only while the diff is a live signal. -->
+                    <!-- What the branch changed, last and pushed to the line's right edge so the counts line up down a lane; it costs no row of its own (wrapping here when the line is full). A press: the count is what the work IS, so it opens the review rather than the chat. Red and green only while the diff is a live signal. -->
                     <button
                         v-if="diffShown && agent.diff !== undefined"
                         type="button"
-                        class="shrink-0 rounded-sm font-mono hover:underline"
+                        class="ml-auto shrink-0 rounded-sm font-mono tabular-nums hover:underline"
                         :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
                         v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
                         @click.stop="emit('changes')"
@@ -817,11 +822,6 @@ const grab = (event: PointerEvent): void => {
                         <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                         <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
                     </button>
-                    <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
-                    <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
-                        <Icon name="user" class="shrink-0 text-2xs" />
-                        <span class="truncate">{{ account.label }}</span>
-                    </span>
                 </div>
 
                 <!-- Never replaces the live readout below: this says what the loop is working toward, that says what it's doing right now. -->

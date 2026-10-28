@@ -84,6 +84,7 @@ export const ICONS = {
     fork: ACTION_GLYPHS[`fork`],
     forward: ACTION_GLYPHS[`forward`],
     gift: OBJECT_GLYPHS[`gift`],
+    "git-branch": OBJECT_GLYPHS[`git-branch`],
     github: BRAND_GLYPHS[`github`],
     gitlab: BRAND_GLYPHS[`gitlab`],
     globe: OBJECT_GLYPHS[`globe`],

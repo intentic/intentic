@@ -37,14 +37,14 @@ const CHROME = `inline-flex min-w-0 items-center gap-1 rounded font-mono text-2x
         :aria-label="t(`agents.sessionChip.sessionName`, { branch })"
         @click.stop="emit(`reveal`, $event)"
     >
-        <Icon name="code" class="shrink-0 text-2xs" />
+        <Icon name="git-branch" class="shrink-0 text-2xs" />
         <template v-if="!compact">
             <span class="truncate">{{ branch }}</span>
             <Icon name="chevron-down" class="shrink-0 text-[0.6rem] opacity-60" />
         </template>
     </button>
     <span v-else v-tooltip.top="branch" :class="[CHROME, `max-w-full shrink`]">
-        <Icon name="code" class="shrink-0 text-2xs" />
+        <Icon name="git-branch" class="shrink-0 text-2xs" />
         <span class="truncate">{{ shown }}</span>
     </span>
 </template>
