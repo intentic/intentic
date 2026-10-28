@@ -63,6 +63,27 @@ impl Write for Io {
         }
     }
 
+    // Hyper otherwise flattens every HTTP body into its headers buffer, copying even a streamed upload's bytes.
+    fn is_write_vectored(&self) -> bool {
+        match self {
+            Io::Unix { inner } => inner.is_write_vectored(),
+            Io::Tcp { inner } => inner.is_write_vectored(),
+            Io::Tls { inner } => inner.is_write_vectored(),
+        }
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        match self.project() {
+            IoProjection::Unix { inner } => inner.poll_write_vectored(cx, bufs),
+            IoProjection::Tcp { inner } => inner.poll_write_vectored(cx, bufs),
+            IoProjection::Tls { inner } => inner.poll_write_vectored(cx, bufs),
+        }
+    }
+
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.project() {
             IoProjection::Unix { inner } => inner.poll_flush(cx),
@@ -241,3 +262,6 @@ where
         .pool_idle_timeout(Duration::from_secs(4))
         .build(connector)
 }
+
+#[cfg(test)]
+mod tests;
