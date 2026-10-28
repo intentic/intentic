@@ -444,7 +444,7 @@ onMounted(() => {
                             }}</span>
                         </template>
                         <template v-if="section.provider !== undefined && section.badge !== undefined && !section.withheld" #actions>
-                            <RouterLink :to="connectTo(section.provider)" class="text-2xs text-link" @click="closeOnPlainClick">
+                            <RouterLink :to="connectTo(section.provider)" class="text-2xs text-link hover:underline" @click="closeOnPlainClick">
                                 {{ t(`ui.action.connect`) }}
                             </RouterLink>
                         </template>
@@ -533,7 +533,7 @@ onMounted(() => {
                 </template>
                 <div v-if="searching && flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     <p>{{ t(`chat.modelPicker.noModelsMatch`) }}</p>
-                    <button v-if="rail !== undefined" type="button" class="mt-1 text-2xs text-link" @click="railTo(undefined)">
+                    <button v-if="rail !== undefined" type="button" class="mt-1 text-2xs text-link hover:underline" @click="railTo(undefined)">
                         {{ t(`chat.modelPicker.searchAllProviders`) }}
                     </button>
                 </div>
