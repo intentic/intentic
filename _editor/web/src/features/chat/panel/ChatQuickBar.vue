@@ -194,17 +194,19 @@ const restingLine = computed(() => {
             <!-- The form not showing leaves the flow, so the box is always the size of what is in it. `inert` is not a
                  boolean Vue knows, so a false value is written as `undefined` to drop the attribute. -->
             <div
-                class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-opacity motion-reduce:transition-none"
+                class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom transition-opacity motion-reduce:transition-none"
                 :class="
                     open
                         ? `pointer-events-none absolute inset-x-0 bottom-0 opacity-0 duration-150 ease-out`
                         : `pointer-events-auto duration-150 ease-out`
                 "
             >
+                <!-- The chip IS the pill's surface: one border, one fill, one radius. A chip plate inside a bordered
+                     wrapper drew two edges that never met. -->
                 <button
                     ref="pill"
                     type="button"
-                    class="chat-quick-pill ui-chip ui-chip-lg ui-chip-lead max-w-[22rem] text-left"
+                    class="chat-quick-pill ui-chip ui-chip-lg ui-chip-lead max-w-[22rem] border-line bg-card/85 text-left shadow-lg backdrop-blur-md hover:border-line-strong hover:bg-overlay"
                     :inert="open || undefined"
                     :aria-expanded="standing === `asking` ? undefined : open"
                     :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
@@ -213,7 +215,7 @@ const restingLine = computed(() => {
                     <!-- The board's identity mark (AgentCard), as a plain filled face: one chat wears one face wherever it is named. -->
                     <IdentityTile :session="session" class="h-6 w-6 text-xs" />
                     <span
-                        class="min-w-0 truncate text-2xs"
+                        class="min-w-0 truncate text-xs"
                         :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
                         >{{ restingLine }}</span
                     >
