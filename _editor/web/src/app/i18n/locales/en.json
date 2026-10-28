@@ -4011,7 +4011,6 @@
             "showOlder": "Show {hidden} older",
             "showOlderModels": "Show {hidden} older {label} models",
             "unavailable": "Unavailable",
-            "addAnotherProvider": "Add another provider",
             "nothingConnected": "Nothing is connected yet. Connect a model to start",
             "notSharedFold": "Models not shared with you",
             "nothingShared": "None of this sandbox's AI accounts is shared with you."

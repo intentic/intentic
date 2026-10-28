@@ -121,7 +121,7 @@ const toggleExpanded = (target: string): void => {
 // Nothing here is the reader's to run, though something is connected: the one line that says so leads the list.
 const nothingYours = computed(() => nothingShared());
 
-// Lanes the reader cannot run yet wait behind one row once something can (foldUnconnected); search reads them all anyway.
+// Lanes the reader cannot run yet stay out of the list once something can (foldUnconnected); search reads them all anyway.
 // With nothing of theirs at all, every lane waits there, under the line that says why: a list of rows none of which can be
 // picked says less than that line. A lane the rail names is shown whatever it holds, since naming it asked for it.
 const othersOpen = ref(false);
@@ -129,13 +129,16 @@ const fold = computed(() => {
     const laid = pickerSections(pickerEntries.value, provider, rail.value, providerRunnable);
     return nothingYours.value && rail.value === undefined ? { shown: [], folded: laid } : foldUnconnected(laid, provider, providerRunnable);
 });
+// The row opens the fold only when everything behind it is withheld from the reader (Access ▸ People), which it names.
+// Lanes merely not connected yet get no row: the connect view has doors enough, and search and the rail still reach them.
+const foldRow = computed(
+    () => !searching.value && fold.value.folded.length > 0 && fold.value.folded.every((section) => section.providers.every(providerWithheld)),
+);
 // After the last lane shown, else after the lead rows (Auto) where every lane is folded, else first.
 const foldAfter = computed(() =>
-    searching.value || fold.value.folded.length === 0 ? undefined : (fold.value.shown.at(-1)?.key ?? (sections.value[0]?.key === `lead` ? `lead` : undefined)),
+    foldRow.value ? (fold.value.shown.at(-1)?.key ?? (sections.value[0]?.key === `lead` ? `lead` : undefined)) : undefined,
 );
-const foldFirst = computed(() => !searching.value && fold.value.folded.length > 0 && foldAfter.value === undefined);
-// Whether everything behind the fold is withheld from the reader, which its row then names (rather than connecting more).
-const foldWithheld = computed(() => fold.value.folded.every((section) => section.providers.every(providerWithheld)));
+const foldFirst = computed(() => foldRow.value && foldAfter.value === undefined);
 
 // The visible list: one flat section while searching, else one section per lane, blocks latest then older.
 const sections = computed<
@@ -405,7 +408,7 @@ onMounted(() => {
             >
                 <PickerConnectFirst v-if="nothingConnected && !searching" @navigate="closeOnPlainClick" />
                 <PickerNothingShared v-else-if="nothingYours && !searching" />
-                <PickerFoldRow v-if="foldFirst" v-model="othersOpen" :withheld="foldWithheld" />
+                <PickerFoldRow v-if="foldFirst" v-model="othersOpen" />
                 <template v-for="section in sections" :key="section.key">
                     <!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
                     <SectionHeader v-if="section.label !== undefined" :label="section.label" density="dense" class="px-3 pb-1 pt-2" role="presentation">
@@ -526,7 +529,7 @@ onMounted(() => {
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
                         <span>{{ section.expanded ? t(`ui.action.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden }) }}</span>
                     </button>
-                    <PickerFoldRow v-if="section.key === foldAfter" v-model="othersOpen" :withheld="foldWithheld" />
+                    <PickerFoldRow v-if="section.key === foldAfter" v-model="othersOpen" />
                 </template>
                 <div v-if="searching && flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     <p>{{ t(`chat.modelPicker.noModelsMatch`) }}</p>

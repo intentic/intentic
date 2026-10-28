@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 
-// The model picker's one row the providers the reader cannot run yet fold behind (foldUnconnected), and open below.
-// Named by what waits there: providers to connect, or, when every one of them is withheld from the reader (Access ▸
-// People), models that are not shared with them, since connecting would not make those theirs.
+// The model picker's row the lanes withheld from the reader (Access ▸ People) fold behind, and open below: models that
+// are not shared with them, since connecting would not make those theirs.
 const open = defineModel<boolean>({ required: true });
-const { withheld = false } = defineProps<{ withheld?: boolean }>();
 const t = useT();
 </script>
 
@@ -17,6 +15,6 @@ const t = useT();
         @click="open = !open"
     >
         <Icon :name="open ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
-        <span>{{ withheld ? t(`chat.modelPicker.notSharedFold`) : t(`chat.modelPicker.addAnotherProvider`) }}</span>
+        <span>{{ t(`chat.modelPicker.notSharedFold`) }}</span>
     </button>
 </template>

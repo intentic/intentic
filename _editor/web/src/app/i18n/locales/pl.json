@@ -4011,7 +4011,6 @@
             "notConnected": "niepodłączony",
             "older": "starsza",
             "olderThan": "starsza wersja, {newer} jest nowszy",
-            "addAnotherProvider": "Dodaj innego dostawcę",
             "nothingConnected": "Nic nie jest jeszcze podłączone. Podłącz model, by zacząć",
             "notSharedFold": "Modele nieudostępnione Tobie",
             "nothingShared": "Żadne z kont AI tego sandboxa nie jest Ci udostępnione."

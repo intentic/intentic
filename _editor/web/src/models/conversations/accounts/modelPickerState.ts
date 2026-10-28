@@ -310,7 +310,7 @@ export const pickerSections = (
 export interface FoldedSections {
     // The lanes the list draws open: every one that can run a turn now, and the one this conversation is on.
     readonly shown: readonly PickerSection[];
-    // The lanes behind the list's one "Add another provider" disclosure, in the order pickerSections gave them.
+    // The lanes behind the list's one disclosure (shown only when they are withheld; else left to search and the rail), in the order pickerSections gave them.
     readonly folded: readonly PickerSection[];
 }
 

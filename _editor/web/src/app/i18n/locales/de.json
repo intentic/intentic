@@ -4011,7 +4011,6 @@
             "showOlder": "{hidden} ältere anzeigen",
             "showOlderModels": "{hidden} ältere {label}-Modelle anzeigen",
             "unavailable": "Nicht verfügbar",
-            "addAnotherProvider": "Weiteren Anbieter hinzufügen",
             "nothingConnected": "Noch nichts verbunden. Verbinden Sie ein Modell, um zu starten",
             "notSharedFold": "Nicht mit dir geteilte Modelle",
             "nothingShared": "Keines der KI-Konten dieser Sandbox ist mit dir geteilt."

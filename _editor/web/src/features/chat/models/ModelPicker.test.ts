@@ -55,10 +55,6 @@ const headings = (element: HTMLElement): string[] =>
 const freeChip = (element: HTMLElement): Element | undefined =>
     [...element.querySelectorAll(`[role="presentation"] span`)].find((node) => node.textContent?.trim() === `Free · Google sign-in`);
 
-// The one row the list folds the providers nothing here can run yet behind, while something can.
-const disclosure = (element: HTMLElement): HTMLButtonElement | undefined =>
-    [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Add another provider`));
-
 const oneModel = (label: string) => [{ value: label.toLowerCase().replaceAll(` `, `-`), label }];
 
 beforeEach(() => {
@@ -126,23 +122,15 @@ it(`stops pitching the free sign-in once a model is connected`, async () => {
     const element = mount();
     await nextTick();
 
-    // What runs leads alone; every locked provider waits behind one row (onboarding review 2026-10-18, F10).
+    // What runs leads alone; locked providers stay out of the list, with no row to open them (onboarding review
+    // 2026-10-18, F10): search and the rail still reach them, and the connect view has doors enough.
     expect(headings(element)).toEqual([`Claude Code`]);
     expect(freeChip(element)).toBeUndefined();
-    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider`);
-    expect(disclosure(element)?.getAttribute(`aria-expanded`)).toBe(`false`);
-
-    disclosure(element)?.click();
-    await nextTick();
-    expect(headings(element).slice(0, 5)).toEqual([`Claude Code`, `Codex`, `Grok`, `Kimi Code`, `Google`]);
-    expect(disclosure(element)?.getAttribute(`aria-expanded`)).toBe(`true`);
-    // The price still reads, since a reader comparing options wants it, but in the same chip as every other row.
-    expect(freeChip(element)?.className).toContain(`text-subtle`);
-    expect(freeChip(element)?.className).not.toContain(`text-accent`);
+    expect(element.textContent).not.toContain(`Add another provider`);
 });
 
 // The trial is a working row (a count, not a price): connected providers lead, cost only separates the locked ones.
-it(`seats the working free trial above the locked rows, with its allowance rather than a price`, async () => {
+it(`seats the working free trial beside the active lane, with its allowance rather than a price, and the locked rows left out`, async () => {
     endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
     trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
     providerModels.value = { ...providerModels.value, [TRIAL_PROVIDER]: oneModel(`Free trial`) };
@@ -150,14 +138,9 @@ it(`seats the working free trial above the locked rows, with its allowance rathe
     await nextTick();
 
     // The lane the chat is on stays, locked or not; the trial is the one other thing that runs, and the catalogue of
-    // accounts the reader does not have waits behind one row, cheapest first once opened.
+    // accounts the reader does not have stays out of the list.
     expect(headings(element)).toEqual([`Claude Code`, `Free trial`]);
     expect(element.textContent).toContain(`Free trial · 12 steps left today`);
-    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider`);
-
-    disclosure(element)?.click();
-    await nextTick();
-    expect(headings(element).slice(0, 3)).toEqual([`Claude Code`, `Free trial`, `Google`]);
 });
 
 // Folded is not gone: a reader who types a provider's model still finds it.
@@ -175,7 +158,6 @@ it(`still finds a folded provider's models by search`, async () => {
     await nextTick();
 
     expect([...element.querySelectorAll(`[role="option"]`)].map((row) => row.textContent?.replace(/\s+/g, ` `).trim())).toEqual([`Gemini 3 Pro`]);
-    expect(disclosure(element)).toBeUndefined();
 });
 
 // With nothing connected every row is locked, so the way to unlock them leads the list; once anything runs it goes,
@@ -274,7 +256,6 @@ describe(`for a person held to some AI accounts`, () => {
         await nextTick();
 
         expect(headings(element)).toEqual([`Codex`]);
-        expect(disclosure(element)).toBeUndefined();
         foldRow(element)?.click();
         await nextTick();
 
