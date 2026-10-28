@@ -3,7 +3,7 @@ import type { SandboxHandlerInput, SandboxHandlerOutput } from "@intentic/sandbo
 import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { Frames, refuse } from "@intentic/contract-serve";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { HOME_STORIES } from "../../fixture/home/recording";
+import { homeStoryOf } from "../../fixture/home/recording";
 import { transcriptFor } from "../../fixture/transcripts";
 import type { HomeSandbox } from "../../fixture/home/sandboxes";
 import { homeRecording } from "../../mode";
@@ -38,7 +38,7 @@ const runFor = (conversationId: string, sandbox: HomeSandbox): Run | undefined =
         return existing;
     }
     const now = Date.now();
-    const story = homeRecording && isHomeConversationId(conversationId) ? HOME_STORIES[sandbox] : undefined;
+    const story = homeRecording && isHomeConversationId(conversationId) ? homeStoryOf(sandbox) : undefined;
     const run =
         story === undefined
             ? conversationId === FEATURED_ID

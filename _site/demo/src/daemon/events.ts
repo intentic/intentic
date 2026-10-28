@@ -1,7 +1,7 @@
 import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import type { SandboxHandlerInput } from "@intentic/sandbox-contract/protocol/procedure-types";
 import { Frames, type ProcedureCall } from "@intentic/contract-serve";
-import { homeSandboxOf } from "../fixture/home/sandboxes";
+import { homeSandboxOf } from "../fixture/home/sandboxAt";
 import { watchOwnBrowser } from "../browser";
 import { REPOS } from "../fixture/workspace";
 import { demoMode } from "../mode";

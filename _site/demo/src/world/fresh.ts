@@ -1,4 +1,5 @@
 import { sandboxContract, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { DemoHandler } from "../transport";
 import { json } from "../transport";
 import { answersNothing } from "./addresses";
@@ -17,8 +18,13 @@ const freshRowAt = (url: URL) => {
     return row !== undefined && madeOnThisPage(row.id) ? row : undefined;
 };
 
-// A conversation belongs to the address it was started at; one started nowhere new is the demo's own.
+// A conversation belongs to the address it was started at; one started nowhere new is the demo's own. A home conversation
+// has the same id in every sandbox (it is named after its person), so a new sandbox has its own once it is written in, and
+// writing in it takes nothing from the others.
 const belongsAt = (id: string, origin: string): boolean => {
+    if (isHomeConversationId(id)) {
+        return freshRowAt(new URL(origin)) === undefined || startedAt.get(origin)?.has(id) === true;
+    }
     const home = [...startedAt].find(([, ids]) => ids.has(id))?.[0];
     return home === undefined ? freshRowAt(new URL(origin)) === undefined : home === origin;
 };

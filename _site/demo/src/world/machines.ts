@@ -42,9 +42,9 @@ const bootSteps = (sandboxId: string): (() => boolean)[] => [
 
 /**
  * A computer runs `ic sandbox connect` with this code: the claim, each stage of the run, then the daemon's check-in at
- * the address the code names and its boot. Returns false for a code the platform never minted.
+ * the address the code names and its boot, a step every `every` ms. Returns false for a code the platform never minted.
  */
-export const redeem = (code: string): boolean => {
+export const redeem = (code: string, every = STEP_MS): boolean => {
     const minted = codeOf(code);
     if (minted === undefined) {
         return false;
@@ -52,37 +52,69 @@ export const redeem = (code: string): boolean => {
     const { sandboxId, hostname } = minted;
     // Still the row's current code, and the row still there: a newer mint or a delete ends the run where it stands.
     const current = (): boolean => rowOf(sandboxId) !== undefined && latestCodeFor(sandboxId) === code;
-    pace([
-        () => {
-            claimCode(sandboxId);
-            return current();
-        },
-        ...STAGES.map((stage) => () => {
-            reportSetup(sandboxId, stage);
-            return current();
-        }),
-        () => {
-            reportSetup(sandboxId, `done`);
-            checkIn(sandboxId, `https://${hostname}`);
-            return current();
-        },
-        ...bootSteps(sandboxId),
-    ]);
+    pace(
+        [
+            () => {
+                claimCode(sandboxId);
+                return current();
+            },
+            ...STAGES.map((stage) => () => {
+                reportSetup(sandboxId, stage);
+                return current();
+            }),
+            () => {
+                reportSetup(sandboxId, `done`);
+                checkIn(sandboxId, `https://${hostname}`);
+                return current();
+            },
+            ...bootSteps(sandboxId),
+        ],
+        every,
+    );
     return true;
 };
 
-/** The words `ic sandbox connect` prints on the machine, as the Devices flow streams them back. */
-export const connectLines = (slug: string, code: string): string[] => {
+/** How many of `redeem`'s steps pass between the claim and the daemon's check-in, the moment the editor opens it. */
+export const STEPS_TO_CHECK_IN = STAGES.length + 1;
+
+/** One line `ic sandbox connect` prints, with the pause before it; `claims` marks the line the code is redeemed at. */
+export interface ConnectLine {
+    readonly text: string;
+    readonly afterMs: number;
+    readonly claims?: true;
+}
+
+// The image's layers as docker's pull names them, each pulled, downloaded and extracted in turn.
+const IMAGE_LAYERS = [`3f4ca61aafcd`, `9b3a2e4c11d0`, `d5c0f2a8e771`, `5e1b0c9d2f44`, `a07c6d3e8b19`, `c81f0e2d4a96`];
+
+/**
+ * What `ic sandbox connect` prints on the machine, as the Devices flow streams it back and Add sandbox's progress reads it:
+ * a `[phase]` marker per step of the plan (`@intentic/sandbox-run` setup-progress.ts), docker's own pull lines under the
+ * download, paced so each step is seen to start and finish, about fourteen seconds in all.
+ */
+export const connectLines = (slug: string, code: string): ConnectLine[] => {
     const host = codeOf(code)?.hostname ?? sandboxHostname();
     return [
-        `intentic: redeeming setup code ${code.slice(0, 7)}… with the platform`,
-        `intentic: pulling ghcr.io/intentic/sandbox:stable…`,
-        `stable: Pulling from intentic/sandbox`,
-        `Digest: sha256:1366a71da67cabd5d9f5c90d3b3a4181d861c7b29decc57cc0201c546317ab60`,
-        `intentic: creating the tunnel for ${host}`,
-        `intentic: starting intentic-sandbox-${slug}`,
-        `intentic: waiting for the sandbox daemon to answer…`,
-        `intentic: sandbox ${slug} is up at https://${host}`,
+        { text: `intentic: [checking-docker] checking that Docker is running`, afterMs: 300 },
+        { text: `Docker 27.3.1 is running`, afterMs: 700 },
+        { text: `intentic: [preflight] checking disk space, memory and ports`, afterMs: 500 },
+        { text: `48 GB free · 32 GB memory · ports free`, afterMs: 700 },
+        { text: `intentic: [claiming-code] redeeming setup code ${code.slice(0, 7)}… with the platform`, afterMs: 500, claims: true },
+        { text: `intentic: [pulling-image] pulling ghcr.io/intentic/sandbox:stable`, afterMs: 900 },
+        { text: `stable: Pulling from intentic/sandbox`, afterMs: 300 },
+        ...IMAGE_LAYERS.map((layer) => ({ text: `${layer}: Pulling fs layer`, afterMs: 80 })),
+        ...IMAGE_LAYERS.flatMap((layer) => [
+            { text: `${layer}: Downloading`, afterMs: 250 },
+            { text: `${layer}: Download complete`, afterMs: 350 },
+        ]),
+        ...IMAGE_LAYERS.map((layer) => ({ text: `${layer}: Pull complete`, afterMs: 180 })),
+        { text: `Digest: sha256:1366a71da67cabd5d9f5c90d3b3a4181d861c7b29decc57cc0201c546317ab60`, afterMs: 200 },
+        { text: `Status: Downloaded newer image for ghcr.io/intentic/sandbox:stable`, afterMs: 200 },
+        { text: `intentic: [starting-sandbox] starting intentic-sandbox-${slug}`, afterMs: 500 },
+        { text: `intentic: [waiting-health] waiting for the sandbox daemon to answer`, afterMs: 1_000 },
+        { text: `intentic: [verifying] checking https://${host} answers`, afterMs: 1_400 },
+        { text: `intentic: [connecting-machine] connecting this computer to the sandbox`, afterMs: 900 },
+        { text: `intentic: sandbox ${slug} is up at https://${host}`, afterMs: 1_100 },
     ];
 };
 

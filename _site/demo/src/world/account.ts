@@ -94,8 +94,10 @@ export const DEMO_HOSTED_PLAN: HostedPlanState = {
 const DAY_MS = 86_400_000;
 
 // Both lanes, a name deleted twice and a row on its last day, so the account's Recently deleted page shows each thing it
-// has to tell apart: what a restore brings back, which of two boxes of one name is which, and what goes tomorrow.
-export const DEMO_TRASH: readonly TrashedSandbox[] = [
+// has to tell apart: what a restore brings back, which of two boxes of one name is which, and what goes tomorrow. The
+// home recording, which the landing page runs live, deletes nothing: a first-time visitor has no use for a trash, and an
+// empty one keeps "Recently deleted" out of the account menu (AccountPanel.vue draws it only with something in it).
+const TRASHED: readonly TrashedSandbox[] = [
     {
         id: `trash-staging`,
         name: `acme-staging`,
@@ -129,3 +131,5 @@ export const DEMO_TRASH: readonly TrashedSandbox[] = [
         hosted: false,
     },
 ];
+
+export const DEMO_TRASH: readonly TrashedSandbox[] = homeRecording ? [] : TRASHED;

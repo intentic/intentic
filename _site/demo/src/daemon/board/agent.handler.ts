@@ -1,5 +1,5 @@
 import { clearingSentDraft } from "./drafts";
-import { homeSandboxOf } from "../../fixture/home/sandboxes";
+import { homeSandboxOf } from "../../fixture/home/sandboxAt";
 import { demoRefusals } from "../account/accounts";
 import { queueDoors, sayOrBook, switchAccount } from "./queue";
 import { routeChat } from "./chatRoute";

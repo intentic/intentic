@@ -1,7 +1,7 @@
 import type { DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
 import { Frames } from "@intentic/contract-serve";
 import { forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning } from "../../fixture/devices";
-import { connectLines, redeem } from "../../world/machines";
+import { connectLines, redeem, STEPS_TO_CHECK_IN } from "../../world/machines";
 
 // A paired machine's verbs, streamed as the machine sends them: progress lines, then its own sentence, paced so a
 // press is watchable rather than over before the row has drawn its log.
@@ -105,16 +105,37 @@ const flowLines = (slug: string, op: string): string[] => {
     }
 };
 
-// `create` with a setup code: the machine runs `ic sandbox connect`, and once it is through, the sandbox it made redeems
-// the code and announces itself as a real one would (world/machines.ts), which is what Add sandbox waits on.
+// `create` with a setup code: the machine runs `ic sandbox connect`, each line after its own pause, and the sandbox it
+// makes redeems the code at the line that says so and announces itself as a real one would (world/machines.ts), which is
+// what Add sandbox waits on and its progress reads step by step. The editor opens the new sandbox the moment it checks
+// in, so its reports are paced to check in just after the last line: every step of the progress is seen to finish first.
+const CHECK_IN_AFTER_MS = 700;
+
 const createFlow = (slug: string, setupCode: string): Frames<DeviceFlowLine> =>
-    paced({
-        lines: connectLines(slug, setupCode),
-        result: `Created sandbox "${slug}" and connected it to your account.`,
-        after: () => {
-            redeem(setupCode);
-            setDemoSandboxRunning(slug, true);
-        },
+    new Frames((sink) => {
+        const lines = connectLines(slug, setupCode);
+        const claim = lines.findIndex((line) => line.claims === true);
+        const sum = (upTo: number): number => lines.slice(0, upTo).reduce((ms, line) => ms + line.afterMs, 0);
+        const every = (sum(lines.length) - sum(claim + 1) + CHECK_IN_AFTER_MS) / STEPS_TO_CHECK_IN;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const next = (step: number): void => {
+            const line = lines[step];
+            if (line === undefined) {
+                setDemoSandboxRunning(slug, true);
+                sink.emit({ kind: `result`, message: `Created sandbox "${slug}" and connected it to your account.` });
+                sink.close();
+                return;
+            }
+            timer = setTimeout(() => {
+                if (line.claims === true) {
+                    redeem(setupCode, every);
+                }
+                sink.emit({ kind: `line`, text: line.text });
+                next(step + 1);
+            }, line.afterMs);
+        };
+        next(0);
+        return () => clearTimeout(timer);
     });
 
 export const sandboxFlow = (slug: string, op: string, setupCode?: string): Frames<DeviceFlowLine> =>

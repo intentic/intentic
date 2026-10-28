@@ -128,14 +128,15 @@ const HOME: DemoMode = {
     homeRecording: true,
 };
 
-// What the landing page's hero runs live (src/embed.ts): it opens on the home view the hero's poster was taken of, and
-// every place a visitor clicks to next has the showcase's afternoon behind it rather than an empty board. No chats open,
-// so the first frame matches the poster.
+// What the landing page's hero runs live (src/embed.ts): it opens on the home view the hero's poster was taken of, and a
+// visitor who steps inside a sandbox finds a calm board rather than an empty one: one agent at work on the checkout, one
+// that finished, nothing asking for them. The showcase's seven cards in every state were a wall to someone who had only
+// just arrived (the owner's, 2026-10-28). No chats open, so the first frame matches the poster.
 const HERO: DemoMode = {
     id: `hero`,
     label: `Hero`,
-    note: `The home view, with the showcase's board behind it: what the landing page runs live.`,
-    agents: SHOWCASE.agents,
+    note: `The home view, with a calm board behind it: what the landing page runs live.`,
+    agents: [FEATURED_AGENT_ID, RELEASE_NOTES_AGENT_ID],
     extensions: [],
     teammate: false,
     openChats: false,

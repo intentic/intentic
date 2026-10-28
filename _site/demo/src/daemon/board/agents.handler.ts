@@ -1,5 +1,5 @@
 import { subagentTranscriptFor } from "../../fixture/subagentTranscripts";
-import { homeSandboxOf } from "../../fixture/home/sandboxes";
+import { homeSandboxOf } from "../../fixture/home/sandboxAt";
 import { documentsFor } from "../../fixture/transcripts";
 import { copyAgentIgnored, fileDiff } from "../../fixture/workspace";
 import {

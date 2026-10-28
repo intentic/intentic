@@ -1,6 +1,6 @@
 import { SPECIMEN_CHAT_ID, SPECIMEN_TRANSCRIPT } from "./specimen";
 import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
-import { HOME_STORIES } from "./home/recording";
+import { homeStoryOf } from "./home/recording";
 import type { HomeSandbox } from "./home/sandboxes";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { producedDocumentPaths } from "@intentic/sandbox-contract/text/documents";
@@ -703,11 +703,14 @@ const quietly = (id: string, transcript: AgentTranscript): AgentTranscript => {
 };
 
 // Each recording is one whole page: it starts at the record's first message, and nothing older precedes it. A home
-// conversation is the one sandbox's it was asked of (fixture/home/sandboxes.ts): what was said before the turn it plays.
+// conversation is the one sandbox's it was asked of (fixture/home/sandboxes.ts): what was said before the turn it plays,
+// and nothing at all in a sandbox the visitor made, which has had no conversation yet.
 export const transcriptFor = (id: string, sandbox: HomeSandbox): SandboxHandlerOutput<`agents`, `transcript`> => {
     if (homeRecording && isHomeConversationId(id)) {
-        const messages = HOME_STORIES[sandbox].history;
-        return { sessionId: `ses_demo_home_${sandbox}`, provider: `claude`, harness: `claude-code`, account: `acc_claude_demo`, messages, from: 0, more: false };
+        const story = homeStoryOf(sandbox);
+        return story === undefined
+            ? { messages: [], from: 0, more: false }
+            : { sessionId: `ses_demo_home_${sandbox}`, provider: `claude`, harness: `claude-code`, account: `acc_claude_demo`, messages: story.history, from: 0, more: false };
     }
     const transcript = TRANSCRIPTS[id];
     return { ...(transcript === undefined ? { messages: [] } : quietly(id, transcript)), from: 0, more: false };

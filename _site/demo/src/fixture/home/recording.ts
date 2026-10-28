@@ -2,7 +2,7 @@ import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { PERSONAL } from "./personal";
 import { RESEARCH } from "./research";
-import type { HomeSandbox } from "./sandboxes";
+import type { HomeSandbox, RecordedSandbox } from "./sandboxes";
 import { SHOP } from "./shop";
 import type { HomeStory } from "./story";
 
@@ -25,4 +25,9 @@ export const homeAgent = (email: string, now: number): AgentSummary => ({
 });
 
 // Each sandbox's home conversation: what was said before, and the turn it plays when first opened (story.ts).
-export const HOME_STORIES = { shop: SHOP, research: RESEARCH, personal: PERSONAL } as const satisfies Readonly<Record<HomeSandbox, HomeStory>>;
+const HOME_STORIES = { shop: SHOP, research: RESEARCH, personal: PERSONAL } as const satisfies Readonly<Record<RecordedSandbox, HomeStory>>;
+
+const isRecorded = (sandbox: HomeSandbox): sandbox is RecordedSandbox => Object.hasOwn(HOME_STORIES, sandbox);
+
+/** The story a sandbox's home conversation holds; none for one the visitor made, whose home starts empty. */
+export const homeStoryOf = (sandbox: HomeSandbox): HomeStory | undefined => (isRecorded(sandbox) ? HOME_STORIES[sandbox] : undefined);

@@ -16,6 +16,7 @@ import { installIdentity } from "./world/identity";
 import { installElementAddresses } from "./world/elements";
 import { withPreviewSites } from "./daemon/workspace/previewSites";
 import { coverage } from "./unserved";
+import { showRailHint } from "./railHint";
 
 // Everything that must be true before the real app's entry runs. Transports and credentials must be in place first,
 // hence the dynamic import at the bottom. Credentials are seeded into the real localStorage `sandboxSession` reads,
@@ -90,4 +91,5 @@ console.info(
 );
 
 announceWhenDrawn();
+showRailHint();
 await import("@intentic/web/main");
