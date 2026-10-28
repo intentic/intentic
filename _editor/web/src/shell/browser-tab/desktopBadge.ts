@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { announceDesktopBadge, type DesktopBadgeMark, desktopNotices } from "../../app/environments/desktopNotices";
-import { drawPng, iconKey, iconSvg, overlaySvg } from "./tabIcon";
+import { cropOf, drawableLogo, drawPng, iconKey, iconSvg, overlaySvg } from "./tabIcon";
 import type { TabMark } from "./tabSignal";
 
 // The tab's mark on the desktop app's own icon (desktop-app badge.rs): the tray's icon, the overlay on the Windows
@@ -11,6 +11,8 @@ import type { TabMark } from "./tabSignal";
 // on a dense screen. Each gets the smallest image that stays sharp there.
 const traySize = (): number => (/windows/i.test(globalThis.navigator?.userAgent ?? ``) ? 32 : 64);
 const OVERLAY_SIZE = 32;
+// The window's icon: Windows shows 32 on its taskbar at 100% and 48 or more on a dense screen.
+const WINDOW_SIZE = 64;
 
 /** What the mark means, beside the app's name in the tray's tooltip. */
 export const badgeTooltip = (mark: TabMark | undefined): string | undefined => {
@@ -37,15 +39,19 @@ export const linkImage = (dataUrl: string | undefined): string | undefined =>
 let drawing = 0;
 let shown: string | undefined;
 
-/** Puts the mark on the desktop app's icon, or takes it off; a mark already up costs nothing. */
-export const showDesktopBadge = (mark: TabMark | undefined): void => {
+/**
+ * Puts the mark on the desktop app's icon, or takes it off, over the open sandbox's logo where it has one; the window's
+ * own icon (its taskbar button) becomes that logo, unmarked. A badge already up costs nothing.
+ */
+export const showDesktopBadge = (mark: TabMark | undefined, logo?: string): void => {
     // Nothing to draw for in a browser, or in an app that takes no badge.
     if (!desktopNotices()) {
         return;
     }
+    const own = drawableLogo(logo);
     const tooltip = badgeTooltip(mark);
     // The tooltip carries the count past nine, which the drawing does not.
-    const key = `${iconKey(mark) ?? `none`}|${tooltip ?? ``}`;
+    const key = `${iconKey(mark) ?? `none`}|${tooltip ?? ``}|${own ?? ``}`;
     if (key === shown) {
         return;
     }
@@ -54,14 +60,22 @@ export const showDesktopBadge = (mark: TabMark | undefined): void => {
     const turn = drawing;
     const kind: DesktopBadgeMark = mark?.kind ?? `none`;
     const count = mark?.kind === `asks` ? mark.count : 0;
-    if (mark === undefined) {
+    if (mark === undefined && own === undefined) {
         announceDesktopBadge({ mark: kind, count });
         return;
     }
-    void Promise.all([drawPng(iconSvg(mark), traySize()), drawPng(overlaySvg(mark), OVERLAY_SIZE)]).then(([icon, overlay]) => {
-        if (turn !== drawing) {
-            return;
-        }
-        announceDesktopBadge({ mark: kind, count, tooltip, icon: linkImage(icon), overlay: linkImage(overlay) });
-    });
+    void cropOf(own)
+        .then((crop) =>
+            Promise.all([
+                mark === undefined && own === undefined ? undefined : drawPng(iconSvg(mark, own, crop), traySize()),
+                mark === undefined ? undefined : drawPng(overlaySvg(mark), OVERLAY_SIZE),
+                own === undefined ? undefined : drawPng(iconSvg(undefined, own, crop), WINDOW_SIZE),
+            ]),
+        )
+        .then(([icon, overlay, window]) => {
+            if (turn !== drawing) {
+                return;
+            }
+            announceDesktopBadge({ mark: kind, count, tooltip, icon: linkImage(icon), overlay: linkImage(overlay), window: linkImage(window) });
+        });
 };

@@ -241,7 +241,7 @@ impl BadgeMark {
     }
 }
 
-/// `intentic://badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]`: the workspace tab's mark, for the app's icon
+/// `intentic://badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…][&window=…]`: the workspace tab's mark, for the app's icon
 /// in the tray, on the Windows taskbar and on a Linux dock (badge.rs). The page draws both images with the drawing its
 /// tab icon is made of (the web's tabIcon.ts), so the tab, the tray and the taskbar cannot disagree, and the app only
 /// puts them up. App-window only: a link from anywhere else could paint the tray with what it chose.
@@ -256,6 +256,9 @@ pub struct BadgeArgs {
     pub icon: Option<Vec<u8>>,
     /// The mark alone, a PNG: the overlay on the Windows taskbar's button.
     pub overlay: Option<Vec<u8>>,
+    /// The open sandbox's logo, unmarked, a PNG: the icon of the app's window (its taskbar button, its dock tile).
+    /// Absent is the app's own icon.
+    pub window: Option<Vec<u8>>,
 }
 
 /// The most a badge image may weigh, decoded. A 64-pixel icon is a few kilobytes; this bounds what a link can make
@@ -291,6 +294,7 @@ fn badge_of(
     tooltip: Option<String>,
     icon: Option<String>,
     overlay: Option<String>,
+    window: Option<String>,
 ) -> Option<BadgeArgs> {
     let mark = BadgeMark::parse(mark)?;
     let count = match count {
@@ -308,6 +312,7 @@ fn badge_of(
         tooltip,
         icon: png_of(icon)?,
         overlay: png_of(overlay)?,
+        window: png_of(window)?,
     })
 }
 
@@ -900,6 +905,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             get("tooltip"),
             get("icon"),
             get("overlay"),
+            get("window"),
         )
         .map(Link::Badge),
         "badge" => None,
@@ -2113,7 +2119,7 @@ L"}"#,
     fn the_workspace_hands_over_its_mark_with_both_images() {
         let png = png_param();
         let args = badge_of_link(
-            &format!("intentic://badge?mark=asks&count=3&tooltip=3%20need%20you&icon={png}&overlay={png}"),
+            &format!("intentic://badge?mark=asks&count=3&tooltip=3%20need%20you&icon={png}&overlay={png}&window={png}"),
             APP,
         )
         .unwrap();
@@ -2125,6 +2131,7 @@ L"}"#,
                 tooltip: Some("3 need you".into()),
                 icon: Some(PNG.to_vec()),
                 overlay: Some(PNG.to_vec()),
+                window: Some(PNG.to_vec()),
             }
         );
         // No mark: the app's own icon, no overlay, no count.
@@ -2136,6 +2143,7 @@ L"}"#,
                 tooltip: None,
                 icon: None,
                 overlay: None,
+                window: None,
             })
         );
     }

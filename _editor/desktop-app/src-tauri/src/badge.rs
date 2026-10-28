@@ -30,6 +30,8 @@ struct Standing {
     /// The mark alone, for the overlay of each face's taskbar button. Read on Windows only, kept everywhere: one shape.
     #[cfg_attr(not(windows), allow(dead_code))]
     overlay: Option<Image<'static>>,
+    /// The open sandbox's logo for the window's icon, or none for the app's own.
+    window: Option<Image<'static>>,
     /// The count a Linux dock was last told.
     count: Option<u32>,
 }
@@ -65,9 +67,11 @@ pub fn show(app: &AppHandle, args: BadgeArgs) {
         let badge = app.state::<Badge>();
         let mut standing = badge.0.lock().unwrap();
         standing.overlay = overlay;
+        standing.window = args.window.as_deref().and_then(image_of);
         standing.count.replace(count) != Some(count)
     };
     if let Some(frame) = crate::frame::frame(app) {
+        window_icon_now(app, &frame);
         overlay_now(app, &frame);
     }
     if tell_dock {
@@ -97,6 +101,18 @@ pub fn window_shown(window: &Webview) {
 
 fn is_face(label: &str) -> bool {
     crate::frame::is_face(label)
+}
+
+/// The frame's own icon, which the taskbar button and the dock tile show: the open sandbox's logo, or the app's.
+fn window_icon_now(app: &AppHandle, window: &Window) {
+    let logo = app.state::<Badge>().0.lock().unwrap().window.clone();
+    let Some(icon) = logo.or_else(|| app.default_window_icon().cloned().map(Image::to_owned))
+    else {
+        return;
+    };
+    if let Err(error) = window.set_icon(icon) {
+        eprintln!("intentic: the window's icon could not be set: {error}");
+    }
 }
 
 /// The overlay on the frame's taskbar button, as the badge stands. A hidden frame has no button to mark, and gets its

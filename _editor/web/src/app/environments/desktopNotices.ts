@@ -33,6 +33,8 @@ export interface DesktopBadge {
     readonly icon?: string;
     /** The mark alone, in the same encoding: the overlay on the Windows taskbar's button. */
     readonly overlay?: string;
+    /** The open sandbox's logo, unmarked, in the same encoding: the window's icon. None keeps the app's own. */
+    readonly window?: string;
 }
 
 export const desktopBadgeLink = (badge: DesktopBadge): string => {
@@ -49,6 +51,9 @@ export const desktopBadgeLink = (badge: DesktopBadge): string => {
     }
     if (badge.overlay !== undefined) {
         params.set(`overlay`, badge.overlay);
+    }
+    if (badge.window !== undefined) {
+        params.set(`window`, badge.window);
     }
     return `intentic://badge?${params.toString()}`;
 };

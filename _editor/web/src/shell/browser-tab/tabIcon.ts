@@ -29,7 +29,7 @@ const lotus = (fill: string): string => `<svg x="0" y="0" width="32" height="32"
 
 // Only an inline picture: an SVG drawn as an image loads nothing from the network, and every sandbox logo is one
 // (an upload is downscaled to a data URL, a preset is an SVG data URL), so anything else keeps the lotus.
-const drawableLogo = (logo: string | undefined): string | undefined => (logo?.startsWith(`data:image/`) === true ? logo : undefined);
+export const drawableLogo = (logo: string | undefined): string | undefined => (logo?.startsWith(`data:image/`) === true ? logo : undefined);
 
 const attribute = (value: string): string => value.replaceAll(`&`, `&amp;`).replaceAll(`"`, `&quot;`).replaceAll(`<`, `&lt;`);
 
@@ -234,7 +234,7 @@ const measure = (logo: string): Promise<LogoCrop | undefined> =>
         image.src = logo;
     });
 
-const cropOf = (logo: string | undefined): Promise<LogoCrop | undefined> => {
+export const cropOf = (logo: string | undefined): Promise<LogoCrop | undefined> => {
     if (logo === undefined || readLogoStyle(logo) !== undefined) {
         return Promise.resolve(undefined);
     }

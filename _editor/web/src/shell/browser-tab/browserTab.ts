@@ -145,20 +145,12 @@ export const startBrowserTab = (): void => {
               })
             : undefined,
     );
-    watch(
-        shown,
-        (mark) => {
-            setTabMark(mark);
-            showDesktopBadge(mark);
-        },
-        { immediate: true },
-    );
-    // The open sandbox's logo stands in for the lotus whether or not the tab shows the fleet's marks.
-    watch(
-        () => active.value?.image ?? undefined,
-        (logo) => setTabLogo(logo),
-        { immediate: true },
-    );
+    watch(shown, (mark) => setTabMark(mark), { immediate: true });
+    // The open sandbox's logo stands in for the lotus whether or not the tab shows the fleet's marks, on the tab and on
+    // the desktop app's icon alike.
+    const logo = computed(() => active.value?.image ?? undefined);
+    watch(logo, (image) => setTabLogo(image), { immediate: true });
+    watch([shown, logo], ([mark, image]) => showDesktopBadge(mark, image), { immediate: true });
     onScopeDispose(() => {
         setTabLogo(undefined);
         setTabMark(undefined);
