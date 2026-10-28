@@ -44,23 +44,37 @@ const normalize = (path: string): string => {
 };
 
 // TypeScript's ESM rule means source imports the emitted name, so `./widget.js` resolves to a real neighbour
-// `widget.ts`; the .js→.ts rewrites are tried before extensionless and directory-index forms.
-const candidatesFor = (base: string): string[] => {
-    const candidates = [base];
+// `widget.ts`; the .js→.ts rewrites are tried before extensionless and directory-index forms. Stop on the first
+// match: eagerly constructing every suffix and index form allocated dozens of unused strings per relative import.
+const resolveFile = (base: string, known: ReadonlySet<string>): string | undefined => {
+    if (known.has(base)) {
+        return base;
+    }
     const jsLike = /\.(js|jsx|mjs|cjs)$/.exec(base);
     if (jsLike !== null) {
         const stem = base.slice(0, -jsLike[0].length);
-        candidates.push(`${stem}.ts`, `${stem}.tsx`, `${stem}.mts`);
+        for (const suffix of [".ts", ".tsx", ".mts"]) {
+            const candidate = `${stem}${suffix}`;
+            if (known.has(candidate)) {
+                return candidate;
+            }
+        }
     }
     for (const suffix of CANDIDATE_SUFFIXES) {
-        candidates.push(`${base}${suffix}`);
+        const candidate = `${base}${suffix}`;
+        if (known.has(candidate)) {
+            return candidate;
+        }
     }
     for (const indexBase of INDEX_BASES) {
         for (const suffix of CANDIDATE_SUFFIXES) {
-            candidates.push(`${base}${indexBase}${suffix}`);
+            const candidate = `${base}${indexBase}${suffix}`;
+            if (known.has(candidate)) {
+                return candidate;
+            }
         }
     }
-    return candidates;
+    return undefined;
 };
 
 // Workspace package name → its directory, from each package.json's "name"; lets a cross-package import
@@ -82,14 +96,26 @@ const resolveSpecifier = (
     known: ReadonlySet<string>,
     packages: ReadonlyMap<string, string>,
 ): string | undefined => {
-    const tryAll = (base: string): string | undefined => candidatesFor(base).find((candidate) => known.has(candidate));
+    const tryAll = (base: string): string | undefined => resolveFile(base, known);
     if (specifier.startsWith(".")) {
         return tryAll(normalize(`${dirOf(fromPath)}/${specifier}`));
     }
     // Longest package name wins, so `@scope/pkg/sub` prefers `@scope/pkg` over a shorter `@scope` entry.
-    const owner = [...packages.keys()]
-        .filter((name) => specifier === name || specifier.startsWith(`${name}/`))
-        .toSorted((a, b) => b.length - a.length)[0];
+    // Only slash-delimited prefixes can own this specifier. Probe longest first rather than scanning every package
+    // for every import (including external dependencies, which have no owner in the workspace).
+    let owner: string | undefined;
+    let prefix = specifier;
+    while (prefix !== "") {
+        if (packages.has(prefix)) {
+            owner = prefix;
+            break;
+        }
+        const slash = prefix.lastIndexOf("/");
+        if (slash === -1) {
+            break;
+        }
+        prefix = prefix.slice(0, slash);
+    }
     if (owner === undefined) {
         return undefined;
     }
