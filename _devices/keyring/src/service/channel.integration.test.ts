@@ -45,11 +45,15 @@ describe("the protected service's door", () => {
             log: () => undefined,
         });
         try {
+            // A setup held for the helper (service-run.ts) waits for it rather than finding nobody.
+            expect(await link.whenReady(10)).toBe(false);
+            const waiting = link.whenReady(5000);
             const helper = await open(port);
             helper.send({ door: token, as: "helper" });
             expect(await helper.next(5000)).toBe(JSON.stringify({ method: "passphrase" }));
             helper.send({ method: "passphrase", passphrase: PASSPHRASE });
             expect(await helper.next(5000)).toBe(JSON.stringify({ ok: true }));
+            expect(await waiting).toBe(true);
             // The fake helper answers each call as a person and a window would.
             void (async () => {
                 for (;;) {

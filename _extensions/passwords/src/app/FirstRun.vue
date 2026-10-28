@@ -80,6 +80,17 @@ const rememberAll = (): Promise<void> =>
     }).finally(() => {
         settingUp.value = undefined;
     });
+// Each row says in a word what Turn on does for it, and only a source this computer cannot have adds a line: why.
+const statusOf = (source: SourceStatus) => {
+    if (!source.available) {
+        return { label: t(`app.settings.unavailable`), tone: `text-subtle` };
+    }
+    if (source.ready) {
+        return { label: t(`app.first.ready`), tone: `text-success` };
+    }
+    // A phone is paired from the phone itself, so Turn on leaves it to that.
+    return source.source === `phone` ? { label: t(`app.first.pairOnPhone`), tone: `text-muted` } : { label: t(`app.first.willSetUp`), tone: `text-content` };
+};
 const notNow = (): Promise<void> =>
     run(async () => {
         await port.updateSettings({ remember: REMEMBER_NOTHING });
@@ -128,14 +139,15 @@ const notNow = (): Promise<void> =>
                 <h2 class="text-lg font-semibold text-content">{{ t(`app.first.rememberTitle`) }}</h2>
                 <p class="text-sm text-muted">{{ t(`app.first.rememberHelp`) }}</p>
                 <ul class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
-                    <li v-for="source in sources" :key="source.source" class="flex items-center gap-3 px-4 py-3" :class="source.available ? `` : `opacity-60`">
-                        <div class="flex min-w-0 flex-1 flex-col">
-                            <span class="text-sm text-content">{{ t(`app.settings.sources.${source.source}`) }}<span v-if="source.detail" class="text-muted"> · {{ source.detail }}</span></span>
-                            <span class="text-2xs text-subtle">{{ t(`app.settings.sourceHelp.${source.source}`) }}</span>
+                    <li v-for="source in sources" :key="source.source" class="flex flex-col gap-0.5 px-4 py-3" :class="source.available ? `` : `opacity-60`">
+                        <div class="flex items-baseline gap-3">
+                            <span class="min-w-0 flex-1 text-sm font-medium text-content">
+                                {{ t(`app.settings.sources.${source.source}`) }}<span v-if="source.detail" class="ml-2 text-xs font-normal text-muted">{{ source.detail }}</span>
+                            </span>
+                            <span class="shrink-0 whitespace-nowrap text-xs" :class="statusOf(source).tone">{{ statusOf(source).label }}</span>
                         </div>
-                        <span class="shrink-0 text-2xs" :class="source.ready ? `text-success` : `text-muted`">
-                            {{ !source.available ? (source.why ?? t(`app.settings.unavailable`)) : source.ready ? t(`app.first.ready`) : (source.asks ?? t(`app.settings.setUp`)) }}
-                        </span>
+                        <p class="text-xs text-muted">{{ t(`app.settings.sourceHelp.${source.source}`) }}</p>
+                        <p v-if="!source.available && source.why" class="text-xs text-warning">{{ source.why }}</p>
                     </li>
                 </ul>
                 <p v-if="settingUp" class="flex items-center gap-1.5 text-xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.first.settingSource`, { source: settingUp }) }}</p>

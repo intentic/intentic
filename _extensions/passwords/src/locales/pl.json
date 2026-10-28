@@ -196,7 +196,7 @@
                 "sandbox": "Terminale sandboxa"
             },
             "sourceHelp": {
-                "browser": "Logowania w Brave, Chrome lub Edge z rozszerzeniem Intentic.",
+                "browser": "Logowania przez rozszerzenie Intentic.",
                 "terminal": "Monity ssh, sudo i git na tym komputerze.",
                 "apps": "Pola haseł w programach: wpisujesz raz w nasze małe okienko.",
                 "phone": "Autouzupełnianie z telefonu.",
@@ -246,6 +246,8 @@
             "rememberTitle": "Niech Intentic zapamiętuje hasła, które wpisujesz",
             "rememberHelp": "Zapisują się cicho przy logowaniu, z powiadomieniem do cofnięcia. Agenci nie dostają żadnego, dopóki na to nie pozwolisz.",
             "ready": "Gotowe",
+            "willSetUp": "Zostanie skonfigurowane",
+            "pairOnPhone": "Sparuj na telefonie",
             "turnOnRemember": "Włącz",
             "notNow": "Nie teraz",
             "settingSource": "Konfigurowanie {source}…",

@@ -148,7 +148,7 @@ export const passphraseConsent = (prompt: PassphrasePrompt, extras: ConsentExtra
             return nobodyToAsk(request, "the keyring is not set up yet: `intentic-machine keyring setup` sets it up.");
         }
         for (let attempt = 1; attempt <= PASSPHRASE_TRIES; attempt++) {
-            const message = attempt === 1 ? request.message : `That was not the keyring's passphrase. ${request.message}`;
+            const message = attempt === 1 ? request.message : `That was not the recovery key. ${request.message}`;
             const answer = await prompt({ title: request.title, message });
             if (answer.kind === "cancelled") {
                 return { ok: false, code: "declined", reason: "The person at the computer said no." };

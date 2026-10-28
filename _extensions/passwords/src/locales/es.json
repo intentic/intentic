@@ -196,7 +196,7 @@
                 "sandbox": "Terminales del sandbox"
             },
             "sourceHelp": {
-                "browser": "Inicios de sesión en Brave, Chrome o Edge con la extensión de Intentic.",
+                "browser": "Inicios de sesión a través de la extensión de Intentic.",
                 "terminal": "Avisos de ssh, sudo y git en este ordenador.",
                 "apps": "Campos de contraseña en programas: escribes una vez en nuestro cuadrito.",
                 "phone": "Autocompletado de tu teléfono.",
@@ -246,6 +246,8 @@
             "rememberTitle": "Dejar que Intentic recuerde las contraseñas que escribes",
             "rememberHelp": "Se guardan en silencio al iniciar sesión, con un aviso para deshacer. Los agentes no reciben ninguna hasta que tú lo digas.",
             "ready": "Listo",
+            "willSetUp": "Se configurará",
+            "pairOnPhone": "Vincular en el teléfono",
             "turnOnRemember": "Activar",
             "notNow": "Ahora no",
             "settingSource": "Configurando {source}…",

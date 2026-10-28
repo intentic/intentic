@@ -196,7 +196,7 @@
                 "sandbox": "Sandbox-Terminals"
             },
             "sourceHelp": {
-                "browser": "Anmeldungen in Brave, Chrome oder Edge mit der Intentic-Erweiterung.",
+                "browser": "Anmeldungen über die Intentic-Erweiterung.",
                 "terminal": "ssh-, sudo- und git-Aufforderungen auf diesem Computer.",
                 "apps": "Passwortfelder in Programmen: du gibst einmal in unser kleines Feld ein.",
                 "phone": "Autofill deines Telefons.",
@@ -246,6 +246,8 @@
             "rememberTitle": "Intentic soll sich die Passwörter merken, die du eingibst",
             "rememberHelp": "Leise beim Anmelden gespeichert, mit einer Meldung zum Rückgängigmachen. Agenten bekommen keine davon, bis du es erlaubst.",
             "ready": "Bereit",
+            "willSetUp": "Wird eingerichtet",
+            "pairOnPhone": "Am Telefon koppeln",
             "turnOnRemember": "Aktivieren",
             "notNow": "Nicht jetzt",
             "settingSource": "{source} wird eingerichtet…",

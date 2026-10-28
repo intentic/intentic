@@ -34,10 +34,13 @@ namespace IntenticKeyring {
   }
 
   public static class Passphrase {
+    // Title as the box's heading, the message under it, and one field named for what goes in it.
     public static string Ask(string title, string message, int seconds) {
       Application.EnableVisualStyles();
       Form form = new Form();
-      form.Text = title;
+      form.Text = "Intentic Passwords";
+      form.Font = new Font("Segoe UI", 10f);
+      form.BackColor = SystemColors.Window;
       form.FormBorderStyle = FormBorderStyle.FixedDialog;
       form.MinimizeBox = false;
       form.MaximizeBox = false;
@@ -45,28 +48,48 @@ namespace IntenticKeyring {
       form.StartPosition = FormStartPosition.CenterScreen;
       form.AutoSize = true;
       form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-      form.Padding = new Padding(16);
+      form.Padding = new Padding(20, 16, 20, 16);
       FlowLayoutPanel panel = new FlowLayoutPanel();
       panel.FlowDirection = FlowDirection.TopDown;
       panel.AutoSize = true;
+      Label heading = new Label();
+      heading.Text = title;
+      heading.Font = new Font("Segoe UI Semibold", 12f);
+      heading.AutoSize = true;
+      heading.MaximumSize = new Size(380, 0);
+      heading.Margin = new Padding(0, 0, 0, 6);
       Label body = new Label();
-      body.Text = message + "\r\n\r\nThe keyring's passphrase:";
+      body.Text = message;
+      body.ForeColor = SystemColors.GrayText;
       body.AutoSize = true;
-      body.MaximumSize = new Size(480, 0);
+      body.MaximumSize = new Size(380, 0);
+      body.Margin = new Padding(0, 0, 0, 14);
+      Label field = new Label();
+      field.Text = "Recovery key";
+      field.AutoSize = true;
+      field.Margin = new Padding(0, 0, 0, 4);
       TextBox box = new TextBox();
       box.UseSystemPasswordChar = true;
-      box.Width = 320;
+      box.Width = 380;
+      box.Margin = new Padding(0, 0, 0, 16);
       FlowLayoutPanel buttons = new FlowLayoutPanel();
+      buttons.FlowDirection = FlowDirection.RightToLeft;
+      buttons.Width = 380;
       buttons.AutoSize = true;
+      buttons.Margin = new Padding(0);
       Button ok = new Button();
-      ok.Text = "OK";
+      ok.Text = "Continue";
+      ok.AutoSize = true;
       ok.DialogResult = DialogResult.OK;
       Button cancel = new Button();
       cancel.Text = "Cancel";
+      cancel.AutoSize = true;
       cancel.DialogResult = DialogResult.Cancel;
       buttons.Controls.Add(ok);
       buttons.Controls.Add(cancel);
+      panel.Controls.Add(heading);
       panel.Controls.Add(body);
+      panel.Controls.Add(field);
       panel.Controls.Add(box);
       panel.Controls.Add(buttons);
       form.Controls.Add(panel);

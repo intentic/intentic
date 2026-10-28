@@ -63,10 +63,20 @@ export const provenBy = async (run: Pick<ServiceRun, "proven">, files: KeyringPa
     }
 };
 
-// The core's handler, with a setup that went through handed to the platform: the Linux service wraps the vault key
-// under its own key then, while the recovery key it was made with is still in hand.
-const withAfterSetup = (keyring: Keyring, run: ServiceRun, files: KeyringPaths): KeyringHandler => ({
+// How long a setup waits for the session helper. The service and the helper start together and the helper looks for
+// the door every 5 s, so a setup sent the moment the service answers found no helper: Hello was skipped as "not here"
+// (a vault the recovery key alone opens, asked for at every sign-in and every yes), and the helper, arriving a moment
+// later, asked for a recovery key the person had not been shown yet.
+const SETUP_WAITS_FOR_HELPER_MS = 12_000;
+
+// The core's handler, with a setup held until the session helper is there to enrol Hello and answer for this session,
+// and a setup that went through handed to the platform: the Linux service wraps the vault key under its own key then,
+// while the recovery key it was made with is still in hand.
+const withAfterSetup = (keyring: Keyring, run: ServiceRun, files: KeyringPaths, link: HelperLink, log: (message: string) => void): KeyringHandler => ({
     handle: async (request) => {
+        if (request.op === "setup" && (await readVaultFile(files.vault)) === undefined && !(await link.whenReady(SETUP_WAITS_FOR_HELPER_MS))) {
+            log("setting up with no session helper connected: Hello cannot be enrolled");
+        }
         const answer = await keyring.handle(request);
         if (request.op === "setup" && answer.ok && run.afterSetup !== undefined) {
             const file = await readVaultFile(files.vault);
@@ -107,7 +117,7 @@ export const runService = async (run: ServiceRun, runner: Runner): Promise<never
     const token = randomBytes(32).toString("base64url");
     const { port } = await serveDoor(
         {
-            handler: withAfterSetup(keyring, run, files),
+            handler: withAfterSetup(keyring, run, files, link, log),
             link,
             token,
             challenge: async () => ((await readVaultFile(files.vault)) === undefined ? { method: "unset" } : await run.challenge(files)),

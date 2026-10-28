@@ -271,7 +271,9 @@ describe(`PasswordsApp`, () => {
 
         await waitFor(() => expect(el.textContent).toContain(`Let Intentic remember the passwords you type`));
         expect(el.textContent).not.toContain(`ABCD-EFGH-IJKL-MNOP`);
-        expect(el.textContent).toContain(`Brave will ask once`);
+        // Each source says in a word what Turn on does for it; one this computer cannot have says why.
+        expect(el.textContent).toContain(`Will set up`);
+        expect(el.textContent).toContain(`No phone is paired.`);
         button(el, `Turn on`).click();
         await waitFor(() => expect(el.textContent).toContain(`Bring your passwords along`));
         // Every source this computer can have, on together; only the one not yet in place is set up.

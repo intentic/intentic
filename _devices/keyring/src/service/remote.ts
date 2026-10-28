@@ -26,14 +26,44 @@ export class HelperLink {
     #next = 1;
     readonly #one = serialLock();
 
+    readonly #waiting = new Set<() => void>();
+
     // The proven helper, replacing any before it.
     attach(helper: LineSocket): void {
         this.#helper?.end();
         this.#helper = helper;
+        for (const wake of this.#waiting) {
+            wake();
+        }
+        this.#waiting.clear();
     }
 
     get ready(): boolean {
         return this.#helper !== undefined && !this.#helper.closed;
+    }
+
+    /** Resolves true once a proven helper is connected, at once if one is, or false after `deadlineMs` without one. */
+    async whenReady(deadlineMs: number): Promise<boolean> {
+        if (this.ready) {
+            return true;
+        }
+        let wake: (() => void) | undefined;
+        const attached = new Promise<true>((resolve) => {
+            wake = () => resolve(true);
+            this.#waiting.add(wake);
+        });
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<false>((resolve) => {
+            timer = setTimeout(() => resolve(false), deadlineMs);
+        });
+        try {
+            return await Promise.race([attached, late]);
+        } finally {
+            clearTimeout(timer);
+            if (wake !== undefined) {
+                this.#waiting.delete(wake);
+            }
+        }
     }
 
     // One call answered by the helper as `schema` says, or undefined when there is none or it did not answer in time.
@@ -118,7 +148,7 @@ export const remoteHello = (link: HelperLink, pin: () => Promise<HelloPin | unde
 };
 
 // What the recovery prompt adds to the request it is shown for: the passphrase box is where the recovery key goes.
-export const RECOVERY_HINT = "Type your recovery key: the one Passwords showed once when it was set up on this computer.";
+export const RECOVERY_HINT = "Your recovery key is the one Passwords showed once, when it was set up.";
 
 // The recovery key (or a passphrase from before recovery keys), asked by the helper; the core checks it against the vault,
 // so a helper cannot make one up. What the person typed is read as a recovery key first (recovery.ts).

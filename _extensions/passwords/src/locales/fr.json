@@ -196,7 +196,7 @@
                 "sandbox": "Terminaux sandbox"
             },
             "sourceHelp": {
-                "browser": "Connexions dans Brave, Chrome ou Edge avec l'extension Intentic.",
+                "browser": "Connexions via l'extension Intentic.",
                 "terminal": "Invites ssh, sudo et git sur cet ordinateur.",
                 "apps": "Champs mot de passe dans les programmes : vous saisissez une fois dans notre petite zone.",
                 "phone": "Saisie automatique de votre téléphone.",
@@ -246,6 +246,8 @@
             "rememberTitle": "Laisser Intentic mémoriser les mots de passe que vous saisissez",
             "rememberHelp": "Enregistrés discrètement en vous connectant, avec un avis pour annuler. Les agents n'en reçoivent aucun tant que vous ne l'autorisez pas.",
             "ready": "Prêt",
+            "willSetUp": "Sera configuré",
+            "pairOnPhone": "Associer sur le téléphone",
             "turnOnRemember": "Activer",
             "notNow": "Pas maintenant",
             "settingSource": "Configuration de {source}…",

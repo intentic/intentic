@@ -196,7 +196,7 @@
                 "sandbox": "Sandbox terminals"
             },
             "sourceHelp": {
-                "browser": "Sign-ins in Brave, Chrome or Edge with the Intentic extension.",
+                "browser": "Sign-ins through the Intentic extension.",
                 "terminal": "ssh, sudo and git prompts on this computer.",
                 "apps": "Password fields in programs: you type once into a small box of ours.",
                 "phone": "Your phone's autofill.",
@@ -246,6 +246,8 @@
             "rememberTitle": "Let Intentic remember the passwords you type",
             "rememberHelp": "Saved quietly as you sign in, with a notice you can undo. Agents get none of them until you say so.",
             "ready": "Ready",
+            "willSetUp": "Will set up",
+            "pairOnPhone": "Pair on phone",
             "turnOnRemember": "Turn on",
             "notNow": "Not now",
             "settingSource": "Setting up {source}…",

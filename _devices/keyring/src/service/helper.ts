@@ -107,8 +107,8 @@ export const answerCall = async (hands: Hands, call: HelperCall): Promise<Helper
 };
 
 const PROOF_NOTICE = {
-    title: "Connect Passwords",
-    message: "Passwords on this computer asks you to confirm it is you, once for this sign-in, before it can ask you anything or type for you.",
+    title: "Confirm it's you",
+    message: "Once per sign-in, so Passwords can ask you things and type for you.",
 };
 
 /** What the helper answers a challenge with. Exported for its test. */
