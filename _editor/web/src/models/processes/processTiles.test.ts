@@ -1,5 +1,5 @@
 import type { ProcessReport } from "../../app/environments/processes/processReport";
-import { mergeProcesses, processBadgeOf, processTileOf, processTilesOf } from "./processTiles";
+import { foldedOnSandbox, mergeProcesses, processBadgeOf, processTileOf, processTilesOf, sandboxRunOf, settledSetups } from "./processTiles";
 
 const run = (over: Partial<ProcessReport> = {}): ProcessReport => ({
     id: `sandbox-setup:sbx_7`,
@@ -48,5 +48,38 @@ describe(`the rail's group`, () => {
         const merged = mergeProcesses([run(), run({ id: `docker:engine`, kind: `docker` })], [run({ state: `done` })]);
         expect(merged.map((report) => report.id)).toEqual([`sandbox-setup:sbx_7`, `docker:engine`]);
         expect(merged[0]?.state).toBe(`done`);
+    });
+});
+
+describe(`one sandbox, one tile`, () => {
+    const tiled = new Set([`sbx_7`]);
+
+    it(`draws a working run of a sandbox already on the rail on that sandbox's tile, not in the group`, () => {
+        expect(foldedOnSandbox(run(), tiled)).toBe(true);
+        expect(foldedOnSandbox(run({ state: `waiting`, waitingFor: `pcSetup` }), tiled)).toBe(true);
+        expect(sandboxRunOf([run({ percent: 80 })], `sbx_7`)?.percent).toBe(80);
+    });
+
+    it(`keeps a run that asks or failed in the group, its way to the page that answers it`, () => {
+        expect(foldedOnSandbox(run({ state: `failed` }), tiled)).toBe(false);
+        expect(foldedOnSandbox(run({ state: `waiting`, waitingFor: `consent` }), tiled)).toBe(false);
+        expect(sandboxRunOf([run({ state: `failed` })], `sbx_7`)).toBeUndefined();
+    });
+
+    it(`leaves a sandbox the rail has no tile for in the group`, () => {
+        expect(foldedOnSandbox(run({ sandboxId: `sbx_8` }), tiled)).toBe(false);
+        expect(foldedOnSandbox(run({ sandboxId: undefined }), tiled)).toBe(false);
+    });
+
+    it(`hides a finished setup, which is put away, but not another run's "done"`, () => {
+        expect(foldedOnSandbox(run({ state: `done` }), tiled)).toBe(true);
+        expect(foldedOnSandbox(run({ id: `recreate:sbx_7`, kind: `recreate`, state: `done` }), tiled)).toBe(false);
+    });
+
+    it(`puts away a finished setup for a sandbox the reader has, here or the one they are in`, () => {
+        const done = run({ state: `done` });
+        expect(settledSetups([done, run({ id: `sandbox-setup:sbx_9`, sandboxId: `sbx_9`, state: `done` })], tiled, undefined)).toEqual([done]);
+        expect(settledSetups([done], new Set(), `sbx_7`)).toEqual([done]);
+        expect(settledSetups([run()], tiled, undefined)).toEqual([]);
     });
 });

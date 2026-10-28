@@ -77,6 +77,39 @@ export const mergeProcesses = (...lists: readonly (readonly ProcessReport[])[]):
     return [...byId.values()];
 };
 
+// ONE SANDBOX, ONE TILE (2026-10-28, the owner's): a sandbox already on the rail (it reported in, so it is in the
+// switcher's list) carries its own runs, rather than a second tile with the same letters under the divider. While such a
+// run works its sandbox's tile wears the spinning mark; a run that asks something of the reader, or failed, keeps its tile
+// in the group, since that tile is the way to the page that answers it. A setup that finished needs no news tile at all:
+// its sandbox's tile is the news, marked ready until opened (settledSetups, RailProcesses.vue).
+
+/**
+ * Whether a run is drawn on its sandbox's own tile (one of `tiled`) rather than in the group: while it works, and a setup
+ * once it finished (put away a moment later, so no "done" tile flashes up meanwhile). Another run's "done" keeps its tile.
+ */
+export const foldedOnSandbox = (report: ProcessReport, tiled: ReadonlySet<string>): boolean =>
+    report.sandboxId !== undefined &&
+    tiled.has(report.sandboxId) &&
+    !processAsks(report) &&
+    (processLive(report) || (report.kind === `sandbox-setup` && report.state === `done`));
+
+/** The run a sandbox's tile wears while it works: its spinning mark and its line; undefined while none does. */
+export const sandboxRunOf = (reports: readonly ProcessReport[], sandboxId: string): ProcessReport | undefined =>
+    reports.find((report) => report.sandboxId === sandboxId && processLive(report) && !processAsks(report));
+
+/**
+ * The setups that finished for a sandbox the reader already has (on this rail, or the one the shell is in): put away by
+ * the rail as they finish, rather than standing as a tile that says "done" beside the sandbox it made.
+ */
+export const settledSetups = (reports: readonly ProcessReport[], tiled: ReadonlySet<string>, active: string | undefined): readonly ProcessReport[] =>
+    reports.filter(
+        (report) =>
+            report.kind === `sandbox-setup` &&
+            report.state === `done` &&
+            report.sandboxId !== undefined &&
+            (tiled.has(report.sandboxId) || report.sandboxId === active),
+    );
+
 /** The tiles a face's rail wears for `reports`, leaving out what the face already draws a tile of its own for. */
 export const processTilesOf = (reports: readonly ProcessReport[], drawnElsewhere: (report: ProcessReport) => boolean = () => false): readonly ProcessTile[] =>
     reports.filter((report) => processShown(report) && !drawnElsewhere(report)).map(processTileOf);

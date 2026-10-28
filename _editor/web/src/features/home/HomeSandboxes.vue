@@ -17,6 +17,11 @@ import { HOME_PATH } from "../../lib/routes/firstScreens";
 import { signInAt } from "../../lib/routes/signIn";
 import { goInside } from "../../lib/routes/homeDetour";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
+import { RUNNING_MARK_CLASS } from "../../workbench/views/viewBadge";
+import TileMark from "../../components/TileMark.vue";
+import { useFaceProcesses } from "../../models/processes/faceProcesses";
+import { sandboxRunOf } from "../../models/processes/processTiles";
+import { processNote } from "../../models/processes/processWords";
 import type { ViewBadge } from "@intentic/extension-api";
 import HomeNoSandbox from "./HomeNoSandbox.vue";
 import NewSandboxTile from "./newSandbox/NewSandboxTile.vue";
@@ -46,7 +51,17 @@ const badgeOf = (id: string): ViewBadge | undefined => {
     // Made while its reader was in another sandbox's chat: it says it is ready until it is opened.
     return readySandboxes.value.has(id) ? { mark: `check`, tone: `info` } : undefined;
 };
-const noteOf = (id: string): string => (readySandboxes.value.has(id) ? t(`home.newSandbox.ready`) : t(`home.doubleClickToEnter`));
+// A run about a sandbox that has its tile (its setup still finishing, a sync, a recreate) turns on that tile, with its line
+// in the hover, rather than standing as a second tile with the same letters (processTiles.ts `foldedOnSandbox`).
+const { list: processes } = useFaceProcesses();
+const runOf = (id: string) => sandboxRunOf(processes.value, id);
+const noteOf = (id: string): string => {
+    const run = runOf(id);
+    if (run !== undefined) {
+        return processNote(run);
+    }
+    return readySandboxes.value.has(id) ? t(`home.newSandbox.ready`) : t(`home.doubleClickToEnter`);
+};
 // The tile of the sandbox whose chat the page shows; on a page of the person's own (settings), none is.
 const route = useRoute();
 // While the new sandbox's page, or a process's, stands in the chat's place, its tile is the selected one; the new
@@ -147,6 +162,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
         >
             <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
+            <TileMark v-if="runOf(box.id)" name="spinner" spin :class="[RUNNING_MARK_CLASS, `icon-rail-mark absolute bottom-0.5 right-0.5`]" />
         </button>
         <NewSandboxTile />
         <span class="relative flex shrink-0">
