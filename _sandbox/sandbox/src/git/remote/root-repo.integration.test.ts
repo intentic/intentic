@@ -200,15 +200,54 @@ test("skills the sandbox generated and root committed leave the index in one com
 
     expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
 
-    expect(await sh(work, "ls-files", "--", ".agents", ".claude")).toBe(".agents/skills/mine/SKILL.md\n.claude/skills/mine");
-    expect(await sh(work, "show", "--format=%s", "--name-status", "HEAD")).toBe(
-        "chore: untrack skills the sandbox generates\n\nD\t.agents/skills/lsp/SKILL.md\nD\t.claude/skills/lsp",
+    // The per-skill links went first, with the move to the single link (commitClaudeSkillsMove).
+    expect(await sh(work, "ls-files", "--", ".agents", ".claude")).toBe(".agents/skills/mine/SKILL.md");
+    expect(await sh(work, "show", "--format=%s", "--name-status", "HEAD")).toBe("chore: untrack skills the sandbox generates\n\nD\t.agents/skills/lsp/SKILL.md");
+    expect(await sh(work, "show", "--format=%s", "--name-status", "HEAD~1")).toBe(
+        "chore(skills): move .claude/skills to the single .agents/skills link\n\nD\t.claude/skills/lsp\nD\t.claude/skills/mine",
     );
     expect(await sh(work, "status", "--porcelain", "-uall")).toBe("A  notes.md");
     expect(await readFile(join(work, ".claude", "skills", "lsp", "SKILL.md"), "utf8")).toBe(generated);
     // Converged: a second boot finds nothing left to untrack.
     await ensureRootRepo(workspacePaths(work), historyRoot);
     expect(await sh(work, "log", "-1", "--format=%s")).toBe("chore: untrack skills the sandbox generates");
+});
+
+// What 2026-10-28's single link left on main: links and the owner's own folders under `.claude/skills`, committed, and a
+// Changes list of deletions git would not stage one by one. The boot that brings the link commits the move.
+test("the boot that turns .claude/skills into one link commits the move, and leaves the owner's staging alone", async () => {
+    const { work, historyRoot } = await tempBase();
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const owned = "---\nname: mine\ndescription: Mine.\n---\nMine.\n";
+    await mkdir(join(work, ".agents", "skills", "linked"), { recursive: true });
+    await writeFile(join(work, ".agents", "skills", "linked", "SKILL.md"), "---\nname: linked\ndescription: Linked.\n---\nLinked.\n");
+    await mkdir(join(work, ".claude", "skills", "mine", "references"), { recursive: true });
+    await writeFile(join(work, ".claude", "skills", "mine", "SKILL.md"), owned);
+    await writeFile(join(work, ".claude", "skills", "mine", "references", "notes.md"), "notes\n");
+    await symlink("../../.agents/skills/linked", join(work, ".claude", "skills", "linked"));
+    await sh(work, "add", "-f", "-A", "--", ".agents", ".claude");
+    await sh(work, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "skills");
+    await writeFile(join(work, "notes.md"), "staged\n");
+    await sh(work, "add", "notes.md");
+
+    expect(await ensureRootRepo(workspacePaths(work), historyRoot)).toBe(false);
+
+    expect(await sh(work, "show", "--format=%s", "--name-status", "-M", "HEAD")).toBe(
+        [
+            "chore(skills): move .claude/skills to the single .agents/skills link",
+            "",
+            "R100\t.claude/skills/mine/SKILL.md\t.agents/skills/mine/SKILL.md",
+            "R100\t.claude/skills/mine/references/notes.md\t.agents/skills/mine/references/notes.md",
+            "D\t.claude/skills/linked",
+        ].join("\n"),
+    );
+    expect(await sh(work, "status", "--porcelain", "-uall")).toBe("A  notes.md");
+    expect(await readFile(join(work, ".claude", "skills", "mine", "SKILL.md"), "utf8")).toBe(owned);
+    // Converged: a second boot finds nothing left to commit.
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    expect(await sh(work, "log", "-1", "--format=%s")).toBe("chore(skills): move .claude/skills to the single .agents/skills link");
+    expect(await sh(work, "status", "--porcelain", "-uall")).toBe("A  notes.md");
 });
 
 // A conversation's own checkout of root, same shape as an agent worktree.

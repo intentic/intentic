@@ -491,6 +491,33 @@ test("stagePaths stages a deletion, which a bare `git add` would skip", async ()
     expect((await changedFiles(dir)).staged).toEqual([{ path: "a.txt", status: "deleted", additions: 0, deletions: 1 }]);
 });
 
+// The `.claude/skills` move to one link (store/skills/claude-skills.ts): what the folder tracked now sits beyond a link,
+// and staging those deletions one by one failed with "beyond a symbolic link".
+test("stagePaths stages a deletion whose folder became a symbolic link, beside an ordinary path", async () => {
+    const dir = await tempRepo();
+    await mkdir(join(dir, ".agents", "skills", "chrome"), { recursive: true });
+    await writeFile(join(dir, ".agents", "skills", "chrome", "SKILL.md"), "skill\n");
+    await mkdir(join(dir, ".claude", "skills"), { recursive: true });
+    await symlink("../../.agents/skills/chrome", join(dir, ".claude", "skills", "chrome"));
+    await writeFile(join(dir, ".claude", "skills", "notes.md"), "mine\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "skills");
+    await rm(join(dir, ".claude", "skills"), { recursive: true });
+    await symlink("../.agents/skills", join(dir, ".claude", "skills"));
+    await writeFile(join(dir, ".git", "info", "exclude"), "/.claude/skills\n");
+    await writeFile(join(dir, "a.txt"), "two\n");
+
+    await stagePaths(dir, [".claude/skills/chrome", ".claude/skills/notes.md", "a.txt"]);
+
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged.map(({ path, status }) => ({ path, status }))).toEqual([
+        { path: ".claude/skills/chrome", status: "deleted" },
+        { path: ".claude/skills/notes.md", status: "deleted" },
+        { path: "a.txt", status: "modified" },
+    ]);
+    expect(unstaged).toEqual([]);
+});
+
 test("unstagePaths on an unborn HEAD returns the file to untracked instead of failing", async () => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-changes-"));
     tempDirs.push(dir);

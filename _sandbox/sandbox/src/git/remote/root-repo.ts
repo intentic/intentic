@@ -1,6 +1,7 @@
-import { rm, writeFile } from "node:fs/promises";
+import { lstat, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { pathExists } from "@intentic/base/fs";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { defaultGit, gitInit, gitStageAll, type GitRunner } from "@intentic/base/git";
@@ -14,6 +15,7 @@ import { ignoreFileMode } from "./repo-git-dirs.js";
 import { ensureLines } from "../../store/plain-files/text-file.js";
 import { syncSkillLinkExcludes } from "../../store/git/skill-link-excludes.js";
 import { generatedSkillNames } from "../../store/skills/skill-stamp.js";
+import { convergeClaudeSkills } from "../../store/skills/claude-skills.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
 // Git dir lives on /history; the in-worktree `.git` is a pointer reconverged if deleted. Idempotent: init runs once;
@@ -67,14 +69,23 @@ const strayGitlinks = async (root: string, git: GitRunner): Promise<string[]> =>
 };
 
 // Drops `paths` from root's index and commits the removal via a private index built from HEAD, never touching the
-// user's staged index for anything else; the files stay on disk. No-op for an empty list, and an unborn HEAD takes the
-// index removal alone, with nothing to commit yet.
-const untrackCommitted = async (root: string, gitDir: string, paths: readonly string[], message: string, git: GitRunner): Promise<void> => {
+// user's staged index for anything else; the files stay on disk. `added` are files that commit takes as they are on disk,
+// the other end of a move. No-op for an empty list, and an unborn HEAD takes the index removal alone, with nothing to
+// commit yet.
+const untrackCommitted = async (
+    root: string,
+    gitDir: string,
+    paths: readonly string[],
+    message: string,
+    git: GitRunner,
+    added: readonly string[] = [],
+): Promise<void> => {
     if (paths.length === 0) {
         return;
     }
     // `update-index --force-remove`, not `git rm --cached`, which refuses once a nested HEAD no longer matches.
     const drop = ["update-index", "--force-remove", "--", ...paths];
+    const add = added.length === 0 ? undefined : ["add", "--", ...added];
     const head = await git(root, ["rev-parse", "-q", "--verify", "HEAD"])
         .then(({ stdout }) => stdout.trim())
         .catch(() => undefined);
@@ -87,6 +98,9 @@ const untrackCommitted = async (root: string, gitDir: string, paths: readonly st
     try {
         await git(root, ["read-tree", head], privateIndex);
         await git(root, drop, privateIndex);
+        if (add !== undefined) {
+            await git(root, add, privateIndex);
+        }
         const tree = (await git(root, ["write-tree"], privateIndex)).stdout.trim();
         // Equal trees: the paths were only staged, never committed; skip an empty housekeeping commit.
         if (tree !== (await git(root, ["rev-parse", "HEAD^{tree}"])).stdout.trim()) {
@@ -111,6 +125,9 @@ const untrackCommitted = async (root: string, gitDir: string, paths: readonly st
         await rm(index, { force: true });
     }
     await git(root, drop);
+    if (add !== undefined) {
+        await git(root, add);
+    }
 };
 
 // A gitlink that reached root's index (add -f, a race) is dropped and the removal committed. Re-runs every boot;
@@ -149,6 +166,41 @@ const untrackGeneratedSkills = async (root: string, gitDir: string, git: GitRunn
         await untrackCommitted(root, gitDir, await trackedGeneratedSkills(root, git), "chore: untrack skills the sandbox generates", git);
     } catch {
         // allow(silent-catch): housekeeping only; the tracked copies keep working, and the next boot tries again.
+    }
+};
+
+// THE `.claude/skills` MOVE, COMMITTED (2026-10-28). A tree from before the single link (store/skills/claude-skills.ts)
+// tracked a link per skill under `.claude/skills`, and the owner's own skill folders there. Converging it on the main
+// tree drops the links and moves those folders to `.agents/skills`, which used to leave the owner a Changes list of
+// deletions git would not stage one by one ("beyond a symbolic link") and no idea where they came from. Converged here
+// first, so the boot that brings the single link also commits it: once `.claude/skills` is the link, whatever HEAD
+// still tracks under it is gone from the tree, and each file that moved out of it is committed at its new path. Re-runs
+// every boot, a no-op once HEAD tracks nothing there. Best-effort, as untrackGeneratedSkills is.
+const commitClaudeSkillsMove = async (root: string, gitDir: string, git: GitRunner): Promise<void> => {
+    try {
+        await convergeClaudeSkills(root, { adopt: true });
+        if ((await lstat(join(root, ".claude", "skills")).catch(undefinedIfMissing))?.isSymbolicLink() !== true) {
+            return;
+        }
+        const head = await git(root, ["ls-tree", "-r", "-z", "--name-only", "HEAD", "--", ".claude/skills"])
+            .then(({ stdout }) => stdout.split("\0").filter((path) => path.startsWith(".claude/skills/")))
+            // allow(silent-catch): an unborn HEAD tracks nothing to drop.
+            .catch(() => []);
+        if (head.length === 0) {
+            return;
+        }
+        const moved: string[] = [];
+        for (const path of head) {
+            const target = join(".agents", "skills", path.slice(".claude/skills/".length));
+            // A folder there is a skill the old link pointed at, already where it lives; only a moved file is new.
+            const found = await lstat(join(root, target)).catch(undefinedIfMissing);
+            if (found !== undefined && !found.isDirectory()) {
+                moved.push(target);
+            }
+        }
+        await untrackCommitted(root, gitDir, head, "chore(skills): move .claude/skills to the single .agents/skills link", git, moved);
+    } catch {
+        // allow(silent-catch): housekeeping only; the next boot tries again, and Commit all takes the same change meanwhile.
     }
 };
 
@@ -232,6 +284,7 @@ export const ensureRootRepo = async (
         return true;
     }
     await untrackNestedRepos(workspace.root, gitDir, git);
+    await commitClaudeSkillsMove(workspace.root, gitDir, git);
     await untrackGeneratedSkills(workspace.root, gitDir, git);
     return false;
 };

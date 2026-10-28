@@ -1,4 +1,4 @@
-import { mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
@@ -42,9 +42,42 @@ const overPaths = async (dir: string, paths: readonly string[], argsFor: (chunk:
     }
 };
 
-// Stages exactly `paths`: adds, edits, and deletions (`-A` covers a removal, which a bare `add` skips).
+// Whether a folder above `path` is now a symbolic link, as `.claude/skills` became when one link replaced its per-skill
+// links (store/skills/claude-skills.ts). Git counts what it tracked under there as deleted, yet `add` refuses the path
+// outright ("beyond a symbolic link"). Each folder is looked up once across the whole list.
+const beyondSymlink = async (dir: string, path: string, seen: Map<string, Promise<boolean>>): Promise<boolean> => {
+    const parts = path.split("/").slice(0, -1);
+    for (let depth = 1; depth <= parts.length; depth++) {
+        const folder = parts.slice(0, depth).join("/");
+        let linked = seen.get(folder);
+        if (linked === undefined) {
+            linked = lstat(join(dir, folder)).then(
+                (stats) => stats.isSymbolicLink(),
+                // allow(silent-catch): a folder that is gone has no link in it.
+                () => false,
+            );
+            seen.set(folder, linked);
+        }
+        if (await linked) {
+            return true;
+        }
+    }
+    return false;
+};
+
+// Stages exactly `paths`: adds, edits, and deletions (`-A` covers a removal, which a bare `add` skips). A path beyond a
+// symbolic link can only be a removal, which leaves the index through `rm --cached`, the one verb that takes it.
 export const stagePaths = async (dir: string, paths: readonly string[], git: GitRunner = defaultGit): Promise<void> => {
-    await overPaths(dir, paths, (chunk) => ["add", "-A", "--", ...chunk], git);
+    const seen = new Map<string, Promise<boolean>>();
+    const beyond = new Set<string>();
+    for (const path of paths) {
+        if (await beyondSymlink(dir, path, seen)) {
+            beyond.add(path);
+        }
+    }
+    const reachable = beyond.size === 0 ? paths : paths.filter((path) => !beyond.has(path));
+    await overPaths(dir, reachable, (chunk) => ["add", "-A", "--", ...chunk], git);
+    await overPaths(dir, [...beyond], (chunk) => ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", ...chunk], git);
 };
 
 // Stages the whole repo but `scratch` in one spawn, with no ceiling to chunk under; what a whole-repo commit resolves to.
