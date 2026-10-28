@@ -105,11 +105,10 @@ const mainBranch = computed(() => changes.conflicts.value?.find((conflict) => co
             @delete="changes.deleteScratch"
         />
 
-        <!-- What no land carries because the repository ignores it (a render in out/): copied into the owner's tree on a
-             press, beside git rather than through it. -->
+        <!-- What no land carries because the repository ignores it (a render in out/): a quiet line like the notes around
+             it, its files copied into the owner's tree on a press, beside git rather than through it. -->
         <AgentIgnoredReport
             v-if="changes.ignored.value.length > 0"
-            class="mx-2 mt-2"
             :ignored="changes.ignored.value"
             :busy="changes.actionBusy.value"
             :streaming="streaming"

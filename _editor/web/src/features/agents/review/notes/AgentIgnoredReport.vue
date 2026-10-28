@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import type { IgnoredOutput } from "@intentic/sandbox-contract/schemas/git/git";
-import { Button, explorerColorClass, formatBytes, iconForEntry, useExplorerStyle } from "@intentic/ui";
+import { explorerColorClass, formatBytes, iconForEntry, ui, useExplorerStyle } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
-import { computed, ref } from "vue";
+import { computed, ref, useId } from "vue";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
 
 // What the conversation made for its owner that the repository's ignore rules keep out of every land: a render in
 // `out/`, a report as a PDF. The daemon lists only files a person opens, so build output never reaches this card.
-// Drawn as the review's own file rows, each copied into the owner's tree on a press, and all of them from the head.
-// A folder holding many (a render's frames) folds into one row, so a long list never buries the rest of the review.
+// Nothing failed and nothing waits on it, so it is one quiet line under the bar like the review's other notes: how
+// many and how big, copy-all, and the list folded behind Show. Opened, each file (or a folder of many, as one row)
+// copies on its own press, revealed on hover so the list reads as names and sizes rather than a column of buttons.
 
 const t = useT();
 const { explorerStyle } = useExplorerStyle();
@@ -69,6 +70,10 @@ const count = computed(() => listed.value + more.value);
 const bytes = computed(() => props.ignored.reduce((total, group) => total + group.paths.reduce((sum, output) => sum + output.bytes, 0), 0));
 const locked = computed(() => props.busy || props.streaming);
 
+// Whether the list under the line is open; folded at first, since the line already says what and how much.
+const shown = ref(false);
+const listId = useId();
+
 // Folders the owner opened, by key.
 const open = ref(new Set<string>());
 const toggle = (key: string): void => {
@@ -90,40 +95,54 @@ const copyAll = (): void => {
     );
 };
 
-// The head carries the whole phrase when it offers copy-all; a lone file's row carries it itself.
-const rowCopyLabel = computed(() => (listed.value > 1 ? t(`agents.agentIgnoredReport.copy`) : t(`agents.agentIgnoredReport.copyOne`)));
+// The line's copy names where the files go; a row's says only "Copy", the line above having said the rest.
+const copyAllLabel = computed(() => (listed.value > 1 ? t(`agents.agentIgnoredReport.copyAll`) : t(`agents.agentIgnoredReport.copyOne`)));
 // Where a copy goes, which the button's own words leave out.
 const copyTip = computed(() => ({ title: t(`agents.agentIgnoredReport.outsideGit`), note: t(`agents.agentIgnoredReport.hint`) }));
 
-const ROW = `flex min-w-0 items-center gap-2 py-1 pl-2.5 pr-1.5 max-md:min-h-11`;
+// A notice that needs no decision: one line under the bar, no box, as ReviewNotes draws its others.
+const NOTE_LINE = `mx-2 mt-1.5 flex min-w-0 items-center gap-3 px-2 text-2xs text-muted`;
+const ROW = `group flex min-w-0 items-center gap-2 rounded px-1.5 py-0.5 hover:bg-overlay max-md:min-h-11`;
+// A row's copy, shown on hover or focus where there is a pointer, always on touch.
+const ROW_COPY = ui.textButton({ size: `xs`, flush: true }, `shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100`);
 const SIZE = `w-14 shrink-0 text-right text-2xs tabular-nums text-subtle`;
 </script>
 
 <template>
-    <!-- Quiet like the scratch report: nothing failed, and the work below lands without these. -->
-    <section class="flex shrink-0 flex-col rounded-md border border-border bg-overlay" :aria-label="t(`agents.agentIgnoredReport.title`, { count }, count)">
-        <header class="flex min-h-8 items-center gap-2 py-1 pl-2.5 pr-1.5">
-            <Icon name="eye-slash" class="shrink-0 text-2xs text-subtle" />
-            <span class="min-w-0 flex-1 text-2xs">
-                <span class="font-medium text-content">{{ t(`agents.agentIgnoredReport.title`, { count }, count) }}</span>
-                <span class="text-subtle"> · {{ formatBytes(bytes) }}</span>
+    <section class="shrink-0" :aria-label="t(`agents.agentIgnoredReport.title`, { count }, count)">
+        <header :class="NOTE_LINE">
+            <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                <Icon name="eye-slash" class="shrink-0 text-2xs text-subtle" />
+                <span class="min-w-0 truncate">
+                    {{ t(`agents.agentIgnoredReport.title`, { count }, count) }}<span class="text-subtle"> · {{ formatBytes(bytes) }}</span>
+                </span>
             </span>
-            <span v-if="streaming" class="shrink-0 text-2xs text-subtle">{{ t(`agents.agentIgnoredReport.afterTurn`) }}</span>
-            <Button
-                v-else-if="listed > 1"
-                size="small"
-                tier="boring"
-                class="shrink-0 whitespace-nowrap"
+            <button
+                v-if="lines.length > 0"
+                type="button"
+                :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)"
+                :aria-expanded="shown"
+                :aria-controls="listId"
+                @click="shown = !shown"
+            >
+                {{ shown ? t(`agents.agentIgnoredReport.hide`) : t(`agents.agentIgnoredReport.show`) }}
+                <Icon :name="shown ? 'chevron-up' : 'chevron-down'" class="text-[0.6rem]" />
+            </button>
+            <span v-if="streaming" class="shrink-0 text-subtle">{{ t(`agents.agentIgnoredReport.afterTurn`) }}</span>
+            <button
+                v-else-if="listed > 0"
+                type="button"
+                :class="ui.textButton({ size: `xs` }, `shrink-0 whitespace-nowrap`)"
                 :disabled="locked"
                 v-tooltip.bottom="copyTip"
                 @click="copyAll"
             >
-                <Icon name="download" />{{ t(`agents.agentIgnoredReport.copyAll`) }}
-            </Button>
+                {{ copyAllLabel }}
+            </button>
         </header>
 
-        <!-- Held to a few rows, scrolling past them, so an opened folder of frames never pushes the review's own list out. -->
-        <ul class="max-h-64 overflow-y-auto border-t border-border py-0.5">
+        <!-- Bounded and scrolled on its own, so an opened folder of frames never pushes the review's own list out. -->
+        <ul v-if="shown" :id="listId" class="mx-2 mt-1 max-h-48 overflow-y-auto rounded-md border border-line p-0.5 text-2xs">
             <li v-for="line in lines" :key="line.kind === `file` ? line.file.key : line.key">
                 <!-- A folder of many: one row, its files behind the chevron. -->
                 <template v-if="line.kind === `folder`">
@@ -141,9 +160,9 @@ const SIZE = `w-14 shrink-0 text-right text-2xs tabular-nums text-subtle`;
                             <span class="shrink-0 text-2xs text-subtle">{{ t(`agents.agentIgnoredReport.files`, { count: line.files.length }, line.files.length) }}</span>
                         </button>
                         <span :class="SIZE">{{ formatBytes(line.bytes) }}</span>
-                        <Button size="small" tier="quiet" class="shrink-0" :disabled="locked" v-tooltip.bottom="copyTip" @click="copyFiles(line.repo, line.files)">
+                        <button type="button" :class="ROW_COPY" :disabled="locked" v-tooltip.bottom="copyTip" @click="copyFiles(line.repo, line.files)">
                             {{ t(`agents.agentIgnoredReport.copy`) }}
-                        </Button>
+                        </button>
                     </div>
                     <ul v-if="open.has(line.key)" class="pl-5">
                         <li v-for="file in line.files" :key="file.key" :class="ROW">
@@ -157,9 +176,9 @@ const SIZE = `w-14 shrink-0 text-right text-2xs tabular-nums text-subtle`;
                                 t(`agents.agentIgnoredReport.replaces`)
                             }}</span>
                             <span :class="SIZE">{{ formatBytes(file.output.bytes) }}</span>
-                            <Button size="small" tier="quiet" class="shrink-0" :disabled="locked" v-tooltip.bottom="copyTip" @click="copyFiles(file.repo, [file])">
+                            <button type="button" :class="ROW_COPY" :disabled="locked" v-tooltip.bottom="copyTip" @click="copyFiles(file.repo, [file])">
                                 {{ t(`agents.agentIgnoredReport.copy`) }}
-                            </Button>
+                            </button>
                         </li>
                     </ul>
                 </template>
@@ -175,13 +194,12 @@ const SIZE = `w-14 shrink-0 text-right text-2xs tabular-nums text-subtle`;
                         t(`agents.agentIgnoredReport.replaces`)
                     }}</span>
                     <span :class="SIZE">{{ formatBytes(line.file.output.bytes) }}</span>
-                    <Button size="small" tier="quiet" class="shrink-0 whitespace-nowrap" :disabled="locked" v-tooltip.bottom="copyTip" @click="copyFiles(line.file.repo, [line.file])">
-                        {{ rowCopyLabel }}
-                    </Button>
+                    <button type="button" :class="ROW_COPY" :disabled="locked" v-tooltip.bottom="copyTip" @click="copyFiles(line.file.repo, [line.file])">
+                        {{ t(`agents.agentIgnoredReport.copy`) }}
+                    </button>
                 </div>
             </li>
+            <li v-if="more > 0" class="px-1.5 py-0.5 text-subtle">{{ t(`agents.agentIgnoredReport.more`, { count: more }, more) }}</li>
         </ul>
-
-        <p v-if="more > 0" class="border-t border-border px-2.5 py-1 text-2xs text-subtle">{{ t(`agents.agentIgnoredReport.more`, { count: more }, more) }}</p>
     </section>
 </template>

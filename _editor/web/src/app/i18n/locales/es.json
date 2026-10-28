@@ -333,10 +333,12 @@
             "copyAll": "Copiar todo a mi árbol",
             "copyOne": "Copiar a mi árbol",
             "files": "{count} archivo | {count} archivos",
+            "hide": "Ocultar",
             "hint": "Llega a la misma ruta",
             "more": "{count} más que no aparece aquí | {count} más que no aparecen aquí",
             "outsideGit": "Fuera de git",
             "replaces": "sustituye al tuyo",
+            "show": "Mostrar",
             "title": "No se integrará: {count} archivo que excluye tu .gitignore | No se integrarán: {count} archivos que excluye tu .gitignore"
         },
         "agentSessionMenu": {

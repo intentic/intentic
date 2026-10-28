@@ -333,10 +333,12 @@
             "copyAll": "Copy all into my tree",
             "copyOne": "Copy into my tree",
             "files": "{count} file | {count} files",
+            "hide": "Hide",
             "hint": "Lands at the same path",
             "more": "{count} more not listed here | {count} more not listed here",
             "outsideGit": "Outside git",
             "replaces": "replaces yours",
+            "show": "Show",
             "title": "Won't land: {count} file your .gitignore excludes | Won't land: {count} files your .gitignore excludes"
         },
         "agentSessionMenu": {

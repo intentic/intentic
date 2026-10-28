@@ -333,10 +333,12 @@
             "copyAll": "Skopiuj wszystkie do mojego drzewa",
             "copyOne": "Skopiuj do mojego drzewa",
             "files": "{count} plik | {count} pliki | {count} plików",
+            "hide": "Ukryj",
             "hint": "Trafia pod tę samą ścieżkę",
             "more": "{count} kolejny nie jest tu wymieniony | {count} kolejne nie są tu wymienione | {count} kolejnych nie jest tu wymienionych",
             "outsideGit": "Poza gitem",
             "replaces": "zastąpi Twój",
+            "show": "Pokaż",
             "title": "Nie zostanie scalony: {count} plik wykluczony przez Twój .gitignore | Nie zostaną scalone: {count} pliki wykluczone przez Twój .gitignore | Nie zostanie scalonych: {count} plików wykluczonych przez Twój .gitignore"
         },
         "agentSessionMenu": {

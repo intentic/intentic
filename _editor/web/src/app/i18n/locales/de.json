@@ -333,10 +333,12 @@
             "copyAll": "Alle in meinen Baum kopieren",
             "copyOne": "In meinen Baum kopieren",
             "files": "{count} Datei | {count} Dateien",
+            "hide": "Ausblenden",
             "hint": "Landet unter demselben Pfad",
             "more": "{count} weitere, hier nicht aufgeführt | {count} weitere, hier nicht aufgeführt",
             "outsideGit": "Außerhalb von git",
             "replaces": "ersetzt Ihre",
+            "show": "Zeigen",
             "title": "Wird nicht gelandet: {count} Datei, die Ihre .gitignore ausschließt | Wird nicht gelandet: {count} Dateien, die Ihre .gitignore ausschließt"
         },
         "agentSessionMenu": {
