@@ -124,6 +124,21 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
             summarized: z.boolean(),
         }),
     }),
+    // A turn that went out on another provider, account, loop or model than the conversation's turn before it
+    // (schemas/providers/switched.ts SwitchedSchema): `segment` what changed, `provider` the one it runs on now (an id),
+    // `model` its model's id, `account` what the account is called in the sandbox, `loop` what its loop is called, and
+    // `fresh` false where it went on in the same session on another model.
+    z.object({
+        code: z.literal("switched"),
+        params: z.object({
+            segment: z.enum(["provider", "account", "loop", "model"]),
+            provider: z.string(),
+            model: z.string().optional(),
+            account: z.string().optional(),
+            loop: z.string().optional(),
+            fresh: z.boolean(),
+        }),
+    }),
     // An agent's own dependency install starting: into its conversation's own copy (`ownCopy`) or the main tree; the
     // workspace root (`root`) and up to three project folders named (`projects`, each with its slash, already joined),
     // and how many `more` were not named.

@@ -3203,6 +3203,17 @@
                     "summary": ", picking up from a summary of the conversation and its latest messages.",
                     "recent": ", picking up from its latest messages and the work in hand."
                 }
+            },
+            "switched": {
+                "provider": "Switched to {provider}",
+                "account": "Switched to the {account} account",
+                "anotherAccount": "Switched to another {provider} account",
+                "loop": "Switched to running through {loop}",
+                "anotherLoop": "Switched to another loop",
+                "model": "Switched to {model}",
+                "anotherModel": "Switched to another model",
+                "fresh": ": this message started a fresh session, with the conversation so far carried over.",
+                "same": ": same session, so the model re-reads the conversation once."
             }
         },
         "failure": {

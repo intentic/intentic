@@ -346,6 +346,11 @@ test("events: the hello's build opens with this daemon's version", async () => {
     expect(daemonVersionOfBuild(hello.build)).toBe(version);
 });
 
+// The editor drops its own switch divider at send only where the record will say it (agent/run/turn/turn-switch.ts).
+test("events: the hello says every turn's switch is in the conversation's record", async () => {
+    expect((await helloFrom(clientFor(createApp(services())))).recordsSwitches).toBe(true);
+});
+
 test("events: the hello names the daemon's build and where its boot is, then streams every step", async () => {
     const boot = createBootTracker(createLogger(testConfig));
     boot.declare([{ key: "registry", label: "Loading conversations" }]);
@@ -413,6 +418,7 @@ test("events: a project sandbox's hello names its folder, workspace-relative, an
         "voiceCodecs",
         "build",
         "boot",
+        "recordsSwitches",
     ]);
 });
 

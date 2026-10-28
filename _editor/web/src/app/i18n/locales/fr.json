@@ -3203,6 +3203,17 @@
                     "summary": ", en partant d'un résumé de la conversation et de ses derniers messages.",
                     "recent": ", en partant de ses derniers messages et du travail en cours."
                 }
+            },
+            "switched": {
+                "provider": "Passage à {provider}",
+                "account": "Passage au compte {account}",
+                "anotherAccount": "Passage à un autre compte {provider}",
+                "loop": "Passage à une exécution via {loop}",
+                "anotherLoop": "Passage à une autre boucle",
+                "model": "Passage à {model}",
+                "anotherModel": "Passage à un autre modèle",
+                "fresh": " : ce message a ouvert une nouvelle session avec la conversation jusqu'ici.",
+                "same": " : même session, donc le modèle relit la conversation une fois."
             }
         },
         "failure": {

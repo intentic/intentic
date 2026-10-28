@@ -24,6 +24,7 @@ import { setDaemonBoot } from "../../../client/sandbox/useDaemonBoot";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
 import { setUploadEncodings } from "../../../client/sandbox/daemon/uploadEncodings";
 import { setVoiceCodecs } from "../../../client/sandbox/daemon/voiceCodecs";
+import { setRecordsSwitches } from "../../../client/sandbox/daemon/recordedSwitches";
 import { setDaemonVersion } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 
@@ -102,6 +103,8 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     setUploadEncodings(event.uploadEncodings);
     // Whether the voice sockets may speak Opus: only to a daemon that names it.
     setVoiceCodecs(event.voiceCodecs);
+    // Whether the record says which turn switched provider, account, loop or model, or the chat's own divider must.
+    setRecordsSwitches(event.recordsSwitches);
     // Which release answers, held against the oldest this app supports: below it, one page says so (SandboxGate).
     setDaemonVersion(event.build, event.surface);
     // Daemon boot state, needed before other daemon queries are allowed to fire this tick.

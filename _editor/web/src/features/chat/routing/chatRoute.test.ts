@@ -46,8 +46,8 @@ type Chat = Parameters<typeof useChatRoute>[0] extends () => infer C ? C : never
 // Only the fields routing reads and writes; a real Conversation drags a transcript and stream along. `notice` and
 // `rewordNotice` stand in for the transcript rows the chat writes about the reading.
 const wearModel = jest.fn();
-const notice = jest.fn<(text: string, extra?: { noticeWait?: string }) => number>(() => 7);
-const rewordNotice = jest.fn<(id: number, text: string, extra?: { noticeWait?: string }) => void>();
+const notice = jest.fn<(text: string, standing: string, extra?: { noticeWait?: string }) => number>(() => 7);
+const rewordNotice = jest.fn<(id: number, text: string, extra?: { noticeWait?: string }, standing?: string) => void>();
 const setAuto = jest.fn();
 // What a test sets apart from a fresh chat of this sandbox's, per part of the conversation it lives on.
 interface ChatOver {
@@ -179,7 +179,7 @@ test("auto model on, persona matching off: only the model is asked for", async (
     answer({ model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
     await route(chat).beforeSend(WORK, false);
     expect(sent()).toMatchObject({ model: true, persona: false });
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Choosing which model this chat runs on`), { noticeWait: `chatRoute` });
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Choosing which model this chat runs on`), `upcoming`, { noticeWait: `chatRoute` });
     expect(chat.selection.actsAs.value).toBeUndefined();
     expect(verdict()).toBe(
         `Read the opening message as work for Opus 5. Every turn after this one stays on it until you change it. Read by ${JUDGE_LABEL}.`,
@@ -191,7 +191,7 @@ test("persona matching on, auto model off: only the persona is asked for, and Au
     answer({ persona: { id: `backend`, reason: `The message reads like Backend's work.` } });
     await route(chat).beforeSend(WORK, false);
     expect(sent()).toMatchObject({ model: false, persona: true });
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading which persona this chat belongs to`), { noticeWait: `chatRoute` });
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading which persona this chat belongs to`), `upcoming`, { noticeWait: `chatRoute` });
     expect(chat.selection.actsAs.value).toBe(`backend`);
     // Nothing to disarm: Auto was never armed here, and the next new chat's default is not this reading's business.
     expect(setAuto).not.toHaveBeenCalled();
@@ -211,7 +211,7 @@ test("the chat says the reading is running, and the row settles in place", async
     routeChat.mockReturnValueOnce(new Promise<ChatRoute>((done) => (resolve = done)));
     const wait = route(chat).beforeSend(WORK, false);
 
-    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading what this chat opens on`), { noticeWait: `chatRoute` });
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading what this chat opens on`), `upcoming`, { noticeWait: `chatRoute` });
     expect(chatRouteWait(chat)).toMatchObject({ since: expect.any(Number) });
 
     resolve({
@@ -221,7 +221,7 @@ test("the chat says the reading is running, and the row settles in place", async
     });
     await wait;
     expect(chatRouteWait(chat)).toBeUndefined();
-    expect(rewordNotice).toHaveBeenCalledWith(7, expect.any(String), { noticeWait: undefined });
+    expect(rewordNotice).toHaveBeenCalledWith(7, expect.any(String), { noticeWait: undefined }, `happened`);
 });
 
 test("a half that named nothing is still reported: the call was paid for either way", async () => {

@@ -206,11 +206,12 @@ describe(`the transcript's own lines`, () => {
         expect(texts()).toEqual([`first`, `done`, `Switched to Haiku`, `second`]);
     });
 
-    it(`rewords one notice in place and ends its wait`, () => {
+    it(`rewords one notice in place and ends its wait, as history once it is the outcome`, () => {
         const { view, row } = viewOf();
-        const id = view.notice(`Reading which model fits…`, { noticeWait: `chatRoute` });
+        const id = view.notice(`Reading which model fits…`, `upcoming`, { noticeWait: `chatRoute` });
+        expect(row(id).upcoming).toBe(true);
 
-        view.rewordNotice(id, `Read by Haiku.`, { noticeWait: undefined });
+        view.rewordNotice(id, `Read by Haiku.`, { noticeWait: undefined }, `happened`);
 
         expect(row(id)).toEqual({ id, role: `notice`, text: `Read by Haiku.`, local: true, noticeWait: undefined });
         expect(view.messages.value).toHaveLength(ROWS.length + 1);

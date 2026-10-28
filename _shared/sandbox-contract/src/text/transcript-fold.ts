@@ -12,7 +12,7 @@ import {
     type TranscriptTool,
 } from "../events/transcript.js";
 import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
-import { startingRow } from "./notice-rows.js";
+import { isStartingFrame, startingRow } from "./notice-rows.js";
 import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { errorRow, RENEWAL_WITHDRAWN, RENEWING } from "../events/failure-rows.js";
@@ -150,6 +150,11 @@ export class TranscriptFold {
         if (parent !== undefined) {
             return this.applyChild(event, parent);
         }
+        // What the turn started from, each a row of its own rather than a stamp on the message: what was left out is not
+        // part of what was sent, and the fold beside the message only ever lists notes that actually rode.
+        if (isStartingFrame(event)) {
+            return this.pushRow(startingRow(event));
+        }
         switch (event.kind) {
             case "delta": {
                 if (event.text.length === 0) {
@@ -244,12 +249,6 @@ export class TranscriptFold {
                 const notice = keptWarmNotice(event);
                 return line === undefined || notice === undefined ? [] : this.pushRow({ role: "notice", text: line, noticeCode: noticeCode(notice) });
             }
-            // Each a row of its own rather than a stamp on the message: what was left out is not part of what was sent, and
-            // the fold beside the message only ever lists notes that actually rode.
-            case "context_trim":
-            case "handoff":
-            case "fresh_start":
-                return this.pushRow(startingRow(event));
             case "worktree":
                 return this.synced(event.sync);
             case "landed":

@@ -75,6 +75,10 @@ export const HelloSchema = z.object({
     // (_devices/local-files), whose `routes` are the few a folder has rather than a daemon's missing ones. Absent reads
     // as a sandbox, which every daemon before this field was.
     surface: z.enum(["sandbox", "folder"]).optional(),
+    // True when this daemon writes a `switched` notice (schemas/providers/switched.ts) on every turn that goes out on
+    // another provider, account, loop or model than the turn before it, so the conversation's record says so for every
+    // window. Absent is a daemon from before the field, whose editor must keep drawing the divider itself.
+    recordsSwitches: z.boolean().optional(),
 });
 export type Hello = z.infer<typeof HelloSchema>;
 

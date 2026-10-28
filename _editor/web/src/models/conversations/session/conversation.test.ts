@@ -14,6 +14,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
 import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { mirrorKey, mirrorKeyOf, persistable } from "../transcript/transcriptCache";
+import { setRecordsSwitches } from "../../../client/sandbox/daemon/recordedSwitches";
 import { snapshotTab } from "../tabs/tabSnapshot";
 import { NO_ATTENTION } from "../../agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
@@ -669,6 +670,24 @@ describe(`Conversation`, () => {
         const divider = conversation.transcript.messages.value.find((message) => message.role === `notice`);
         expect(divider?.text).toStartWith(`Switched to`);
         expect(persistable(conversation.transcript.messages.value).map((message) => message.text)).toContain(divider!.text);
+    });
+
+    it(`leaves the switch to the record when the daemon writes it there, so the divider was only the preview`, async () => {
+        setRecordsSwitches(true);
+        try {
+            const conversation = new Conversation(`c1`);
+            daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+            await conversation.turn.send(`first`, settings);
+
+            conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+            expect(lastNotice(conversation)).toStartWith(`Switched to`);
+            daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `g-1` }]));
+            await conversation.turn.send(`second`, conversation.selection.turnSettings());
+
+            expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.local === true)).toBe(false);
+        } finally {
+            setRecordsSwitches(undefined);
+        }
     });
 
     it(`turnsOf opens a group at each prompt and keeps pre-prompt frames in one ahead of it`, () => {

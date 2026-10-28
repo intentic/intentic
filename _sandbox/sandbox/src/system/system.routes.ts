@@ -65,8 +65,8 @@ const shownProjectDir = (config: Services["config"], fence: Fence): { readonly p
 };
 
 // The stream's first frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build
-// implements, the codings its uploads decode and its voice sockets speak, the build id for cache invalidation, boot progress, and the project folder
-// the browser opens on.
+// implements, the codings its uploads decode and its voice sockets speak, the build id for cache invalidation, boot progress, the project folder
+// the browser opens on, and that every turn's switch of provider, account, loop or model is in its record (turn-switch.ts).
 const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => ({
     kind: "hello",
     workspaceId: await workspaceIdentity(services),
@@ -79,6 +79,7 @@ const helloFrame = async (services: Services, fence: Fence): Promise<Hello> => (
     build: buildId(),
     boot: services.boot.progress(),
     ...shownProjectDir(services.config, fence),
+    recordsSwitches: true,
 });
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.

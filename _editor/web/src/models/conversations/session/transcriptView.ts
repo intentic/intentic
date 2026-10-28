@@ -14,7 +14,7 @@ import { invalidateAgentTranscript, olderTranscriptPage, PHONE_TURNS } from "../
 import { type ChatAttachment, type ChatMessage, lastTurns, recordedRows, withCancelledCards } from "../transcript/transcript";
 import { type RecordCursor, recordCursor } from "../transcript/transcriptState";
 import { dropTranscript, mirrorKeyOf, readTranscript, saveTranscript } from "../transcript/transcriptCache";
-import { TranscriptClock } from "../transcript/transcriptClock";
+import { type NoticeStanding, TranscriptClock } from "../transcript/transcriptClock";
 import { firstWhere, runningTotal } from "../transcript/transcriptScan";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import type { TurnFailures } from "../endings/turnFailures";
@@ -46,6 +46,15 @@ export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draf
     readonly turn: Pick<TurnClient, "streaming" | "liveRun" | "say">;
     readonly selection: { readonly servingState: Readonly<Ref<AccountState | undefined>> };
     readonly failures: Pick<TurnFailures, "crashed">;
+};
+
+// A notice row as standing for what it is now; no standing given leaves it as it was.
+const standingAs = (message: ChatMessage, standing: NoticeStanding | undefined): ChatMessage => {
+    if (standing === undefined) {
+        return message;
+    }
+    const { upcoming: _was, ...row } = message;
+    return standing === `upcoming` ? { ...row, upcoming: true } : row;
 };
 
 const NOTHING_DOOMED: ReadonlySet<number> = new Set();
@@ -101,11 +110,12 @@ export class TranscriptView extends TranscriptClock {
         super(applied);
     }
 
-    // Replaces one notice's words in place, so a wait and its outcome are one row rather than two.
-    rewordNotice(noticeId: number, text: string, extra?: Pick<ChatMessage, "noticeWait">): void {
+    // Replaces one notice's words in place, so a wait and its outcome are one row rather than two. A `standing` says what
+    // the row stands for from then on (NoticeStanding): a wait was this window's alone, its outcome is history.
+    rewordNotice(noticeId: number, text: string, extra?: Pick<ChatMessage, "noticeWait">, standing?: NoticeStanding): void {
         this.write((state) => ({
             ...state,
-            messages: state.messages.map((message) => (message.id === noticeId ? { ...message, text, ...extra } : message)),
+            messages: state.messages.map((message) => (message.id === noticeId ? standingAs({ ...message, text, ...extra }, standing) : message)),
         }));
     }
 
@@ -269,6 +279,7 @@ export class TranscriptView extends TranscriptClock {
             reason === `edit`
                 ? t(`chat.transcriptView.editedDropped`, { count: dropped }, dropped)
                 : t(`chat.transcriptView.wentBackDropped`, { count: dropped }, dropped),
+            `happened`,
         );
         this.host.session.value = undefined;
         this.host.error.value = null;
@@ -361,7 +372,7 @@ export class TranscriptView extends TranscriptClock {
     // The files moved under this conversation without it doing anything: a checkpoint was restored mid-chat.
     // Only a notice, not a truncation: the transcript is intact, only the disk moved.
     noteWorkspaceRestored(): void {
-        this.notice(t(`chat.transcriptView.workspaceRestored`));
+        this.notice(t(`chat.transcriptView.workspaceRestored`), `happened`);
         this.persist(true);
     }
 

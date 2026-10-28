@@ -7,13 +7,24 @@ import { computed, shallowRef } from "vue";
 import { providerAccounts } from "../../providers/providerAccounts";
 import { modelLabelFor, providerModels } from "../../providers/providerCatalog";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import { daemonRecordsSwitches } from "../../../client/sandbox/daemon/recordedSwitches";
 import { followPick } from "./queueCalls";
 import { runServing } from "../accounts/runServing";
 import { clampEffort } from "../../providers/effortScale";
 import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
 import { accountIntent, readsAsContinuing, type SessionRef, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
-import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
+import {
+    ECHOED_PICKS,
+    type PickAction,
+    type PickEffects,
+    type PickWorld,
+    reduceSelection,
+    type Selection,
+    type SharedPicks,
+    sharedPicksOf,
+    UNPICKED,
+} from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
 import { formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "../../providers/usageStatus";
@@ -123,6 +134,9 @@ export class ComposerSelection {
     // A deliberate routing pick in this chat also answers where a kept request should run. A freshly opened chat's
     // seeded defaults do not: a kept request may have been started by an automation on its own model.
     readonly routingPicked = shallowRef(false);
+    // The picks as the last one made in this window left them, for the other windows holding this chat (pickEcho.ts);
+    // a new object per pick, undefined until one is made here.
+    readonly echoed = shallowRef<SharedPicks | undefined>();
 
     // One read per pick, so a surface drawing one of them redraws only when that one moves.
     readonly provider = computed(() => this.state.value.provider);
@@ -233,8 +247,12 @@ export class ComposerSelection {
         // What the send going out now actually does, read before `sent` moves the swap baseline onto it: the divider it
         // freezes must say this, however the picks got where they are.
         const sending = action.kind === `sent` ? { text: switchNoticeText(this.switchPoint()) } : undefined;
-        const { selection, effects } = reduceSelection(this.state.value, action, this.world());
+        const previous = this.state.value;
+        const { selection, effects } = reduceSelection(previous, action, this.world());
         this.state.value = selection;
+        if (ECHOED_PICKS.has(action.kind) && selection !== previous) {
+            this.echoed.value = sharedPicksOf(selection);
+        }
         // Restored per-chat picks still answer a re-run after a reload; constructor defaults alone do not.
         if (action.kind === `set` && (`provider` in action.picks || `model` in action.picks || `harness` in action.picks)) {
             this.routingPicked.value = true;
@@ -344,7 +362,7 @@ export class ComposerSelection {
     private noticeMidTurnSwitch(segmentSwitched: boolean): void {
         const text = midTurnSwitchText(this.switchPoint(), segmentSwitched);
         if (text !== undefined && this.pendingSwitchNoticeId === undefined) {
-            this.pendingSwitchNoticeId = this.host.transcript.notice(text, { upcoming: true });
+            this.pendingSwitchNoticeId = this.host.transcript.notice(text, `upcoming`);
         }
     }
 
@@ -356,7 +374,9 @@ export class ComposerSelection {
         if (noticeId === undefined) {
             return;
         }
-        if (sending !== undefined && sending.text === undefined) {
+        // Nothing to say (the send makes no switch), or the record says it itself, beside the message, in every window and
+        // after every reload: the line drawn here was only ever the preview.
+        if ((sending !== undefined && sending.text === undefined) || (this.host.box.value === undefined && daemonRecordsSwitches())) {
             this.dropSwitchNotice();
             return;
         }
@@ -454,6 +474,6 @@ export class ComposerSelection {
             this.host.transcript.rewordNotice(noticeId, text);
             return;
         }
-        this.pendingSwitchNoticeId = this.host.transcript.notice(text, { upcoming: true });
+        this.pendingSwitchNoticeId = this.host.transcript.notice(text, `upcoming`);
     }
 }

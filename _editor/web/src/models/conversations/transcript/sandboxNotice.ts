@@ -1,8 +1,10 @@
 import { type ResumeNoticeReason, type SandboxNotice, sandboxNoticeOf } from "@intentic/sandbox-contract/events/sandbox-notice";
 import type { TranscriptRow, WatchOutcome } from "@intentic/sandbox-contract/events/transcript";
+import { accountsLabel } from "@intentic/sandbox-contract/schemas/providers/switched";
 import { t } from "@intentic/ui/i18n";
 import type { Audience } from "../../../app/useAudience";
 import { type FailureView, failureView, legacyFailure } from "../../agent-status/failureView";
+import { modelLabelFor, providerDisplayLabel } from "../../providers/providerCatalog";
 
 /*
  * The sandbox's own notice rows in the reader's language and words. The sandbox writes each as an English sentence
@@ -144,6 +146,11 @@ const FAILURE_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([
     `failed`,
 ]);
 const isFailure = (notice: SandboxNotice): notice is FailureNotice => FAILURE_CODES.has(notice.code);
+// What a turn started from (the contract's notice-rows.ts): what a thin send left out, how a held turn continued, where
+// a home's session started over, and what the turn switched to since the one before it.
+type StartingNotice = Coded<`contextTrim` | `handedOff` | `freshStart` | `switched`>;
+const STARTING_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([`contextTrim`, `handedOff`, `freshStart`, `switched`]);
+const isStarting = (notice: SandboxNotice): notice is StartingNotice => STARTING_CODES.has(notice.code);
 
 // Where the work went, in the audience's own words.
 const landLine = (notice: LandNotice, land: LandWords, place: NoticePlace): string => {
@@ -207,6 +214,9 @@ const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace
     if (isFailure(notice)) {
         return failureLine(notice);
     }
+    if (isStarting(notice)) {
+        return startingLine(notice, audience);
+    }
     switch (notice.code) {
         case `compacted`:
             return t(`chat.sandboxNotice.compacted`);
@@ -226,14 +236,21 @@ const codedLine = (notice: SandboxNotice, audience: Audience, place: NoticePlace
             return RESUMED[notice.params.reason]();
         case `keptWarm`:
             return t(`chat.sandboxNotice.keptWarm`, notice.params, notice.params.refreshes);
-        case `handedOff`:
-            return handedOffLine(notice.params);
-        case `freshStart`:
-            return audience === `maker` ? freshStartPlain(notice.params) : freshStartLine(notice.params);
         case `keptCold`:
             return t(`chat.sandboxNotice.keptCold`, notice.params, notice.params.refreshes);
         case `installing`:
             return installingLine(notice);
+    }
+};
+
+const startingLine = (notice: StartingNotice, audience: Audience): string => {
+    switch (notice.code) {
+        case `handedOff`:
+            return handedOffLine(notice.params);
+        case `freshStart`:
+            return audience === `maker` ? freshStartPlain(notice.params) : freshStartLine(notice.params);
+        case `switched`:
+            return switchedLine(notice.params);
         case `contextTrim`: {
             const { window, omitted, base } = notice.params;
             return sentences(
@@ -291,6 +308,28 @@ const FRESH_WHY_PLAIN = {
 } as const satisfies Readonly<Record<FreshStart["why"], () => string>>;
 const freshStartPlain = ({ why, summarized }: FreshStart): string =>
     `${FRESH_WHY_PLAIN[why]()}${summarized ? t(`chat.sandboxNotice.freshStart.plain.summary`) : t(`chat.sandboxNotice.freshStart.plain.recent`)}`;
+
+// What a turn switched to since the one before it (switched.ts switchedLine): the part that changed, named as the app
+// names providers and models, then whether the session went with it.
+type Switched = Extract<SandboxNotice, { code: "switched" }>["params"];
+const switchedTo = ({ segment, provider, model, account, loop }: Switched): string => {
+    switch (segment) {
+        case `provider`:
+            return t(`chat.sandboxNotice.switched.provider`, { provider: providerDisplayLabel(provider) });
+        case `account`:
+            return account === undefined
+                ? t(`chat.sandboxNotice.switched.anotherAccount`, { provider: accountsLabel(provider) })
+                : t(`chat.sandboxNotice.switched.account`, { account });
+        case `loop`:
+            return loop === undefined ? t(`chat.sandboxNotice.switched.anotherLoop`) : t(`chat.sandboxNotice.switched.loop`, { loop });
+        case `model`:
+            return model === undefined
+                ? t(`chat.sandboxNotice.switched.anotherModel`)
+                : t(`chat.sandboxNotice.switched.model`, { model: modelLabelFor(provider, model) });
+    }
+};
+const switchedLine = (params: Switched): string =>
+    `${switchedTo(params)}${params.fresh ? t(`chat.sandboxNotice.switched.fresh`) : t(`chat.sandboxNotice.switched.same`)}`;
 
 // Another agent's words, named by its title where it had one, else by its id.
 const agentWordsLine = ({ kind, from, title, failed }: NonNullable<TranscriptRow["agentWords"]>): string => {

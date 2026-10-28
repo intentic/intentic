@@ -3203,6 +3203,17 @@
                     "summary": ", ausgehend von einer Zusammenfassung der Unterhaltung und ihren neuesten Nachrichten.",
                     "recent": ", ausgehend von den neuesten Nachrichten und der laufenden Arbeit."
                 }
+            },
+            "switched": {
+                "provider": "Zu {provider} gewechselt",
+                "account": "Zum Konto {account} gewechselt",
+                "anotherAccount": "Zu einem anderen {provider}-Konto gewechselt",
+                "loop": "Zur Ausführung über {loop} gewechselt",
+                "anotherLoop": "Zu einer anderen Schleife gewechselt",
+                "model": "Zu {model} gewechselt",
+                "anotherModel": "Zu einem anderen Modell gewechselt",
+                "fresh": ": Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.",
+                "same": ": Dieselbe Sitzung, daher liest das Modell die Unterhaltung einmal neu."
             }
         },
         "failure": {

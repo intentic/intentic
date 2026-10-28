@@ -77,7 +77,7 @@ const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
         conversation.worktree.value = { branch: fact.branch, base: fact.base };
         if (fact.unenforced === true && !warnedUnenforced.has(conversation)) {
             warnedUnenforced.add(conversation);
-            conversation.transcript.notice(t(`chat.turnFacts.worktreeUnenforced`, { branch: fact.branch }));
+            conversation.transcript.notice(t(`chat.turnFacts.worktreeUnenforced`, { branch: fact.branch }), `happened`);
         }
     },
     // The turn's live posture, echoed back or moved by the agent; drives the selector, not the pick.

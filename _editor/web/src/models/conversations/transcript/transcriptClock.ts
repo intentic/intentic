@@ -33,6 +33,13 @@ const CLOCK_FALLBACK_MS = 120;
 // the frames are left for the reader's own taps and scrolls.
 const TOUCH_TICK_MS = 32;
 
+/* WHAT A LINE THIS WINDOW DRAWS ITSELF STANDS FOR, said by whoever draws it. `happened`: something did (a stop, a
+   rewind, a turn that did not resume), true for every window and every reload, so it is mirrored like the record's own
+   rows. `upcoming`: what this window's next send will do (the "switched" divider while its pick is unsent, Auto still
+   picking a model), true only here and only until that send, so it is never mirrored (ChatMessage.upcoming). A divider
+   one window drew for its own stale picks once reached another through the mirror as a switch nobody made (2026-10-28). */
+export type NoticeStanding = `happened` | `upcoming`;
+
 export class TranscriptClock {
     // shallowRef, not ref: transitions replace the whole object; nothing ever mutates through `state.value`.
     private readonly state = shallowRef<TranscriptState>(emptyTranscriptState);
@@ -168,9 +175,11 @@ export class TranscriptClock {
         return id;
     }
 
-    // Muted line written on the user's clock; local, since a fork must exclude only rows this window drew.
-    notice(text: string, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait" | "upcoming">): number {
-        return this.append({ role: `notice`, text, local: true, ...extra });
+    // Muted line written on the user's clock; local, since a fork must exclude only rows this window drew. Every caller
+    // says what it is (NoticeStanding): a line about this window's next send must never read, anywhere else, as history.
+    notice(text: string, standing: NoticeStanding, extra?: Pick<ChatMessage, "noticeAction" | "noticeWait">): number {
+        const row = { role: `notice`, text, local: true, ...extra } as const;
+        return this.append(standing === `upcoming` ? { ...row, upcoming: true } : row);
     }
 
     // Freezes a card the instant the daemon accepts it, closing the gap before the matching `resolved` patch arrives,

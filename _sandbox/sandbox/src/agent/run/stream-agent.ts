@@ -45,6 +45,7 @@ import { takeCheckpointNote } from "../checkpoints/checkpoint-worktree.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor } from "./turn/break-policy.js";
 import { stopResumeAt } from "./turn/turn-resume.js";
+import { withSwitchTold } from "./turn/turn-switch.js";
 import type { HeldTurn } from "./turn/holds/held-turn.js";
 import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { beginPulse, endPulse, pulseFrame } from "./turn/turn-pulse.js";
@@ -297,13 +298,15 @@ async function* runConversationTurn(
         ).catch((error: unknown) => services.logger.warn({ err: error }, "agents: title naming failed"));
         // Read once above the placement, so every placement checkpoints under the same index.
         const snapshot: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
-        yield* placedTurn(
+        const placed = placedTurn(
             services.conversations,
             conversationId,
             placementOf(services, input, admission, signal, steering, { id: conversationId, snapshot, runner, isolated, coldTrimBasis }),
             turnCloser(services, conversationId, steering, signal),
             input.unattended === true,
         );
+        // Told first what it switched to since the turn before, `existing` being the record before begin rewrote it.
+        yield* withSwitchTold(services, conversationId, existing, input, placed);
     } finally {
         unregister?.();
     }

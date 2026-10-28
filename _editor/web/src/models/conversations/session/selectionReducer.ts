@@ -54,6 +54,44 @@ export interface Selection {
 // The picks a caller may set outright; the two divider facts move only with the turns that decide them.
 export type Picks = Omit<Selection, "sentModel" | "switchedMidTurn" | "accountPicked">;
 
+// What every window holding a conversation keeps in step (pickEcho.ts): where its next turn runs, on what, and how. A
+// window that is not drawing the chat still holds a copy of it, and a copy left on the picks it was summoned with read
+// the record's session against them and drew a switch nobody made (2026-10-28).
+export type SharedPicks = Pick<
+    Selection,
+    "provider" | "harness" | "account" | "model" | "movedFrom" | "displacedModel" | "thinking" | "fast" | "auto" | "effortPick"
+>;
+
+// Every key present, an unset one as undefined, so a receiver writing them clears what the sender cleared.
+export const sharedPicksOf = (selection: Selection): SharedPicks => ({
+    provider: selection.provider,
+    harness: selection.harness,
+    account: selection.account,
+    model: selection.model,
+    movedFrom: selection.movedFrom,
+    displacedModel: selection.displacedModel,
+    thinking: selection.thinking,
+    fast: selection.fast,
+    auto: selection.auto,
+    effortPick: selection.effortPick,
+});
+
+// The picks made for this chat in one window, by its person or by a card worn for them, that the other windows must
+// hear. Every other change is each window's own reading of facts every window has (a seed, a catalog, a session), or a
+// pick written back from elsewhere (`set`), which is how an echo lands and must not echo again.
+export const ECHOED_PICKS: ReadonlySet<PickAction["kind"]> = new Set<PickAction["kind"]>([
+    `selectProvider`,
+    `selectModel`,
+    `wearModel`,
+    `selectHarness`,
+    `selectAccount`,
+    `accountMoved`,
+    `setEffort`,
+    `setThinking`,
+    `setFast`,
+    `setAuto`,
+]);
+
 // What an untouched chat is seeded from: this browser's defaults for the next new chat.
 export interface SeedDefaults {
     // The provider the defaults resolve to on this sandbox, and the one the reader last picked, when that differs.

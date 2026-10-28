@@ -421,7 +421,7 @@ export class TurnFailures {
         }
         this.credentialRenewal.value = undefined;
         rereadAccounts(this.host.selection.provider.value);
-        this.host.transcript.notice(t(`chat.turnFailures.renewalDidNotResume`));
+        this.host.transcript.notice(t(`chat.turnFailures.renewalDidNotResume`), `happened`);
         this.host.transcript.persist();
     }
 }

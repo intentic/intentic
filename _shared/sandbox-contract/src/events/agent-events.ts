@@ -12,6 +12,7 @@ import { PrivacyBypassSchema } from "../schemas/privacy-egress.js";
 import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
 import { FreshStartSchema, HandedOffSchema, HandoffOfferSchema } from "../schemas/providers/handoff.js";
+import { SwitchedSchema } from "../schemas/providers/switched.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, pageAskRequest, PageSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
 import { ReviewFindingsSchema } from "./review.js";
@@ -150,6 +151,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     HandedOffSchema.extend({ kind: z.literal("handoff") }),
     // A home conversation going on in a fresh session rather than re-reading the whole of its old one (handoff.ts).
     FreshStartSchema.extend({ kind: z.literal("fresh_start") }),
+    // A turn going out on another provider, account, loop or model than the conversation's turn before it (switched.ts).
+    SwitchedSchema.extend({ kind: z.literal("switched") }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.
     // `prompt` names the parts the cache is keyed on, so a later turn can say which of them changed.
     z.object({ kind: z.literal("init"), model: z.string(), prompt: PromptFingerprintSchema.optional() }),

@@ -243,7 +243,8 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
         }
         state.asked = true;
         state.since.value = Date.now();
-        const noticeId = chat.transcript.notice(noticeText(want), { noticeWait: `chatRoute` });
+        // This window's send, still deciding what it runs on: a wait no other window can see the end of.
+        const noticeId = chat.transcript.notice(noticeText(want), `upcoming`, { noticeWait: `chatRoute` });
         const wait = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), SEND_WAIT_MS));
         return Promise.race([ask(chat, trimmed, want, editorContext), wait]).then((route) => {
             state.since.value = undefined;
@@ -254,7 +255,7 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
             if (want.model) {
                 chat.selection.apply({ kind: `setAuto`, auto: false });
             }
-            chat.transcript.rewordNotice(noticeId, verdictLine(route, want, worn, matched), { noticeWait: undefined });
+            chat.transcript.rewordNotice(noticeId, verdictLine(route, want, worn, matched), { noticeWait: undefined }, `happened`);
         });
     };
 

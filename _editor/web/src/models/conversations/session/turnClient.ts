@@ -1162,7 +1162,7 @@ export class TurnClient {
     // can no longer trust.
     private stopLocally(): void {
         this.host.transcript.cancelPendingCards();
-        this.host.transcript.notice(t(`chat.sandboxNotice.stopped`));
+        this.host.transcript.notice(t(`chat.sandboxNotice.stopped`), `happened`);
         this.abort();
         this.host.transcript.persist();
     }

@@ -3203,6 +3203,17 @@
                     "summary": ", partiendo de un resumen de la conversación y sus últimos mensajes.",
                     "recent": ", partiendo de sus últimos mensajes y el trabajo en curso."
                 }
+            },
+            "switched": {
+                "provider": "Cambiado a {provider}",
+                "account": "Cambiado a la cuenta {account}",
+                "anotherAccount": "Cambiado a otra cuenta de {provider}",
+                "loop": "Ahora se ejecuta a través de {loop}",
+                "anotherLoop": "Cambiado a otro bucle",
+                "model": "Cambiado a {model}",
+                "anotherModel": "Cambiado a otro modelo",
+                "fresh": ": este mensaje inició una sesión nueva con la conversación hasta ahora incluida.",
+                "same": ": la misma sesión, así que el modelo vuelve a leer la conversación una vez."
             }
         },
         "failure": {

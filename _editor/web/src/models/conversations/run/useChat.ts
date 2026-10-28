@@ -19,6 +19,7 @@ import {
     tabReveal,
 } from "../tabs/useChat-tabs";
 import { attachStarted, loadSessions, sessions, sessionsFailure } from "./useChat-sessions";
+import { echoPicksAcrossWindows } from "./pickEcho";
 import {
     accountBusy,
     accountUsage,
@@ -58,6 +59,9 @@ import { openConversation, reopenClosed } from "../panel/useChat-reveal";
 // Module-level singleton: the shared chat's open conversations (tabs), account connections, and turn
 // preferences. One per window; while another window draws the chat, this window's tabs are a frozen shadow, and
 // display goes through chatStrip (useChat-strip.ts), not this list directly.
+
+// A shadow is still a copy that reads the record and could send: its picks follow the ones made in any window.
+echoPicksAcrossWindows();
 
 // The focused conversation's view: what the store binds and what every surface outside the chat panel reads
 // via useChat().

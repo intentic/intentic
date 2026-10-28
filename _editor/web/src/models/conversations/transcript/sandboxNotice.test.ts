@@ -79,6 +79,14 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `fresh_start`, why: `cold`, model: `claude-haiku-5-5`, summarized: true }]),
     ...turn([{ kind: `fresh_start`, why: `asked`, summarized: true }]),
     ...turn([{ kind: `fresh_start`, why: `cleared`, summarized: false }]),
+    // A turn that switched what it runs on since the one before it, each part that can change and both ways the session
+    // can go (switched.ts).
+    ...turn([{ kind: `switched`, segment: `provider`, provider: `codex`, model: `gpt-5-codex`, loop: `Codex`, fresh: true }]),
+    ...turn([{ kind: `switched`, segment: `account`, provider: `claude`, account: `Work`, loop: `Claude Code`, fresh: true }]),
+    ...turn([{ kind: `switched`, segment: `account`, provider: `codex`, loop: `Codex`, fresh: true }]),
+    ...turn([{ kind: `switched`, segment: `loop`, provider: `kimi`, loop: `OpenCode`, fresh: true }]),
+    ...turn([{ kind: `switched`, segment: `model`, provider: `claude`, model: `claude-sonnet-5`, loop: `Claude Code`, fresh: false }]),
+    ...turn([{ kind: `switched`, segment: `model`, provider: `claude`, model: `claude-sonnet-5`, loop: `Claude Code`, fresh: true }]),
 ];
 
 // What the daemon writes outside the fold, each as it writes it.
@@ -230,6 +238,29 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(line(coded(`contextTrim`))).toBe(
             `Wysłano w wersji odchudzonej, bo okno tego modelu ma 16k. Pominięto: Field notes, Skills. Podstawowe instrukcje samego agenta też zastąpiono krótkim akapitem. Reguły Twojej przestrzeni roboczej, persona tej tury i miejsce jej plików i tak zostały wysłane.`,
         );
+        await setLocale(`en`);
+    });
+
+    // What a turn switched to is said in the reader's language, naming the part that changed and whether the session went.
+    it(`says a turn's switch in German, by the part that changed and whether the session went with it`, async () => {
+        const switched = FOLDED.filter((row) => row.noticeCode?.code === `switched`);
+        expect(switched.map((row) => row.text)).toEqual([
+            `Switched to Codex: this message started a fresh session, with the conversation so far carried over.`,
+            `Switched to the Work account: this message started a fresh session, with the conversation so far carried over.`,
+            `Switched to another ChatGPT account: this message started a fresh session, with the conversation so far carried over.`,
+            `Switched to running through OpenCode: this message started a fresh session, with the conversation so far carried over.`,
+            `Switched to Claude Sonnet 5: same session, so the model re-reads the conversation once.`,
+            `Switched to Claude Sonnet 5: this message started a fresh session, with the conversation so far carried over.`,
+        ]);
+        await setLocale(`de`);
+        expect(switched.map((row) => noticeLine(row, `developer`))).toEqual([
+            `Zu Codex gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
+            `Zum Konto Work gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
+            `Zu einem anderen ChatGPT-Konto gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
+            `Zur Ausführung über OpenCode gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
+            `Zu Claude Sonnet 5 gewechselt: Dieselbe Sitzung, daher liest das Modell die Unterhaltung einmal neu.`,
+            `Zu Claude Sonnet 5 gewechselt: Diese Nachricht hat eine neue Sitzung gestartet, in die die bisherige Unterhaltung übernommen wurde.`,
+        ]);
         await setLocale(`en`);
     });
 

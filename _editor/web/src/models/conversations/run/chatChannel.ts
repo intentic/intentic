@@ -3,6 +3,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import type { Summons } from "./summon";
 import type { HeldDraft } from "../drafts/heldDraft";
 import type { Strip } from "../tabs/tabFacts";
+import type { WirePicks } from "./pickEcho";
 
 // All chat messages share a sandbox guard and delivery order; snapshots additionally require the current owner's identity.
 
@@ -13,6 +14,8 @@ export type ChatNote =
     | { readonly kind: `strip`; readonly owner: string; readonly revision: number; readonly strip: Strip }
     // Asks "what are you showing" on boot or sandbox switch, since asking is cheaper than waiting for the next change.
     | { readonly kind: `roll` }
+    // The picks a person just made for one chat in this window (pickEcho.ts), for every other window's copy of it.
+    | { readonly kind: `picks`; readonly conversationId: string; readonly box?: string; readonly picks: WirePicks }
     // Unsent messages this window changed (composerDrafts.ts): each window keeps the copy a window edited last.
     | {
           readonly kind: `drafts`;

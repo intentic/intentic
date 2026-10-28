@@ -3203,6 +3203,17 @@
                     "summary": ", zaczynając od streszczenia rozmowy i jej najnowszych wiadomości.",
                     "recent": ", zaczynając od najnowszych wiadomości i bieżącej pracy."
                 }
+            },
+            "switched": {
+                "provider": "Przełączono na {provider}",
+                "account": "Przełączono na konto {account}",
+                "anotherAccount": "Przełączono na inne konto {provider}",
+                "loop": "Przełączono na działanie przez {loop}",
+                "anotherLoop": "Przełączono na inną pętlę",
+                "model": "Przełączono na {model}",
+                "anotherModel": "Przełączono na inny model",
+                "fresh": ": ta wiadomość rozpoczęła nową sesję, do której przeszła dotychczasowa rozmowa.",
+                "same": ": ta sama sesja, więc model raz czyta rozmowę od nowa."
             }
         },
         "failure": {

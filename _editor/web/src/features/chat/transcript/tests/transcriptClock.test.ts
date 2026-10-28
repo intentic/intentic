@@ -366,6 +366,6 @@ it(`hands every entry to the conversation in order`, () => {
 
 it(`marks its own notices local`, () => {
     const clock = new TranscriptClock(() => {});
-    clock.notice(`Switched to Codex.`);
+    clock.notice(`Switched to Codex.`, `happened`);
     expect(clock.messages.value).toEqual([{ id: 1, role: `notice`, text: `Switched to Codex.`, local: true }]);
 });

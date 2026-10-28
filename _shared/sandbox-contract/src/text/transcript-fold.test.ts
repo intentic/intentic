@@ -515,6 +515,21 @@ describe("foldTurn", () => {
         });
     });
 
+    // A turn that went out on another provider, account, loop or model than the one before it: a row of its own, in
+    // the record, so every window shows the same switch.
+    it("marks a turn's switch with a row of its own, coded for the reader's language", () => {
+        expect(foldOf("go", [{ kind: "switched", segment: "provider", provider: "codex", model: "gpt-5-codex", loop: "Codex", fresh: true }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Switched to Codex: this message started a fresh session, with the conversation so far carried over.",
+            noticeCode: { code: "switched", params: { segment: "provider", provider: "codex", model: "gpt-5-codex", loop: "Codex", fresh: true } },
+        });
+        expect(foldOf("go", [{ kind: "switched", segment: "model", provider: "claude", model: "claude-sonnet-5", fresh: false }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Switched to Claude Sonnet 5: same session, so the model re-reads the conversation once.",
+            noticeCode: { code: "switched", params: { segment: "model", provider: "claude", model: "claude-sonnet-5", fresh: false } },
+        });
+    });
+
     // A spawned child's work goes into its parent's checkout, as the parent's in-process subagents' edits do: the row
     // says so, never that it reached the owner's workspace, and says who is to bring in a clash.
     it("says a child's work went into its parent's checkout, or was held off it by a clash", () => {
