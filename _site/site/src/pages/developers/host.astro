@@ -250,6 +250,7 @@ const packages = [
         </thead>
         <tbody>
             <tr><td><code>agentRun()</code></td><td>What a run opens on when nobody has chosen: the sandbox's Agent-runs model, falling back to the owner's own chat setting. Reactive.</td></tr>
+            <tr><td><code>allowance(selection, now)</code></td><td>Whether a run started now on that selection would meet a spent allowance: <code>undefined</code> when it would go at once, else when the allowance reopens (<code>reopensAt</code>, epoch milliseconds) with the shell's own words for it (<code>short</code>, <code>when</code>). The composer's Send reads the same rule. Send <code>sendAt</code> with <code>sendAtReopen: true</code> on the run you start and it waits for that reopen instead of being refused. Reactive; pass a ticking <code>now</code>.</td></tr>
             <tr><td><code>describe(selection)</code></td><td>Name a selection you already hold: a pin read back from disk arrives as bare ids and has to be rendered before anyone opens the picker. Reactive, so a disconnected account changes what a stored pin says about itself.</td></tr>
             <tr><td><code>pick(&#123; anchor, action, ... &#125;)</code></td><td>Open the picker over an element: a popover on desktop, a sheet on mobile. Every row inside it updates the open selection; the bar at the bottom, wearing your <code>action</code> as its label, is what resolves the promise. Escape, a click outside and the sheet's backdrop are a plain cancel: <code>undefined</code>, nothing kept.</td></tr>
         </tbody>
@@ -267,6 +268,9 @@ const packages = [
         The picker offers them only when you ask, <code>pick(&#123; …, chooseRun: true &#125;)</code>: a form that stores a model
         and none of them would be showing controls whose answers it throws away. <code>useAgentRunPick</code> asks for you, so a surface built on
         <code>AgentRunButton</code> has them already.
+        It also reads <code>allowance</code>: when the model is out of allowance, the button's press shows the time the run will start, and
+        <code>picker.booking</code> holds the <code>sendAt</code> and <code>sendAtReopen</code> fields your press should send so the run waits for that time.
+        A model picked deliberately while it has no allowance left is how somebody schedules work for later.
     </p>
 
     <h2>api.navigate, api.route and api.theme</h2>

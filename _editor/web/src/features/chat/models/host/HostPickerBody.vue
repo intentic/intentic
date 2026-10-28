@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, type Tip } from "@intentic/ui";
+import { Button, type IconName, type Tip, useNow } from "@intentic/ui";
 import { computed } from "vue";
 import { commitModelPick, dismissModelPick, modelRequest, stageModelPick } from "../../../../models/conversations/accounts/hostModelPicker";
 import { effortLabelOf } from "../../../../models/providers/effortScale";
@@ -13,6 +13,8 @@ import PickerRunSettings from "../run-settings/PickerRunSettings.vue";
 import PickerStatus from "../../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../../models/providers/offeredLoops";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
+import { runAllowance } from "../../../../models/conversations/accounts/shellModelPicking";
+import { atReopenPhrase } from "../../../../models/conversations/endings/pickUp";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -50,12 +52,6 @@ const footerVisible = computed(() => hasContent.value || unplacedRefusal.value !
 
 /* THE KEYBOARD'S SUBMIT, drawn on the one verb it presses (defaultResume): ⌘Enter on a Mac, Ctrl+Enter elsewhere. */
 const submitKeys = formatChord(`Mod+Enter`, isApplePlatform());
-const continueTip = computed((): Tip => ({ title: t(`chat.hostPickerBody.sameChat`), keys: submitKeys }));
-const startOverTip = computed((): Tip =>
-    request.value?.attempt?.continuable === true
-        ? { title: t(`chat.hostPickerBody.freshChat`), note: t(`chat.hostPickerBody.cleanWorktree`) }
-        : { title: t(`chat.hostPickerBody.freshChat`), keys: submitKeys, note: t(`chat.hostPickerBody.stopsAttempt`) },
-);
 
 /* THE VERB THE KEYBOARD'S SUBMIT MEANS when the bar carries two: the safe one, Continue, wherever it is offered. */
 const defaultResume = computed(() => {
@@ -69,15 +65,45 @@ const chosen = computed(() => {
     return held !== undefined && held.provider !== `` && held.model !== ``;
 });
 
-/* WHAT THE PRESS COSTS, in the one line above it: the model, and the tier it will think at where one is pinned. */
+/* WHAT A RUN ON THE STAGED PICK WOULD MEET IF IT STARTED NOW: its allowance spent until a reopen (runServing.ts), by the rule the button beside the panel and the composer's Send read. Ticks while the panel is open, as it is mounted only then. */
+const now = useNow(true, 30_000);
+const spent = computed(() => {
+    const held = request.value;
+    return held === undefined || !chosen.value ? undefined : runAllowance(held, now.value);
+});
+// Only a caller whose press books such a run (`schedules`, a run button) says the time on its verbs; any other is told the
+// allowance is spent in the line above and left to choose.
+const booked = computed(() => (request.value?.schedules === true ? spent.value : undefined));
+const verb = (action: string): string => (booked.value === undefined ? action : t(`chat.hostPickerBody.atTime`, { action, when: booked.value.short }));
+const verbIcon = (icon: IconName): IconName => (booked.value === undefined ? icon : `clock`);
+
+/* WHAT THE PRESS COSTS, in the one line above it: the model, the tier it will think at where one is pinned, and when its allowance is back while it has none. */
 const spend = computed<string>(() => {
     const held = request.value;
     if (held === undefined || !chosen.value) {
         return t(`chat.hostPickerBody.chooseModelToContinue`);
     }
     const tier = held.chooseRun === true ? effortLabelOf(held.effort, held.provider, held.model, held.thinking) : undefined;
-    return [modelLabelFor(held.provider, held.model), ...(tier === undefined ? [] : [tier])].join(` · `);
+    const reopens = spent.value;
+    const back =
+        reopens === undefined
+            ? undefined
+            : atReopenPhrase(
+                  { at: (when) => t(`chat.hostPickerBody.spentAt`, { when }), in: (when) => t(`chat.hostPickerBody.spentIn`, { when }) },
+                  reopens.reopensAt,
+                  now.value,
+              );
+    return [modelLabelFor(held.provider, held.model), ...(tier === undefined ? [] : [tier]), ...(back === undefined ? [] : [back])].join(` · `);
 });
+// A booked press's tip says what pressing does instead of starting now.
+const bookedNote = computed(() => (booked.value === undefined ? undefined : t(`chat.hostPickerBody.bookedNote`)));
+const continueTip = computed((): Tip => ({ title: t(`chat.hostPickerBody.sameChat`), keys: submitKeys, note: bookedNote.value }));
+const startOverTip = computed((): Tip =>
+    request.value?.attempt?.continuable === true
+        ? { title: t(`chat.hostPickerBody.freshChat`), note: bookedNote.value ?? t(`chat.hostPickerBody.cleanWorktree`) }
+        : { title: t(`chat.hostPickerBody.freshChat`), keys: submitKeys, note: bookedNote.value ?? t(`chat.hostPickerBody.stopsAttempt`) },
+);
+const actionTip = computed((): Tip => ({ title: request.value?.action ?? ``, keys: submitKeys, note: bookedNote.value }));
 
 /* A model row STAGES. */
 const choose = (entry: PickerEntry): void => {
@@ -144,36 +170,37 @@ const choose = (entry: PickerEntry): void => {
                         <Button
                             tier="accent"
                             v-if="request.attempt.continuable"
-                            :label="t(`ui.action.continue`)"
+                            :label="verb(t(`ui.action.continue`))"
                             class="flex-1"
                             :disabled="!chosen"
                             v-tooltip.top="continueTip"
                             @click="commitModelPick(`continue`)"
                         >
-                            <template #icon><Icon name="play" /></template>
+                            <template #icon><Icon :name="verbIcon(`play`)" /></template>
                         </Button>
                         <Button
-                            :label="t(`ui.action.startOver`)"
+                            :label="verb(t(`ui.action.startOver`))"
                             class="flex-1"
                             :tier="request.attempt.continuable ? `boring` : `accent`"
                             :disabled="!chosen"
                             v-tooltip.top="startOverTip"
                             @click="commitModelPick(`start-over`)"
                         >
-                            <template #icon><Icon name="refresh" /></template>
+                            <template #icon><Icon :name="verbIcon(`refresh`)" /></template>
                         </Button>
                     </div>
                 </template>
+                <!-- A spent allowance's press is a booking: the verb carries the time it starts, as the run button does. -->
                 <Button
                     tier="accent"
                     v-else
-                    :label="request.action"
+                    :label="verb(request.action)"
                     class="w-full"
                     :disabled="!chosen"
-                    v-tooltip.top="{ title: request.action, keys: submitKeys }"
+                    v-tooltip.top="actionTip"
                     @click="commitModelPick()"
                 >
-                    <template #icon><Icon name="play" /></template>
+                    <template #icon><Icon :name="verbIcon(`play`)" /></template>
                 </Button>
             </div>
         </template>

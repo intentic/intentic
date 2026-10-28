@@ -45,7 +45,15 @@ export {
     toneWash,
 } from "./lib/tone.js";
 export { default as AgentRunButton } from "./components/sandbox/AgentRunButton.vue";
-export { type AgentRunAttempt, type AgentRunChoice, type AgentRunPicker, type ModelPicking, useAgentRunPick } from "./composables/useAgentRunPick.js";
+export {
+    type AgentRunAllowance,
+    type AgentRunAttempt,
+    type AgentRunBooking,
+    type AgentRunChoice,
+    type AgentRunPicker,
+    type ModelPicking,
+    useAgentRunPick,
+} from "./composables/useAgentRunPick.js";
 export { type FixStanceLook, fixStanceLook } from "./composables/fixStanceLook.js";
 export { default as AnchoredOverlay } from "./components/overlays/AnchoredOverlay.vue";
 export { default as CoachMark } from "./components/overlays/CoachMark.vue";

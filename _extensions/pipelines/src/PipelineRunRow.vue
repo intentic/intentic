@@ -7,6 +7,7 @@ import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract
 import {
     AgentRunButton,
     type AgentRunAttempt,
+    type AgentRunBooking,
     Await,
     type AgentRunChoice,
     appLink,
@@ -64,7 +65,8 @@ const emit = defineEmits<{
     rerun: [run: PipelineRun];
     cancel: [run: PipelineRun];
     // `resume` is the verb the caret's panel was ended with over an attempt that already exists; absent is the plain press.
-    fix: [run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined];
+    // `booking` is the button's own (useAgentRunPick): its model's allowance is spent, so the fix waits for the reopen.
+    fix: [run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined, booking: AgentRunBooking | undefined];
 }>();
 
 // vue-query caches per queryKey; each row owns its own entry, so remounts are free.
@@ -318,7 +320,7 @@ const fixLabel = computed(() => {
 });
 
 const startFix = (): void => {
-    emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined, fixModel.resume.value);
+    emit(`fix`, props.run, fixModel.overridden.value ? fixModel.model.value : undefined, fixModel.resume.value, fixModel.booking.value);
     fixModel.clear();
 };
 

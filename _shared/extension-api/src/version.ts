@@ -9,4 +9,8 @@
 // 2.36.0 records settings choice labels and explanations alongside the Mac shortcut schema.
 // 2.37.0 adds the kit's own day and time fields, `DatePicker` and `TimeField`, in place of the browser's date popup and
 // hour spinner. Additive.
-export const extensionApiVersion = "2.37.0";
+// 2.38.0 tells a run button whether the model it would spend has allowance: `api.models.allowance(selection, now)` answers
+// when a spent allowance reopens, by the rule the composer's Send books by, and `pick({ schedules })` has the panel's verbs
+// say when a run on such a model starts. The kit's `useAgentRunPick` reads it as `spent` and `booking`, and
+// `<AgentRunButton>` draws the press as the time it starts. Additive. The recorded surface grows `modelsApi`.
+export const extensionApiVersion = "2.38.0";

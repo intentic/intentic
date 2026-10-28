@@ -37,6 +37,8 @@ jest.mock(`../../../models/conversations/accounts/shellModelPicking`, () => ({
             mocked.roles.push(role);
             return STANDING;
         },
+        // Every model here has room: a press starts its run now.
+        allowance: () => undefined,
         pick: async (options: { action?: string; model: string }) => {
             mocked.opened.push({ action: options.action, model: options.model });
             return mocked.answer;

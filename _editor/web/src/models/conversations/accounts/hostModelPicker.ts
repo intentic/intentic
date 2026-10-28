@@ -60,6 +60,8 @@ interface ModelRequest extends StagedPick {
     readonly chooseRun?: boolean;
     // The attempt the bar's verbs are about; absent, the bar carries `action` alone.
     readonly attempt?: AttemptOnOffer | undefined;
+/* THE CALLER'S PRESS BOOKS A SPENT ALLOWANCE'S RUN FOR ITS REOPEN (a run button's): the bar's verbs then say when it starts. */
+    readonly schedules?: boolean | undefined;
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 

@@ -62,6 +62,9 @@
         "viewLogs": "Zobacz dzienniki"
     },
     "agentRunButton": {
+        "atTime": "{label} · {when}",
+        "booked": "Rusza, gdy limit się odnowi",
+        "bookedNote": "{model} nie ma teraz limitu. Kliknięcie rezerwuje ten przebieg na chwilę odnowienia; wcześniej nic nie trafia do dostawcy.",
         "clickToChange": "Kliknij, by zmienić",
         "clickToConfigure": "Kliknij, by ustawić",
         "configureStartRun": "Skonfiguruj i uruchom ten przebieg — {spend}",
@@ -70,6 +73,7 @@
         "model": "Model",
         "sandboxDefault": "Domyślny sandboxa",
         "speed": "Szybkość",
+        "starts": "Rusza",
         "thisRunOnly": "Tylko ten przebieg"
     },
     "code": {

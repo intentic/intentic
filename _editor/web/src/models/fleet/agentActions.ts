@@ -7,6 +7,8 @@ import type { Conversation } from "../conversations/session/conversation";
 import type { ChatAttachment } from "../conversations/transcript/transcript";
 import { errands } from "../conversations/run/errands";
 import { summonChat, summonTurn } from "../conversations/run/summon";
+import { spentUntilOf } from "../conversations/accounts/runServing";
+import { reopenBooking, type TurnBooking } from "../conversations/drafts/sendLater";
 import { useChat } from "../conversations/run/useChat";
 import { transcriptShown } from "../conversations/run/useChat-sessions";
 import { composingConversation, draftConversation } from "../conversations/panel/useChat-reveal";
@@ -42,6 +44,14 @@ export const agentWork = (id: string, at: AgentReach = undefined): string => (at
 // A collaborator's ask to land, one press per card however many surfaces offer it (the card, its review page).
 export const landRequestWork = (id: string, at: AgentReach = undefined): string => `${agentWork(id, at)}/request-land`;
 
+// How a new agent's opening words go, read as the moment they are sent: as its composer's Send would send them, booked
+// for the reopen of an allowance the records call spent (runServing.ts, the one rule both read) rather than into a
+// refusal. A model picked while it has no allowance left is how a run is scheduled for later. Undefined sends them now.
+const openingBooking = (conversation: Conversation): TurnBooking | undefined => {
+    const until = spentUntilOf(conversation.selection.servingState.value, Date.now());
+    return until === undefined ? undefined : reopenBooking(until);
+};
+
 // `run` is the model a surface's run button stands at (useAgentRunPick: a job's list, or the reader's pick for this run
 // alone). Without it the draft opens on whatever the composer last held, which is the reader's chat model and says
 // nothing about the job the press starts.
@@ -76,7 +86,7 @@ export const startAgent = (
     // The prompt rides the summons, so the turn runs in the window drawing the chat rather than whichever one was
     // clicked (summonTurn).
     if (fitted === undefined && prompt !== undefined) {
-        summonTurn(conversation, prompt, opening?.files);
+        summonTurn(conversation, prompt, opening?.files, openingBooking(conversation));
         revealConversation(conversation);
         return conversation.conversationId;
     }
@@ -93,7 +103,7 @@ export const startAgent = (
             console.warn(`startAgent: project persona for ${project} was refused; the conversation runs unfenced`, error);
             conversation.selection.apply({ kind: `set`, picks: { actsAs: undefined } });
         })
-        .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt, opening?.files)));
+        .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt, opening?.files, openingBooking(conversation))));
     return conversation.conversationId;
 };
 

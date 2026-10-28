@@ -43,6 +43,7 @@ import { invalidateAgentTranscript } from "../../../../models/conversations/tran
 import { type ChatAttachment, type ChatMessage, continuationFor } from "../../../../models/conversations/transcript/transcript";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import { useFreshAgentSend } from "./freshAgentSend";
+import { spentUntilOf } from "../../../../models/conversations/accounts/runServing";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
 // (what it says, whether it may, what Stop and the queue will do); the doing is the press itself, in the precedence
@@ -338,11 +339,9 @@ export const useComposerSend = (host: SendHost) => {
     // is timed.
     const paneNow = useNow(() => pickUp.value?.readyAt !== undefined || view.spentReopensAt.value !== undefined || later.value?.kind === `at`);
     // When the account this send would run on reopens (ms), while that is still ahead; a reset the clock has passed is a
-    // stale reading, and a plain send is the honest press for it.
-    const spentUntil = computed(() => {
-        const at = view.spentReopensAt.value;
-        return at === undefined || at * 1_000 <= paneNow.value ? undefined : at * 1_000;
-    });
+    // stale reading, and a plain send is the honest press for it. The rule every press that starts an agent reads too
+    // (runServing.ts), so a run button and this Send cannot judge one model differently.
+    const spentUntil = computed(() => spentUntilOf(view.servingState.value, paneNow.value));
     // The pane's words, plus what only a scheduled send says: when, and whether a turn already waiting goes ahead of it.
     const words = computed<ComposerWords>(() => {
         // Only a sandbox that books the whole queue lets a booking go with an ordinary send (`scheduled` is a hold only

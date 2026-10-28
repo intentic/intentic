@@ -18,6 +18,7 @@ import {
     SplitView,
     toneTint,
     useNarrow,
+    type AgentRunBooking,
     type AgentRunChoice,
     type TallyItem,
     ProjectChip,
@@ -245,12 +246,18 @@ onBeforeUnmount(() => {
 
 // `pick` is set only via the caret beside the row's button; the ordinary path opens on the sandbox's agent-run list.
 // `resume` is the verb that caret's panel was ended with over an attempt that already exists (Continue / Start over).
-const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined): Promise<void> => {
+// `booking` is the button's: its model's allowance is spent, so the agent opens now with its task booked for the reopen.
+const fixRun = async (
+    run: PipelineRun,
+    pick: AgentRunChoice | undefined,
+    resume: FixResume | undefined,
+    booking: AgentRunBooking | undefined,
+): Promise<void> => {
     busy.value = actionKey(run);
     starting.value = actionKey(run);
     actionError.value = undefined;
     try {
-        const { conversationId } = await fix.mutateAsync({ run, pick, mode: resume });
+        const { conversationId } = await fix.mutateAsync({ run, pick, mode: resume, booking });
         // Not awaited: navigation below is the point, so the row shows 'Agent working' without delaying it.
         void refreshFixes();
         // Opens the fleet board, not the diff view: nothing to review yet. `?focus` waits for the roster.

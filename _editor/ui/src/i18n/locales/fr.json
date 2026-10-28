@@ -62,6 +62,9 @@
         "viewLogs": "Voir les journaux"
     },
     "agentRunButton": {
+        "atTime": "{label} · {when}",
+        "booked": "Démarre quand le quota se rouvre",
+        "bookedNote": "{model} n'a plus de quota pour l'instant. Cliquer réserve cette exécution pour la réouverture ; rien n'est envoyé au fournisseur avant.",
         "clickToChange": "Cliquer pour changer",
         "clickToConfigure": "Cliquer pour configurer",
         "configureStartRun": "Configurer et lancer cette exécution — {spend}",
@@ -70,6 +73,7 @@
         "model": "Modèle",
         "sandboxDefault": "Défaut du sandbox",
         "speed": "Vitesse",
+        "starts": "Démarre",
         "thisRunOnly": "Cette exécution seule"
     },
     "code": {

@@ -3964,10 +3964,14 @@
             "sentBySandboxCi": "Enviado por el sandbox, a partir de una ejecución de CI fallida"
         },
         "hostPickerBody": {
+            "atTime": "{action} · {when}",
+            "bookedNote": "Este modelo no tiene cuota: al pulsar, la ejecución queda reservada para la renovación y nada llega al proveedor antes.",
             "chooseModelToContinue": "Elige un modelo para continuar",
             "cleanWorktree": "Worktree limpio",
             "freshChat": "Chat nuevo",
             "sameChat": "Mismo chat",
+            "spentAt": "cuota de vuelta a las {when}",
+            "spentIn": "cuota de vuelta en {when}",
             "stopsAttempt": "Detiene este intento"
         },
         "limitReset": {

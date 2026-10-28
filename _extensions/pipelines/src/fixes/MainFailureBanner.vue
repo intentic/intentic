@@ -3,6 +3,7 @@ import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-pla
 import type { CiRepo, MainFailureHandBack, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import {
     type AgentRunAttempt,
+    type AgentRunBooking,
     AgentRunButton,
     type AgentRunChoice,
     appLink,
@@ -43,7 +44,9 @@ const props = defineProps<{
 }>();
 // The run row's own event, so the view handles both the same way: the caret's model pick, and the verb its panel ended
 // with over the agent's attempt (Continue / Start over).
-const emit = defineEmits<{ fix: [run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined] }>();
+const emit = defineEmits<{
+    fix: [run: PipelineRun, pick: AgentRunChoice | undefined, resume: FixResume | undefined, booking: AgentRunBooking | undefined];
+}>();
 
 const api = host();
 
@@ -173,7 +176,7 @@ const runKey = computed(() =>
 );
 const pressFix = (): void => {
     if (props.view.run !== undefined) {
-        emit(`fix`, props.view.run, picker.overridden.value ? picker.model.value : undefined, picker.resume.value);
+        emit(`fix`, props.view.run, picker.overridden.value ? picker.model.value : undefined, picker.resume.value, picker.booking.value);
         picker.clear();
     }
 };

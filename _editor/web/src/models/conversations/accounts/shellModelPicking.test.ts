@@ -141,3 +141,29 @@ test(`with nothing pinned, the standing choice is the model a new chat would ope
     expect([open.provider.value, open.model.value]).toEqual([`claude`, `claude-opus-4-6`]);
     expect({ provider: choice.provider, model: choice.model }).toEqual({ provider: `zai`, model: `glm-4.6` });
 });
+
+// A run button on a model whose allowance is spent draws its press as the time the run starts, and its press books for
+// then: both read `spent` and `booking` off the same rule the composer's Send books by (runServing.ts).
+test(`a run button on a model with no allowance left books its press for the reopen, and one with room starts now`, async () => {
+    const reopens = Math.round(Date.now() / 1_000) + 7_200;
+    const usage = (utilization: number) => ({
+        measuredAt: Date.now(),
+        windows: [{ kind: `five_hour` as const, gates: `all` as const, utilization, resetsAt: reopens }],
+    });
+    pinned({ provider: `claude`, model: `claude-sonnet-4-6` });
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude`, connectedAt: 1, usage: usage(100) }] };
+    let pick: ReturnType<typeof useAgentRunPick> | undefined;
+    const app = mounted(() => {
+        pick = useAgentRunPick(() => shellModelPicking(), ROLE);
+        return () => h(`div`);
+    });
+
+    expect(pick?.booking.value).toEqual({ sendAt: reopens * 1_000, sendAtReopen: true });
+    expect(pick?.spent.value?.reopensAt).toBe(reopens * 1_000);
+
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc`, label: `Claude`, connectedAt: 1, usage: usage(10) }] };
+    await nextTick();
+
+    expect(pick?.booking.value).toBeUndefined();
+    app.unmount();
+});

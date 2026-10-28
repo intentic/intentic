@@ -3964,10 +3964,14 @@
             "sentBySandboxCi": "Von der Sandbox gesendet, aus einem fehlgeschlagenen CI-Lauf"
         },
         "hostPickerBody": {
+            "atTime": "{action} · {when}",
+            "bookedNote": "Dieses Modell hat kein Kontingent mehr: Der Klick bucht den Lauf für die Freigabe, vorher geht nichts an den Anbieter.",
             "chooseModelToContinue": "Wählen Sie ein Modell, um fortzufahren",
             "cleanWorktree": "Sauberer Worktree",
             "freshChat": "Neuer Chat",
             "sameChat": "Gleicher Chat",
+            "spentAt": "Kontingent wieder um {when}",
+            "spentIn": "Kontingent wieder in {when}",
             "stopsAttempt": "Stoppt diesen Versuch"
         },
         "limitReset": {

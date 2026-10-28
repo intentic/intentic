@@ -1,4 +1,5 @@
 import { computed, type ComputedRef, ref } from "vue";
+import { useNow } from "./useNow.js";
 
 /* THE MODEL A SURFACE-STARTED RUN WILL OPEN ON, AND THE OVERRIDE FOR IT, the state behind every <AgentRunButton> in the app. */
 
@@ -27,6 +28,24 @@ export interface AgentRunAttempt {
     readonly continuable: boolean;
 }
 
+/* WHAT A RUN ON A CHOICE WOULD MEET IF IT STARTED NOW, answered by the host's one rule (the composer's Send reads the same):
+   its allowance is spent, and reopens at `reopensAt`. A press then books the run for that instant (AgentRunBooking)
+   rather than sending it into a refusal, which is how a model chosen with no allowance left schedules work for later. */
+export interface AgentRunAllowance {
+    // When the spent allowance reopens (epoch ms), still ahead: the run starts by itself then.
+    readonly reopensAt: number;
+    // The narrowest honest label for that instant, the composer's scheduled Send's own: "40m", "21:00", "Tue 09:00".
+    readonly short: string;
+    // The longer form for a tooltip: "21:00, about 4 hours".
+    readonly when: string;
+}
+
+/* THE BOOKING A PRESS ON A SPENT ALLOWANCE MAKES, in the wire's own words (AgentTurn's `sendAt` with `sendAtReopen`): held until the reopen, sent then, and nothing reaches the provider before. */
+export interface AgentRunBooking {
+    readonly sendAt: number;
+    readonly sendAtReopen: true;
+}
+
 /* WHETHER TWO SELECTIONS WOULD START THE SAME RUN, which is the only question `overridden` is really asking. */
 const sameChoice = (left: AgentRunChoice, right: AgentRunChoice): boolean =>
     left.provider === right.provider &&
@@ -40,6 +59,12 @@ const sameChoice = (left: AgentRunChoice, right: AgentRunChoice): boolean =>
 /* The two questions this asks of whichever world it is running in: what would run if nobody chose, and let them choose. */
 export interface ModelPicking {
     agentRun(role: string): AgentRunChoice;
+    // What a run started on `choice` at `now` would meet (AgentRunAllowance), undefined when it would go at once. Reactive
+    // when read in a computed: it moves with the accounts' readings and refusals as the composer's Send does.
+    allowance(
+        choice: { readonly provider: string; readonly model: string; readonly account?: string | undefined; readonly harness?: string | undefined },
+        now: number,
+    ): AgentRunAllowance | undefined;
     pick(options: {
         readonly anchor: HTMLElement;
         readonly provider: string;
@@ -56,6 +81,8 @@ export interface ModelPicking {
         readonly chooseRun?: boolean;
         // The attempt the bar's verbs are about (AgentRunAttempt); absent, the bar carries `action` alone.
         readonly attempt?: AgentRunAttempt | undefined;
+/* THE PRESS BOOKS A SPENT ALLOWANCE'S RUN FOR ITS REOPEN: the bar's verbs then say when it starts, as the button beside it does. */
+        readonly schedules?: boolean | undefined;
     }): Promise<AgentRunChoice | undefined>;
 }
 
@@ -71,6 +98,12 @@ export interface AgentRunPicker {
     readonly choose: (anchor: HTMLElement, action: string) => Promise<boolean>;
 /* THE VERB THE PANEL ENDED WITH, for the run the caller is about to start: continue the attempt it was opened over, or start over from it. */
     readonly resume: ComputedRef<"continue" | "start-over" | undefined>;
+    // The model's allowance is spent with a reopen ahead (AgentRunAllowance), so the press starts the run then, not now;
+    // undefined while it would go at once. What <AgentRunButton> draws as a time on its press.
+    readonly spent: ComputedRef<AgentRunAllowance | undefined>;
+    // What the caller sends with its press so the run waits for that reopen: the booking `spent` promises, or undefined
+    // to start now. Every press beside the button must carry it, or the button says one thing and the run does another.
+    readonly booking: ComputedRef<AgentRunBooking | undefined>;
     // Back to the standing setting, called once a run has been started with the pick, so the next one on the
     // same row does not silently inherit a choice made for a different failure.
     readonly clear: () => void;
@@ -82,10 +115,16 @@ export function useAgentRunPick(models: () => ModelPicking, role: string, attemp
     const picked = ref<AgentRunChoice | undefined>(undefined);
     const standing = computed<AgentRunChoice>(() => models().agentRun(role));
     const model = computed<AgentRunChoice>(() => picked.value ?? standing.value);
+    // A minute-scale clock: the label counts minutes, and a reopen passed a beat ago books for an instant the sandbox
+    // already lets through.
+    const now = useNow(true, 30_000);
+    const spent = computed(() => models().allowance(model.value, now.value));
     return {
         model,
         overridden: computed(() => picked.value !== undefined && !sameChoice(picked.value, standing.value)),
         resume: computed(() => picked.value?.resume),
+        spent,
+        booking: computed(() => (spent.value === undefined ? undefined : { sendAt: spent.value.reopensAt, sendAtReopen: true as const })),
         choose: async (anchor: HTMLElement, action: string): Promise<boolean> => {
             const over = attempt?.();
             const next = await models().pick({
@@ -95,6 +134,8 @@ export function useAgentRunPick(models: () => ModelPicking, role: string, attemp
                 // Every surface that presses this button sends the knobs on with the model (the daemon fills a
                 // pinned entry's own in only for a run that named neither), so the rows are always offered here.
                 chooseRun: true,
+                // Every press beside this picker carries `booking`, so a spent model's run waits for its reopen.
+                schedules: true,
                 provider: model.value.provider,
                 model: model.value.model,
                 ...(model.value.account !== undefined ? { account: model.value.account } : {}),

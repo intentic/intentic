@@ -34,6 +34,8 @@ interface RecordedSurface {
     readonly workspaceApi?: readonly string[];
     /* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there. */
     readonly chatApi?: readonly string[];
+    // api.models' own members, recorded from 2.38.0 on: `allowance` was added there.
+    readonly modelsApi?: readonly string[];
     // The backend api's `daemon` members (server.ts), recorded from 2.17.0 on: `rpc` was added there.
     readonly daemonApi?: readonly string[];
     // The backend api's own members (server.ts), recorded from 2.20.0 on: `tools` was added there.
@@ -112,6 +114,7 @@ const liveSurface = (): RecordedSurface => ({
     sandboxApi: nestedMembers(`sandbox`),
     workspaceApi: nestedMembers(`workspace`),
     chatApi: nestedMembers(`chat`),
+    modelsApi: nestedMembers(`models`),
     daemonApi: nestedMembers(`daemon`, `src/server.ts`),
     serverApi: apiMembers(`src/server.ts`, `export interface ExtensionServerApi {`),
     toolDefinition: apiMembers(`src/server.ts`, `export interface ToolDefinition {`),

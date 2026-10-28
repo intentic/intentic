@@ -5,6 +5,7 @@ import { floatingWindowPanel, raiseFloating } from "../../../workbench/window/fl
 import { Conversation } from "../session/conversation";
 import { traceFocus } from "./focusTrace";
 import type { ChatAttachment } from "../transcript/transcript";
+import type { TurnBooking } from "../drafts/sendLater";
 import { showRun } from "./chatRun";
 import { closeSubagent, showSubagent } from "../panel/subagentView";
 import { snapshotTab, type StoredTab } from "../tabs/tabSnapshot";
@@ -78,7 +79,7 @@ const apply = (summons: Summons): void => {
     // Only the window holding the chat's own window sends a carried turn: every window applies this summons, and the
     // one that composed it kept the turn for itself unless it draws no chat (summonTurn).
     if (summons.deliver !== undefined && focused !== undefined && floatingWindowPanel.value === `chat`) {
-        void focused.turn.say(summons.deliver);
+        void (summons.deliverAt === undefined ? focused.turn.say(summons.deliver) : focused.turn.schedule(summons.deliver, summons.deliverAt));
     }
 };
 
@@ -125,8 +126,9 @@ export const summonChat = (summons: Summons): void => {
  * the eye already goes.
  */
 // `files` are staged chips the opening message carries; they ride only a turn run here, since a summons to another
-// window delivers words alone.
-export const summonTurn = (conversation: Conversation, prompt: string, files?: readonly ChatAttachment[]): void => {
+// window delivers words alone. `booking` holds the turn for a spent allowance's reopen (agentActions.ts openingBooking),
+// wherever it is sent from: booked, it waits in the queue drawn as scheduled, and nothing reaches the provider before.
+export const summonTurn = (conversation: Conversation, prompt: string, files?: readonly ChatAttachment[], booking?: TurnBooking): void => {
     const here = drawsChat.value;
     summonChat({
         kind: `reveal`,
@@ -134,10 +136,10 @@ export const summonTurn = (conversation: Conversation, prompt: string, files?: r
         entries: [conversation],
         focus: conversation.conversationId,
         caret: true,
-        ...(here ? {} : { deliver: prompt }),
+        ...(here ? {} : { deliver: prompt, deliverAt: booking }),
     });
     if (here) {
-        void conversation.turn.say(prompt, files);
+        void (booking === undefined ? conversation.turn.say(prompt, files) : conversation.turn.schedule(prompt, booking, files));
         return;
     }
     // Raises the window already holding the chat, so the answer arrives where the eye goes; never opens one.

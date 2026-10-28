@@ -62,6 +62,9 @@
         "viewLogs": "Ver los registros"
     },
     "agentRunButton": {
+        "atTime": "{label} · {when}",
+        "booked": "Empieza cuando se renueve la cuota",
+        "bookedNote": "{model} no tiene cuota ahora mismo. Al pulsar, esta ejecución queda reservada para la renovación; nada llega al proveedor antes.",
         "clickToChange": "Clic para cambiar",
         "clickToConfigure": "Clic para configurar",
         "configureStartRun": "Configura e inicia esta ejecución — {spend}",
@@ -70,6 +73,7 @@
         "model": "Modelo",
         "sandboxDefault": "Predeterminado",
         "speed": "Velocidad",
+        "starts": "Empieza",
         "thisRunOnly": "Solo esta ejecución"
     },
     "code": {

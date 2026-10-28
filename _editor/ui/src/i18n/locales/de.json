@@ -62,6 +62,9 @@
         "viewLogs": "Protokolle ansehen"
     },
     "agentRunButton": {
+        "atTime": "{label} · {when}",
+        "booked": "Startet, wenn das Kontingent wieder frei ist",
+        "bookedNote": "{model} hat gerade kein Kontingent mehr. Ein Klick bucht diesen Lauf für die Freigabe; vorher geht nichts an den Anbieter.",
         "clickToChange": "Klicken zum Ändern",
         "clickToConfigure": "Klicken zum Einrichten",
         "configureStartRun": "Diesen Lauf einrichten und starten — {spend}",
@@ -70,6 +73,7 @@
         "model": "Modell",
         "sandboxDefault": "Sandbox-Standard",
         "speed": "Tempo",
+        "starts": "Startet",
         "thisRunOnly": "Nur dieser Lauf"
     },
     "code": {

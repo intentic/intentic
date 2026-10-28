@@ -1,6 +1,7 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
 import { seedComposer } from "../drafts/composerBinding";
+import type { TurnBooking } from "../drafts/sendLater";
 import { drawsChat } from "../run/chatEcho";
 import { Conversation } from "../session/conversation";
 import type { StoredTab } from "../tabs/tabSnapshot";
@@ -46,6 +47,9 @@ export interface Reveal {
     // The focused chat's first turn, for the window drawing the chat to send (summon.ts); only that window acts on
     // it, so a summons every window applies still starts exactly one turn.
     readonly deliver?: string;
+    // What that turn waits for, when the window that composed it found its allowance spent: the chat's window books it
+    // for the reopen (TurnClient.schedule) rather than sending it into a refusal.
+    readonly deliverAt?: TurnBooking | undefined;
 }
 
 // The transcript round-trip behind a session entry, off the reveal's synchronous path.

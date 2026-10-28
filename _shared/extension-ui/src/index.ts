@@ -7,7 +7,9 @@
 export {
     // `useAgentRunPick` takes `api.models` as an argument, so the kit itself stays free of the extension API.
     AgentRunButton,
+    type AgentRunAllowance,
     type AgentRunAttempt,
+    type AgentRunBooking,
     type AgentRunChoice,
     type AgentRunPicker,
     type ModelPicking,

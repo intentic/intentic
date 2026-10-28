@@ -74,6 +74,14 @@ const WAITING: FixStance = {
     hint: "The fix agent's allowance is spent. Nothing is owed: the turn goes again when the provider's window reopens.",
 };
 
+const SCHEDULED: FixStance = {
+    kind: "waiting",
+    ongoing: true,
+    retry: false,
+    label: "Scheduled",
+    hint: "The fix agent is booked to start by itself, most often when its model's allowance reopens. Nothing is owed; open it to send it sooner or change when it goes.",
+};
+
 // True only for a clean finish (`ready`, or `idle` with a diff); a crashed turn with files also has a diff, but that
 // belongs in the ending's hint, not here.
 const holdingWork = (agent: AgentSummary): boolean =>
@@ -134,6 +142,9 @@ const RULES: readonly ((agent: AgentSummary) => FixStance | undefined)[] = [
     (agent) => (awaitsWake(agent) ? WORKING : undefined),
     (agent) => (holdingWork(agent) ? READY : undefined),
     (agent) => (agent.status === "landed" ? LANDED : undefined),
+    // Its task waits in the queue booked for later (a Fix pressed on a model with no allowance left, booked for the
+    // reopen): it has not run since, so a card with nothing changed is not an ending. A fix held or landed says so first.
+    (agent) => (agent.next?.kind === "send" ? SCHEDULED : undefined),
 ];
 
 export const fixStance = (agent: AgentSummary): FixStance => {

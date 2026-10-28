@@ -55,6 +55,19 @@ const spend = computed(() => {
         ` · `,
     );
 });
+// A spent allowance makes the press a booking, as on every run button (useAgentRunPick `spent`): startAgent books the
+// opening words for its reopen, so the press and both tips say when the run starts.
+const booked = computed(() => picker.spent.value);
+const pressHint = computed((): Tip => {
+    const spent = booked.value;
+    return spent === undefined
+        ? hint
+        : {
+              ...hint,
+              rows: [...(hint.rows ?? []), { label: t(`ui.agentRunButton.starts`), value: spent.when }],
+              note: t(`ui.agentRunButton.bookedNote`, { model: picker.model.value.label }),
+          };
+});
 const caretHint = computed(
     (): Tip => ({
         title: t(`ui.agentRunButton.sandboxDefault`),
@@ -62,6 +75,7 @@ const caretHint = computed(
             { label: t(`ui.agentRunButton.model`), value: picker.model.value.label },
             { label: t(`ui.agentRunButton.effort`), value: picker.model.value.effortLabel ?? `` },
             { label: t(`ui.agentRunButton.speed`), value: picker.model.value.fast === true ? t(`ui.agentRunButton.fast`) : `` },
+            { label: t(`ui.agentRunButton.starts`), value: booked.value?.when ?? `` },
         ],
         note: t(`ui.agentRunButton.clickToConfigure`),
     }),
@@ -74,12 +88,12 @@ const caretHint = computed(
         <button
             type="button"
             :class="ui.textButton({ tone: dormant ? `subtle` : `quiet`, size: `xs` }, `whitespace-nowrap`)"
-            v-tooltip.top="hint"
+            v-tooltip.top="pressHint"
             :aria-label="label"
             data-refactor
             @click="run"
         >
-            <Icon name="sparkles" class="shrink-0" />
+            <Icon :name="booked ? `clock` : `sparkles`" class="shrink-0" />
             <span class="hidden @2xl:inline">{{ hint.title }}</span>
         </button>
         <button

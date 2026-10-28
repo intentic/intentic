@@ -3964,10 +3964,14 @@
             "sentBySandboxCi": "Sent by the sandbox, from a failed CI run"
         },
         "hostPickerBody": {
+            "atTime": "{action} · {when}",
+            "bookedNote": "This model has no allowance left: the press books the run for the reopen, and nothing reaches the provider before.",
             "chooseModelToContinue": "Choose a model to continue",
             "cleanWorktree": "Clean worktree",
             "freshChat": "Fresh chat",
             "sameChat": "Same chat",
+            "spentAt": "allowance back at {when}",
+            "spentIn": "allowance back in {when}",
             "stopsAttempt": "Stops this attempt"
         },
         "limitReset": {

@@ -12,7 +12,7 @@ import { projectScope, setProjectScope, withinScope } from "../app/projectScope"
 import { useAudience } from "../app/useAudience";
 import { effortLabelOf, effortRungOf } from "../models/providers/effortScale";
 import { modelLabelFor } from "../models/providers/providerCatalog";
-import { agentRunChoice, shellModelPicking } from "../models/conversations/accounts/shellModelPicking";
+import { agentRunChoice, runAllowance, shellModelPicking } from "../models/conversations/accounts/shellModelPicking";
 import { summonChat } from "../models/conversations/run/summon";
 import { useChat } from "../models/conversations/run/useChat";
 import { accountsOf } from "../models/conversations/accounts/useChat-accounts";
@@ -531,6 +531,8 @@ export const createExtensionApi = (
                     fast: choice.fast,
                 });
             },
+            // The shell's own reading (runServing.ts), the one the composer's Send books by.
+            allowance: runAllowance,
             describe: (selection) =>
                 named({
                     provider: selection.provider as AgentProvider,

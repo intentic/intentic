@@ -154,6 +154,10 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     // ordinary session with a prepared prompt. The pick's fields ARE the turn's, spread verbatim.
                     turn: {
                         ...input.pick,
+                        // A model with no allowance left was chosen for later: the task waits for its reopen, booked the
+                        // way a composer's scheduled send is (fix-attempts.ts), rather than meeting a refusal now.
+                        ...opt("sendAt", input.sendAt),
+                        ...opt("sendAtReopen", input.sendAtReopen),
                         // Whoever pressed Fix, verified as POST /agent verifies it: the conversation is theirs.
                         ...spokenBy(speakerOf(context.identity, context.principal)),
                         ...opt("areas", areasOf(context.identity)),

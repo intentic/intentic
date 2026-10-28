@@ -28,4 +28,18 @@ describe(`a Fix press`, () => {
             mode: `start-over`,
         });
     });
+
+    // The button drew its press as a time: its model has no allowance left, so the fix is booked for the reopen. It names
+    // that model outright, since the booking waits for that model's allowance and nothing else's.
+    it(`books a press on a spent allowance for its reopen, naming the model the button named`, () => {
+        const booking = { sendAt: 1_900_000_000_000, sendAtReopen: true as const };
+
+        expect(fixParams({ run, standing, booking })).toEqual({
+            repo: `web`,
+            runId: 41,
+            pick: { agent: `zai`, model: `glm-4.6` },
+            sendAt: 1_900_000_000_000,
+            sendAtReopen: true,
+        });
+    });
 });

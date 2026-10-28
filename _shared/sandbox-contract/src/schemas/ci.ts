@@ -239,6 +239,20 @@ export const CiFixParamSchema = CiRunParamSchema.extend({
         .describe(
             "Open the conversation even when every failed job died in its runner's own setup, which is the fleet's fault and nothing an agent on the code can repair. Left out, such a run is refused with that sentence.",
         ),
+    // The run button's booking (useAgentRunPick `booking`): the chosen model's allowance is spent, so the press schedules
+    // the fix for its reopen instead of sending it into a refusal. AgentTurn's own two fields, read the same way.
+    sendAt: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+            "Hold the fix until then (epoch milliseconds) instead of starting it now: the reopen of the allowance the chosen model would be refused by. The conversation opens at once with its task waiting in the queue, drawn as scheduled, and starts by itself then. Ignored when already past; at most a month ahead.",
+        ),
+    sendAtReopen: z
+        .literal(true)
+        .optional()
+        .describe("Says `sendAt` is the reopen of a spent allowance rather than a time you chose, so every window says the fix waits on an allowance. Only with `sendAt`."),
 });
 export type CiFixParam = z.infer<typeof CiFixParamSchema>;
 // The fix route opens an isolated conversation (fleet card + chat tab) seeded with the failure context.

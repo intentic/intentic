@@ -1,7 +1,10 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentTurn, MessageReceipt } from "@intentic/sandbox-contract/schemas/agent";
 import { ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
-import { type FixAttemptDeps, startFixAttempt } from "./fix-attempts.js";
+import { unstubbed } from "@intentic/testing";
+import type { Services } from "../../composition.js";
+import type { Said, StartedRun, TurnInput, Unsaid } from "../../seams/turn-starter.js";
+import { AttemptRefused, daemonFixAttemptDeps, type FixAttemptDeps, startFixAttempt } from "./fix-attempts.js";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 const BASE = ciFixConversationId("web", 41);
@@ -122,5 +125,47 @@ describe("an attempt turned away before it started", () => {
         expect(calls).toEqual([`start ${BASE}`]);
         expect(started[0]).toMatchObject({ conversationId: BASE, prompt: ASK.prompt, errand: "ci-fix", runRole: "pipeline-fix" });
         expect(started[0]).not.toHaveProperty("title");
+    });
+});
+
+// A Fix pressed on a model whose allowance is spent carries the button's booking (`sendAt`): the person's door books it
+// as it books a composer's scheduled send, so the conversation opens now with its task drawn as scheduled and nothing
+// reaches the provider before the reopen.
+describe("a press booked for a spent allowance's reopen", () => {
+    const doors = (said: MessageReceipt | Unsaid = { delivered: "queued" }) => {
+        const calls: string[] = [];
+        const say = jest.fn(async (input: Said): Promise<MessageReceipt | Unsaid> => {
+            calls.push(`say ${input.voice} ${input.turn.conversationId}`);
+            return said;
+        });
+        const start = jest.fn(async (turn: TurnInput): Promise<StartedRun> => {
+            calls.push(`start ${turn.conversationId ?? ""}`);
+            return { id: "run-1", async *frames () {} };
+        });
+        const services = unstubbed<Services>("services", {
+            agents: unstubbed<Services["agents"]>("agents", { clearArchived: async () => void calls.push("clearArchived") }),
+            turns: unstubbed<Services["turns"]>("turns", { say, start }),
+        });
+        return { deps: daemonFixAttemptDeps(services, { pressed: true }), say, calls };
+    };
+    const BOOKED = { ...ASK.turn, prompt: ASK.prompt, conversationId: BASE, sendAt: 1_900_000_000_000, sendAtReopen: true as const };
+
+    test("goes through the person's door, which books it, and starts no turn", async () => {
+        const { deps, say, calls } = doors();
+        await expect(deps.start(BOOKED)).resolves.toEqual({ delivered: "queued" });
+        expect(calls).toEqual(["clearArchived", `say person ${BASE}`]);
+        expect(say).toHaveBeenCalledWith({ turn: BOOKED, voice: "person" });
+    });
+
+    test("a booking that door refuses refuses the attempt, with its reason", async () => {
+        const { deps } = doors({ invalid: "That conversation cannot land anything." });
+        await expect(deps.start(BOOKED)).rejects.toThrow(new AttemptRefused("That conversation cannot land anything."));
+    });
+
+    test("an unbooked press starts its turn as it always did", async () => {
+        const { deps, calls } = doors();
+        const { sendAt: _at, sendAtReopen: _reopen, ...now } = BOOKED;
+        await deps.start(now);
+        expect(calls).toEqual(["clearArchived", `start ${BASE}`]);
     });
 });

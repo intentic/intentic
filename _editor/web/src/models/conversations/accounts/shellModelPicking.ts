@@ -2,13 +2,15 @@ import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/sch
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { sendableEffort } from "@intentic/sandbox-contract/models/agent-catalog";
-import type { AgentRunChoice, ModelPicking } from "@intentic/ui";
+import type { AgentRunAllowance, AgentRunChoice, ModelPicking } from "@intentic/ui";
 import { effectScope } from "vue";
 import { effortLabelOf } from "../../providers/effortScale";
 import { type RoleModel, useRoleModel } from "../../providers/roleModel";
 import { requestModelPick } from "./hostModelPicker";
 import { modelLabelFor } from "../../providers/providerCatalog";
 import { rememberedModelFor, rememberedProviderFor } from "../run/turnDefaults";
+import { pickUpShort, pickUpWhen } from "../endings/pickUp";
+import { runSpentUntil } from "./runServing";
 
 // The shell's implementation of the kit's `ModelPicking`, driving every <AgentRunButton>. `api.models` in
 // extension-host/apiImpl.ts is built on this, so a Fix button drawn by an extension and one drawn by the shell
@@ -80,8 +82,22 @@ export const agentRunChoice = (role: string): AgentRunChoice => {
     });
 };
 
+/**
+ * What a run started on `choice` at `now` would meet: its allowance spent until a reopen still ahead, worded as the
+ * composer's scheduled Send words it ("40m", "21:00"), or undefined when it would go at once. One rule (runServing.ts) for
+ * the composer and every run button, so a model the picker stamps "back at 21:00" is one whose press books for 21:00.
+ */
+export const runAllowance = (
+    choice: { readonly provider: string; readonly model: string; readonly account?: string | undefined; readonly harness?: string | undefined },
+    now: number,
+): AgentRunAllowance | undefined => {
+    const at = runSpentUntil(choice, now);
+    return at === undefined ? undefined : { reopensAt: at, short: pickUpShort(at, now), when: pickUpWhen(at, now) };
+};
+
 export const shellModelPicking = (): ModelPicking => ({
     agentRun: agentRunChoice,
+    allowance: runAllowance,
     pick: async (options) => {
         const choice = await requestModelPick({
             anchor: options.anchor,
@@ -95,6 +111,7 @@ export const shellModelPicking = (): ModelPicking => ({
             ...(options.action !== undefined ? { action: options.action } : {}),
             ...(options.chooseRun === true ? { chooseRun: true } : {}),
             ...(options.attempt !== undefined ? { attempt: options.attempt } : {}),
+            schedules: options.schedules,
         });
         return choice === undefined ? undefined : namedChoice(choice);
     },

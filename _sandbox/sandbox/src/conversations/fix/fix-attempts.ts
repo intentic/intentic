@@ -109,6 +109,16 @@ export const daemonFixAttemptDeps = (services: Services, request: { readonly pre
         if (request.pressed) {
             await services.agents.clearArchived([turn.conversationId]);
         }
+        // Booked by whoever pressed for a model whose allowance is spent: the person's door books it as it books a
+        // composer's scheduled send (booking-ask.ts), opening the conversation now with the task waiting in its queue,
+        // drawn as scheduled, and sending nothing to the provider before then. An instant already past goes now.
+        if (request.pressed && turn.sendAt !== undefined) {
+            const said = await services.turns.say({ turn, voice: "person" });
+            if ("invalid" in said || "why" in said) {
+                throw new AttemptRefused("invalid" in said ? said.invalid : said.why);
+            }
+            return said;
+        }
         // Nobody pressed for it: the sandbox speaks the turn it starts by itself.
         const started = await services.turns.start(request.pressed || turn.speaker !== undefined ? turn : { ...turn, speaker: { kind: "sandbox" } });
         return typeof started === "string" ? undefined : started;

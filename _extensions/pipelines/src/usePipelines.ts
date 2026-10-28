@@ -1,7 +1,7 @@
 import { type CiFixParam, type CiFixResponse, isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import { runPickOf } from "@intentic/sandbox-contract/schemas/agent";
-import type { AgentRunChoice } from "@intentic/extension-ui";
+import type { AgentRunBooking, AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { ciRunsQuery } from "./ciRunsQuery";
@@ -23,24 +23,45 @@ export const runsPollMs = (runs: readonly PipelineRun[] | undefined): number =>
 // button names instead (`standing`: the job's pin, or the model a new chat would open on) as the fallback, which the
 // daemon runs only when no model pinned for the job can: it holds no chat pick of its own, and once opened an
 // unpinned fix on a provider the owner never connected.
+// `booking` is the button's (useAgentRunPick): the model's allowance is spent, so the fix is booked for its reopen. A booked
+// press names its model outright, since the booking waits for that model's allowance: the run that starts then is the one
+// the button named, never a rung of the job's list the sandbox would reach by itself in the meantime.
 export const fixParams = ({
     run,
     pick,
     mode,
     standing,
+    booking,
 }: {
     readonly run: PipelineRun;
     readonly pick?: AgentRunChoice | undefined;
     readonly mode?: FixResume | undefined;
     readonly standing: AgentRunChoice;
-}): CiFixParam => ({
-    repo: run.repo,
-    runId: run.runId,
-    // No fallback while the chat default names no model yet (a provider whose catalog has not loaded): sent empty, the
-    // sandbox refuses the whole press as bad input, where without one it opens on its own default.
-    ...(pick === undefined ? (standing.model === `` ? {} : { fallback: runPickOf(standing) }) : { pick: runPickOf(pick) }),
-    ...(mode === undefined ? {} : { mode }),
-});
+    readonly booking?: AgentRunBooking | undefined;
+}): CiFixParam => {
+    const named = pick ?? (booking !== undefined && standing.model !== `` ? standing : undefined);
+    const params: CiFixParam = {
+        repo: run.repo,
+        runId: run.runId,
+        // No fallback while the chat default names no model yet (a provider whose catalog has not loaded): sent empty, the
+        // sandbox refuses the whole press as bad input, where without one it opens on its own default.
+        ...(named === undefined ? (standing.model === `` ? {} : { fallback: runPickOf(standing) }) : { pick: runPickOf(named) }),
+        ...(mode === undefined ? {} : { mode }),
+    };
+    if (booking !== undefined) {
+        params.sendAt = booking.sendAt;
+        params.sendAtReopen = booking.sendAtReopen;
+    }
+    return params;
+};
+
+/** One press of a Fix button: the run, the caret's pick, the verb its panel ended with, and the booking it showed. */
+export interface FixPress {
+    readonly run: PipelineRun;
+    readonly pick?: AgentRunChoice | undefined;
+    readonly mode?: FixResume | undefined;
+    readonly booking?: AgentRunBooking | undefined;
+}
 
 export function usePipelines() {
     const api = host();
@@ -66,9 +87,10 @@ export function usePipelines() {
     // own named default; effort travels with the model so a pick can't silently drop to the provider's default tier.
     // `mode` is the verb the picker's bar was ended with over an attempt that already exists; absent is the plain
     // press, which the daemon reads by the contract's own rule (planFixAttempt).
+    // `booking` holds it for a spent allowance's reopen, as the button that was pressed said it would.
     const fix = useMutation({
-        mutationFn: ({ run, pick, mode }: { run: PipelineRun; pick?: AgentRunChoice | undefined; mode?: FixResume | undefined }): Promise<CiFixResponse> =>
-            api.sandbox.rpc.ci.fix(fixParams({ run, pick, mode, standing: api.models.agentRun(`pipeline-fix`) })),
+        mutationFn: ({ run, pick, mode, booking }: FixPress): Promise<CiFixResponse> =>
+            api.sandbox.rpc.ci.fix(fixParams({ run, pick, mode, booking, standing: api.models.agentRun(`pipeline-fix`) })),
     });
 
     return {

@@ -1,5 +1,6 @@
 import type { AgentSummary, LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { PickAction } from "../conversations/session/selectionReducer";
 import type { Summons } from "../conversations/run/summon";
 
@@ -34,6 +35,7 @@ const chat = {
     },
     // Every prompt that reached a conversation: the assertion for "a turn was actually spent".
     enqueued: [] as string[],
+    booked: [] as { prompt: string; booking: unknown }[],
     // Every errand turn a conversation opened, by its opening: the row the chat draws before the words exist.
     opened: [] as string[],
 };
@@ -83,17 +85,23 @@ jest.mock("../conversations/panel/useChat-strip", () => ({
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));
-// The draft startAgent pins and summons, one per test so its pins can be read back.
-const draft = {
-    value: {
-        conversationId: `c1`,
-        selection: pickable({ actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } }),
-    },
-};
+// The draft startAgent pins and summons, one per test so its pins can be read back. `servingState` is the verdict its
+// composer's Send would read (runServing.ts): unset, the opening words go now.
+const draftSelection = (servingState?: AccountState) => ({
+    ...pickable<{ actsAs: { value: string | undefined }; startIn: { value: string | undefined } }>({ actsAs: { value: undefined }, startIn: { value: undefined } }),
+    servingState: { value: servingState },
+});
+const draft = { value: { conversationId: `c1`, selection: draftSelection() } };
 jest.mock("../conversations/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
-    draftConversation: () => ({ ...draft.value, turn: { say: (prompt: string) => chat.enqueued.push(prompt) } }),
+    draftConversation: () => ({
+        ...draft.value,
+        turn: {
+            say: (prompt: string) => chat.enqueued.push(prompt),
+            schedule: (prompt: string, booking: unknown) => chat.booked.push({ prompt, booking }),
+        },
+    }),
     agentTabOf: () => ({}),
     composingConversation: () => undefined,
 }));
@@ -103,7 +111,12 @@ jest.mock("../conversations/panel/useChat-reveal", () => ({
 const summoned: Summons[] = [];
 jest.mock("../conversations/run/summon", () => ({
     summonChat: (summons: Summons) => summoned.push(summons),
-    summonTurn: (conversation: { turn: { say: (prompt: string) => void } }, prompt: string) => conversation.turn.say(prompt),
+    summonTurn: (
+        conversation: { turn: { say: (prompt: string) => void; schedule: (prompt: string, booking: unknown) => void } },
+        prompt: string,
+        _files?: unknown,
+        booking?: unknown,
+    ) => (booking === undefined ? conversation.turn.say(prompt) : conversation.turn.schedule(prompt, booking)),
 }));
 jest.mock("../../lib/queryPersistence", () => ({
     queryClient: { invalidateQueries: async () => undefined },
@@ -173,7 +186,8 @@ afterEach(() => {
     chat.opened.length = 0;
     painting.until = undefined;
     registry.value = [];
-    draft.value = { conversationId: `c1`, selection: pickable({ actsAs: { value: undefined }, startIn: { value: undefined } }) };
+    draft.value = { conversationId: `c1`, selection: draftSelection() };
+    chat.booked.length = 0;
     setProjectScope(undefined);
     unstubAllGlobals();
 });
@@ -392,6 +406,16 @@ it("leaves the tab's account alone when the registry has no account for the agen
 it("starts a fresh agent already running the task it was handed", () => {
     startAgent(`Refactor src/app.ts.`);
     expect(chat.enqueued).toEqual([`Refactor src/app.ts.`]);
+});
+
+// A model with no allowance left books the words for its reopen, as the new chat's own Send would, rather than sending
+// them into a refusal: how a run picked on a spent model is scheduled for later.
+it("books the task for the reopen when the model it opens on has no allowance left", () => {
+    const reopens = Math.round(Date.now() / 1_000) + 3_600;
+    draft.value = { conversationId: `c1`, selection: draftSelection({ kind: `spent`, reopensAt: reopens }) };
+    startAgent(`Refactor src/app.ts.`);
+    expect(chat.enqueued).toEqual([]);
+    expect(chat.booked).toEqual([{ prompt: `Refactor src/app.ts.`, booking: { sendAt: reopens * 1_000, sendAtReopen: true } }]);
 });
 
 it("still starts an empty one when there is nothing to say", () => {

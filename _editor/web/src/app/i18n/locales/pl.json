@@ -3964,10 +3964,14 @@
             "sentBySandboxCi": "Wysłane przez sandbox — z nieudanego uruchomienia CI"
         },
         "hostPickerBody": {
+            "atTime": "{action} · {when}",
+            "bookedNote": "Ten model nie ma już limitu: kliknięcie rezerwuje przebieg na chwilę odnowienia, a wcześniej nic nie trafia do dostawcy.",
             "chooseModelToContinue": "Wybierz model, by kontynuować",
             "cleanWorktree": "Czysty worktree",
             "freshChat": "Nowy czat",
             "sameChat": "Ten sam czat",
+            "spentAt": "limit wraca o {when}",
+            "spentIn": "limit wraca za {when}",
             "stopsAttempt": "Zatrzymuje tę próbę"
         },
         "limitReset": {

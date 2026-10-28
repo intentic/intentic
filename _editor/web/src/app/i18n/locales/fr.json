@@ -3964,10 +3964,14 @@
             "sentBySandboxCi": "Envoyé par le sandbox, d'après une exécution CI en échec"
         },
         "hostPickerBody": {
+            "atTime": "{action} · {when}",
+            "bookedNote": "Ce modèle n'a plus de quota : cliquer réserve l'exécution pour la réouverture, et rien n'est envoyé au fournisseur avant.",
             "chooseModelToContinue": "Choisissez un modèle pour continuer",
             "cleanWorktree": "Worktree propre",
             "freshChat": "Nouveau chat",
             "sameChat": "Même chat",
+            "spentAt": "quota de retour à {when}",
+            "spentIn": "quota de retour dans {when}",
             "stopsAttempt": "Arrête cette tentative"
         },
         "limitReset": {

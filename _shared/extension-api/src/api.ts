@@ -294,6 +294,16 @@ export interface PickedModel {
     readonly fast?: boolean | undefined;
 }
 
+/* WHAT A RUN ON A MODEL WOULD MEET IF IT STARTED NOW (`models.allowance`): its allowance is spent and reopens at `reopensAt`. A press then books the run for that instant, as the composer's Send books a message, rather than starting it into a refusal. */
+export interface RunAllowance {
+    // When the spent allowance reopens, in epoch milliseconds, still ahead: the run starts by itself then.
+    readonly reopensAt: number;
+    // The narrowest honest label for that instant, the composer's own: "40m", "21:00", "Tue 09:00".
+    readonly short: string;
+    // The longer form for a tooltip: "21:00, about 4 hours".
+    readonly when: string;
+}
+
 export type SettingValue = string | number | boolean;
 
 export interface ProcessStatus {
@@ -460,6 +470,13 @@ export interface IntenticApi {
         // The sandbox's default model for a job `role` (e.g. "acceptance-run"), falling back to the model a new
         // chat of the owner's would open on; reactive in a computed.
         agentRun(role: string): PickedModel;
+        // What a run started on this selection at `now` (epoch ms) would meet: its allowance spent until a reopen still
+        // ahead, or undefined when it would go at once. The composer's Send reads the same rule, so a run booked on this
+        // answer and a message booked there wait for the same instant. Reactive in a computed; pass a ticking `now`.
+        allowance(
+            selection: { readonly provider: string; readonly model: string; readonly account?: string | undefined; readonly harness?: string | undefined },
+            now: number,
+        ): RunAllowance | undefined;
         // Renders a stored pin (bare ids) back into a display-ready `PickedModel`, so a saved choice doesn't
         // need its own catalog. Reactive: reflects a renamed model or disconnected account.
         describe(selection: {
@@ -487,6 +504,8 @@ export interface IntenticApi {
             readonly chooseRun?: boolean;
             /* THE ATTEMPT ALREADY MADE AT WHAT THIS RUN WOULD ANSWER, when there is one: a line naming it, and whether it can be continued from here. */
             readonly attempt?: { readonly summary: string; readonly continuable: boolean } | undefined;
+            /* THE PRESS BOOKS A SPENT ALLOWANCE'S RUN FOR ITS REOPEN (`allowance`): the panel's verbs then say when it starts. Only for a caller that does book it. */
+            readonly schedules?: boolean | undefined;
         }): Promise<PickedModel | undefined>;
     };
     // Navigates the shell to an app path (e.g. "/capabilities", "/ext/<view>/<key>").

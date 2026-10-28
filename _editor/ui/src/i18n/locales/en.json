@@ -62,6 +62,9 @@
         "viewLogs": "View logs"
     },
     "agentRunButton": {
+        "atTime": "{label} · {when}",
+        "booked": "Starts when the allowance reopens",
+        "bookedNote": "{model} has no allowance left right now. Pressing books this run for the reopen; nothing reaches the provider before.",
         "clickToChange": "Click to change",
         "clickToConfigure": "Click to configure",
         "configureStartRun": "Configure and start this run — {spend}",
@@ -70,6 +73,7 @@
         "model": "Model",
         "sandboxDefault": "Sandbox default",
         "speed": "Speed",
+        "starts": "Starts",
         "thisRunOnly": "This run only"
     },
     "code": {

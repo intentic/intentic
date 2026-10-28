@@ -1,16 +1,14 @@
-import { accountServesLoop, capabilitiesOf, clampMode, fastAllowed, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { capabilitiesOf, clampMode, fastAllowed, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { AgentProvider, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import type { AccountState, ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { preferredAccount, reopensAtOf, SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef } from "vue";
-import { providerAccounts, translatorAccounts } from "../../providers/providerAccounts";
+import { providerAccounts } from "../../providers/providerAccounts";
 import { modelLabelFor, providerModels } from "../../providers/providerCatalog";
-import { subscriptionProviderOn } from "../../providers/access";
-import { offeredLoops, selectedLoop } from "../../providers/offeredLoops";
-import { servingAccount } from "../accounts/servingAccount";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { followPick } from "./queueCalls";
+import { runServing } from "../accounts/runServing";
 import { clampEffort } from "../../providers/effortScale";
 import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
 import { accountIntent, readsAsContinuing, type SessionRef, type TurnSettings } from "../run/turnRequest";
@@ -18,7 +16,7 @@ import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
-import { accountFacts, accountState, routedAccountFacts, formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "../../providers/usageStatus";
+import { formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "../../providers/usageStatus";
 
 // A conversation's selection as the composer binds it: the value `reduceSelection` moves, read one pick at a time, and
 // the one "switched" divider a change of it owes the transcript. Which picks a switch retires is the reducer's rule;
@@ -182,34 +180,26 @@ export class ComposerSelection {
             ) !== undefined,
     );
 
-    // The account the next turn runs on (servingAccount), judged for this selection's model, for a surface that names it
-    // without drawing the list (the pane's reconnect notice). The picker ticks the same row by the same rule over the same
-    // rows, fed `account` and `accountNamed`, so neither can name an account the turn then does not run on.
-    readonly servingAccount = computed(() =>
-        this.subscription.value === undefined
-            ? servingAccount(this.provider.value, this.accountRows.value, { account: this.account.value, named: this.accountNamed.value })
-            : undefined,
+    // Where the next turn runs and that account's verdict for this selection's model (runServing), the reading every press
+    // that starts an agent shares, so the composer's Send and a run button cannot judge one model differently.
+    private readonly serving = computed(() =>
+        runServing({
+            provider: this.provider.value,
+            harness: this.harness.value,
+            model: this.model.value,
+            account: this.account.value,
+            named: this.accountNamed.value,
+        }),
     );
 
-    // That account's verdict for this selection's model, off the same rows: what the composer reads to know a press would
-    // only meet a spent allowance (composerIntent's `scheduled`).
-    readonly servingState = computed<AccountState | undefined>(() => {
-        const rows = this.accountRows.value;
-        if (this.subscription.value === undefined) {
-            return rows.find((row) => row.id === this.servingAccount.value?.id)?.state;
-        }
-        // The translator balances its subscriptions, independently of a native account/session pick. Any usable
-        // credential keeps the pool runnable. When none can serve, book the earliest reopening, never the first row.
-        const preferred = preferredAccount(rows)?.state;
-        if (preferred?.kind === `ready` || preferred?.kind === `unknown`) {
-            return preferred;
-        }
-        return rows.reduce<AccountState | undefined>((best, row) => {
-            const at = reopensAtOf(row.state);
-            const bestAt = best === undefined ? undefined : reopensAtOf(best);
-            return at !== undefined && (bestAt === undefined || at < bestAt) ? row.state : best;
-        }, preferred);
-    });
+    // The account the next turn runs on (servingAccount), for a surface that names it without drawing the list (the pane's
+    // reconnect notice). The picker ticks the same row by the same rule over the same rows, fed `account` and
+    // `accountNamed`, so neither can name an account the turn then does not run on. Undefined for a subscription.
+    readonly servingAccount = computed(() => this.serving.value.account);
+
+    // That account's verdict, or a subscription pool's: what the composer reads to know a press would only meet a spent
+    // allowance (composerIntent's `scheduled`).
+    readonly servingState = computed<AccountState | undefined>(() => this.serving.value.state);
 
     // Who the next turn goes on, as a move of words already waiting names it (agent.queueReroute): the runtime, model and
     // effort the composer holds, and the account only where a send would name one (accountIntent), else the daemon's.
@@ -228,22 +218,6 @@ export class ComposerSelection {
             routing.account = named;
         }
         return routing;
-    });
-
-    private readonly subscription = computed(() => subscriptionProviderOn(this.provider.value, this.harness.value));
-
-    private readonly accountRows = computed(() => {
-        const provider = this.provider.value;
-        const model = this.model.value === `` ? undefined : { id: this.model.value };
-        const subscription = this.subscription.value;
-        if (subscription !== undefined) {
-            return translatorAccounts.value[subscription].map((entry) => ({ id: entry.name, state: accountState(provider, routedAccountFacts(entry), model) }));
-        }
-        const loop = selectedLoop(offeredLoops(provider), this.harness.value);
-        return (providerAccounts.value[provider] ?? []).filter((entry) => accountServesLoop(provider, loop, entry)).map((entry) => ({
-            id: entry.id,
-            state: accountState(provider, accountFacts(entry), model),
-        }));
     });
 
     // The one unsent "switched" divider notice, upserted/removed as settings toggle, frozen by the next send.

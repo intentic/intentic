@@ -106,6 +106,21 @@ test("a spent allowance reads as a wait rather than an error", () => {
     expect(stance.ongoing).toBe(true);
 });
 
+// A Fix pressed on a model with no allowance left opens its conversation at once, the task booked for the reopen: idle,
+// nothing changed, and not an ending, since nothing has run yet.
+test("an attempt whose task is booked for later reads as scheduled, not as one that changed nothing", () => {
+    const stance = fixStance(agent({ status: `idle`, next: { kind: `send`, at: 5_000, count: 1 } }));
+    expect(stance.kind).toBe(`waiting`);
+    expect(stance.label).toBe(`Scheduled`);
+    expect(stance.retry).toBe(false);
+    expect(stance.ongoing).toBe(true);
+});
+
+test("a fix held for review still says so with a message booked beside it", () => {
+    const stance = fixStance(agent({ status: `ready`, diff: { files: 1, insertions: 3, deletions: 0 }, next: { kind: `send`, at: 5_000, count: 1 } }));
+    expect(stance.kind).toBe(`ready`);
+});
+
 test("a stopped turn says so, and offers the press again", () => {
     const stance = fixStance(agent({ status: `stopped` }));
     expect(stance.label).toBe(`Stopped`);

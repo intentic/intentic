@@ -42,9 +42,10 @@ const {
     loading?: boolean;
     disabled?: boolean;
     // The caller's own reason for the button, shown on the primary half; what the run costs is the caret's
-    // own tooltip, so the two never share one.
+    // own tooltip, so the two never share one. A booked press says when it starts instead.
     hint?: TooltipValue;
 }>();
+// The press. A caller whose picker reads `spent` sends `picker.booking` with it, so the run waits for the time drawn here.
 const emit = defineEmits<{ run: [] }>();
 
 // The caret's own DOM node, for the picker to anchor to; taken as the generic instance since PrimeVue's
@@ -67,7 +68,22 @@ const spend = computed(() => {
     ].join(` · `);
 });
 
-/* WHAT THE CARET PROMISES, in the one place a caret can say anything: whose choice the run's model is, and the model. */
+/* A SPENT ALLOWANCE MAKES THE PRESS A BOOKING (useAgentRunPick `spent`): the press then wears the time it starts, as the composer's Send does, and its tip says why. */
+const booked = computed(() => picker.spent.value);
+const pressLabel = computed(() => (booked.value === undefined ? label : t(`ui.agentRunButton.atTime`, { label, when: booked.value.short })));
+const pressHint = computed((): TooltipValue | undefined => {
+    const spent = booked.value;
+    if (spent === undefined) {
+        return hint;
+    }
+    return {
+        title: t(`ui.agentRunButton.booked`),
+        rows: [{ label: t(`ui.agentRunButton.starts`), value: spent.when }],
+        note: t(`ui.agentRunButton.bookedNote`, { model: modelLabel.value }),
+    };
+});
+
+/* WHAT THE CARET PROMISES, in the one place a caret can say anything: whose choice the run's model is, the model, and when it starts where that is not now. */
 const caretHint = computed((): Tip => {
     const choice = picker.model.value;
     return {
@@ -76,6 +92,7 @@ const caretHint = computed((): Tip => {
             { label: t(`ui.agentRunButton.model`), value: choice.label },
             { label: t(`ui.agentRunButton.effort`), value: choice.effortLabel ?? `` },
             { label: t(`ui.agentRunButton.speed`), value: choice.fast === true ? t(`ui.agentRunButton.fast`) : `` },
+            { label: t(`ui.agentRunButton.starts`), value: booked.value?.when ?? `` },
         ],
         note: overridden.value ? t(`ui.agentRunButton.clickToChange`) : t(`ui.agentRunButton.clickToConfigure`),
     };
@@ -98,17 +115,19 @@ const openPicker = (): void => {
 <template>
     <span class="inline-flex items-stretch gap-px">
         <!-- Only borderless text buttons trim their inner edges. -->
+        <!-- A booked press trades the caller's glyph for the clock: the time beside the verb is the press's whole meaning then. -->
         <Button
-            :label="label"
+            :label="pressLabel"
             :size="size"
             v-bind="look"
             :loading="loading"
             :disabled="disabled"
             :class="['rounded-r-none', quiet ? 'pr-1' : '']"
-            v-tooltip.top="hint"
+            v-tooltip.top="pressHint"
             @click="emit(`run`)"
         >
-            <template v-if="icon" #icon><Icon :name="icon" /></template>
+            <template v-if="booked" #icon><Icon name="clock" /></template>
+            <template v-else-if="icon" #icon><Icon :name="icon" /></template>
         </Button>
         <!-- Disabled together with the primary half, never on its own, so nobody can configure a model for a click that can't run. -->
         <!-- allow(buttons): A SPLIT BUTTON'S SEAM. Two buttons are welded into one control here, so the pair has to
