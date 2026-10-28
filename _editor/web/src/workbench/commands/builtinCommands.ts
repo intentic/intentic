@@ -244,14 +244,15 @@ export const BUILTIN_COMMANDS = {
         when: onSurface(`workspace`),
     },
     "workspace.refresh": { title: () => t(`workspace.workspaceDesktop.refreshFiles`), category: WORKSPACE, icon: `refresh` },
-    // Mod+Z brings back the last delete wherever the caret isn't in a field or the code editor, which keep their own
-    // undo; with nothing deleted the chord passes through untouched.
+    // Mod+Z takes back the last file change (a delete, a move or rename, an entry made) wherever the caret isn't in a
+    // field or the code editor, which keep their own undo; with nothing to take back the chord passes through untouched.
+    // The id is the one it had while it took back deletes alone, so a chord someone bound to it still reaches it.
     "workspace.undoDelete": {
-        title: () => t(`workspace.workspaceDesktop.undoDelete`),
+        title: () => t(`workspace.workspaceDesktop.undoFileChange`),
         category: WORKSPACE,
         icon: `undo`,
         keybinding: `Mod+Z`,
-        when: `workspaceDeleteUndoable && !editableTarget`,
+        when: `workspaceFileUndoable && !editableTarget`,
     },
 
     // The terminal panel (TerminalPanel.vue, panelCommands.ts). Tab-family chords match the workspace and chat strips,

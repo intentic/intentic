@@ -4,6 +4,7 @@ import { useTerminalPanel } from "../../../../models/terminal/useTerminalPanel";
 import { downloadEntries } from "../../files/downloadEntries";
 import { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { useDeleteUndo } from "../undo/useDeleteUndo";
+import { askMoveConflict } from "../transfer/moveConflicts";
 import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import type { FileVerbSeams } from "./fileVerbs";
 
@@ -16,7 +17,7 @@ type SurfaceStore = Omit<ReturnType<typeof useWorkspaceTree>, "extractEntry"> & 
 // files are already on, so none of those verbs is offered there.
 export const fileVerbSeams = (): FileVerbSeams & { readonly store: SurfaceStore } => {
     const store = useWorkspaceTree();
-    const shared = { uploads: useUploadQueue(), say: useNotifications().say, sayDeleted: useDeleteUndo().sayDeleted };
+    const shared = { uploads: useUploadQueue(), say: useNotifications().say, sayDeleted: useDeleteUndo().sayDeleted, askConflict: askMoveConflict };
     if (localFace() !== undefined) {
         return { ...shared, store: { ...store, extractEntry: undefined } };
     }

@@ -7,6 +7,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { rpcPrefix } from "../../../lib/queryKeys";
 import { patchedTree } from "../tree/treeDelta";
+import { forgetFollowed, patchListing } from "../tree/lazyListings";
 
 // Live workspace-change state fed from the daemon's SSE stream; consumed by the tree, the review lists' module
 // grouping, the file viewer, and the tree's row flash. Module singleton so invalidation can't die with an unmounting
@@ -37,6 +38,11 @@ let patches = 0;
 /* WHAT MOVED IN THE SHARED TREE: every cached tree holding the generation the change counts from is patched in place;
    one holding another is fetched afresh, which is how a missed change heals. */
 export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
+    // A folder read on its own (past the walk's budget) takes the entries the delta carries for it, rather than being
+    // read again for the same change (lazyListings.ts, patchListing).
+    for (const dir of delta.dirs) {
+        patchListing(dir.path, dir.entries);
+    }
     for (const query of queryClient.getQueryCache().findAll({ queryKey: rpcPrefix(`workspace.tree`) })) {
         const tree = query.state.data as WorkspaceTree | undefined;
         if (tree === undefined || walkedTree(tree)) {
@@ -44,6 +50,8 @@ export const applyTreeChanged = (delta: WorkspaceTreeDelta): void => {
         }
         const patched = patchedTree(tree, delta);
         if (patched === undefined) {
+            // A generation was skipped: what the folders read on their own missed may be anything, so none is trusted.
+            forgetFollowed();
             void invalidatePushedQueries(queryClient, { queryKey: query.queryKey, exact: true });
             continue;
         }

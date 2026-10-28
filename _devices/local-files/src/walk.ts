@@ -3,6 +3,7 @@ import { readdir, readlink, realpath, stat } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { mapPool } from "@intentic/base/async";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import { compareListed } from "@intentic/sandbox-contract/schemas/workspace/name-order";
 import type {
     WorkspaceChildren,
     WorkspaceLink,
@@ -15,7 +16,7 @@ import { segmentsOf, within } from "./paths.js";
 // The explorer's two reads over a folder on the user's disk, by the daemon's rules for /work
 // (_sandbox/sandbox/src/workspace/files/workspace-tree.ts): breadth first under one entry budget, ignored folders listed
 // but not opened, links listed as what they point at and opened only when they stay inside the folder, dirs before files
-// then alphabetical. What the daemon adds for a workspace it keeps resident (a watched in-memory tree, the barren-folder
+// then in natural name order. What the daemon adds for a workspace it keeps resident (a watched in-memory tree, the barren-folder
 // scan) is left out: a folder here is read when someone looks at it.
 
 // The eager walk's budget, the daemon's own: spent across the whole folder and re-spent on every refetch.
@@ -75,7 +76,7 @@ const followEntry = async (dirent: Dirent, dirAbs: string, realDir: string, root
     return found === undefined ? { name, isDir: false, real } : { name, isDir: false, real, size: found.size, mtime: Math.round(found.mtimeMs) };
 };
 
-const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
+const byKind = (a: Entry, b: Entry): number => compareListed({ name: a.name, dir: a.isDir }, { name: b.name, dir: b.isDir });
 
 const entriesOf = async (dirAbs: string, realDir: string, root: string): Promise<Entry[] | undefined> => {
     const dirents = await quietly(readdir(dirAbs, { withFileTypes: true }));

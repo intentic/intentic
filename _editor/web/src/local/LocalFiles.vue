@@ -17,6 +17,7 @@ import ExplorerSearchBar from "../features/workspace/search/ExplorerSearchBar.vu
 import WorkspaceSearchResults from "../features/workspace/search/WorkspaceSearchResults.vue";
 import { useExplorerSearch } from "../features/workspace/search/useExplorerSearch";
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
+import MoveConflictDialog from "../features/workspace/explorer/transfer/MoveConflictDialog.vue";
 import { useCloseGuard } from "../features/workspace/tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../models/workspace/tabs/useWorkspaceTabs";
 import type { Disposable } from "@intentic/extension-api";
@@ -456,5 +457,6 @@ onUnmounted(() => {
         <ShortcutSheet />
         <!-- A close that would discard unsaved edits, the window's (held back by the app) or a tab's: it happens only on the reader's word. -->
         <CloseGuardDialog :open="asking" :question="question" @cancel="keepOpen" @confirm="closeAnyway" />
+        <MoveConflictDialog />
     </div>
 </template>

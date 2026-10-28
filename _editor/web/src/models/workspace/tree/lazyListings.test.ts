@@ -19,7 +19,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     }),
 }));
 
-const { drawsListings, lazyChildren, listingsSeen, relist, relistWhenSeen } = await import("./lazyListings");
+const { drawsListings, forgetFollowed, lazyChildren, listingsSeen, patchListing, relist, relistUnlessPushed, relistWhenSeen } = await import("./lazyListings");
 const { receiveDesktopShown } = await import("../../../workbench/window/onScreen");
 
 const listing = (...names: string[]): WorkspaceChildren => ({ entries: names.map((name) => ({ name, path: `src/${name}`, type: `file` })), hidden: 0 });
@@ -90,4 +90,53 @@ it(`reads a changed folder only while a listing is drawn and on screen, and catc
 
     tree.stop();
     expect(listingsSeen.value).toBe(false);
+});
+
+describe(`a folder the pushed deltas keep`, () => {
+    // A read of the folder that the test answers, so it starts loaded.
+    const loaded = async (): Promise<void> => {
+        relist(`src`);
+        await settle();
+        reads.shift()?.answer(listing(`a.md`));
+        await settle();
+    };
+
+    it(`takes the delta's entries and waits for the next delta instead of reading itself again`, async () => {
+        jest.useFakeTimers();
+        await loaded();
+        const entries = listing(`a.md`, `b.md`).entries;
+        expect([patchListing(`src`, entries), patchListing(`docs`, entries)]).toEqual([true, false]);
+
+        relistUnlessPushed(`src`);
+        patchListing(`src`, listing(`a.md`, `b.md`, `c.md`).entries);
+        jest.advanceTimersByTime(5000);
+        await settle();
+        expect([reads.length, lazyChildren.value.get(`src`)?.map((entry) => entry.name)]).toEqual([0, [`a.md`, `b.md`, `c.md`]]);
+        jest.useRealTimers();
+    });
+
+    it(`reads the folder after all when its delta never comes, and again on every change once deltas are not trusted`, async () => {
+        jest.useFakeTimers();
+        // A tree draws in a window on screen, so a read asked for is a read made.
+        const drawing = effectScope();
+        drawing.run(() => drawsListings());
+        receiveDesktopShown(true);
+        await loaded();
+        patchListing(`src`, listing(`a.md`).entries);
+
+        relistUnlessPushed(`src`);
+        jest.advanceTimersByTime(1999);
+        const early = reads.length;
+        jest.advanceTimersByTime(1);
+        await settle();
+        const late = reads.map((read) => read.path);
+        reads.shift()?.answer(listing(`a.md`));
+        await settle();
+        forgetFollowed();
+        relistUnlessPushed(`src`);
+        await settle();
+        expect([early, late, reads.map((read) => read.path)]).toEqual([0, [`src`], [`src`]]);
+        drawing.stop();
+        jest.useRealTimers();
+    });
 });

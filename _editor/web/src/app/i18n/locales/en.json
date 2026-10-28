@@ -12704,7 +12704,9 @@
             "moveHere": "Move Here",
             "newFile": "New File",
             "newFolder": "New Folder",
-            "openTerminal": "Open Terminal"
+            "openTerminal": "Open Terminal",
+            "copyPath": "Copy Path",
+            "copyPaths": "Copy {count} Paths"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "also viewing this file"
@@ -13091,7 +13093,6 @@
             "showExplorer": "Show explorer",
             "smart": "Smart",
             "tabsStayOpen": "Tabs stay open",
-            "undoDelete": "Undo Delete",
             "search": "Search…",
             "searchIgnoredFiles": "Search ignored files",
             "searchInFiles2": "Search in Files…",
@@ -13108,7 +13109,8 @@
             "toggleTestFiles": "Toggle Test Files",
             "viewing": "Viewing as",
             "moveBack": "Move Back",
-            "openToSide": "Open to the Side"
+            "openToSide": "Open to the Side",
+            "undoFileChange": "Undo File Change"
         },
         "bringProject": {
             "connectAccount": "Connect an account",
@@ -13200,7 +13202,11 @@
             "technicalHidden": "{count} technical file hidden | {count} technical files hidden",
             "technicalKinds": "Lockfiles, config, dotfiles, builds",
             "viewingFile": "viewing this file",
-            "emptyFolder": "Empty folder."
+            "emptyFolder": "Empty folder.",
+            "selectionFolders": "{count} folder | {count} folders",
+            "selectionFiles": "{count} file | {count} files",
+            "selection": "{what} selected",
+            "selectionWithSize": "{what} selected · {size}"
         },
         "useWorkspaceTree": {
             "couldntOpen": "Couldn't open {path}."
@@ -13273,7 +13279,12 @@
             "couldntExtract": "Couldn't extract that.",
             "couldntDownload": "Couldn't download that file.",
             "downloadingArchive": "Downloading {name}",
-            "couldntDownloadThese": "Couldn't download those items."
+            "couldntDownloadThese": "Couldn't download those items.",
+            "pathsCopied": "{count} paths copied",
+            "renamedBack": "Renamed back to {name}",
+            "movedBack": "{count} item moved back | {count} items moved back",
+            "madeUndone": "{count} new item sent to the trash | {count} new items sent to the trash",
+            "couldntUndo": "Couldn't undo that."
         },
         "treeRows": {
             "awaitingListing": "Awaiting listing",
@@ -13422,6 +13433,29 @@
             "stagingFiles": "Staging {count} file in {repo}… | Staging {count} files in {repo}…",
             "stop": "Stop",
             "waiting": "Waiting for {repo} to be free…"
+        },
+        "moveConflict": {
+            "oneTaken": "“{name}” is already in {folder}",
+            "manyTaken": "{count} names are already taken in {folder}",
+            "keepBoth": "Keep both",
+            "replace": "Replace",
+            "skip": "Skip",
+            "theWorkspace": "the workspace",
+            "oneDescription": "Keep both moves it in under a new name. Replace sends the one there to the trash first, so Undo brings it back.",
+            "manyDescription": "Keep both moves them in under new names. Replace sends the ones there to the trash first, so Undo brings them back. Skip moves only the rest."
+        },
+        "fileOperation": {
+            "moving": "Moving {done} of {total} items",
+            "copying": "Copying {done} of {total} items",
+            "deleting": "Deleting {done} of {total} items",
+            "restoring": "Restoring {done} of {total} items",
+            "moved": "Moved {done} of {total} items",
+            "copied": "Copied {done} of {total} items",
+            "deleted": "Deleted {done} of {total} items",
+            "restored": "Restored {done} of {total} items",
+            "stopping": "Stopping after the items already under way",
+            "notDone": "Not done: {names}",
+            "andMore": "{names} and {count} more"
         }
     },
     "gettingStarted": {

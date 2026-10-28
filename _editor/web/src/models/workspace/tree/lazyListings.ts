@@ -52,6 +52,7 @@ watch(workspaceAgent, () => {
     lazyLoading.value = new Set();
     relistQueued.value.clear();
     unseenChanges.value.clear();
+    forgetFollowed();
     // Also clears any load notice: it could still be naming a directory from the scope just dropped.
     clearLoadNotice();
 });
@@ -178,3 +179,59 @@ watch(listingsSeen, (seen) => {
         }
     }
 });
+
+/* LISTINGS THE PUSHED DELTAS KEEP. The daemon's resident tree re-lists a folder it holds when a batch touches it, and
+   pushes that folder's entries in its delta (useWorkspaceLive's applyTreeChanged): the same entries a read of the folder
+   would answer. A loaded folder a delta has carried once is kept by deltas from then on, so a change a batch names waits
+   a moment for the delta that follows it instead of reading the folder again. Reading it again fetched a folder of fifty
+   thousand entries (about 5 MB) twice per change: once pushed and thrown away, once read. A delta that never comes (a
+   folder the resident tree stopped holding, a frame lost) is read after the wait, and the folder is read on every change
+   again until a delta carries it. Only the shared tree has deltas; a conversation's own checkout is read as before. */
+const DELTA_WAIT_MS = 2000;
+const followed = sandboxValue(() => new Set<string>());
+const awaitingDelta = sandboxValue(
+    () => new Map<string, ReturnType<typeof setTimeout>>(),
+    (held) => held.forEach((timer) => clearTimeout(timer)),
+);
+
+/** Takes a loaded folder's entries from a pushed delta, and keeps following it by deltas; false for one not loaded here. */
+export const patchListing = (path: string, entries: readonly WorkspaceTreeEntry[]): boolean => {
+    if (workspaceAgent.value !== undefined || !lazyChildren.value.has(path)) {
+        return false;
+    }
+    lazyChildren.value.set(path, entries);
+    lazyHidden.value.delete(path);
+    followed.value.add(path);
+    clearTimeout(awaitingDelta.value.get(path));
+    awaitingDelta.value.delete(path);
+    return true;
+};
+
+/** Whether deltas keep this loaded folder current, so a change elsewhere in the tree need not read it again. */
+export const followedByDeltas = (path: string): boolean => followed.value.has(path);
+
+/** A batch named this loaded folder: wait for the delta that keeps it, or read it again where deltas do not. */
+export const relistUnlessPushed = (path: string): void => {
+    if (!followed.value.has(path)) {
+        relistWhenSeen(path);
+        return;
+    }
+    if (awaitingDelta.value.has(path)) {
+        return;
+    }
+    awaitingDelta.value.set(
+        path,
+        setTimeout(() => {
+            awaitingDelta.value.delete(path);
+            followed.value.delete(path);
+            relistWhenSeen(path);
+        }, DELTA_WAIT_MS),
+    );
+};
+
+/** Stops trusting deltas for every folder, which are read again on the next change: one may have been missed. */
+export const forgetFollowed = (): void => {
+    followed.value.clear();
+    awaitingDelta.value.forEach((timer) => clearTimeout(timer));
+    awaitingDelta.value.clear();
+};

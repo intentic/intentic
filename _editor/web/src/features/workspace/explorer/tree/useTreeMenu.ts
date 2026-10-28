@@ -42,6 +42,8 @@ export interface TreeMenuHost {
     readonly download?: (paths: readonly string[]) => void;
     // Asks an agent about this file.
     readonly ask?: (path: string) => void;
+    // Puts these workspace paths on the clipboard as text.
+    readonly copyPaths?: (paths: readonly string[]) => void;
 }
 
 // Where a menu opened on `target` acts. A right-click on empty space acts in the tree's OWN root: `` would aim every verb
@@ -80,7 +82,7 @@ export const useTreeMenu = (host: TreeMenuHost) => {
     // The verbs of a menu opened on `target` (undefined for the background), acting in `dir`. The four the surface may lack
     // are undefined without it, which drops their rows (EntryVerbs).
     const verbsFor = (target: WorkspaceTreeEntry | undefined, dir: string, multi: boolean): EntryVerbs => {
-        const { extract, openTerminal, download, ask } = host;
+        const { extract, openTerminal, download, ask, copyPaths } = host;
         return {
             newFile: () => host.beginCreate(dir, `file`),
             newFolder: () => host.beginCreate(dir, `dir`),
@@ -113,6 +115,7 @@ export const useTreeMenu = (host: TreeMenuHost) => {
                     ? undefined
                     : () => download(multi ? host.rules.unlockedOnly([...selection.value]) : [target.path]),
             ask: ask === undefined || target === undefined ? undefined : () => ask(target.path),
+            copyPath: copyPaths === undefined || target === undefined ? undefined : () => copyPaths(multi ? [...selection.value] : [target.path]),
         };
     };
     const menuItems = computed<MenuItem[]>(() => {

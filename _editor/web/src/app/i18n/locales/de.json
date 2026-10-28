@@ -12704,7 +12704,9 @@
             "moveHere": "Hierher verschieben",
             "newFile": "Neue Datei",
             "newFolder": "Neuer Ordner",
-            "openTerminal": "Terminal öffnen"
+            "openTerminal": "Terminal öffnen",
+            "copyPath": "Pfad kopieren",
+            "copyPaths": "{count} Pfade kopieren"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "sieht diese Datei ebenfalls an"
@@ -13091,7 +13093,6 @@
             "showExplorer": "Explorer zeigen",
             "smart": "Smart",
             "tabsStayOpen": "Tabs bleiben offen",
-            "undoDelete": "Löschen rückgängig machen",
             "search": "Suchen…",
             "searchIgnoredFiles": "Ignorierte Dateien durchsuchen",
             "searchInFiles2": "In Dateien suchen…",
@@ -13108,7 +13109,8 @@
             "toggleTestFiles": "Testdateien umschalten",
             "viewing": "Ansicht als",
             "moveBack": "Zurückverschieben",
-            "openToSide": "Seitlich öffnen"
+            "openToSide": "Seitlich öffnen",
+            "undoFileChange": "Dateiänderung rückgängig machen"
         },
         "bringProject": {
             "connectAccount": "Konto verbinden",
@@ -13200,7 +13202,11 @@
             "technicalHidden": "{count} technische Datei ausgeblendet | {count} technische Dateien ausgeblendet",
             "technicalKinds": "Lockfiles, Konfiguration, Dotfiles, Builds",
             "viewingFile": "sieht diese Datei an",
-            "emptyFolder": "Leerer Ordner."
+            "emptyFolder": "Leerer Ordner.",
+            "selectionFolders": "{count} Ordner | {count} Ordner",
+            "selectionFiles": "{count} Datei | {count} Dateien",
+            "selection": "{what} ausgewählt",
+            "selectionWithSize": "{what} ausgewählt · {size}"
         },
         "useWorkspaceTree": {
             "couldntOpen": "{path} konnte nicht geöffnet werden."
@@ -13273,7 +13279,12 @@
             "couldntExtract": "Ließ sich nicht entpacken.",
             "couldntDownload": "Die Datei ließ sich nicht herunterladen.",
             "downloadingArchive": "{name} wird heruntergeladen",
-            "couldntDownloadThese": "Die Elemente ließen sich nicht herunterladen."
+            "couldntDownloadThese": "Die Elemente ließen sich nicht herunterladen.",
+            "pathsCopied": "{count} Pfade kopiert",
+            "renamedBack": "Zurück umbenannt in {name}",
+            "movedBack": "{count} Element zurückverschoben | {count} Elemente zurückverschoben",
+            "madeUndone": "{count} neues Element in den Papierkorb gelegt | {count} neue Elemente in den Papierkorb gelegt",
+            "couldntUndo": "Das ließ sich nicht rückgängig machen."
         },
         "treeRows": {
             "awaitingListing": "Liste folgt",
@@ -13422,6 +13433,29 @@
             "stagingFiles": "{count} Datei wird in {repo} gestaged… | {count} Dateien werden in {repo} gestaged…",
             "stop": "Stoppen",
             "waiting": "Warte, bis {repo} frei ist…"
+        },
+        "moveConflict": {
+            "oneTaken": "„{name}“ gibt es in {folder} schon",
+            "manyTaken": "{count} Namen gibt es in {folder} schon",
+            "keepBoth": "Beide behalten",
+            "replace": "Ersetzen",
+            "skip": "Überspringen",
+            "theWorkspace": "dem Arbeitsbereich",
+            "oneDescription": "Beide behalten verschiebt es unter neuem Namen. Ersetzen legt das Vorhandene zuerst in den Papierkorb, sodass Rückgängig es zurückholt.",
+            "manyDescription": "Beide behalten verschiebt sie unter neuen Namen. Ersetzen legt das Vorhandene zuerst in den Papierkorb, sodass Rückgängig es zurückholt. Überspringen verschiebt nur den Rest."
+        },
+        "fileOperation": {
+            "moving": "{done} von {total} Elementen werden verschoben",
+            "copying": "{done} von {total} Elementen werden kopiert",
+            "deleting": "{done} von {total} Elementen werden gelöscht",
+            "restoring": "{done} von {total} Elementen werden wiederhergestellt",
+            "moved": "{done} von {total} Elementen verschoben",
+            "copied": "{done} von {total} Elementen kopiert",
+            "deleted": "{done} von {total} Elementen gelöscht",
+            "restored": "{done} von {total} Elementen wiederhergestellt",
+            "stopping": "Hält nach den bereits laufenden Elementen an",
+            "notDone": "Nicht erledigt: {names}",
+            "andMore": "{names} und {count} weitere"
         }
     },
     "gettingStarted": {

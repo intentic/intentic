@@ -6,6 +6,7 @@ import { mapPool } from "@intentic/base/async";
 import { isMissing } from "@intentic/base/errors";
 import { held } from "@intentic/base/held";
 import type { WorkspaceLink } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { compareListed } from "@intentic/sandbox-contract/schemas/workspace/name-order";
 import { compileGitignore, type Matchers, walkMatchers } from "@intentic/workspace-ignore";
 import { isUnder, realPathOf } from "./workspace-files-paths.js";
 
@@ -103,8 +104,8 @@ export const fileFacts = (entry: Pick<Entry, `size` | `mtime`>): FileFacts => {
     return facts;
 };
 
-// Dirs before files, then alphabetical, on the followed kind.
-export const byKind = (a: Entry, b: Entry): number => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
+// Dirs before files, then natural name order (name-order.ts), on the followed kind.
+export const byKind = (a: Entry, b: Entry): number => compareListed({ name: a.name, dir: a.isDir }, { name: b.name, dir: b.isDir });
 
 // The size comes back with the entry rather than being stat'd again one at a time by the callers: on a workspace of a
 // few thousand files that is the difference between a listing the browser waits a second for and one it waits a moment

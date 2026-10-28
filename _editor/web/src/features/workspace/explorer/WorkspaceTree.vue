@@ -43,6 +43,7 @@ import { useTreeGestures } from "./tree/useTreeGestures";
 import { useTreeReveal } from "./tree/useTreeReveal";
 import { useTreeRows } from "./tree/useTreeRows";
 import { useTreeWindow } from "./tree/useTreeWindow";
+import TreeFoot from "./tree/TreeFoot.vue";
 import TreeSkeleton from "./tree/TreeSkeleton.vue";
 import { useEmptyDirs } from "./useEmptyDirs";
 import { useFileNesting } from "../../../models/workspace/tree/useFileNesting";
@@ -571,22 +572,12 @@ defineExpose({ focusTree });
                 <template #fallback><TreeSkeleton /></template>
             </Await>
         </div>
-        <!-- The technical switch's own receipt: a press here is the way back, so the hidden files are never a mystery. Not
-             under a cover, which lists no file at all, so the switch it offers would change nothing in sight. Outside the
-             tree and below its flex-1 body, so it rests at the pane's bottom edge rather than right under the last row,
-             where a press meant for a file lands on it. -->
-        <button
-            v-if="technicalCount > 0 && filter.trim() === '' && cover === undefined"
-            type="button"
-            class="flex w-full shrink-0 items-center gap-1.5 px-2 py-1 text-left text-2xs italic text-subtle transition-colors hover:text-content"
-            v-tooltip.top="{ title: t(`workspace.workspaceTree.showFiles`), note: t(`workspace.workspaceTree.technicalKinds`) }"
-            @click="layout.toggleHideTechnical()"
-        >
-            <span class="w-[0.7rem] shrink-0"></span>
-            <span class="min-w-0 flex-1 truncate">{{
-                t(`workspace.workspaceTree.technicalHidden`, { count: technicalCount }, technicalCount)
-            }}</span>
-        </button>
+        <TreeFoot
+            :technical="technicalCount > 0 && filter.trim() === '' && cover === undefined ? technicalCount : 0"
+            :selection="selection"
+            :entries="byPath"
+            @show-technical="layout.toggleHideTechnical()"
+        />
         <!-- Shown only while barren branches exist, pinned to the bottom; names what it counts, since Undo reverses the delete exactly. -->
         <div v-if="barrenBranches.length > 0 && filter.trim() === ''" class="sticky bottom-0 z-10 border-t border-line bg-card">
             <!-- Every branch is named, and each can be kept individually rather than all-or-nothing. -->

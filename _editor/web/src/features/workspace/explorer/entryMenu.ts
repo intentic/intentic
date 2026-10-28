@@ -35,6 +35,8 @@ export interface EntryVerbs {
     readonly duplicate?: () => void;
     // What was copied, moved here instead (a Mac's ⌥⌘V); offered only while the clipboard holds a copy.
     readonly moveHere?: () => void;
+    // Puts the entry's workspace path, or the selection's one per line, on the clipboard as text.
+    readonly copyPath?: () => void;
 }
 
 // The key each verb answers to on the surface, drawn at the right of its row: how a reader learns them.
@@ -142,6 +144,18 @@ const downloadRow = (input: EntryMenuInput): MenuItem[] => {
     return [{ label, icon: `download`, command: verbs.download }];
 };
 
+// Changes nothing and is read anywhere, so every menu with a target has it: the read-only one and an archive's too.
+const copyPathRow = ({ target, multi, count, verbs }: EntryMenuInput): MenuItem[] =>
+    target === undefined || verbs.copyPath === undefined
+        ? []
+        : [
+              {
+                  label: multi ? t(`workspace.entryMenu.copyPaths`, { count }) : t(`workspace.entryMenu.copyPath`),
+                  icon: `link`,
+                  command: verbs.copyPath,
+              },
+          ];
+
 // Changes nothing, so a reader keeps it too; one file only, since the conversation it starts is about that file.
 const askRow = ({ target, multi, verbs }: EntryMenuInput): MenuItem[] =>
     target?.type === `file` && !multi && verbs.ask !== undefined ? [{ label: t(`local.entryMenu.askAgent`), icon: `robot`, command: verbs.ask }] : [];
@@ -149,7 +163,7 @@ const askRow = ({ target, multi, verbs }: EntryMenuInput): MenuItem[] =>
 // A download changes nothing, so a reader keeps it.
 const readOnlyMenu = (input: EntryMenuInput): MenuItem[] => {
     const { head = [], lead = [], tail = [] } = input;
-    return joinGroups(head, askRow(input), lead, downloadRow(input), tail, [readOnlyNote()]);
+    return joinGroups(head, askRow(input), lead, [...copyPathRow(input), ...downloadRow(input)], tail, [readOnlyNote()]);
 };
 
 // Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
@@ -163,7 +177,7 @@ const archiveMenu = (input: EntryMenuInput): MenuItem[] => {
     const copyRow: MenuItem[] = offers(input, VERB_ROUTES.copy)
         ? [{ label: multi ? t(`workspace.entryMenu.copyItems`, { count }, count) : t(`ui.action.copy`), icon: `copy`, command: verbs.copy }]
         : [];
-    const reads: MenuItem[] = target === undefined ? [] : [...copyRow, ...downloadRow(input)];
+    const reads: MenuItem[] = target === undefined ? [] : [...copyRow, ...copyPathRow(input), ...downloadRow(input)];
     return joinGroups(head, reads, tail, [archiveNote()]);
 };
 
@@ -239,6 +253,7 @@ const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
                   ),
               ]
             : []),
+        ...copyPathRow(input),
         ...downloadRow(input),
     ];
     return [...withSeparator(changes), ...withSeparator(carries)];

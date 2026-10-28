@@ -110,6 +110,25 @@ describe(`paste`, () => {
         expect(store.clipboard.value).toEqual({ mode: `copy`, paths: [`src/main.ts`] });
     });
 
+    it(`asks once before a cut lands on names the folder holds, then keeps both, replaces or moves nothing`, async () => {
+        const TAKEN = [dir(`src`, [file(`src/main.ts`), file(`src/README.md`)]), file(`README.md`), file(`notes.md`)];
+        const MOVE_RUN = `run: Couldn't move those items.`;
+        const answers = await Promise.all(
+            ([`keep`, `replace`, `skip`, `cancel`] as const).map(async (conflictAnswer) => {
+                const { transfer, store, calls, askConflict } = treeSurface(TAKEN, { conflictAnswer });
+                store.clipboard.value = { mode: `cut`, paths: [`README.md`, `notes.md`] };
+                await transfer.paste(`src`);
+                return [conflictAnswer, askConflict.mock.calls, [...calls]];
+            }),
+        );
+        expect(answers).toEqual([
+            [`keep`, [[`src`, [`README.md`], true]], [MOVE_RUN, `move notes.md, README.md into src (README.md as README 2.md)`]],
+            [`replace`, [[`src`, [`README.md`], true]], [MOVE_RUN, `delete src/README.md`, `move notes.md, README.md into src`]],
+            [`skip`, [[`src`, [`README.md`], true]], [MOVE_RUN, `move notes.md into src`]],
+            [`cancel`, [[`src`, [`README.md`], true]], []],
+        ]);
+    });
+
     it(`moves what was copied on Move Here, a Mac's ⌥⌘V, and spends the clipboard as a cut does`, async () => {
         const { transfer, store, selecting } = treeSurface(TREE);
         store.clipboard.value = { mode: `copy`, paths: [`README.md`] };
@@ -117,7 +136,7 @@ describe(`paste`, () => {
 
         await transfer.moveHere();
 
-        expect(store.moveIntoMany.mock.calls).toEqual([[[`README.md`], `src`]]);
+        expect(store.moveIntoMany.mock.calls).toEqual([[[`README.md`], `src`, new Map()]]);
         expect(store.copyEntries.mock.calls).toEqual([]);
         expect(store.clipboard.value).toBeUndefined();
     });
@@ -137,7 +156,7 @@ describe(`paste`, () => {
 
         await transfer.paste(`src`);
 
-        expect([store.moveIntoMany.mock.calls, [...selecting.selection.value]]).toEqual([[[[`README.md`], `src`]], [`src/README.md`]]);
+        expect([store.moveIntoMany.mock.calls, [...selecting.selection.value]]).toEqual([[[[`README.md`], `src`, new Map()]], [`src/README.md`]]);
         expect(store.clipboard.value).toBeUndefined();
     });
 
@@ -253,7 +272,7 @@ describe(`an entry dragged by pointer`, () => {
         await drain();
 
         expect([store.moveIntoMany.mock.calls, store.copyEntries.mock.calls, [...store.expanded.value], [...selecting.selection.value]]).toEqual([
-            [[[`README.md`], `src`]],
+            [[[`README.md`], `src`, new Map()]],
             [[[{ from: `assets.zip/logo.png`, to: `docs/logo.png` }]]],
             [`docs`],
             [`docs/logo.png`],
@@ -268,7 +287,7 @@ describe(`an entry dragged by pointer`, () => {
         window.dispatchEvent(new PointerEvent(`pointerup`));
         await drain();
 
-        expect([store.moveIntoMany.mock.calls, [...store.expanded.value]]).toEqual([[[[`README.md`], `app`]], [`app/package.json`]]);
+        expect([store.moveIntoMany.mock.calls, [...store.expanded.value]]).toEqual([[[[`README.md`], `app`, new Map()]], [`app/package.json`]]);
     });
 });
 

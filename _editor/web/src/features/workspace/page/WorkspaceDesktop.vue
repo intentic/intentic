@@ -7,7 +7,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } f
 import { type BuiltinCommand, registerBuiltin } from "../../../workbench/commands/builtinCommands";
 import { commandShortcut, type CommandRegistration } from "../../../workbench/commands/useCommands";
 import { publishContextKey } from "../../../workbench/commands/contextKeys";
-import { deleteUndoable } from "../../../models/workspace/tree/deleteUndo";
+import { fileUndoable } from "../../../models/workspace/tree/deleteUndo";
 import { UNDO_DELETE, useDeleteUndo } from "../explorer/undo/useDeleteUndo";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
@@ -49,6 +49,7 @@ import { opensAsFolder } from "../../../models/workspace/files/archiveEntries";
 import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "../../../models/workspace/home/useHome";
 import { useRootDrop } from "../explorer/transfer/useRootDrop";
 import EntryDragGhost from "../explorer/transfer/EntryDragGhost.vue";
+import MoveConflictDialog from "../explorer/transfer/MoveConflictDialog.vue";
 import { filesToEntries } from "../../../models/workspace/tree/dropEntries";
 import DirectoryChecks from "../directory-ui/DirectoryChecks.vue";
 import DirectoryRuns from "../directory-ui/DirectoryRuns.vue";
@@ -75,7 +76,7 @@ import { useT } from "@intentic/ui/i18n";
 // (sandbox-global); this view owns no control for it.
 
 const t = useT();
-const { undoDelete } = useDeleteUndo();
+const { undoStep } = useDeleteUndo();
 
 const layout = useLayout();
 const { maker } = useAudience();
@@ -612,7 +613,7 @@ const WORKSPACE_COMMANDS: readonly (readonly [BuiltinCommand, CommandRegistratio
     [`workspace.closeAllTabs`, closeAllTabs],
     [`workspace.reopenClosedTab`, reopenClosedTab],
     [`workspace.refresh`, () => refetch()],
-    [UNDO_DELETE, () => undoDelete()],
+    [UNDO_DELETE, () => undoStep()],
 ];
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
@@ -627,7 +628,7 @@ onMounted(() => {
     // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
     workspaceCommandDisposables = [
-        publishContextKey(`workspaceDeleteUndoable`, deleteUndoable),
+        publishContextKey(`workspaceFileUndoable`, fileUndoable),
         ...WORKSPACE_COMMANDS.map(([command, handler]) => registerBuiltin(command, handler)),
     ];
 });
@@ -940,6 +941,7 @@ const homeTooltip = computed((): Tip => ({
         <DirectoryRuns v-model="runsDir" />
         <!-- The pill a row or tile becomes while the pointer carries it, over either surface. -->
         <EntryDragGhost />
+        <MoveConflictDialog />
     </div>
 </template>
 

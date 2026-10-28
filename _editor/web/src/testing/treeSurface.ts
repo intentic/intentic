@@ -14,6 +14,7 @@ import { indexEntries } from "../features/workspace/explorer/tree/treeRows";
 import { createFileVerbs, type FileVerbSeams } from "../features/workspace/explorer/tree/fileVerbs";
 import type { TreeMenuHost } from "../features/workspace/explorer/tree/useTreeMenu";
 import { useTreeRows } from "../features/workspace/explorer/tree/useTreeRows";
+import type { ConflictChoice } from "../features/workspace/explorer/transfer/moveConflicts";
 
 // A file surface built as WorkspaceTree.vue builds it (createFileVerbs), over fakes of its two seams: the store's daemon calls, empty folders.
 
@@ -116,9 +117,10 @@ export const fakeTreeStore = (listing: readonly WorkspaceTreeEntry[], { canWrite
             await answered;
             calls.push(`copy ${pairs.map((pair) => `${pair.from} → ${pair.to}`).join(`, `)}`);
         }),
-        moveIntoMany: mock(async (sources: readonly string[], into: string): Promise<void> => {
+        moveIntoMany: mock(async (sources: readonly string[], into: string, names?: ReadonlyMap<string, string>): Promise<void> => {
             await answered;
-            calls.push(`move ${sources.join(`, `)} into ${into}`);
+            const renamed = [...(names ?? new Map<string, string>())].map(([from, name]) => ` (${from} as ${name})`).join(``);
+            calls.push(`move ${sources.join(`, `)} into ${into}${renamed}`);
         }),
         extractEntry: mock(async (path: string): Promise<string> => {
             await answered;
@@ -147,12 +149,23 @@ export interface SurfaceOptions extends StoreOptions {
     readonly nesting?: boolean;
     // Whether a landed rename is said by name, as the phone's surface asks.
     readonly sayRenamed?: boolean;
+    // How the reader answers a move into a folder that holds its names (moveConflicts.ts); `cancel` answers nothing.
+    readonly conflictAnswer?: ConflictChoice | `cancel`;
 }
 
 // The tree's composables over one listing, the way WorkspaceTree.vue builds them; the surface's element is in the DOM.
 export const treeSurface = (
     listing: readonly WorkspaceTreeEntry[],
-    { rootDir = ``, barren = [], rowActions = () => [], frame = () => ({}), nesting = false, sayRenamed = false, ...options }: SurfaceOptions = {},
+    {
+        rootDir = ``,
+        barren = [],
+        rowActions = () => [],
+        frame = () => ({}),
+        nesting = false,
+        sayRenamed = false,
+        conflictAnswer = `keep`,
+        ...options
+    }: SurfaceOptions = {},
 ) => {
     const { store, calls, release } = fakeTreeStore(listing, options);
     const { settled, emptyDirs } = emptyDirsOver(barren);
@@ -169,6 +182,11 @@ export const treeSurface = (
     const download = mock((targets: readonly DownloadTarget[]): Promise<string | undefined> =>
         Promise.resolve(targets.length === 1 && targets[0]?.type === `file` ? undefined : `selection.zip`),
     );
+    // The question a move asked, and the reader's answer to it.
+    const askConflict = mock(
+        (into: string, names: readonly string[], others: boolean): Promise<ConflictChoice | undefined> =>
+            Promise.resolve(conflictAnswer === `cancel` ? undefined : conflictAnswer),
+    );
     const surface = effectScope().run(() => {
         const rows = useTreeRows({
             tree: () => store.tree.value,
@@ -182,7 +200,7 @@ export const treeSurface = (
             emptyDirs,
         });
         const verbs = createFileVerbs({
-            seams: unstubbed<FileVerbSeams>(`fileVerbSeams`, { store, uploads, say, sayDeleted, download }),
+            seams: unstubbed<FileVerbSeams>(`fileVerbSeams`, { store, uploads, say, sayDeleted, download, askConflict }),
             byPath: rows.byPath,
             order: rows.orderedPaths,
             rootDir: () => rootDir,
@@ -207,5 +225,5 @@ export const treeSurface = (
         surface.selecting.selection.value = new Set(paths);
         surface.selecting.lead.value = paths.at(-1) ?? null;
     };
-    return { ...surface, store, calls, release, settled, uploads, say, sayDeleted, download, el, select };
+    return { ...surface, store, calls, release, settled, uploads, say, sayDeleted, download, askConflict, el, select };
 };

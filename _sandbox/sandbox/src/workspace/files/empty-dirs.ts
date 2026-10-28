@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { holdsLockedWorkspacePath } from "@intentic/sandbox-contract/state/locked-folders";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
+import { compareNames } from "@intentic/sandbox-contract/schemas/workspace/name-order";
 import { createIgnoreScope, type IgnoreScope, toRelPath } from "@intentic/workspace-ignore";
 import { type DirReads, freshDirReads } from "./dir-reads.js";
 
@@ -53,7 +54,7 @@ export const scanBarrenDirs = async (root: string, options?: { maxDirs?: number;
             .filter((child) => !scope.isIgnored(child.name, child.path, true) && !isLockedWorkspacePath(child.path));
         // Anything this walk won't descend into is content, which stops the branch here.
         let all = names.others === 0 && children.length === names.dirs.length;
-        children.sort((left, right) => left.name.localeCompare(right.name));
+        children.sort((left, right) => compareNames(left.name, right.name));
         const scanned = await Promise.all(children.map((child) => visit(child.abs, child.path, scope)));
 
         const found: string[] = [];

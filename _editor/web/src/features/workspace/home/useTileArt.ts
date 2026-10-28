@@ -2,6 +2,7 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 import { onBeforeUnmount, onMounted, type Ref, ref, watch } from "vue";
 import { reportBox } from "../../../models/workspace/home/mediaBoxes";
 import { stopWaiting, whenNear } from "../../../models/workspace/home/nearViewport";
+import { queueArt } from "../../../models/workspace/home/artQueue";
 import { type ThumbnailKind, type TileEdge, tileArt } from "../../../models/workspace/home/thumbnails";
 
 // What a home tile draws in place of its glyph, a grid tile's and a gallery picture's alike: fetched once the tile is
@@ -89,6 +90,9 @@ export const useTileArt = (
     let asked: TileEdge | undefined;
     // The edge the picture on screen was drawn at, so what its pixels say about the original is read against it.
     let drawnAt: TileEdge | undefined;
+    // Takes back the ask still waiting its turn (artQueue.ts): the tile scrolled out of reach, or a larger edge replaced it.
+    let takeBack: (() => void) | undefined;
+    onBeforeUnmount(() => takeBack?.());
 
     const load = (): void => {
         const wanted = kind();
@@ -98,27 +102,30 @@ export const useTileArt = (
         }
         asked = at;
         const version = versionOf(entry());
-        void tileArt(entry(), wanted, at).then(
-            async (answer) => {
-                // A larger picture replacing one already painted is decoded first; a first one paints as it lands.
-                if (src.value !== undefined && answer.as === `picture`) {
-                    await decoded(answer.url);
-                }
-                // A tile re-used for another file, or already handed a larger edge, keeps what it has.
-                if (versionOf(entry()) !== version || asked !== at) {
-                    return;
-                }
-                src.value = answer.url;
-                as.value = answer.as;
-                drawnAt = answer.edge;
-                // An older sandbox answers its viewer's rendition, larger than asked: nothing up to that needs asking again.
-                asked = answer.edge > at ? answer.edge : at;
-            },
-            () => {
-                if (src.value === undefined) {
-                    failed.value = true;
-                }
-            },
+        takeBack?.();
+        takeBack = queueArt(() =>
+            tileArt(entry(), wanted, at).then(
+                async (answer) => {
+                    // A larger picture replacing one already painted is decoded first; a first one paints as it lands.
+                    if (src.value !== undefined && answer.as === `picture`) {
+                        await decoded(answer.url);
+                    }
+                    // A tile re-used for another file, or already handed a larger edge, keeps what it has.
+                    if (versionOf(entry()) !== version || asked !== at) {
+                        return;
+                    }
+                    src.value = answer.url;
+                    as.value = answer.as;
+                    drawnAt = answer.edge;
+                    // An older sandbox answers its viewer's rendition, larger than asked: nothing up to that needs asking again.
+                    asked = answer.edge > at ? answer.edge : at;
+                },
+                () => {
+                    if (src.value === undefined) {
+                        failed.value = true;
+                    }
+                },
+            ),
         );
     };
     whenTileNear(

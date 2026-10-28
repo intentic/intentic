@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { compareNames } from "@intentic/sandbox-contract/schemas/workspace/name-order";
 import { type FileCategory, formatOf } from "@intentic/ui/file-format";
 import { t } from "@intentic/ui/i18n";
 import { type DateGroupKey, dateGroupOf } from "./homeDates";
@@ -57,11 +58,8 @@ const BY_CATEGORY: Record<FileCategory, HomeGroupKey> = {
 
 export const groupOf = (entry: WorkspaceTreeEntry): HomeGroupKey => (entry.type === `dir` ? `folders` : BY_CATEGORY[formatOf(entry.name).category]);
 
-// Numeric-aware and case-blind: img2 before img10, Readme beside readme. The code-point tie-break keeps two names the
-// collator calls equal in one fixed order across renders.
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: `base` });
-export const byNaturalName = (left: WorkspaceTreeEntry, right: WorkspaceTreeEntry): number =>
-    collator.compare(left.name, right.name) || (left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+// Numeric-aware and case-blind: img2 before img10, Readme beside readme; the same order the tree lists them in.
+export const byNaturalName = (left: WorkspaceTreeEntry, right: WorkspaceTreeEntry): number => compareNames(left.name, right.name);
 
 // Newest first; a tie (two files from one save) falls back to natural name order, so the order holds across renders.
 const byNewest = (left: WorkspaceTreeEntry, right: WorkspaceTreeEntry): number =>

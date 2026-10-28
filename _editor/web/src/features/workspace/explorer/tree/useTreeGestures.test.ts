@@ -237,3 +237,35 @@ describe(`the keyboard`, () => {
         expect([tab.defaultPrevented, typed.defaultPrevented, done, selecting.lead.value]).toEqual([false, false, [], `src`]);
     });
 });
+
+describe(`typing a name`, () => {
+    // A press at a given moment, so the pause that ends a word is the test's to say.
+    const typed = (name: string, at: number): KeyboardEvent => Object.defineProperty(key(name), `timeStamp`, { value: at });
+
+    it(`selects the next row it starts, keeping a longer word in place and wrapping round`, () => {
+        const { gestures, selecting, state } = gesturesOver();
+        selecting.selectSingle(`src`);
+        const n = typed(`n`, 1000);
+
+        gestures.onKeydown(n);
+        expect([state().selected, n.defaultPrevented, n.cancelBubble]).toEqual([[`notes.md`], true, true]);
+        gestures.onKeydown(typed(`o`, 1100));
+        gestures.onKeydown(typed(`t`, 1200));
+        expect(state().selected).toEqual([`notes.md`]);
+
+        // After a pause a letter starts a new word, searching on from the selection and wrapping round to the top.
+        gestures.onKeydown(typed(`s`, 3000));
+        expect(state().selected).toEqual([`src`]);
+    });
+
+    it(`takes a space inside a word as part of the name, and a lone space as the toggle it is`, () => {
+        const { gestures, selecting, state } = gesturesOver();
+        selecting.selectSingle(`src`);
+        gestures.onKeydown(typed(`r`, 1000));
+        gestures.onKeydown(typed(` `, 1100));
+        expect(state().selected).toEqual([`README.md`]);
+
+        gestures.onKeydown(typed(` `, 5000));
+        expect(state().selected).toEqual([]);
+    });
+});

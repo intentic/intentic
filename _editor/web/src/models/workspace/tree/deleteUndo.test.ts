@@ -1,7 +1,7 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type DeleteBatch, deleteUndoable, rememberDelete, takeDelete } from "./deleteUndo";
+import { type DeleteBatch, fileUndoable, rememberCreated, rememberDelete, rememberMoves, takeStep } from "./deleteUndo";
 
-// Pins the stack Mod+Z and a receipt's Undo share: newest first, and a batch taken back only once whichever asks.
+// Pins the stack Mod+Z and a receipt's Undo share: newest first, and a step taken back only once whichever asks.
 
 const batch = (...paths: string[]): DeleteBatch => ({ entries: paths.map((path) => ({ path, type: `file`, trashed: `t:${path}` })) });
 
@@ -15,7 +15,7 @@ it(`walks back newest first, one gesture at a time`, () => {
     rememberDelete(first);
     rememberDelete(second);
 
-    expect([takeDelete(), takeDelete(), takeDelete(), deleteUndoable.value]).toEqual([second, first, undefined, false]);
+    expect([takeStep(), takeStep(), takeStep(), fileUndoable.value]).toEqual([second, first, undefined, false]);
 });
 
 it(`takes a named batch from anywhere in the stack, and only once`, () => {
@@ -24,10 +24,21 @@ it(`takes a named batch from anywhere in the stack, and only once`, () => {
     rememberDelete(first);
     rememberDelete(second);
 
-    expect([takeDelete(first), takeDelete(first), takeDelete()]).toEqual([first, undefined, second]);
+    expect([takeStep(first), takeStep(first), takeStep()]).toEqual([first, undefined, second]);
 });
 
 it(`remembers nothing for a delete that sent nothing to the trash`, () => {
     rememberDelete(batch());
-    expect(deleteUndoable.value).toBe(false);
+    expect(fileUndoable.value).toBe(false);
+});
+
+it(`holds moves and entries made beside deletes, in the order they were done`, () => {
+    const deleted = batch(`a.txt`);
+    rememberDelete(deleted);
+    rememberMoves([{ from: `b.txt`, to: `docs/b.txt` }]);
+    rememberCreated([`new.txt`]);
+    rememberMoves([]);
+    rememberCreated([]);
+
+    expect([takeStep(), takeStep(), takeStep(), takeStep()]).toEqual([{ created: [`new.txt`] }, { moves: [{ from: `b.txt`, to: `docs/b.txt` }] }, deleted, undefined]);
 });

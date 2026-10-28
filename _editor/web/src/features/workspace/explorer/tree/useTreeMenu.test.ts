@@ -88,6 +88,23 @@ describe(`where the verbs act`, () => {
     });
 });
 
+describe(`copying paths`, () => {
+    it(`puts the entry's path, or the selection's one per line, on the clipboard and says so`, async () => {
+        const written: string[] = [];
+        const clipboard = { writeText: jest.fn(async (text: string) => void written.push(text)) };
+        Object.defineProperty(globalThis.navigator, `clipboard`, { configurable: true, value: clipboard });
+        const { say, press, select } = menuOver();
+        press(MAIN, `Copy Path`);
+        select(`app/src/main.ts`, `app/web`);
+        press(MAIN, `Copy 2 Paths`);
+        await drain();
+        expect([written, say.mock.calls.map(([message]) => message)]).toEqual([
+            [`app/src/main.ts`, `app/src/main.ts\napp/web`],
+            [`Path copied`, `2 paths copied`],
+        ]);
+    });
+});
+
 describe(`downloading`, () => {
     it(`hands one file over as itself, and a folder or a selection as one ZIP, the private entries left out`, async () => {
         const { download, say, press, select } = menuOver();
@@ -132,6 +149,7 @@ describe(`what the menu offers`, () => {
             `Cut 2 items`,
             `Copy 2 items`,
             `Duplicate 2 items`,
+            `Copy 2 Paths`,
             `Download 2 items as ZIP`,
         ]);
 
@@ -163,9 +181,9 @@ describe(`what the menu offers`, () => {
         const reader = menuOver({ canWrite: false });
         reader.press(SRC);
         expect([archived, locked, labels(reader.menu.menuItems.value)]).toEqual([
-            [`Copy`, `Download`, `—`, `Inside an archive: extract it to change anything`],
+            [`Copy`, `Copy Path`, `Download`, `—`, `Inside an archive: extract it to change anything`],
             [`Kept private by the sandbox`],
-            [`What src is`, `—`, `Download as ZIP`, `—`, `You can read here. Changing files needs edit access.`],
+            [`What src is`, `—`, `Copy Path`, `Download as ZIP`, `—`, `You can read here. Changing files needs edit access.`],
         ]);
     });
 });
@@ -211,8 +229,8 @@ describe(`the member's edit fence`, () => {
     it(`offers no write verb at all to a member whose edit is "none", and every one to a maintainer`, () => {
         const none = fenced({ editFence: [] }).open(A);
         const maintainer = fenced({}).open(A);
-        expect(none).toEqual([`Download`, `—`, READ_ONLY]);
-        expect(maintainer).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Download`]);
+        expect(none).toEqual([`Copy Path`, `Download`, `—`, READ_ONLY]);
+        expect(maintainer).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Copy Path`, `Download`]);
     });
 });
 
@@ -233,9 +251,9 @@ describe(`what the backend serves`, () => {
         press(MAIN);
         const onSelection = labels(menu.menuItems.value);
         expect([onArchive, onFolder, onSelection]).toEqual([
-            [`New File`, `—`, `Download`],
-            [`New File`, `What src is`],
-            [`New File`],
+            [`New File`, `—`, `Copy Path`, `Download`],
+            [`New File`, `What src is`, `—`, `Copy Path`],
+            [`New File`, `—`, `Copy 2 Paths`],
         ]);
         // The same verbs reached without the menu (F2, Delete, Ctrl+X and Ctrl+C on the selection) open, stage and send nothing.
         edits.beginRename(`app/src/main.ts`);
@@ -256,8 +274,22 @@ describe(`what the backend serves`, () => {
         const onArchive = labels(menu.menuItems.value);
         press(SRC);
         expect([onArchive, labels(menu.menuItems.value)]).toEqual([
-            [`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Download`],
-            [`New File`, `New Folder`, `What src is`, `Open Terminal`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Download as ZIP`],
+            [`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Copy Path`, `Download`],
+            [
+                `New File`,
+                `New Folder`,
+                `What src is`,
+                `Open Terminal`,
+                `—`,
+                `Rename`,
+                `Delete`,
+                `—`,
+                `Cut`,
+                `Copy`,
+                `Duplicate`,
+                `Copy Path`,
+                `Download as ZIP`,
+            ],
         ]);
     });
 });
@@ -302,8 +334,8 @@ describe(`a surface without a sandbox's seams`, () => {
         press(WEB);
         const onFolder = labels(menu.menuItems.value);
         expect([onArchive, onFolder, asked]).toEqual([
-            [`Ask an agent about this`, `—`, `New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`],
-            [`New File`, `New Folder`, `—`, `Rename`, `Keep folder`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`],
+            [`Ask an agent about this`, `—`, `New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Copy Path`],
+            [`New File`, `New Folder`, `—`, `Rename`, `Keep folder`, `Delete`, `—`, `Cut`, `Copy`, `Duplicate`, `Copy Path`],
             [ZIP.path],
         ]);
     });

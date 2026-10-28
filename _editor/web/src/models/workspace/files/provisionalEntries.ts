@@ -1,6 +1,7 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed } from "vue";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { compareListed } from "@intentic/sandbox-contract/schemas/workspace/name-order";
 import { basename, parentDir } from "@intentic/ui/path";
 
 // What this browser has done to the workspace that the daemon's listing hasn't agreed with yet. That listing is a fresh
@@ -231,7 +232,7 @@ export const isLeaving = (path: string): boolean => departures.value.has(path);
 // Same order the daemon lists a directory in (folders first, then by name), so a placeholder sits where its real row
 // will, and landing doesn't move it.
 const byKind = (left: WorkspaceTreeEntry, right: WorkspaceTreeEntry): number =>
-    left.type === right.type ? left.name.localeCompare(right.name) : left.type === `dir` ? -1 : 1;
+    compareListed({ name: left.name, dir: left.type === `dir` }, { name: right.name, dir: right.type === `dir` });
 
 /**
  * One directory's listing as the explorer should draw it now: arrivals merged in, departures taken out. Returns

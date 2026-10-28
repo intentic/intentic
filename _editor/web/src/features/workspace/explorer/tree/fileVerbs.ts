@@ -1,4 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { writeClipboard } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import type { Ref } from "vue";
@@ -15,7 +16,7 @@ import { useTreeDelete } from "./useTreeDelete";
 import { useInlineEdit, useTreeEdits } from "./useTreeEdits";
 import { type TreeMenuHost, useTreeMenu } from "./useTreeMenu";
 import { useTreeRules } from "./useTreeRules";
-import { useTreeTransfer } from "./useTreeTransfer";
+import { type TreeTransferHost, useTreeTransfer } from "./useTreeTransfer";
 
 // Every verb a file surface offers (select, name in place, create, delete with undo, copy, cut, paste, drag, extract,
 // the right-click menu), built once over one listing. The tree, the home and the tests' harness each call this rather
@@ -37,6 +38,7 @@ export interface FileVerbSeams {
         | "clipboard"
         | "copyEntries"
         | "moveIntoMany"
+        | "removeEntries"
         | "loadChildren"
         | "canWriteAt"
     > &
@@ -50,6 +52,8 @@ export interface FileVerbSeams {
     readonly openTerminal?: (dir: string) => void;
     // Hands entries to the browser's own download manager; answers the archive's name when they come zipped.
     readonly download?: (targets: readonly DownloadTarget[]) => Promise<string | undefined>;
+    // Asks how a move lands where its names are taken (moveConflicts.ts); without it both are kept.
+    readonly askConflict?: TreeTransferHost["askConflict"];
 }
 
 export interface FileVerbsOptions {
@@ -144,6 +148,7 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         store,
         uploads: seams.uploads,
         say,
+        askConflict: seams.askConflict,
     });
     const createIn = options.createIn;
     const { openTerminal, download } = seams;
@@ -183,6 +188,13 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
                       );
                   },
         ask: options.ask,
+        // Through the surface's own window, so a popped-out tree writes to the clipboard of the window it is in.
+        copyPaths: (paths) =>
+            void writeClipboard(paths.join(`\n`), options.el.value).then((landed) => {
+                if (landed) {
+                    say(paths.length === 1 ? t(`workspace.fileVerbs.pathCopied`) : t(`workspace.fileVerbs.pathsCopied`, { count: paths.length }));
+                }
+            }),
     });
 
     return { rules, selecting, inline, edits, deleting, transfer, menu };

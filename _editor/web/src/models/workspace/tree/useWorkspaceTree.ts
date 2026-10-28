@@ -17,9 +17,24 @@ import { editFenceOf, fenceWrites, writesSomewhere } from "./editScope";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { awaitingListing, dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
-import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./deleteUndo";
+import { type DeleteBatch, rememberCreated, rememberDelete, rememberMoves, type TrashedEntry } from "./deleteUndo";
+import { type OperationKind, trackOperation } from "./fileOperations";
 import { changedDirs, refreshWalkedTrees, treeRead } from "../changes/useWorkspaceLive";
-import { clearLoadNotice, drawsListings, failedListing, lazyChildren, lazyHidden, lazyLoading, listingsSeen, loadChildren, relist, relistWhenSeen } from "./lazyListings";
+import {
+    clearLoadNotice,
+    drawsListings,
+    failedListing,
+    followedByDeltas,
+    forgetFollowed,
+    lazyChildren,
+    lazyHidden,
+    lazyLoading,
+    listingsSeen,
+    loadChildren,
+    relist,
+    relistUnlessPushed,
+    relistWhenSeen,
+} from "./lazyListings";
 import { actionError, busy, run } from "./treeActions";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
@@ -116,6 +131,61 @@ const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${
 // Never older than the tree a pushed delta already patched in (useWorkspaceLive's treeRead).
 export const fetchWorkspaceTree = treeRead(() => sandboxRpc.workspace.tree({ agent: workspaceAgent.value }));
 
+/*
+ * THE ONE PATH EVERY TREE WRITE TAKES. Each item's provisional rows are already on screen (the callers below note
+ * them before the first byte moves), so this confirms or takes back each item's own rows on that item's own answer:
+ * a bulk delete where three paths are refused keeps the seventeen that landed. What retires the rows is the listing
+ * catching up (afterWrite). The first refusal is rethrown once every write has settled, so `run` reports it without
+ * cancelling the rest. A gesture of many entries names its `kind`, which puts its progress and a Stop on a card
+ * (fileOperations.ts); an entry not yet begun when Stop is pressed is left where it is, its rows taken back.
+ */
+const settleEachAfter =
+    (afterWrite: (paths: readonly string[]) => void) =>
+    async <T>(
+        items: readonly T[],
+        rows: (item: T) => readonly string[],
+        write: (item: T) => Promise<unknown>,
+        // Anything else this write moved ahead of the answer, put back. The rows are taken care of here; a move also
+        // carries the open tabs, and one left at a name the daemon refused reads a file that isn't there and closes
+        // itself, taking an unsaved buffer with it.
+        undo?: (item: T) => void,
+        kind?: OperationKind,
+    ): Promise<void> => {
+        let failure: { readonly cause: unknown } | undefined;
+        const landed: string[] = [];
+        const operation = trackOperation(kind, items.length);
+        const takeBack = (item: T): void => {
+            for (const path of rows(item)) {
+                dropProvisional(path);
+            }
+            undo?.(item);
+        };
+        await mapPool(items, WRITE_POOL, async (item: T) => {
+            if (operation.stopped()) {
+                takeBack(item);
+                return;
+            }
+            try {
+                await write(item);
+                for (const path of rows(item)) {
+                    markSettled(path);
+                    landed.push(path);
+                }
+                operation.landed(rows(item)[0] ?? ``, true);
+            } catch (caught) {
+                takeBack(item);
+                operation.landed(rows(item)[0] ?? ``, false);
+                failure ??= { cause: caught };
+            }
+        });
+        operation.end();
+        afterWrite(landed);
+        if (failure !== undefined) {
+            // Awaiting a rejection is how the daemon's own error leaves here unchanged; `throw` would need it narrowed.
+            await Promise.reject(failure.cause);
+        }
+    };
+
 export function useWorkspaceTree() {
     const queryClient = useQueryClient();
     // Where this member may change files by hand (editScope.ts): everywhere for the tiers that manage the sandbox,
@@ -178,45 +248,7 @@ export function useWorkspaceTree() {
         }, HEAL_AFTER_MS);
     };
 
-    /*
-     * THE ONE PATH EVERY TREE WRITE TAKES. Each item's provisional rows are already on screen (the callers below note
-     * them before the first byte moves), so this confirms or takes back each item's own rows on that item's own answer:
-     * a bulk delete where three paths are refused keeps the seventeen that landed. What retires the rows is the listing
-     * catching up (afterWrite). The first refusal is rethrown once every write has settled, so `run` reports it without
-     * cancelling the rest.
-     */
-    const settleEach = async <T>(
-        items: readonly T[],
-        rows: (item: T) => readonly string[],
-        write: (item: T) => Promise<unknown>,
-        // Anything else this write moved ahead of the answer, put back. The rows are taken care of here; a move also
-        // carries the open tabs, and one left at a name the daemon refused reads a file that isn't there and closes
-        // itself, taking an unsaved buffer with it.
-        undo?: (item: T) => void,
-    ): Promise<void> => {
-        let failure: { readonly cause: unknown } | undefined;
-        const landed: string[] = [];
-        await mapPool(items, WRITE_POOL, async (item: T) => {
-            try {
-                await write(item);
-                for (const path of rows(item)) {
-                    markSettled(path);
-                    landed.push(path);
-                }
-            } catch (caught) {
-                for (const path of rows(item)) {
-                    dropProvisional(path);
-                }
-                undo?.(item);
-                failure ??= { cause: caught };
-            }
-        });
-        afterWrite(landed);
-        if (failure !== undefined) {
-            // Awaiting a rejection is how the daemon's own error leaves here unchanged; `throw` would need it narrowed.
-            await Promise.reject(failure.cause);
-        }
-    };
+    const settleEach = settleEachAfter(afterWrite);
 
     // What a moved or copied entry draws as while it is provisional; a renamed folder must not arrive as a file.
     const typeOf = (path: string): "file" | "dir" => (entriesByPath.value.get(path)?.type === `dir` ? `dir` : `file`);
@@ -228,6 +260,7 @@ export function useWorkspaceTree() {
             (dir) => [dir],
             (dir) => sandboxRpc.workspace.mkdir({ path: dir }),
         );
+        rememberCreated([path]);
     };
     // A new, empty file. Same route as a save, but its row has to exist before the walk agrees and has to be taken back
     // if the write is refused, which is exactly what an editor save must not do.
@@ -238,10 +271,12 @@ export function useWorkspaceTree() {
             (file) => [file],
             (file) => uploadText(file, ``),
         );
+        rememberCreated([path]);
     };
     // Rename is the only single move (same parent, new name); every other op goes through a batch variant below. The
     // pair moves together: the old row goes and the new one arrives in the same frame, so nothing flickers between.
-    const moveEntry = async (from: string, to: string): Promise<void> => {
+    // `remember` is false for a move that is itself an undo, which must not become the next thing Mod+Z takes back.
+    const moveEntry = async (from: string, to: string, remember = true): Promise<void> => {
         noteLeaving(from);
         noteArriving(to, { kind: `write`, type: typeOf(from) });
         renameOpenPaths(from, to);
@@ -251,6 +286,9 @@ export function useWorkspaceTree() {
             (move) => sandboxRpc.workspace.move(move),
             (move) => renameOpenPaths(move.to, move.from),
         );
+        if (remember) {
+            rememberMoves([{ from, to }]);
+        }
     };
     // Each entry goes to the daemon's trash; the ones that went are remembered as one batch for Mod+Z, even when some
     // of the gesture was refused, and answered so a receipt's Undo can name exactly this delete.
@@ -271,6 +309,8 @@ export function useWorkspaceTree() {
                         entries.push({ path, type: types.get(path) ?? `file`, trashed });
                     }
                 },
+                undefined,
+                `delete`,
             );
         } finally {
             rememberDelete(batch);
@@ -307,6 +347,8 @@ export function useWorkspaceTree() {
                     throw failure;
                 }
             },
+            undefined,
+            `restore`,
         ).finally(() => rememberDelete({ entries: batch.entries.filter((entry) => !settled.has(entry.trashed)) }));
         return { landed, gone };
     };
@@ -314,35 +356,49 @@ export function useWorkspaceTree() {
         for (const { from, to } of pairs) {
             noteArriving(to, { kind: `write`, type: typeOf(from) });
         }
+        const copied: string[] = [];
         await settleEach(
             pairs,
             (pair) => [pair.to],
-            (pair) => sandboxRpc.workspace.copy(pair),
-        );
+            async (pair) => {
+                await sandboxRpc.workspace.copy(pair);
+                copied.push(pair.to);
+            },
+            undefined,
+            `copy`,
+        ).finally(() => rememberCreated(copied));
     };
     // Unpacks an archive beside itself and answers where it landed. No provisional row: only the daemon, which can see
     // inside the archive and knows which names are free, can say what the new entry is called.
     const extractEntry = async (path: string): Promise<string> => {
         const landed = await sandboxRpc.workspace.extract({ path });
+        rememberCreated([landed.path]);
         await invalidate();
         return landed.path;
     };
-    // Moves each source into targetDir, skipping ones already there or that would nest a folder in itself.
-    const moveIntoMany = async (sources: readonly string[], targetDir: string): Promise<void> => {
+    // Moves each source into targetDir, skipping ones already there or that would nest a folder in itself. `names` lands
+    // a source under another name, where its own is taken there (a move's Keep Both, moveConflicts.ts); the daemon refuses
+    // a move onto an entry already there rather than replacing it.
+    const moveIntoMany = async (sources: readonly string[], targetDir: string, names?: ReadonlyMap<string, string>): Promise<void> => {
         const moves = sources
             .filter((source) => canMoveInto(source, targetDir))
-            .map((source) => ({ from: source, to: joinPath(targetDir, basename(source)) }));
+            .map((source) => ({ from: source, to: joinPath(targetDir, names?.get(source) ?? basename(source)) }));
         for (const { from, to } of moves) {
             noteLeaving(from);
             noteArriving(to, { kind: `write`, type: typeOf(from) });
             renameOpenPaths(from, to);
         }
+        const moved: (typeof moves)[number][] = [];
         await settleEach(
             moves,
             (move) => [move.from, move.to],
-            (move) => sandboxRpc.workspace.move(move),
+            async (move) => {
+                await sandboxRpc.workspace.move(move);
+                moved.push(move);
+            },
             (move) => renameOpenPaths(move.to, move.from),
-        );
+            `move`,
+        ).finally(() => rememberMoves(moved));
     };
 
     const tree = computed<readonly WorkspaceTreeEntry[]>(() => query.data.value?.tree ?? []);
@@ -425,8 +481,9 @@ export function useWorkspaceTree() {
     // and a stat per file, is how one open folder of several thousand files became a second of daemon time per second.
     watch(query.data, () => {
         // Iterating the live keys is safe: a read only writes this map after its first await.
+        // One the deltas keep is current already: its own changes arrive in them (lazyListings.ts, patchListing).
         for (const path of lazyChildren.value.keys()) {
-            if (onScreen(path)) {
+            if (onScreen(path) && !followedByDeltas(path)) {
                 relistWhenSeen(path);
             }
         }
@@ -435,10 +492,16 @@ export function useWorkspaceTree() {
     // The watch above can't see a write below the walk's budget: a file landing there leaves the eager tree identical,
     // so `query.data` never changes and the folder holding it would stay as it was listed. The file-watch batch names
     // the directory, so refetch exactly the loaded ones it touched (an empty batch means "unknown", so all of them).
+    // A named one the deltas keep waits for its delta instead; an unknown batch may hide a missed delta, so all are read.
     watch(changedDirs, ({ dirs }) => {
+        if (dirs.size === 0) {
+            forgetFollowed();
+        }
         for (const path of lazyChildren.value.keys()) {
-            if (dirs.size === 0 || dirs.has(path)) {
+            if (dirs.size === 0) {
                 relistWhenSeen(path);
+            } else if (dirs.has(path)) {
+                relistUnlessPushed(path);
             }
         }
     });

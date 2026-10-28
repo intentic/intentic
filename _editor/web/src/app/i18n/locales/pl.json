@@ -12029,7 +12029,9 @@
             "moveHere": "Przenieś tutaj",
             "newFile": "Nowy plik",
             "newFolder": "Nowy folder",
-            "openTerminal": "Otwórz terminal"
+            "openTerminal": "Otwórz terminal",
+            "copyPath": "Kopiuj ścieżkę",
+            "copyPaths": "Kopiuj ścieżki ({count})"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "też ogląda ten plik"
@@ -12479,7 +12481,6 @@
             "showExplorer": "Pokaż eksplorator",
             "smart": "Inteligentne",
             "tabsStayOpen": "Karty zostają otwarte",
-            "undoDelete": "Cofnij usunięcie",
             "search": "Szukaj…",
             "searchIgnoredFiles": "Przeszukuj ignorowane pliki",
             "searchInFiles2": "Szukaj w plikach…",
@@ -12496,7 +12497,8 @@
             "toggleTestFiles": "Przełącz pliki testowe",
             "viewing": "Widok jako",
             "moveBack": "Przenieś z powrotem",
-            "openToSide": "Otwórz obok"
+            "openToSide": "Otwórz obok",
+            "undoFileChange": "Cofnij zmianę plików"
         },
         "bringProject": {
             "connectAccount": "Połącz konto",
@@ -12588,7 +12590,11 @@
             "technicalHidden": "Ukryto {count} plik techniczny | Ukryto {count} pliki techniczne | Ukryto {count} plików technicznych",
             "technicalKinds": "Lockfile, konfiguracja, dotfile, buildy",
             "viewingFile": "ogląda ten plik",
-            "emptyFolder": "Pusty folder."
+            "emptyFolder": "Pusty folder.",
+            "selectionFolders": "{count} folder | {count} foldery | {count} folderów",
+            "selectionFiles": "{count} plik | {count} pliki | {count} plików",
+            "selection": "Zaznaczono: {what}",
+            "selectionWithSize": "Zaznaczono: {what} · {size}"
         },
         "words": {
             "cantEditHere": "Nie do edycji tutaj",
@@ -12650,7 +12656,12 @@
             "couldntExtract": "Nie udało się tego wypakować.",
             "couldntDownload": "Nie udało się pobrać tego pliku.",
             "downloadingArchive": "Pobieranie {name}",
-            "couldntDownloadThese": "Nie udało się pobrać tych elementów."
+            "couldntDownloadThese": "Nie udało się pobrać tych elementów.",
+            "pathsCopied": "Skopiowano ścieżki ({count})",
+            "renamedBack": "Przywrócono nazwę {name}",
+            "movedBack": "Przeniesiono z powrotem {count} element | Przeniesiono z powrotem {count} elementy | Przeniesiono z powrotem {count} elementów",
+            "madeUndone": "Wysłano do kosza {count} nowy element | Wysłano do kosza {count} nowe elementy | Wysłano do kosza {count} nowych elementów",
+            "couldntUndo": "Nie udało się tego cofnąć."
         },
         "homeCover": {
             "allFiles": "Wszystkie pliki",
@@ -12825,6 +12836,29 @@
             "stagingFiles": "Dodawanie {count} pliku do indeksu w {repo}… | Dodawanie {count} plików do indeksu w {repo}… | Dodawanie {count} plików do indeksu w {repo}…",
             "stop": "Zatrzymaj",
             "waiting": "Czekanie, aż {repo} będzie wolne…"
+        },
+        "moveConflict": {
+            "oneTaken": "„{name}” już jest w {folder}",
+            "manyTaken": "Zajęte nazwy w {folder}: {count}",
+            "keepBoth": "Zachowaj oba",
+            "replace": "Zastąp",
+            "skip": "Pomiń",
+            "theWorkspace": "obszarze roboczym",
+            "oneDescription": "Zachowaj oba przenosi go pod nową nazwą. Zastąp najpierw wysyła istniejący do kosza, więc Cofnij go przywraca.",
+            "manyDescription": "Zachowaj oba przenosi je pod nowymi nazwami. Zastąp najpierw wysyła istniejące do kosza, więc Cofnij je przywraca. Pomiń przenosi tylko resztę."
+        },
+        "fileOperation": {
+            "moving": "Przenoszenie: {done} z {total}",
+            "copying": "Kopiowanie: {done} z {total}",
+            "deleting": "Usuwanie: {done} z {total}",
+            "restoring": "Przywracanie: {done} z {total}",
+            "moved": "Przeniesiono {done} z {total}",
+            "copied": "Skopiowano {done} z {total}",
+            "deleted": "Usunięto {done} z {total}",
+            "restored": "Przywrócono {done} z {total}",
+            "stopping": "Zatrzymuje się po elementach już w toku",
+            "notDone": "Nie wykonano: {names}",
+            "andMore": "{names} i {count} więcej"
         }
     },
     "needs": {

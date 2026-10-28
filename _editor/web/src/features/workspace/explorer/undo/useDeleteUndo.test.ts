@@ -5,14 +5,22 @@ import type { DeleteBatch } from "../../../../models/workspace/tree/deleteUndo";
 // Pins what a delete's receipt promises: an Undo only for a batch this tab holds an id to take back by, and, in a local
 // window, where the files went instead. The daemon's store is the seam; the receipt is read off the notification lane.
 
+// What the undo asked of the daemon's store, in order.
+const asked: string[] = [];
 jest.mock("../../../../models/workspace/tree/useWorkspaceTree", () => ({
     useWorkspaceTree: () => ({
         run: async (task: () => Promise<void>): Promise<void> => task(),
         restoreDeleted: async (): Promise<{ landed: readonly string[]; gone: number }> => ({ landed: [], gone: 0 }),
+        moveEntry: async (from: string, to: string, remember?: boolean): Promise<void> => void asked.push(`move ${from} → ${to} ${String(remember)}`),
+        removeEntries: async (paths: readonly string[]): Promise<DeleteBatch> => {
+            asked.push(`delete ${paths.join(`, `)}`);
+            return { entries: paths.map((path) => ({ path, type: `file`, trashed: `t:${path}` })) };
+        },
     }),
 }));
 
 const { useDeleteUndo } = await import("./useDeleteUndo");
+const { fileUndoable, rememberCreated, rememberMoves } = await import("../../../../models/workspace/tree/deleteUndo");
 const { useNotifications } = await import("../../../../workbench/notifications/notifications");
 
 const FACE: LocalFace = { daemonUrl: `http://127.0.0.1:47201`, token: `t`.repeat(64), id: `w1`, name: `project`, path: `/home/me/project` };
@@ -60,4 +68,31 @@ test("a local window's delete says which of the system's trashes it went to, and
         [`3 items deleted`, `Moved to the Recycle Bin`],
         [`a.md deleted`, `Moved to the Trash`],
     ]);
+});
+
+test("Mod+Z walks back a move home newest first, then sends what was made to the trash without remembering that", async () => {
+    asked.length = 0;
+    const { undoStep } = useDeleteUndo();
+    rememberCreated([`copy.md`]);
+    rememberMoves([
+        { from: `a.md`, to: `docs/a.md` },
+        { from: `docs`, to: `notes` },
+    ]);
+    await undoStep();
+    const moved = said();
+    await undoStep();
+
+    expect([asked, moved, said(), fileUndoable.value]).toEqual([
+        [`move notes → docs false`, `move docs/a.md → a.md false`, `delete copy.md`],
+        [`2 items moved back`],
+        [`1 new item sent to the trash`],
+        false,
+    ]);
+});
+
+test("a rename taken back says the name it went back to", async () => {
+    const { undoStep } = useDeleteUndo();
+    rememberMoves([{ from: `docs/old.md`, to: `docs/new.md` }]);
+    await undoStep();
+    expect(said()).toEqual([`Renamed back to old.md`]);
 });

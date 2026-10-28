@@ -908,6 +908,26 @@ test("workspace.delete sends an entry to the trash, and restore brings it back, 
     expect(await errorCode(client.workspace.restore({ trashed: "../../etc" }))).toBe("NOT_FOUND");
 });
 
+test("a move never lands on an entry already there: the file it would have replaced is untouched", async () => {
+    const workspace = tempWorkspace([]);
+    const trash = createWorkspaceTrash(join(workspace.root, STATE_DIR, "local", "trash"));
+    const client = clientFor(createApp(services({ workspace, files: fakeFiles({ trash, move: moveWorkspacePath, copy: copyWorkspacePath }) })));
+    await mkdir(join(workspace.root, "a"), { recursive: true });
+    await mkdir(join(workspace.root, "b"), { recursive: true });
+    await writeFile(join(workspace.root, "a", "notes.md"), "moving");
+    await writeFile(join(workspace.root, "b", "notes.md"), "precious");
+
+    expect(await errorCode(client.workspace.move({ from: "a/notes.md", to: "b/notes.md" }))).toBe("CONFLICT");
+    expect([await readFile(join(workspace.root, "a", "notes.md"), "utf8"), await readFile(join(workspace.root, "b", "notes.md"), "utf8")]).toEqual([
+        "moving",
+        "precious",
+    ]);
+    // A free name still moves, and a rename to the entry's own name is no collision with itself.
+    expect(await client.workspace.move({ from: "a/notes.md", to: "b/notes 2.md" })).toEqual({ ok: true });
+    expect(await client.workspace.move({ from: "b/notes 2.md", to: "b/notes 2.md" })).toEqual({ ok: true });
+    expect(await readFile(join(workspace.root, "b", "notes 2.md"), "utf8")).toBe("moving");
+});
+
 test("the folders the control plane sits in stay put: no delete, move or copy onto them, and a copy out leaves it behind", async () => {
     const workspace = tempWorkspace([]);
     const trash = createWorkspaceTrash(join(workspace.root, STATE_DIR, "local", "trash"));

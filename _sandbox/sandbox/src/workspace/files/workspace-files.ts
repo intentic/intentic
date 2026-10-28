@@ -119,6 +119,14 @@ export const moveWorkspacePath = async (fromAbs: string, toAbs: string): Promise
     await rename(fromAbs, toAbs);
 };
 
+// Whether a move from `fromAbs` would land on something already at `toAbs`: rename(2) silently replaces a file of the
+// same name, which leaves nothing in the trash to take back. The same entry at both ends is a case-only rename on a
+// case-insensitive disk, which moves nothing over anything.
+export const moveTargetTaken = async (fromAbs: string, toAbs: string): Promise<boolean> => {
+    const [source, there] = await Promise.all([lstat(fromAbs).catch(undefinedIfMissing), lstat(toAbs).catch(undefinedIfMissing)]);
+    return there !== undefined && !(source !== undefined && source.dev === there.dev && source.ino === there.ino);
+};
+
 // Copies a file or directory recursively, creating the target's parent first. `keep` leaves out any entry under the
 // source it answers false for (and everything below it), so a copy of a folder never carries out what its own path
 // could not be read at.

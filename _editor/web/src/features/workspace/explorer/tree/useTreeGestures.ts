@@ -3,6 +3,7 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 import { isApplePlatform } from "@intentic/ui/keys";
 import type { Ref } from "vue";
 import { clickIntent } from "../../../../lib/multiSelect";
+import { createTypeAhead, typeAheadTarget } from "../../../../lib/files/typeAhead";
 import { opensAsFolder } from "../../../../models/workspace/files/archiveEntries";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { consumeSuppressedClick } from "../transfer/useEntryDrag";
@@ -43,7 +44,8 @@ export interface TreeGesturesHost {
 }
 
 // The keyboard half: treeKeys.ts decides what a key means, this does it. A move of the selection or the cursor takes
-// the focus with it.
+// the focus with it. A printable key the tree does not otherwise own is a name being typed (typeAhead.ts), selecting
+// the next row it starts.
 const treeKeyboard = (host: TreeGesturesHost, activate: (entry: WorkspaceTreeEntry, revealManagedDir: boolean, mode: OpenMode) => void) => {
     const { selection, lead, selectSingle, extendTo, toggleAt } = host.selecting;
     const ACTS: { readonly [K in KeyIntent["kind"]]: (intent: Extract<KeyIntent, { kind: K }>) => void } = {
@@ -82,8 +84,27 @@ const treeKeyboard = (host: TreeGesturesHost, activate: (entry: WorkspaceTreeEnt
         none: () => undefined,
     };
     const isMac = isApplePlatform();
+    const typing = createTypeAhead();
+    const nameAt = (path: string): string => host.byPath.value.get(path)?.name ?? ``;
+    // Selects the row a typed character lands on; the key is the tree's either way, so a letter bound elsewhere in the
+    // window (a review's j and k) never fires while a name is being typed here.
+    const typeName = (event: KeyboardEvent, character: string): void => {
+        const word = typing.add(character, event.timeStamp);
+        const target = typeAheadTarget(host.order.value, nameAt, lead.value, word);
+        if (target !== undefined) {
+            ACTS.select({ kind: `select`, path: target });
+        }
+        event.preventDefault();
+        event.stopPropagation();
+    };
     const onKeydown = (event: KeyboardEvent): void => {
         if (host.editing.value) {
+            return;
+        }
+        // A space inside a word being typed is part of the name, not the selection toggle it is on its own.
+        const spaced = event.key === ` ` ? typing.typed(event, event.timeStamp) : undefined;
+        if (spaced !== undefined) {
+            typeName(event, spaced);
             return;
         }
         const intent = keyIntent(event, {
@@ -95,6 +116,10 @@ const treeKeyboard = (host: TreeGesturesHost, activate: (entry: WorkspaceTreeEnt
             isMac,
         });
         if (intent === undefined) {
+            const character = typing.typed(event, event.timeStamp);
+            if (character !== undefined) {
+                typeName(event, character);
+            }
             return;
         }
         (ACTS[intent.kind] as (intent: KeyIntent) => void)(intent);

@@ -12704,7 +12704,9 @@
             "moveHere": "Mover aquí",
             "newFile": "Archivo nuevo",
             "newFolder": "Carpeta nueva",
-            "openTerminal": "Abrir terminal"
+            "openTerminal": "Abrir terminal",
+            "copyPath": "Copiar ruta",
+            "copyPaths": "Copiar {count} rutas"
         },
         "fileBreadcrumb": {
             "alsoViewingFile": "también está viendo este archivo"
@@ -13091,7 +13093,6 @@
             "showExplorer": "Mostrar explorador",
             "smart": "Inteligente",
             "tabsStayOpen": "Las pestañas siguen abiertas",
-            "undoDelete": "Deshacer eliminación",
             "search": "Buscar…",
             "searchIgnoredFiles": "Buscar en los archivos ignorados",
             "searchInFiles2": "Buscar en los archivos…",
@@ -13108,7 +13109,8 @@
             "toggleTestFiles": "Alternar los archivos de prueba",
             "viewing": "Viendo como",
             "moveBack": "Devolver",
-            "openToSide": "Abrir al lado"
+            "openToSide": "Abrir al lado",
+            "undoFileChange": "Deshacer cambio de archivos"
         },
         "bringProject": {
             "connectAccount": "Conectar una cuenta",
@@ -13200,7 +13202,11 @@
             "technicalHidden": "{count} archivo técnico oculto | {count} archivos técnicos ocultos",
             "technicalKinds": "Lockfiles, configuración, dotfiles, builds",
             "viewingFile": "viendo este archivo",
-            "emptyFolder": "Carpeta vacía."
+            "emptyFolder": "Carpeta vacía.",
+            "selectionFolders": "{count} carpeta | {count} carpetas",
+            "selectionFiles": "{count} archivo | {count} archivos",
+            "selection": "Selección: {what}",
+            "selectionWithSize": "Selección: {what} · {size}"
         },
         "useWorkspaceTree": {
             "couldntOpen": "No se pudo abrir {path}."
@@ -13273,7 +13279,12 @@
             "couldntExtract": "No se ha podido extraer.",
             "couldntDownload": "No se ha podido descargar ese archivo.",
             "downloadingArchive": "Descargando {name}",
-            "couldntDownloadThese": "No se han podido descargar esos elementos."
+            "couldntDownloadThese": "No se han podido descargar esos elementos.",
+            "pathsCopied": "{count} rutas copiadas",
+            "renamedBack": "Se volvió a llamar {name}",
+            "movedBack": "{count} elemento devuelto a su sitio | {count} elementos devueltos a su sitio",
+            "madeUndone": "{count} elemento nuevo enviado a la papelera | {count} elementos nuevos enviados a la papelera",
+            "couldntUndo": "No se pudo deshacer."
         },
         "treeRows": {
             "awaitingListing": "Esperando la lista",
@@ -13422,6 +13433,29 @@
             "stagingFiles": "Preparando {count} archivo en {repo}… | Preparando {count} archivos en {repo}…",
             "stop": "Detener",
             "waiting": "Esperando a que {repo} esté libre…"
+        },
+        "moveConflict": {
+            "oneTaken": "«{name}» ya está en {folder}",
+            "manyTaken": "{count} nombres ya existen en {folder}",
+            "keepBoth": "Conservar ambos",
+            "replace": "Reemplazar",
+            "skip": "Omitir",
+            "theWorkspace": "el espacio de trabajo",
+            "oneDescription": "Conservar ambos lo mueve con un nombre nuevo. Reemplazar envía primero el que hay a la papelera, así que Deshacer lo recupera.",
+            "manyDescription": "Conservar ambos los mueve con nombres nuevos. Reemplazar envía primero los que hay a la papelera, así que Deshacer los recupera. Omitir mueve solo el resto."
+        },
+        "fileOperation": {
+            "moving": "Moviendo {done} de {total} elementos",
+            "copying": "Copiando {done} de {total} elementos",
+            "deleting": "Eliminando {done} de {total} elementos",
+            "restoring": "Restaurando {done} de {total} elementos",
+            "moved": "Movidos {done} de {total} elementos",
+            "copied": "Copiados {done} de {total} elementos",
+            "deleted": "Eliminados {done} de {total} elementos",
+            "restored": "Restaurados {done} de {total} elementos",
+            "stopping": "Se detiene tras los elementos ya en curso",
+            "notDone": "Sin hacer: {names}",
+            "andMore": "{names} y {count} más"
         }
     },
     "gettingStarted": {

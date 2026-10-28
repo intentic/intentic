@@ -8,6 +8,7 @@ import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentat
 import type { Evidence } from "../../features/sandbox/diagnosis/diagnose";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { holdReadAloudNotice } from "../../features/chat/voice/readAloud";
+import { holdFileOperationNotice } from "../../models/workspace/tree/fileOperations";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { analyticsAvailable, analyticsChoice, chooseAnalytics } from "../../app/analyticsConsent";
 import { hold, type NotificationInput, type NotificationTone } from "../../workbench/notifications/notifications";
@@ -341,6 +342,9 @@ export const startNotificationSources = (): void => {
 
     // A reply being read aloud: what the voice is doing before its first word, and Stop once the reply has scrolled away.
     holdReadAloudNotice();
+
+    // A move, copy, delete or restore of many entries: how far it has got, and a Stop.
+    holdFileOperationNotice();
 
     holdTransportNotice(activeSandboxId);
 

@@ -28,6 +28,7 @@ import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { testCommandOf } from "./layout/test-runner.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
+import { moveTargetTaken } from "./files/workspace-files.js";
 import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { workspaceReads } from "./workspace-reads.js";
@@ -238,6 +239,11 @@ export const createWorkspaceRoutes = (services: Services) => {
             const [from, to] = [await contained(context, input.from), await contained(context, input.to)];
             await refuseKeptFolder(services.workspace.root, from);
             await refuseKeptFolder(services.workspace.root, to);
+            // Never over an entry: what is there goes to the trash first if the caller means to replace it, so a delete
+            // can take it back, which a rename over it never could.
+            if (await moveTargetTaken(from, to)) {
+                throw new ORPCError("CONFLICT", { message: `“${input.to.slice(input.to.lastIndexOf("/") + 1)}” already exists there` });
+            }
             await services.files.move(from, to);
             wrote(from, to);
             return { ok: true } as const;

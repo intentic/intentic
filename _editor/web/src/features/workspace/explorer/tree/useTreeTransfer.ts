@@ -12,6 +12,7 @@ import { filesOffered } from "../transfer/dragSource";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { VERB_ROUTES } from "../entryMenu";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
+import { type ConflictChoice, planMoves, resolveMoves } from "../transfer/moveConflicts";
 import { beginEntryDrag, useEntryDrag } from "../transfer/useEntryDrag";
 import type { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
 import { isUnlisted } from "./treeRows";
@@ -38,10 +39,17 @@ export interface TreeTransferHost {
     // The tree element: a clipboard write goes through its window, so a popped-out explorer writes to its own.
     readonly el: Readonly<Ref<HTMLElement | undefined>>;
     // `extractEntry` is left out where nothing unpacks (fileVerbs.ts' seams), and Extract with it.
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "clipboard" | "run" | "copyEntries" | "moveIntoMany" | "loadChildren"> &
+    readonly store: Pick<
+        ReturnType<typeof useWorkspaceTree>,
+        "clipboard" | "run" | "copyEntries" | "moveIntoMany" | "removeEntries" | "loadChildren"
+    > &
         Partial<Pick<ReturnType<typeof useWorkspaceTree>, "extractEntry">>;
     readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueueFromDataTransfer">;
     readonly say: ReturnType<typeof useNotifications>["say"];
+    // How to land entries whose names are taken in `dir` (moveConflicts.ts); undefined moves nothing. Without one, both
+    // are kept, which loses nothing.
+    // `others` says the gesture also moves entries whose names are free, which is when Skip differs from moving nothing.
+    readonly askConflict?: ((dir: string, names: readonly string[], others: boolean) => Promise<ConflictChoice | undefined>) | undefined;
 }
 
 // Names already in the target dir; an unlisted dir is fetched first, so the check isn't made against a placeholder, and
@@ -54,6 +62,47 @@ const namesIn = async (host: TreeTransferHost, dir: string): Promise<ReadonlySet
     }
     const siblings = target === undefined ? host.tree() : host.childrenOf(target);
     return new Set(siblings.map((child) => child.name));
+};
+
+// Moves `sources` into `dir`, never over an entry already there: a name it holds is asked about once for the whole
+// gesture (keep both, replace, skip), and what is replaced goes to the trash first, where a delete's Undo finds it.
+// `shown` reveals what lands, before the write is awaited, since its rows are already on screen.
+const moveInto = async (
+    host: TreeTransferHost,
+    sources: readonly string[],
+    dir: string,
+    shown: (landed: readonly LandedEntry[]) => void,
+): Promise<void> => {
+    const { store } = host;
+    const taken = await namesIn(host, dir);
+    const plan = planMoves(sources, dir, taken);
+    const choice =
+        plan.clashes.length === 0
+            ? `keep`
+            : await (host.askConflict?.(
+                  dir,
+                  plan.clashes.map((source) => basename(source)),
+                  plan.free.length > 0,
+              ) ?? `keep`);
+    if (choice === undefined) {
+        return;
+    }
+    const { sources: moving, names, replaced } = resolveMoves(plan, choice, dir, taken);
+    if (moving.length === 0) {
+        return;
+    }
+    const landed = moving.map((source): LandedEntry => ({
+        path: joinPath(dir, names.get(source) ?? basename(source)),
+        type: host.byPath.value.get(source)?.type ?? `file`,
+    }));
+    const write = store.run(async () => {
+        if (replaced.length > 0) {
+            await store.removeEntries(replaced);
+        }
+        await store.moveIntoMany(moving, dir, names);
+    }, t(`workspace.fileVerbs.couldntMove`));
+    shown(landed);
+    await write;
 };
 
 // Files dragged in from the OS: the platform's own drag, the one kind the page never starts (useEntryDrag.ts).
@@ -179,13 +228,7 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
         }
         const sources = movableInto(clip.paths, dir);
         clipboard.value = undefined;
-        if (sources.length === 0) {
-            return;
-        }
-        const landed = sources.map((source) => landedAs(source, joinPath(dir, basename(source))));
-        const write = store.run(() => store.moveIntoMany(sources, dir), t(`workspace.fileVerbs.couldntMove`));
-        revealLanded(dir, landed);
-        await write;
+        await moveInto(host, sources, dir, (landed) => revealLanded(dir, landed));
     };
 
     // The tree owns the clipboard's events only while it holds focus; an open inline field owns its own.
@@ -254,12 +297,9 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
             await copyInto(paths, dir, t(`workspace.fileVerbs.couldntCopyOut`));
             return;
         }
-        const landed = paths.map((path) => landedAs(path, joinPath(dir, basename(path))));
-        const write = store.run(() => store.moveIntoMany(paths, dir), t(`workspace.fileVerbs.couldntMove`));
         // The folder dropped on stays as it was, but the nest opens: a file dropped into an open package folder would
         // otherwise vanish under its package.json.
-        host.openNest(dir, landed);
-        await write;
+        await moveInto(host, paths, dir, (landed) => host.openNest(dir, landed));
     };
     // Every press reaches beginEntryDrag, carrying nothing when it cannot travel: that is what ends a drag's claim on a click.
     // ⌥ held on a Mac makes the drag a copy, as in Finder; any other modifier keeps the press a click (a range, a toggle).
