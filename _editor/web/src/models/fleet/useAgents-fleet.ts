@@ -38,9 +38,10 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 }
 
 // How many finished entries show before the rest collapse behind one row; older ones remain reachable.
-// Six rather than seven: Finished is the only self-filling lane, so it decides how tall the board reads, and the
-// fold below it is one press away. The number is small on purpose — the lane is a ledger you skim, not the work.
-export const FINISHED_WINDOW = 6;
+// Seven, now that a finished card is a row shorter (cost moved to the tile's hover): Finished is the only self-filling
+// lane, so it decides how tall the board reads, and the fold below it is one press away. The number is small on
+// purpose — the lane is a ledger you skim, not the work.
+export const FINISHED_WINDOW = 7;
 
 // Landed work the workspace no longer holds; the card offers Land again, not a receipt. Not when an agent took it out,
 // which was its doing on purpose, so the card offers nothing to put back (agentStatus.landedAway).

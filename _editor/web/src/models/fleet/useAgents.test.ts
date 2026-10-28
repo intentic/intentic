@@ -109,15 +109,15 @@ describe("windowFinished", () => {
         const { shown, hidden } = windowFinished(lane(10), undefined, byId);
 
         expect(shown).toHaveLength(FINISHED_WINDOW);
-        expect(hidden).toBe(4);
+        expect(hidden).toBe(3);
     });
 
     it("keeps the selected receipt at the tail when it would otherwise sit past the fold", () => {
         const { shown, hidden } = windowFinished(lane(10), `a8`, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
-        // Seven cards on screen out of ten: the row below may only claim the three it actually hides.
-        expect(hidden).toBe(3);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
+        // Eight cards on screen out of ten: the row below may only claim the two it actually hides.
+        expect(hidden).toBe(2);
     });
 
     // The window picks which cards survive the cap and never which order they sit in: the lane already decided that,
@@ -127,7 +127,7 @@ describe("windowFinished", () => {
         entries[8] = { ...entries[8]!, status: `ready`, updatedAt: 100 };
         const { shown } = windowFinished(entries, `a8`, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
     });
 
     // Presses used to widen the window — every card owing one was drawn wherever it sat — so a lane carrying a day of
@@ -136,8 +136,8 @@ describe("windowFinished", () => {
         const entries = lane(20).map((agent, at) => (at < 12 ? agent : { ...agent, status: `ready` as const }));
         const { shown, hidden } = windowFinished(entries, undefined, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`]);
-        expect(hidden).toBe(14);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`]);
+        expect(hidden).toBe(13);
     });
 
     it("leaves the lane alone when the selection is already inside the window: no card is ever shown twice", () => {
@@ -149,10 +149,10 @@ describe("windowFinished", () => {
     });
 
     it("drops the tail row entirely when the pin was the only card behind it", () => {
-        // Seven cards, so `a6` is the only one past the window, and it is the pin: nothing is left to claim.
-        const { shown, hidden } = windowFinished(lane(7), `a6`, byId);
+        // Eight cards, so `a7` is the only one past the window, and it is the pin: nothing is left to claim.
+        const { shown, hidden } = windowFinished(lane(8), `a7`, byId);
 
-        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`]);
+        expect(ids(shown)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`]);
         expect(hidden).toBe(0);
     });
 
@@ -162,8 +162,8 @@ describe("windowFinished", () => {
         const chats = lane(10).map((agent) => ({ conversation: { conversationId: agent.id } }));
         const { shown, hidden } = windowFinished(chats, `a8`, (entry) => entry.conversation.conversationId);
 
-        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a8`]);
-        expect(hidden).toBe(3);
+        expect(shown.map((entry) => entry.conversation.conversationId)).toEqual([`a0`, `a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a8`]);
+        expect(hidden).toBe(2);
     });
 });
 
@@ -1736,9 +1736,9 @@ describe("the finished fold", () => {
         const { shown, hidden } = windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id);
 
         expect(shown[0]?.id).toBe(`just-finished`);
-        // Six cards, not nine: the stale presses sit under the timeline and the last of them fold, reachable behind the row.
-        expect(shown.map((entry) => entry.id)).toEqual([`just-finished`, ...Array.from({ length: 5 }, (_, at) => `stale-ready-${at}`)]);
-        expect(hidden).toBe(3);
+        // Seven cards, not nine: the stale presses sit under the timeline and the last of them fold, reachable behind the row.
+        expect(shown.map((entry) => entry.id)).toEqual([`just-finished`, ...Array.from({ length: 6 }, (_, at) => `stale-ready-${at}`)]);
+        expect(hidden).toBe(2);
     });
 });
 

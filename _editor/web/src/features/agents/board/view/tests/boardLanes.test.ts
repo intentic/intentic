@@ -103,17 +103,17 @@ const boardOf = (
 };
 
 describe(`Finished's window`, () => {
-    it(`draws the newest six and folds the rest behind its tail row`, () => {
+    it(`draws the newest seven and folds the rest behind its tail row`, () => {
         const { lanes } = boardOf(finished(8));
-        expect(ids(lanes.cardsFor(`finished`))).toEqual([`f0`, `f1`, `f2`, `f3`, `f4`, `f5`]);
-        expect(lanes.hiddenFinished.value).toBe(2);
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([`f0`, `f1`, `f2`, `f3`, `f4`, `f5`, `f6`]);
+        expect(lanes.hiddenFinished.value).toBe(1);
     });
 
     it(`keeps the card wearing the ring where the lane puts it, however far down`, () => {
         const { lanes, selected } = boardOf(finished(8));
         selected.value = `f7`;
-        expect(ids(lanes.cardsFor(`finished`))).toEqual([`f0`, `f1`, `f2`, `f3`, `f4`, `f5`, `f7`]);
-        expect(lanes.hiddenFinished.value).toBe(1);
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([`f0`, `f1`, `f2`, `f3`, `f4`, `f5`, `f6`, `f7`]);
+        expect(lanes.hiddenFinished.value).toBe(0);
     });
 
     it(`lifts for the lane's own expand and for a filter, since a result set must not hide its own matches`, () => {
@@ -139,8 +139,8 @@ describe(`Finished's window`, () => {
     it(`caps the lane's runs with its cards, and counts the ones it capped in the tail row`, () => {
         const runs = Array.from({ length: 8 }, (_unused, at) => run(`r${at}`));
         const { lanes } = boardOf(finished(6), { runs });
-        expect(runIds(lanes.runsFor(`finished`))).toEqual([`r0`, `r1`, `r2`, `r3`, `r4`, `r5`]);
-        expect(lanes.hiddenFinished.value).toBe(2);
+        expect(runIds(lanes.runsFor(`finished`))).toEqual([`r0`, `r1`, `r2`, `r3`, `r4`, `r5`, `r6`]);
+        expect(lanes.hiddenFinished.value).toBe(1);
     });
 });
 
@@ -285,7 +285,7 @@ describe(`children riding under their parent`, () => {
 
     it(`keeps the card a ringed child rides under in Finished's window`, () => {
         const done = card(`p`, { updatedAt: 1 });
-        const { lanes, selected } = boardOf([...finished(6), done, helper(`h1`)]);
+        const { lanes, selected } = boardOf([...finished(7), done, helper(`h1`)]);
         expect(ids(lanes.cardsFor(`finished`))).not.toContain(`p`);
         selected.value = `h1`;
         expect(ids(lanes.cardsFor(`finished`))).toContain(`p`);

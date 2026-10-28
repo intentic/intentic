@@ -14,7 +14,7 @@ import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // How many cards Active holds before its groups take heads: below it the lane fits on a screen, so nothing needs
 // folding.
-export const HEADS_FROM = 6;
+export const HEADS_FROM = 7;
 
 // The lanes left to right, which is also the order a Shift+click range walks.
 export const LANE_ORDER: readonly FleetLane[] = [`attention`, `active`, `finished`];

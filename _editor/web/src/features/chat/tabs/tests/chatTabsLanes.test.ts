@@ -186,8 +186,8 @@ it(`caps the Finished lane and says how many it is holding back`, async () => {
     openFinished(10);
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`]);
-    expect(tailRow(el)?.textContent?.trim()).toBe(`4 earlier`);
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`]);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
 });
 
 it(`opens the rest in place, and folds them back`, async () => {
@@ -205,7 +205,7 @@ it(`opens the rest in place, and folds them back`, async () => {
     tailRow(el)?.click();
 
     await settle();
-    expect(cardsOnScreen(el)).toHaveLength(6);
+    expect(cardsOnScreen(el)).toHaveLength(7);
 });
 
 it(`pins the chat being read into the window, however far down the lane it is`, async () => {
@@ -214,12 +214,12 @@ it(`pins the chat being read into the window, however far down the lane it is`, 
     openFinished(10);
     await settle();
 
-    openFromBoard(`done9`); // done9 is the oldest finished chat, four rows behind the fold.
+    openFromBoard(`done9`); // done9 is the oldest finished chat, three rows behind the fold.
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done9`]);
-    // The pin is on screen, so the row may only claim the three it actually hides.
-    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`, `done9`]);
+    // The pin is on screen, so the row may only claim the two it actually hides.
+    expect(tailRow(el)?.textContent?.trim()).toBe(`2 earlier`);
 });
 
 it(`clears the whole lane from its header, whatever the window is showing, but keeps the focused chat`, async () => {
