@@ -65,3 +65,41 @@ test("readModules skips ignored dirs and nested repos", async () => {
     expect(await readModules(dir)).toEqual([{ dir: "_apps/web", name: "@shop/web" }]);
     await rm(dir, { recursive: true, force: true });
 });
+
+const crate = (name: string): string => `[package]\nname = "${name}"\nversion = "0.1.0"\n`;
+
+test("readModules groups a Cargo workspace by its crates", async () => {
+    const dir = await scaffold({
+        // A virtual manifest names no crate: the workspace root is not a module, as a pnpm root without a name.
+        "Cargo.toml": '[workspace]\nmembers = ["crates/*"]\n',
+        "Cargo.lock": "",
+        "crates/core/Cargo.toml": crate("shop-core"),
+        "crates/cli/Cargo.toml": crate("shop-cli"),
+        // A crate shipping an npm binding names itself by the package people import.
+        "bindings/node/Cargo.toml": crate("shop-napi"),
+        "bindings/node/package.json": pkg("@shop/native"),
+        // Not modules: a manifest mid-edit, one with no [package], and cargo's packaged copies under target/.
+        "crates/broken/Cargo.toml": "[package\nname =",
+        "crates/meta/Cargo.toml": "[dependencies]\n",
+        "target/package/shop-core-0.1.0/Cargo.toml": crate("shop-core"),
+    });
+
+    expect((await readModules(dir)).toSorted((a, b) => a.dir.localeCompare(b.dir))).toEqual([
+        { dir: "bindings/node", name: "@shop/native" },
+        { dir: "crates/cli", name: "shop-cli" },
+        { dir: "crates/core", name: "shop-core" },
+    ]);
+    await rm(dir, { recursive: true, force: true });
+});
+
+test("readModules takes a single crate's own Cargo.toml at the repo root, and keeps a target dir that is not cargo's", async () => {
+    const single = await scaffold({ "Cargo.toml": crate("shop"), "src/main.rs": "" });
+    expect(await readModules(single)).toEqual([{ dir: "", name: "shop" }]);
+
+    // `target` is only cargo's output beside a Cargo manifest; elsewhere it is an ordinary folder name.
+    const app = await scaffold({ "deploy/target/aws/package.json": pkg("@shop/aws") });
+    expect(await readModules(app)).toEqual([{ dir: "deploy/target/aws", name: "@shop/aws" }]);
+
+    await rm(single, { recursive: true, force: true });
+    await rm(app, { recursive: true, force: true });
+});

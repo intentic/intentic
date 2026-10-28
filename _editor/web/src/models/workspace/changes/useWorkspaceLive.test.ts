@@ -48,6 +48,11 @@ describe(`markWorkspaceChanged`, () => {
         expect(queryClient.getQueryState(modulesKey)?.isInvalidated).toBe(true);
     });
 
+    it(`re-reads the package layout when a Rust crate's manifest lands`, () => {
+        markWorkspaceChanged([`crates/new-crate/Cargo.toml`]);
+        expect(queryClient.getQueryState(modulesKey)?.isInvalidated).toBe(true);
+    });
+
     it(`re-reads the package layout on the empty "just refetch" batch, which is how a big scaffold arrives`, () => {
         markWorkspaceChanged([]);
         expect(queryClient.getQueryState(modulesKey)?.isInvalidated).toBe(true);

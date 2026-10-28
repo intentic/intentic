@@ -89,8 +89,10 @@ const refreshModules = throttleTrailing(() => void invalidatePushedQueries(query
 
 // True only when a manifest could exist among the paths (or the batch is empty — the daemon's own "too many
 // paths to list" signal, sent for a scaffold, branch switch, drop or reconnect too).
+// The manifests a module is named by (the daemon's workspace/deps/modules.ts): package.json, and a Rust crate's Cargo.toml.
+const MODULE_MANIFESTS = [`package.json`, `Cargo.toml`];
 const mayChangeModules = (paths: readonly string[]): boolean =>
-    paths.length === 0 || paths.some((path) => path === `package.json` || path.endsWith(`/package.json`));
+    paths.length === 0 || paths.some((path) => MODULE_MANIFESTS.some((manifest) => path === manifest || path.endsWith(`/${manifest}`)));
 
 /* DIRECTORIES THE LAST BATCH WROTE INTO, for listings the tree query can't refresh by itself: a lazily-loaded subtree
    sits outside that query, and a file landing in one leaves the eager tree byte-identical, so nothing else would say it
