@@ -49,11 +49,13 @@ const listener = computed(() => attrs[`onClick`]);
 const held = computed(() => attrs[`disabled`] === true || attrs[`disabled`] === `` || locked.value);
 const shown = computed(() => attrs[`loading`] === true || working.value);
 
-// Slots pass through except `default` (wrapped for the spinner) and `loadingicon` (defaults to our own glyph).
-const wrapped = computed(() => slots[`default`] !== undefined);
+// Slots pass through except `default` (wrapped for the spinner) and `loadingicon` (defaults to our own glyph). Read while
+// rendering, never cached: slots are not reactive, so a computed would keep the first render's set and drop a slot a
+// caller adds later (an `#icon` that appears once a change needs a passkey).
 const OWN = new Set([`default`, `loadingicon`]);
-const forwarded = computed(() => Object.keys(slots).filter((name) => !OWN.has(name)));
-const ownSpinner = computed(() => slots[`loadingicon`] === undefined);
+const wrapped = (): boolean => slots[`default`] !== undefined;
+const forwarded = (): string[] => Object.keys(slots).filter((name) => !OWN.has(name));
+const ownSpinner = (): boolean => slots[`loadingicon`] === undefined;
 </script>
 
 <template>
@@ -62,13 +64,13 @@ const ownSpinner = computed(() => slots[`loadingicon`] === undefined);
         :disabled="held"
         :loading="shown"
         :aria-busy="shown || undefined"
-        :class="wrapped ? `relative` : ``"
+        :class="wrapped() ? `relative` : ``"
         @click="press(listener, $event)"
     >
-        <template v-for="name in forwarded" #[name]="slotProps" :key="name"><slot :name="name" v-bind="slotProps ?? {}" /></template>
-        <template v-if="ownSpinner" #loadingicon><Icon name="spinner" spin /></template>
+        <template v-for="name in forwarded()" #[name]="slotProps" :key="name"><slot :name="name" v-bind="slotProps ?? {}" /></template>
+        <template v-if="ownSpinner()" #loadingicon><Icon name="spinner" spin /></template>
         <template v-else #loadingicon="slotProps"><slot name="loadingicon" v-bind="slotProps ?? {}" /></template>
-        <template v-if="wrapped" #default>
+        <template v-if="wrapped()" #default>
             <!-- While the spinner shows: `visibility` hides the content so the button doesn't resize, and `display: contents` keeps
                  the children direct flex items. Only for that wait, so a button at rest holds its content and nothing else. -->
             <template v-if="shown">

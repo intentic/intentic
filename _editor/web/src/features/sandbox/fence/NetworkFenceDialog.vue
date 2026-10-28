@@ -1,9 +1,12 @@
 <!-- THE NETWORK FENCE OF ONE SANDBOX: what it may reach on the networks around the machine it runs on. The internet
      stays open either way; `Internet only` refuses the LAN, the machine itself, networks reached through a VPN and
-     link-local metadata, except the exceptions listed. The state ic reports leads, then the switch, the exceptions,
-     and the two places an exception is offered from: what the fence refused lately, and what this sandbox's own cards
-     dial. Saving a change that only tightens sends it; one that loosens asks for the owner's passkey first
-     (networkFence.ts), and says what to do instead where that cannot happen here. -->
+     link-local metadata, except the exceptions listed. A failure of the state ic reports leads, then the switch and the
+     drawing of what it means (FenceReach.vue), which stands in for the sentences that used to explain it. Everything
+     below is about a fence that is on, so it shows only while the draft is: the ways around it, the exceptions, and the
+     two places an exception is offered from, what the fence refused lately and what this sandbox's own cards dial.
+     Exceptions held while it is off still show, so they are not hidden by a switch. Saving a change that only tightens
+     sends it; one that loosens asks for the owner's passkey first (networkFence.ts, the Save button says so), and says
+     what to do instead where that cannot happen here. -->
 <script setup lang="ts">
 import type {
     EgressAllow,
@@ -34,14 +37,13 @@ import {
     withoutException,
 } from "../../../models/sandbox/devices/egressFlow";
 import { accessPath } from "../../../models/sandbox/sandboxNav";
+import FenceReach from "./FenceReach.vue";
 import { readOwnerKeys, sendFence, signStanding } from "./networkFence";
 
 const t = useT();
 
-const { open, name, machine, hostId, target, status } = defineProps<{
+const { open, machine, hostId, target, status } = defineProps<{
     open: boolean;
-    /** The sandbox, as its card titles it. */
-    name: string;
     /** The machine it runs on, as the page names it. */
     machine: string;
     hostId: string;
@@ -91,6 +93,7 @@ const profile = computed<EgressProfile>({
     get: () => draft.value.profile,
     set: (value) => (draft.value = { ...draft.value, profile: value }),
 });
+const fenced = computed(() => profile.value === `internet-only`);
 // Protocol names are the same in every language, and the catalog says them too, so the check reading this file can.
 const PROTOCOLS = computed(() => [
     { value: `both`, label: t(`sandbox.networkFence.tcpUdp`) },
@@ -102,7 +105,7 @@ const PROFILES = computed(() => [
     { label: t(`sandbox.networkFence.internetOnly`), value: `internet-only` as const },
 ]);
 
-// The state ic reports, as the one sentence each needs; nothing while the fence is simply off.
+// The state ic reports, as the one sentence each needs; nothing while the fence is simply in force or off.
 const notes = computed(() => {
     const said: { readonly key: string; readonly tone: `warning` | `danger` | `info`; readonly text: string }[] = [];
     if (status?.state === `failed`) {
@@ -116,14 +119,16 @@ const notes = computed(() => {
     } else if (status?.state === `unsupported`) {
         said.push({ key: `unsupported`, tone: `warning`, text: t(`sandbox.networkFence.unsupported`) });
     }
-    if (status?.advisory === true && status.effectiveProfile !== `open`) {
-        said.push({ key: `advisory`, tone: `warning`, text: t(`sandbox.networkFence.advisory`) });
-    }
-    if (status?.hostShell === true) {
-        said.push({ key: `hostShell`, tone: `warning`, text: t(`sandbox.networkFence.hostShell`, { machine }) });
-    }
     return said;
 });
+// The ways around a fence, said once beneath the drawing and only while the draft puts one up: with it off there is
+// nothing to step around.
+const bypass = computed(() =>
+    [
+        status?.advisory === true ? t(`sandbox.networkFence.advisory`, { machine }) : undefined,
+        status?.hostShell === true ? t(`sandbox.networkFence.hostShell`, { machine }) : undefined,
+    ].filter((line) => line !== undefined),
+);
 
 const allow = (entry: EgressAllow): void => {
     draft.value = withException({ ...draft.value, profile: `internet-only` }, entry);
@@ -190,24 +195,21 @@ const save = async (): Promise<void> => {
     <Modal
         :open="open"
         size="md"
-        :header="t(`sandbox.networkFence.title`, { name })"
-        :description="t(`sandbox.networkFence.lead`, { machine })"
+        :header="t(`sandbox.networkFence.title`)"
         @update:open="emit(`close`)"
     >
         <div class="flex flex-col gap-5">
             <Notice v-for="note in notes" :key="note.key" :tone="note.tone" size="sm">{{ note.text }}</Notice>
 
-            <div class="flex flex-col gap-1.5">
-                <SegmentedControl v-model="profile" :options="PROFILES" size="sm" />
-                <p class="text-xs text-muted">
-                    {{ profile === `open` ? t(`sandbox.networkFence.offMeans`) : t(`sandbox.networkFence.internetOnlyMeans`) }}
-                </p>
-                <p v-if="(status?.neverAllow.length ?? 0) > 0" class="text-2xs text-subtle">
-                    {{ t(`sandbox.networkFence.neverAllow`, { machine, list: status?.neverAllow.join(`, `) }) }}
-                </p>
+            <div class="flex flex-col gap-4">
+                <SegmentedControl v-model="profile" :options="PROFILES" size="sm" class="self-start" />
+                <FenceReach :fenced="fenced" :machine="machine" />
+                <Notice v-if="fenced && bypass.length > 0" tone="warning" size="sm">
+                    <span v-for="(line, index) in bypass" :key="line" class="block" :class="index > 0 && `mt-1`">{{ line }}</span>
+                </Notice>
             </div>
 
-            <RowGroup :label="t(`sandbox.networkFence.exceptions`)">
+            <RowGroup v-if="fenced || draft.allow.length > 0" :label="t(`sandbox.networkFence.exceptions`)">
                 <template #actions>
                     <Button
                         size="small"
@@ -279,11 +281,14 @@ const save = async (): Promise<void> => {
                         />
                     </template>
                 </Row>
-                <RowNote v-if="draft.allow.length === 0 && !form" variant="empty">{{ t(`sandbox.networkFence.noExceptions`) }}</RowNote>
-                <RowNote v-else-if="profile === `open` && draft.allow.length > 0">{{ t(`sandbox.networkFence.keptWhileOff`) }}</RowNote>
+                <RowNote v-if="draft.allow.length === 0 && !form">{{ t(`sandbox.networkFence.noExceptions`) }}</RowNote>
+                <RowNote v-else-if="!fenced && draft.allow.length > 0">{{ t(`sandbox.networkFence.keptWhileOff`) }}</RowNote>
+                <RowNote v-if="fenced && (status?.neverAllow.length ?? 0) > 0">{{
+                    t(`sandbox.networkFence.neverAllow`, { machine, list: status?.neverAllow.join(`, `) })
+                }}</RowNote>
             </RowGroup>
 
-            <RowGroup v-if="blocked.length > 0" :label="t(`sandbox.networkFence.recentlyBlocked`)">
+            <RowGroup v-if="fenced && blocked.length > 0" :label="t(`sandbox.networkFence.recentlyBlocked`)">
                 <Row v-for="entry in blocked" :key="`${entry.to}:${entry.port ?? ``}:${entry.protocol}`" :description="blockedWords(entry)">
                     <template #title
                         ><span class="font-mono">{{ blockedTitle(entry) }}</span></template
@@ -297,7 +302,7 @@ const save = async (): Promise<void> => {
                 </Row>
             </RowGroup>
 
-            <RowGroup v-if="suggested.length > 0" :label="t(`sandbox.networkFence.suggested`)">
+            <RowGroup v-if="fenced && suggested.length > 0" :label="t(`sandbox.networkFence.suggested`)">
                 <Row v-for="entry in suggested" :key="`${entry.from}:${entry.to}`" :description="exceptionWords(entry)">
                     <template #title
                         ><span class="font-mono">{{ entry.to }}</span></template
@@ -324,7 +329,6 @@ const save = async (): Promise<void> => {
                     </li>
                 </ol>
             </div>
-            <p v-else-if="needsProof" class="text-xs text-muted">{{ t(`sandbox.networkFence.willAsk`) }}</p>
 
             <Notice v-if="failure" tone="danger" size="sm">{{ failure }}</Notice>
         </div>

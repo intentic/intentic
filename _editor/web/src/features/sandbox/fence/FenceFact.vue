@@ -73,7 +73,6 @@ const saved = (message: string): void => {
         <NetworkFenceDialog
             v-if="editable && hostId !== undefined"
             :open="opened"
-            :name="group.title"
             :machine="machine.label"
             :host-id="hostId"
             :target="target"

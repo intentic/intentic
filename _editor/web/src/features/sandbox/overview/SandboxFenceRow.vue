@@ -55,7 +55,6 @@ const saved = (message: string): void => {
         <NetworkFenceDialog
             v-if="canShip && fences && hostId !== undefined"
             :open="opened"
-            :name="sandbox.active.value?.name ?? slug ?? ``"
             :machine="door?.label ?? ``"
             :host-id="hostId"
             :target="target"
