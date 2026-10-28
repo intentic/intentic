@@ -21,6 +21,17 @@ const execFileAsync = promisify(execFile);
 const PARENT_MAIN_REF = "refs/runner-parent/main";
 const PARENT_TURN_REF = "refs/runner-parent/turn";
 
+// One sync at a time on this runner. Every pull moves the same parking refs and checks out the same main line in the
+// shared working dir, so two conversations dispatched here together (a fan-out) would otherwise race on the repo's
+// index.lock and on each other's parked refs, failing one turn before it starts.
+let gitWork: Promise<unknown> = Promise.resolve();
+const exclusively = <T>(work: () => Promise<T>): Promise<T> => {
+    const run = gitWork.then(work, work);
+    // allow(silent-catch): the failure is the caller's, through `run`; the chain only needs to know this one is over.
+    gitWork = run.catch(() => undefined);
+    return run;
+};
+
 export interface RunnerSyncDeps {
     readonly workspaceRoot: string;
     readonly historyRoot: string;
@@ -77,7 +88,13 @@ const ensureRepo = async (deps: RunnerSyncDeps, identity: RunnerIdentity, repo: 
     return workingDir;
 };
 
-export const syncFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> => {
+export const syncFromParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
+    exclusively(() => pullFromParent(deps, identity, input, onLine));
+
+export const pushToParent = (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> =>
+    exclusively(() => deliverToParent(deps, identity, input, onLine));
+
+const pullFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> => {
     for (const { repo, dir, mainBranch } of input.repos) {
         const workingDir = await ensureRepo(deps, identity, repo, dir);
         const url = runnerGitUrl(identity.parentUrl, repo);
@@ -108,7 +125,7 @@ export const syncFromParent = async (deps: RunnerSyncDeps, identity: RunnerIdent
     }
 };
 
-export const pushToParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> => {
+const deliverToParent = async (deps: RunnerSyncDeps, identity: RunnerIdentity, input: RunnerSync, onLine: (line: string) => void): Promise<void> => {
     for (const { repo, dir } of input.repos) {
         const workingDir = workingDirOf(deps, dir);
         const url = runnerGitUrl(identity.parentUrl, repo);

@@ -113,6 +113,20 @@ test("a conversation branch that failed to fetch for any other reason fails the 
     expect(said.some((line) => line.includes("starting it at"))).toBe(false);
 });
 
+// A fan-out dispatches several conversations to one runner at once; each pull must still get through.
+test("concurrent pulls into one mirror all succeed", async () => {
+    const runner = freshRunner();
+    await git(parentWork, ["branch", "-f", "agent/conv2", mainBranch]);
+    await git(parentWork, ["branch", "-f", "agent/conv3", mainBranch]);
+    const pulls = ["agent/conv1", "agent/conv2", "agent/conv3"].map((branch) =>
+        syncFromParent(runner, identity, { ...sync("pull"), branch }, () => undefined),
+    );
+    await expect(Promise.all(pulls)).resolves.toBeDefined();
+    for (const branch of ["agent/conv1", "agent/conv2", "agent/conv3"]) {
+        expect(await git(runner.workspaceRoot, ["rev-parse", branch])).toBe(await git(parentWork, ["rev-parse", branch]));
+    }
+});
+
 test("push lands on the incoming ref, and the checked-out main branch refuses a push outright", async () => {
     await git(runnerWork, ["switch", "agent/conv1"]);
     await writeFile(join(runnerWork, "work.md"), "what the runner did\n");
