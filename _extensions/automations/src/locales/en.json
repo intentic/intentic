@@ -2,22 +2,15 @@
     "automationComposer": {
         "anyExternalSystemWake": "Any external system can wake this automation by POSTing this URL.",
         "automationCreatedWireUp": "Automation created: wire up the webhook:",
-        "cancel": "Cancel",
-        "clearTemplate": "Clear template",
         "close": "Close",
         "codeChores": "Code chores",
-        "copyEmbedSnippet": "Copy the embed snippet for {id}",
         "copyWebhookUrl": "Copy webhook URL for {id}",
-        "create": "Create",
         "done": "Done",
-        "filterTemplates": "Filter templates…",
         "visitorChatCreatedDrop": "Visitor chat created: drop this into your site:",
         "integrations": "Integrations",
-        "newAutomation": "New automation",
-        "noTemplateMatches": "No template matches.",
         "onAnyPageListed": "on any page you listed above. The launcher appears in the corner; visitor conversations show up on your agents board, where you can watch and take over.",
         "pasteBefore": "Paste it before",
-        "startTemplate": "Start from a template"
+        "copyEmbedSnippet": "Copy the embed snippet for {id}"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "About a second of each visitor's browser time. No keys.",
@@ -45,7 +38,6 @@
         "every": "Every",
         "everyRepoChangeTouched": "every repo the change touched",
         "everyoneElse": "Everyone else",
-        "fires": "Fires",
         "firesIn": "Fires {when}.",
         "fri": "Fri",
         "moveUp": "Move up",
@@ -87,7 +79,6 @@
         "onePerLineScheme": "One per line, scheme and host only. www and the bare domain count separately.",
         "onlyAgentsWorkActually": "Only when an agent's work actually reaches your workspace.",
         "onlyAllowedSitesDaily": "Only the allowed sites and the daily limit are left.",
-        "onlyOnce": "Only once",
         "onlyRepoOptional": "Only this repo (optional)",
         "peopleRuleNames": "People rule {index} names",
         "persona": "Speaks as",
@@ -106,7 +97,6 @@
         "runsOn": "Runs on",
         "sStarterSendsDifferent": "This is {label}'s starter, but {label2} sends a different payload.",
         "sStarterYoursTo": "{label}'s starter, yours to rewrite.",
-        "sandboxClock": "This sandbox ({zone})",
         "sat": "Sat",
         "schedule": "Schedule",
         "seconds": "seconds",
@@ -165,8 +155,6 @@
         "noteHint": "One line on what it is for. Its notifications lead with it.",
         "stopAfterFirstFire": "Stop after the first fire",
         "endsOn": "Ends",
-        "endDate": "End date",
-        "noEndDate": "No end date",
         "endsCaption": "It switches itself off {when} and tells you.",
         "if": "If",
         "whatHasToBeTrue": "What has to be true first. No model runs to check it.",
@@ -614,5 +602,61 @@
             "delegate": "No subagents",
             "sandbox": "No sandbox settings"
         }
+    },
+    "zonePicker": {
+        "sandbox": "This sandbox's clock",
+        "yours": "Your clock",
+        "every": "Every time zone"
+    },
+    "momentField": {
+        "time": "Time of day"
+    },
+    "endsFields": {
+        "onDate": "End on a date"
+    },
+    "whenProperty": {
+        "when": "When",
+        "change": "Change when it runs: {now}",
+        "pickMoment": "Pick a moment",
+        "webhook": "When its webhook is called",
+        "urlAfter": "Its URL is shown once it is created"
+    },
+    "endsProperty": {
+        "never": "Never",
+        "first": "After its first fire",
+        "on": "On {at}",
+        "firstOrDate": "After its first fire, or on {at}",
+        "change": "Change when it ends: {now}"
+    },
+    "thenProperty": {
+        "agent": "Starts a new agent",
+        "conversation": "Continues a conversation",
+        "pickConversation": "Pick a conversation to continue",
+        "change": "Change what it sets off: {now}"
+    },
+    "automationDraft": {
+        "done": "Done",
+        "newAutomation": "New automation",
+        "name": "Name",
+        "namePlaceholder": "Name it, e.g. morning-briefing",
+        "note": "Note",
+        "notePlaceholder": "Add a one-line note on what it is for",
+        "create": "Create",
+        "cancel": "Cancel",
+        "close": "Close",
+        "allSettings": "All settings",
+        "back": "Back",
+        "instructions": "Instructions",
+        "message": "Message",
+        "instructionsPlaceholder": "What should the agent do when it wakes? Write it as you would ask in a chat.",
+        "check": "Check",
+        "site": "On your site",
+        "template": "Start from a template"
+    },
+    "scheduleFields": {
+        "on": "On",
+        "cron": "Cron",
+        "clock": "Clock",
+        "onlyAfter": "Only after"
     }
 }

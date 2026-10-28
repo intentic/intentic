@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { type Cross, placeAnchored, type Placement, type Side } from "../../lib/anchorPlacement.js";
+import { useOverlayNest } from "./overlayNest.js";
 import { provideSurfaceGround } from "./surfaceGround.js";
 
 const {
@@ -33,6 +34,8 @@ provideSurfaceGround();
 const open = defineModel<boolean>({ required: true });
 
 const box = ref<HTMLElement>();
+// Panels opened from inside this one (a picker in a popover) count as inside it (overlayNest.ts).
+const nest = useOverlayNest(() => box.value);
 // Undefined until measured; parked off-screen via one :style binding, never written to imperatively.
 const placement = ref<Placement>();
 
@@ -79,14 +82,15 @@ const onPointerDown = (event: Event): void => {
         return;
     }
     // Excludes the anchor so its own click still toggles, rather than dismissing right before it reopens.
-    if (box.value?.contains(target) === true || anchor?.contains(target) === true) {
+    if (nest.holds(target) || anchor?.contains(target) === true) {
         return;
     }
     open.value = false;
 };
 
 const onKeydown = (event: KeyboardEvent): void => {
-    if (event.key === `Escape`) {
+    // The newest panel's Escape: a picker open inside this popover closes, and the popover stays.
+    if (event.key === `Escape` && !nest.covered()) {
         open.value = false;
     }
 };
@@ -108,6 +112,7 @@ const disarm = (): void => {
     armed.view.removeEventListener(`blur`, onBlur);
     armed.observer.disconnect();
     armed = undefined;
+    nest.closed();
 };
 
 const arm = (): void => {
@@ -127,6 +132,7 @@ const arm = (): void => {
     const observer = new view.ResizeObserver(() => reposition());
     observer.observe(box.value);
     armed = { doc, view, observer };
+    nest.opened();
 };
 
 watch(

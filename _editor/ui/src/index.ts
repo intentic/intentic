@@ -290,6 +290,9 @@ export { SurfaceGround } from "./components/overlays/surfaceGround.js";
 export { default as RowNote } from "./components/rows/RowNote.vue";
 // A row a thumb swipes aside to take its one action (archive, take back); the action keeps a press of its own elsewhere.
 export { type SwipeAction, default as SwipeRow } from "./components/rows/SwipeRow.vue";
+// The app's own day and time-of-day fields, in place of the browser's date popup and hour spinner.
+export { default as DatePicker } from "./components/forms/DatePicker.vue";
+export { default as TimeField } from "./components/forms/TimeField.vue";
 export { default as SearchBar } from "./components/forms/SearchBar.vue";
 export { default as SegmentedControl } from "./components/forms/SegmentedControl.vue";
 // ProgressRing's countable sibling: one arc per item, for progress through a list rather than a fraction.

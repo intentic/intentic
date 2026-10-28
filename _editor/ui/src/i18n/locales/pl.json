@@ -457,5 +457,9 @@
         "failed": "Nie udało się sprawdzić, czy jest coś nowszego: {error}",
         "offline": "Sandbox nie odpowiada, więc widzisz to, co pokazał ostatnio",
         "updated": "Zaktualizowano {ago}"
+    },
+    "datePicker": {
+        "previousMonth": "Poprzedni miesiąc",
+        "nextMonth": "Następny miesiąc"
     }
 }

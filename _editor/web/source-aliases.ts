@@ -119,8 +119,8 @@ export const sourceAliases = (): Record<string, string> => ({
     // desktop link policy, which loads with nothing booted.
     "@intentic/ui/event-target": fromRoot("_editor/ui/src/lib/input/eventTarget.ts"),
     "@intentic/ui/keys": fromRoot("_editor/ui/src/lib/input/keys.ts"),
-    // Date/byte/token formatting used by pure projections (history day labels, usage window resets) whose unit tests
-    // run without a DOM.
+    // Days, clocks, dates, bytes and tokens for pure projections (history day labels, the send-later grid), tested DOM-free.
+    "@intentic/ui/clock": fromRoot("_editor/ui/src/lib/clock.ts"),
     "@intentic/ui/format": fromRoot("_editor/ui/src/lib/format.ts"),
     // Edit scripts and word segments, pure, under the prose and table diffs and the viewers' redline; their unit tests
     // run without a DOM.

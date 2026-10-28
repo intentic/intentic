@@ -457,5 +457,9 @@
         "failed": "Impossible de vérifier s'il y a plus récent : {error}",
         "offline": "La sandbox ne répond pas : voici ce qu'elle a affiché en dernier",
         "updated": "Mis à jour {ago}"
+    },
+    "datePicker": {
+        "previousMonth": "Mois précédent",
+        "nextMonth": "Mois suivant"
     }
 }

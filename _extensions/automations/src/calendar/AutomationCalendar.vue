@@ -410,7 +410,7 @@ const HOUR_LINES = {
                             <span v-if="!cramped && placed.columns === 1" class="shrink-0 tabular-nums opacity-75">{{ formatClock(placed.item.at) }}</span>
                         </button>
 
-                        <!-- The moment the composer above is setting, held in place until it is saved or dropped. -->
+                        <!-- The moment the draft above is setting, held in place until it is saved or dropped. -->
                         <div
                             v-if="draftSlot?.day === column.index"
                             class="pointer-events-none absolute inset-x-0.5 z-2 flex items-center gap-1 rounded-md border border-dashed border-primary-500 bg-primary-500/15 px-1.5 text-2xs font-medium text-link"

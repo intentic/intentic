@@ -7,4 +7,6 @@
 // itself (⌃A, ⌃K, ⌥←, ⌘⌫). Additive: a manifest without `mac` is unchanged. The recorded surface grows the manifest
 // schema.
 // 2.36.0 records settings choice labels and explanations alongside the Mac shortcut schema.
-export const extensionApiVersion = "2.36.0";
+// 2.37.0 adds the kit's own day and time fields, `DatePicker` and `TimeField`, in place of the browser's date popup and
+// hour spinner. Additive.
+export const extensionApiVersion = "2.37.0";

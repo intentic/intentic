@@ -2,22 +2,15 @@
     "automationComposer": {
         "anyExternalSystemWake": "Dowolny system zewnętrzny może obudzić tę automatyzację, wysyłając POST na ten adres.",
         "automationCreatedWireUp": "Automatyzacja utworzona: podepnij webhooka:",
-        "cancel": "Anuluj",
-        "clearTemplate": "Wyczyść szablon",
         "close": "Zamknij",
         "codeChores": "Zadania przy kodzie",
-        "copyEmbedSnippet": "Kopiuj fragment osadzenia dla {id}",
         "copyWebhookUrl": "Kopiuj adres webhooka dla {id}",
-        "create": "Utwórz",
         "done": "Gotowe",
-        "filterTemplates": "Filtruj szablony…",
         "integrations": "Integracje",
-        "newAutomation": "Nowa automatyzacja",
-        "noTemplateMatches": "Żaden szablon nie pasuje.",
         "onAnyPageListed": "na każdej stronie, którą wypisałeś powyżej. Uruchamiacz pojawia się w rogu; rozmowy odwiedzających trafiają na Twoją tablicę agentów, gdzie możesz je oglądać i przejmować.",
         "pasteBefore": "Wklej to przed",
-        "startTemplate": "Wyjdź od szablonu",
-        "visitorChatCreatedDrop": "Recepcja utworzona: wrzuć to na swoją stronę:"
+        "visitorChatCreatedDrop": "Recepcja utworzona: wrzuć to na swoją stronę:",
+        "copyEmbedSnippet": "Kopiuj fragment osadzenia dla {id}"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Około sekundy czasu przeglądarki każdego odwiedzającego. Żadnych kluczy.",
@@ -45,7 +38,6 @@
         "every": "Co",
         "everyRepoChangeTouched": "każde repozytorium, którego dotknęła zmiana",
         "everyoneElse": "Wszyscy pozostali",
-        "fires": "Uruchamia się",
         "firesIn": "Uruchamia się {when}.",
         "fri": "pt",
         "googleClientId": "Identyfikator klienta Google",
@@ -95,7 +87,6 @@
         "onePerLineScheme": "Po jednym w wierszu, tylko schemat i host. www i goła domena liczą się osobno.",
         "onlyAgentsWorkActually": "Tylko wtedy, gdy praca agenta faktycznie dociera do Twojej przestrzeni roboczej.",
         "onlyAllowedSitesDaily": "Zostają tylko dozwolone witryny i dzienny limit.",
-        "onlyOnce": "Tylko raz",
         "onlyRepoOptional": "Tylko to repozytorium (opcjonalnie)",
         "othersCaption": {
             "allow": "Każdy, kogo nie wymieniono, dostaje odpowiedź jako persona powyżej — tak działała ta automatyzacja, zanim miała reguły.",
@@ -121,7 +112,6 @@
         "runsOn": "Działa na",
         "sStarterSendsDifferent": "To jest rozrusznik {label}, ale {label2} wysyła inny ładunek.",
         "sStarterYoursTo": "Rozrusznik {label}, do przepisania po swojemu.",
-        "sandboxClock": "Ten sandbox ({zone})",
         "sat": "sob",
         "schedule": "Harmonogram",
         "seconds": "sekund",
@@ -165,8 +155,6 @@
         "noteHint": "Jedna linijka o tym, po co jest. Od niej zaczynają się jej powiadomienia.",
         "stopAfterFirstFire": "Wyłącz po pierwszym uruchomieniu",
         "endsOn": "Kończy się",
-        "endDate": "Data zakończenia",
-        "noEndDate": "Bez daty zakończenia",
         "endsCaption": "Wyłączy się sama {when} i da ci znać.",
         "if": "Jeśli",
         "whatHasToBeTrue": "Co musi być prawdą najpierw. Do sprawdzenia nie uruchamia się żaden model.",
@@ -614,5 +602,61 @@
             "delegate": "Bez podagentów",
             "sandbox": "Bez ustawień piaskownicy"
         }
+    },
+    "zonePicker": {
+        "sandbox": "Zegar tego sandboxa",
+        "yours": "Twój zegar",
+        "every": "Wszystkie strefy czasowe"
+    },
+    "momentField": {
+        "time": "Godzina"
+    },
+    "endsFields": {
+        "onDate": "Zakończ w wybranym dniu"
+    },
+    "whenProperty": {
+        "when": "Kiedy",
+        "change": "Zmień, kiedy działa: {now}",
+        "pickMoment": "Wybierz moment",
+        "webhook": "Gdy zostanie wywołany jego webhook",
+        "urlAfter": "Jego adres pojawi się po utworzeniu"
+    },
+    "endsProperty": {
+        "never": "Nigdy",
+        "first": "Po pierwszym uruchomieniu",
+        "on": "{at}",
+        "firstOrDate": "Po pierwszym uruchomieniu lub {at}",
+        "change": "Zmień, kiedy się kończy: {now}"
+    },
+    "thenProperty": {
+        "agent": "Uruchamia nowego agenta",
+        "conversation": "Kontynuuje rozmowę",
+        "pickConversation": "Wybierz rozmowę do kontynuowania",
+        "change": "Zmień, co uruchamia: {now}"
+    },
+    "automationDraft": {
+        "done": "Gotowe",
+        "newAutomation": "Nowa automatyzacja",
+        "name": "Nazwa",
+        "namePlaceholder": "Nazwij ją, np. morning-briefing",
+        "note": "Notatka",
+        "notePlaceholder": "Dodaj jedno zdanie o tym, do czego służy",
+        "create": "Utwórz",
+        "cancel": "Anuluj",
+        "close": "Zamknij",
+        "allSettings": "Wszystkie ustawienia",
+        "back": "Wstecz",
+        "instructions": "Instrukcje",
+        "message": "Wiadomość",
+        "instructionsPlaceholder": "Co agent ma zrobić po przebudzeniu? Napisz to tak, jak poprosiłbyś na czacie.",
+        "check": "Sprawdzenie",
+        "site": "Na Twojej stronie",
+        "template": "Zacznij od szablonu"
+    },
+    "scheduleFields": {
+        "on": "W",
+        "cron": "Cron",
+        "clock": "Zegar",
+        "onlyAfter": "Dopiero po"
     }
 }

@@ -15,6 +15,7 @@
             "@intentic/ui/brand-color": ["../../_editor/ui/src/lib/brandColor.ts"],
             "@intentic/ui/brand-mark": ["../../_editor/ui/src/components/brand/brandMark.ts"],
             "@intentic/ui/dag": ["../../_editor/ui/src/components/charts/dagLayout.ts"],
+            "@intentic/ui/clock": ["../../_editor/ui/src/lib/clock.ts"],
             "@intentic/ui/format": ["../../_editor/ui/src/lib/format.ts"],
             "@intentic/ui/highlighter": ["../../_editor/ui/src/composables/useHighlighter.ts"],
             "@intentic/ui/icons": ["../../_editor/ui/src/icons/iconSets.ts"],

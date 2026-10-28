@@ -2,22 +2,15 @@
     "automationComposer": {
         "anyExternalSystemWake": "Jedes externe System kann diese Automation wecken, indem es an diese URL POSTet.",
         "automationCreatedWireUp": "Automation angelegt: verdrahten Sie den Webhook:",
-        "cancel": "Abbrechen",
-        "clearTemplate": "Vorlage leeren",
         "close": "Schließen",
         "codeChores": "Code-Hausarbeiten",
-        "copyEmbedSnippet": "Einbettungs-Schnipsel für {id} kopieren",
         "copyWebhookUrl": "Webhook-URL für {id} kopieren",
-        "create": "Erstellen",
         "done": "Fertig",
-        "filterTemplates": "Vorlagen filtern…",
         "visitorChatCreatedDrop": "Empfang angelegt: legen Sie das in Ihre Website:",
         "integrations": "Integrationen",
-        "newAutomation": "Neue Automation",
-        "noTemplateMatches": "Keine Vorlage passt.",
         "onAnyPageListed": "auf jeder Seite, die Sie oben aufgeführt haben. Der Launcher erscheint in der Ecke; Besucher-Unterhaltungen tauchen auf Ihrem Agenten-Board auf, wo Sie mitlesen und übernehmen können.",
         "pasteBefore": "Fügen Sie es ein vor",
-        "startTemplate": "Von einer Vorlage ausgehen"
+        "copyEmbedSnippet": "Einbettungs-Schnipsel für {id} kopieren"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Etwa eine Sekunde Browserzeit pro Besucher. Keine Schlüssel.",
@@ -45,7 +38,6 @@
         "every": "Alle",
         "everyRepoChangeTouched": "jedes Repo, das die Änderung berührt hat",
         "everyoneElse": "Alle anderen",
-        "fires": "Löst aus",
         "firesIn": "Löst {when} aus.",
         "fri": "Fr",
         "moveUp": "Nach oben",
@@ -87,7 +79,6 @@
         "onePerLineScheme": "Einer pro Zeile, nur Schema und Host. www und die nackte Domain zählen getrennt.",
         "onlyAgentsWorkActually": "Nur wenn die Arbeit eines Agenten tatsächlich Ihren Workspace erreicht.",
         "onlyAllowedSitesDaily": "Es bleiben nur die erlaubten Websites und das Tageslimit.",
-        "onlyOnce": "Nur einmal",
         "onlyRepoOptional": "Nur dieses Repo (optional)",
         "peopleRuleNames": "Namen für Personenregel {index}",
         "persona": "Spricht als",
@@ -106,7 +97,6 @@
         "runsOn": "Läuft auf",
         "sStarterSendsDifferent": "Das ist der Starter von {label}, aber {label2} sendet eine andere Nutzlast.",
         "sStarterYoursTo": "Starter von {label}, Ihrer zum Umschreiben.",
-        "sandboxClock": "Diese Sandbox ({zone})",
         "sat": "Sa",
         "schedule": "Zeitplan",
         "seconds": "Sekunden",
@@ -165,8 +155,6 @@
         "noteHint": "Eine Zeile dazu, wofür sie da ist. Ihre Benachrichtigungen beginnen damit.",
         "stopAfterFirstFire": "Nach dem ersten Auslösen stoppen",
         "endsOn": "Endet",
-        "endDate": "Enddatum",
-        "noEndDate": "Kein Enddatum",
         "endsCaption": "Sie schaltet sich {when} selbst ab und sagt Ihnen Bescheid.",
         "if": "Wenn",
         "whatHasToBeTrue": "Was zuerst zutreffen muss. Zur Prüfung läuft kein Modell.",
@@ -614,5 +602,61 @@
             "delegate": "Keine Unteragenten",
             "sandbox": "Keine Sandbox-Einstellungen"
         }
+    },
+    "zonePicker": {
+        "sandbox": "Uhr dieser Sandbox",
+        "yours": "Ihre Uhr",
+        "every": "Alle Zeitzonen"
+    },
+    "momentField": {
+        "time": "Uhrzeit"
+    },
+    "endsFields": {
+        "onDate": "An einem Datum beenden"
+    },
+    "whenProperty": {
+        "when": "Wann",
+        "change": "Ändern, wann es läuft: {now}",
+        "pickMoment": "Zeitpunkt wählen",
+        "webhook": "Wenn sein Webhook aufgerufen wird",
+        "urlAfter": "Seine URL erscheint nach dem Erstellen"
+    },
+    "endsProperty": {
+        "never": "Nie",
+        "first": "Nach dem ersten Auslösen",
+        "on": "Am {at}",
+        "firstOrDate": "Nach dem ersten Auslösen oder am {at}",
+        "change": "Ändern, wann es endet: {now}"
+    },
+    "thenProperty": {
+        "agent": "Startet einen neuen Agenten",
+        "conversation": "Setzt eine Unterhaltung fort",
+        "pickConversation": "Unterhaltung zum Fortsetzen wählen",
+        "change": "Ändern, was es auslöst: {now}"
+    },
+    "automationDraft": {
+        "done": "Fertig",
+        "newAutomation": "Neue Automatisierung",
+        "name": "Name",
+        "namePlaceholder": "Benennen, z. B. morning-briefing",
+        "note": "Notiz",
+        "notePlaceholder": "Eine Zeile dazu, wofür sie ist",
+        "create": "Erstellen",
+        "cancel": "Abbrechen",
+        "close": "Schließen",
+        "allSettings": "Alle Einstellungen",
+        "back": "Zurück",
+        "instructions": "Anweisungen",
+        "message": "Nachricht",
+        "instructionsPlaceholder": "Was soll der Agent tun, wenn er aufwacht? Schreiben Sie es wie in einem Chat.",
+        "check": "Prüfung",
+        "site": "Auf Ihrer Website",
+        "template": "Mit einer Vorlage beginnen"
+    },
+    "scheduleFields": {
+        "on": "Am",
+        "cron": "Cron",
+        "clock": "Uhr",
+        "onlyAfter": "Erst nach"
     }
 }

@@ -1,8 +1,9 @@
 <!-- Whether a fire goes ahead by itself, waits for the owner, or waits a while first: the setting that matters most about work nobody watches. -->
 <script setup lang="ts">
 import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
-import { Icon, ui } from "@intentic/extension-ui";
+import { ui } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import ChoiceList from "./ChoiceList.vue";
 import PropertyPopover from "./PropertyPopover.vue";
 import PropertyRow from "./PropertyRow.vue";
 import { EDITABLE_VALUE } from "./propertyLook";
@@ -86,23 +87,7 @@ const save = async (): Promise<void> => {
             :can-save="picked !== `delay` || seconds > 0"
             @save="save"
         >
-            <div class="flex flex-col gap-1" role="radiogroup" :aria-label="t(`gateProperty.label`)">
-                <button
-                    v-for="choice in CHOICES"
-                    :key="choice.value"
-                    type="button"
-                    role="radio"
-                    :aria-checked="picked === choice.value"
-                    class="flex items-start gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-content/5"
-                    @click="picked = choice.value"
-                >
-                    <Icon :name="picked === choice.value ? `check-circle` : `circle`" class="shrink-0 text-sm" :class="picked === choice.value ? `text-link` : `text-subtle`" />
-                    <span class="flex min-w-0 flex-col">
-                        <span class="text-sm text-content">{{ choice.title }}</span>
-                        <span class="text-xs text-subtle">{{ choice.note }}</span>
-                    </span>
-                </button>
-            </div>
+            <ChoiceList v-model="picked" :choices="CHOICES" :label="t(`gateProperty.label`)" />
             <label v-if="picked === `delay`" class="flex items-center gap-2 pl-9 text-xs text-muted">
                 {{ t(`gateProperty.waitFor`) }}
                 <input v-model.number="seconds" type="number" min="1" class="w-20" :class="ui.input()" />

@@ -2,22 +2,15 @@
     "automationComposer": {
         "anyExternalSystemWake": "Cualquier sistema externo puede despertar esta automatización haciendo POST a esta URL.",
         "automationCreatedWireUp": "Automatización creada: conecta el webhook:",
-        "cancel": "Cancelar",
-        "clearTemplate": "Vaciar la plantilla",
         "close": "Cerrar",
         "codeChores": "Tareas de código",
-        "copyEmbedSnippet": "Copiar el fragmento de inserción de {id}",
         "copyWebhookUrl": "Copiar la URL del webhook de {id}",
-        "create": "Crear",
         "done": "Hecho",
-        "filterTemplates": "Filtrar plantillas…",
         "visitorChatCreatedDrop": "Recepción creada: pon esto en tu sitio:",
         "integrations": "Integraciones",
-        "newAutomation": "Automatización nueva",
-        "noTemplateMatches": "Ninguna plantilla coincide.",
         "onAnyPageListed": "en cualquier página que hayas listado arriba. El lanzador aparece en la esquina; las conversaciones de visitantes salen en tu tablero de agentes, donde puedes mirar y tomar el relevo.",
         "pasteBefore": "Pégalo antes de",
-        "startTemplate": "Partir de una plantilla"
+        "copyEmbedSnippet": "Copiar el fragmento de inserción de {id}"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Alrededor de un segundo del tiempo de navegador de cada visitante. Sin claves.",
@@ -45,7 +38,6 @@
         "every": "Cada",
         "everyRepoChangeTouched": "todos los repos que tocó el cambio",
         "everyoneElse": "Todos los demás",
-        "fires": "Se dispara",
         "firesIn": "Se dispara {when}.",
         "fri": "Vie",
         "moveUp": "Subir",
@@ -87,7 +79,6 @@
         "onePerLineScheme": "Uno por línea, solo esquema y host. www y el dominio a secas cuentan por separado.",
         "onlyAgentsWorkActually": "Solo cuando el trabajo de un agente llega de verdad a tu espacio de trabajo.",
         "onlyAllowedSitesDaily": "Solo quedan los sitios permitidos y el límite diario.",
-        "onlyOnce": "Solo una vez",
         "onlyRepoOptional": "Solo este repo (opcional)",
         "peopleRuleNames": "Nombres de la regla de personas {index}",
         "persona": "Habla como",
@@ -106,7 +97,6 @@
         "runsOn": "Se ejecuta en",
         "sStarterSendsDifferent": "Este es el iniciador de {label}, pero {label2} envía una carga distinta.",
         "sStarterYoursTo": "Iniciador de {label}, tuyo para reescribirlo.",
-        "sandboxClock": "Este entorno ({zone})",
         "sat": "Sáb",
         "schedule": "Programación",
         "seconds": "segundos",
@@ -165,8 +155,6 @@
         "noteHint": "Una línea sobre su propósito. Sus notificaciones empiezan con ella.",
         "stopAfterFirstFire": "Detener tras la primera activación",
         "endsOn": "Termina",
-        "endDate": "Fecha de fin",
-        "noEndDate": "Sin fecha de fin",
         "endsCaption": "Se desactiva {when} y te avisa.",
         "if": "Si",
         "whatHasToBeTrue": "Qué debe cumplirse primero. No se ejecuta ningún modelo para comprobarlo.",
@@ -614,5 +602,61 @@
             "delegate": "Sin subagentes",
             "sandbox": "Sin ajustes del entorno"
         }
+    },
+    "zonePicker": {
+        "sandbox": "Reloj de este sandbox",
+        "yours": "Tu reloj",
+        "every": "Todas las zonas horarias"
+    },
+    "momentField": {
+        "time": "Hora del día"
+    },
+    "endsFields": {
+        "onDate": "Terminar en una fecha"
+    },
+    "whenProperty": {
+        "when": "Cuándo",
+        "change": "Cambiar cuándo se ejecuta: {now}",
+        "pickMoment": "Elige un momento",
+        "webhook": "Cuando se llama a su webhook",
+        "urlAfter": "Su URL aparece al crearla"
+    },
+    "endsProperty": {
+        "never": "Nunca",
+        "first": "Tras su primera ejecución",
+        "on": "El {at}",
+        "firstOrDate": "Tras su primera ejecución o el {at}",
+        "change": "Cambiar cuándo termina: {now}"
+    },
+    "thenProperty": {
+        "agent": "Inicia un agente nuevo",
+        "conversation": "Continúa una conversación",
+        "pickConversation": "Elige una conversación que continuar",
+        "change": "Cambiar lo que desencadena: {now}"
+    },
+    "automationDraft": {
+        "done": "Listo",
+        "newAutomation": "Nueva automatización",
+        "name": "Nombre",
+        "namePlaceholder": "Ponle nombre, p. ej. morning-briefing",
+        "note": "Nota",
+        "notePlaceholder": "Añade una línea sobre para qué sirve",
+        "create": "Crear",
+        "cancel": "Cancelar",
+        "close": "Cerrar",
+        "allSettings": "Todos los ajustes",
+        "back": "Atrás",
+        "instructions": "Instrucciones",
+        "message": "Mensaje",
+        "instructionsPlaceholder": "¿Qué debe hacer el agente al despertar? Escríbelo como lo pedirías en un chat.",
+        "check": "Comprobación",
+        "site": "En tu sitio",
+        "template": "Empezar con una plantilla"
+    },
+    "scheduleFields": {
+        "on": "Los",
+        "cron": "Cron",
+        "clock": "Reloj",
+        "onlyAfter": "Solo tras"
     }
 }

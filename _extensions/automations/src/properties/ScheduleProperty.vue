@@ -2,11 +2,12 @@
 <script setup lang="ts">
 import type { Automation, AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
 import { asZone, localZone, type Zone } from "@intentic/sandbox-contract/time";
-import { formatDateTime, formatWhen, ui } from "@intentic/extension-ui";
+import { formatDateTime, formatWhen } from "@intentic/extension-ui";
 import { computed, reactive, ref } from "vue";
 import { cronOf, defaultSchedule, instantOf, localInputOf, nextIn, parseCron, previewOf } from "../cronSchedule";
 import { scheduleSentence } from "../detail/scheduleWords";
-import ScheduleFields from "../ScheduleFields.vue";
+import MomentField from "../schedule/MomentField.vue";
+import ScheduleFields from "../schedule/ScheduleFields.vue";
 import { useSandboxZone } from "../useAutomations";
 import PropertyPopover from "./PropertyPopover.vue";
 import PropertyRow from "./PropertyRow.vue";
@@ -140,7 +141,7 @@ const save = async (): Promise<void> => {
             :saving="saving"
             :error="error"
             :can-save="canSave"
-            :wide="trigger.kind === `schedule`"
+            wide
             @save="save"
         >
             <ScheduleFields
@@ -152,12 +153,11 @@ const save = async (): Promise<void> => {
                 :zone="draftZone"
                 :sandbox-zone="sandboxZone"
             />
-            <label v-else class="ui-field">
-                <span class="ui-field-label">{{ t(`automationFields.fires`) }}</span>
-                <input v-model="onceAt" type="datetime-local" :class="ui.input()" />
+            <template v-else>
+                <MomentField v-model="onceAt" :min="Date.now()" />
                 <span v-if="onceError" class="text-xs text-danger">{{ onceError }}</span>
                 <span v-else-if="!Number.isNaN(onceInstant)" class="text-xs text-muted">{{ t(`automationFields.firesIn`, { when: nextIn(onceInstant) }) }}</span>
-            </label>
+            </template>
         </PropertyPopover>
     </PropertyRow>
 </template>

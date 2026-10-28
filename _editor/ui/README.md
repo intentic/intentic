@@ -50,7 +50,10 @@ flowchart LR
 - **Primitives, never their copies.** The section label's look (uppercase, tracked) is `SectionHeader`'s alone: a
   menu's group heading, a drawer's sub-label and a card's eyebrow are `<SectionHeader density="dense">` (or a
   `Section` around what they head), and words inside a row take no uppercase. A tab strip is `SegmentedControl`, a
-  search field `SearchBar` (whose `focus("end")` puts the caret after a prefix), an expanding row `DisclosureRow`. The
+  search field `SearchBar` (whose `focus("end")` puts the caret after a prefix), an expanding row `DisclosureRow`, a
+  day `DatePicker` and a time of day `TimeField` (never `type="date"`, `"time"` or `"datetime-local"`, whose popups are
+  the browser's own; their arithmetic is `src/lib/clock.ts`). An anchored panel opened from inside another counts as
+  inside it, so a picker in a popover neither closes it nor shares its Escape (`overlayNest.ts`). The
   `substitutes` check refuses each drawn by hand; a place the primitive cannot draw (a browser's page tabs, a commit
   graph's rows) says why with `allow(substitutes)`.
 - **Tones.** `src/lib/tone.ts` is the one tone vocabulary (`success`, `warning`, `danger`, `info`, `neutral`,

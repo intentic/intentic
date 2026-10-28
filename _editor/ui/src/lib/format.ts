@@ -58,6 +58,8 @@ const DATE_STYLES = {
     dayMonth: { month: `short`, day: `numeric` },
     // A month on its own, for a heading over what happened in it: "August".
     month: { month: `long` },
+    // A month with its year, over a date grid that pages through months: "October 2026".
+    monthYear: { month: `long`, year: `numeric` },
     // A month's short name, where a calendar's grid crosses into it: "Nov".
     monthShort: { month: `short` },
     // A weekday's short name, over a calendar's column: "Tue".
@@ -187,6 +189,9 @@ export const formatDateLong = (at: number | string): string => dateFormat(`dateL
 
 /** A month's own name, the year left to context: "August". For a heading over the things dated in it. */
 export const formatMonth = (at: number): string => dateFormat(`month`).format(at);
+
+/** A month with its year, over a date grid that pages through months: "October 2026". */
+export const formatMonthYear = (at: number): string => dateFormat(`monthYear`).format(at);
 
 /** A month's short name, where a calendar's grid crosses into it: "Nov". */
 export const formatMonthShort = (at: number): string => dateFormat(`monthShort`).format(at);

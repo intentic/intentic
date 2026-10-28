@@ -46,6 +46,10 @@
             "types": "./src/components/brand/brandMark.ts",
             "default": "./src/components/brand/brandMark.ts"
         },
+        "./clock": {
+            "types": "./src/lib/clock.ts",
+            "default": "./src/lib/clock.ts"
+        },
         "./format": {
             "types": "./src/lib/format.ts",
             "default": "./src/lib/format.ts"

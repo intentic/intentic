@@ -457,5 +457,9 @@
         "failed": "Couldn't check for anything newer: {error}",
         "offline": "The sandbox isn't answering, so this is what it showed last",
         "updated": "Updated {ago}"
+    },
+    "datePicker": {
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month"
     }
 }

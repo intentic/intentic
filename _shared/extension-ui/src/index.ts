@@ -151,6 +151,9 @@ export {
     SectionHeader,
     SearchBar,
     SegmentedControl,
+    // A day off a month's grid and a typed time of day with its list: never the browser's own date and time popups.
+    DatePicker,
+    TimeField,
     seriesColor,
     sinceOf,
     // Deprecated (2026-10-20) with SkeletonSnapshot and vSkeletonSource: <Await> holds all three.

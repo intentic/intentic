@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import type { FireOn, SenderSeen, WatchCheckResult } from "@intentic/sandbox-contract/schemas/automations";
+import type { SenderSeen } from "@intentic/sandbox-contract/schemas/automations";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { canonicalHarness, loopLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
 import {
     Button,
     Icon,
@@ -14,17 +13,17 @@ import {
     SegmentedControl,
     ToggleSwitch,
     ui,
-    vAction,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import AutomationLabels from "./AutomationLabels.vue";
-import ScheduleFields from "./ScheduleFields.vue";
-import { glyph } from "./catalog";
-import { nextIn, since } from "./cronSchedule";
+import ConditionFields from "./fields/ConditionFields.vue";
+import TriggerFields from "./fields/TriggerFields.vue";
+import { useTriggerKinds } from "./fields/triggerKinds";
+import EndsFields from "./schedule/EndsFields.vue";
+import { since } from "./cronSchedule";
 import { host } from "./host";
-import { useCiDelivery } from "./useCiDelivery";
-import { useConversations, useSenders, useWatchCheck } from "./useAutomations";
-import { type AutomationFormState, type ConditionKind, type SenderRuleDraft, splitIds, type TargetKind, type TriggerKind } from "./useAutomationForm";
+import { useConversations, useSenders } from "./useAutomations";
+import { type AutomationFormState, type SenderRuleDraft, splitIds, type TargetKind } from "./useAutomationForm";
 import { t } from "./i18n.js";
 import ServicePicker from "./service/ServicePicker.vue";
 import { usePersonaOptions } from "./persona/personaOptions";
@@ -41,15 +40,8 @@ const props = defineProps<{
 
 const {
     form,
-    schedule,
     isVisitorChat,
     listenerSource,
-    branchField,
-    liveSources,
-    visibleSources,
-    cronPreview,
-    effectiveZone,
-    sandboxZone,
     starterPrompt,
     staleStarter,
     applyStarter,
@@ -57,20 +49,15 @@ const {
     markTouched,
     nameError,
     promptError,
-    originsError,
     modelsError,
     sendersOffered,
     addSenderRule,
     removeSenderRule,
     sendersError,
-    onceAt,
-    onceError,
     targetsOffered,
     effectiveTarget,
     needsModels,
     retireOffered,
-    watchSource,
-    conditionError,
     expiresAt,
     expiresError,
     conversationError,
@@ -79,6 +66,7 @@ const {
 // Who its wakes act as: the built-ins and the cards, for the automation and for each sender rule, and the one sentence
 // under the picker when a card it names is gone (personaOptions.ts).
 const { personaOptions, rulePersonaOptions, personaHint } = usePersonaOptions(form, isVisitorChat);
+const { TRIGGER_TABS, whenCaption, kind } = useTriggerKinds(props.state);
 
 // Who has written to this source, by name, so a rule is filled by a click rather than a copied id; read only while the
 // block is open.
@@ -117,111 +105,12 @@ const othersCaption = (others: (typeof OTHERS_OPTIONS.value)[number][`value`]): 
         allow: t(`automationFields.othersCaption.allow`),
     })[others];
 
-// CI's delivery path: instant, polled, or never; fetched only while a CI trigger is on screen.
-const isCi = computed(() => form.kind === `listener` && form.provider === `ci`);
-const { delivery } = useCiDelivery(
-    isCi,
-    computed(() => form.channelId),
-);
-const DELIVERY_TONE = {
-    ok: `text-muted`,
-    polling: `text-warning`,
-    none: `text-danger`,
-} as const;
-const DELIVERY_ICON = {
-    ok: `check-circle`,
-    polling: `clock`,
-    none: `exclamation-triangle`,
-} as const;
-
 // Exposed so a submitting parent can focus the first invalid field; `promptInput` reaches inside `<ProseField>` to the
 // actual element, not the component.
 const nameInput = ref<HTMLInputElement>();
 const promptField = ref<InstanceType<typeof ProseField>>();
 const promptInput = computed(() => promptField.value?.field);
 defineExpose({ nameInput, promptInput });
-
-// The app's segmented control, not four hand-drawn cards, so the loudest thing in the form isn't the trigger-kind
-// question. Each keeps its glyph, the same one the list outside this form uses for the row.
-const TRIGGER_TABS = computed<readonly { value: TriggerKind; label: string; icon: IconName }[]>(() => [
-    { value: `schedule`, label: t(`automationFields.schedule`), icon: `clock` },
-    { value: `once`, label: t(`automationFields.once`), icon: `pin` },
-    { value: `event`, label: t(`automationFields.webhook`), icon: `bolt` },
-    // Needs a connected gateway; an already-Live automation keeps it listed so its editor can't re-point it.
-    ...(liveSources.value.length > 0 || form.kind === `listener`
-        ? [{ value: `listener` as const, label: t(`automationFields.live`), icon: `wifi` as const }]
-        : []),
-    { value: `workspace`, label: t(`automationFields.workspace`), icon: `eye` },
-]);
-
-// One caption sentence per trigger kind, shown under the picker instead of a label with its own gloss.
-// Built when read, so the caption follows the language on screen.
-const kindCaption = (kind: TriggerKind): string =>
-    ({
-        schedule: t(`automationFields.kindCaption.schedule`),
-        // Says the two things a reminder's owner has to know and cannot see: which clock the time was read on, and that a
-        // sleeping sandbox delivers late rather than never.
-        once: t(`automationFields.kindCaption.once`),
-        event: t(`automationFields.kindCaption.event`),
-        listener: t(`automationFields.kindCaption.listener`),
-        workspace: t(`automationFields.kindCaption.workspace`),
-    })[kind];
-// Names the source directly, not "a connected service", since the reader just picked it; a Visitor chat isn't a service,
-// so it says what actually happens.
-const whenCaption = computed<string>(() => {
-    if (form.kind !== `listener`) {
-        return kindCaption(form.kind);
-    }
-    return isVisitorChat.value
-        ? t(`automationFields.kindCaption.visitorChat`)
-        : t(`automationFields.kindCaption.source`, { source: listenerSource.value.label });
-});
-
-// Wrapped, not bound straight to `form.kind`: switching to Live also has to pick a connected source.
-const kind = computed<TriggerKind>({
-    get: () => form.kind,
-    set: (next) => {
-        form.kind = next;
-        if (next === `listener` && !liveSources.value.some((source) => source.provider === form.provider)) {
-            form.provider = liveSources.value[0]?.provider ?? `discord`;
-        }
-    },
-});
-
-const ACCESS_OPTIONS = computed(
-    () =>
-        [
-            { value: `public`, label: t(`automationFields.anyone`) },
-            { value: `google`, label: t(`automationFields.googleSignIn`) },
-        ] as const,
-);
-const ANTI_BOT_OPTIONS = computed(
-    () =>
-        [
-            { value: `pow`, label: t(`automationFields.builtInCheck`) },
-            { value: `turnstile`, label: t(`automationFields.cloudflareTurnstile`) },
-            { value: `off`, label: t(`automationFields.off`) },
-        ] as const,
-);
-
-// Worded as the moment, not the wire event id, since two ids can fire on the same turn and read as one.
-const WORKSPACE_EVENTS = computed(
-    () =>
-        [
-            { value: `turn.settled`, label: t(`automationFields.turnSettles`), hint: t(`automationFields.afterEveryIsolatedAgent`) },
-            { value: `agent.landed`, label: t(`automationFields.workLands`), hint: t(`automationFields.onlyAgentsWorkActually`) },
-        ] as const,
-);
-
-// RETIRED MOMENTS, never offered: `deps.broken` and `deps.fixed` were the edges of the check that ran after every land,
-// which is gone, so nothing emits them. An automation written for one still opens as what it is, its moment drawn
-// pressed and marked retired, with the sentence that it never fires, rather than as a form with nothing chosen.
-const retiredEvent = computed(() => {
-    if (form.workspaceEvent === `deps.broken`) {
-        return { label: t(`automationFields.checksBreak`) };
-    }
-    return form.workspaceEvent === `deps.fixed` ? { label: t(`automationFields.checksRecover`) } : undefined;
-});
 
 // An ordered ladder of picks, walked at fire time; row 1 is preferred, the rest catch it when that account has nothing
 // left. No longer defaultable: `modelsError` requires at least one.
@@ -338,62 +227,6 @@ const moveRung = (index: number, by: number): void => {
 
 /* ---- the check ---- */
 
-// Chips rather than tabs: five kinds wrap on a phone, and the trigger's own tabs above are already the loud question.
-const CONDITION_OPTIONS = computed<readonly { value: ConditionKind; label: string; icon?: IconName }[]>(() => [
-    { value: `none`, label: t(`automationFields.conditionNone`) },
-    { value: `guard`, label: t(`automationFields.conditionGuard`), icon: `terminal` },
-    { value: `npm`, label: t(`automationFields.conditionNpm`), icon: `box` },
-    { value: `github-release`, label: t(`automationFields.conditionGithub`), icon: `github` },
-    { value: `url`, label: t(`automationFields.conditionUrl`), icon: `globe` },
-]);
-const conditionCaption = (condition: ConditionKind): string =>
-    ({
-        none: t(`automationFields.conditionCaption.none`),
-        guard: t(`automationFields.conditionCaption.guard`),
-        npm: t(`automationFields.conditionCaption.npm`),
-        "github-release": t(`automationFields.conditionCaption.github`),
-        url: t(`automationFields.conditionCaption.url`),
-    })[condition];
-const conditionShown = computed(() => touched.has(`condition`) && conditionError.value !== undefined);
-const isSource = computed(() => form.condition === `npm` || form.condition === `github-release` || form.condition === `url`);
-
-const FIRE_ON_OPTIONS = computed(
-    () =>
-        [
-            { value: `pass`, label: t(`automationFields.everyPass`) },
-            { value: `change`, label: t(`automationFields.onlyOnChange`) },
-        ] as const satisfies readonly { value: FireOn; label: string }[],
-);
-
-// CHECK NOW: the source as it stands, run once by the daemon, nothing saved. The answer is kept beside the source it was
-// for and shown only while the boxes still say the same thing, so an edited source never wears an old verdict.
-const check = useWatchCheck();
-type Checked = { readonly key: string; readonly result: WatchCheckResult } | { readonly key: string; readonly error: string };
-const checked = ref<Checked>();
-const sourceKey = computed(() => (watchSource.value === undefined ? undefined : JSON.stringify(watchSource.value)));
-const shownCheck = computed(() => (checked.value !== undefined && checked.value.key === sourceKey.value ? checked.value : undefined));
-const checkNow = async (): Promise<void> => {
-    const source = watchSource.value;
-    if (source === undefined) {
-        markTouched(`condition`);
-        return;
-    }
-    const key = JSON.stringify(source);
-    try {
-        checked.value = { key, result: await check.mutateAsync(source) };
-    } catch (err) {
-        checked.value = { key, error: err instanceof Error ? err.message : t(`automationFields.checkFailed`) };
-    }
-};
-// What the verdict means for THIS watch: a pass fires on the next check, unless it fires only on a change, where the
-// first check just notes what it sees.
-const checkVerdict = (result: WatchCheckResult): string => {
-    if (!result.pass) {
-        return t(`automationFields.checkWaiting`);
-    }
-    return form.fireOn === `change` ? t(`automationFields.checkPassesChange`) : t(`automationFields.checkPassesFires`);
-};
-
 /* ---- what it sets off ---- */
 
 const TARGET_TABS = computed<readonly { value: TargetKind; label: string; icon: IconName }[]>(() => [
@@ -442,11 +275,6 @@ const conversationOptions = computed<readonly PickerOption[]>(() => [
 // as itself and a notification runs nothing, so with neither there is nobody to pick.
 const personaShown = computed(() => needsModels.value || form.condition === `guard`);
 
-// Clears the event filter on switch, since an old filter (e.g. `pipeline_failed`) may match nothing on the new source.
-const setProvider = (provider: string): void => {
-    form.provider = provider;
-    form.eventType = undefined;
-};
 </script>
 
 <template>
@@ -488,280 +316,19 @@ const setProvider = (provider: string): void => {
                 <SegmentedControl v-model="kind" :options="TRIGGER_TABS" stretch class="max-w-2xl" />
                 <p class="text-2xs text-subtle">{{ whenCaption }}</p>
 
-                <!-- The trigger selects the event and optional repository to watch. -->
-                <template v-if="form.kind === 'workspace'">
-                    <div class="ui-field">
-                        <span class="ui-field-label">{{ t(`automationFields.wake`) }}</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="option in WORKSPACE_EVENTS"
-                                :key="option.value"
-                                type="button"
-                                :class="ui.chip({ on: form.workspaceEvent === option.value })"
-                                :aria-pressed="form.workspaceEvent === option.value"
-                                @click="form.workspaceEvent = option.value"
-                            >
-                                {{ option.label }}
-                            </button>
-                            <!-- Not a choice: the moment this automation already names, which nothing sends any more. -->
-                            <span v-if="retiredEvent !== undefined" data-retired-trigger :class="ui.chip({ on: true }, `text-subtle`)">
-                                <span class="line-through">{{ retiredEvent.label }}</span>
-                                <span class="text-2xs">{{ t(`automationFields.retired`) }}</span>
-                            </span>
-                        </div>
-                        <span v-if="retiredEvent !== undefined" class="text-2xs text-warning">{{ t(`automationFields.retiredNeverFires`) }}</span>
-                        <span v-else class="text-2xs text-subtle">
-                            {{ WORKSPACE_EVENTS.find((option) => option.value === form.workspaceEvent)?.hint }}
-                        </span>
-                    </div>
-                    <label class="ui-field max-w-sm">
-                        <span class="ui-field-label">{{ t(`automationFields.onlyRepoOptional`) }}</span>
-                        <input
-                            v-model="form.repo"
-                            :placeholder="t(`automationFields.everyRepoChangeTouched`)"
-                            class="font-mono"
-                            :class="ui.input()"
-                        />
-                    </label>
-                </template>
-
-                <template v-if="form.kind === 'listener'">
-                    <!-- Chips identify choices compactly and wrap when needed. -->
-                    <div class="ui-field">
-                        <span class="ui-field-label">{{ t(`automationFields.source`) }}</span>
-                        <div class="flex flex-wrap gap-1.5">
-                            <button
-                                v-for="source in visibleSources"
-                                :key="source.provider"
-                                type="button"
-                                :class="ui.chip({ on: form.provider === source.provider })"
-                                :aria-pressed="form.provider === source.provider"
-                                :disabled="!source.available"
-                                @click="setProvider(source.provider)"
-                            >
-                                <img v-if="source.logo" :src="`https://cdn.simpleicons.org/${source.logo}`" class="h-3.5 w-3.5" alt="" />
-                                <Icon v-else :name="glyph(source.icon) ?? 'bolt'" class="text-2xs" />
-                                {{ source.label }}
-                                <span v-if="!source.available" class="text-warning">{{ t(`automationFields.unavailable`) }}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Visitor chat settings describe its embed location and audience. -->
-                    <div v-if="isVisitorChat" class="grid gap-3 @2xl:grid-cols-2">
-                        <label class="ui-field @2xl:col-span-2">
-                            <span class="ui-field-label">{{ t(`automationFields.allowedSites`) }}</span>
-                            <textarea
-                                v-model="form.origins"
-                                rows="2"
-                                placeholder="https://example.com&#10;https://www.example.com"
-                                class="font-mono"
-                                :class="[ui.input(), touched.has('origins') && originsError ? 'ui-field-error-box' : '']"
-                                @blur="markTouched('origins')"
-                            ></textarea>
-                            <span v-if="touched.has('origins') && originsError" class="ui-field-error">
-                                <Icon name="exclamation-triangle" class="text-2xs" />
-                                {{ originsError }}
-                            </span>
-                            <p v-else class="text-2xs text-subtle">{{ t(`automationFields.onePerLineScheme`) }}</p>
-                        </label>
-                        <div class="ui-field">
-                            <span class="ui-field-label">{{ t(`automationFields.whoChat`) }}</span>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button
-                                    v-for="option in ACCESS_OPTIONS"
-                                    :key="option.value"
-                                    type="button"
-                                    :class="ui.chip({ on: form.access === option.value })"
-                                    :aria-pressed="form.access === option.value"
-                                    @click="form.access = option.value"
-                                >
-                                    {{ option.label }}
-                                </button>
-                            </div>
-                        </div>
-                        <div class="ui-field">
-                            <span class="ui-field-label">{{ t(`automationFields.botCheck`) }}</span>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button
-                                    v-for="option in ANTI_BOT_OPTIONS"
-                                    :key="option.value"
-                                    type="button"
-                                    :class="ui.chip({ on: form.antiBot === option.value })"
-                                    :aria-pressed="form.antiBot === option.value"
-                                    @click="form.antiBot = option.value"
-                                >
-                                    {{ option.label }}
-                                </button>
-                            </div>
-                            <p class="text-2xs text-subtle">
-                                <template v-if="form.antiBot === 'pow'">{{ t(`automationFields.aboutSecondEachVisitors`) }}</template>
-                                <template v-else-if="form.antiBot === 'turnstile'">{{ t(`automationFields.invisibleMostVisitorsNeeds`) }}</template>
-                                <template v-else>{{ t(`automationFields.onlyAllowedSitesDaily`) }}</template>
-                            </p>
-                        </div>
-                        <label v-if="form.access === 'google'" class="ui-field">
-                            <span class="ui-field-label">{{ t(`automationFields.googleClientId`) }}</span>
-                            <input
-                                v-model="form.googleClientId"
-                                placeholder="1234-abc.apps.googleusercontent.com"
-                                class="font-mono"
-                                :class="ui.input()"
-                            />
-                            <p class="text-2xs text-subtle">{{ t(`automationFields.sitesOwnOauthClient`) }}</p>
-                        </label>
-                        <template v-if="form.antiBot === 'turnstile'">
-                            <label class="ui-field">
-                                <span class="ui-field-label">{{ t(`automationFields.turnstileSiteKey`) }}</span>
-                                <input
-                                    v-model="form.turnstileSiteKey"
-                                    :placeholder="t(`automationFields.n0x4aaa`)"
-                                    class="font-mono"
-                                    :class="ui.input()"
-                                />
-                            </label>
-                            <label class="ui-field">
-                                <span class="ui-field-label">{{ t(`automationFields.turnstileSecretKey`) }}</span>
-                                <input
-                                    v-model="form.turnstileSecret"
-                                    type="password"
-                                    :placeholder="t(`automationFields.n0x4aaa`)"
-                                    class="font-mono"
-                                    :class="ui.input()"
-                                />
-                                <p class="text-2xs text-subtle">{{ t(`automationFields.staysInSandboxOnly`) }}</p>
-                            </label>
-                        </template>
-                        <label class="ui-field">
-                            <span class="ui-field-label">{{ t(`automationFields.greetingOptional`) }}</span>
-                            <input v-model="form.greeting" :placeholder="t(`automationFields.hiAskMeAnything`)" :class="ui.input()" />
-                        </label>
-                        <label class="flex items-center gap-2 text-sm">
-                            <input v-model="form.aiDisclosure" type="checkbox" />
-                            {{ t(`automationFields.aiDisclosure`) }}
-                        </label>
-                        <label v-if="form.aiDisclosure" class="ui-field">
-                            <span class="ui-field-label">{{ t(`automationFields.aiDisclosureText`) }}</span>
-                            <input v-model="form.aiDisclosureText" maxlength="300" :placeholder="t(`automationFields.aiDisclosureDefault`)" :class="ui.input()" />
-                        </label>
-                        <label class="ui-field">
-                            <span class="ui-field-label">{{ t(`automationFields.dailyMessageLimit`) }}</span>
-                            <input
-                                v-model="form.dailyMessageMax"
-                                type="number"
-                                min="1"
-                                :placeholder="String(WEBCHAT_DAILY_MAX_DEFAULT)"
-                                :class="ui.input()"
-                            />
-                            <p class="text-2xs text-subtle">
-                                {{ t(`automationFields.eachMessageRunsAgent`, { webchat_daily_max_default: WEBCHAT_DAILY_MAX_DEFAULT }) }}
-                            </p>
-                        </label>
-                    </div>
-
-                    <div v-else class="grid gap-3 @2xl:grid-cols-2">
-                        <div class="ui-field @2xl:col-span-2">
-                            <span class="ui-field-label">{{ t(`automationFields.events`) }}</span>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button
-                                    type="button"
-                                    :class="ui.chip({ on: form.eventType === undefined })"
-                                    :aria-pressed="form.eventType === undefined"
-                                    @click="form.eventType = undefined"
-                                >
-                                    {{ t(`automationFields.any`) }}
-                                </button>
-                                <button
-                                    v-for="eventOption in listenerSource.events"
-                                    :key="eventOption.value"
-                                    type="button"
-                                    :class="ui.chip({ on: form.eventType === eventOption.value })"
-                                    :aria-pressed="form.eventType === eventOption.value"
-                                    @click="form.eventType = eventOption.value"
-                                >
-                                    {{ eventOption.label }}
-                                </button>
-                            </div>
-                            <label
-                                v-if="form.eventType === 'message' && listenerSource.mentionLabel"
-                                class="flex items-center gap-2 text-xs text-muted"
-                            >
-                                <ToggleSwitch v-model="form.mentioned" :aria-label="listenerSource.mentionLabel" />
-                                {{ listenerSource.mentionLabel }}
-                            </label>
-                        </div>
-                        <label class="ui-field">
-                            <span class="ui-field-label">{{ listenerSource.channel.label }}</span>
-                            <input v-model="form.channelId" :placeholder="listenerSource.channel.placeholder" class="font-mono" :class="ui.input()" />
-                        </label>
-                        <!-- CI's own second narrowing axis (branch); without it, "wake on CI failure" means every agent's branch too. -->
-                        <label v-if="branchField" class="ui-field">
-                            <span class="ui-field-label">{{ branchField.label }}</span>
-                            <input v-model="form.branch" :placeholder="branchField.placeholder" class="font-mono" :class="ui.input()" />
-                            <p class="text-2xs text-subtle">{{ branchField.hint }}</p>
-                        </label>
-                    </div>
-                </template>
-
-                <!-- One box, since a moment is one answer. `datetime-local` reads the reader's own clock, which is how
-                     they mean it; what gets stored is the instant that resolves to. -->
-                <template v-if="form.kind === 'once'">
-                    <label class="ui-field">
-                        <span class="ui-field-label">{{ t(`automationFields.fires`) }}</span>
-                        <input v-model="form.onceAt" type="datetime-local" class="w-64" :class="ui.input()" @change="markTouched(`onceAt`)" />
-                    </label>
-                    <p v-if="onceError && touched.has(`onceAt`)" class="text-xs text-danger">{{ onceError }}</p>
-                    <!-- The same proof the cron preview gives: how far off the moment they picked actually is. -->
-                    <p v-else-if="!onceError" class="text-xs text-muted">{{ t(`automationFields.firesIn`, { when: nextIn(onceAt) }) }}</p>
-                </template>
-
-                <ScheduleFields
-                    v-if="form.kind === 'schedule'"
-                    v-model:tz="form.tz"
-                    v-model:after-sessions="form.afterSessions"
-                    :schedule="schedule"
-                    :preview="cronPreview"
-                    :zone="effectiveZone"
-                    :sandbox-zone="sandboxZone"
-                />
-
-                <!-- CI has no held-open gateway: its events arrive by webhook, or by polling if that couldn't register. -->
-                <p v-if="isCi && delivery" class="flex items-start gap-1.5 text-xs" :class="DELIVERY_TONE[delivery.state]">
-                    <Icon :name="DELIVERY_ICON[delivery.state]" class="shrink-0 text-2xs" />
-                    <span>
-                        {{ delivery.summary }}
-                        <span v-if="delivery.detail" class="mt-1 block text-2xs text-subtle">{{ delivery.detail }}</span>
-                    </span>
-                </p>
+                <TriggerFields :state="state" />
 
                 <!-- HOW IT ENDS, so a watch never outlives what it was for: as it fires, or at a date. A one-time wake
                      already ends as it fires, so neither is offered there. -->
-                <template v-if="retireOffered">
-                    <div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line-subtle pt-3">
-                        <label class="flex items-center gap-2 text-xs text-content">
-                            <ToggleSwitch v-model="form.stopAfterFirst" :aria-label="t(`automationFields.stopAfterFirstFire`)" />
-                            {{ t(`automationFields.stopAfterFirstFire`) }}
-                        </label>
-                        <label class="flex items-center gap-2 text-xs text-content">
-                            {{ t(`automationFields.endsOn`) }}
-                            <input
-                                v-model="form.expiresAt"
-                                type="datetime-local"
-                                class="w-56"
-                                :class="[ui.input(), touched.has(`expiresAt`) && expiresError ? `ui-field-error-box` : ``]"
-                                :aria-label="t(`automationFields.endDate`)"
-                                @change="markTouched(`expiresAt`)"
-                            />
-                        </label>
-                        <button v-if="form.expiresAt !== ``" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="form.expiresAt = ``">
-                            {{ t(`automationFields.noEndDate`) }}
-                        </button>
-                    </div>
-                    <p v-if="expiresError && touched.has(`expiresAt`)" class="-mt-1 text-xs text-danger">{{ expiresError }}</p>
-                    <p v-else-if="form.expiresAt !== `` && !expiresError" class="-mt-1 text-2xs text-subtle">
-                        {{ t(`automationFields.endsCaption`, { when: nextIn(expiresAt) }) }}
-                    </p>
-                </template>
+                <div v-if="retireOffered" class="border-t border-line-subtle pt-3">
+                    <EndsFields
+                        v-model:stop-after-first="form.stopAfterFirst"
+                        v-model:expires-at="form.expiresAt"
+                        :at="expiresAt"
+                        :error="touched.has(`expiresAt`) ? expiresError : undefined"
+                        @update:expires-at="markTouched(`expiresAt`)"
+                    />
+                </div>
             </div>
         </section>
 
@@ -772,173 +339,7 @@ const setProvider = (provider: string): void => {
                 <span class="text-2xs text-subtle">{{ t(`automationFields.whatHasToBeTrue`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <div class="flex flex-wrap gap-1.5">
-                    <button
-                        v-for="option in CONDITION_OPTIONS"
-                        :key="option.value"
-                        type="button"
-                        :class="ui.chip({ on: form.condition === option.value })"
-                        :aria-pressed="form.condition === option.value"
-                        @click="form.condition = option.value"
-                    >
-                        <Icon v-if="option.icon" :name="option.icon" class="text-2xs" />
-                        {{ option.label }}
-                    </button>
-                </div>
-                <p class="text-2xs text-subtle">{{ conditionCaption(form.condition) }}</p>
-
-                <label v-if="form.condition === `guard`" class="ui-field">
-                    <textarea
-                        v-model="form.guard"
-                        rows="3"
-                        spellcheck="false"
-                        :placeholder="t(`automationFields.guardPlaceholder`)"
-                        :aria-label="t(`automationFields.guardCommand`)"
-                        :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
-                        @blur="markTouched(`condition`)"
-                    ></textarea>
-                </label>
-
-                <template v-if="form.condition === `npm`">
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            type="button"
-                            :class="ui.chip({ on: form.npmBy === `range` })"
-                            :aria-pressed="form.npmBy === `range`"
-                            @click="form.npmBy = `range`"
-                        >
-                            {{ t(`automationFields.waitForVersion`) }}
-                        </button>
-                        <button
-                            type="button"
-                            :class="ui.chip({ on: form.npmBy === `tag` })"
-                            :aria-pressed="form.npmBy === `tag`"
-                            @click="form.npmBy = `tag`"
-                        >
-                            {{ t(`automationFields.followTag`) }}
-                        </button>
-                    </div>
-                    <div class="grid gap-3 @2xl:grid-cols-2">
-                        <label class="ui-field min-w-0">
-                            <span class="ui-field-label">{{ t(`automationFields.package`) }}</span>
-                            <input
-                                v-model="form.npmPackage"
-                                placeholder="bun"
-                                spellcheck="false"
-                                :class="[ui.input(`font-mono`), conditionShown && form.npmPackage.trim() === `` ? `ui-field-error-box` : ``]"
-                                @blur="markTouched(`condition`)"
-                            />
-                        </label>
-                        <label v-if="form.npmBy === `range`" class="ui-field min-w-0">
-                            <span class="ui-field-label">{{ t(`automationFields.versionRange`) }}</span>
-                            <input
-                                v-model="form.npmRange"
-                                placeholder=">=1.4.3"
-                                spellcheck="false"
-                                :class="[ui.input(`font-mono`), conditionShown && form.npmRange.trim() === `` ? `ui-field-error-box` : ``]"
-                                @blur="markTouched(`condition`)"
-                            />
-                        </label>
-                        <label v-else class="ui-field min-w-0">
-                            <span class="ui-field-label">{{ t(`automationFields.distTag`) }}</span>
-                            <input v-model="form.npmTag" :placeholder="t(`automationFields.tagPlaceholder`)" spellcheck="false" :class="ui.input(`font-mono`)" />
-                        </label>
-                    </div>
-                    <p class="text-2xs text-subtle">
-                        {{ form.npmBy === `range` ? t(`automationFields.npmCaption.range`) : t(`automationFields.npmCaption.tag`) }}
-                    </p>
-                </template>
-
-                <div v-if="form.condition === `github-release`" class="flex flex-wrap items-end gap-x-6 gap-y-2">
-                    <label class="ui-field w-full min-w-0 max-w-sm">
-                        <span class="ui-field-label">{{ t(`automationFields.repository`) }}</span>
-                        <input
-                            v-model="form.githubRepo"
-                            placeholder="oven-sh/bun"
-                            spellcheck="false"
-                            :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
-                            @blur="markTouched(`condition`)"
-                        />
-                    </label>
-                    <label class="flex items-center gap-2 pb-2 text-xs text-content">
-                        <ToggleSwitch v-model="form.githubPrereleases" :aria-label="t(`automationFields.prereleasesToo`)" />
-                        {{ t(`automationFields.prereleasesToo`) }}
-                    </label>
-                </div>
-
-                <template v-if="form.condition === `url`">
-                    <div class="grid gap-3 @2xl:grid-cols-2">
-                        <label class="ui-field min-w-0">
-                            <span class="ui-field-label">{{ t(`automationFields.page`) }}</span>
-                            <input
-                                v-model="form.pageUrl"
-                                type="url"
-                                placeholder="https://example.com/status"
-                                spellcheck="false"
-                                :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
-                                @blur="markTouched(`condition`)"
-                            />
-                        </label>
-                        <label class="ui-field min-w-0">
-                            <span class="ui-field-label">{{ t(`automationFields.onlyWhatMatches`) }}</span>
-                            <input
-                                v-model="form.pageSelect"
-                                placeholder="v(\d+\.\d+\.\d+)"
-                                spellcheck="false"
-                                :class="ui.input(`font-mono`)"
-                                @blur="markTouched(`condition`)"
-                            />
-                        </label>
-                    </div>
-                    <p class="text-2xs text-subtle">{{ t(`automationFields.pageCaption`) }}</p>
-                </template>
-
-                <span v-if="conditionShown" class="ui-field-error">
-                    <Icon name="exclamation-triangle" class="text-2xs" />
-                    {{ conditionError }}
-                </span>
-
-                <!-- CHECK NOW: what the watch would see today, before it is armed. Sources only: a guard command runs
-                     with the persona's credentials, which nobody has approved for a preview. -->
-                <div v-if="isSource" class="flex flex-col gap-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <Button
-                            size="small"
-                            tier="boring"
-                            :label="t(`automationFields.checkNow`)"
-                            :loading="check.isPending.value"
-                            @click="checkNow"
-                        >
-                            <template #icon><Icon name="refresh" /></template>
-                        </Button>
-                        <span v-if="shownCheck === undefined" class="text-2xs text-subtle">{{ t(`automationFields.checkNowHint`) }}</span>
-                    </div>
-                    <div
-                        v-if="shownCheck !== undefined && `result` in shownCheck"
-                        class="flex flex-col gap-1 rounded-md border border-line bg-canvas px-3 py-2"
-                    >
-                        <span class="flex items-center gap-1.5 text-xs" :class="shownCheck.result.pass ? `text-success` : `text-muted`">
-                            <Icon :name="shownCheck.result.pass ? `check-circle` : `clock`" class="text-2xs" />
-                            {{ checkVerdict(shownCheck.result) }}
-                        </span>
-                        <pre class="max-h-32 overflow-auto font-mono text-2xs break-words whitespace-pre-wrap text-content">{{ shownCheck.result.saw }}</pre>
-                    </div>
-                    <p v-else-if="shownCheck !== undefined" class="flex items-start gap-1.5 text-xs text-danger">
-                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
-                        {{ shownCheck.error }}
-                    </p>
-                </div>
-
-                <!-- WHEN IT FIRES: every passing check, or only a change in what the check saw. Nothing to compare without a check. -->
-                <template v-if="form.condition !== `none`">
-                    <div class="flex flex-wrap items-center gap-3 text-xs text-content">
-                        <span>{{ t(`automationFields.fireOn`) }}</span>
-                        <SegmentedControl v-model="form.fireOn" :options="FIRE_ON_OPTIONS" />
-                    </div>
-                    <p class="-mt-1 text-2xs text-subtle">
-                        {{ form.fireOn === `change` ? t(`automationFields.fireOnCaption.change`) : t(`automationFields.fireOnCaption.pass`) }}
-                    </p>
-                </template>
+                <ConditionFields :state="state" />
             </div>
         </section>
 

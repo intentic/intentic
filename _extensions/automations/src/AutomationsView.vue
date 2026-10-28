@@ -17,7 +17,7 @@ import {
 } from "@intentic/extension-ui";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 import AutomationCalendar from "./calendar/AutomationCalendar.vue";
-import AutomationComposer from "./AutomationComposer.vue";
+import AutomationDraft from "./draft/AutomationDraft.vue";
 import AutomationRail, { type RailShelf } from "./shelves/AutomationRail.vue";
 import AutomationRow from "./AutomationRow.vue";
 import VisitorChatInstallDialog from "./VisitorChatInstallDialog.vue";
@@ -41,7 +41,7 @@ const { automations, loaded, save, setEnabled, remove, run } = useAutomations();
 // A list that never answered says so in its own place; up here, only one whose last answer still stands.
 const listError = computed(() => (loaded.value.state === `ready` ? loaded.value.refreshError : undefined));
 const { sources, templates, error: catalogError } = useCatalog();
-// Resolved once here and handed down, so the row, composer and shelves all read the one answer.
+// Resolved once here and handed down, so the row, draft and shelves all read the one answer.
 const listenerSources = computed(() => withAvailability(sources.value, host().workspace.capabilities()));
 const offered = computed(() => availableTemplates(templates.value, host().workspace.capabilities()));
 
@@ -90,7 +90,7 @@ const lensOptions = computed(() => [
     { label: t(`automationsView.list`), value: `list` as const, icon: `bars` as const },
     { label: t(`automationsView.calendar`), value: `calendar` as const, icon: `calendar` as const },
 ]);
-// A moment clicked on the calendar, which the composer opens on as a one-time wake.
+// A moment clicked on the calendar, which the draft opens on as a one-time wake.
 const createAt = ref<number | undefined>(undefined);
 // The automation the calendar opened, drawn above it as its own row, open: every value of it is changed where it is shown,
 // exactly as in the list. The list opens its rows in place instead.
@@ -180,12 +180,12 @@ const availableChores = computed(() =>
     offered.value.filter((template) => template.offer === `create` && !automations.value.some((automation) => automation.id === template.id)),
 );
 
-// Templates marked `configure` (today just Visitor chat): picking one opens the composer prefilled, not a silent save,
+// Templates marked `configure` (today just Visitor chat): picking one opens the draft prefilled, not a silent save,
 // since an unconfigured Visitor chat would admit nobody.
 const availableSuggestions = computed(() =>
     offered.value.filter((template) => template.offer === `configure` && !automations.value.some((automation) => automation.id === template.id)),
 );
-// Which recipe the composer opens on, when it was opened from a suggestion rather than from "New".
+// Which recipe the draft opens on, when it was opened from a suggestion rather than from "New".
 const createPrefill = ref<AutomationTemplate | undefined>(undefined);
 const openFromSuggestion = (recipe: AutomationTemplate): void => {
     createPrefill.value = recipe;
@@ -250,7 +250,7 @@ const runNow = async (automation: AutomationSummary): Promise<void> => {
     }
 };
 
-// A chore opens via the composer, never creates directly: a recipe can't know which providers are connected, so the
+// A chore opens as a draft, never creates directly: a recipe can't know which providers are connected, so the
 // person picks the model instead of it guessing one or creating a row that can't fire.
 
 const removeAutomation = async (): Promise<void> => {
@@ -295,7 +295,7 @@ const toggleDetail = (id: string): void => {
                 <!-- Keyed on the prefill and the slot, so picking a different suggestion or moment while open remounts fresh
                      instead of keeping stale fields. -->
                 <div v-if="createOpen" ref="topCard">
-                    <AutomationComposer
+                    <AutomationDraft
                         :templates="offered"
                         :key="`${createPrefill?.id ?? `blank`}@${createAt ?? ``}`"
                         :prefill="createPrefill"
@@ -423,7 +423,7 @@ const toggleDetail = (id: string): void => {
                 >
                     <Section class="mb-2.5 px-1" :label="t(`automationsView.addAutomation`)" />
                     <div class="grid gap-1.5 @xl:grid-cols-2 @3xl:grid-cols-3">
-                        <!-- A chevron, not a plus: each opens the composer prefilled, never a one-click create. -->
+                        <!-- A chevron, not a plus: each opens the draft prefilled, never a one-click create. -->
                         <button
                             v-for="recipe in [...availableChores, ...availableSuggestions]"
                             :key="recipe.id"

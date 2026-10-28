@@ -109,6 +109,8 @@ export const extensionUiNames = [
     "ScrollFrame",
     "SearchBar",
     "SegmentedControl",
+    "DatePicker",
+    "TimeField",
     "seriesColor",
     "similarity",
     "sinceOf",
