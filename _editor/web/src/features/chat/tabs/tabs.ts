@@ -3,7 +3,7 @@ import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { computed, type ComputedRef } from "vue";
 import { useAgents } from "../../../models/fleet/useAgents";
-import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { attentionLaneOrder, type FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { type FleetLane, laneOf, NO_ATTENTION } from "../../../models/agent-status/agentStatus-lanes";
 import { rosterHeard } from "../../../models/fleet/useAgents-registry";
 import type { Conversation } from "../../../models/conversations/session/conversation";
@@ -94,4 +94,16 @@ export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
                 laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
         ),
     );
+};
+
+// The chats waiting on the reader, in the order Next Chat That Needs You walks them, this sandbox's own: Attention first,
+// in its lane's order, then finished news not read yet, oldest first, so a run of presses reads it in the order it came.
+// A workflow step is read through its run's row, never on its own.
+export const needsYouQueue = (fleet: readonly FleetAgent[]): FleetAgent[] => {
+    const own = fleet.filter((agent) => agent.sandboxId === undefined);
+    const waiting = own.filter((agent) => laneOf(agent) === `attention`).toSorted(attentionLaneOrder);
+    const unread = own
+        .filter((agent) => agent.unread && agent.workflow === undefined && laneOf(agent) === `finished`)
+        .toSorted((a, b) => a.updatedAt - b.updatedAt);
+    return [...waiting, ...unread];
 };

@@ -72,6 +72,8 @@ const settle = async (): Promise<void> => {
 };
 
 const mountRail = async (): Promise<HTMLElement> => {
+    // These rows are read and landed, which the rail folds away (doneFold.ts): opened, so every row is drawn.
+    sessionStorage.setItem(`intentic.chatList.doneOpen.main`, `1`);
     setAgents(SEEDED.map(summary), 100);
     const el = document.createElement(`div`);
     document.body.append(el);

@@ -3,7 +3,6 @@ import { Button, ui, ContextMenu } from "@intentic/ui";
 import { computed, nextTick, provide, ref, watch } from "vue";
 import type { FleetLane } from "../../../models/agent-status/agentStatus-lanes";
 import { useAgents } from "../../../models/fleet/useAgents";
-import { FINISHED_WINDOW, windowFinished } from "../../../models/fleet/useAgents-fleet";
 import HoverCard from "./HoverCard.vue";
 import RailCard from "./RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
@@ -14,6 +13,8 @@ import { closeSubagent, subagentOnScreen } from "../../../models/conversations/p
 import { dismissRows, rowsUnder, settleDismissed, useFoldFlip, useRowReveal } from "@intentic/ui/motion";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOrdered, steadyLanes } from "./laneOrder";
+import { chatDoneWith, type FinishedFold, foldFinished, runDoneWith } from "./doneFold";
+import { windowRole } from "../../../lib/windows/windowRole";
 import { tabsInLane } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
@@ -59,14 +60,16 @@ const { edit, hoverCard, menu: tabMenu, menuId, menuItems: tabMenuItems, shareTa
 
 // Runs are grouped by lane as long as the ledger holds them; chatRun marks only which row is selected.
 const { runs: workflowRuns } = useWorkflowRuns();
-// Finished lane's cap; runs obey it too. Lifted by the row's own expand.
-const showAllFinished = ref(false);
-const windowed = computed(() => !showAllFinished.value);
+// The Finished lane's "N done" fold (doneFold.ts), open or shut: this window's own, kept across a reload of it. Keyed by
+// the window's kind, since a popped-out chat's window starts with a copy of its opener's session storage.
+const DONE_OPEN_KEY = `intentic.chatList.doneOpen.${windowRole}`;
+const doneOpen = ref(globalThis.sessionStorage?.getItem(DONE_OPEN_KEY) === `1`);
+watch(doneOpen, (open) => globalThis.sessionStorage?.setItem(DONE_OPEN_KEY, open ? `1` : `0`));
 // An archived run is excluded entirely.
 const listedRuns = computed(() => workflowRuns.value.filter((run) => run.archivedAt === undefined));
-// Same lane rule as the board, including a step's question putting the run in Attention.
-const runsIn = (lane: FleetLane): WorkflowRun[] =>
-    runsInLane(listedRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value));
+// Same lane rule as the board, including a step's question putting the run in Attention. Every run of the lane: Finished
+// folds what is done with (doneFold.ts) rather than capping by count.
+const runsInAll = (lane: FleetLane): WorkflowRun[] => runsInLane(listedRuns.value, lane, Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value));
 // Selected only while the run's diagram is the thing on screen; a followed run keeps drawing its diagram with
 // nothing live in the panes.
 const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && showingRunGraph(run, chatRun.value, panes.value);
@@ -144,7 +147,7 @@ const clearLane = async (lane: FleetLane): Promise<void> => {
     const rows = section === null ? [] : (rowsUnder(section)[0] ?? []);
     const leaving = rows.filter((row) => ids.has(row.getAttribute(`data-chat-row`) ?? ``));
     // Emptied means nothing of the lane is left to draw, a run the Finished window hides included.
-    const emptied = section !== null && leaving.length === rows.length && (lane !== `finished` || hiddenRuns.value === 0);
+    const emptied = section !== null && leaving.length === rows.length && (lane !== `finished` || doneOpen.value || runFold.value.folded.length === 0);
     const played = emptied ? [...leaving, section] : leaving;
     sweeping.value = true;
     section?.style.setProperty(`pointer-events`, `none`);
@@ -163,30 +166,38 @@ const clearLane = async (lane: FleetLane): Promise<void> => {
 
 // Lane visibility is filtered in JS, not `v-show`: `LANES` is compile-time so `v-for` yields a stable fragment,
 // and `v-show` (set only on mount) would freeze stale in a long-lived floating window.
-// A lane holding only a run still counts as occupied.
-const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[lane.key].length > 0 || runsIn(lane.key).length > 0));
+// A lane holding only a run still counts as occupied, and so does a Finished lane whose every chat is folded: its fold
+// row is where those chats are.
+const occupiedLanes = computed(() => LANES.value.filter((lane) => lanes.value[lane.key].length > 0 || runsInAll(lane.key).length > 0));
 
-// The board's Finished cap as a browsing limit, not a close: the active chat rides in, and a filter or the row's own
-// expand lifts it.
-const finishedWindow = computed(() =>
-    windowFinished(lanes.value.finished, windowed.value ? activeId.value : undefined, (entry) => entry.conversation.conversationId),
+// FINISHED SHOWS WHAT IS STILL OWED; THE REST FOLDS (doneFold.ts). While the pointer is over the list each chat keeps
+// its side of the fold (as the lanes' order holds there), so a chat the reader just left folds once they leave the list,
+// sliding the column up (useFoldFlip below) rather than vanishing under the next press.
+const heldIds = <T>(drawn: FinishedFold<T> | undefined, idOf: (entry: T) => string): FinishedFold<string> | undefined =>
+    pointerOver.value && drawn !== undefined ? { shown: drawn.shown.map(idOf), folded: drawn.folded.map(idOf) } : undefined;
+const chatId = (entry: OpenChat): string => entry.conversation.conversationId;
+const chatFold = computed<FinishedFold<OpenChat>>((drawn) =>
+    foldFinished(lanes.value.finished, (entry) => chatDoneWith(entry, actions.isSelected), chatId, heldIds(drawn, chatId)),
 );
-// Includes hidden runs: hiding a run also hides its chats, so the count must cover the whole workflow.
-const hiddenRuns = computed(
-    () => runsInLane(listedRuns.value, `finished`, Number.POSITIVE_INFINITY, runsNeedingYou(fleet.value)).length - runsIn(`finished`).length,
+const runFold = computed<FinishedFold<WorkflowRun>>((drawn) =>
+    foldFinished(runsInAll(`finished`), (run) => runDoneWith(run, fleet.value, runOnScreen(run)), (run) => run.runId, heldIds(drawn, (run) => run.runId)),
 );
-const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
+const doneCount = computed(() => chatFold.value.folded.length + runFold.value.folded.length);
 
-// The drawn cards of every lane, built once a pass rather than per `cardsIn` call.
-const laneCards = computed<Record<FleetLane, OpenChat[]>>(() => {
-    const next: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
-    for (const lane of [`attention`, `active`, `finished`] as const) {
-        next[lane] = lane === `finished` && windowed.value ? finishedWindow.value.shown : lanes.value[lane];
+// What a lane draws, top to bottom: every run and chat of Attention and Active; of Finished, what is still owed, the
+// fold's row, and what is done with once the fold is open, under its row.
+type LanePart = { readonly key: `cards` | `done`; readonly runs: readonly WorkflowRun[]; readonly chats: readonly OpenChat[] } | { readonly key: `fold` };
+const partsOf = (lane: FleetLane): readonly LanePart[] => {
+    if (lane !== `finished`) {
+        return [{ key: `cards`, runs: runsInAll(lane), chats: lanes.value[lane] }];
     }
-    return next;
-});
-// A lane's visible chats after (for Finished) the browsing window.
-const cardsIn = (lane: FleetLane): OpenChat[] => laneCards.value[lane];
+    const owed: LanePart = { key: `cards`, runs: runFold.value.shown, chats: chatFold.value.shown };
+    if (doneCount.value === 0) {
+        return [owed];
+    }
+    const fold: LanePart = { key: `fold` };
+    return doneOpen.value ? [owed, fold, { key: `done`, runs: runFold.value.folded, chats: chatFold.value.folded }] : [owed, fold];
+};
 
 // Re-fetches the archive when a registered conversation has no agent; `probed` skips ones already confirmed gone.
 const probed = new Set<string>();
@@ -208,7 +219,7 @@ watch(
 // the docked sheet.
 const scroller = ref<HTMLElement | null>(null);
 // What opens and shuts the trays under the cards (ChildRows' `shown`): the chats selected here and a subagent shown in
-// one's column, and a lane's Clear (`sweeps`). A render that moves it makes room below a tray, or closes up over what a
+// one's column, a lane's Clear (`sweeps`), and a chat or run going under Finished's fold or the fold opening. A render that moves it makes room below a tray, or closes up over what a
 // Clear took, by sliding what stands there (the `data-fold-unit`s).
 useFoldFlip(
     scroller,
@@ -216,7 +227,7 @@ useFoldFlip(
         `${conversations.value
             .filter((conversation) => actions.isSelected(conversation.conversationId))
             .map((conversation) => conversation.conversationId)
-            .join(`,`)}|${subagentOnScreen.value?.id}|${sweeps.value}`,
+            .join(`,`)}|${subagentOnScreen.value?.id}|${sweeps.value}|${chatFold.value.folded.map(chatId).join(`,`)}|${runFold.value.folded.length}|${doneOpen.value}`,
 );
 // THE LANES OPEN ROW BY ROW, as the board's do (@intentic/ui/motion, reveal.ts): the lane labels are there at once and
 // the cards arrive top to bottom. This rail is one column, so the order is simply down it. Unlike the board, whose
@@ -225,7 +236,11 @@ useFoldFlip(
 useRowReveal(scroller, {
     key: () =>
         occupiedLanes.value
-            .map((lane) => [runsIn(lane.key).map((run) => run.runId), cardsIn(lane.key).map((entry) => entry.conversation.conversationId)].join(`,`))
+            .map((lane) =>
+                partsOf(lane.key)
+                    .map((part) => (part.key === `fold` ? `fold` : [...part.runs.map((run) => run.runId), ...part.chats.map(chatId)].join(`,`)))
+                    .join(`/`),
+            )
             .join(`|`),
     arrivals: true,
 });
@@ -274,39 +289,50 @@ defineExpose({ beginRename: actions.beginRename });
                         {{ t(`ui.action.clear`) }}
                     </Button>
                 </template>
-                <!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
-                <div v-if="runsIn(lane.key).length > 0" class="flex min-w-0 flex-col gap-3.5">
-                    <RailCard
-                        v-for="run in runsIn(lane.key)"
-                        :key="run.runId"
-                        data-reveal
-                        :title="run.workflow.name"
-                        icon="sitemap"
-                        dashed
-                        :selected="runOnScreen(run)"
-                        :aria-label="t(`chat.chatTabList.openWorkflowRun`, { name: run.workflow.name })"
-                        @click="openRunInChat(run)"
+                <template v-for="part in partsOf(lane.key)" :key="part.key">
+                    <!-- THE FOLD'S ROW: how many done-with chats it holds, one press from opening them under it. Quiet text,
+                         not a tile: it divides the lane rather than standing in it as a card. -->
+                    <button
+                        v-if="part.key === 'fold'"
+                        type="button"
+                        :class="[ui.textButton({ tone: `subtle`, size: `xs` }), `px-2.5`]"
+                        :aria-expanded="doneOpen"
+                        v-tooltip.bottom="{ title: t(`chat.chatTabList.doneTitle`), note: t(`chat.chatTabList.doneNote`) }"
+                        data-fold-unit
+                        @click="doneOpen = !doneOpen"
                     >
-                        <template #meta>
-                            <span class="min-w-0 truncate text-subtle">
-                                {{ t(`chat.chatTabList.stepsDone`, { done: run.steps.filter((step) => step.state === `done`).length, total: run.steps.length })
-                                }}<template v-if="runningTitles(run).length > 0"> · {{ runningTitles(run).join(` · `) }}</template>
-                            </span>
-                        </template>
-                    </RailCard>
-                </div>
-                <ChatRowList v-if="cardsIn(lane.key).length > 0" :entries="cardsIn(lane.key)" />
-                <!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
-                <button
-                    v-if="lane.key === 'finished' && hiddenFinished > 0"
-                    type="button"
-                    :class="ui.addTile(`gap-1 rounded-lg py-1.5 text-2xs`)"
-                    data-fold-unit
-                    @click="showAllFinished = !showAllFinished"
-                >
-                    <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    {{ showAllFinished ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: hiddenFinished }) }}
-                </button>
+                        <Icon :name="doneOpen ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                        {{ t(`chat.chatTabList.done`, { count: doneCount }) }}
+                    </button>
+                    <template v-else>
+                        <!-- Dashed like the board's run card: a run is the container for the rows below it, not one of them. -->
+                        <div v-if="part.runs.length > 0" class="flex min-w-0 flex-col gap-3.5">
+                            <RailCard
+                                v-for="run in part.runs"
+                                :key="run.runId"
+                                data-reveal
+                                :title="run.workflow.name"
+                                icon="sitemap"
+                                dashed
+                                :selected="runOnScreen(run)"
+                                :aria-label="t(`chat.chatTabList.openWorkflowRun`, { name: run.workflow.name })"
+                                @click="openRunInChat(run)"
+                            >
+                                <template #meta>
+                                    <span class="min-w-0 truncate text-subtle">
+                                        {{
+                                            t(`chat.chatTabList.stepsDone`, {
+                                                done: run.steps.filter((step) => step.state === `done`).length,
+                                                total: run.steps.length,
+                                            })
+                                        }}<template v-if="runningTitles(run).length > 0"> · {{ runningTitles(run).join(` · `) }}</template>
+                                    </span>
+                                </template>
+                            </RailCard>
+                        </div>
+                        <ChatRowList v-if="part.chats.length > 0" :entries="part.chats" />
+                    </template>
+                </template>
             </RailLane>
             <!-- What a host adds below the open chats, in the same scroll: the docked sheet's Past chats (ChatTabs.vue). -->
             <slot name="after" />

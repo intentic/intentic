@@ -146,18 +146,20 @@ it(`drops a lane the last chat left, so no empty header is left standing`, async
     expect(cardsOnScreen(el)).toEqual([`waiting`]);
 });
 
-// Finished never empties itself the way Active/Attention do, so this rail needs its own cap on it, matching
-// the board's windowFinished.
-const seedFinished = (count: number): void =>
+// Finished never empties itself the way Active/Attention do, so the rail folds what it is done with (doneFold.ts): read,
+// landed, owing nothing. `owes` gives a chat something still owed: news not read yet, or work not landed.
+const seedFinished = (count: number, owes: Readonly<Record<string, `unread` | `unlanded`>> = {}): void =>
     setAgents(
         Array.from({ length: count }, (_, at) => ({
             id: `done${at}`,
             title: `landed run ${at}`,
-            status: `landed`,
+            status: owes[`done${at}`] === `unlanded` ? (`ready` as const) : (`landed` as const),
             provider: `claude`,
             harness: `native`,
-            // Newest first, so `done0` leads and `done${count - 1}` is furthest behind the fold.
+            // Newest first, so `done0` leads and `done${count - 1}` is the oldest.
             updatedAt: 2_000 - at,
+            // Read after it finished, save where it is owed news: last opened before it did.
+            seenAt: owes[`done${at}`] === `unread` ? 1 : 5_000,
             attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
         })) satisfies AgentSummary[],
         100,
@@ -171,7 +173,7 @@ const openFinished = (count: number): void => {
 };
 
 const tailRow = (el: HTMLElement): HTMLButtonElement | undefined =>
-    [...el.querySelectorAll(`button`)].find((button) => /earlier|Show fewer/.test(button.textContent ?? ``));
+    [...el.querySelectorAll(`button`)].find((button) => (button.textContent?.trim() ?? ``).endsWith(` done`));
 // Clear inside one named lane: every lane carries one, so matching on the word alone would hit whichever lane
 // happened to draw first rather than the one under test.
 const clearButton = (el: HTMLElement, lane: string): HTMLButtonElement | undefined => {
@@ -179,18 +181,30 @@ const clearButton = (el: HTMLElement, lane: string): HTMLButtonElement | undefin
     return [...(section?.querySelectorAll(`button`) ?? [])].find((button) => button.textContent?.trim() === `Clear`);
 };
 
-it(`caps the Finished lane and says how many it is holding back`, async () => {
+it(`folds the finished chats it is done with, and says how many`, async () => {
     seedFinished(10);
     const el = await mountList();
 
     openFinished(10);
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`]);
-    expect(tailRow(el)?.textContent?.trim()).toBe(`3 earlier`);
+    // done0 is the one being read, so it stays out of the fold.
+    expect(cardsOnScreen(el)).toEqual([`done0`]);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`9 done`);
 });
 
-it(`opens the rest in place, and folds them back`, async () => {
+it(`keeps above the fold a finished chat that still owes something: news not read, work not landed`, async () => {
+    seedFinished(10, { done4: `unread`, done7: `unlanded` });
+    const el = await mountList();
+
+    openFinished(10);
+
+    await settle();
+    expect(cardsOnScreen(el)).toEqual([`done0`, `done4`, `done7`]);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`7 done`);
+});
+
+it(`opens the done ones in place under the fold, and folds them back`, async () => {
     seedFinished(10);
     const el = await mountList();
     openFinished(10);
@@ -200,26 +214,25 @@ it(`opens the rest in place, and folds them back`, async () => {
 
     await settle();
     expect(cardsOnScreen(el)).toHaveLength(10);
-    expect(tailRow(el)?.textContent?.trim()).toBe(`Show fewer`);
+    expect(tailRow(el)?.getAttribute(`aria-expanded`)).toBe(`true`);
 
     tailRow(el)?.click();
 
     await settle();
-    expect(cardsOnScreen(el)).toHaveLength(7);
+    expect(cardsOnScreen(el)).toEqual([`done0`]);
 });
 
-it(`pins the chat being read into the window, however far down the lane it is`, async () => {
+it(`folds the chat the reader left, and keeps the one they moved to`, async () => {
     seedFinished(10);
     const el = await mountList();
     openFinished(10);
     await settle();
 
-    openFromBoard(`done9`); // done9 is the oldest finished chat, three rows behind the fold.
+    openFromBoard(`done9`); // The oldest, from under the fold.
 
     await settle();
-    expect(cardsOnScreen(el)).toEqual([`done0`, `done1`, `done2`, `done3`, `done4`, `done5`, `done6`, `done9`]);
-    // The pin is on screen, so the row may only claim the two it actually hides.
-    expect(tailRow(el)?.textContent?.trim()).toBe(`2 earlier`);
+    expect(cardsOnScreen(el)).toEqual([`done9`]);
+    expect(tailRow(el)?.textContent?.trim()).toBe(`9 done`);
 });
 
 it(`clears the whole lane from its header, whatever the window is showing, but keeps the focused chat`, async () => {

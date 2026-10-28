@@ -9,7 +9,6 @@ import { type ComponentPublicInstance, computed, onBeforeUnmount, onMounted, ref
 import { useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useDriveRefusal } from "../session/driveRefusal";
-import { laneOf } from "../../../models/agent-status/agentStatus-lanes";
 import { turnInFlight } from "../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { canArchive } from "../../../models/fleet/useAgents-fleet";
@@ -18,7 +17,7 @@ import RailLane from "../../../components/RailLane.vue";
 import RailColumn from "./RailColumn.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../models/catalog";
 import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../../../models/conversations/panel/chatPanelLayout";
-import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
+import { allTabs, isArchived, laneOfTab, needsYouQueue, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import { useChat } from "../../../models/conversations/run/useChat";
 import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
 import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
@@ -223,11 +222,12 @@ const barVerbs = (): MenuItem[] => [
     },
 ];
 
-// The next chat waiting on the reader after the focused one, open or not, in the board's own attention order.
+// The next chat waiting on the reader after the focused one, open or not (needsYouQueue): opening one reads it, so it
+// drops out and the next press goes on from the head of what is left.
 const nextNeedsYou = (): void => {
-    const waiting = fleet.value.filter((agent) => agent.sandboxId === undefined && laneOf(agent) === `attention`);
-    const at = waiting.findIndex((agent) => agent.id === activeId.value);
-    const next = waiting[(at + 1) % Math.max(waiting.length, 1)];
+    const queue = needsYouQueue(fleet.value);
+    const at = queue.findIndex((agent) => agent.id === activeId.value);
+    const next = queue[(at + 1) % Math.max(queue.length, 1)];
     if (next !== undefined && next.id !== activeId.value) {
         openAgent(next);
     }

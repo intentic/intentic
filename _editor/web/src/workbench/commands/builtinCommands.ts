@@ -158,7 +158,15 @@ export const BUILTIN_COMMANDS = {
     "chat.closeAllTabs": { title: () => t(`chat.words.closeAll`), category: CHAT, icon: `times`, keybinding: `Ctrl+Shift+Backspace`, when: onSurface(`chat`) },
     "chat.archive": { title: () => t(`chat.chatTabs.archiveChat`), category: CHAT, icon: `box`, when: onSurface(`chat`) },
     "chat.reopenClosed": { title: () => t(`chat.words.reopenClosedChat`), category: CHAT, icon: `history`, when: onSurface(`chat`) },
-    "chat.nextNeedsYou": { title: () => t(`chat.chatTabs.nextNeedsYou`), category: CHAT, icon: `exclamation-circle` },
+    // Off the tab family's Alt+Arrow (rail sections), with Shift: the triage walk through what waits on the reader. ⌥⇧↓
+    // extends a selection in a Mac text field, so the Mac takes ⌃⌥↓.
+    "chat.nextNeedsYou": {
+        title: () => t(`chat.chatTabs.nextNeedsYou`),
+        category: CHAT,
+        icon: `exclamation-circle`,
+        keybinding: `Alt+Shift+ArrowDown`,
+        mac: `Ctrl+Alt+ArrowDown`,
+    },
     "chat.nextTab": { title: () => t(`ui.action.next`), category: CHAT, ...NEXT_TAB, when: onSurface(`chat`) },
     "chat.previousTab": { title: () => t(`chat.chatTabs.previous`), category: CHAT, ...PREVIOUS_TAB, when: onSurface(`chat`) },
     // VSCode's split chord for a different chat, not a second view: a chat carries its own composer.
