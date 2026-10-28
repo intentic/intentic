@@ -58,6 +58,36 @@ const BY_CATEGORY: Record<FileCategory, HomeGroupKey> = {
 
 export const groupOf = (entry: WorkspaceTreeEntry): HomeGroupKey => (entry.type === `dir` ? `folders` : BY_CATEGORY[formatOf(entry.name).category]);
 
+/**
+ * How the home draws an entry, by what it can show rather than what it is called. A large tile earns its room only by
+ * showing what is inside: a picture or a video shows itself (`visual`); a file read from its start shows a miniature of
+ * that start (`card`); anything else, a folder included, has nothing to show inside, so it is one line (`chip`) and
+ * spends the room on its name and the facts a reader checks.
+ */
+export type HomeDisplay = `visual` | `card` | `chip`;
+
+const DISPLAY_OF = {
+    image: `visual`,
+    video: `visual`,
+    audio: `visual`,
+    doc: `card`,
+    code: `card`,
+    shell: `card`,
+    style: `card`,
+    data: `chip`,
+    config: `chip`,
+    lock: `chip`,
+    archive: `chip`,
+    binary: `chip`,
+    generic: `chip`,
+} as const satisfies Record<FileCategory, HomeDisplay>;
+
+export const displayOf = (entry: WorkspaceTreeEntry): HomeDisplay => (entry.type === `dir` ? `chip` : DISPLAY_OF[formatOf(entry.name).category]);
+
+// Within a date heading, the cards first, then the pictures, then the one-line chips, each newest first: a heading of
+// mixed kinds drawn in strict time order would switch from card to picture to chip every few files.
+const DISPLAY_ORDER = { card: 0, visual: 1, chip: 2 } as const satisfies Record<HomeDisplay, number>;
+
 // Numeric-aware and case-blind: img2 before img10, Readme beside readme; the same order the tree lists them in.
 export const byNaturalName = (left: WorkspaceTreeEntry, right: WorkspaceTreeEntry): number => compareNames(left.name, right.name);
 
@@ -83,7 +113,11 @@ const dateGroups = (entries: readonly WorkspaceTreeEntry[], now: number): readon
         }
     }
     const dated = [...buckets]
-        .map(([key, bucket]) => ({ key, label: bucket.label, entries: bucket.entries.toSorted(byNewest) }))
+        .map(([key, bucket]) => ({
+            key,
+            label: bucket.label,
+            entries: bucket.entries.toSorted((left, right) => DISPLAY_ORDER[displayOf(left)] - DISPLAY_ORDER[displayOf(right)] || byNewest(left, right)),
+        }))
         .toSorted((left, right) => (right.entries[0]?.mtime ?? Number.NEGATIVE_INFINITY) - (left.entries[0]?.mtime ?? Number.NEGATIVE_INFINITY));
     return [
         ...(folders.length === 0 ? [] : [{ key: `folders` as const, label: t(`shared.folders`), entries: folders.toSorted(byNaturalName) }]),

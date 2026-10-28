@@ -1,5 +1,5 @@
 <!-- The entry being named, drawn first in the open folder before it exists, in the shape it will take: a folder as a chip
-     (HomeFolderChip.vue), a file as a tile (HomeTile.vue), so nothing changes shape when the name is committed. -->
+     (HomeChip.vue), a file as a tile (HomeTile.vue), so nothing changes shape when the name is committed. -->
 <script setup lang="ts">
 import { focusInput } from "@intentic/ui/inline-rename";
 import { useT } from "@intentic/ui/i18n";

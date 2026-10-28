@@ -54,7 +54,6 @@ export const useHomeGallery = (dir: () => string, listed: () => readonly Workspa
             targetHeight: galleryHeight.value,
             captionHeight: galleryCaption,
             rowGap: gap,
-            drawn: (group) => group.entries.some((entry) => galleryArtOf(entry) !== undefined),
             aspectOf: (entry) => aspectFor(entry, aspectOfBox(entry), known),
         };
     });

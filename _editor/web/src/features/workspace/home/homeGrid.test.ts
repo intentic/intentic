@@ -4,14 +4,14 @@ import { homeLayout, EMPTY_LAYOUT } from "./homeLayout";
 import type { HomeGroup, HomeGroupKey } from "./homeOrder";
 
 const entriesOf = (prefix: string, count: number): WorkspaceTreeEntry[] =>
-    Array.from({ length: count }, (_, index) => ({ name: `${prefix}${index}`, path: `${prefix}${index}`, type: `file` as const }));
+    Array.from({ length: count }, (_, index) => ({ name: `${prefix}${index}.png`, path: `${prefix}${index}.png`, type: `file` as const }));
 
 // Lays tiles out the way the home does: each group's entries wrap at `columns`, groups stacked in order. File groups,
 // since folders are chips of their own columns (homeLayout.test.ts travels those).
 const laidOut = (columns: number, ...groupSizes: number[]) => {
     const keys: HomeGroupKey[] = [`code`, `documents`, `pictures`, `media`];
     const groups: HomeGroup[] = groupSizes.map((size, at) => ({ key: keys[at]!, label: keys[at]!, entries: entriesOf(`${at}-`, size) }));
-    return homeLayout(groups, true, { columns, tileHeight: 100, labelHeight: 30, chipColumns: columns, chipHeight: 40 });
+    return homeLayout(groups, true, { columns, tileHeight: 100, labelHeight: 30, chipColumns: columns, chipHeight: 40, cardColumns: columns, cardHeight: 160 });
 };
 
 describe(`arrow travel over the home`, () => {

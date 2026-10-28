@@ -16,6 +16,8 @@ const galleryRow = ref<HTMLElement>();
 const galleryCard = ref<HTMLElement>();
 const chipGrid = ref<HTMLElement>();
 const chip = ref<HTMLElement>();
+const cardGrid = ref<HTMLElement>();
+const card = ref<HTMLElement>();
 
 const px = (value: string): number => Number.parseFloat(value) || 0;
 
@@ -29,6 +31,8 @@ const MEASURED = [
     `galleryCaption`,
     `chipColumns`,
     `chipHeight`,
+    `cardColumns`,
+    `cardHeight`,
 ] as const satisfies readonly (keyof HomeProbed)[];
 
 const measure = (): void => {
@@ -37,6 +41,7 @@ const measure = (): void => {
     }
     const style = getComputedStyle(grid.value);
     const chips = chipGrid.value === undefined ? undefined : getComputedStyle(chipGrid.value);
+    const cards = cardGrid.value === undefined ? undefined : getComputedStyle(cardGrid.value);
     // The gap rides in the band height: bands are placed at an offset, so nothing else would space them apart. A gallery
     // card's frame is its padding either side, the gap between cards, and what it adds under its picture (the name and
     // the padding), this card's picture being zero tall.
@@ -50,6 +55,8 @@ const measure = (): void => {
         galleryCaption: galleryCard.value?.offsetHeight ?? 0,
         chipColumns: chips === undefined ? 1 : chips.gridTemplateColumns.split(` `).filter((track) => track !== ``).length,
         chipHeight: chips === undefined ? 1 : (chip.value?.offsetHeight ?? 0) + px(chips.rowGap),
+        cardColumns: cards === undefined ? 1 : cards.gridTemplateColumns.split(` `).filter((track) => track !== ``).length,
+        cardHeight: cards === undefined ? 1 : (card.value?.offsetHeight ?? 0) + px(cards.rowGap),
     };
     // A pane drag fires this every frame, and a new object would re-lay the whole folder out even when nothing moved.
     const was = probed.value;
@@ -85,9 +92,16 @@ onBeforeUnmount(() => observer?.disconnect());
                 <span class="mt-2 flex h-5 text-xs">&nbsp;</span>
             </div>
         </div>
-        <!-- The folder chips, as HomeFolderChip.vue and the home's chip band draw them. -->
+        <!-- The folder chips, as HomeChip.vue and the home's chip band draw them. -->
         <div ref="chipGrid" class="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-1.5">
             <div ref="chip" class="flex h-9 items-center text-xs">&nbsp;</div>
+        </div>
+        <!-- The preview cards, as HomeCard.vue and the home's card band draw them. -->
+        <div ref="cardGrid" class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2">
+            <div ref="card" class="flex flex-col p-1">
+                <span class="block h-32"></span>
+                <span class="mt-2 flex h-5 text-xs">&nbsp;</span>
+            </div>
         </div>
     </div>
 </template>

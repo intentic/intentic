@@ -1,4 +1,4 @@
-import { formatClock, formatDate, formatDayMonth, formatMonth, formatWeekdayTime } from "@intentic/ui/format";
+import { formatClock, formatDate, formatDayMonth, formatMonth, formatWeekdayTime, timeAgo } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
 // When a file changed, as the home's date grouping says it (homeOrder.ts `homeGroups` with `date`): the heading it sits
@@ -65,6 +65,22 @@ export const dateLine = (mtime: number | undefined, now: number): string => {
     }
     if (mtime >= midnightBefore(now, 7)) {
         return formatWeekdayTime(mtime);
+    }
+    return new Date(mtime).getFullYear() === new Date(now).getFullYear() ? formatDayMonth(mtime) : formatDate(mtime);
+};
+
+const WEEK_MS = 7 * 86_400_000;
+
+/**
+ * A file's age short enough to sit beside its size on one line: "3h ago" or "2d ago" within the week, then the day
+ * ("Aug 20"), with the year only once it is another year's. Undefined for a file whose listing carried no time.
+ */
+export const fileAge = (mtime: number | undefined, now = Date.now()): string | undefined => {
+    if (mtime === undefined) {
+        return undefined;
+    }
+    if (now - mtime < WEEK_MS) {
+        return timeAgo(mtime, { now, days: true });
     }
     return new Date(mtime).getFullYear() === new Date(now).getFullYear() ? formatDayMonth(mtime) : formatDate(mtime);
 };

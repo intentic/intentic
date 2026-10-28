@@ -3,13 +3,14 @@ import { moveInGrid } from "./homeGrid";
 import { bandOfIndex, homeLayout, rowIndexOf } from "./homeLayout";
 import type { HomeGroup } from "./homeOrder";
 
-const entriesOf = (prefix: string, count: number): WorkspaceTreeEntry[] =>
-    Array.from({ length: count }, (_, index) => ({ name: `${prefix}${index}`, path: `${prefix}${index}`, type: `file` as const }));
+// Pictures by default: with no gallery they are the home's own tiles, which most of these tests travel.
+const entriesOf = (prefix: string, count: number, extension = `.png`, type: `file` | `dir` = `file`): WorkspaceTreeEntry[] =>
+    Array.from({ length: count }, (_, index) => ({ name: `${prefix}${index}${extension}`, path: `${prefix}${index}${extension}`, type }));
 
 const groupsOf = (...sizes: number[]): HomeGroup[] =>
-    sizes.map((size, at) => ({ key: at === 0 ? `code` : `documents`, label: `g${at}`, entries: entriesOf(`${at}-`, size) }));
+    sizes.map((size, at) => ({ key: at === 0 ? `pictures` : `media`, label: `g${at}`, entries: entriesOf(`${at}-`, size) }));
 
-const METRICS = { columns: 3, tileHeight: 100, labelHeight: 30, chipColumns: 2, chipHeight: 40 };
+const METRICS = { columns: 3, tileHeight: 100, labelHeight: 30, chipColumns: 2, chipHeight: 40, cardColumns: 2, cardHeight: 160 };
 
 describe(`homeLayout`, () => {
     it(`wraps each group's entries at the column count`, () => {
@@ -61,7 +62,7 @@ describe(`homeLayout`, () => {
 });
 
 describe(`folders`, () => {
-    const folders = { key: `folders` as const, label: `Folders`, entries: entriesOf(`dir-`, 3) };
+    const folders = { key: `folders` as const, label: `Folders`, entries: entriesOf(`dir-`, 3, ``, `dir`) };
     const layout = homeLayout([folders, ...groupsOf(3)], true, METRICS);
 
     it(`stand as rows of chips at the chips' own columns and height, over the files' tiles`, () => {
@@ -76,6 +77,33 @@ describe(`folders`, () => {
         // The third tile stands under the right half, where the second row has no chip: the nearest is the lone one.
         expect(moveInGrid(layout, 5, `ArrowUp`)).toBe(2);
         expect(moveInGrid(layout, 1, `ArrowDown`)).toBe(2);
+    });
+});
+
+describe(`files, by what each can show`, () => {
+    it(`draws a file read from its start as a card and one with nothing inside to show as a chip`, () => {
+        const layout = homeLayout(
+            [
+                { key: `documents`, label: `Documents`, entries: entriesOf(`doc-`, 3, `.md`) },
+                { key: `config`, label: `Config`, entries: entriesOf(`conf-`, 2, `.json`) },
+            ],
+            true,
+            METRICS,
+        );
+        expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `cards`, `cards`, `label`, `chips`]);
+        expect(layout.heights).toEqual([30, 160, 160, 30, 40]);
+    });
+
+    it(`lays a heading of mixed files out as runs, numbering them on through the heading`, () => {
+        const today = { key: `today` as const, label: `Today`, entries: [...entriesOf(`n-`, 1, `.md`), ...entriesOf(`p-`, 2), ...entriesOf(`z-`, 1, `.zip`)] };
+        const layout = homeLayout([today], true, METRICS);
+        expect(layout.bands.map((band) => band.kind)).toEqual([`label`, `cards`, `tiles`, `chips`]);
+        expect(layout.rows.map((row) => [row.start, row.count])).toEqual([
+            [0, 1],
+            [1, 2],
+            [3, 1],
+        ]);
+        expect(new Set(layout.bands.map((band) => band.key)).size).toBe(layout.bands.length);
     });
 });
 

@@ -17,7 +17,7 @@ import type { HomeGroup } from "../homeOrder";
 
 const METRICS = { width: 1000, targetHeight: 200, gap: 8 };
 // The home's own grid around a gallery: tiles four across, folder chips four across.
-const HOME = { columns: 4, tileHeight: 100, labelHeight: 30, chipColumns: 4, chipHeight: 42 };
+const HOME = { columns: 4, tileHeight: 100, labelHeight: 30, chipColumns: 4, chipHeight: 42, cardColumns: 4, cardHeight: 160 };
 
 // What a row occupies across the pane, gaps included.
 const rowWidth = (widths: readonly number[], gap = METRICS.gap): number => widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1);
@@ -134,7 +134,6 @@ describe(`a gallery inside the home's bands`, () => {
     const aspects = [1.5, 1.5, 1.5, 0.75, 1, 1.78, 1.33, 0.56, 1.5, 1.5];
     const gallery = {
         ...METRICS,
-        drawn: (group: HomeGroup) => group.key === `pictures`,
         aspectOf: (entry: WorkspaceTreeEntry) => aspects[Number.parseInt(entry.name, 10)]!,
         captionHeight: 24,
         rowGap: 12,
@@ -195,7 +194,6 @@ describe(`folders above a gallery`, () => {
     const pictures: HomeGroup = { key: `pictures`, label: `Pictures`, entries: [file(`0.png`), file(`1.png`), file(`2.png`)] };
     const gallery = {
         ...METRICS,
-        drawn: (group: HomeGroup) => group.key === `pictures`,
         aspectOf: () => 1,
         captionHeight: 24,
         rowGap: 12,

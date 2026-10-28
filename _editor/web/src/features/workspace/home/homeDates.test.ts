@@ -1,5 +1,5 @@
 import { formatClock, formatDate, formatDayMonth, formatMonth, formatWeekdayTime } from "@intentic/ui/format";
-import { dateGroupOf, dateLine } from "./homeDates";
+import { dateGroupOf, dateLine, fileAge } from "./homeDates";
 
 // Local wall-clock times, so the edges hold in whatever timezone the suite runs in.
 const at = (year: number, month: number, day: number, hour = 12, minute = 0): number => new Date(year, month - 1, day, hour, minute).getTime();
@@ -44,5 +44,16 @@ describe(`the line under a file's name`, () => {
 
     it(`is empty with no time, which keeps the tile its height`, () => {
         expect(dateLine(undefined, NOW)).toBe(``);
+    });
+});
+
+describe(`a file's age beside its size`, () => {
+    const now = new Date(2026, 9, 28, 12, 0).getTime();
+
+    it(`is relative within the week, the day after it, and the year only for another year's`, () => {
+        expect(fileAge(now - 3 * 3_600_000, now)).toMatch(/3/u);
+        expect(fileAge(new Date(2026, 7, 20, 9, 0).getTime(), now)).not.toMatch(/2026/u);
+        expect(fileAge(new Date(2025, 7, 20, 9, 0).getTime(), now)).toMatch(/2025/u);
+        expect(fileAge(undefined, now)).toBeUndefined();
     });
 });

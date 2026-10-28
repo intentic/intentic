@@ -1,10 +1,11 @@
-<!-- A folder above a gallery: its glyph and its name on one line, a chip in a grid of chips, so the pictures under it have the screen. -->
+<!-- A folder, or a file with nothing inside worth showing (a lockfile, a config, an archive): its glyph and its name on one line, a chip in a grid of chips, with what a reader checks at its end: a folder's tree icons, a file's size and age. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
+import { explorerColorClass, formatBytes, type IconName, iconForEntry } from "@intentic/ui";
 import { computed } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { useT } from "@intentic/ui/i18n";
+import { fileAge } from "./homeDates";
 import { provisionalAt } from "../../../models/workspace/files/provisionalEntries";
 import { provisionalTooltip } from "../explorer/tree/treeRows";
 import type { RowAction } from "../explorer/rowActions";
@@ -63,6 +64,14 @@ const quiet = computed(() => dimmed || locked || pending);
 // A chip stands on a faint fill of its own at rest, so a strip of them reads as places to go rather than loose words.
 // The selected tint and a drop's fill are the row's own (`ui-row-select-*`), which a fill set here would paint over.
 const resting = computed(() => !selected && !dropTarget);
+// A file's size and age; the line the home hands (a result's folder, a time under a date heading) stands for the age.
+const facts = computed(() => {
+    if (entry.type === `dir`) {
+        return where;
+    }
+    const age = where ?? fileAge(entry.mtime);
+    return [entry.size === undefined ? undefined : formatBytes(entry.size), age].filter((part) => part !== undefined && part !== ``).join(` · `);
+});
 // The tree's rule for its row icons: an icon that is evidence (a repository with checks, one that runs) stands, faint;
 // one that is only something to do (its panel) shows on hover, on focus, and on the selected chip.
 const actionClass = (action: RowAction): string =>
@@ -132,7 +141,7 @@ const run = (action: RowAction, event: MouseEvent): void => {
             >{{ entry.name }}</span
         >
         <Icon v-if="entry.link !== undefined" name="link" class="shrink-0 text-[0.65rem] text-subtle" :aria-label="t(`workspace.words.symlink`)" />
-        <span v-if="where" class="max-w-[45%] shrink-0 truncate text-2xs text-subtle" v-tooltip.bottom.overflow="where">{{ where }}</span>
+        <span v-if="facts" class="max-w-[45%] shrink-0 truncate text-2xs text-subtle tabular-nums" v-tooltip.bottom.overflow="facts">{{ facts }}</span>
         <!-- Its own presses: they neither open the folder nor start a drag from it. -->
         <button
             v-for="action in renaming ? [] : actions"

@@ -1,13 +1,14 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type GalleryMetrics, justifyRows, sharedStart } from "./gallery/homeGallery";
-import type { HomeGroup } from "./homeOrder";
+import { displayOf, type HomeDisplay, type HomeGroup } from "./homeOrder";
 
 // The home's tiles as a list of fixed-height bands: a group label, or one row of tiles. Turning the grid into a list is
 // what lets the home window itself — a folder of fifty thousand files then paints the dozen rows on screen and no more.
 // Pure, no DOM: the view measures the column count and the band heights off a probe and hands them in, so the CSS stays
-// the single source of truth for both. In a gallery a group of pictures is laid out as justified rows (homeGallery.ts)
-// instead: still bands, each one row, only each its own height; and the folders above it as a strip of one-line chips, so
-// the pictures have the screen rather than a row of large glyphs.
+// the single source of truth for both. Each entry is drawn by what it can show (homeOrder.ts `displayOf`): a folder or a
+// file with nothing inside worth showing as a one-line chip, a file read from its start as a card with a miniature of
+// that start, a picture or a video as a tile, or, in a gallery, in justified rows (homeGallery.ts): still bands, each one
+// row, only each its own height.
 
 export type HomeBand =
     | { readonly kind: "label"; readonly key: string; readonly label: string }
@@ -30,8 +31,9 @@ export type HomeBand =
           readonly shared: string;
       }
     | {
-          // Folders above a gallery, each a one-line chip in a grid of its own columns.
-          readonly kind: "chips";
+          // One-line chips (folders, and files with nothing inside to show), or preview cards, each in a grid of its own
+          // columns.
+          readonly kind: "chips" | "cards";
           readonly key: string;
           readonly entries: readonly WorkspaceTreeEntry[];
           readonly start: number;
@@ -66,9 +68,12 @@ export interface HomeMetrics {
     // A tile row's full height, gap included: bands are placed by offset, so the gap has to live in the height.
     readonly tileHeight: number;
     readonly labelHeight: number;
-    // The folders' chip grid: its column count at this width, and a row's height, gap included.
+    // The chips' grid: its column count at this width, and a row's height, gap included.
     readonly chipColumns: number;
     readonly chipHeight: number;
+    // The preview cards' grid, the same two.
+    readonly cardColumns: number;
+    readonly cardHeight: number;
 }
 
 /** What the home measures off its probe (HomeProbe.vue): the grid's metrics, and a gallery card's frame. */
@@ -92,12 +97,12 @@ export const UNPROBED: HomeProbed = {
     galleryCaption: 0,
     chipColumns: 1,
     chipHeight: 1,
+    cardColumns: 1,
+    cardHeight: 1,
 };
 
-/** How a gallery lays its groups out; absent, every group is tiles. */
+/** How a gallery lays its pictures and videos out; absent, they are tiles. */
 export interface HomeGallery extends GalleryMetrics {
-    // Which groups are drawn as pictures; the rest (a group of documents) stay tiles, and folders are always chips.
-    readonly drawn: (group: HomeGroup) => boolean;
     // Each entry's width over its height, as it is to be laid out.
     readonly aspectOf: (entry: WorkspaceTreeEntry) => number;
     // Height a row adds under its pictures (the name) and below that (the gap to the next row).
@@ -121,6 +126,89 @@ const spansOf = (widths: readonly number[], gap: number, paneWidth: number): rea
     });
 };
 
+// The stretches of one display in a heading's entries, in order: [display, index of the first, entries].
+const runsOf = (entries: readonly WorkspaceTreeEntry[]): readonly (readonly [HomeDisplay, number, readonly WorkspaceTreeEntry[]])[] => {
+    const runs: [HomeDisplay, number, WorkspaceTreeEntry[]][] = [];
+    entries.forEach((entry, at) => {
+        const display = displayOf(entry);
+        const last = runs.at(-1);
+        if (last?.[0] === display) {
+            last[2].push(entry);
+        } else {
+            runs.push([display, at, [entry]]);
+        }
+    });
+    return runs;
+};
+
+interface Laid {
+    readonly bands: HomeBand[];
+    readonly heights: number[];
+    readonly rows: HomeRow[];
+}
+
+interface Grid {
+    readonly kind: `tiles` | `chips` | `cards`;
+    readonly columns: number;
+    readonly height: number;
+}
+
+// The grid a display that is not a gallery's is laid out on.
+const gridOf = (display: HomeDisplay, metrics: HomeMetrics): Grid =>
+    display === `visual`
+        ? { kind: `tiles`, columns: metrics.columns, height: metrics.tileHeight }
+        : display === `card`
+          ? { kind: `cards`, columns: metrics.cardColumns, height: metrics.cardHeight }
+          : { kind: `chips`, columns: metrics.chipColumns, height: metrics.chipHeight };
+
+// A run as rows of a grid: the home's own tiles, whose columns line up with the rows' indices, or a grid of its own
+// columns (chips, cards), whose rows say where each stands across the pane so Up and Down can cross into another grid.
+const laidGrid = (
+    entries: readonly WorkspaceTreeEntry[],
+    start: number,
+    key: string,
+    grid: Grid,
+    out: Laid,
+): void => {
+    const across = Math.max(1, Math.floor(grid.columns));
+    for (let at = 0; at < entries.length; at += across) {
+        const row = entries.slice(at, at + across);
+        const laid: HomeRow = { band: out.bands.length, start: start + at, count: row.length };
+        out.rows.push(grid.kind === `tiles` ? laid : { ...laid, spans: evenSpans(row.length, across) });
+        // Keyed on the run and the row's first index, not on an entry: a rename must not re-key the whole band.
+        out.bands.push(
+            grid.kind === `tiles`
+                ? { kind: `tiles`, key: `${key}#${at}`, entries: row, start: start + at }
+                : { kind: grid.kind, key: `${key}#${at}`, entries: row, start: start + at, columns: across },
+        );
+        out.heights.push(grid.height);
+    }
+};
+
+// A run of pictures as justified rows. The row's width is the pane's; how a row's own frame (the selection ring) fits
+// inside it is the view's.
+const laidGallery = (entries: readonly WorkspaceTreeEntry[], start: number, key: string, gallery: HomeGallery, out: Laid): void => {
+    const shared = sharedStart(entries.map((entry) => entry.name));
+    for (const row of justifyRows(entries.map(gallery.aspectOf), gallery)) {
+        out.rows.push({
+            band: out.bands.length,
+            start: start + row.start,
+            count: row.widths.length,
+            spans: spansOf(row.widths, gallery.gap, gallery.width),
+        });
+        out.bands.push({
+            kind: `gallery`,
+            key: `${key}#${row.start}`,
+            entries: entries.slice(row.start, row.start + row.widths.length),
+            start: start + row.start,
+            height: row.height,
+            widths: row.widths,
+            shared,
+        });
+        out.heights.push(row.height + gallery.captionHeight + gallery.rowGap);
+    }
+};
+
 export const EMPTY_LAYOUT: HomeLayout = { bands: [], heights: [], rows: [], columns: 1, count: 0 };
 
 /**
@@ -140,50 +228,15 @@ export const homeLayout = (groups: readonly HomeGroup[], showLabels: boolean, me
             bands.push({ kind: `label`, key: `${group.key}#label`, label: group.label });
             heights.push(metrics.labelHeight);
         }
-        // Folders are places to go, not things to look at: a strip of one-line chips over the files, however they are
-        // drawn, rather than a row of large glyphs that are all the same glyph.
-        if (group.key === `folders`) {
-            const across = Math.max(1, Math.floor(metrics.chipColumns));
-            for (let at = 0; at < group.entries.length; at += across) {
-                const entries = group.entries.slice(at, at + across);
-                rows.push({ band: bands.length, start: start + at, count: entries.length, spans: evenSpans(entries.length, across) });
-                bands.push({ kind: `chips`, key: `${group.key}#${at}`, entries, start: start + at, columns: across });
-                heights.push(metrics.chipHeight);
+        // A heading's entries in runs of one display, each laid out its own way; a date heading holds its runs together
+        // (homeOrder.ts), a kind heading is one run.
+        for (const [display, from, entries] of runsOf(group.entries)) {
+            const key = `${group.key}#${display}${from}`;
+            if (display === `visual` && gallery !== undefined) {
+                laidGallery(entries, start + from, key, gallery, { bands, heights, rows });
+            } else {
+                laidGrid(entries, start + from, key, gridOf(display, metrics), { bands, heights, rows });
             }
-            start += group.entries.length;
-            continue;
-        }
-        if (gallery?.drawn(group) === true) {
-            const shared = sharedStart(group.entries.map((entry) => entry.name));
-            // The row's width is the pane's; how a row's own frame (the selection ring) fits inside it is the view's.
-            for (const row of justifyRows(group.entries.map(gallery.aspectOf), gallery)) {
-                const entries = group.entries.slice(row.start, row.start + row.widths.length);
-                rows.push({
-                    band: bands.length,
-                    start: start + row.start,
-                    count: entries.length,
-                    spans: spansOf(row.widths, gallery.gap, gallery.width),
-                });
-                bands.push({
-                    kind: `gallery`,
-                    key: `${group.key}#${row.start}`,
-                    entries,
-                    start: start + row.start,
-                    height: row.height,
-                    widths: row.widths,
-                    shared,
-                });
-                heights.push(row.height + gallery.captionHeight + gallery.rowGap);
-            }
-            start += group.entries.length;
-            continue;
-        }
-        for (let at = 0; at < group.entries.length; at += columns) {
-            const entries = group.entries.slice(at, at + columns);
-            rows.push({ band: bands.length, start: start + at, count: entries.length });
-            // Keyed on the group and the row's first index, not on an entry: a rename must not re-key the whole band.
-            bands.push({ kind: `tiles`, key: `${group.key}#${at}`, entries, start: start + at });
-            heights.push(metrics.tileHeight);
         }
         start += group.entries.length;
     }
@@ -191,10 +244,10 @@ export const homeLayout = (groups: readonly HomeGroup[], showLabels: boolean, me
 };
 
 // How a band of tiles is boxed, by what it holds: a gallery row lays its pictures side by side at their own widths, a
-// chip row and a tile row are grids, of their own columns or of the home's.
-export const BAND_LOOK = { gallery: `flex gap-1`, chips: `grid gap-1.5`, tiles: `grid gap-0.5` } as const;
+// chip row, a card row and a tile row are grids, of their own columns or of the home's. The gaps are HomeProbe.vue's.
+export const BAND_LOOK = { gallery: `flex gap-1`, chips: `grid gap-1.5`, cards: `grid gap-2`, tiles: `grid gap-0.5` } as const;
 export const bandColumns = (band: Exclude<HomeBand, { kind: "label" }>, columns: number): { gridTemplateColumns?: string } =>
-    band.kind === `gallery` ? {} : { gridTemplateColumns: `repeat(${band.kind === `chips` ? band.columns : columns}, minmax(0, 1fr))` };
+    band.kind === `gallery` ? {} : { gridTemplateColumns: `repeat(${band.kind === `tiles` ? columns : band.columns}, minmax(0, 1fr))` };
 
 // Position in `rows` of the tile row holding a home-order index, by binary search; -1 when the index is out of range.
 // The position, not the row: travel steps to `rows[at - 1]` and `rows[at + 1]`, which a row alone could not name.

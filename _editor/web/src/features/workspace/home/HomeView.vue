@@ -32,7 +32,8 @@ import HomeCover from "./HomeCover.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeGallerySwitch from "./gallery/HomeGallerySwitch.vue";
 import HomeGalleryTile from "./gallery/HomeGalleryTile.vue";
-import HomeFolderChip from "./HomeFolderChip.vue";
+import HomeChip from "./HomeChip.vue";
+import HomeCard from "./HomeCard.vue";
 import HomeDraft from "./HomeDraft.vue";
 import type { RowAction } from "../explorer/rowActions";
 import HomeProbe from "./HomeProbe.vue";
@@ -130,7 +131,7 @@ const {
 );
 const gridLayout = computed(() => homeLayout(groups.value, showLabels.value, probed.value, gallery.value));
 // The tile a band draws, by what it holds; its box is homeLayout's (`BAND_LOOK`, `bandColumns`).
-const BAND_TILE = { gallery: HomeGalleryTile, chips: HomeFolderChip, tiles: HomeTile } as const;
+const BAND_TILE = { gallery: HomeGalleryTile, chips: HomeChip, cards: HomeCard, tiles: HomeTile } as const;
 // What a tile takes beyond what every tile does: a picture its box, a folder the icons its tree row carries.
 const tileProps = (
     band: HomeBand,

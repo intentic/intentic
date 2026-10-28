@@ -119,9 +119,15 @@ describe(`grouped by date`, () => {
         ]);
     });
 
-    it(`mixes kinds under one date, which is the point of it`, () => {
-        const [today] = byDate([dated(`a.zip`, at(10, 7, 10)), dated(`b.md`, at(10, 7, 11)), dated(`c.png`, at(10, 7, 9))]);
-        expect(today?.entries.map((entry) => entry.name)).toEqual([`b.md`, `a.zip`, `c.png`]);
+    it(`mixes kinds under one date, which is the point of it, cards then pictures then chips, each newest first`, () => {
+        const [today] = byDate([
+            dated(`a.zip`, at(10, 7, 10)),
+            dated(`b.md`, at(10, 7, 11)),
+            dated(`c.png`, at(10, 7, 9)),
+            dated(`d.ts`, at(10, 7, 12)),
+            dated(`e.lock`, at(10, 7, 13)),
+        ]);
+        expect(today?.entries.map((entry) => entry.name)).toEqual([`d.ts`, `b.md`, `c.png`, `e.lock`, `a.zip`]);
     });
 
     it(`breaks a tie in time by name, so the order holds across renders`, () => {
