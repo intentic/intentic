@@ -64,13 +64,17 @@
         --wallpaper-tray: rgb(0 0 0 / 0.32);
     }
 
-    /* The canvas colour stays under the art, so the board is its usual self for the frame before the picture decodes. */
+    /* The canvas colour stays under the art, so the board is its usual self for the frame before the picture decodes.
+       The picture is pinned to the window (`fixed`), not to the board: sized against the board, opening the bottom pane
+       or a side panel rescaled and re-cropped the whole picture. The scrim's two layers stay on the board's own box,
+       since they frame its header row and edges. */
     [data-wallpaper] .agents-board {
         background-color: var(--color-canvas);
         background-image: var(--wallpaper-scrim), linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)), var(--wallpaper-art);
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
+        background-attachment: scroll, scroll, scroll, fixed;
     }
 
     /* A dashed card is a place for something and has no fill of its own, which on the picture put its words straight
