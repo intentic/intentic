@@ -258,6 +258,25 @@ it(`gives a sandbox Docker Compose runs the edit to its compose file instead of 
     expect(step?.textContent).not.toContain(`curl`);
 });
 
+// The owner found the edit drawn as a paragraph per block, its YAML scrolling sideways and folded behind "Show all" at
+// once: it is numbered steps, a few words over each thing to copy, every block wrapped and none folded.
+it(`hands a Compose-run sandbox its edit as numbered steps to copy, wrapped and never folded`, async () => {
+    state.value = { ...environment, manager: `compose` };
+    pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\n# intentic:runtime --privileged\n`, hash: `f00d` };
+    const el = mount();
+    const steps = (): string[] => [...el.querySelectorAll(`[data-executor="compose"] ol > li`)].map((li) => li.querySelector(`p`)?.textContent?.trim() ?? ``);
+    expect(steps()).toEqual([`Paste into the sandbox's service`, `Add to its environment`, `Redeploy or press Deploy in Komodo or Portainer`]);
+    const blocks = [...el.querySelectorAll(`[data-executor="compose"] .ui-code`)];
+    expect(blocks).toHaveLength(3);
+    expect(blocks.every((code) => code.classList.contains(`ui-code-wrap`) && !code.classList.contains(`ui-code-clamp`))).toBe(true);
+    // One Copy per step, in the step's own row.
+    expect(el.querySelectorAll(`[data-executor="compose"] li > div button`)).toHaveLength(3);
+    // A base that already is the environment needs only the hash and the redeploy.
+    pending.value = { content: `FROM ghcr.io/intentic/sandbox:stable\n`, hash: `f00d` };
+    await nextTick();
+    expect(steps()).toEqual([`Add to its environment`, `Redeploy or press Deploy in Komodo or Portainer`]);
+});
+
 // The daemon marks a block as arriving after a rebuild only while one is pending (contents.ts), so the card has no
 // sentence for "arriving, yet nothing pending": that state once drew one, for a tool whose command sat off PATH.
 it(`draws no rebuild step for contents while nothing approved waits to be built`, () => {

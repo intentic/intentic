@@ -6,6 +6,7 @@ import { useHighlighter } from "../../composables/useHighlighter.js";
 import { useT } from "../../i18n/index.js";
 import type { ShikiLang } from "@intentic/code-read/langs";
 import CopyButton from "./CopyButton.vue";
+import { withLineIndents } from "./codeLineIndents.js";
 import { useLatest } from "../../composables/useLatest.js";
 
 const t = useT();
@@ -114,7 +115,8 @@ watch(
         // Sliced, so a log tail of any size never holds the page; a tail spends its colour on its newest lines.
         void highlightSliced(nextCode, nextLang, { from: tail || scrollBottom ? `end` : `start`, stale: () => !isLatest() }).then((out) => {
             if (isLatest()) {
-                html.value = out;
+                // A wrapped block's lines carry their indent, which code.css hangs a wrapped line's rest under.
+                html.value = out !== undefined && wrap ? withLineIndents(out, nextCode) : out;
             }
         });
     },

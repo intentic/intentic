@@ -58,6 +58,35 @@ const directivesOf = (content: string): string[] => {
 
 const SERVICE_INDENT = `    `;
 
+// The heredoc delimiters a Dockerfile line opens (`<<EOF`, `<<-"EOF"`), in the order their bodies follow it.
+const heredocsOpenedBy = (line: string): string[] =>
+    [...line.matchAll(/<<-?\s*(["']?)([A-Za-z_]\w*)\1/gu)].map((match) => match[2] ?? ``).filter((tag) => tag !== ``);
+
+// The recipe as Compose needs it in the file: its instructions without the comments and blank lines around them, which
+// were most of the snippet (the daemon's header, each fragment's explanation, the directives already said as service
+// keys above). Docker drops those lines itself, so the build is the same; a heredoc's body is kept whole, since a `#`
+// there is the script's own line (a shebang, a shell comment).
+const buildLinesOf = (content: string): string[] => {
+    const lines: string[] = [];
+    const open: string[] = [];
+    for (const line of content.trimEnd().split(`\n`)) {
+        if (open.length > 0) {
+            lines.push(line);
+            if (line.trim() === open[0]) {
+                open.shift();
+            }
+            continue;
+        }
+        const trimmed = line.trim();
+        if (trimmed === `` || trimmed.startsWith(`#`)) {
+            continue;
+        }
+        lines.push(line);
+        open.push(...heredocsOpenedBy(line));
+    }
+    return lines;
+};
+
 // Pure: the edit for one approved recipe. `$` is doubled inside the inline Dockerfile, or Compose would read the
 // recipe's own shell (`$(node -p …)`) as variables of its file and build something else.
 export const composeRebuildOf = (hash: string, content: string): ComposeRebuild => {
@@ -69,13 +98,9 @@ export const composeRebuildOf = (hash: string, content: string): ComposeRebuild 
               `image: intentic-sandbox-environment:${hash.replace(/^sha256:/u, ``).slice(0, 12)}`,
               `pull_policy: build`,
               `build:`,
-              `    # Base updates arrive with each build.`,
               `    pull: true`,
               `    dockerfile_inline: |`,
-              ...content
-                  .trimEnd()
-                  .split(`\n`)
-                  .map((line) => (line === `` ? `` : `        ${line.replaceAll(`$`, `$$$$`)}`)),
+              ...buildLinesOf(content).map((line) => (line === `` ? `` : `        ${line.replaceAll(`$`, `$$$$`)}`)),
           ]
         : [];
     return {

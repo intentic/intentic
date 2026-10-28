@@ -7223,11 +7223,11 @@
             "whereGetsVersion": "Woher {label} seine Version bekommt"
         },
         "environmentCard": {
-            "composeLead": "Diese Sandbox läuft unter Docker Compose, deshalb wird sie über ihre Compose-Datei neu gebaut, nicht mit einem Befehl von hier. Füge dies dem Service der Sandbox hinzu:",
-            "composeServiceLabel": "Zum Service der Sandbox hinzufügen",
-            "composeHashLead": "Und dies zur environment des Service, damit die Sandbox weiß, dass sie dieses Rezept ausführt:",
-            "composeHashOnlyLead": "Diese Sandbox läuft unter Docker Compose, und ihr Image enthält bereits alles hier. Füge dies der environment des Service in ihrer Compose-Datei hinzu, damit die Sandbox es weiß:",
-            "composeRedeploy": "Dann neu bereitstellen: Deploy in Komodo oder Portainer, oder im Ordner mit der Datei:",
+            "composeTitle": "Mit Docker Compose neu bauen",
+            "composeStepService": "In den Service der Sandbox einfügen",
+            "composeStepEnvironment": "Zu seiner environment hinzufügen",
+            "composeStepRedeploy": "Neu bereitstellen",
+            "composeStepRedeployElsewhere": "oder Deploy in Komodo oder Portainer drücken",
             "activeOverlay": "Aktives Overlay",
             "againstSandboxsHost": "gegen den Host dieser Sandbox.",
             "applied": "angewendet",

@@ -27,6 +27,17 @@
         overflow-wrap: break-word;
     }
 
+    /* A WRAPPED LINE HANGS UNDER ITS OWN INDENT, two columns in, rather than restarting at the margin, where an indented
+       file (YAML, JSON) lost its shape. `--hang` is the line's leading width, set by Code.vue; a full-width inline-block
+       takes the indent and keeps the newline Shiki puts between lines as the only break. */
+    .ui-code.ui-code-wrap .shiki .line {
+        display: inline-block;
+        width: 100%;
+        vertical-align: top;
+        padding-left: calc((var(--hang, 0) + 2) * 1ch);
+        text-indent: calc((var(--hang, 0) + 2) * -1ch);
+    }
+
 /* Clamped to `--ui-code-clamp-lines` visible lines (Code's `clampLines`), the block's own fade + toggle on top. */
     .ui-code.ui-code-clamp .shiki,
     .ui-code.ui-code-clamp pre {

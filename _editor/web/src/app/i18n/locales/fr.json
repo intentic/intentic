@@ -7223,11 +7223,11 @@
             "whereGetsVersion": "D'où {label} tire sa version"
         },
         "environmentCard": {
-            "composeLead": "Docker Compose exécute ce sandbox : il se reconstruit depuis son fichier compose, pas avec une commande d'ici. Ajoutez ceci au service du sandbox :",
-            "composeServiceLabel": "À ajouter au service du sandbox",
-            "composeHashLead": "Et ceci à l'environment du service, pour que le sandbox sache qu'il exécute cette recette :",
-            "composeHashOnlyLead": "Docker Compose exécute ce sandbox, et son image contient déjà tout ce qui est ici. Ajoutez ceci à l'environment du service dans son fichier compose, pour que le sandbox le sache :",
-            "composeRedeploy": "Puis redéployez-le : Deploy dans Komodo ou Portainer, ou dans le dossier du fichier :",
+            "composeTitle": "Reconstruire avec Docker Compose",
+            "composeStepService": "Collez-le dans le service du sandbox",
+            "composeStepEnvironment": "Ajoutez-le à son environment",
+            "composeStepRedeploy": "Redéployez",
+            "composeStepRedeployElsewhere": "ou appuyez sur Deploy dans Komodo ou Portainer",
             "activeOverlay": "Surcouche active",
             "againstSandboxsHost": "face à l'hôte de ce sandbox.",
             "applied": "appliquée",

@@ -6676,11 +6676,11 @@
             "whereGetsVersion": "Skąd {label} bierze swoją wersję"
         },
         "environmentCard": {
-            "composeLead": "Ten sandbox uruchamia Docker Compose, więc przebudowuje się go z jego pliku compose, a nie poleceniem stąd. Dodaj to do usługi sandboxa:",
-            "composeServiceLabel": "Dodaj do usługi sandboxa",
-            "composeHashLead": "I to do environment usługi, żeby sandbox wiedział, że działa na tym przepisie:",
-            "composeHashOnlyLead": "Ten sandbox uruchamia Docker Compose, a jego obraz ma już wszystko, co tu jest. Dodaj to do environment usługi w jego pliku compose, żeby sandbox o tym wiedział:",
-            "composeRedeploy": "Potem wdróż go ponownie: Deploy w Komodo lub Portainerze albo w folderze z plikiem:",
+            "composeTitle": "Przebuduj przez Docker Compose",
+            "composeStepService": "Wklej do usługi sandboxa",
+            "composeStepEnvironment": "Dodaj do jej environment",
+            "composeStepRedeploy": "Wdróż ponownie",
+            "composeStepRedeployElsewhere": "albo naciśnij Deploy w Komodo lub Portainerze",
             "activeOverlay": "Aktywna nakładka",
             "againstSandboxsHost": "wobec hosta tego sandboxa.",
             "applied": "zastosowana",

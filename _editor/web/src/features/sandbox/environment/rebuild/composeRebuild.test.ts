@@ -35,8 +35,30 @@ it(`builds a recipe with steps inline, doubling $ so Compose does not read the r
     expect(lines).toContain(`        dockerfile_inline: |`);
     expect(lines).toContain(`            FROM ghcr.io/intentic/sandbox:stable`);
     expect(lines).toContain(`            RUN ln -sf "/opt/x-$$(node -p 'process.arch')" /usr/local/bin/x`);
-    // A blank line inside the block scalar stays blank rather than trailing spaces.
-    expect(lines.filter((line) => line.trim() === ``).every((line) => line === ``)).toBe(true);
+});
+
+// The owner read a dozen lines of the daemon's own commentary before the first step that builds anything: the file
+// gets the instructions, and Docker would have dropped the rest anyway.
+it(`leaves the recipe's comments and blank lines out of the inline Dockerfile`, () => {
+    const edit = composeRebuildOf(HASH, `${HEADER}\n# ---- ffmpeg ----\n# Encodes screen recordings.\nRUN apt-get update \\\n    && apt-get install -y ffmpeg\n\n${DOCKER}\n`);
+    const inline = edit.snippet.split(`\n`).slice(edit.snippet.split(`\n`).indexOf(`        dockerfile_inline: |`) + 1);
+    expect(inline).toEqual([`            FROM ghcr.io/intentic/sandbox:stable`, `            RUN apt-get update \\`, `                && apt-get install -y ffmpeg`]);
+});
+
+// A `#` inside a heredoc is the script's own line, and a blank one is part of the file it writes.
+it(`keeps a heredoc's body whole, comments and blank lines included`, () => {
+    const steps = `RUN <<EOF cat > /usr/local/bin/hello\n#!/bin/sh\n\n# greets\necho hi\nEOF\n# after\nRUN true`;
+    const lines = composeRebuildOf(HASH, `${HEADER}\n${steps}\n`).snippet.split(`\n`);
+    const at = lines.indexOf(`            RUN <<EOF cat > /usr/local/bin/hello`);
+    expect(lines.slice(at)).toEqual([
+        `            RUN <<EOF cat > /usr/local/bin/hello`,
+        `            #!/bin/sh`,
+        ``,
+        `            # greets`,
+        `            echo hi`,
+        `            EOF`,
+        `            RUN true`,
+    ]);
 });
 
 it(`tags the built image from the hash's hex, so a prefixed hash still names a valid image`, () => {
