@@ -328,10 +328,10 @@ const relanding = computed(() => props.pending === `reland` || (relandOffered.va
 // Context is deliberately absent: it is a row of the identity tile's hover (see `tileHint`), so a card whose only stat
 // was its context opens no summary row at all.
 // A maker's card drops cost, diff, model and login, which crowd a narrow card and mean nothing to a non-coder. A coder's
-// cost waits on the geek metrics (a total with no denominator, asking no press); its diff is what Land brings in.
+// cost waits on the geek metrics (a total with no denominator, asking no press); its diff rides the branch's line.
 const costShown = computed(() => !maker.value && showLiveMetrics.value && props.agent.costUsd !== undefined);
 const diffShown = computed(() => !maker.value && props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0));
-const stats = computed(() => costShown.value || diffShown.value);
+const stats = computed(() => costShown.value);
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The tile's glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
 // a session has got to sat in the summary row, last, among four other stats. So the rim went around the tile, and
@@ -767,6 +767,7 @@ const grab = (event: PointerEvent): void => {
                         provenance !== undefined ||
                         model !== undefined ||
                         agent.branch !== undefined ||
+                        diffShown ||
                         (account !== undefined && !mobile)
                     "
                     :data-shares="landPresses ? undefined : ''"
@@ -804,6 +805,18 @@ const grab = (event: PointerEvent): void => {
                     <!-- Abbreviated on the card, full string on hover; a label, not a control (copy is on the right-click menu). -->
                     <!-- Clipped on the card, full identity on hover; nothing renders if the sandbox can't name the account. -->
                     <SessionChip v-if="agent.branch !== undefined && !maker" :branch="agent.branch" />
+                    <!-- What the branch changed, beside it, so it costs no row of its own (wrapping here when the line is full). A press: the count is what the work IS, so it opens the review rather than the chat. Red and green only while the diff is a live signal. -->
+                    <button
+                        v-if="diffShown && agent.diff !== undefined"
+                        type="button"
+                        class="shrink-0 rounded-sm font-mono hover:underline"
+                        :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
+                        v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
+                        @click.stop="emit('changes')"
+                    >
+                        <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
+                        <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
+                    </button>
                     <!-- Not on a phone: which login served the turn is the line's least-read fact, and on a phone's width it was the one that broke the line in two. -->
                     <span v-if="account !== undefined && !mobile" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
                         <Icon name="user" class="shrink-0 text-2xs" />
@@ -894,7 +907,7 @@ const grab = (event: PointerEvent): void => {
                     @land="emit('land')"
                 />
 
-                <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave, a running readout asking 10rem to say what it does. -->
+                <!-- The closing summary line: counted stats (geek metrics), then the drill-in and time held to the line's right (see `summary`); with no stats it shares what the land presses or model line leave, a running readout asking 10rem to say what it does. -->
                 <div
                     v-if="summary" data-shares
                     class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-2xs text-muted"
@@ -902,19 +915,6 @@ const grab = (event: PointerEvent): void => {
                 >
                     <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
-                    <!-- Red and green only while the diff is a live signal. -->
-                    <!-- A press: the count is what the work IS, so it opens the work (the review) rather than the chat the card opens. -->
-                    <button
-                        v-if="diffShown && agent.diff !== undefined"
-                        type="button" data-stat
-                        class="rounded-sm font-mono hover:underline"
-                        :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
-                        v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
-                        @click.stop="emit('changes')"
-                    >
-                        <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
-                        <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
-                    </button>
                     <!-- Lifetime cost total, read-only, with the geek metrics (see `costShown`). -->
                     <span v-if="costShown && agent.costUsd !== undefined" data-stat>{{ formatMoney(agent.costUsd) }}</span>
                     <!-- Opt-in geek metrics, beside what it cost: what its processes and those of everything grouped under it hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->

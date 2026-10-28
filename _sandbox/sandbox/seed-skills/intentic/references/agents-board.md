@@ -30,10 +30,10 @@ The route behind all of them is `agents.rename` (`POST /agents/{id}/rename`).
 
 Each card on `/agents` shows: a leading tile tinted and marked by the kind of work read from the title (a fix, a
 feature…), or the provider's logo when no kind is read; the title; a status pill; a line naming the owner (when it
-is not you), the model, the machine it runs on when that is elsewhere, the branch (without `agent/`) and the
-account; and a row with lines added and removed (press it to open the review) and reactions. What each agent has
-cost joins that row only with **Geek metrics** on (Settings → Appearance), beside its CPU and memory share; spend
-across agents is on the Usage page. The card does not show the persona or the repository.
+is not you), the model, the machine it runs on when that is elsewhere, the branch (without `agent/`), the lines it
+added and removed (press them to open the review) and the account; and a closing row with reactions and the time.
+What each agent has cost joins that row only with **Geek metrics** on (Settings → Appearance), beside its CPU and
+memory share; spend across agents is on the Usage page. The card does not show the persona or the repository.
 
 **Reactions** are the one mark people add: 👍 and 👎 in one press, the rest from a fixed picker (**Add reaction**).
 Everyone sharing the sandbox sees them and who left each; one per person per emoji, up to 24 different emoji on a
