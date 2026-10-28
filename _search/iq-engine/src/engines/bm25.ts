@@ -16,6 +16,7 @@ export const toMatch = (query: string): string | undefined => {
 
 const PRF_DOCS = 10;
 const PRF_TERMS = 8;
+const PRF_BATCH = 256;
 
 // RM3-style pseudo-relevance feedback: mine the strongest non-query terms from the first-pass top docs. The
 // caller runs the expanded query as a SECOND engine into RRF fusion, so original-query ranks keep their weight.
@@ -37,9 +38,24 @@ export const prfTerms = (db: SqliteDb, query: string): string[] => {
             }
         }
     }
+    if (tf.size === 0) {
+        return [];
+    }
+    // The FTS vocabulary already knows each term's document count. Counting matching rows separately for every word
+    // walked the postings hundreds of times per query. TEMP works on read-only connections without changing the
+    // durable index schema; this virtual table reads the current FTS index, so it needs no invalidation.
+    db.run("CREATE VIRTUAL TABLE IF NOT EXISTS temp.iq_prf_vocabulary USING fts5vocab(main, chunks_fts, row)");
+    const terms = [...tf.keys()];
+    const frequencies = new Map<string, number>();
+    for (let offset = 0; offset < terms.length; offset += PRF_BATCH) {
+        const batch = terms.slice(offset, offset + PRF_BATCH);
+        for (const row of db.all(`SELECT term, doc FROM temp.iq_prf_vocabulary WHERE term IN (${batch.map(() => "?").join(",")})`, ...batch)) {
+            frequencies.set(String(row["term"]), Number(row["doc"]));
+        }
+    }
     const scored: { term: string; score: number }[] = [];
     for (const [term, frequency] of tf) {
-        const df = Number(db.get("SELECT COUNT(*) AS n FROM chunks_fts WHERE chunks_fts MATCH ?", `"${term}"`)?.["n"] ?? 0);
+        const df = frequencies.get(term) ?? 0;
         if (df > 0 && df < total / 4) {
             scored.push({ term, score: frequency * Math.log(total / df) });
         }

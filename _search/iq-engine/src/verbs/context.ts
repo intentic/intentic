@@ -110,15 +110,24 @@ const matchesChain = (siblings: readonly StoredSymbol[], symbol: StoredSymbol, c
 // Every symbol the ref could mean, best first: exported ahead of local, then smallest span, since the tightest
 // definition of a name is what someone asking to read it means.
 const refMatches = (db: SqliteDb, ref: SymbolRef, allowed: ReadonlySet<string>): StoredSymbol[] => {
-    const byPath = new Map<string, StoredSymbol[]>();
-    for (const row of symbolRows(db, "")) {
-        byPath.set(row.path, [...(byPath.get(row.path) ?? []), row]);
-    }
-    return symbolRows(db, "WHERE s.name = ?", ref.chain.at(-1) ?? "")
+    const matches = symbolRows(db, "WHERE s.name = ?", ref.chain.at(-1) ?? "")
         .filter((symbol) => allowed.has(symbol.path))
-        .filter((symbol) => ref.path === undefined || symbol.path === ref.path)
-        .filter((symbol) => matchesChain(byPath.get(symbol.path) ?? [], symbol, ref.chain))
-        .toSorted((a, b) => Number(b.exported) - Number(a.exported) || a.endLine - a.line - (b.endLine - b.line));
+        .filter((symbol) => ref.path === undefined || symbol.path === ref.path);
+    // A bare name needs no enclosing scopes. A chain only needs siblings in files with an admitted candidate, once
+    // per file: loading and grouping the entire symbol table made every read pay for unrelated workspace symbols.
+    const byPath = new Map<string, StoredSymbol[]>();
+    const qualified =
+        ref.chain.length === 1
+            ? matches
+            : matches.filter((symbol) => {
+                  let siblings = byPath.get(symbol.path);
+                  if (siblings === undefined) {
+                      siblings = symbolRows(db, "WHERE f.path = ?", symbol.path);
+                      byPath.set(symbol.path, siblings);
+                  }
+                  return matchesChain(siblings, symbol, ref.chain);
+              });
+    return qualified.toSorted((a, b) => Number(b.exported) - Number(a.exported) || a.endLine - a.line - (b.endLine - b.line));
 };
 
 // One symbol's live body off disk, grown by -C. Undefined when the file has gone since it was indexed.
