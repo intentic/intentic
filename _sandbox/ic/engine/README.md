@@ -13,7 +13,8 @@ Desktop come over when their owner moves them (`ic engine move --to intentic`).
   sandbox's was 137). It costs disk, every image kept twice (compressed and unpacked), as on Docker Desktop. An engine
   that already holds images on overlay2 keeps that store.
 - `iptables`, `ip6tables`, `openssl`, `ca-certificates`, `passt` (pasta) and `socat` from Alpine
-- `/usr/local/bin/intentic-engine` — foreground keeper started by `ic engine start`
+- `/usr/local/bin/intentic-engine` — foreground keeper started by `ic engine start`; on a PC with an NVIDIA GPU it also
+  writes a CDI spec for it ([below](#the-nvidia-gpu))
 - `/etc/wsl.conf` — no Windows PATH append; automount stays on, at `/mnt/`, which is where `ic` and the desktop app
   point a bind mount of a Windows folder (`docker-host/src/wsl_path.rs`)
 
@@ -76,6 +77,29 @@ pipe ([below](#its-named-pipe)) takes it past Docker Desktop. A sandbox moved fr
 Docker Desktop answered `/health` from Windows, reached the internet, and ran Docker in Docker. Two starts at once ended
 with one keeper and both `ic engine start`s answered in 3.6 s; a start after the keeper was killed stopped the dockerd
 and pasta it left and answered in 7.7 s; the desktop app's keeper brought a killed engine back in 34 s.
+
+## The NVIDIA GPU
+
+A sandbox whose GPU switch is on runs with `--gpus=all`. Before 2026-10-28 this engine had no NVIDIA runtime, so ic's
+probe dropped the GPU and the editor said "this computer has no NVIDIA container runtime" (rog, RTX 5080). WSL gives
+every distro the Windows driver: `/dev/dxg`, plus the user-mode libraries and `nvidia-smi` in `/usr/lib/wsl/lib`.
+Docker 29 serves `--gpus=all` through CDI, but only when dockerd finds `nvidia-cdi-hook` on its PATH at start.
+Otherwise it falls through to AMD's CDI driver ("failed to discover GPU vendor from CDI", "AMD CDI spec not found").
+
+So on a PC with an NVIDIA GPU (`/dev/dxg`, `libcuda.so.1` and `nvidia-smi` under `/usr/lib/wsl/lib`), the keeper
+writes two files before dockerd starts:
+
+- `/etc/cdi/intentic-nvidia-wsl.yaml` declares `nvidia.com/gpu=all`. It is what `nvidia-ctk cdi generate --mode=wsl`
+  writes, minus its hooks: the device node, `/usr/lib/wsl` mounted read-only at the same path with
+  `LD_LIBRARY_PATH=/usr/lib/wsl/lib`, and `nvidia-smi` at `/usr/bin/nvidia-smi`. A container's own
+  `LD_LIBRARY_PATH` is replaced by that one; a sandbox image sets none.
+- `/usr/local/bin/nvidia-cdi-hook` is a stub that exits 0, marked as the keeper's. It exists only so that dockerd
+  registers the NVIDIA driver; the spec never calls it.
+
+If another file in `/etc/cdi` or `/var/run/cdi` already declares `nvidia.com/gpu` (someone installed the real toolkit),
+the keeper writes neither file and removes its stub: CDI refuses a device that two specs declare. On a PC with no NVIDIA
+GPU, it removes both. Measured on rog, 2026-10-28: `docker run --gpus=all --entrypoint=nvidia-smi <sandbox image> -L`
+listed the RTX 5080 Laptop GPU, which is the line ic's probe looks for.
 
 ## Its named pipe
 

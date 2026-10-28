@@ -87,6 +87,69 @@ if [ ! -f /etc/docker/daemon.json ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------------------------------
+# THE NVIDIA GPU (2026-10-28). A sandbox whose GPU switch is on runs with `--gpus=all`, and this engine had no NVIDIA
+# runtime, so ic's probe dropped the GPU ("this computer has no NVIDIA container runtime"; rog, RTX 5080, 2026-10-28).
+# WSL hands every distro the Windows driver: /dev/dxg and the user-mode libraries in /usr/lib/wsl/lib, nvidia-smi
+# among them. Docker 29 serves `--gpus=all` through CDI. It does that only when dockerd finds `nvidia-cdi-hook` on its
+# PATH at start (daemon/devices_nvidia_linux.go), and it needs a spec that declares nvidia.com/gpu=all. Without the
+# hook it falls through to AMD's CDI driver: "failed to discover GPU vendor from CDI", or "AMD CDI spec not found".
+# So the keeper writes the spec nvidia-ctk's WSL mode would write, minus its hooks (the device node, the driver
+# libraries mounted where WSL keeps them and found through LD_LIBRARY_PATH, nvidia-smi on the PATH), and a hook stub
+# that this spec never calls. A spec someone generated with the real toolkit is left in charge. Two specs that
+# declare the same device make CDI refuse both, and the real toolkit's spec calls the real hook, so in that case
+# the keeper writes neither file and removes the stub it wrote earlier.
+# ---------------------------------------------------------------------------------------------------------------------
+NVIDIA_SPEC="/etc/cdi/intentic-nvidia-wsl.yaml"
+NVIDIA_HOOK="/usr/local/bin/nvidia-cdi-hook"
+NVIDIA_HOOK_MARK="# intentic-engine: stub"
+nvidia_gpu() {
+  ours_hook=""
+  grep -qF "$NVIDIA_HOOK_MARK" "$NVIDIA_HOOK" 2>/dev/null && ours_hook=1
+  if [ ! -c /dev/dxg ] || [ ! -e /usr/lib/wsl/lib/libcuda.so.1 ] || [ ! -e /usr/lib/wsl/lib/nvidia-smi ]; then
+    rm -f "$NVIDIA_SPEC"
+    [ -n "$ours_hook" ] && rm -f "$NVIDIA_HOOK"
+    return 0
+  fi
+  for spec in /etc/cdi/* /var/run/cdi/*; do
+    [ -f "$spec" ] && [ "$spec" != "$NVIDIA_SPEC" ] || continue
+    if grep -qE '^kind:[[:space:]]*"?nvidia\.com/gpu"?[[:space:]]*$' "$spec"; then
+      say "an NVIDIA CDI spec is already there ($spec): leaving the GPU to it"
+      rm -f "$NVIDIA_SPEC"
+      [ -n "$ours_hook" ] && rm -f "$NVIDIA_HOOK"
+      return 0
+    fi
+  done
+  mkdir -p /etc/cdi
+  cat >"$NVIDIA_SPEC" <<'EOF'
+# Written by the intentic-engine keeper at every start: the NVIDIA GPU WSL hands this distro, for `docker run --gpus=all`.
+cdiVersion: "0.5.0"
+kind: nvidia.com/gpu
+devices:
+  - name: all
+    containerEdits:
+      deviceNodes:
+        - path: /dev/dxg
+containerEdits:
+  env:
+    - LD_LIBRARY_PATH=/usr/lib/wsl/lib
+  mounts:
+    - hostPath: /usr/lib/wsl
+      containerPath: /usr/lib/wsl
+      options: [ro, nosuid, nodev, rbind, rprivate]
+    - hostPath: /usr/lib/wsl/lib/nvidia-smi
+      containerPath: /usr/bin/nvidia-smi
+      options: [ro, nosuid, nodev, bind]
+EOF
+  if [ ! -e "$NVIDIA_HOOK" ] || [ -n "$ours_hook" ]; then
+    printf '#!/bin/sh\n%s: makes dockerd serve --gpus=all from %s, which calls no hook.\nexit 0\n' \
+      "$NVIDIA_HOOK_MARK" "$NVIDIA_SPEC" >"$NVIDIA_HOOK"
+    chmod 755 "$NVIDIA_HOOK"
+  fi
+  say "NVIDIA GPU found: --gpus=all served through CDI ($NVIDIA_SPEC)"
+}
+nvidia_gpu || say "could not set up the NVIDIA GPU; sandboxes run without it"
+
+# ---------------------------------------------------------------------------------------------------------------------
 # OTHER WSL DISTROS (2026-10-10), as Docker Desktop's WSL integration serves them, for a distro `ic engine wsl enable`
 # names (its rootfs/integrate runs there at every start of that distro):
 # - the API on a socket in $SHARED, which that distro links as its own /run/docker.sock, its group that distro's docker
