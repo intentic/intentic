@@ -1,5 +1,6 @@
 import type { DeviceCommandResult } from "@intentic/sandbox-contract/schemas/devices";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, DEV_REBUILD_SWAP_MARK, DEV_REBUILD_WAITING_MARK } from "@intentic/sandbox-contract/schemas/devices";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { RestartResume } from "../../system/restart-resume.js";
 import { createDevSwapWhenIdle, type DevSwapCommand, type DevSwapWhenIdle } from "../idle/dev-swap-when-idle.js";
 
@@ -63,13 +64,17 @@ const make = (): DevSwapWhenIdle => {
     return waiter;
 };
 
-const tick = async (ms = 25): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-};
+const tick = (ms = 25): Promise<void> => advanceTimersByTimeAsync(ms);
 const commands = (): DevSwapCommand[] => sent.map((call) => call.command);
+
+// Wall-clock waits can overshoot several polls on a busy runner and reach the holding marker before an assertion.
+beforeEach(() => {
+    jest.useFakeTimers();
+});
 
 afterEach(() => {
     waiter?.stop();
+    jest.useRealTimers();
     waiter = undefined;
     busy = [];
     sent = [];
@@ -102,6 +107,7 @@ test("never lets a gate through before the build is holding at it", async () => 
     const swap = make();
     await swap.ask({ host: "rog" });
     await tick(8);
+    expect(commands()).toEqual(["dev-rebuild-hold", "dev-rebuild-log", "dev-rebuild-log"]);
     expect(commands()).not.toContain("dev-rebuild-release");
     expect(swap.state()?.phase).toBe("waiting");
     await tick(40);
